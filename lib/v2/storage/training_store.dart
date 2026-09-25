@@ -17,7 +17,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:collection/collection.dart';
 import 'package:path/path.dart' as p;
 
 import '../chess/training/records.dart';
@@ -31,6 +30,10 @@ import 'file_lock.dart';
 import 'recovery_gate.dart';
 import 'relocation_notes.dart';
 import 'training_rows.dart';
+import 'reference_change.dart';
+import 'training_intent.dart';
+import 'training_payload.dart';
+import 'training_writes.dart';
 
 /// A row as read and as it is to be written; `before` is null for a row the
 /// file did not have.
@@ -39,25 +42,46 @@ typedef Change<T> = ({T? before, T after});
 /// Where one move's streak lives: its line and its ply.
 typedef StreakKey = ({LineKey line, int ply});
 
-/// Identifies one accepted write through retries in this process. Keep this
-/// token with the command until it succeeds or is explicitly discarded.
-/// It retains the exact file versions prepared under the Documents lock;
-/// it is not a persistent journal and does not recover after a restart.
+/// Stable identity and source proofs captured before durable enqueue. The
+/// journal owns ordered recovery after acknowledgement, across process restarts.
 final class ProgressOperation {
-  ProgressOperation({Map<String, Revision> sources = const {}})
-    : sources = Map.unmodifiable(sources);
+  ProgressOperation({
+    String? id,
+    this.predecessorId,
+    Map<String, Revision> sources = const {},
+  }) : id = id ?? newCompoundId(),
+       sources = Map.unmodifiable(sources);
+
+  final String id;
+
+  /// An earlier accepted command this projected row baseline depends on.
+  final String? predecessorId;
 
   /// The PGNs that supplied this command, captured before it was queued.
   final Map<String, Revision> sources;
 
   (String, String)? _identity;
-  List<_Planned>? _planned;
-  bool _complete = false;
 }
 
 /// The training files. The filesystem is a real boundary, so this is an
 /// interface: [TrainingStore] in the app, a scripted one in tests.
 abstract interface class ProgressFiles {
+  /// Records frozen changes durably without waiting for earlier execution.
+  /// An uncertain acknowledgement must retry this same operation identity.
+  Future<ProgressAdmission> enqueueWrite({
+    List<Change<Review>> reviews = const [],
+    List<Change<MoveStreak>> streaks = const [],
+    List<HistoryRow> history = const [],
+    required ProgressOperation operation,
+  });
+  Future<ProgressAdmission> enqueueAttempt(
+    Attempt attempt, {
+    required ProgressOperation operation,
+  });
+
+  /// Applies the durable prefix through this command, exactly once.
+  Future<ProgressWrite> commit(ProgressOperation operation);
+
   /// Everything recorded for these sources. When PGN input was already read,
   /// [observed] binds the rows to those exact persisted observations. Without
   /// it this read captures a fresh source observation for a storage caller.
@@ -90,16 +114,19 @@ final class TrainingStore implements ProgressFiles {
     this.documents, {
     required Directory support,
     Future<void> Function(String, List<int>) publish = replaceFile,
-    Future<ProgressWrite> Function(Directory, Future<ProgressWrite> Function())
-        lock =
-        withDirectoryLock,
-  }) : _publish = publish,
-       _lock = lock,
+    Future<void> Function(TrainingWriteStep)? trainingHook,
+    this._lock = withDirectoryLock,
+  }) : _writes = TrainingWrites(
+         documents: documents,
+         support: support,
+         publish: publish,
+         testHook: trainingHook,
+       ),
        _recovery = RecoveryGate(documents: documents, support: support);
 
   final RecoveryGate _recovery;
 
-  final Future<void> Function(String, List<int>) _publish;
+  final TrainingWrites _writes;
   final Future<ProgressWrite> Function(
     Directory,
     Future<ProgressWrite> Function(),
@@ -172,154 +199,123 @@ final class TrainingStore implements ProgressFiles {
   }
 
   @override
+  Future<ProgressAdmission> enqueueWrite({
+    List<Change<Review>> reviews = const [],
+    List<Change<MoveStreak>> streaks = const [],
+    List<HistoryRow> history = const [],
+    required ProgressOperation operation,
+  }) {
+    final payload = jsonEncode([
+      'write',
+      [
+        for (final change in reviews)
+          [
+            change.before == null ? null : _reviewCodec.row(change.before!),
+            _reviewCodec.row(change.after),
+          ],
+      ],
+      [
+        for (final change in streaks)
+          [
+            change.before == null ? null : _streakCodec.row(change.before!),
+            _streakCodec.row(change.after),
+          ],
+      ],
+      [for (final row in history) encodeHistory(row)],
+    ]);
+    return _enqueue(payload, operation);
+  }
+
+  @override
+  Future<ProgressAdmission> enqueueAttempt(
+    Attempt attempt, {
+    required ProgressOperation operation,
+  }) => _enqueue(jsonEncode(['attempt', encodeAttempt(attempt)]), operation);
+
+  Future<ProgressAdmission> _enqueue(
+    String payload,
+    ProgressOperation operation,
+  ) async {
+    final String destination;
+    try {
+      destination = _destination();
+    } on Object catch (error) {
+      return ProgressRejected(ProgressFailed(_detail(error)));
+    }
+    final identity = (destination, payload);
+    if (operation._identity != null && operation._identity != identity) {
+      return const ProgressRejected(ProgressConflict());
+    }
+    operation._identity = identity;
+    final result = await _locked('accept training progress', () async {
+      final paths = TrainingPayload.decode(payload).sources;
+      final sources = {
+        for (final path in paths) path: ?operation.sources[path],
+      };
+      if (sources.length != paths.length) {
+        throw const TrainingChanged('Missing source authority');
+      }
+      await _writes.enqueue(
+        id: operation.id,
+        payload: payload,
+        sources: sources,
+        predecessorId: operation.predecessorId,
+      );
+      return const ProgressWritten();
+    });
+    return result is ProgressWritten
+        ? const ProgressEnqueued()
+        : ProgressRejected(result);
+  }
+
+  @override
+  Future<ProgressWrite> commit(ProgressOperation operation) {
+    final identity = operation._identity;
+    if (identity == null) {
+      return Future.value(
+        const ProgressFailed(
+          'Enqueue this training command before applying it.',
+        ),
+      );
+    }
+    return _locked('commit training progress', () async {
+      if (_destination() != identity.$1) {
+        throw const TrainingChanged('Operation destination');
+      }
+      await _writes.commit(
+        id: operation.id,
+        digest: trainingDigest(identity.$2),
+      );
+      _log = null;
+      return const ProgressWritten();
+    });
+  }
+
+  @override
   Future<ProgressWrite> write({
     List<Change<Review>> reviews = const [],
     List<Change<MoveStreak>> streaks = const [],
     List<HistoryRow> history = const [],
     ProgressOperation? operation,
-  }) {
-    // The caller may change its lists while this command waits for the lock.
-    final reviewChanges = List.of(reviews);
-    final streakChanges = List.of(streaks);
-    final historyRows = List.of(history);
-    final payload = jsonEncode([
-      'write',
-      [
-        for (final change in reviewChanges)
-          [
-            if (change.before case final before?)
-              _reviewCodec.row(before)
-            else
-              null,
-            _reviewCodec.row(change.after),
-          ],
-      ],
-      [
-        for (final change in streakChanges)
-          [
-            if (change.before case final before?)
-              _streakCodec.row(before)
-            else
-              null,
-            _streakCodec.row(change.after),
-          ],
-      ],
-      [for (final row in historyRows) encodeHistory(row)],
-    ]);
-    return _perform(
-      'write the training progress',
-      operation,
-      {
-        for (final row in reviewChanges) row.after.key.source,
-        for (final row in streakChanges) row.after.key.source,
-        for (final row in historyRows) row.key.source,
-      },
-      payload,
-      () async => [
-        if (reviewChanges.isNotEmpty)
-          await _merged(reviewChanges, _reviewCodec),
-        if (streakChanges.isNotEmpty)
-          await _merged(streakChanges, _streakCodec),
-        if (historyRows.isNotEmpty)
-          await _appended(historyFile, [
-            for (final row in historyRows) encodeCsvRecord(encodeHistory(row)),
-          ]),
-      ],
+  }) async {
+    final token = operation ?? ProgressOperation();
+    final admission = await enqueueWrite(
+      reviews: reviews,
+      streaks: streaks,
+      history: history,
+      operation: token,
     );
+    return admission is ProgressRejected ? admission.result : commit(token);
   }
 
-  /// The file is replaced whole rather than appended to in place: an
-  /// append cut short leaves half a line, which the old app will not read
-  /// past. Existing bytes, including a torn character, are preserved.
   @override
   Future<ProgressWrite> logAttempt(
     Attempt attempt, {
     ProgressOperation? operation,
-  }) {
-    final line = encodeAttempt(attempt);
-    return _perform(
-      'log an answer',
-      operation,
-      {attempt.key.source},
-      jsonEncode(['attempt', line]),
-      () async {
-        final original = await _bytes(attemptsFile);
-        final was = original ?? Uint8List(0);
-        final gap = was.isEmpty || was.last == _lineFeed ? '' : '\n';
-        return [
-          _Planned(
-            attemptsFile,
-            original,
-            (BytesBuilder(copy: false)
-                  ..add(was)
-                  ..add(utf8.encode('$gap$line\n')))
-                .takeBytes(),
-            attempt: line,
-          ),
-        ];
-      },
-    );
-  }
-
-  Future<ProgressWrite> _perform(
-    String action,
-    ProgressOperation? operation,
-    Set<String> sources,
-    String payload,
-    Future<List<_Planned>> Function() prepare,
-  ) async {
+  }) async {
     final token = operation ?? ProgressOperation();
-    final String destination;
-    try {
-      destination = _destination();
-    } on FileSystemException catch (error) {
-      return ProgressFailed(_detail(error));
-    }
-    final identity = (destination, payload);
-    if (token._identity != null && token._identity != identity) {
-      return const ProgressConflict();
-    }
-    // Bind even if lock acquisition fails: the next call must still be this
-    // accepted command, not a replacement payload using its retry token.
-    token._identity = identity;
-    final result = await _locked(action, () async {
-      // The lock may have waited while a directory symlink was retargeted.
-      if (_destination() != destination) {
-        throw const _Changed('operation destination');
-      }
-      if (token._complete) return const ProgressWritten();
-      await _sources(sources, token.sources);
-      final planned = token._planned ??= await prepare();
-      final remaining = <_Planned>[];
-      // Preflight every participant before publishing any remaining file.
-      for (final file in planned) {
-        final current = await _bytes(file.name);
-        if (const ListEquality<int>().equals(current, file.bytes)) continue;
-        if (!const ListEquality<int>().equals(current, file.original)) {
-          throw _Changed(file.name);
-        }
-        remaining.add(file);
-      }
-      await removeStaleTemporaries(documents);
-      for (final file in remaining) {
-        if (file.attempt == null) await _keepFirstVersion(file);
-      }
-      for (final file in remaining) {
-        final before = file.attempt == null
-            ? null
-            : await File(_path(file.name)).stat();
-        await _publish(_path(file.name), file.bytes);
-        if (before != null) await _logged(before, file.attempt!);
-      }
-      return const ProgressWritten();
-    });
-    // A publisher or the lock's release can fail after replacing bytes.
-    // Retain the plan until the complete guarded operation is acknowledged.
-    if (result is ProgressWritten) {
-      token._complete = true;
-      token._planned = null;
-    }
-    return result;
+    final admission = await enqueueAttempt(attempt, operation: token);
+    return admission is ProgressRejected ? admission.result : commit(token);
   }
 
   Future<Map<String, Revision>> _sources(
@@ -343,34 +339,24 @@ final class TrainingStore implements ProgressFiles {
     return versions;
   }
 
-  /// Keeps the wrong answers read before current once [line] is added, when
-  /// they described the log as it was just before it; otherwise the next
-  /// read looks at the file again, as it would have anyway.
-  Future<void> _logged(FileStat before, String line) async {
-    final cached = _log;
-    if (cached == null ||
-        cached.size != before.size ||
-        cached.modified != before.modified) {
-      return;
-    }
-    final after = await File(_path(attemptsFile)).stat();
-    if (after.type == FileSystemEntityType.notFound) return;
-    _log = (
-      size: after.size,
-      modified: after.modified,
-      wrong: [
-        ...cached.wrong,
-        if (decodeAttempt(line) case final a? when !a.correct) a,
-      ],
-    );
-  }
-
   Future<ProgressWrite> _locked(
     String action,
     Future<ProgressWrite> Function() write,
   ) async {
     try {
-      return await _recovery.run(() => _lock(documents, write));
+      return await _recovery.run(
+        () => _lock(
+          documents,
+          () => p.equals(_writes.documents.path, _writes.support.path)
+              ? write()
+              : withDirectoryLock(_writes.support, write),
+        ),
+        recoverTraining: false,
+      );
+    } on TrainingUnreadable catch (unreadable) {
+      return ProgressUnreadable(unreadable.file, unreadable.line);
+    } on TrainingChanged {
+      return const ProgressConflict();
     } on _Unreadable catch (unreadable) {
       return unreadable.result;
     } on _Changed catch (changed) {
@@ -468,82 +454,6 @@ final class TrainingStore implements ProgressFiles {
     _log = (size: stat.size, modified: stat.modified, wrong: wrong);
     return wrong;
   }
-
-  /// The file [codec] reads with each of [changes] in place of the row it
-  /// names, or added at the end when the file has no such row.
-  ///
-  /// Rows are written in the current width, so an older header is written
-  /// as the current one, as the old app writes it: a chapter move reads the
-  /// rows by the header's width, and 11 columns under an 8-column header
-  /// would be read as a path with a comma in it.
-  Future<_Planned> _merged<T, K>(
-    List<Change<T>> changes,
-    _Codec<T, K> codec,
-  ) async {
-    final name = codec.file;
-    final header = headerOf(name);
-    final original = await _bytes(name);
-    final records = await _records(name, _decodeText(name, original));
-    final width = headerWidth(records);
-    final wanted = {for (final c in changes) codec.key(c.after): c};
-    final out = StringBuffer(records.isEmpty ? '$header\n' : '');
-    for (final record in records) {
-      final cells = codec.cells(record, width);
-      final row = cells == null ? null : codec.decode(cells);
-      if (cells != null && row == null) throw _Unreadable(name, record.line);
-      final change = row == null ? null : wanted.remove(codec.key(row));
-      final text = cells == null
-          ? (record.isBlank ? record.source : header)
-          : change == null
-          ? record.source
-          : _replaced(row, change, codec);
-      out
-        ..write(text)
-        ..write(record.terminator);
-    }
-    for (final change in wanted.values) {
-      if (change.before != null) throw _Changed(codec.row(change.before as T));
-      if (out.isNotEmpty && !out.toString().endsWith('\n')) out.write('\n');
-      out.writeln(codec.row(change.after));
-    }
-    return _Planned(name, original, utf8.encode(out.toString()));
-  }
-
-  String _replaced<T, K>(T? current, Change<T> change, _Codec<T, K> codec) {
-    final now = codec.row(current as T);
-    final after = codec.row(change.after);
-    final before = change.before;
-    if (now != after && (before == null || now != codec.row(before))) {
-      throw _Changed(now);
-    }
-    return after;
-  }
-
-  Future<_Planned> _appended(String name, List<String> rows) async {
-    final header = headerOf(name);
-    final original = await _bytes(name);
-    final text = _decodeText(name, original);
-    final was = text == null || text.trim().isEmpty
-        ? '$header\n'
-        : text.endsWith('\n')
-        ? text
-        : '$text\n';
-    return _Planned(
-      name,
-      original,
-      utf8.encode('$was${rows.map((r) => '$r\n').join()}'),
-    );
-  }
-
-  /// The old app keeps the bytes a file held before its first write in its
-  /// current format; a file that has that copy already is left alone.
-  Future<void> _keepFirstVersion(_Planned file) async {
-    final original = file.original;
-    if (original == null) return;
-    final kept = File(_path('${file.name}.pre-csv-v2.bak'));
-    if (await kept.exists()) return;
-    await createFileExclusively(kept.path, original);
-  }
 }
 
 /// How the rows of one CSV are read, told apart and written.
@@ -580,19 +490,6 @@ const _streakCodec = _Codec<MoveStreak, StreakKey>(
 LineKey _reviewKey(Review review) => review.key;
 
 StreakKey _streakKey(MoveStreak streak) => (line: streak.key, ply: streak.ply);
-
-final class _Planned {
-  const _Planned(this.name, this.original, this.bytes, {this.attempt});
-
-  final String name;
-
-  /// What the file held, or null when there was no file.
-  final Uint8List? original;
-  final Uint8List bytes;
-
-  /// The new answer, when this plan appends to the attempts log.
-  final String? attempt;
-}
 
 final class _Unreadable implements Exception {
   _Unreadable(this.file, this.line);
@@ -672,4 +569,17 @@ int _lineAt(Uint8List bytes, int? offset) {
     if (bytes[i] == _lineFeed) line++;
   }
   return line;
+}
+
+sealed class ProgressAdmission {
+  const ProgressAdmission();
+}
+
+final class ProgressEnqueued extends ProgressAdmission {
+  const ProgressEnqueued();
+}
+
+final class ProgressRejected extends ProgressAdmission {
+  const ProgressRejected(this.result);
+  final ProgressWrite result;
 }

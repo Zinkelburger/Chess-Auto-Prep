@@ -142,7 +142,38 @@ class NativeFileObservation {
   final String? sha256Hex;
 }
 
-Future<NativeFileObservation> observeFile(String path) => Isolate.run(() {
+Future<NativeFileObservation> observeFile(String path) =>
+    Isolate.run(() => _observeFile(path));
+
+/// Observes an ordered prefix in one isolate using the same native checks as
+/// [observeFile]. Copy [paths] before dispatch so caller mutations cannot change
+/// the requested files. This is not an atomic snapshot across multiple files.
+///
+/// A nonempty input always observes at least one file. Stop after accumulated
+/// successful bytes reach [maxBytes]; the last file may exceed that budget.
+/// Missing/refused files count as zero bytes. Callers bound candidate count and
+/// advance by the returned length to read the remaining paths.
+Future<List<NativeFileObservation>> observeFileBatch(
+  List<String> paths, {
+  int maxBytes = 16 * 1024 * 1024,
+}) async {
+  if (maxBytes <= 0)
+    throw ArgumentError.value(maxBytes, 'maxBytes', 'Must be positive');
+  final requested = List<String>.of(paths);
+  return Isolate.run(() {
+    final observations = <NativeFileObservation>[];
+    var bytes = 0;
+    for (final path in requested) {
+      final observed = _observeFile(path);
+      observations.add(observed);
+      bytes += observed.bytes?.length ?? 0;
+      if (bytes >= maxBytes) break;
+    }
+    return List<NativeFileObservation>.unmodifiable(observations);
+  });
+}
+
+NativeFileObservation _observeFile(String path) {
   _checkPath(path);
   final nativePath = path.toNativeUtf8();
   Pointer<_Snapshot> result = nullptr;
@@ -169,7 +200,7 @@ Future<NativeFileObservation> observeFile(String path) => Isolate.run(() {
     if (result != nullptr) _free(result);
     malloc.free(nativePath);
   }
-});
+}
 
 class NativeNameCollision implements Exception {
   const NativeNameCollision(this.path);

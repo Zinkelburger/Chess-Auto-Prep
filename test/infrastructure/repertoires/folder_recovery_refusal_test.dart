@@ -182,6 +182,7 @@ void main() {
   for (final endpoint in [
     'Support',
     'Support/relocation-writes/child',
+    'Support/training-writes/child',
     'Support/backups',
     '.cap-reference-history',
     'repertoires/.cap-repertoire-publications/child',

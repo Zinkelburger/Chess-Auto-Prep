@@ -10,6 +10,7 @@ import 'compound_write.dart';
 import 'foreign_recovery.dart';
 import 'relocation_notes.dart';
 import 'training_records.dart';
+import 'training_writes.dart';
 
 /// Recovery and affected access share the supported apps' outer domain lock.
 /// The order is domain, Documents, then distinct leaf directories. Callers
@@ -29,6 +30,7 @@ final class RecoveryGate {
          support: support,
          testHook: relocationHook,
        ),
+       training = TrainingWrites(documents: documents, support: support),
        compounds = CompoundWrites(
          documents: documents,
          support: support,
@@ -40,8 +42,16 @@ final class RecoveryGate {
   final RelocationNotes notes;
   final CompoundWrites compounds;
   final FileRelocations relocations;
+  final TrainingWrites training;
 
-  Future<T> run<T>(Future<T> Function() action) async {
+  /// Enqueue/commit callers can defer training drain, but still validate all
+  /// recovery metadata and hold the same domain while accepting their command.
+  /// The action acquires its own Documents/leaf locks after recovery releases
+  /// those locks; it must never reenter this gate.
+  Future<T> run<T>(
+    Future<T> Function() action, {
+    bool recoverTraining = true,
+  }) async {
     final root = Directory(p.join(documents.path, 'repertoires'));
     await root.create(recursive: true);
     final canonical = await root.resolveSymbolicLinks();
@@ -56,6 +66,20 @@ final class RecoveryGate {
           DocumentRef(documents.path),
           [support],
           () async {
+            // Inspect all protocols before any replay: directory order does
+            // not establish which of two pending writers was accepted first.
+            final trainingPending = await training.inspect();
+            final notesPending = await notes.inspect();
+            final compoundPending = await compounds.inspect();
+            final relocationPending = await relocations.inspect();
+            if (trainingPending &&
+                (notesPending || compoundPending || relocationPending)) {
+              throw const RecoveryRequired(
+                'Training and document recovery are both unfinished. '
+                'Their order cannot be established safely.',
+              );
+            }
+            if (recoverTraining) await training.recover();
             await notes.finishOwed();
             await compounds.recover();
             await relocations.recover();

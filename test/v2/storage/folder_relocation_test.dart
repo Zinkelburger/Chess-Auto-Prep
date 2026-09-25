@@ -41,6 +41,7 @@ void main() {
     'backups',
     '.cap-reference-history',
     'relocation-writes/nested',
+    'training-writes/nested',
   ]) {
     test(
       'shared Documents and Support cannot move owned metadata $path',

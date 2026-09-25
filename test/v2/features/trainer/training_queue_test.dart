@@ -59,7 +59,7 @@ void main() {
   tearDown(() => documents.delete(recursive: true));
 
   test(
-    'mark then exclude materializes the second row after recovery',
+    'mark then exclude preserves its projected row through recovery',
     () async {
       expect(
         await progress.mark([lines.first], known: true),
@@ -95,7 +95,11 @@ void main() {
       isA<ProgressFailed>(),
     );
     expect(publications, 1);
-    expect((await read()).reviews.containsKey(lines.last.key), isFalse);
+    expect(progress.reviews.containsKey(lines.last.key), isFalse);
+    final recovered = (await read()).reviews;
+    expect(recovered[lines.first.key]!.lastRating, 'good');
+    expect(recovered[lines.last.key]!.lastRating, 'easy');
+    expect(await file(historyFile).readAsLines(), hasLength(3));
     progress.dispose();
     failing = false;
     await pending.retry(store);
@@ -107,9 +111,38 @@ void main() {
   });
 
   test(
+    'queued successor recovers on a new store without its disposed owner',
+    () async {
+      expect(
+        await progress.mark([lines.first], known: true),
+        isA<ProgressFailed>(),
+      );
+      expect(
+        await progress.setExcluded(lines.first, excluded: true),
+        isA<ProgressFailed>(),
+      );
+      progress.dispose();
+      final reopened = TrainingStore(
+        documents,
+        support: Directory(p.join(documents.path, 'Support')),
+      );
+      final recovered = await reopened.read({lines.first.key.source});
+      expect(recovered, isA<ProgressLoaded>());
+      final review = (recovered as ProgressLoaded).reviews[lines.first.key]!;
+      expect(review.lastRating, 'good');
+      expect(review.excluded, isTrue);
+      expect(await file(historyFile).readAsLines(), hasLength(2));
+      failing = false;
+      await pending.retry(store);
+      expect(await pending.settle(), isNull);
+      expect(await file(historyFile).readAsLines(), hasLength(2));
+    },
+  );
+
+  test(
     'a later answer waits for an uncertain append to be reconciled',
     () async {
-      final answer = (
+      const answer = (
         ply: 0,
         fen: Fen.initial,
         played: 'd5',

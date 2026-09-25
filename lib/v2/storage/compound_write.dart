@@ -115,6 +115,16 @@ final class CompoundWrites {
     return note.command;
   }
 
+  /// Validate every receipt without replay, before choosing recovery order.
+  Future<bool> inspect() => _checked(() async {
+    _checkRoots();
+    final notes = await _readAll();
+    return notes.any(
+      (note) =>
+          note.state == _State.prepared || note.state == _State.committing,
+    );
+  });
+
   Future<void> recover() => _checked(() async {
     _checkRoots();
     await _recover(await _readAll());

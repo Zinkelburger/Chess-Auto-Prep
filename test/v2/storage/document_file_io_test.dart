@@ -57,6 +57,115 @@ void main() {
     });
   });
 
+  group('observeFileBatch', () {
+    test(
+      'preserves ordered native observations including missing and invalid entries',
+      () async {
+        await File(at('binary')).writeAsBytes([0, 255, 127, 10]);
+        await written('empty', '');
+        await Directory(at('directory')).create();
+        final paths = [
+          at('binary'),
+          at('missing'),
+          at('directory'),
+          at('empty'),
+          at('binary'),
+        ];
+        final batch = await observeFileBatch(paths);
+        expect(batch, hasLength(paths.length));
+        for (var index = 0; index < paths.length; index++) {
+          final single = await observeFile(paths[index]);
+          final observed = batch[index];
+          expect(observed.status, single.status);
+          expect(observed.error, single.error);
+          expect(observed.identity, single.identity);
+          expect(observed.volume, single.volume);
+          expect(observed.bytes, single.bytes);
+          expect(observed.sha256Hex, single.sha256Hex);
+        }
+        expect(() => batch.clear(), throwsUnsupportedError);
+        expect(() => batch.first.bytes![0] = 1, throwsUnsupportedError);
+      },
+    );
+
+    test('captures caller paths before dispatch', () async {
+      await written('first', 'original request');
+      await written('second', 'later mutation');
+      final paths = [at('first')];
+      final pending = observeFileBatch(paths);
+      paths[0] = at('second');
+      paths.add(at('missing'));
+      final observed = await pending;
+      expect(observed, hasLength(1));
+      expect(utf8.decode(observed.single.bytes!), 'original request');
+    });
+
+    test('returns a byte-bounded prefix which callers can resume', () async {
+      await written('small', '12');
+      await written('larger', '3456');
+      await written('last', '789');
+      final paths = [at('missing'), at('small'), at('larger'), at('last')];
+      final first = await observeFileBatch(paths, maxBytes: 5);
+      expect(first, hasLength(3));
+      expect(first.map((file) => file.status), [1, 0, 0]);
+      expect(first.last.bytes, utf8.encode('3456'));
+      final rest = await observeFileBatch(
+        paths.sublist(first.length),
+        maxBytes: 5,
+      );
+      expect(rest, hasLength(1));
+      expect(rest.single.bytes, utf8.encode('789'));
+      final oversized = await observeFileBatch(paths.sublist(2), maxBytes: 1);
+      expect(oversized, hasLength(1));
+      expect(oversized.single.bytes, utf8.encode('3456'));
+    });
+
+    test(
+      'rejects invalid budgets and NUL paths; accepts empty input',
+      () async {
+        expect(await observeFileBatch([]), isEmpty);
+        for (final budget in [0, -1]) {
+          await expectLater(
+            observeFileBatch([], maxBytes: budget),
+            throwsArgumentError,
+          );
+        }
+        await expectLater(
+          observeFileBatch([at('missing'), '${at('a')}\u0000b']),
+          throwsArgumentError,
+        );
+      },
+    );
+
+    test('refuses links while reading neighboring ordinary files', () async {
+      await written('real', 'preserved');
+      await Link(at('link')).create(at('real'));
+      await Link(at('dangling')).create(at('absent'));
+      final results = await observeFileBatch([
+        at('link'),
+        at('real'),
+        at('dangling'),
+      ]);
+      expect(results.map((file) => file.status), [4, 0, 4]);
+      for (final failed in [results.first, results.last]) {
+        expect(failed.bytes, isNull);
+        expect(failed.identity, isNull);
+        expect(failed.sha256Hex, isNull);
+      }
+      expect(utf8.decode(results[1].bytes!), 'preserved');
+    });
+
+    test('reobserves native replacement identity without caching', () async {
+      await written('file', 'first');
+      final before = (await observeFileBatch([at('file')])).single;
+      await (await written('replacement', 'second')).rename(at('file'));
+      final after = (await observeFileBatch([at('file')])).single;
+      expect(after.identity, isNot(before.identity));
+      expect(after.bytes, utf8.encode('second'));
+      expect(before.bytes, utf8.encode('first'));
+    });
+  });
+
   group('observeFile refuses', () {
     test('a folder', () async {
       await Directory(at('folder')).create();

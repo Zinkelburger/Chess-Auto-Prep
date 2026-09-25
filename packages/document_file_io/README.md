@@ -59,6 +59,13 @@ These checks do not simulate sudden power loss or every network/cloud provider:
 Windows directory-entry durability and sync-provider hydration guarantees remain
 outside the contract. No blanket power-loss guarantee is made.
 
+`observeFileBatch` performs the same native file observations in one worker.
+It returns an ordered prefix bounded by a 16 MiB default byte budget; a single
+file may exceed that budget. Callers bound the candidate count and resume at
+the returned prefix length. Recovery readers use this to validate every
+metadata file without starting a worker for each receipt. This is not an
+atomic snapshot across files; operation owners still validate their read sets.
+
 Checks from repository root:
 
 ```

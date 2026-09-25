@@ -188,6 +188,7 @@ void _folderParticipants(
     for (final name in [
       'relocation-writes',
       'compound-writes',
+      'training-writes',
       'unfinished-moves',
       'backups',
       'books.json',

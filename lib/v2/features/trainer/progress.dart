@@ -17,21 +17,21 @@ typedef TrainerTime = ({DateTime Function() now, double Function() jitter});
 
 /// The progress displayed by one scope. The app registry owns accepted
 /// mutations: it keeps them in order, including after this scope is disposed.
-/// Inputs are captured on acceptance; rows are derived once preceding changes
-/// have committed, then retained with their store token for exact retry.
+/// Rows are captured against the private projected result of preceding accepted
+/// commands. Enqueue persists them before publication waits on predecessors;
+/// displayed rows change only after the store acknowledges a commit.
 class TrainingProgress extends ChangeNotifier {
   TrainingProgress({
-    required ProgressFiles files,
+    required this._files,
     required ProgressLoaded loaded,
-    required TrainerTime time,
+    required this._time,
     PendingWrites? pendingWrites,
   }) : pendingWrites = pendingWrites ?? PendingWrites(),
-       _files = files,
        _sources = Map.of(loaded.sources),
-       _time = time,
        _reviews = {...loaded.reviews},
+       _projectedReviews = {...loaded.reviews},
+       _projectedSaved = {...loaded.streaks},
        _streaks = {...loaded.streaks},
-       _saved = {...loaded.streaks},
        _mistakes = [...loaded.mistakes];
 
   final ProgressFiles _files;
@@ -39,9 +39,11 @@ class TrainingProgress extends ChangeNotifier {
   final PendingWrites pendingWrites;
   final TrainerTime _time;
   final Map<LineKey, Review> _reviews;
+  final Map<LineKey, Review> _projectedReviews;
+  final Map<StreakKey, MoveStreak> _projectedSaved;
   final Map<StreakKey, MoveStreak> _streaks;
-  final Map<StreakKey, MoveStreak> _saved;
   final List<Attempt> _mistakes;
+  ProgressOperation? _lastAccepted;
   bool _stale = false;
   bool _disposed = false;
   bool _suspended = false;
@@ -57,8 +59,9 @@ class TrainingProgress extends ChangeNotifier {
     if (source == null) return true; // A scripted adapter supplies no proof.
     if (source != before ||
         source.nativeIdentity != before.nativeIdentity ||
-        after.nativeIdentity == null)
+        after.nativeIdentity == null) {
       return false;
+    }
     _sources[path] = after;
     return true;
   }
@@ -74,10 +77,13 @@ class TrainingProgress extends ChangeNotifier {
   Review reviewOf(TrainingLine line) =>
       _reviews[line.key] ?? Review(key: line.key, lineName: line.name);
 
+  Review _projectedReview(TrainingLine line) =>
+      _projectedReviews[line.key] ?? Review(key: line.key, lineName: line.name);
+
   /// Answers change the in-memory streak immediately; its rating captures it.
   /// Logging uses a separate operation token so an unknown append is not replayed.
   Future<ProgressWrite> answered(TrainingLine line, DrillAnswer answer) {
-    if (_disposed || _suspended)
+    if (_disposed || _suspended) {
       return Future.value(
         ProgressFailed(
           _suspended
@@ -85,6 +91,7 @@ class TrainingProgress extends ChangeNotifier {
               : 'This training scope is closed.',
         ),
       );
+    }
     final attempt = Attempt(
       key: line.key,
       ply: answer.ply,
@@ -104,15 +111,18 @@ class TrainingProgress extends ChangeNotifier {
         correct: answer.correct,
       );
     }
-    final operation = ProgressOperation(sources: _sources);
-    return _accept(() async {
-      final result = await _files.logAttempt(attempt, operation: operation);
-      if (result is ProgressWritten && !answer.correct) {
-        _mistakes.add(attempt);
-        if (!_disposed) notifyListeners();
-      }
-      return result;
-    }).run();
+    final operation = _operation();
+    return _submit(
+      () => _files.enqueueAttempt(attempt, operation: operation),
+      () async {
+        final result = await _files.commit(operation);
+        if (result is ProgressWritten && !answer.correct) {
+          _mistakes.add(attempt);
+          if (!_disposed) notifyListeners();
+        }
+        return result;
+      },
+    );
   }
 
   /// A rating's time, spread and answered moves are fixed before any wait.
@@ -122,21 +132,22 @@ class TrainingProgress extends ChangeNotifier {
     Rating rating, {
     required bool clean,
   }) async {
-    if (_disposed || _suspended)
+    if (_disposed || _suspended) {
       return ProgressFailed(
         _suspended
             ? 'The training source is being saved.'
             : 'This training scope is closed.',
       );
+    }
     final at = now;
     final spread = _time.jitter();
     final answers = Map<StreakKey, MoveStreak>.of(_streaks);
     final earlier = pendingWrites.unfinished(_files).isNotEmpty;
     final result = await _mutation(() {
-      final before = _reviews[line.key];
+      final before = _projectedReviews[line.key];
       final after = asWritten(
         rated(
-          (before ?? reviewOf(line)).copyWith(lineName: line.name),
+          (before ?? _projectedReview(line)).copyWith(lineName: line.name),
           rating,
           now: at,
           clean: clean,
@@ -147,8 +158,8 @@ class TrainingProgress extends ChangeNotifier {
         reviews: [(before: before, after: after)],
         streaks: [
           for (final MapEntry(:key, :value) in answers.entries)
-            if (key.line == line.key && _saved[key] != value)
-              (before: _saved[key], after: value),
+            if (key.line == line.key && _projectedSaved[key] != value)
+              (before: _projectedSaved[key], after: value),
         ],
         history: [
           HistoryRow(
@@ -185,8 +196,8 @@ class TrainingProgress extends ChangeNotifier {
     () => (
       reviews: [
         (
-          before: _reviews[line.key],
-          after: asWritten(reviewOf(line).copyWith(excluded: excluded)),
+          before: _projectedReviews[line.key],
+          after: asWritten(_projectedReview(line).copyWith(excluded: excluded)),
         ),
       ],
       streaks: const [],
@@ -203,15 +214,18 @@ class TrainingProgress extends ChangeNotifier {
       final changes = <Change<Review>>[];
       final history = <HistoryRow>[];
       for (final line in selected) {
-        final status = statusOf(line, _reviews[line.key], at);
+        final status = statusOf(line, _projectedReviews[line.key], at);
         final trained =
             status == LineStatus.due || status == LineStatus.learned;
         if (known ? status != LineStatus.untrained : !trained) continue;
-        final review = reviewOf(line);
+        final review = _projectedReview(line);
         final after = known
             ? markedKnown(review, now: at, nth: changes.length)
             : markedUnknown(review);
-        changes.add((before: _reviews[line.key], after: asWritten(after)));
+        changes.add((
+          before: _projectedReviews[line.key],
+          after: asWritten(after),
+        ));
         history.add(
           HistoryRow(
             key: line.key,
@@ -227,7 +241,7 @@ class TrainingProgress extends ChangeNotifier {
   }
 
   Future<ProgressWrite> _mutation(_Rows Function() prepare) {
-    if (_disposed || _suspended)
+    if (_disposed || _suspended) {
       return Future.value(
         ProgressFailed(
           _suspended
@@ -235,35 +249,83 @@ class TrainingProgress extends ChangeNotifier {
               : 'This training scope is closed.',
         ),
       );
-    final operation = ProgressOperation(sources: _sources);
-    _Rows? prepared;
-    return _accept(() async {
-      final rows = prepared ??= prepare();
-      if (rows.reviews.isEmpty &&
-          rows.streaks.isEmpty &&
-          rows.history.isEmpty) {
-        return const ProgressWritten();
+    }
+    final prepared = prepare();
+    final rows = (
+      reviews: List<Change<Review>>.unmodifiable(prepared.reviews),
+      streaks: List<Change<MoveStreak>>.unmodifiable(prepared.streaks),
+      history: List<HistoryRow>.unmodifiable(prepared.history),
+    );
+    if (rows.reviews.isEmpty && rows.streaks.isEmpty && rows.history.isEmpty) {
+      return Future.value(const ProgressWritten());
+    }
+    for (final change in rows.reviews) {
+      _projectedReviews[change.after.key] = change.after;
+    }
+    for (final change in rows.streaks) {
+      _projectedSaved[(line: change.after.key, ply: change.after.ply)] =
+          change.after;
+    }
+    final operation = _operation();
+    return _submit(
+      () => _files.enqueueWrite(
+        reviews: rows.reviews,
+        streaks: rows.streaks,
+        history: rows.history,
+        operation: operation,
+      ),
+      () => _commit(rows, operation),
+    );
+  }
+
+  ProgressOperation _operation() {
+    final operation = ProgressOperation(
+      sources: _sources,
+      predecessorId: _lastAccepted?.id,
+    );
+    _lastAccepted = operation;
+    return operation;
+  }
+
+  /// Enqueue is an independent read barrier even when this obligation cannot
+  /// publish yet. A failed admission retries the same payload and operation.
+  Future<ProgressWrite> _submit(
+    Future<ProgressAdmission> Function() enqueue,
+    Future<ProgressWrite> Function() commit,
+  ) async {
+    Future<ProgressAdmission> start() {
+      final future = Future<ProgressAdmission>.sync(enqueue).catchError(
+        (Object error) => ProgressRejected(ProgressFailed('$error')),
+      );
+      pendingWrites.watch(_files, future);
+      return future;
+    }
+
+    final first = start();
+    Future<ProgressAdmission>? admission = first;
+    final result = await _accept(() async {
+      final accepted = await (admission ??= start());
+      if (accepted case ProgressRejected(:final result)) {
+        admission = null;
+        if (result is ProgressConflict) _stale = true;
+        if (!_disposed) notifyListeners();
+        return result;
       }
-      return _commit(rows, operation);
+      return commit();
     }).run();
+    // A blocked predecessor can prevent the work callback running at all.
+    // Still settle enqueue, and make its failure retryable on the next run.
+    if (await first is ProgressRejected) admission = null;
+    return result;
   }
 
   Future<ProgressWrite> _commit(_Rows rows, ProgressOperation operation) async {
-    final result = await _files.write(
-      reviews: rows.reviews,
-      streaks: rows.streaks,
-      history: rows.history,
-      operation: operation,
-    );
+    final result = await _files.commit(operation);
     switch (result) {
       case ProgressWritten():
         _stale = false;
         for (final change in rows.reviews) {
           _reviews[change.after.key] = change.after;
-        }
-        for (final change in rows.streaks) {
-          _saved[(line: change.after.key, ply: change.after.ply)] =
-              change.after;
         }
       case ProgressConflict():
         _stale = true;

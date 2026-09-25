@@ -29,6 +29,53 @@ final class ScriptedProgress implements ProgressFiles {
 
   var reads = 0;
 
+  final _queued = <ProgressOperation, Future<ProgressWrite> Function()>{};
+  final _committed = <ProgressOperation>{};
+
+  @override
+  Future<ProgressAdmission> enqueueWrite({
+    List<Change<Review>> reviews = const [],
+    List<Change<MoveStreak>> streaks = const [],
+    List<HistoryRow> history = const [],
+    required ProgressOperation operation,
+  }) async {
+    final keptReviews = List<Change<Review>>.unmodifiable(reviews);
+    final keptStreaks = List<Change<MoveStreak>>.unmodifiable(streaks);
+    final keptHistory = List<HistoryRow>.unmodifiable(history);
+    _queued.putIfAbsent(
+      operation,
+      () =>
+          () => write(
+            reviews: keptReviews,
+            streaks: keptStreaks,
+            history: keptHistory,
+            operation: operation,
+          ),
+    );
+    return const ProgressEnqueued();
+  }
+
+  @override
+  Future<ProgressAdmission> enqueueAttempt(
+    Attempt attempt, {
+    required ProgressOperation operation,
+  }) async {
+    _queued.putIfAbsent(
+      operation,
+      () =>
+          () => logAttempt(attempt, operation: operation),
+    );
+    return const ProgressEnqueued();
+  }
+
+  @override
+  Future<ProgressWrite> commit(ProgressOperation operation) async {
+    if (_committed.contains(operation)) return const ProgressWritten();
+    final result = await _queued[operation]!();
+    if (result is ProgressWritten) _committed.add(operation);
+    return result;
+  }
+
   @override
   Future<ProgressRead> read(
     Set<String> sources, {

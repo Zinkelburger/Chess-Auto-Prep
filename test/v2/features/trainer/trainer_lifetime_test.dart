@@ -318,6 +318,45 @@ final class _HeldProgress implements ProgressFiles {
         })
       >[];
 
+  final _queued = <ProgressOperation, Future<ProgressWrite> Function()>{};
+
+  @override
+  Future<ProgressAdmission> enqueueWrite({
+    List<Change<Review>> reviews = const [],
+    List<Change<MoveStreak>> streaks = const [],
+    List<HistoryRow> history = const [],
+    required ProgressOperation operation,
+  }) async {
+    _queued.putIfAbsent(
+      operation,
+      () =>
+          () => write(
+            reviews: reviews,
+            streaks: streaks,
+            history: history,
+            operation: operation,
+          ),
+    );
+    return const ProgressEnqueued();
+  }
+
+  @override
+  Future<ProgressAdmission> enqueueAttempt(
+    Attempt attempt, {
+    required ProgressOperation operation,
+  }) async {
+    _queued.putIfAbsent(
+      operation,
+      () =>
+          () => logAttempt(attempt, operation: operation),
+    );
+    return const ProgressEnqueued();
+  }
+
+  @override
+  Future<ProgressWrite> commit(ProgressOperation operation) =>
+      _queued[operation]!();
+
   @override
   Future<ProgressRead> read(
     Set<String> sources, {

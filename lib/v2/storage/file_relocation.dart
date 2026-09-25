@@ -410,6 +410,23 @@ final class FileRelocations {
     await testHook?.call(FileRelocationStep.intent);
   }
 
+  /// Validate every receipt without replay, before choosing recovery order.
+  Future<bool> inspect() async {
+    _checkRoots();
+    try {
+      final notes = await _readAll();
+      return notes.any(
+        (note) =>
+            note.state == RelocationState.prepared ||
+            note.state == RelocationState.committing,
+      );
+    } on RecoveryRequired {
+      rethrow;
+    } on Object catch (error) {
+      throw RecoveryRequired('File relocation inspection failed: $error');
+    }
+  }
+
   Future<void> recover() async {
     _checkRoots();
     try {

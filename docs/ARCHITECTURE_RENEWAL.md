@@ -179,7 +179,9 @@ progress owner is disposed. Closing disables new window input, pauses producers,
 flushes the document and drains accepted persistence before stopping engines.
 Failures and timeouts require an explicit close-without-saving choice. Training
 commands remain ordered by their shared progress store across scope replacement;
-failed commands retain their original timing, rows and in-process retry token.
+failed commands retain their original timing, rows and stable operation id.
+Training acceptance is journaled before waiting for a failed predecessor;
+the queue can recover without the former screen, registry or process.
 Book and settings snapshots keep their latest unsaved value for retry, including
 after their presentation owner is disposed; loading cannot silently replace that
 value. Existing dialogs and puzzle delays pause during close and resume when it
@@ -393,6 +395,40 @@ A failed training write blocks publication while preserving the PGN draft and
 the current lesson. Closed-source Library writes and exact retries use the same
 barrier. An ordinary optimistic save cannot renew stale training authority by
 adopting an unrelated equal-content file.
+
+`TrainingProgress` derives accepted rows against a private projection of earlier
+accepted changes; displayed progress advances only after commit acknowledgement.
+`ProgressFiles.enqueueWrite` and `enqueueAttempt` persist those frozen rows or
+answers before `commit` waits for predecessors. A missing predecessor intent is
+an unsaved acceptance, retained for ordered retry. A known optimistic conflict
+is refused before enqueue; a conflict arising after durable acceptance preserves
+the command and requires recovery.
+
+`TrainingWrites` owns the ordered private `Support/training-writes/` queue.
+Queued intents recover forward. At the head, one command captures all four
+training files as exact nullable byte snapshots, including unchanged files and
+torn historical attempt bytes. A committing record binds the complete before/
+after plan to the frozen command; replay validates every participant and source
+before publishing anything. Completion replaces full snapshots with a compact
+receipt retaining command, order, profile and source proofs. An exact completed
+retry acknowledges that receipt without replacing subsequent data. Native old
+journal copies remain admissible only with a verified forward transition to the
+current receipt.
+
+Recovery inspects all protocols before replay. Simultaneously pending training
+and namespace operations have no established ordering and block access. Normal
+access drains training before a new structural operation; accepting another
+training command can validate its projected predecessor state without publishing
+that predecessor. V1 accepts only strictly validated completed training history
+and refuses every pending or unknown training journal before its own recovery.
+Completed receipts are retained and scanned, so per-command/read cost still
+grows with receipt count; retained native previous copies can also keep old full
+snapshots. Native reads batch up to 32 candidates with a 16 MiB byte budget
+(one oversized record is allowed), while every record is still validated. A
+warm Linux measurement with 5,000 minimal compact receipts reduced median
+inspection from 467 ms to 153 ms; four normal command scans still cost about
+0.52–0.61 seconds before source reads and publication. This does not certify
+long-running training-history scale.
 
 Relocation completion and recovery flush both endpoint directories and their
 containing entries before rewriting references or retiring the recovery note.
@@ -865,7 +901,8 @@ restored file: occupied history is preserved separately rather than merged by
 guesswork. Those historical ownership links remain unverified.
 
 Existing unfinished folder notes continue through their original recovery
-protocol. Multi-file edits and durable rating journals remain H3c work.
+protocol. Accepted training commands use the durable queue described under
+[Identity and undo](#identity-and-undo). Multi-file edits remain H3c work.
 Completed relocation snapshots are retained;
 pruning and scan costs remain explicit follow-up work. The tested native
 recovery platform is Linux; Windows/macOS durability is unverified.
@@ -1242,7 +1279,7 @@ per batch and use tests and commits as the implementation record.
 | H2 | H1 | Accepted ratings and writes outlive reload/dispose; `PendingWrites`, training progress/owner, exit guard | Two overlapping reloads cannot bypass the same pending rating; failed outcomes remain retryable; shutdown is honest | Done 2026-09-24: app-owned training obligations, ordered barriers and exact in-process retry survive reload/dispose; retained book/settings/account/recent-file/copy outcomes; shutdown covers existing dialogs and suspends puzzle timers. Failure-first regressions, independent reviews, 2,155 v2 tests and analyze/lint passed after merging current main. Headless Linux partial training publication survived scope replacement and retried with three history rows exactly once. Persistent crash recovery remains H3; Windows/macOS durability unverified. |
 | H3a | H2 | Existing relocation recovery before affected reads; document guards, training reads, startup; reconcile v1 domain locks/order | Kill during a move, reopen/train from either supported app; no missing or duplicate progress; incompatible access blocks safely | Done 2026-09-24 on Linux: canonical shared domain before affected Documents access; strict v2 notes recover before PGN/training reads and complete scans, foreign receipts refuse without mutation, and UI shows the recovery reason with Retry. Regression-first tests, independent reviews, 2,232 v2 tests, final focused storage/legacy checks and analyze/lint passed. Six real-process tests cover cross-app exclusion, SIGKILL and all four training files recovering once; headless refusal/retry verified. No new metadata format. Windows/macOS recovery guarantees remain unverified; v1 native recovery is still Linux-only. |
 | H3b | H3a | One compound operation for course rename/book references and its inverse; Library, storage, session history | Rename and undo agree across PGN/book state, including crash and external-conflict cases | Done 2026-09-24 on Linux: explicit section intent follows held/coalesced drafts; one guarded private receipt commits PGN and books, preserves unknown fields and validates the complete inverse. Exact retry, external conflicts, navigation admission and v1 refusal have regression tests; 2,381 v2 tests, focused legacy/process checks and analyze/lint pass. Real SIGKILL preparation/publication tests and headless partial book-write failure, Retry and undo verified both participants. Complete receipts remain retained with growing scan/storage cost; Windows/macOS durability unverified. |
-| H3c | H3b | Apply the proven operation boundary to supported file/folder moves, delete/restore and multi-file edits | Every existing command has an explicit required read/write set, recovery path and compatible undo behavior | In progress: source admission, file rename/move/quarantine-delete/restore, folder relocation and retained import placement verified 2026-09-25 on Linux. One relocation owner journals all four training files, books, backup ownership and full folder inventories. Independent reviews, failure-first regressions, 2,722 v2 tests (four Windows-only skips), 264 legacy tests and analyze/lint passed; native filesystem admission and process-kill recovery are covered. Headless interrupted file and folder renames blocked access after restart; Retry preserved learned status, two backup versions, one history row, one attempt and nested binary/empty entries. File delete/restore and repeat reopen also passed. Native replacement copies and metadata ancestry have regression coverage. Multi-file edits and persistent accepted rating journals remain unfinished; Windows/macOS durability remains unverified. |
+| H3c | H3b | Apply the proven operation boundary to supported file/folder moves, delete/restore and multi-file edits | Every existing command has an explicit required read/write set, recovery path and compatible undo behavior | In progress: source admission, file/folder relocation, delete/restore, retained import placement and durable accepted training verified 2026-09-25 on Linux. Relocation preserves four training files, books, backup ownership and complete folder inventories; prior 2,722 v2/264 legacy tests and headless interrupted rename/delete/restore proofs passed. Training freezes accepted commands in an ordered persistent queue, validates all participants before replay, and compacts completion receipts. Latest full v2 suite: 2,773 passed, four Windows-only skips; final focused native/storage/legacy/frontend suite: 903 passed, four Windows-only skips; analyze/lint and independent review passed. Three actual SIGKILL boundaries recover distinct commands exactly once. Headless interrupted mark-known plus queued exclusion survived restart, blocked access until Retry, then recovered the original timestamp and one history row; a second reopen left all four training files byte-identical. Native receipt batching improved measured scan cost, which still grows with history. Multi-file edits remain unfinished; Windows/macOS durability remains unverified. |
 | H4 | H2, H3c | Versioned input snapshots for catalog, shelf, gaps, book comparison and training; targeted invalidation | A late computation cannot replace a newer result; a fresh rebuild equals the displayed committed projection | Not started |
 | H5 | H2, H3c | Generation, mining, downloads, bughouse and engine lifetimes; job-specific checkpoints and truthful completion | Stop/retry/restart neither duplicates saved units nor loses promised results; resources return to baseline | Not started |
 | H6 | H4, H5 | All existing modes: focus/shortcuts/navigation/close, settings, credentials, diagnostics and integrity checks | The complete cross-mode sequence below passes with real disposable storage, offline/error cases and headless UI checks | Not started |

@@ -576,6 +576,7 @@ void validateFolderParticipantPaths(
     for (final name in [
       'relocation-writes',
       'compound-writes',
+      'training-writes',
       'unfinished-moves',
       'backups',
       'books.json',

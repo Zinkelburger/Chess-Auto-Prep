@@ -273,6 +273,29 @@ final class _HeldProgress implements ProgressFiles {
     Map<String, Revision>? observed,
   }) => delegate.read(sources, observed: observed);
   @override
+  Future<ProgressAdmission> enqueueWrite({
+    List<Change<Review>> reviews = const [],
+    List<Change<MoveStreak>> streaks = const [],
+    List<HistoryRow> history = const [],
+    required ProgressOperation operation,
+  }) => delegate.enqueueWrite(
+    reviews: reviews,
+    streaks: streaks,
+    history: history,
+    operation: operation,
+  );
+  @override
+  Future<ProgressAdmission> enqueueAttempt(
+    Attempt attempt, {
+    required ProgressOperation operation,
+  }) => delegate.enqueueAttempt(attempt, operation: operation);
+  @override
+  Future<ProgressWrite> commit(ProgressOperation operation) async {
+    await release.future;
+    return delegate.commit(operation);
+  }
+
+  @override
   Future<ProgressWrite> logAttempt(
     Attempt attempt, {
     ProgressOperation? operation,

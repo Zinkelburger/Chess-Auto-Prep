@@ -199,6 +199,11 @@ private compound and file-relocation journals. `foreign_relocation_history.dart`
 validates `Support/relocation-writes/` without importing v2 or reading current
 participants: only complete/cancelled records are accepted. Pending, malformed,
 linked or unknown metadata instructs the user to reopen v2, preserving all files.
+`foreign_training_history.dart` applies the same refusal boundary to
+`Support/training-writes/`: it validates compact completed receipts, their
+predecessor chain and proven native previous copies without replaying commands
+or consulting historical source paths. Pending or unknown training evidence
+blocks document/training access before legacy recovery can run.
 The v2 protocol and remaining migration work are described in
 [architecture renewal](ARCHITECTURE_RENEWAL.md#course-files).
 
