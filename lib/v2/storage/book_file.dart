@@ -161,7 +161,6 @@ final class BookFile implements BookStore {
   }
 }
 
-
 Revision _installedRevision(NativeFileObservation file) {
   final hash = file.sha256Hex;
   final identity = file.identity;

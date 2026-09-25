@@ -89,7 +89,10 @@ final class RecoveryGate {
         ('older relocation notes', notes.finishOwed),
         ('unfinished edits', compounds.recover),
         ('unfinished moves', relocations.recover),
-        ('the old app\'s operations', () => refuseV1Recovery(documents, support)),
+        (
+          'the old app\'s operations',
+          () => refuseV1Recovery(documents, support),
+        ),
       ]) {
         try {
           await step();

@@ -545,7 +545,10 @@ final class FileRelocations {
         ),
       ),
       alternateTo: DocumentRef(
-        p.join(record.trainingRoot, p.relative(record.to, from: documents.path)),
+        p.join(
+          record.trainingRoot,
+          p.relative(record.to, from: documents.path),
+        ),
       ),
     )).files;
   }

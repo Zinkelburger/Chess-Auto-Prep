@@ -157,10 +157,8 @@ void main() {
     expect((await reopened.commit(command)).secondary!.after, targetAfter);
     expect(await from.exists(), isFalse);
     expect(await to.readAsString(), 'external replacement');
-    expect(
-      reopened.publishedRevision(command.id),
-      first.publishedRevision(command.id),
-    );
+    // Another owner never vouches for a native file it did not install.
+    expect(reopened.publishedRevision(command.id), isNull);
   });
 
   test('same id cannot change only the second participant', () async {

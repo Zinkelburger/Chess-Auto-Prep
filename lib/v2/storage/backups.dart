@@ -57,7 +57,10 @@ final class BackupArchive {
       for (final version in index.versions.reversed) {
         final file = File(p.join(folder.path, version.file));
         if (!await file.exists()) continue;
-        return (version: version, bytes: versionBytes(await file.readAsBytes()));
+        return (
+          version: version,
+          bytes: versionBytes(await file.readAsBytes()),
+        );
       }
     } on Object catch (error) {
       log.w('read the newest kept version of $id', error);

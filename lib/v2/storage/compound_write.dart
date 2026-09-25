@@ -55,11 +55,13 @@ final class CompoundWrites {
   // of this profile — is answered without writing again. Retries only come
   // from this process: the caller's retry token is in memory too.
   static final _finished = <String, Map<String, CompoundCommit>>{};
-  static final _revisions = <String, Map<(String, String?), Revision>>{};
   Map<String, CompoundCommit> get _completed =>
       _finished.putIfAbsent(support.path, () => {});
-  Map<(String, String?), Revision> get _published =>
-      _revisions.putIfAbsent(support.path, () => {});
+
+  // The native identity of what this owner published. Another owner's retry
+  // gets content-only revisions, so it never vouches for a file it did not
+  // observe being installed.
+  final _published = <(String, String?), Revision>{};
   Revision? publishedRevision(String id, {String? path}) =>
       _published[(id, path)];
 

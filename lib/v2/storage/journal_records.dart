@@ -5,7 +5,6 @@ import 'package:path/path.dart' as p;
 
 import '../diagnostics/log.dart';
 import 'directory_entries.dart';
-import 'recovery_files.dart';
 import 'recovery_quarantine.dart';
 
 /// The records in one journal folder (`Support/<name>/<id>.json`).
@@ -39,7 +38,7 @@ Future<List<(File, T)>> readJournal<T>(
       if (entry is! File || id == null) {
         throw const FormatException('not a journal record');
       }
-      final value = jsonDecode(exactText(await entry.readAsBytes()));
+      final value = jsonDecode(utf8.decode(await entry.readAsBytes()));
       records.add((entry, decode(value, id)));
     } on Object catch (error) {
       await quarantine(directory.parent, entry, error);
