@@ -14,6 +14,7 @@ import '../../storage/pending_writes.dart';
 import '../../storage/my_accounts.dart';
 import '../../storage/my_games_files.dart';
 import 'set_additions.dart';
+import 'download_saves.dart';
 
 /// How many of each account's newest games a review looks at: the old
 /// app's `last 20 games`.
@@ -88,7 +89,14 @@ final class MyGamesNotDownloaded extends MyGamesStatus {
   final Map<GameSite, GamesNotFetched> problems;
 }
 
-enum MyGamesProblem { noAccounts, engine, setUnreadable, notSaved }
+enum MyGamesProblem {
+  noAccounts,
+  accountsUnreadable,
+  gamesUnreadable,
+  engine,
+  setUnreadable,
+  notSaved,
+}
 
 /// The review stopped. Games not reviewed yet stay queued: start carries on.
 final class MyGamesFailed extends MyGamesStatus {
@@ -135,6 +143,55 @@ final class MyGames extends ChangeNotifier {
        _now = now;
 
   final PendingWrites pendingWrites;
+  late final _downloads = DownloadSaves(_cache, _store, pendingWrites);
+  bool _retryingDownloads = false;
+  final _corpusProblems = <GameSite, ({String username, String detail})>{};
+  Map<GameSite, String> get corpusProblems => {
+    for (final entry in _corpusProblems.entries) entry.key: entry.value.detail,
+  };
+  Map<GameSite, String> get downloadProblems => _downloads.problems;
+  bool get retryingDownloads => _retryingDownloads;
+
+  Future<void> retryDownloads() async {
+    if (_disposed || running || _retryingDownloads) return;
+    _retryingDownloads = true;
+    notifyListeners();
+    try {
+      await _downloads.retry();
+      await _retryCorpusReads();
+      await load();
+      final finished = switch (_status) {
+        MyGamesDone() ||
+        MyGamesFailed(problem: MyGamesProblem.gamesUnreadable) => true,
+        _ => false,
+      };
+      if (downloadProblems.isEmpty && corpusProblems.isEmpty && finished) {
+        _status = const MyGamesIdle();
+      }
+    } finally {
+      _retryingDownloads = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  Future<void> _retryCorpusReads() async {
+    for (final entry in _corpusProblems.entries.toList()) {
+      final read = await _cache.snapshotNewest(
+        entry.key,
+        entry.value.username,
+        max: reviewWindow,
+      );
+      if (read is CachedGamesSnapshot) {
+        _corpusProblems.remove(entry.key);
+      } else if (read is CachedGamesUnavailable) {
+        _corpusProblems[entry.key] = (
+          username: entry.value.username,
+          detail: read.detail,
+        );
+      }
+    }
+  }
+
   final AccountStore _store;
   final List<RecentGames> _sites;
   final GamesCache _cache;
@@ -156,11 +213,20 @@ final class MyGames extends ChangeNotifier {
   final _accountRequests = Object();
   PendingObligation<bool>? _accountWrite;
   String? _accountProblem;
+  String? _accountReadProblem;
 
-  String? get accountProblem => _accountProblem;
+  String? get accountProblem =>
+      _accountProblem ??
+      _accountReadProblem ??
+      (!savingAccounts && pendingWrites.unfinished(_store).isNotEmpty
+          ? 'Account changes are waiting to be saved.'
+          : null);
+  bool get accountsUnavailable => _accountReadProblem != null;
   bool get savingAccounts => _accountSaves > 0;
   bool get accountsUnsettled =>
-      savingAccounts || (_accountWrite != null && !_accountWrite!.committed);
+      savingAccounts ||
+      accountsUnavailable ||
+      pendingWrites.unfinished(_store).isNotEmpty;
 
   /// The accounts with a username, and when each last downloaded.
   Map<GameSite, Account> get accounts => _accounts;
@@ -187,13 +253,32 @@ final class MyGames extends ChangeNotifier {
     if (_disposed) return;
     final revision = _accountRevision;
     await pendingWrites.settleFor(_store);
-    if (_disposed ||
-        revision != _accountRevision ||
-        pendingWrites.unfinished(_store).isNotEmpty)
-      return;
-    final read = await _store.read();
     if (_disposed || revision != _accountRevision) return;
-    _accounts = read;
+    if (pendingWrites.unfinished(_store).isNotEmpty) {
+      _accountReadProblem =
+          'Account changes have not been saved. Retry saving the usernames.';
+      notifyListeners();
+      return;
+    }
+    AccountsRead read;
+    try {
+      read = await _store.snapshot();
+    } on Object catch (error) {
+      read = AccountsUnavailable(
+        'The saved accounts could not be read: $error',
+      );
+    }
+    if (_disposed || revision != _accountRevision) return;
+    switch (read) {
+      case AccountsSnapshot(:final accounts, revision: final current)
+          when current == _store.revision:
+        _accounts = accounts;
+        _accountReadProblem = null;
+      case AccountsSnapshot():
+        _accountReadProblem = 'Accounts changed during the read. Retry.';
+      case AccountsUnavailable(:final detail):
+        _accountReadProblem = detail;
+    }
     notifyListeners();
   }
 
@@ -201,7 +286,9 @@ final class MyGames extends ChangeNotifier {
   /// downloaded, and games a paused review left queued are let go: they
   /// may be another account's. Answers whether both were kept.
   Future<bool> saveUsernames({String? lichess, String? chesscom}) {
-    if (_disposed || running) return Future.value(false);
+    if (_disposed || running || downloadProblems.isNotEmpty) {
+      return Future.value(false);
+    }
     _accountRevision++;
     final work = _saveUsernames(lichess?.trim(), chesscom?.trim());
     pendingWrites.watch(_accountRequests, work);
@@ -267,6 +354,10 @@ final class MyGames extends ChangeNotifier {
           ),
     };
     _accountProblem = null;
+    _accountReadProblem = null;
+    _corpusProblems.removeWhere(
+      (site, failure) => _accounts[site]?.username != failure.username,
+    );
     if (!running) {
       _queue = const [];
       _status = const MyGamesIdle();
@@ -277,14 +368,15 @@ final class MyGames extends ChangeNotifier {
   /// The exact requested pair remains in the accepted operation after the
   /// dialog or owner goes away; retrying does not ask for the names again.
   Future<void> retryUsernames() async {
-    if (_accountWrite == null || savingAccounts) return;
+    if (savingAccounts) return;
     _accountSaves++;
     if (!_disposed) notifyListeners();
     try {
       await pendingWrites.retry(_store);
-      _accountProblem = _accountWrite!.committed
+      _accountProblem = pendingWrites.unfinished(_store).isEmpty
           ? null
           : 'Your account names could not be saved.';
+      await load();
     } finally {
       _accountSaves--;
       if (!_disposed) notifyListeners();
@@ -293,12 +385,20 @@ final class MyGames extends ChangeNotifier {
 
   /// Downloads and reviews, or carries on with the games a pause or a
   /// failure left queued.
-  Future<void> start() => _disposed || accountsUnsettled
-      ? Future.value()
-      : pendingWrites.track(this, _start(), label: 'Game review');
+  Future<void> start() {
+    if (_disposed) return Future.value();
+    if (accountsUnsettled) {
+      notifyListeners();
+      return Future.value();
+    }
+    return pendingWrites.track(this, _start(), label: 'Game review');
+  }
 
   Future<void> _start() async {
-    if (running) return;
+    if (running || _retryingDownloads) return;
+    if (downloadProblems.isNotEmpty || corpusProblems.isNotEmpty) {
+      return retryDownloads();
+    }
     final (added, notReached) = switch (_status) {
       MyGamesPaused(:final added, :final notReached) => (added, notReached),
       MyGamesFailed(:final added) => (added, const <GameSite>{}),
@@ -346,7 +446,16 @@ final class MyGames extends ChangeNotifier {
   /// Answers the sites that were not reached when there is something to
   /// review now, or null when the job ends here.
   Future<Set<GameSite>?> _download() async {
-    if (_accounts.isEmpty) await load();
+    await load();
+    if (accountsUnavailable) {
+      _become(
+        MyGamesFailed(
+          MyGamesProblem.accountsUnreadable,
+          detail: _accountReadProblem!,
+        ),
+      );
+      return null;
+    }
     if (_accounts.isEmpty) {
       _become(const MyGamesFailed(MyGamesProblem.noAccounts));
       return null;
@@ -354,11 +463,16 @@ final class MyGames extends ChangeNotifier {
     _become(const MyGamesDownloading());
     final games = <_Queued>[];
     final problems = <GameSite, GamesNotFetched>{};
+    final accounts = Map<GameSite, Account>.of(_accounts);
     for (final source in _sites) {
-      final account = _accounts[source.site];
+      final account = accounts[source.site];
       if (account == null) continue;
       games.addAll(await _gamesOf(source, account.username, problems));
       if (_disposed) return null;
+    }
+    if (games.isEmpty && corpusProblems.isNotEmpty) {
+      _become(const MyGamesFailed(MyGamesProblem.gamesUnreadable));
+      return null;
     }
     if (games.isEmpty && problems.isNotEmpty) {
       _become(MyGamesNotDownloaded(problems));
@@ -386,21 +500,35 @@ final class MyGames extends ChangeNotifier {
     Map<GameSite, GamesNotFetched> problems,
   ) async {
     final site = source.site;
-    final List<String> texts;
     final max = await _toAskFor(site, username);
-    switch (await source.recent(username, max: max)) {
+    GamesFetch fetched;
+    try {
+      fetched = await source.recent(username, max: max);
+    } on Object {
+      fetched = const GamesNotFetched(GamesProblem.unreachable);
+    }
+    switch (fetched) {
       case GamesFetched(:final games):
-        final when = _now();
-        await _cache.keep(site, username, games, when);
-        await _store.setDownloaded(site, when);
-        _accounts = {..._accounts, site: Account(username, downloaded: when)};
-        // A site may answer more than was asked for; the window is the
-        // newest this many, whatever came down.
-        texts = games.take(reviewWindow).toList();
+        await _downloads.accept(site, username, games, _now());
+        if (!_disposed) await load();
       case final GamesNotFetched failed:
         problems[site] = failed;
-        texts = await _cache.read(site, username, max: reviewWindow) ?? [];
     }
+    // Reviews consume the same persisted corpus as an offline second launch.
+    // An unacknowledged HTTP result stays solely in its retry obligation.
+    final snapshot = await _cache.snapshotNewest(
+      site,
+      username,
+      max: reviewWindow,
+    );
+    if (snapshot is CachedGamesUnavailable) {
+      _corpusProblems[site] = (username: username, detail: snapshot.detail);
+      return [];
+    }
+    _corpusProblems.remove(site);
+    final texts = [
+      for (final game in (snapshot as CachedGamesSnapshot).games) game.text,
+    ];
     return [
       for (final text in texts)
         (site: site, username: username, id: gameIdIn(text), text: text),
@@ -412,10 +540,13 @@ final class MyGames extends ChangeNotifier {
   /// saved, a download asks for that many, and after that only for what a
   /// review needs.
   Future<int> _toAskFor(GameSite site, String username) async {
-    final saved = await _cache.newest(site, username, max: bookCheckWindow);
-    return (saved?.length ?? 0) < bookCheckWindow
-        ? bookCheckWindow
-        : reviewWindow;
+    final saved = await _cache.snapshotNewest(
+      site,
+      username,
+      max: bookCheckWindow,
+    );
+    final count = saved is CachedGamesSnapshot ? saved.games.length : 0;
+    return count < bookCheckWindow ? bookCheckWindow : reviewWindow;
   }
 
   /// Takes the games either app has reviewed since they were queued off the
