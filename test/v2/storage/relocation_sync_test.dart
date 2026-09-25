@@ -1,11 +1,13 @@
 @TestOn('linux || mac-os')
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/v2/storage/backups.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/document_relocation.dart';
+import 'package:chess_auto_prep/v2/storage/file_relocation.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/relocation_notes.dart';
 import 'package:chess_auto_prep/v2/storage/training_records.dart' as training;
@@ -56,69 +58,124 @@ void main() {
     '${ref.path},line_1,4,2,true\n',
   );
 
-  for (final operation in ['move', 'folder', 'delete']) {
+  for (final endpoint in ['source', 'destination', 'ancestor']) {
+    test('folder retains its note when $endpoint flush fails', () async {
+      final from = fixture.ref('repertoires/Before/Main.pgn');
+      await fixture.put(from, oneGame('1. d4'));
+      await rowsFor(from);
+      final sourceParent = p.dirname(p.dirname(from.path));
+      final destinationParent = p.join(fixture.documents.path, 'nested');
+      await Directory(destinationParent).create();
+      failAt = switch (endpoint) {
+        'source' => sourceParent,
+        'destination' => destinationParent,
+        _ => fixture.documents.path,
+      };
+      expect(
+        await relocation.moveFolder(
+          p.dirname(from.path),
+          p.join(destinationParent, 'After'),
+        ),
+        isA<FolderMoveFailed>(),
+      );
+      final owed = await pending.read();
+      expect(owed, hasLength(1));
+      final movedPath = p.join(owed.single.to, 'Main.pgn');
+      expect(await File(from.path).exists(), isFalse);
+      expect(await File(movedPath).readAsString(), oneGame('1. d4'));
+      expect(await getRows().readAsString(), contains(from.path));
+      await expectLater(
+        notes.finishOwed(),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(await pending.read(), hasLength(1));
+      failAt = null;
+      flushed.clear();
+      await notes.finishOwed();
+      expect(
+        flushed,
+        containsAll([sourceParent, destinationParent, fixture.documents.path]),
+      );
+      expect(await pending.read(), isEmpty);
+      expect(await getRows().readAsString(), contains(movedPath));
+      final committedRows = await getRows().readAsString();
+      await notes.finishOwed();
+      expect(await getRows().readAsString(), committedRows);
+    });
+  }
+
+  for (final operation in ['move', 'rename', 'delete']) {
     for (final endpoint in ['source', 'destination', 'ancestor']) {
-      test('$operation retains its note when $endpoint flush fails', () async {
-        final from = fixture.ref('repertoires/Before/Main.pgn');
-        final to = fixture.ref('repertoires/After/Main.pgn');
-        final revision = await fixture.put(from, oneGame('1. d4'));
-        await rowsFor(from);
-        final sourceParent = operation == 'folder'
-            ? p.dirname(p.dirname(from.path))
-            : p.dirname(from.path);
-        final destinationParent = switch (operation) {
-          'folder' => p.join(fixture.documents.path, 'nested'),
-          'delete' => p.join(p.dirname(from.path), recoveryFolder),
-          _ => p.dirname(to.path),
-        };
-        if (operation == 'folder') await Directory(destinationParent).create();
-        failAt = switch (endpoint) {
-          'source' => sourceParent,
-          'destination' => destinationParent,
-          _ => fixture.documents.path,
-        };
-        final Object result = switch (operation) {
-          'folder' => await relocation.moveFolder(
-            p.dirname(from.path),
-            p.join(destinationParent, 'After'),
-          ),
-          'delete' => await relocation.delete(from, expected: revision),
-          _ => await relocation.move(from, to, expected: revision),
-        };
-        expect(
-          result,
-          operation == 'folder' ? isA<FolderMoveFailed>() : isA<IoFailure>(),
-        );
-        final owed = await pending.read();
-        expect(owed, hasLength(1));
-        expect(await File(from.path).exists(), isFalse);
-        final movedPath = operation == 'folder'
-            ? p.join(owed.single.to, 'Main.pgn')
-            : owed.single.to;
-        expect(await File(movedPath).readAsString(), oneGame('1. d4'));
-        expect(await getRows().readAsString(), contains(from.path));
-        await expectLater(
-          notes.finishOwed(),
-          throwsA(isA<FileSystemException>()),
-        );
-        expect(await pending.read(), hasLength(1));
-        failAt = null;
-        flushed.clear();
-        await notes.finishOwed();
-        expect(
-          flushed,
-          containsAll([
-            sourceParent,
-            destinationParent,
-            fixture.documents.path,
-          ]),
-        );
-        expect(await pending.read(), isEmpty);
-        expect(await getRows().readAsString(), contains(movedPath));
-        final committedRows = await getRows().readAsString();
-        await notes.finishOwed();
-        expect(await getRows().readAsString(), committedRows);
-      });
+      test(
+        '$operation retains committing journal when $endpoint flush fails',
+        () async {
+          const id = '1780000000000000-f1';
+          final from = fixture.ref('repertoires/Before/Main.pgn');
+          final to = fixture.ref(
+            operation == 'move'
+                ? 'repertoires/After/Main.pgn'
+                : operation == 'delete'
+                ? 'repertoires/Before/.cap-pgn-history/$id-Main.pgn'
+                : 'repertoires/Before/Renamed.pgn',
+          );
+          final revision = await fixture.put(from, oneGame('1. d4'));
+          await rowsFor(from);
+          final before = await getRows().readAsBytes();
+          final failedPath = switch (endpoint) {
+            'source' => p.dirname(from.path),
+            'destination' => p.dirname(to.path),
+            _ => fixture.documents.path,
+          };
+          final owner = FileRelocations(
+            documents: fixture.documents,
+            support: fixture.support,
+            testHook: (step) async {
+              if (step == FileRelocationStep.intent) failAt = failedPath;
+            },
+            synchronize: (path) async {
+              flushed.add(path);
+              if (path == failAt && !await File(from.path).exists()) {
+                throw FileSystemException('injected flush failure', path);
+              }
+              await syncDirectory(path);
+            },
+          );
+          Future<Object> run() async => operation == 'delete'
+              ? owner.delete(from, expected: revision, operationId: id)
+              : owner.move(from, to, expected: revision, operationId: id);
+          expect(await run(), isA<IoFailure>());
+          final note = File(
+            p.join(fixture.support.path, 'relocation-writes', '$id.json'),
+          );
+          final committing = await note.readAsBytes();
+          expect(jsonDecode(utf8.decode(committing))['state'], 'committing');
+          expect(await File(from.path).exists(), isFalse);
+          expect(await File(to.path).readAsString(), oneGame('1. d4'));
+          expect(await getRows().readAsBytes(), before);
+          await expectLater(owner.recover(), throwsA(isA<RecoveryRequired>()));
+          expect(await note.readAsBytes(), committing);
+          expect(await getRows().readAsBytes(), before);
+          failAt = null;
+          flushed.clear();
+          await owner.recover();
+          expect(
+            flushed,
+            containsAll([
+              p.dirname(from.path),
+              p.dirname(to.path),
+              fixture.documents.path,
+            ]),
+          );
+          expect(jsonDecode(await note.readAsString())['state'], 'complete');
+          expect(await getRows().readAsString(), contains(to.path));
+          final committed = await getRows().readAsBytes();
+          expect(
+            await run(),
+            operation == 'delete' ? isA<Deleted>() : isA<Moved>(),
+          );
+          expect(await getRows().readAsBytes(), committed);
+        },
+      );
     }
   }
 
@@ -128,21 +185,20 @@ void main() {
     final alias = p.join(fixture.root.path, 'documents-alias');
     await Link(alias).create(fixture.documents.path);
     final documents = Directory(alias);
-    final relocation = DocumentRelocation(
+    final relocation = FileRelocations(
       documents: documents,
-      backups: BackupArchive(
-        Directory(p.join(fixture.support.path, 'backups')),
-      ),
-      notes: RelocationNotes(
-        notes: PendingRepoints(fixture.support, documents: documents),
-        records: training.TrainingRecords(documents),
-      ),
+      support: fixture.support,
     );
     final from = DocumentRef(
       p.join(alias, 'repertoires', 'Before', 'Main.pgn'),
     );
     expect(
-      await relocation.rename(from, 'After.pgn', expected: revision),
+      await relocation.move(
+        from,
+        DocumentRef(p.join(p.dirname(from.path), 'After.pgn')),
+        expected: revision,
+        operationId: 'alias-move',
+      ),
       isA<Moved>(),
     );
     expect(await pending.read(), isEmpty);
@@ -157,9 +213,9 @@ void main() {
     );
     final flushed = <String>[];
     var blocked = true;
-    final pending = PendingRepoints(
-      support,
+    final relocation = FileRelocations(
       documents: fixture.documents,
+      support: support,
       synchronize: (path) async {
         flushed.add(path);
         if (blocked && path == fixture.root.path) {
@@ -168,28 +224,48 @@ void main() {
         await syncDirectory(path);
       },
     );
-    final relocation = DocumentRelocation(
-      documents: fixture.documents,
-      backups: BackupArchive(Directory(p.join(support.path, 'backups'))),
-      notes: RelocationNotes(
-        notes: pending,
-        records: training.TrainingRecords(fixture.documents),
-      ),
-    );
     expect(
-      await relocation.move(from, to, expected: revision),
+      await relocation.move(
+        from,
+        to,
+        expected: revision,
+        operationId: 'new-ancestry',
+      ),
       isA<IoFailure>(),
     );
     expect(await File(from.path).exists(), isTrue);
     expect(await File(to.path).exists(), isFalse);
-    expect(await pending.read(), isEmpty);
+    final journal = Directory(p.join(support.path, 'relocation-writes'));
+    expect(await journal.list().toList(), isEmpty);
+    // The first attempt created the ancestors; their existence is not proof
+    // that their parent entries were durably synchronized.
+    expect(
+      await relocation.move(
+        from,
+        to,
+        expected: revision,
+        operationId: 'new-ancestry',
+      ),
+      isA<IoFailure>(),
+    );
+    expect(await File(from.path).exists(), isTrue);
+    expect(await File(to.path).exists(), isFalse);
+    expect(await journal.list().toList(), isEmpty);
     blocked = false;
     flushed.clear();
-    expect(await relocation.move(from, to, expected: revision), isA<Moved>());
+    expect(
+      await relocation.move(
+        from,
+        to,
+        expected: revision,
+        operationId: 'new-ancestry',
+      ),
+      isA<Moved>(),
+    );
     expect(
       flushed,
       containsAllInOrder([
-        p.join(support.path, 'unfinished-moves'),
+        p.join(support.path, 'relocation-writes'),
         support.path,
         p.dirname(support.path),
         p.join(fixture.root.path, 'new'),

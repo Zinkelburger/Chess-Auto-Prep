@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../diagnostics/log.dart';
 import 'atomic_write.dart';
+import 'backup_relocation.dart';
 
 /// Every version the store replaces, kept where a mistake in Documents cannot
 /// reach it: `<support>/backups/<document id>/`, one plain copy per version
@@ -27,6 +28,27 @@ final class BackupArchive {
   /// The `backups` directory under Support.
   final Directory root;
 
+  /// Plans without writing; the relocation journal owns this exact result.
+  Future<BackupMove> planMove({
+    required String fromId,
+    required String toId,
+    required String documentPath,
+    required String operationId,
+  }) => BackupRelocation(root).planMove(
+    fromId: fromId,
+    toId: toId,
+    documentPath: documentPath,
+    operationId: operationId,
+  );
+
+  Future<void> validateMove(BackupMove move, {bool allowAfter = true}) =>
+      BackupRelocation(root).validateMove(move, allowAfter: allowAfter);
+
+  Future<void> applyMove(
+    BackupMove move, {
+    Future<void> Function(BackupMoveStep)? testHook,
+  }) => BackupRelocation(root).applyMove(move, testHook: testHook);
+
   /// Where the versions of the document with [id] are kept, for telling
   /// someone where to find them.
   Directory folderFor(String id) => Directory(p.join(root.path, id));
@@ -39,8 +61,8 @@ final class BackupArchive {
   /// restore writes against anything.
   Future<BackupVersion?> versionWithHash(String id, String hash) async {
     try {
-      final versions = await _readIndex(folderFor(id));
-      return versions.where((version) => version.hash == hash).lastOrNull;
+      final index = await _readIndex(folderFor(id));
+      return index.versions.where((version) => version.hash == hash).lastOrNull;
     } on Object catch (error) {
       log.e('look for a kept version of $id', error);
       return null;
@@ -63,7 +85,7 @@ final class BackupArchive {
     try {
       await folder.create(recursive: true);
       final index = await _readIndex(folder);
-      if (index.isNotEmpty && index.last.hash == hash) {
+      if (index.versions.isNotEmpty && index.versions.last.hash == hash) {
         return const BackupSkipped();
       }
       final time = DateTime.now().toUtc();
@@ -79,7 +101,7 @@ final class BackupArchive {
         size: bytes.length,
         hash: hash,
       );
-      await _writeIndex(folder, documentPath, [...index, version]);
+      await _writeIndex(folder, documentPath, index, append: version);
       return const BackupRecorded();
     } on Object catch (error) {
       log.e('record the previous version of $documentPath', error);
@@ -153,10 +175,12 @@ final class BackupArchive {
   /// An index is a list of files that are on the disk anyway, so it can be
   /// written again from them. Letting a truncated one stand would instead
   /// fail every later save and delete of that document, for good.
-  Future<List<BackupVersion>> _readIndex(Directory folder) async {
+  Future<_BackupIndex> _readIndex(Directory folder) async {
     final file = File(p.join(folder.path, _indexName));
     try {
-      if (!await file.exists()) return await _rebuilt(folder);
+      if (!await file.exists()) {
+        return _BackupIndex.rebuilt(await _rebuilt(folder));
+      }
       // Decoded here rather than by `readAsString`, which reports bytes
       // that are not UTF-8 as a [FileSystemException] and so would skip
       // the repair below.
@@ -164,16 +188,16 @@ final class BackupArchive {
     } on FormatException catch (error) {
       log.e('read the kept versions in ${folder.path}', error);
       await _putAside(file);
-      return _rebuilt(folder);
+      return _BackupIndex.rebuilt(await _rebuilt(folder));
     }
   }
 
-  List<BackupVersion> _listed(String text) {
+  _BackupIndex _listed(String text) {
     final json = jsonDecode(text);
-    final versions = json is Map<String, Object?> ? json['versions'] : null;
-    if (versions is! List) {
+    if (json is! Map<String, Object?> || json['versions'] is! List) {
       throw const FormatException('the kept versions are not a list');
     }
+    final versions = json['versions']! as List;
     final listed = <BackupVersion>[];
     for (final version in versions) {
       if (version is! Map<String, Object?>) {
@@ -181,7 +205,7 @@ final class BackupArchive {
       }
       listed.add(BackupVersion.fromJson(version));
     }
-    return listed;
+    return _BackupIndex(json, listed);
   }
 
   /// What the version files in [folder] say, oldest first.
@@ -241,17 +265,34 @@ final class BackupArchive {
   Future<void> _writeIndex(
     Directory folder,
     String documentPath,
-    List<BackupVersion> versions,
-  ) async {
+    _BackupIndex index, {
+    BackupVersion? append,
+  }) async {
     final json = {
+      ...index.data,
       'path': documentPath,
-      'versions': [for (final version in versions) version.toJson()],
+      if (append != null)
+        'versions': [...index.data['versions']! as List, append.toJson()],
     };
     await replaceFile(
       p.join(folder.path, _indexName),
       utf8.encode(jsonEncode(json)),
     );
   }
+}
+
+/// Validated known fields serve version lookup; the original objects retain
+/// metadata this build does not interpret when appending or moving history.
+final class _BackupIndex {
+  const _BackupIndex(this.data, this.versions);
+
+  _BackupIndex.rebuilt(List<BackupVersion> versions)
+    : this({
+        'versions': [for (final version in versions) version.toJson()],
+      }, versions);
+
+  final Map<String, Object?> data;
+  final List<BackupVersion> versions;
 }
 
 const _indexName = 'index.json';

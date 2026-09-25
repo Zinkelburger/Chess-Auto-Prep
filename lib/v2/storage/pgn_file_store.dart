@@ -19,6 +19,8 @@ import 'document_probe.dart';
 import 'document_ref.dart';
 import 'document_relocation.dart';
 import 'edit_scope.dart';
+import 'file_relocation.dart';
+import 'reference_change.dart';
 import 'mutation_guards.dart';
 import 'pgn_document_store.dart';
 import 'relocation_notes.dart';
@@ -51,19 +53,22 @@ import 'section_reference_check.dart';
 /// stops the write. That comparison, and everything else that touches every
 /// byte of the file, runs on another isolate.
 ///
-/// Renaming, moving and deleting change where a document lives rather than
-/// what is in it; they are in [DocumentRelocation].
+/// File moves use [FileRelocations] to commit location, training, selectors
+/// and backup ownership together, including quarantine delete and restore.
+/// [DocumentRelocation] still owns folder moves under the original protocol.
 final class PgnFileStore implements PgnDocumentStore {
   factory PgnFileStore({
     required Directory documents,
     required Directory support,
     Future<void> Function(CompoundWriteStep)? compoundHook,
+    Future<void> Function(FileRelocationStep)? relocationHook,
   }) {
     final backups = BackupArchive(Directory(p.join(support.path, 'backups')));
     final recovery = RecoveryGate(
       documents: documents,
       support: support,
       compoundHook: compoundHook,
+      relocationHook: relocationHook,
     );
     return PgnFileStore._(
       documents,
@@ -436,9 +441,12 @@ final class PgnFileStore implements PgnDocumentStore {
     DocumentRef ref,
     String name, {
     required Revision expected,
-  }) => _guard(
-    () => _relocation.rename(ref, name, expected: expected),
-    IoFailure.new,
+    String? operationId,
+  }) => move(
+    ref,
+    DocumentRef(p.join(p.dirname(ref.path), name)),
+    expected: expected,
+    operationId: operationId,
   );
 
   @override
@@ -446,18 +454,52 @@ final class PgnFileStore implements PgnDocumentStore {
     DocumentRef ref,
     DocumentRef destination, {
     required Revision expected,
-  }) => _guard(
-    () => _relocation.move(ref, destination, expected: expected),
-    IoFailure.new,
-  );
+    String? operationId,
+  }) {
+    final id = operationId ?? newCompoundId();
+    return _guard(
+      () => lockedForRelocation(
+        documents,
+        ref,
+        [folderOf(ref), folderOf(destination), recovery.support],
+        () => recovery.relocations.move(
+          ref,
+          destination,
+          expected: expected,
+          operationId: id,
+        ),
+        IoFailure.new,
+      ),
+      IoFailure.new,
+    );
+  }
 
   @override
   Future<FolderMoveResult> moveFolder(String from, String to) =>
       _guard(() => _relocation.moveFolder(from, to), FolderMoveFailed.new);
 
   @override
-  Future<DeleteResult> delete(DocumentRef ref, {required Revision expected}) =>
-      _guard(() => _relocation.delete(ref, expected: expected), IoFailure.new);
+  Future<DeleteResult> delete(
+    DocumentRef ref, {
+    required Revision expected,
+    String? operationId,
+  }) {
+    final id = operationId ?? newCompoundId();
+    return _guard(
+      () => lockedForRelocation(
+        documents,
+        ref,
+        [folderOf(ref), recovery.support],
+        () => recovery.relocations.delete(
+          ref,
+          expected: expected,
+          operationId: id,
+        ),
+        IoFailure.new,
+      ),
+      IoFailure.new,
+    );
+  }
 
   Receipt _receipt(String before, Revision was, Revision committed) =>
       Receipt(committed: committed, before: before, beforeRevision: was);

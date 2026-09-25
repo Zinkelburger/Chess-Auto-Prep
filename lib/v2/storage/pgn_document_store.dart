@@ -44,13 +44,17 @@ abstract interface class PgnDocumentStore {
     DocumentRef ref,
     String name, {
     required Revision expected,
+    String? operationId,
   });
 
-  /// Moves [ref] to [destination], replacing nothing.
+  /// Moves [ref] to [destination], replacing nothing. A caller retains
+  /// [operationId] and the original revision to retry an unknown outcome;
+  /// a completed receipt acknowledges that exact operation after reopening.
   Future<MoveResult> move(
     DocumentRef ref,
     DocumentRef destination, {
     required Revision expected,
+    String? operationId,
   });
 
   /// Moves the folder at [from] to [to] with everything in it, in one
@@ -66,7 +70,11 @@ abstract interface class PgnDocumentStore {
 
   /// Moves [ref] into the recovery folder the old app also deletes into, so
   /// the user has one place to look and nothing is unlinked.
-  Future<DeleteResult> delete(DocumentRef ref, {required Revision expected});
+  Future<DeleteResult> delete(
+    DocumentRef ref, {
+    required Revision expected,
+    String? operationId,
+  });
 }
 
 sealed class DocumentRead {
@@ -183,9 +191,8 @@ final class Moved implements MoveResult {
   /// Unchanged by the move: the same bytes in the same file, under a new name.
   final Revision revision;
 
-  /// Whether the training rows that named the old path followed it. The file
-  /// is not put back when they did not: it is where the user asked for it,
-  /// and this says what is still pointing at the name it left.
+  /// The training result of the completed file move. Native file commands
+  /// return Moved only after all required participants have committed.
   final RepointResult training;
 }
 
@@ -248,7 +255,8 @@ final class NotWritable extends SaveDidNotLand {
   const NotWritable(super.detail);
 }
 
-/// The operation could not be carried out. The document is as it was.
+/// The operation could not be acknowledged. A durable intent may already
+/// have published participants; exact retry or recovery determines completion.
 final class IoFailure extends SaveDidNotLand
     implements CreateResult, MoveResult, DeleteResult {
   const IoFailure(super.detail);

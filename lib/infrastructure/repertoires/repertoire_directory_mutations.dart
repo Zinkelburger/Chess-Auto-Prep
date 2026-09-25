@@ -11,6 +11,7 @@ import '../../utils/safe_file_name.dart';
 import '../../services/storage/file_mutation_service.dart';
 import '../../utils/atomic_file.dart';
 import '../../utils/file_operation_lock.dart';
+import 'foreign_relocation_history.dart';
 
 enum RepertoireMoveStep { prepared, moved, referencesUpdated, completed }
 
@@ -26,6 +27,7 @@ class RepertoireDirectoryMutations {
     this.recoverAdditional,
     this.foreignRecoveryNotes,
     this.compoundRecoveryNotes,
+    this.relocationRecoveryNotes,
     this.compoundDocumentsRoot,
     this.trash,
     this.trashAllowedRoot,
@@ -43,6 +45,7 @@ class RepertoireDirectoryMutations {
   /// Versioned v2 PGN/book operations. Terminal history remains compatible;
   /// pending or unrecognized metadata requires its owning application's recovery.
   final Directory? compoundRecoveryNotes;
+  final Directory? relocationRecoveryNotes;
   final Directory? compoundDocumentsRoot;
   final Directory? trash;
   final Directory? trashAllowedRoot;
@@ -57,6 +60,10 @@ class RepertoireDirectoryMutations {
     return withFileOperationLock(
       p.join(canonicalRoot, '.cap-directory-domain'),
       () async {
+        await checkForeignRelocationHistory(
+          relocationRecoveryNotes,
+          documents: compoundDocumentsRoot,
+        );
         await _refuseCompoundRecovery();
         await _refuseForeignRecovery();
         await _recover();

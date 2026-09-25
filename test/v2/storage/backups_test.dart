@@ -2,6 +2,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:chess_auto_prep/v2/storage/document_ref.dart';
+
 import 'package:chess_auto_prep/v2/storage/atomic_write.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -46,8 +48,10 @@ void main() {
   test('a deleted document leaves its bytes behind', () async {
     final ref = fixture.ref('KID/Main.pgn');
     final revision = await fixture.put(ref, a);
-    expect(await fixture.store.delete(ref, expected: revision), isA<Deleted>());
-    expect(fixture.keptTexts(ref), [a]);
+    final deleted =
+        await fixture.store.delete(ref, expected: revision) as Deleted;
+    expect(fixture.keptTexts(DocumentRef(deleted.recoveredTo)), [a]);
+    expect(await fixture.backupFolder(ref).exists(), isFalse);
   });
 
   test('a renamed document keeps one history', () async {
@@ -193,7 +197,7 @@ void main() {
     expect(fixture.keptTexts(ref).last, a);
   });
 
-  test('an adoption that cannot be made moves no history at all', () async {
+  test('a journaled move preserves histories beside legacy staging', () async {
     final taken = fixture.ref('KID/Mainline.pgn');
     final first = await fixture.put(taken, older);
     await fixture.edit(taken, newer, first);
@@ -208,9 +212,10 @@ void main() {
         .backupFolder(ref)
         .listSync()
         .map((e) => p.basename(e.path));
-    // The name the incoming history has to wait under is taken, by what an
-    // adoption that was interrupted left behind.
-    await Directory('${occupied.path}.adopting').create();
+    // Legacy staging is preserved; the journal uses its own recorded aside.
+    final legacy = Directory('${occupied.path}.adopting');
+    await legacy.create();
+    await File(p.join(legacy.path, 'retained')).writeAsString('legacy bytes');
 
     final moved = await fixture.store.rename(
       ref,
@@ -218,19 +223,19 @@ void main() {
       expected: saved.receipt.committed,
     );
 
-    expect(moved, isA<Moved>(), reason: 'the chapter still moves');
-    // Neither history was disturbed, and nothing was set aside.
-    expect(occupied.listSync().map((e) => p.basename(e.path)), occupantHeld);
+    expect(moved, isA<Moved>());
+    expect(occupied.listSync().map((e) => p.basename(e.path)), mineHeld);
+    expect(fixture.backupFolder(ref).existsSync(), isFalse);
+    final aside = Directory(p.join(fixture.support.path, 'backups'))
+        .listSync()
+        .whereType<Directory>()
+        .singleWhere((e) => p.basename(e.path).contains('.superseded-'));
+    expect(aside.listSync().map((e) => p.basename(e.path)), occupantHeld);
     expect(
-      fixture.backupFolder(ref).listSync().map((e) => p.basename(e.path)),
-      mineHeld,
+      await File(p.join(legacy.path, 'retained')).readAsString(),
+      'legacy bytes',
     );
-    expect(
-      Directory(
-        p.join(fixture.support.path, 'backups'),
-      ).listSync().where((e) => p.basename(e.path).contains('.superseded-')),
-      isEmpty,
-    );
+    expect(fixture.keptTexts(taken), [a]);
   });
 
   test(

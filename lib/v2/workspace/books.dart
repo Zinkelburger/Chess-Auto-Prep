@@ -303,11 +303,16 @@ final class Books extends ChangeNotifier {
   /// snapshot; failures preserve the document command for its owner's retry.
   Future<documents.SaveResult> saveReferences(
     Future<documents.SaveResult> Function() save,
-  ) async {
+  ) => changeReferences(save, failed: documents.IoFailure.new);
+
+  /// File relocation and structural saves share the same book admission:
+  /// settle accepted snapshots before entering storage, then reload recovery.
+  Future<T> changeReferences<T>(
+    Future<T> Function() operation, {
+    required T Function(String detail) failed,
+  }) async {
     if (_changingReferences || _disposed) {
-      return const documents.IoFailure(
-        'A book reference change is still pending.',
-      );
+      return failed('A book reference change is still pending.');
     }
     _changingReferences = true;
     final completion = _referenceWrite = Completer<void>();
@@ -317,13 +322,13 @@ final class Books extends ChangeNotifier {
       await pendingWrites.settleFor(_store);
       if (!canRetry && (!_loaded || _unreadable)) await _readReferences();
       if (_unreadable || canRetry) {
-        return const documents.IoFailure(
-          'Save or recover your books before renaming a chapter.',
+        return failed(
+          'Save or recover your books before changing this document.',
         );
       }
-      final documents.SaveResult result;
+      final T result;
       try {
-        result = await save();
+        result = await operation();
       } finally {
         // A lost acknowledgement may leave intent. Read through recovery
         // before allowing the book snapshot to be edited again.

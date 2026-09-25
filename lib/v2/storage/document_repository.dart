@@ -82,10 +82,12 @@ final class DocumentRepository extends ChangeNotifier
     DocumentRef ref,
     String name, {
     required Revision expected,
+    String? operationId,
   }) => move(
     ref,
     DocumentRef(p.join(p.dirname(ref.path), name)),
     expected: expected,
+    operationId: operationId,
   );
 
   @override
@@ -93,10 +95,16 @@ final class DocumentRepository extends ChangeNotifier
     DocumentRef ref,
     DocumentRef destination, {
     required Revision expected,
+    String? operationId,
   }) async {
     final result = await _write(
       ref.path,
-      _store.move(ref, destination, expected: expected),
+      _store.move(
+        ref,
+        destination,
+        expected: expected,
+        operationId: operationId,
+      ),
     );
     if (result is Moved)
       _committed(
@@ -128,10 +136,11 @@ final class DocumentRepository extends ChangeNotifier
   Future<DeleteResult> delete(
     DocumentRef ref, {
     required Revision expected,
+    String? operationId,
   }) async {
     final result = await _write(
       ref.path,
-      _store.delete(ref, expected: expected),
+      _store.delete(ref, expected: expected, operationId: operationId),
     );
     if (result is Deleted)
       _committed(DocumentChange(ref.path, kind: DocumentChangeKind.deleted));

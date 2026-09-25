@@ -8,6 +8,7 @@ import 'atomic_write.dart';
 import 'compound_commit.dart';
 import 'document_ref.dart';
 import 'relocation_notes.dart' show RecoveryRequired;
+import 'recovery_files.dart';
 
 enum CompoundWriteStep { prepared, intent, document, books, completed }
 
@@ -21,8 +22,8 @@ final class CompoundWrites {
     this.testHook,
   }) : _configuredDocuments = documents,
        _configuredSupport = support,
-       documents = _canonicalRoot(documents),
-       support = _canonicalRoot(support);
+       documents = canonicalRecoveryRoot(documents),
+       support = canonicalRecoveryRoot(support);
 
   final Directory _configuredDocuments;
   final Directory _configuredSupport;
@@ -46,8 +47,8 @@ final class CompoundWrites {
   });
 
   void _checkRoots() {
-    if (_canonicalRoot(_configuredDocuments).path != documents.path ||
-        _canonicalRoot(_configuredSupport).path != support.path) {
+    if (canonicalRecoveryRoot(_configuredDocuments).path != documents.path ||
+        canonicalRecoveryRoot(_configuredSupport).path != support.path) {
       throw const RecoveryRequired('The configured profile root changed.');
     }
   }
@@ -92,8 +93,8 @@ final class CompoundWrites {
     // A fresh or cancelled command has not published either participant.
     await _preflight(command, allowAfter: false);
     final note = existing ?? _Note(command, _State.prepared);
-    await _directory(support, create: true);
-    await _directory(_folder, create: true);
+    await recoveryDirectory(support, create: true);
+    await recoveryDirectory(_folder, create: true);
     await _record(note, _State.prepared, fresh: existing == null);
     await testHook?.call(CompoundWriteStep.prepared);
     await _record(note, _State.committing);
@@ -153,10 +154,10 @@ final class CompoundWrites {
     CompoundCommit command, {
     required bool allowAfter,
   }) async {
-    if (!await _directory(documents)) {
+    if (!await recoveryDirectory(documents)) {
       throw const RecoveryRequired('The Documents directory is missing.');
     }
-    await _directory(support);
+    await recoveryDirectory(support);
     final root = p.normalize(p.absolute(documents.path));
     var parent = root;
     final parts = p.split(
@@ -164,7 +165,7 @@ final class CompoundWrites {
     );
     for (final part in parts) {
       parent = p.join(parent, part);
-      if (!await _directory(Directory(parent))) {
+      if (!await recoveryDirectory(Directory(parent))) {
         throw RecoveryRequired('The document directory is missing: $parent.');
       }
     }
@@ -195,15 +196,15 @@ final class CompoundWrites {
     if (current == after) {
       // A prior rename/delete may have landed but lost its directory-flush
       // acknowledgement. Confirm its namespace durability before completing.
-      await _sync(p.dirname(path));
+      await flushRecoveryDirectory(p.dirname(path));
       return;
     }
     if (after == null) {
       await File(path).delete();
-      await _sync(p.dirname(path));
+      await flushRecoveryDirectory(p.dirname(path));
       return;
     }
-    await _unusedStage(path);
+    await requireUnusedRecoveryStage(path);
     await replaceFile(
       path,
       utf8.encode(after),
@@ -218,7 +219,7 @@ final class CompoundWrites {
 
   Future<void> _record(_Note note, _State state, {bool fresh = false}) async {
     final path = _path(note.command.id);
-    await _unusedStage(path);
+    await requireUnusedRecoveryStage(path);
     final bytes = utf8.encode(jsonEncode(note.json(state)));
     // The native no-follow reader has this allocation limit. Never publish
     // a journal it could not validate after a restart.
@@ -236,7 +237,8 @@ final class CompoundWrites {
   }
 
   Future<List<_Note>> _readAll() async {
-    if (!await _directory(support) || !await _directory(_folder)) return [];
+    if (!await recoveryDirectory(support) || !await recoveryDirectory(_folder))
+      return [];
     final entries = await _folder.list(followLinks: false).toList();
     entries.sort((a, b) => a.path.compareTo(b.path));
     final notes = <_Note>[];
@@ -379,33 +381,6 @@ Future<String?> _text(String path) async {
   return utf8.decode(observed.bytes!);
 }
 
-Future<bool> _directory(Directory directory, {bool create = false}) async {
-  var observed = await observeDirectory(directory.path);
-  if (observed.status == 1) {
-    if (!create) return false;
-    await directory.create(recursive: true);
-    await _sync(p.dirname(directory.path));
-    observed = await observeDirectory(directory.path);
-  }
-  if (observed.status != 0) {
-    throw RecoveryRequired(
-      'Compound directory is unreadable or unsupported: ${directory.path}.',
-    );
-  }
-  return true;
-}
-
-Future<void> _unusedStage(String path) async {
-  final stage = await observeFile(temporaryPathFor(path));
-  if (stage.status != 1) {
-    throw RecoveryRequired('An unverified staged file remains for $path.');
-  }
-}
-
-Future<void> _sync(String directory) async {
-  if (!Platform.isWindows) await syncDirectory(directory);
-}
-
 Future<T> _checked<T>(Future<T> Function() work) async {
   try {
     return await work();
@@ -418,26 +393,4 @@ Future<T> _checked<T>(Future<T> Function() work) async {
       'Compound metadata appeared during preparation.',
     );
   }
-}
-
-// Pin configured roots before any await. Aliases at construction are trusted;
-// later resolutions only detect retargeting. Participants stay no-follow.
-// Support can be absent on the first edit, so resolve its nearest existing
-// ancestor without creating any directories before command validation.
-Directory _canonicalRoot(Directory directory) {
-  var current = p.normalize(p.absolute(directory.path));
-  final absent = <String>[];
-  while (FileSystemEntity.typeSync(current, followLinks: false) ==
-      FileSystemEntityType.notFound) {
-    absent.add(p.basename(current));
-    final parent = p.dirname(current);
-    if (parent == current) {
-      throw RecoveryRequired(
-        'The profile root cannot be resolved: ${directory.path}.',
-      );
-    }
-    current = parent;
-  }
-  final resolved = Directory(current).resolveSymbolicLinksSync();
-  return Directory(p.joinAll([resolved, ...absent.reversed]));
 }

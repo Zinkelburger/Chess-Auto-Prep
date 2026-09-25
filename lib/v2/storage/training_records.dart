@@ -24,6 +24,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:path/path.dart' as p;
+import 'package:document_file_io/document_file_io.dart';
 
 import '../diagnostics/log.dart';
 import 'atomic_write.dart';
@@ -35,8 +36,31 @@ import 'training_rows.dart';
 final class TrainingRecords {
   const TrainingRecords(this.documents);
 
-  /// The folder the three files sit in, beside `repertoires/`.
+  /// The folder the four files sit in, beside `repertoires/`.
   final Directory documents;
+
+  /// Capture all four participants without writing. The caller holds the
+  /// Documents lock through planning and any later publication. Malformed
+  /// records throw [Malformed]; failed native observations or decoding throw
+  /// [IoFailure]. No participant or backup is modified on either failure.
+  Future<TrainingRepointPlan> plan(
+    DocumentRef from,
+    DocumentRef to, {
+    DocumentRef? alternateFrom,
+    DocumentRef? alternateTo,
+  }) async {
+    final before = <String, String?>{};
+    for (final name in _files) {
+      before[name] = await _read(name, from.path);
+    }
+    return TrainingRepointPlan.fromSnapshots(
+      from: from,
+      to: to,
+      before: before,
+      alternateFrom: alternateFrom,
+      alternateTo: alternateTo,
+    );
+  }
 
   /// Rewrites every record that named [from] so it names [to] instead.
   ///
@@ -51,50 +75,60 @@ final class TrainingRecords {
   /// replaced. The files are replaced one atomic publication each; a reader
   /// between two of them sees whole files, never half a row.
   Future<RepointResult> repoint(DocumentRef from, DocumentRef to) async {
-    if (p.equals(from.path, to.path)) return const NothingToRepoint();
-    return _rewrite(from.path, to.path);
-  }
-
-  Future<RepointResult> _rewrite(String from, String to) async {
-    final planned = <_Rewrite>[];
-    var rows = 0;
-    for (final name in _files) {
-      switch (await _plan(name, from, to)) {
-        case _Keep():
-          continue;
-        case _Refused(:final result):
-          return result;
-        case final _Rewrite rewrite:
-          planned.add(rewrite);
-          rows += rewrite.rowsChanged;
-      }
-    }
-    if (planned.isEmpty) return const NothingToRepoint();
-    return _commit(planned, rows);
-  }
-
-  Future<_Plan> _plan(String name, String from, String to) async {
-    final file = File(p.join(documents.path, name));
-    final String text;
+    final TrainingRepointPlan planned;
     try {
-      if (!await file.exists()) return const _Keep();
-      // `readAsString` would report bytes that are not UTF-8 as a
-      // [FileSystemException]; decoding here says what is wrong.
-      text = utf8.decode(await file.readAsBytes());
+      planned = await plan(from, to);
+    } on Malformed catch (failure) {
+      return failure;
+    } on IoFailure catch (failure) {
+      return failure;
+    }
+    final changed = planned.files.where((file) => file.changed).toList();
+    if (changed.isEmpty) return const NothingToRepoint();
+    return _commit(changed, planned.rowsChanged);
+  }
+
+  Future<String?> _read(String name, String from) async {
+    final path = p.join(documents.path, name);
+    final String text;
+    final String prefix;
+    try {
+      final observed = await observeFile(path);
+      if (observed.status == 1) {
+        return null;
+      }
+      final bytes = observed.bytes;
+      if (observed.status != 0 || bytes == null) {
+        throw FileSystemException(
+          'Cannot observe training participant $name',
+          path,
+          OSError('Native observation', observed.error),
+        );
+      }
+      // Dart's UTF-8 decoder consumes a leading BOM. Retain that exact prefix
+      // separately while the existing record codecs read the decoded body.
+      text = utf8.decode(bytes);
+      prefix =
+          bytes.length >= 3 &&
+              bytes[0] == 0xef &&
+              bytes[1] == 0xbb &&
+              bytes[2] == 0xbf
+          ? '\ufeff'
+          : '';
     } on FileSystemException catch (error) {
       log.e('read $name to repoint $from', error);
-      return _Refused(IoFailure(_detail(error)));
+      throw IoFailure(_detail(error));
     } on FormatException catch (error) {
       log.e('read $name to repoint $from', error);
-      return const _Refused(IoFailure(_notText));
+      throw const IoFailure(_notText);
     }
-    // A file with no records is one the user has not trained against yet.
-    if (text.trim().isEmpty) return const _Keep();
-    if (name == _attempts) return _planAttempts(text, from, to);
-    return _planText(text, name, from, to);
+    return '$prefix$text';
   }
 
-  Future<RepointResult> _commit(List<_Rewrite> planned, int rows) async {
+  Future<RepointResult> _commit(
+    List<TrainingRepointFile> planned,
+    int rows,
+  ) async {
     final operation =
         '${DateTime.now().microsecondsSinceEpoch}-'
         '${Random.secure().nextInt(1 << 32).toRadixString(16)}';
@@ -106,7 +140,7 @@ final class TrainingRecords {
       for (final file in planned) {
         await replaceFile(
           p.join(documents.path, file.name),
-          utf8.encode(file.text),
+          utf8.encode(file.after!),
         );
       }
     } on Object catch (error) {
@@ -121,18 +155,84 @@ final class TrainingRecords {
   /// folder per relocation. A schedule is a year of the user's reviews, and
   /// the four files are the only copy of it, so nothing replaces one of them
   /// until what it held is somewhere else.
-  Future<void> _keepReplaced(_Rewrite file, String operation) async {
+  Future<void> _keepReplaced(TrainingRepointFile file, String operation) async {
     final kept = p.join(documents.path, _replacedFolder, operation, file.name);
     await Directory(p.dirname(kept)).create(recursive: true);
-    await createFileExclusively(kept, utf8.encode(file.original));
+    await createFileExclusively(kept, utf8.encode(file.before!));
   }
+}
+
+/// A complete immutable read set for one training reference relocation.
+final class TrainingRepointPlan {
+  TrainingRepointPlan._(List<TrainingRepointFile> files, this.rowsChanged)
+    : files = List.unmodifiable(files);
+
+  /// Reconstructs the deterministic transformation from a journal's complete
+  /// captured read set. No paths are read and no caller-owned collection is
+  /// retained. Missing or extra participant names are an invalid envelope.
+  /// A trusted configured root alias can supply a second path spelling; both
+  /// mappings are applied before publishing one final snapshot per file.
+  factory TrainingRepointPlan.fromSnapshots({
+    required DocumentRef from,
+    required DocumentRef to,
+    required Map<String, String?> before,
+    DocumentRef? alternateFrom,
+    DocumentRef? alternateTo,
+  }) {
+    if ((alternateFrom == null) != (alternateTo == null)) {
+      throw ArgumentError(
+        'Alternate source and destination must be supplied together.',
+      );
+    }
+    if (before.length != _files.length || !_files.every(before.containsKey)) {
+      throw const FormatException(
+        'Expected exactly four training participants.',
+      );
+    }
+    final files = <TrainingRepointFile>[];
+    var rows = 0;
+    for (final name in _files) {
+      final planned = _planSnapshot(name, before[name], from.path, to.path);
+      final alternate = alternateFrom == null
+          ? null
+          : _planSnapshot(
+              name,
+              planned.file.after,
+              alternateFrom.path,
+              alternateTo!.path,
+            );
+      files.add(
+        TrainingRepointFile._(
+          name,
+          planned.file.before,
+          alternate == null ? planned.file.after : alternate.file.after,
+        ),
+      );
+      rows += planned.rowsChanged + (alternate?.rowsChanged ?? 0);
+    }
+    return TrainingRepointPlan._(files, rows);
+  }
+
+  final List<TrainingRepointFile> files;
+  final int rowsChanged;
+}
+
+/// Exact text before and after relocation. Null means an absent file, distinct
+/// from an existing empty file. Unchanged participants remain in the read set.
+final class TrainingRepointFile {
+  const TrainingRepointFile._(this.name, this.before, this.after);
+
+  final String name;
+  final String? before;
+  final String? after;
+  bool get changed => before != after;
 }
 
 sealed class RepointResult {
   const RepointResult();
 }
 
-/// [rowsChanged] rows across the three files now name the new path.
+/// [rowsChanged] rows across the four files now name the new path.
 final class Repointed extends RepointResult {
   const Repointed(this.rowsChanged);
 
@@ -148,7 +248,7 @@ final class NothingToRepoint extends RepointResult {
 ///
 /// Nothing was written. A training file is a user's whole review history, and
 /// a record nobody can read is not one to replace with defaults.
-final class Malformed extends RepointResult {
+final class Malformed extends RepointResult implements Exception {
   const Malformed(this.file, this.line);
 
   /// The file's name, such as `repertoire_reviews.csv`.
@@ -158,8 +258,9 @@ final class Malformed extends RepointResult {
   final int line;
 }
 
-/// The records could not be read or written. They are as they were.
-final class IoFailure extends RepointResult {
+/// A read or write failed. Planning failures never change any participant;
+/// a commit failure may follow an earlier publication, retained in backups.
+final class IoFailure extends RepointResult implements Exception {
   const IoFailure(this.detail);
 
   /// For the log; the widget writes the sentence.
@@ -183,6 +284,35 @@ const _attemptIdKey = 'repertoireId';
 
 const _notText = 'the file is not UTF-8 text';
 
+({TrainingRepointFile file, int rowsChanged}) _planSnapshot(
+  String name,
+  String? before,
+  String from,
+  String to,
+) {
+  if (before == null) {
+    return (file: TrainingRepointFile._(name, null, null), rowsChanged: 0);
+  }
+  final prefix = before.startsWith('\ufeff') ? '\ufeff' : '';
+  final text = before.substring(prefix.length);
+  final parsed = text.trim().isEmpty
+      ? const _Keep()
+      : name == _attempts
+      ? _planAttempts(text, from, to)
+      : _planText(text, name, from, to);
+  return switch (parsed) {
+    _Keep() => (
+      file: TrainingRepointFile._(name, before, before),
+      rowsChanged: 0,
+    ),
+    _Refused(:final result) => throw result,
+    _Rewrite(:final text, :final rowsChanged) => (
+      file: TrainingRepointFile._(name, before, '$prefix$text'),
+      rowsChanged: rowsChanged,
+    ),
+  };
+}
+
 /// What one file needs, decided without touching the disk.
 sealed class _Plan {
   const _Plan();
@@ -193,18 +323,7 @@ final class _Keep extends _Plan {
 }
 
 final class _Rewrite extends _Plan {
-  const _Rewrite({
-    required this.name,
-    required this.original,
-    required this.text,
-    required this.rowsChanged,
-  });
-
-  /// The file's name, such as `repertoire_reviews.csv`.
-  final String name;
-
-  /// What the file holds now, kept before the rewrite replaces it.
-  final String original;
+  const _Rewrite({required this.text, required this.rowsChanged});
 
   final String text;
   final int rowsChanged;
@@ -213,7 +332,7 @@ final class _Rewrite extends _Plan {
 final class _Refused extends _Plan {
   const _Refused(this.result);
 
-  final RepointResult result;
+  final Malformed result;
 }
 
 _Plan _planText(String text, String name, String from, String to) {
@@ -240,12 +359,7 @@ _Plan _planAttempts(String text, String from, String to) {
     lines[i] = rewritten;
   }
   if (rows == 0) return const _Keep();
-  return _Rewrite(
-    name: _attempts,
-    original: text,
-    text: lines.join('\n'),
-    rowsChanged: rows,
-  );
+  return _Rewrite(text: lines.join('\n'), rowsChanged: rows);
 }
 
 /// One logged answer pointing at its chapter, or null when the line is not
@@ -297,12 +411,7 @@ _Plan _planRecords(
       ..write(record.terminator);
   }
   if (rows == 0) return const _Keep();
-  return _Rewrite(
-    name: name,
-    original: text,
-    text: out.toString(),
-    rowsChanged: rows,
-  );
+  return _Rewrite(text: out.toString(), rowsChanged: rows);
 }
 
 /// The record with its chapter moved, or null when the row written would
@@ -333,6 +442,7 @@ String? _rewritten(
 
 /// The old app's matching rule, which this one must agree with exactly.
 String? _moved(String path, String from, String to) {
+  if (p.equals(from, to)) return null;
   if (p.equals(path, from)) return to;
   if (p.isWithin(from, path)) return p.join(to, p.relative(path, from: from));
   return null;

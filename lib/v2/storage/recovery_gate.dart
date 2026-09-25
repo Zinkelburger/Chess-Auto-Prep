@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import 'file_lock.dart';
+import 'file_relocation.dart';
 import 'mutation_guards.dart';
 import 'document_ref.dart';
 import 'compound_write.dart';
@@ -18,9 +19,15 @@ final class RecoveryGate {
     required this.documents,
     required this.support,
     Future<void> Function(CompoundWriteStep)? compoundHook,
+    Future<void> Function(FileRelocationStep)? relocationHook,
   }) : notes = RelocationNotes(
          notes: PendingRepoints(support, documents: documents),
          records: TrainingRecords(documents),
+       ),
+       relocations = FileRelocations(
+         documents: documents,
+         support: support,
+         testHook: relocationHook,
        ),
        compounds = CompoundWrites(
          documents: documents,
@@ -32,6 +39,7 @@ final class RecoveryGate {
   final Directory support;
   final RelocationNotes notes;
   final CompoundWrites compounds;
+  final FileRelocations relocations;
 
   Future<T> run<T>(Future<T> Function() action) async {
     final root = Directory(p.join(documents.path, 'repertoires'));
@@ -50,6 +58,7 @@ final class RecoveryGate {
           () async {
             await notes.finishOwed();
             await compounds.recover();
+            await relocations.recover();
           },
           (detail) => throw RecoveryRequired(detail),
         );

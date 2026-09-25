@@ -116,6 +116,9 @@ class IOStorageService implements StorageService {
         compoundRecoveryNotes: Directory(
           p.join((await _supportRoot()).path, 'compound-writes'),
         ),
+        relocationRecoveryNotes: Directory(
+          p.join((await _supportRoot()).path, 'relocation-writes'),
+        ),
         compoundDocumentsRoot: await _documentsRoot(),
         recoverAdditional: () async => (await _publications()).recover(),
       );

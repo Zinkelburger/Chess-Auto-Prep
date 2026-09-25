@@ -21,7 +21,6 @@ import '../../storage/edit_scope.dart';
 import '../../storage/reference_change.dart';
 import '../../storage/pgn_document_store.dart' as store;
 import '../../storage/pgn_file_picker.dart';
-import '../../storage/training_records.dart' as records;
 import '../../ui/file_names.dart';
 import '../../workspace/books.dart';
 import '../../workspace/repertoire_catalog.dart';
@@ -29,6 +28,7 @@ import '../../workspace/document_saver.dart';
 import '../../workspace/document_session.dart';
 import '../../workspace/session_results.dart';
 import 'library_state.dart';
+import 'accepted_file_changes.dart';
 
 typedef LibraryTrainingGuard =
     Future<LibraryResult> Function(Future<LibraryResult> Function() operation);
@@ -564,37 +564,22 @@ final class Library extends ChangeNotifier {
   /// The chapter at [ref] renamed or moved to [to]. The workspace follows it
   /// when it has it open.
   Future<LibraryResult> _relocate(ChapterRef ref, DocumentRef to) =>
-      _withRevision(ref, (revision) async {
-        switch (await _store.move(ref, to, expected: revision)) {
-          case store.Moved(:final training):
-            if (_session.source?.path == ref.path) {
-              _session.relocated(ChapterRef.at(to.path));
-            }
-            _books?.movedFile(ref.path, to.path);
-            return LibraryDone(training: training);
-          case store.Collision():
-            return const LibraryNameTaken();
-          case store.Conflict():
-            return const LibraryStale();
-          case store.IoFailure(:final detail):
-            return LibraryFailure(detail);
-        }
-      });
+      _fileChanges.move(ref, to);
+
+  late final _fileChanges = AcceptedFileChanges(
+    runRetry: (body) =>
+        _run('retry the file change', body, retiresTraining: true),
+    documents: _store,
+    saver: _saver,
+    session: _session,
+    books: _books,
+    pendingWrites: pendingWrites,
+    synchronize: catalog.synchronize,
+  );
 
   /// The chapter at [ref] to the recovery folder. The workspace closes it
   /// when it has it open.
-  Future<LibraryResult> _remove(ChapterRef ref) =>
-      _withRevision(ref, (revision) async {
-        switch (await _store.delete(ref, expected: revision)) {
-          case store.Deleted(:final training):
-            if (_session.source?.path == ref.path) _session.closed();
-            return LibraryDone(training: training);
-          case store.Conflict():
-            return const LibraryStale();
-          case store.IoFailure(:final detail):
-            return LibraryFailure(detail);
-        }
-      });
+  Future<LibraryResult> _remove(ChapterRef ref) => _fileChanges.delete(ref);
 
   /// Moves the folder whole, including raw-game sidecars and generation bundles.
   Future<LibraryResult> _renameFolder(
@@ -613,24 +598,12 @@ final class Library extends ChangeNotifier {
 
   /// Deletes each distinct file into recovery. A failure stops the batch;
   /// earlier files remain recoverable and unprocessed files stay in place.
-  Future<LibraryResult> _deleteFolder(RepertoireFolder folder) async {
-    final repointed = <records.RepointResult>[];
-    final removed = <String>{};
-    for (final chapter in folder.chapters) {
-      final file = chapter.wholeFile;
-      if (!removed.add(file.path)) continue;
-      final result = await _remove(file);
-      if (result case LibraryDone(:final training)) {
-        repointed.add(training);
-        continue;
-      }
-      return LibraryStoppedAt(file.name, result);
-    }
-    if (!folder.chapters.any((c) => c.path == folder.path)) {
-      await _files.removeIfEmpty(folder.path);
-    }
-    return LibraryDone(training: foldedRepoint(repointed));
-  }
+  Future<LibraryResult> _deleteFolder(RepertoireFolder folder) =>
+      _fileChanges.deleteRepertoire(folder, () async {
+        if (!folder.chapters.any((c) => c.path == folder.path)) {
+          await _files.removeIfEmpty(folder.path);
+        }
+      });
 
   Future<LibraryResult> _movedFolder(String from, String to) async {
     switch (await _store.moveFolder(from, to)) {
@@ -924,44 +897,6 @@ final class Library extends ChangeNotifier {
           for (final line in lines)
             (c) => lineGraftedInto(c, host: host, line: line),
         ];
-
-  /// Writes against the current revision, holding the saver for an open file.
-  Future<LibraryResult> _withRevision(
-    ChapterRef ref,
-    Future<LibraryResult> Function(Revision revision) write,
-  ) async {
-    // By path: any chapter of the open file is the open file.
-    if (_session.source?.path == ref.path) return _held(write);
-    switch (await _store.open(ref)) {
-      case store.Opened(:final revision):
-        // The user may have opened this very chapter while it was being read,
-        // and from here on its writes belong behind the saver's hold.
-        if (_session.source?.path == ref.path) return _held(write);
-        return write(revision);
-      case store.Absent():
-        return const LibraryStale();
-      case store.Unreadable(:final detail):
-        log.w('read ${ref.path} before changing it', detail);
-        return LibraryFailure(detail);
-    }
-  }
-
-  /// Holds the open file against autosave. A conflict requires reloading the
-  /// workspace's revision, unlike a closed file's retryable [LibraryStale].
-  Future<LibraryResult> _held(
-    Future<LibraryResult> Function(Revision revision) write,
-  ) async {
-    final result = await _saver.holdStill(write);
-    if (result == null) {
-      if (!_saver.settled) {
-        return const LibraryFailure(
-          'Save or recover the open draft before changing its file.',
-        );
-      }
-      return const LibraryBusy();
-    }
-    return result is LibraryStale ? const LibraryConflicted() : result;
-  }
 }
 
 /// [lines] each naming [section] as its chapter, or no chapter when it is

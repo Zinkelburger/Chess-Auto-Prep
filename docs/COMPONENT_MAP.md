@@ -194,6 +194,13 @@ paths retain the journal and surface **Recover library** in the catalog.
 review history, move progress and mistake log, retaining prior text under
 Documents `.cap-reference-history/`, then updates the shared book selections.
 Reference failures resume from the journal without repeating the namespace move.
+Before any affected access or its own recovery, this owner also checks v2's
+private compound and file-relocation journals. `foreign_relocation_history.dart`
+validates `Support/relocation-writes/` without importing v2 or reading current
+participants: only complete/cancelled records are accepted. Pending, malformed,
+linked or unknown metadata instructs the user to reopen v2, preserving all files.
+The v2 protocol and remaining migration work are described in
+[architecture renewal](ARCHITECTURE_RENEWAL.md#course-files).
 
 `IOStorageService` routes Linux repertoire/nested-folder moves through this
 owner and supplies the same domain lock to managed file operations and the

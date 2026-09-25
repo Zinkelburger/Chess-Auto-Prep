@@ -206,17 +206,27 @@ void main() {
       final kid = fixture.ref('repertoires/KID/Main.pgn');
       final benko = fixture.ref('repertoires/Benko/Main.pgn');
       final slav = fixture.ref('repertoires/Slav/Main.pgn');
-      final first = await chapter(kid);
+      await chapter(kid);
       final second = await chapter(benko);
       final third = await chapter(slav);
       writeRows([kid, benko, slav]);
 
+      // An older supported v2 build left its original four-field note after
+      // moving the PGN. The new owner must finish that protocol before starting.
+      final moved = fixture.ref('repertoires/KID/A.pgn');
+      final identity = await identityOf(kid);
+      await notes.record(
+        'older-move',
+        from: kid.path,
+        to: moved.path,
+        identity: identity,
+        folder: false,
+      );
+      await File(kid.path).rename(moved.path);
       await Process.run('chmod', ['a-w', fixture.documents.path]);
-      final one = await fixture.store.rename(kid, 'A.pgn', expected: first);
       final two = await fixture.store.rename(benko, 'B.pgn', expected: second);
       await Process.run('chmod', ['u+w', fixture.documents.path]);
 
-      expect(one, isA<Moved>());
       expect(two, isA<IoFailure>());
       expect(
         await notes.read(),

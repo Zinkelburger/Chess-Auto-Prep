@@ -809,6 +809,43 @@ readable. V1 conservatively guards supported Documents accesses, including the
 four training files. No foreign journal is replayed and no metadata format is
 introduced by this gate. Non-Linux v1 recovery remains unverified.
 
+File rename, move, quarantine delete and file restore now use `FileRelocations` and private
+version-1 `Support/relocation-writes/<id>.json` records. Each record captures the
+PGN's canonical endpoints, native identity and hash; all four training files'
+exact before/after text (including absent and unchanged participants); raw book
+selectors; and the complete backup-directory identity, index and file inventory.
+The captured Documents spelling preserves training keys reached through a
+configured alias alongside canonical keys. Pending recovery verifies that alias
+still resolves to the pinned Documents root. No current paths are consulted to
+reinterpret a terminal receipt's intended operation.
+
+Preparation validates every participant and preserves changed training inputs
+under `.cap-reference-history/<id>/` before durable commit intent. Recovery
+validates the complete read set before moving the PGN, publishing rows and book
+selectors, and transferring backup ownership. Occupied destination history moves
+to a deterministic preserved aside; a chapter with no incoming history cannot
+inherit it. Namespace flush failures retain intent, and replay flushes both
+endpoints and their ancestors. `Moved` is returned only after completion.
+`AcceptedFileChanges` retains the original id and revision through UI and registry
+retry, coordinates books and open drafts, and follows or closes only the matching accepted file observation. V1 refuses pending, malformed or unknown relocation records before
+its own recovery/access; validated complete/cancelled records remain readable.
+
+A quarantine delete keeps the current PGN version before preparation and moves
+its backup ownership with the file; restore brings that history back. Deletion
+ids follow the existing recovery filename grammar. Repertoire deletion retains
+its accepted ordered file list and failed command, leaving sidecars and prior
+quarantine contents in place. It resumes without repeating completed files.
+Pre-journal quarantines lack proof tying a former path's backup history to the
+restored file: occupied history is preserved separately rather than merged by
+guesswork. Those historical ownership links remain unverified.
+
+Folder moves still use their original notes and have not yet acquired this
+complete participant boundary. Existing unfinished notes
+continue through their original recovery protocol. Multi-file edits and durable
+rating journals also remain H3c work. Completed relocation snapshots are retained;
+pruning and scan costs remain explicit follow-up work. The tested native
+recovery platform is Linux; Windows/macOS durability is unverified.
+
 - **One file, one write path.** A chapter of a course file opens as a
   `SectionView`: its games in file order as an ordinary `Chapter`, so every
   edit works unchanged. `spliced` puts the edit back into the file, and the
@@ -1157,7 +1194,7 @@ per batch and use tests and commits as the implementation record.
 | H2 | H1 | Accepted ratings and writes outlive reload/dispose; `PendingWrites`, training progress/owner, exit guard | Two overlapping reloads cannot bypass the same pending rating; failed outcomes remain retryable; shutdown is honest | Done 2026-09-24: app-owned training obligations, ordered barriers and exact in-process retry survive reload/dispose; retained book/settings/account/recent-file/copy outcomes; shutdown covers existing dialogs and suspends puzzle timers. Failure-first regressions, independent reviews, 2,155 v2 tests and analyze/lint passed after merging current main. Headless Linux partial training publication survived scope replacement and retried with three history rows exactly once. Persistent crash recovery remains H3; Windows/macOS durability unverified. |
 | H3a | H2 | Existing relocation recovery before affected reads; document guards, training reads, startup; reconcile v1 domain locks/order | Kill during a move, reopen/train from either supported app; no missing or duplicate progress; incompatible access blocks safely | Done 2026-09-24 on Linux: canonical shared domain before affected Documents access; strict v2 notes recover before PGN/training reads and complete scans, foreign receipts refuse without mutation, and UI shows the recovery reason with Retry. Regression-first tests, independent reviews, 2,232 v2 tests, final focused storage/legacy checks and analyze/lint passed. Six real-process tests cover cross-app exclusion, SIGKILL and all four training files recovering once; headless refusal/retry verified. No new metadata format. Windows/macOS recovery guarantees remain unverified; v1 native recovery is still Linux-only. |
 | H3b | H3a | One compound operation for course rename/book references and its inverse; Library, storage, session history | Rename and undo agree across PGN/book state, including crash and external-conflict cases | Done 2026-09-24 on Linux: explicit section intent follows held/coalesced drafts; one guarded private receipt commits PGN and books, preserves unknown fields and validates the complete inverse. Exact retry, external conflicts, navigation admission and v1 refusal have regression tests; 2,381 v2 tests, focused legacy/process checks and analyze/lint pass. Real SIGKILL preparation/publication tests and headless partial book-write failure, Retry and undo verified both participants. Complete receipts remain retained with growing scan/storage cost; Windows/macOS durability unverified. |
-| H3c | H3b | Apply the proven operation boundary to supported file/folder moves, delete/restore and multi-file edits | Every existing command has an explicit required read/write set, recovery path and compatible undo behavior | In progress: source-admission increment verified 2026-09-25 on Linux. V1/v2 validate captured training sources; save/undo and Library operations settle accepted training, preserve exact retries and reject stale row actions; relocation namespace flush failures retain recovery. Independent reviews, 2,456 v2 tests (serial), 354 legacy tests and analyze/lint passed. Headless partial-rating failure blocked PGN autosave; both retries and reopen preserved one outcome and the draft. No new durable format. Compound relocation participants, multi-file edits and persistent rating journals remain unfinished; Windows/macOS durability remains unverified. |
+| H3c | H3b | Apply the proven operation boundary to supported file/folder moves, delete/restore and multi-file edits | Every existing command has an explicit required read/write set, recovery path and compatible undo behavior | In progress: source-admission increment verified 2026-09-25 on Linux. V1/v2 validate captured training sources; save/undo and Library operations settle accepted training, preserve exact retries and reject stale row actions; relocation namespace flush failures retain recovery. Independent reviews, 2,456 v2 tests (serial), 354 legacy tests and analyze/lint passed. Headless partial-rating failure blocked PGN autosave; both retries and reopen preserved one outcome and the draft. The next increment adds journaled file rename/move/delete/restore with all training files, books and backup ownership; failure/restart tests and independent review are in progress. Folder moves, multi-file edits and persistent rating journals remain unfinished; Windows/macOS durability remains unverified. |
 | H4 | H2, H3c | Versioned input snapshots for catalog, shelf, gaps, book comparison and training; targeted invalidation | A late computation cannot replace a newer result; a fresh rebuild equals the displayed committed projection | Not started |
 | H5 | H2, H3c | Generation, mining, downloads, bughouse and engine lifetimes; job-specific checkpoints and truthful completion | Stop/retry/restart neither duplicates saved units nor loses promised results; resources return to baseline | Not started |
 | H6 | H4, H5 | All existing modes: focus/shortcuts/navigation/close, settings, credentials, diagnostics and integrity checks | The complete cross-mode sequence below passes with real disposable storage, offline/error cases and headless UI checks | Not started |

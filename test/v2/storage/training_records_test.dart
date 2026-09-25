@@ -8,6 +8,7 @@ import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart'
     hide IoFailure;
 import 'package:chess_auto_prep/v2/storage/training_records.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart' as store;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -385,34 +386,47 @@ void main() {
     expect(read(_history), contains(_historyRow(renamed.path)));
   });
 
-  test('rows a move could not rewrite are rewritten by the next one', () async {
-    writeAll();
-    final revision = await fixture.put(kid, '[Event "KID"]\n\n1. d4 *\n');
-    // The rename lands and the rows cannot follow, which is what a machine
-    // stopping between the two writes would leave behind.
-    await Process.run('chmod', ['a-w', fixture.documents.path]);
-    final moved =
-        await fixture.store.rename(kid, 'Mainline.pgn', expected: revision)
-            as Moved;
-    await Process.run('chmod', ['u+w', fixture.documents.path]);
-    expect(moved.training, isA<IoFailure>());
-    expect(read(_progress), contains(_progressRow(kid.path)));
-
-    final renamed = fixture.ref('repertoires/KID/Mainline.pgn');
-    final again =
-        await fixture.store.rename(
-              renamed,
-              'Classical.pgn',
-              expected: moved.revision,
-            )
-            as Moved;
-
-    expect(again.training, isA<Repointed>());
-    final classical = fixture.ref('repertoires/KID/Classical.pgn');
-    expect(read(_progress), contains(_progressRow(classical.path)));
-    expect(read(_history), contains(_historyRow(classical.path)));
-    expect(read(_progress), isNot(contains(_progressRow(kid.path))));
-  }, skip: _needsAPlainUser);
+  test(
+    'unkept training snapshots prevent a move, then exact retry succeeds',
+    () async {
+      writeAll();
+      final revision = await fixture.put(kid, '[Event "KID"]\n\n1. d4 *\n');
+      await Process.run('chmod', ['a-w', fixture.documents.path]);
+      final refused = await fixture.store.rename(
+        kid,
+        'Mainline.pgn',
+        expected: revision,
+        operationId: 'training-unwritable',
+      );
+      await Process.run('chmod', ['u+w', fixture.documents.path]);
+      expect(refused, isA<store.IoFailure>());
+      expect(await File(kid.path).exists(), isTrue);
+      expect(read(_progress), contains(_progressRow(kid.path)));
+      final moved =
+          await fixture.store.rename(
+                kid,
+                'Mainline.pgn',
+                expected: revision,
+                operationId: 'training-unwritable',
+              )
+              as Moved;
+      final renamed = fixture.ref('repertoires/KID/Mainline.pgn');
+      expect(moved.training, isA<Repointed>());
+      final again =
+          await fixture.store.rename(
+                renamed,
+                'Classical.pgn',
+                expected: moved.revision,
+              )
+              as Moved;
+      expect(again.training, isA<Repointed>());
+      final classical = fixture.ref('repertoires/KID/Classical.pgn');
+      expect(read(_progress), contains(_progressRow(classical.path)));
+      expect(read(_history), contains(_historyRow(classical.path)));
+      expect(read(_progress), isNot(contains(_progressRow(kid.path))));
+    },
+    skip: _needsAPlainUser,
+  );
 
   test('deleting a chapter sends its rows into recovery with it', () async {
     writeAll();

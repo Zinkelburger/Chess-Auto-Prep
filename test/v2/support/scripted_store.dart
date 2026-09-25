@@ -116,10 +116,12 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
     DocumentRef ref,
     String name, {
     required Revision expected,
+    String? operationId,
   }) => move(
     ref,
     DocumentRef(p.join(p.dirname(ref.path), name)),
     expected: expected,
+    operationId: operationId,
   );
 
   @override
@@ -127,6 +129,7 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
     DocumentRef ref,
     DocumentRef destination, {
     required Revision expected,
+    String? operationId,
   }) async {
     await _turn();
     final queued = _next(moves);
@@ -165,6 +168,7 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
   Future<DeleteResult> delete(
     DocumentRef ref, {
     required Revision expected,
+    String? operationId,
   }) async {
     await _turn();
     final queued = _next(deletes);
