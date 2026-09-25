@@ -14,6 +14,7 @@ import 'document_ref.dart';
 import 'edit_scope.dart';
 import 'file_lock.dart';
 import 'pgn_document_store.dart';
+import 'recovery_files.dart';
 
 /// The files the review of the user's games shares with the old app.
 
@@ -44,6 +45,20 @@ final class CachedGamesSnapshot extends CachedGamesRead {
 
 final class CachedGamesUnavailable extends CachedGamesRead {
   const CachedGamesUnavailable(this.detail);
+  final String detail;
+}
+
+/// The corpus and its fetched note have both been acknowledged.
+sealed class GamesKeep {
+  const GamesKeep();
+}
+
+final class GamesKept extends GamesKeep {
+  const GamesKept();
+}
+
+final class GamesNotKept extends GamesKeep {
+  const GamesNotKept(this.detail);
   final String detail;
 }
 
@@ -132,35 +147,38 @@ final class GamesCache {
     return read is Opened ? read.text : null;
   }
 
-  /// Adds the games of [downloaded] the file does not have yet at its end,
-  /// as the old app does, and notes when they came down. Never throws: the
-  /// games are in hand either way, and the log says what went wrong.
-  Future<void> keep(
+  /// Publishes deduplicated games before their freshness note. Failures keep
+  /// the downloaded input with the caller for exact retry, including lost acks.
+  Future<GamesKeep> keep(
     GameSite site,
     String username,
     List<String> downloaded,
     DateTime when,
   ) async {
+    final frozen = List<String>.unmodifiable(downloaded);
     final ref = refFor(site, username);
-    final read = await _store.open(ref);
-    final String? outcome = switch (read) {
-      Absent() => _created(
-        await _store.create(ref, '${downloaded.join('\n\n')}\n'),
-      ),
-      Opened(readOnly: null, :final text, :final revision) => await _appended(
-        ref,
-        text,
-        revision,
-        downloaded,
-      ),
-      Opened(:final readOnly?) => readOnly,
-      Unreadable(:final detail) => detail,
-    };
-    if (outcome != null) {
-      log.w('keep the ${site.label} games of $username', outcome);
-      return;
+    try {
+      final read = await _store.open(ref);
+      final String? outcome = switch (read) {
+        Absent() => _created(
+          await _store.create(ref, '${_freshIn('', frozen).join('\n\n')}\n'),
+        ),
+        Opened(readOnly: null, :final text, :final revision) => await _appended(
+          ref,
+          text,
+          revision,
+          frozen,
+        ),
+        Opened(:final readOnly?) => readOnly,
+        Unreadable(:final detail) => detail,
+      };
+      if (outcome != null) return GamesNotKept(outcome);
+      await _stamp(ref, when);
+      return const GamesKept();
+    } on Object catch (error) {
+      log.w('keep the ${site.label} games of $username', error);
+      return GamesNotKept('$error');
     }
-    await _stamp(ref, when);
   }
 
   Future<String?> _appended(
@@ -193,19 +211,12 @@ final class GamesCache {
   };
 
   /// The old app's `.fetched` note: milliseconds since the epoch.
-  Future<void> _stamp(DocumentRef ref, DateTime when) async {
-    try {
-      await withDirectoryLock(
-        Directory(p.dirname(ref.path)),
-        () => replaceFile(
-          '${ref.path}.fetched',
-          utf8.encode('${when.millisecondsSinceEpoch}'),
-        ),
-      );
-    } on Object catch (error) {
-      log.w('note when ${ref.path} came down', error);
-    }
-  }
+  Future<void> _stamp(DocumentRef ref, DateTime when) =>
+      withDirectoryLock(Directory(p.dirname(ref.path)), () async {
+        final path = '${ref.path}.fetched';
+        await requireUnusedRecoveryStage(path);
+        await replaceFile(path, utf8.encode('${when.millisecondsSinceEpoch}'));
+      });
 }
 
 // What reads every game of a saved file. The file grows with every
@@ -243,11 +254,17 @@ List<CachedGame> _newestIn(String text, int max) {
 
 /// The games of [downloaded] that [text] does not have yet, each once.
 List<String> _freshIn(String text, List<String> downloaded) {
-  final have = {for (final game in _gamesIn(text)) gameIdIn(game)};
+  final have = {for (final game in _gamesIn(text)) _identityOf(game)};
   return [
     for (final game in downloaded)
-      if (have.add(gameIdIn(game))) game,
+      if (have.add(_identityOf(game))) game,
   ];
+}
+
+// Missing metadata must not collapse unrelated downloaded games into one.
+(String, String) _identityOf(String game) {
+  final id = gameIdIn(game);
+  return id.isEmpty ? ('text', game.trim()) : ('id', id);
 }
 
 /// The ids of games the old app reviewed before its sets carried their own

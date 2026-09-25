@@ -176,8 +176,11 @@ final class _Accounts implements AccountStore {
   Future<Map<GameSite, Account>> read() => saved.read();
 
   @override
-  Future<bool> setDownloaded(GameSite site, DateTime when) =>
-      saved.setDownloaded(site, when);
+  Future<bool> setDownloaded(
+    GameSite site,
+    DateTime when, {
+    String? expectedUsername,
+  }) => saved.setDownloaded(site, when, expectedUsername: expectedUsername);
 
   @override
   Future<bool> setUsername(GameSite site, String? username) async {

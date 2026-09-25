@@ -145,10 +145,12 @@ final class ScriptedSite implements RecentGames {
   final GameSite site;
   final List<GamesFetch> answers;
   final asked = <String>[];
+  Object? error;
 
   @override
   Future<GamesFetch> recent(String username, {required int max}) async {
     asked.add(username);
+    if (error case final failure?) throw failure;
     return answers.length > 1 ? answers.removeAt(0) : answers.single;
   }
 }
@@ -159,23 +161,37 @@ final class MemoryAccounts implements AccountStore {
     : accounts = {...?accounts};
 
   final Map<GameSite, Account> accounts;
+  bool rejectDownloaded = false;
+  bool unavailable = false;
+  void Function()? onDownloaded;
 
   int _revision = 0;
   @override
   int get revision => _revision;
   @override
-  Future<AccountsRead> snapshot() async =>
-      AccountsSnapshot(accounts: accounts, revision: revision);
+  Future<AccountsRead> snapshot() async => unavailable
+      ? const AccountsUnavailable('Account file could not be read.')
+      : AccountsSnapshot(accounts: accounts, revision: revision);
 
   @override
-  Future<Map<GameSite, Account>> read() async => {...accounts};
+  Future<Map<GameSite, Account>> read() async =>
+      unavailable ? {} : {...accounts};
 
   @override
-  Future<bool> setDownloaded(GameSite site, DateTime when) async {
+  Future<bool> setDownloaded(
+    GameSite site,
+    DateTime when, {
+    String? expectedUsername,
+  }) async {
+    if (rejectDownloaded) return false;
     final account = accounts[site];
+    if (expectedUsername != null && account?.username != expectedUsername) {
+      return false;
+    }
     if (account != null) {
       accounts[site] = Account(account.username, downloaded: when);
     }
+    onDownloaded?.call();
     return true;
   }
 

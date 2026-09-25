@@ -10,6 +10,7 @@ import 'package:chess_auto_prep/v2/chess/tactics/analyzed_games.dart';
 import 'package:chess_auto_prep/v2/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/v2/chess/tactics/mined_set.dart';
 import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
+import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/my_games_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -108,6 +109,126 @@ void main() {
       );
     });
 
+    test('native refused corpus write does not publish freshness', () async {
+      final ref = cache.refFor(GameSite.lichess, 'me');
+      await Directory(ref.path).create(recursive: true);
+      expect(
+        await cache.keep(GameSite.lichess, 'me', [
+          scholarsMate,
+        ], DateTime(2026)),
+        isA<GamesNotKept>(),
+      );
+      expect(await File('${ref.path}.fetched').exists(), isFalse);
+    });
+
+    test(
+      'stamp failure retains published corpus for independent restart and retry',
+      () async {
+        final ref = cache.refFor(GameSite.lichess, 'me');
+        final obstruction = Directory('${ref.path}.fetched');
+        await obstruction.create(recursive: true);
+        final when = DateTime(2026);
+        expect(
+          await cache.keep(GameSite.lichess, 'me', [
+            scholarsMate,
+            scholarsMate,
+          ], when),
+          isA<GamesNotKept>(),
+        );
+        final reopened = GamesCache(fixture.store, folder: cache.folder);
+        expect(await reopened.all(GameSite.lichess, 'me'), [scholarsMate]);
+        await obstruction.delete();
+        expect(
+          await reopened.keep(GameSite.lichess, 'me', [scholarsMate], when),
+          isA<GamesKept>(),
+        );
+        expect(await reopened.all(GameSite.lichess, 'me'), [scholarsMate]);
+        expect(
+          await File('${ref.path}.fetched').readAsString(),
+          '${when.millisecondsSinceEpoch}',
+        );
+      },
+    );
+
+    test('unrecognized fetched staging link preserves its target', () async {
+      final ref = cache.refFor(GameSite.lichess, 'me');
+      await Directory(cache.folder).create(recursive: true);
+      final outside = File(p.join(fixture.root.path, 'unrelated'));
+      await outside.writeAsString('unrelated bytes');
+      final stage = Link(
+        p.join(cache.folder, '.${p.basename(ref.path)}.fetched.v2-tmp'),
+      );
+      await stage.create(outside.path);
+      expect(
+        await cache.keep(GameSite.lichess, 'me', [
+          scholarsMate,
+        ], DateTime(2026)),
+        isA<GamesNotKept>(),
+      );
+      expect(await outside.readAsString(), 'unrelated bytes');
+      expect(await stage.target(), outside.path);
+    });
+
+    for (final existing in [false, true]) {
+      test(
+        'lost ${existing ? 'append' : 'create'} acknowledgement retries native corpus exactly once',
+        () async {
+          final ref = cache.refFor(GameSite.lichess, 'me');
+          if (existing) {
+            await cache.keep(GameSite.lichess, 'me', [
+              quietChesscomGame,
+            ], DateTime(2025));
+          }
+          final flaky = GamesCache(
+            _LostAcknowledgement(fixture.store),
+            folder: cache.folder,
+          );
+          expect(
+            await flaky.keep(GameSite.lichess, 'me', [
+              scholarsMate,
+            ], DateTime(2026)),
+            isA<GamesNotKept>(),
+          );
+          final beforeRetry = await File(ref.path).readAsString();
+          expect(
+            await flaky.keep(GameSite.lichess, 'me', [
+              scholarsMate,
+            ], DateTime(2026)),
+            isA<GamesKept>(),
+          );
+          expect(await File(ref.path).readAsString(), beforeRetry);
+          expect(
+            await cache.all(GameSite.lichess, 'me'),
+            existing ? [quietChesscomGame, scholarsMate] : [scholarsMate],
+          );
+        },
+      );
+    }
+
+    test(
+      'distinct games without site identifiers survive keep and exact retry',
+      () async {
+        const first = '[Event "First"]\n[Result "*"]\n\n1. e4 *';
+        const second = '[Event "Second"]\n[Result "*"]\n\n1. d4 *';
+        expect(
+          await cache.keep(GameSite.lichess, 'me', [
+            first,
+            second,
+          ], DateTime(2026)),
+          isA<GamesKept>(),
+        );
+        expect(await cache.all(GameSite.lichess, 'me'), [first, second]);
+        expect(
+          await cache.keep(GameSite.lichess, 'me', [
+            first,
+            second,
+          ], DateTime(2026)),
+          isA<GamesKept>(),
+        );
+        expect(await cache.all(GameSite.lichess, 'me'), [first, second]);
+      },
+    );
+
     test('answers the newest saved games first, and nothing when there '
         'are none', () async {
       expect(await cache.read(GameSite.lichess, 'me', max: 5), isNull);
@@ -165,4 +286,45 @@ void main() {
     ).writeAsBytes([0x6c, 0x69, 0xff, 0xfe, 0x0a]);
     expect(await readOlderAnalyzed(fixture.documents), isNull);
   });
+}
+
+/// The native publication lands, but the caller receives no acknowledgement.
+final class _LostAcknowledgement implements PgnDocumentStore {
+  _LostAcknowledgement(this.store);
+  final PgnDocumentStore store;
+  bool lose = true;
+  @override
+  Future<DocumentRead> open(DocumentRef ref) => store.open(ref);
+  @override
+  Future<CreateResult> create(DocumentRef ref, String text) async {
+    final result = await store.create(ref, text);
+    if (lose && result is Created) {
+      lose = false;
+      return const IoFailure('acknowledgement lost');
+    }
+    return result;
+  }
+
+  @override
+  Future<SaveResult> save(
+    DocumentRef ref,
+    String text, {
+    required Revision expected,
+    required EditScope scope,
+  }) async {
+    final result = await store.save(
+      ref,
+      text,
+      expected: expected,
+      scope: scope,
+    );
+    if (lose && result is Saved) {
+      lose = false;
+      return const IoFailure('acknowledgement lost');
+    }
+    return result;
+  }
+
+  @override
+  Never noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }
