@@ -142,7 +142,7 @@ final class LichessExplorerApi implements LichessExplorer {
     try {
       return ExplorerFetched(parseExplorerAnswer(response.body));
     } on FormatException catch (error) {
-      log.w('read the explorer answer', error);
+      log.w('read the explorer answer', error.runtimeType);
       return const ExplorerNotFetched(ExplorerProblem.http);
     }
   }
@@ -201,7 +201,7 @@ final class LichessExplorerApi implements LichessExplorer {
             .get(url, headers: headers)
             .timeout(explorerTimeout);
       } on Object catch (error) {
-        log.w('$action (attempt $attempt)', error);
+        log.w('$action (attempt $attempt)', error.runtimeType);
       }
     }
     return null;

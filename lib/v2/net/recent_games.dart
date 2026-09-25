@@ -197,7 +197,7 @@ Future<http.Response?> _once(
   try {
     return await client.get(url, headers: headers).timeout(gamesTimeout);
   } on Object catch (error) {
-    log.w('download ${url.host}', error);
+    log.w('download ${url.host}', error.runtimeType);
     return null;
   }
 }
