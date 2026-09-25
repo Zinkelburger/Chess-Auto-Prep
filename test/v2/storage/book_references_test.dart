@@ -52,6 +52,187 @@ Map<String, Object?> decoded(String text) =>
     jsonDecode(text) as Map<String, Object?>;
 
 void main() {
+  String? relocate(
+    String? text,
+    String from,
+    String to, {
+    bool directory = false,
+  }) => relocateBookReferences(
+    text,
+    repertoireRoot: root,
+    from: from,
+    to: to,
+    directory: directory,
+  );
+
+  group('path relocation', () {
+    test('absent books stay absent', () {
+      expect(relocate(null, chapter, '$root/New.pgn'), isNull);
+    });
+
+    test(
+      'file move preserves sections, duplicates, order and unknown metadata',
+      () {
+        final before = fixture();
+        selectors(
+          before,
+        ).add({'path': 'Course/Main.pgn', 'section': 'A', 'unknown': 42});
+        selectors(
+          before,
+        ).add({'path': 'Course/Main.pgn/Child.pgn', 'section': null});
+        firstBook(before)['repertoires'] = [
+          'Course',
+          'Course/Main.pgn',
+          'Course/Main.pgn/child',
+        ];
+        books(before).add({
+          'id': 'book',
+          'name': 'Duplicate',
+          'chapters': [
+            {
+              'path': 'Course/Main.pgn',
+              'opaque': ['x', true],
+            },
+          ],
+        });
+        final expected = decoded(jsonEncode(before));
+        for (final book in books(expected).cast<Map<String, Object?>>()) {
+          for (final selector
+              in (book['chapters'] as List).cast<Map<String, Object?>>()) {
+            if (selector['path'] == 'Course/Main.pgn')
+              selector['path'] = 'Other/Moved.pgn';
+          }
+        }
+        (firstBook(expected)['repertoires'] as List)[1] = 'Other/Moved.pgn';
+        expect(
+          decoded(
+            relocate(jsonEncode(before), chapter, '$root/Other/Moved.pgn')!,
+          ),
+          expected,
+        );
+      },
+    );
+
+    test(
+      'folder move maps descendants and exact selectors but respects boundaries',
+      () {
+        final before = fixture();
+        firstBook(before)['repertoires'] = [
+          'Course',
+          'Course/Nested',
+          'Course2',
+          'Course/Nested',
+        ];
+        selectors(before).addAll([
+          {'path': 'Course/Nested/Deep.pgn', 'section': 'Keep'},
+          {'path': 'Course2/Main.pgn'},
+          {'path': 'Course'},
+        ]);
+        final expected = decoded(jsonEncode(before));
+        firstBook(expected)['repertoires'] = [
+          'Archive/New',
+          'Archive/New/Nested',
+          'Course2',
+          'Archive/New/Nested',
+        ];
+        for (final item in selectors(expected).cast<Map<String, Object?>>()) {
+          final path = item['path'] as String;
+          if (path == 'Course' || path.startsWith('Course/'))
+            item['path'] = 'Archive/New${path.substring('Course'.length)}';
+        }
+        expect(
+          decoded(
+            relocate(
+              jsonEncode(before),
+              '$root/Course',
+              '$root/Archive/New',
+              directory: true,
+            )!,
+          ),
+          expected,
+        );
+      },
+    );
+
+    for (final directory in [false, true]) {
+      test(
+        '${directory ? 'folder' : 'file'} quarantine and restore retain selectors away from a reused old path',
+        () {
+          final before = fixture();
+          final from = directory ? '$root/Course' : chapter;
+          final to = directory
+              ? '$root/.cap-pgn-history/deleted-1/Course'
+              : '$root/Course/.cap-pgn-history/deleted-1.pgn';
+          final moved = relocate(
+            jsonEncode(before),
+            from,
+            to,
+            directory: directory,
+          )!;
+          final paths = selectors(
+            decoded(moved),
+          ).cast<Map<String, Object?>>().map((s) => s['path']).toList();
+          expect(
+            paths.take(3),
+            everyElement(
+              directory
+                  ? '.cap-pgn-history/deleted-1/Course/Main.pgn'
+                  : 'Course/.cap-pgn-history/deleted-1.pgn',
+            ),
+          );
+          expect(paths, isNot(contains('Course/Main.pgn')));
+          expect(
+            decoded(relocate(moved, to, from, directory: directory)!),
+            before,
+          );
+        },
+      );
+    }
+
+    test(
+      'unaffected JSON remains byte exact, including absent optional selectors',
+      () {
+        final original =
+            '${const JsonEncoder.withIndent('    ').convert(fixture())}\n';
+        expect(relocate(original, chapter, chapter), original);
+        expect(
+          relocate(
+            original,
+            '$root/Elsewhere',
+            '$root/Elsewhere2',
+            directory: true,
+          ),
+          original,
+        );
+        expect(
+          relocate(original, '/Outside/A', '/Outside/B', directory: true),
+          original,
+        );
+        const optional =
+            '{ "version":1, "active":"missing", "books":[{"id":"b","name":"N","extra":7}]}';
+        expect(relocate(optional, chapter, '$root/New.pgn'), optional);
+      },
+    );
+
+    for (final paths in [
+      (chapter, '/Outside/Main.pgn'),
+      ('/Outside/Main.pgn', chapter),
+      (chapter, '/Documents/repertoires-extra/Main.pgn'),
+      ('$root', '$root/Renamed'),
+      ('Course/Main.pgn', '$root/Moved.pgn'),
+      (chapter, '$root/../Moved.pgn'),
+      (chapter, '$root/Bad\\Name.pgn'),
+      ('$root/Bad\\Name.pgn', chapter),
+    ]) {
+      test('unrepresentable or noncanonical mapping is refused: $paths', () {
+        expect(
+          () => relocate(jsonEncode(fixture()), paths.$1, paths.$2),
+          throwsFormatException,
+        );
+      });
+    }
+  });
+
   test('missing books remains missing', () => expect(rename(null), isNull));
 
   test(
@@ -180,6 +361,14 @@ void main() {
     test('invalid book envelope is refused: $text', () {
       expect(() => rename(text), throwsFormatException);
       expect(() => rename(text, []), throwsFormatException);
+      expect(
+        () => relocate(text, chapter, '$root/Moved.pgn'),
+        throwsFormatException,
+      );
+      expect(
+        () => relocate(text, '/Outside/A', '/Outside/B'),
+        throwsFormatException,
+      );
     });
   }
 
@@ -224,6 +413,14 @@ void main() {
           selectors(before).add({'path': 'Course/Main.pgn', 'section': 1});
       }
       expect(() => rename(jsonEncode(before)), throwsFormatException);
+      expect(
+        () => relocate(jsonEncode(before), chapter, '$root/Moved.pgn'),
+        throwsFormatException,
+      );
+      expect(
+        () => relocate(jsonEncode(before), '/Outside/A', '/Outside/B'),
+        throwsFormatException,
+      );
     });
   }
 }
