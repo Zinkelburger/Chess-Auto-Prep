@@ -27,6 +27,7 @@ import '../models/repertoire_metadata.dart';
 import '../repositories/repertoire_decoder.dart';
 import '../repositories/repertoire_document_repository.dart';
 import 'repertoire_board_controller.dart';
+import 'repertoire_line_edits.dart';
 import 'repertoire_writer.dart';
 
 /// Manages repertoire state and acts as the single source of truth.
@@ -78,6 +79,14 @@ class RepertoireController
 
   bool _isRepertoireWhite = true;
   bool get isRepertoireWhite => _isRepertoireWhite;
+
+  bool _boardFlipped = false;
+  bool get boardFlipped => _boardFlipped;
+  void setBoardFlipped(bool value) {
+    if (_boardFlipped == value) return;
+    _boardFlipped = value;
+    _notifyStructureChanged();
+  }
 
   bool _needsColorSelection = false;
   bool get needsColorSelection => _needsColorSelection;
@@ -312,8 +321,9 @@ class RepertoireController
   }
 
   VoidCallback? _pendingLineSave;
-  Future<void> _lineSaveTail = Future.value();
-  Object? _lineSaveFailure;
+  late final RepertoireLineEdits _lineEdits = RepertoireLineEdits(documents);
+  RepertoireLineEditContext _lineContext = RepertoireLineEditContext('', {});
+  List<RepertoireLineDraft> get pendingLineDrafts => _lineEdits.drafts;
 
   /// The editor supplies its debounce flusher, or null once it is saved.
   /// Keeping this callback separate from persistence lets core await pending
@@ -321,27 +331,28 @@ class RepertoireController
   void setPendingLineSave(VoidCallback? flush) => _pendingLineSave = flush;
 
   /// Await pending document edits without consuming a failure on a close retry.
-  Future<void> flushDocumentForClose() =>
-      _flushPendingLineSaves(retainFailure: true);
+  Future<void> flushDocumentForClose() async {
+    Object observed;
+    do {
+      observed = (_lineEdits.revision, writer.revision, _pendingLineSave);
+      await Future.wait([_flushPendingLineSaves(), writer.flush()]);
+    } while (observed != (_lineEdits.revision, writer.revision, _pendingLineSave));
+  }
   Object get closeRevision => (
     _repertoireFilePath,
     _loadGeneration,
-    _lineSaveTail,
-    _lineSaveFailure,
+    _lineEdits.revision,
+    writer.revision,
     _pendingLineSave,
     _board.closeRevision,
+    _boardFlipped,
   );
 
-  Future<void> _flushPendingLineSaves({bool retainFailure = false}) async {
+  Future<void> _flushPendingLineSaves() async {
     final flush = _pendingLineSave;
     _pendingLineSave = null;
     flush?.call();
-    await _lineSaveTail;
-    final failure = _lineSaveFailure;
-    if (!retainFailure) _lineSaveFailure = null;
-    if (failure != null) {
-      throw StateError('Could not save pending line edits: $failure');
-    }
+    await _lineEdits.flush();
   }
 
   /// Capture a save destination before a debounced editor edit can outlive
@@ -353,14 +364,14 @@ class RepertoireController
     if (_isLoading || selected == null || filePath == null) return null;
     final lineId = selected.id;
     final generation = _loadGeneration;
-    final originals = _lineOriginals;
-    originals.putIfAbsent(lineId, () => selected.fullPgn);
+    final context = _lineContext;
+    _lineEdits.bind(context, lineId, selected.fullPgn);
     return (newPgn) => _updateLineContent(
       newPgn,
       filePath: filePath,
       lineId: lineId,
       generation: generation,
-      originals: originals,
+      editContext: context,
     );
   }
 
@@ -374,43 +385,19 @@ class RepertoireController
     required String filePath,
     required String lineId,
     required int generation,
-    required Map<String, String> originals,
-  }) {
-    final result = _lineSaveTail.then(
-      (_) => _persistLineContent(
-        newPgn,
-        filePath: filePath,
-        lineId: lineId,
-        generation: generation,
-        originals: originals,
-      ),
-    );
-    _lineSaveTail = result.then<void>(
-      (saved) {
-        _lineSaveFailure = saved ? null : 'The original line is unavailable.';
-      },
-      onError: (Object error, StackTrace _) {
-        _lineSaveFailure = error;
-      },
-    );
-    return result;
-  }
-
-  Future<bool> _persistLineContent(
-    String newPgn, {
-    required String filePath,
-    required String lineId,
-    required int generation,
-    required Map<String, String> originals,
+    required RepertoireLineEditContext editContext,
   }) async {
-    final success = await documents.updateLineContent(
-      filePath,
-      lineId,
-      newPgn,
-      expectedContent: originals[lineId]!,
-    );
-    if (success == null) return false;
-    originals[lineId] = success;
+    String? success;
+    try {
+      success = await _lineEdits.save(editContext, lineId, newPgn);
+    } catch (_) {
+      _notifyStructureChanged();
+      rethrow;
+    }
+    if (success == null) {
+      _notifyStructureChanged();
+      return false;
+    }
     if (generation != _loadGeneration ||
         _currentRepertoire?.filePath != filePath) {
       return true;
@@ -564,16 +551,20 @@ class RepertoireController
   Future<void> Function()? debugBeforeRepertoireApply;
 
   /// Sets a new repertoire and triggers loading.
-  Future<void> setRepertoire(RepertoireMetadata repertoire) async {
-    _currentRepertoire = repertoire;
-    await loadRepertoire();
+  Future<void> setRepertoire(RepertoireMetadata repertoire) =>
+      _loadRepertoire(repertoire);
+
+  Future<void> loadRepertoire() async {
+    final repertoire = _currentRepertoire;
+    if (repertoire != null) await _loadRepertoire(repertoire);
   }
 
   /// (Re)loads the PGN content for the current repertoire.
-  Future<void> loadRepertoire() async {
-    if (_currentRepertoire == null) return;
+  Future<void> _loadRepertoire(RepertoireMetadata repertoire) async {
     final generation = ++_loadGeneration;
-    final filePath = _currentRepertoire!.filePath;
+    final filePath = repertoire.filePath;
+    final changedChapter = _currentRepertoire?.filePath != filePath;
+    var flushed = false;
     writer.clearUndoStack();
     _loadError = null;
     _setLoading(true);
@@ -583,6 +574,8 @@ class RepertoireController
       // tree. A same-file reload or a quick A → B → A must read saved edits.
       await _flushPendingLineSaves();
       if (generation != _loadGeneration) return;
+      flushed = true;
+      _currentRepertoire = repertoire;
       final read = await documents.read(filePath);
       await debugAfterRepertoireRead?.call();
       if (generation != _loadGeneration) return;
@@ -601,14 +594,17 @@ class RepertoireController
       if (generation != _loadGeneration) return;
 
       _applyLoaded(loaded);
+      if (changedChapter) _boardFlipped = !_isRepertoireWhite;
       _resetTree();
       _navigateToRootPosition();
     } catch (e) {
       if (generation != _loadGeneration) return;
       _loadError = 'Failed to load repertoire: $e';
       debugPrint(_loadError);
-      _applyLoaded(LoadedRepertoire.missing);
-      _resetTree();
+      if (flushed) {
+        _applyLoaded(LoadedRepertoire.missing);
+        _resetTree();
+      }
     } finally {
       if (generation == _loadGeneration) {
         _setLoading(false);
@@ -656,10 +652,10 @@ class RepertoireController
   /// [LoadedRepertoire.headers] is null when the PGN never parsed far enough
   /// to yield them (missing file, read failure, tree-build error); the current
   /// headers are then kept rather than reset to a guess.
-  Map<String, String> _lineOriginals = {};
-
   void _applyLoaded(LoadedRepertoire loaded) {
-    _lineOriginals = {for (final line in loaded.lines) line.id: line.fullPgn};
+    _lineContext = RepertoireLineEditContext(_repertoireFilePath ?? '', {
+      for (final line in loaded.lines) line.id: line.fullPgn,
+    });
     _repertoirePgn = loaded.pgn;
     _openingTree = loaded.openingTree;
     _repertoireLines = loaded.lines;
@@ -777,5 +773,18 @@ class RepertoireController
       _loadCompleters.clear();
     }
     _notifyStructureChanged();
+  }
+
+  @override
+  void dispose() {
+    _loadGeneration++;
+    writer.clearUndoStack();
+    _pendingLineSave = null;
+    _isLoading = false;
+    for (final waiter in _loadCompleters) {
+      waiter.complete();
+    }
+    _loadCompleters.clear();
+    super.dispose();
   }
 }

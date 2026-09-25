@@ -11,10 +11,8 @@
 /// way the rest of the app does: an [AppState] handoff.
 library;
 
-import 'package:chess_auto_prep/infrastructure/repertoires/isolate_repertoire_decoder.dart';
-import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_document_repository.dart';
-import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_decoder.dart';
 import '../support/repertoire_dependencies.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_controller.dart';
 
 import 'package:chess_auto_prep/app/app_dependencies.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
@@ -122,11 +120,8 @@ Future<AppState> _pumpScreen(
     MultiProvider(
       providers: [
         ChangeNotifierProvider<AppState>.value(value: appState),
-        Provider<RepertoireDocumentRepository>.value(
-          value: testRepertoireDocuments(),
-        ),
-        Provider<RepertoireDecoder>.value(
-          value: const IsolateRepertoireDecoder(),
+        ChangeNotifierProvider<RepertoireController>(
+          create: (_) => testRepertoireController(),
         ),
       ],
       child: MaterialApp(

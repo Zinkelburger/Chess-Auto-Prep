@@ -118,6 +118,7 @@ def main() -> int:
         'lib/features/documents/controllers/viewer_presentation_controller.dart',
         'lib/features/documents/controllers/viewer_collection_controller.dart',
         'lib/features/repertoires/controllers/repertoire_board_controller.dart',
+        'lib/features/repertoires/controllers/repertoire_line_edits.dart',
         'lib/features/repertoires/models/repertoire_authoring.dart',
         'lib/features/repertoires/models/loaded_repertoire.dart',
         'lib/features/repertoires/repositories/repertoire_decoder.dart',

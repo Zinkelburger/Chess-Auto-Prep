@@ -2,14 +2,9 @@
 /// Shows repertoire positions with board + PGN + context tabs layout.
 library;
 
-import '../features/repertoires/repositories/repertoire_document_repository.dart';
-import '../features/repertoires/repositories/repertoire_decoder.dart';
-
 import '../app/legacy_theme_boundary.dart';
 
 import 'dart:async';
-import '../features/documents/controllers/document_close_coordinator.dart';
-import '../features/documents/widgets/document_close_scope.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -160,7 +155,8 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   final BoardPreviewController _boardPreview = BoardPreviewController();
   final NavigationStack _navigationStack = NavigationStack();
 
-  bool _boardFlipped = false;
+  bool get _boardFlipped => _controller.boardFlipped;
+  set _boardFlipped(bool value) => _controller.setBoardFlipped(value);
 
   /// Decides what a generation notification means for this screen (run just
   /// ended? re-cluster? coalesce the rebuild?). Stateful, so it lives outside
@@ -481,10 +477,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     _layout.addListener(_onLayoutChanged);
     unawaited(_layout.load());
     _workspaceNavigation.addListener(_onAppStateChanged);
-    _controller = RepertoireController(
-      documents: context.read<RepertoireDocumentRepository>(),
-      decoder: context.read<RepertoireDecoder>(),
-    );
+    _controller = context.read<RepertoireController>();
     _controller.addListener(_onRepertoireChanged);
     _generationController.addListener(_onGenerationChanged);
     _auditController.addListener(_onAuditChanged);
@@ -497,6 +490,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       _appState = appState;
       appState.addListener(_onAppStateChanged);
 
+      if (_controller.currentRepertoire != null) _onRepertoireChanged();
       if (appState.hasPending<OpenBuilder>()) {
         _onAppStateChanged();
       }
@@ -630,7 +624,6 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         if (currentId != _lastRepertoireId) {
           _auditController.onRepertoireSwitching(_lastRepertoireId);
           _lastRepertoireId = currentId;
-          _boardFlipped = !_controller.isRepertoireWhite;
           // Drop the old repertoire's trees now, then bring in whatever this
           // one saved — the last full build and every probe since.
           _generationController.clearTree();
@@ -1012,7 +1005,6 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     _generationController.removeListener(_onGenerationChanged);
     _generationController.dispose();
     _controller.removeListener(_onRepertoireChanged);
-    _controller.dispose();
 
     _appState?.removeListener(_onAppStateChanged);
     _appState = null;
@@ -1041,15 +1033,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       ),
       body: LegacyThemeBoundary(child: root.body),
     );
-    return DocumentCloseRegistration(
-      revision: () => _controller.closeRevision,
-      prepare: () async {
-        await _controller.flushDocumentForClose();
-        if (!mounted) return null;
-        return DocumentCloseApproval(_controller.closeRevision);
-      },
-      child: shell,
-    );
+    return shell;
   }
 
   ({PreferredSizeWidget appBar, Widget body}) _buildWorkspaceRoot(

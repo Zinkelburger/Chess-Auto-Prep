@@ -50,6 +50,8 @@ class RepertoireWriter {
   final List<_UndoEntry> _undoStack = [];
   int _session = 0;
   int _nextUndoId = 0;
+  int _revision = 0;
+  int get revision => _revision;
 
   bool get canUndo => _undoStack.isNotEmpty;
 
@@ -69,9 +71,20 @@ class RepertoireWriter {
   }
 
   Future<T> _serialExec<T>(Future<T> Function() fn) {
+    _revision++;
     final result = _queueTail.then((_) => fn());
-    _queueTail = result.then((_) {}, onError: (_) {});
+    _queueTail = result
+        .then<void>((_) {}, onError: (Object _, StackTrace _) {})
+        .whenComplete(() => _revision++);
     return result;
+  }
+
+  Future<void> flush() async {
+    Future<void> observed;
+    do {
+      observed = _queueTail;
+      await observed;
+    } while (!identical(observed, _queueTail));
   }
 
   /// Invocations capture the document session before joining the queue.

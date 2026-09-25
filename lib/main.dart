@@ -1,3 +1,6 @@
+import 'app/repertoire_lifetime.dart';
+import 'features/repertoires/controllers/repertoire_controller.dart';
+import 'features/repertoires/widgets/repertoire_close_host.dart';
 import 'app/repertoire_dependencies.dart';
 import 'features/repertoires/repositories/repertoire_document_repository.dart';
 import 'features/repertoires/repositories/repertoire_decoder.dart';
@@ -214,6 +217,16 @@ class ChessAutoPrepApp extends StatelessWidget {
                 createRepertoireDocuments(documents: documents),
           ),
           Provider<RepertoireDecoder>(create: (_) => createRepertoireDecoder()),
+          Provider<RepertoireLifetime>(
+            create: (ctx) => RepertoireLifetime(
+              documents: ctx.read<RepertoireDocumentRepository>(),
+              decoder: ctx.read<RepertoireDecoder>(),
+            ),
+            dispose: (_, lifetime) => lifetime.dispose(),
+          ),
+          Provider<RepertoireController>(
+            create: (ctx) => ctx.read<RepertoireLifetime>().controller,
+          ),
           Provider<PgnCollectionRepository>(
             create: (_) => createPgnCollectionRepository(documents: documents),
           ),
@@ -324,7 +337,10 @@ class ChessAutoPrepApp extends StatelessWidget {
                           context.read<AppState>().setMode(AppMode.pgnViewer),
                       child: PgnViewerCloseHost(
                         lifetime: context.read<PgnViewerLifetime>(),
-                        child: const MainScreen(),
+                        child: RepertoireCloseHost(
+                          controller: context.read<RepertoireController>(),
+                          child: const MainScreen(),
+                        ),
                       ),
                     ),
                   ),

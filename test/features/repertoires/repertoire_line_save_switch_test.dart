@@ -82,6 +82,38 @@ void main() {
     },
   );
 
+  test('a failed edit survives successful edits elsewhere and refused reloads', () async {
+    final twoLines = '$_pgn\n[Event "Second line"]\n[Result "*"]\n\n1. d4 d5 *\n';
+    await File(first.filePath).writeAsString(twoLines);
+    await controller.loadRepertoire();
+    controller.loadPgnLine(controller.repertoireLines.first);
+    final saveFirst = controller.selectedLineSaver!;
+    final intended = _pgn.replaceFirst('e5', 'e5 {unsaved first}');
+    await File(first.filePath).writeAsString(twoLines.replaceFirst('e5', 'e5 {external}'));
+    await expectLater(saveFirst(intended), throwsA(isA<AtomicWriteConflict>()));
+    controller.loadPgnLine(controller.repertoireLines.last);
+    await controller.updateSelectedLineContent(
+      controller.selectedPgnLine!.fullPgn.replaceFirst('d5', 'd5 {saved second}'),
+    );
+    final board = controller.tree;
+    final lines = controller.repertoireLines;
+    await controller.setRepertoire(second);
+    expect(controller.currentRepertoire, first);
+    expect(controller.tree, same(board));
+    expect(controller.repertoireLines, same(lines));
+    expect(controller.loadError, contains('pending line edits'));
+    expect(controller.pendingLineDrafts.single.content, intended);
+    await controller.loadRepertoire();
+    expect(controller.tree, same(board));
+    await expectLater(controller.flushDocumentForClose(), throwsStateError);
+    final saved = await File(first.filePath).readAsString();
+    await File(first.filePath).writeAsString(saved.replaceFirst(' {external}', ''));
+    expect(await saveFirst(intended), isTrue);
+    expect(controller.pendingLineDrafts, isEmpty);
+    await controller.flushDocumentForClose();
+    expect(await File(first.filePath).readAsString(), contains('saved second'));
+  });
+
   test(
     'a pending chapter keeps its loaded tree until atomic replacement',
     () async {
