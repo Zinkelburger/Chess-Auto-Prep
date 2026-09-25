@@ -160,7 +160,7 @@ final class LichessStudyApi implements LichessStudies {
           .get(url, headers: lichessHeaders(token: await _token()))
           .timeout(studyDownloadTimeout);
     } on Object catch (error) {
-      log.w('download the Lichess study ${link.studyId}', error);
+      log.w('download the Lichess study ${link.studyId}', error.runtimeType);
       return const StudyNotFetched(StudyFetchProblem.unreachable);
     }
     final problem = _problemOf(response.statusCode);

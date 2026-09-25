@@ -6,9 +6,12 @@ import 'package:chess_auto_prep/v2/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/v2/chess/generation/sources.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
+import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/v2/storage/pending_writes.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
 import 'package:chess_auto_prep/v2/storage/finds_store.dart';
+import 'package:chess_auto_prep/v2/storage/generation_trees.dart';
 import 'package:chess_auto_prep/v2/workspace/fill_gaps.dart';
 import 'package:chess_auto_prep/v2/workspace/finds.dart';
 import 'package:chess_auto_prep/v2/chess/fen.dart';
@@ -76,21 +79,29 @@ void main() {
     OpponentPolicy policy = const ScriptedPolicy({'e8d8': 1}),
     TreeKeeper? keepTree,
     Finds? finds,
+    PgnDocumentStore? documents,
+    PendingWrites? pending,
+    bool dispose = true,
+    FillToolsFactory? tools,
+    Future<void> Function()? release,
   }) {
     final fill = FillGaps(
       session: fixture.session,
       analysis: analysis,
-      documents: fixture.store,
-      tools: (_) async => FillReady(
-        evaluator: evaluator,
-        policy: policy,
-        release: () async => releases++,
-      ),
+      documents: documents ?? fixture.store,
+      tools:
+          tools ??
+          (_) async => FillReady(
+            evaluator: evaluator,
+            policy: policy,
+            release: release ?? () async => releases++,
+          ),
       keepTree: keepTree,
+      pendingWrites: pending,
       finds: finds,
       clock: () => DateTime(2026, 9, 22, 12),
     );
-    addTearDown(fill.dispose);
+    if (dispose) addTearDown(fill.dispose);
     return fill;
   }
 
@@ -107,11 +118,119 @@ void main() {
     afterUci(positionOf(kingAndPawn), 'e2e4').fen: -100,
   };
 
+  test('throwing tool startup reports failure and resumes analysis', () async {
+    final fill = fillWith(
+      ScriptedEvaluator(),
+      tools: (_) async => throw StateError('startup failed'),
+    );
+    expect(await fill.start(request), isNull);
+    expect(fill.state, isA<FillFailed>());
+    expect(fill.canStart, isTrue);
+    expect(analysis.paused, isFalse);
+  });
+
+  test(
+    'unexpected search decoding failure releases once and resumes analysis',
+    () async {
+      final fill = fillWith(
+        ScriptedEvaluator(),
+        policy: ScriptedPolicy(_BrokenWeights()),
+      );
+      expect(await fill.start(request), isNull);
+      expect(fill.state, isA<FillFailed>());
+      expect(releases, 1);
+      expect(analysis.paused, isFalse);
+    },
+  );
+
+  test(
+    'throwing release cannot report completion or strand running state',
+    () async {
+      final fill = fillWith(
+        ScriptedEvaluator(),
+        release: () async {
+          releases++;
+          throw StateError('release failed');
+        },
+      );
+      expect(await fill.start(request), isNull);
+      expect(fill.state, isA<FillFailed>());
+      expect(releases, 1);
+      expect(analysis.paused, isFalse);
+      expect(fill.canStart, isTrue);
+    },
+  );
+
+  test(
+    'cancel waits for already-started release and consumes its failure',
+    () async {
+      final evaluator = GatedEvaluator();
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      final fill = fillWith(
+        evaluator,
+        release: () async {
+          releases++;
+          evaluator.release();
+          entered.complete();
+          await release.future;
+          throw StateError('release failed');
+        },
+      );
+      final running = fill.start(request);
+      while (evaluator.asked.isEmpty) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      fill.cancel();
+      await entered.future;
+      await pumpEventQueue();
+      expect(analysis.paused, isTrue);
+      expect(fill.canStart, isFalse);
+      release.complete();
+      await running;
+      expect(fill.state, isA<FillFailed>());
+      expect(releases, 1);
+      expect(analysis.paused, isFalse);
+    },
+  );
+
+  test(
+    'disposal consumes a late throwing release without abandoning it',
+    () async {
+      final evaluator = GatedEvaluator();
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      final fill = fillWith(
+        evaluator,
+        dispose: false,
+        release: () async {
+          releases++;
+          evaluator.release();
+          entered.complete();
+          await release.future;
+          throw StateError('release failed');
+        },
+      );
+      final running = fill.start(request);
+      while (evaluator.asked.isEmpty) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      fill.dispose();
+      await entered.future;
+      await pumpEventQueue();
+      expect(analysis.paused, isTrue);
+      release.complete();
+      await running;
+      expect(releases, 1);
+      expect(analysis.paused, isFalse);
+    },
+  );
+
   test('a run keeps its tree for the Search tab and writes nothing', () async {
     final trees = <String>[];
     final fill = fillWith(
       ScriptedEvaluator(scores: e4Best()),
-      keepTree: (ref, tree) async => trees.add(tree),
+      keepTree: (ref, tree, {required runId}) async => trees.add(tree),
     );
     expect(fill.canStart, isTrue);
     expect(await fill.start(request), isNull);
@@ -129,6 +248,86 @@ void main() {
     expect(trees.single, contains('"format": "opening_tree"'));
     expect(trees.single, contains('"eval_depth": 14'));
     expect(fill.canMakeLines, isTrue);
+  });
+
+  test(
+    'publication retries frozen artifacts and settles before Done notification',
+    () async {
+      final pending = PendingWrites();
+      final attempts = <(String, String)>[];
+      var fail = true;
+      final evaluator = ScriptedEvaluator(scores: e4Best());
+      final fill = fillWith(
+        evaluator,
+        pending: pending,
+        keepTree: (_, text, {required runId}) async {
+          attempts.add((runId, text));
+          if (fail) throw StateError('lost acknowledgement');
+        },
+      );
+      fill.addListener(() {
+        if (fill.state is FillDone) expect(fill.canRetry, isFalse);
+      });
+      await fill.start(request);
+      final computations = evaluator.asked.length;
+      expect(fill.state, isA<FillUnsaved>());
+      expect(await pending.settle(), contains('Search results'));
+      fail = false;
+      await fill.retry();
+      expect(fill.state, isA<FillDone>());
+      expect(attempts, [attempts.first, attempts.first]);
+      expect(evaluator.asked.length, computations);
+      expect(await pending.settle(), isNull);
+    },
+  );
+
+  test(
+    'replacement owner retries accepted publication after disposal',
+    () async {
+      final pending = PendingWrites();
+      final attempts = <(String, String)>[];
+      var fail = true;
+      final first = fillWith(
+        ScriptedEvaluator(scores: e4Best()),
+        pending: pending,
+        dispose: false,
+        keepTree: (_, text, {required runId}) async {
+          attempts.add((runId, text));
+          if (fail) throw StateError('unavailable');
+        },
+      );
+      await first.start(request);
+      first.dispose();
+      final replacement = fillWith(ScriptedEvaluator(), pending: pending);
+      expect(replacement.canRetry, isTrue);
+      expect(replacement.canStart, isFalse);
+      fail = false;
+      await replacement.retry();
+      expect(replacement.canRetry, isFalse);
+      expect(attempts, [attempts.first, attempts.first]);
+      expect(await pending.settle(), isNull);
+    },
+  );
+
+  test('accepted draft finishes after owner disposal', () async {
+    final pending = PendingWrites();
+    final fill = fillWith(
+      ScriptedEvaluator(scores: e4Best()),
+      pending: pending,
+      dispose: false,
+    );
+    await fill.start(request);
+    fixture.store.hold = true;
+    final writing = fill.makeLines();
+    while (fixture.store.waiting == 0) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    fill.dispose();
+    fixture.store.hold = false;
+    fixture.store.releaseAll();
+    await writing;
+    expect(textOf(draft()), contains('[Event "Main (draft)"]'));
+    expect(await pending.settle(), isNull);
   });
 
   test('the tree is read at the position on the board: by the moves from '
@@ -153,6 +352,56 @@ void main() {
     await fill.start(request);
     expect(shown, isNotEmpty);
     expect(shown.first, isA<OurNode>(), reason: 'the root was answered first');
+  });
+
+  test('done waits for the required tree publication', () async {
+    final entered = Completer<void>();
+    final release = Completer<void>();
+    final fill = fillWith(
+      ScriptedEvaluator(scores: e4Best()),
+      keepTree: (_, _, {required runId}) {
+        entered.complete();
+        return release.future;
+      },
+    );
+    final running = fill.start(request);
+    await entered.future;
+    expect(fill.state, isNot(isA<FillDone>()));
+    expect(fill.canStart, isFalse);
+    release.complete();
+    await running;
+    expect(fill.state, isA<FillDone>());
+  });
+
+  test('a required tree failure cannot report a saved search', () async {
+    final fill = fillWith(
+      ScriptedEvaluator(scores: e4Best()),
+      keepTree: (_, _, {required runId}) async {
+        throw StateError('tree publication failed');
+      },
+    );
+    await fill.start(request);
+    expect(fill.state, isNot(isA<FillDone>()));
+    expect(fill.canMakeLines, isFalse);
+  });
+
+  test('a lost draft acknowledgement never creates a second draft', () async {
+    final documents = _LostCreate(fixture.store);
+    final fill = fillWith(
+      ScriptedEvaluator(scores: e4Best()),
+      documents: documents,
+    );
+    await fill.start(request);
+    await fill.makeLines();
+    expect(fill.lines, isA<LinesFailed>());
+    expect(fixture.store.documents.containsKey(draft()), isTrue);
+    await fill.makeLines();
+    expect((fill.lines as LinesWritten).draft, draft());
+    expect(documents.paths, [draft().path]);
+    expect(
+      fixture.store.documents.keys,
+      unorderedEquals([fixture.ref, draft()]),
+    );
   });
 
   test('lines are written only when asked: a draft chapter beside the one '
@@ -394,18 +643,16 @@ void main() {
     },
   );
 
-  test('a search started while lines are being written takes over: the '
-      'lines of the run it replaced land nowhere', () async {
+  test('a new search cannot abandon an already accepted draft', () async {
     final fill = fillWith(ScriptedEvaluator(scores: e4Best()));
     await fill.start(request);
     final making = fill.makeLines();
-    final again = fill.start(request);
+    expect(await fill.start(request), contains('accepted search results'));
     await making;
-    await again;
     expect(fill.state, isA<FillDone>());
-    expect(fill.lines, isNull, reason: 'not the replaced run\'s');
-    expect(fill.canMakeLines, isTrue);
-    expect(fixture.store.documents.keys, [fixture.ref], reason: 'no draft');
+    expect(fill.lines, isA<LinesWritten>());
+    expect(textOf(draft()), contains('// Draft'));
+    expect(fill.canStart, isTrue);
   });
 
   test(
@@ -503,4 +750,37 @@ void main() {
       expect(kept.side, Side.white);
     }
   });
+}
+
+/// Reports a failed acknowledgement after actually publishing the draft.
+final class _LostCreate implements PgnDocumentStore {
+  _LostCreate(this.inner);
+  final ScriptedDocumentStore inner;
+  final paths = <String>[];
+  bool fail = true;
+  @override
+  Future<CreateResult> create(DocumentRef ref, String text) async {
+    paths.add(ref.path);
+    final result = await inner.create(ref, text);
+    if (fail) {
+      fail = false;
+      return const IoFailure('lost creation acknowledgement');
+    }
+    return result;
+  }
+
+  @override
+  Future<DocumentRead> open(DocumentRef ref) => inner.open(ref);
+  @override
+  Never noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('${invocation.memberName}');
+}
+
+/// Decoder-shaped failure after the model port has successfully returned.
+final class _BrokenWeights implements Map<String, double> {
+  @override
+  double? operator [](Object? key) => throw StateError('malformed weights');
+  @override
+  Never noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('${invocation.memberName}');
 }

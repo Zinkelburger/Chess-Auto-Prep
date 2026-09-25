@@ -65,6 +65,7 @@ APPROVED: dict[str, tuple[int, str]] = {
         "through atomic_write",
     ),
     "lib/v2/storage/compound_write.dart": (1, "v2 guarded compound inverse: remove only the verified books snapshot when restoring its recorded absence; retained intent and directory flush make recovery retryable"),
+    "lib/v2/storage/generation_trees.dart": (1, "v2 immutable generation artifact: under recovery domain and Documents lock, discard only a no-follow regular stage proven byte-identical to this accepted publication; unknown or linked material remains untouched"),
     "lib/v2/storage/atomic_write.dart": (3, "v2 atomic publication: staged temporary and sweep; replacement/flush use document_file_io"),
     "lib/v2/storage/file_relocation.dart": (1, "v2 journaled file relocation: remove only an empty directory this attempt created and still owns after a refused native rename; preserve committing intent"),
     "lib/v2/storage/pgn_file_store.dart": (1, "no filesystem mutation of its own: one call into FileRelocations.delete that the pattern above matches by method name"),

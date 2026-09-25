@@ -162,17 +162,23 @@ final class AppParts {
   late final labs = wireLabModes(env);
 
   bool _disposed = false;
+  bool _started = false;
+  Future<void>? _starting;
 
   /// Reads what the app starts from: the repertoires, the settings and the
   /// account, then the engine with the settings it was left with, and the
   /// user's games. A window taken down meanwhile starts nothing more.
-  Future<void> start() async {
-    if (_disposed) return;
+  Future<void> start() =>
+      _starting ??= _start().whenComplete(() => _starting = null);
+
+  Future<void> _start() async {
+    if (_disposed || _started) return;
+    await settings.load();
+    if (_disposed || !settings.ready) return;
+    _started = true;
     unawaited(documents.library.refresh());
     unawaited(books.load());
     unawaited(training.myGames.load());
-    await settings.load();
-    if (_disposed) return;
     unawaited(account.load());
     unawaited(labs.offer(env.bughouse.bundled));
     await _workspace.start();

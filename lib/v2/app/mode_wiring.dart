@@ -126,6 +126,7 @@ final class TrainingWiring {
         sites: env.gameSites,
         cache: games,
         set: SetAdditions(
+          pendingWrites: env.pendingWrites,
           documents: env.store,
           session: session,
           saver: workspace.saver,

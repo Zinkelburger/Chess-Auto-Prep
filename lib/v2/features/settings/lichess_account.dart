@@ -39,26 +39,57 @@ final class LichessAccountState extends ChangeNotifier {
   final _requests = Object();
   PendingObligation<bool>? _saving;
   bool _removing = false;
+  bool _readFailed = false;
+  bool _restartRequired = false;
+  Future<void>? _loading;
+
+  bool get canRetryRead => _readFailed && !_restartRequired;
+  bool get readRequiresRestart => _restartRequired;
+  bool get available => !_readFailed && _loading == null;
 
   bool get canRetrySave => _saving != null && !_saving!.committed && !_working;
 
-  /// Reads the saved account. Called once when the app starts.
-  Future<void> load() async {
-    if (_disposed) return;
+  /// Reads the saved account. A failed read retains the last confirmed value;
+  /// authentication changes wait until the account can be read again.
+  Future<void> load() {
+    if (_disposed || _working || _restartRequired) return Future.value();
+    return _loading ??= _load();
+  }
+
+  Future<void> _load() async {
     final revision = _revision;
-    await pendingWrites.settleFor(this);
-    if (_disposed ||
-        revision != _revision ||
-        pendingWrites.unfinished(this).isNotEmpty)
-      return;
-    final saved = await _read();
-    if (_disposed || revision != _revision) return;
-    _set(saved == null ? const SignedOut() : SignedIn(saved), problem: null);
+    try {
+      await pendingWrites.settleFor(this);
+      if (_disposed ||
+          revision != _revision ||
+          pendingWrites.unfinished(this).isNotEmpty)
+        return;
+      final saved = await _read();
+      if (_disposed || revision != _revision) return;
+      _readFailed = false;
+      _loading = null;
+      _set(saved == null ? const SignedOut() : SignedIn(saved), problem: null);
+    } on Object catch (error) {
+      if (_disposed || revision != _revision) return;
+      log.w('read the saved Lichess account', 'the preferences read failed');
+      _readFailed = true;
+      _restartRequired =
+          error is LichessAccountUnavailable && error.restartRequired;
+      _loading = null;
+      _set(
+        _status,
+        problem: _restartRequired
+            ? 'The saved Lichess account is malformed. Repair the saved preferences and restart the app.'
+            : 'The saved Lichess account could not be read. Retry reading it.',
+      );
+    } finally {
+      _loading = null;
+    }
   }
 
   /// Runs the browser flow. Refused while one is already waiting.
   Future<void> logIn() {
-    if (_disposed || _working) return Future.value();
+    if (_disposed || _working || !available) return Future.value();
     final work = _logIn();
     pendingWrites.watch(_requests, work);
     return work;
@@ -86,7 +117,7 @@ final class LichessAccountState extends ChangeNotifier {
   /// Signs in with a personal access token typed into the row. Answers
   /// whether it was taken.
   Future<bool> useToken(String token) {
-    if (_disposed || _working) return Future.value(false);
+    if (_disposed || _working || !available) return Future.value(false);
     final work = _useToken(token);
     pendingWrites.watch(_requests, work);
     return work;
@@ -108,7 +139,8 @@ final class LichessAccountState extends ChangeNotifier {
   /// here whatever Lichess said. When this computer will not forget it,
   /// the row says so: the next launch would read it back as signed in.
   Future<void> logOut() {
-    if (_disposed || _working || _status is! SignedIn) return Future.value();
+    if (_disposed || _working || !available || _status is! SignedIn)
+      return Future.value();
     final work = _logOut();
     pendingWrites.watch(_requests, work);
     return work;

@@ -39,6 +39,44 @@ void main() {
     pending = PendingWrites();
   });
 
+  test(
+    'unavailable account retains its last value and retries before login',
+    () async {
+      var fails = false;
+      var writes = 0;
+      final state = LichessAccountState(
+        login: login,
+        read: () async {
+          if (fails) throw StateError('private-test-token');
+          return someone();
+        },
+        write: (_) async {
+          writes++;
+          return true;
+        },
+      );
+      addTearDown(state.dispose);
+      await state.load();
+      fails = true;
+      await state.load();
+      expect(state.status, isA<SignedIn>());
+      expect(state.problem, contains('could not be read'));
+      expect(state.problem, isNot(contains('private-test-token')));
+      await state.logOut();
+      expect(await state.useToken('replacement'), isFalse);
+      await state.logIn();
+      expect(login.logins, 0);
+      expect(login.revoked, isEmpty);
+      expect(login.tokensTried, isEmpty);
+      expect(writes, 0);
+      fails = false;
+      await state.load();
+      expect(state.problem, isNull);
+      await state.logOut();
+      expect(writes, 1);
+    },
+  );
+
   test('starts signed out, and loads a saved account', () async {
     final state = owner();
     expect(state.status, isA<SignedOut>());

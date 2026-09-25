@@ -97,6 +97,12 @@ class _Account extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    if (account.readRequiresRestart) {
+      return Text('Restart required', style: text.bodySmall);
+    }
+    if (account.canRetryRead) {
+      return _button('Retry read', () => unawaited(account.load()));
+    }
     if (account.canRetrySave) {
       return _button('Retry save', () => unawaited(account.retrySave()));
     }
