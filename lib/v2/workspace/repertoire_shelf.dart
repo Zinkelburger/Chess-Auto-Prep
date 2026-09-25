@@ -19,11 +19,7 @@ import '../storage/pgn_document_store.dart';
 /// indexed from that chapter's own games, so a line counts once, in the
 /// chapter it belongs to.
 final class RepertoireShelf {
-  RepertoireShelf({
-    required ChapterFiles files,
-    required PgnDocumentStore documents,
-  }) : _files = files,
-       _documents = documents;
+  RepertoireShelf({required this._files, required this._documents});
 
   final ChapterFiles _files;
   final PgnDocumentStore _documents;
@@ -39,7 +35,15 @@ final class RepertoireShelf {
 
   List<ChapterRef> _refs = const [];
   bool _stale = true;
-  Future<void>? _reading;
+  Future<_ReadResult>? _reading;
+  var _generation = 0;
+  var _version = 0;
+  String? _problem;
+  Repertoires? _snapshot;
+
+  /// Why the previous complete view remains stale, if rebuilding failed.
+  String? get problem => _problem;
+  int get version => _version;
 
   /// The repertoire chapters in folder order, drafts left out, as last
   /// listed.
@@ -49,12 +53,34 @@ final class RepertoireShelf {
   /// changed, or a read of them has not finished.
   bool get stale => _stale || _reading != null;
 
-  /// [ref]'s index as last read; null when it could not be read.
+  /// Validate the same committed shelf a consumer actually used, together
+  /// with related PGNs (null means absent). A newer shelf cannot certify work
+  /// computed from older indexes, even if its own files are now current.
+  Future<RepertoireValidation> validate({
+    required int version,
+    Map<String, Revision?> additional = const {},
+  }) async {
+    final snapshot = _snapshot;
+    if (snapshot == null || stale || version != _version) {
+      return const RepertoireChanged();
+    }
+    final result = await _files.validate(
+      snapshot,
+      observed: _revisions,
+      additional: additional,
+    );
+    return stale || version != _version ? const RepertoireChanged() : result;
+  }
+
+  /// [ref]'s index in the last complete snapshot, or null if it was absent.
   RepertoireIndex? indexOf(ChapterRef ref) => _indexed[ref];
 
   /// The files changed on disk: they are read again the next time someone
   /// reads, and only the ones whose bytes changed are parsed again.
-  void forget() => _stale = true;
+  void forget() {
+    _generation++;
+    _stale = true;
+  }
 
   /// Reads until nothing is stale, so a change that lands while the files
   /// are being read is read too. [gone] stops it early.
@@ -62,52 +88,70 @@ final class RepertoireShelf {
     while (!gone()) {
       final reading = _reading;
       if (reading != null) {
-        await reading;
+        if (await reading == _ReadResult.failed) return;
       } else if (_stale) {
-        await (_reading = _readOnce(gone).whenComplete(() => _reading = null));
+        final result = await (_reading = _readOnce(
+          gone,
+        ).whenComplete(() => _reading = null));
+        if (result == _ReadResult.failed) return;
       } else {
         return;
       }
     }
   }
 
-  /// One read, for the caller whose [gone] it is. Another reader may be
-  /// waiting on it, so a read that caller gives up leaves the files stale
-  /// for the next one rather than believed.
-  Future<void> _readOnce(bool Function() gone) async {
-    _stale = false;
-    final RepertoireListing listing;
+  Future<_ReadResult> _readOnce(bool Function() gone) async {
+    final generation = _generation;
     try {
-      listing = await _files.list();
-    } on Object catch (error) {
-      log.w('list the repertoires', error);
-      return;
-    }
-    if (listing is! Repertoires) {
-      _refs = const [];
-      return;
-    }
-    final listed = [
-      for (final folder in listing.folders)
-        for (final chapter in folder.chapters)
-          if (!chapter.heading.draft) chapter,
-    ];
-    final byFile = <String, List<ChapterRef>>{};
-    for (final ref in listed) {
-      (byFile[ref.path] ??= []).add(ref);
-    }
-    final indexed = <ChapterRef, RepertoireIndex>{};
-    final revisions = <String, Revision>{};
-    for (final chapters in byFile.values) {
-      if (gone()) {
-        _stale = true;
-        return;
+      final listing = await _files.list();
+      if (gone() || generation != _generation) return _ReadResult.superseded;
+      if (listing is! Repertoires) {
+        throw StateError((listing as RepertoiresUnreadable).detail);
       }
-      await _index(chapters, indexed, revisions);
+      if (listing.unreadable.isNotEmpty) {
+        throw StateError(listing.unreadable.first.detail);
+      }
+      final listed = [
+        for (final folder in listing.folders)
+          for (final chapter in folder.chapters)
+            if (!chapter.heading.draft) chapter,
+      ];
+      final byFile = <String, List<ChapterRef>>{};
+      for (final ref in listed) {
+        (byFile[ref.path] ??= []).add(ref);
+      }
+      final indexed = <ChapterRef, RepertoireIndex>{};
+      final revisions = <String, Revision>{};
+      for (final chapters in byFile.values) {
+        await _index(chapters, indexed, revisions);
+        if (gone() || generation != _generation) return _ReadResult.superseded;
+      }
+      final validation = await _files.validate(listing, observed: revisions);
+      if (gone() || generation != _generation) return _ReadResult.superseded;
+      switch (validation) {
+        case RepertoireChanged():
+          throw StateError(
+            'The repertoire files changed while indexing. Refresh to retry.',
+          );
+        case RepertoireValidationFailed(:final detail):
+          throw StateError(detail);
+        case RepertoireCurrent():
+          _snapshot = listing;
+          _indexed = indexed;
+          _revisions = revisions;
+          _refs = List.unmodifiable(listed);
+          _stale = false;
+          _problem = null;
+          _version++;
+          return _ReadResult.committed;
+      }
+    } on Object catch (error) {
+      if (gone() || generation != _generation) return _ReadResult.superseded;
+      log.w('read the repertoire index', error);
+      _problem = '$error';
+      _stale = true;
+      return _ReadResult.failed;
     }
-    _indexed = indexed;
-    _revisions = revisions;
-    _refs = List.unmodifiable(listed);
   }
 
   /// Indexes [chapters], the chapters one file holds, into [indexed]: what
@@ -128,26 +172,24 @@ final class RepertoireShelf {
           revisions[file.path] = revision;
           return;
         }
-        try {
-          final indexes = await _indexesIn(
-            text,
-            name: file.fileName,
-            sections: [for (final chapter in chapters) chapter.section],
-          );
-          for (final (at, chapter) in chapters.indexed) {
-            indexed[chapter] = indexes[at];
-          }
-          revisions[file.path] = revision;
-        } on Object catch (error) {
-          log.w('index ${file.path}', error);
+        final indexes = await _indexesIn(
+          text,
+          name: file.fileName,
+          sections: [for (final chapter in chapters) chapter.section],
+        );
+        for (final (at, chapter) in chapters.indexed) {
+          indexed[chapter] = indexes[at];
         }
+        revisions[file.path] = revision;
       case Absent():
-        return;
+        throw StateError('${file.path} is missing.');
       case Unreadable(:final detail):
-        log.w('read ${file.path} for the index', detail);
+        throw StateError('${file.path}: $detail');
     }
   }
 }
+
+enum _ReadResult { committed, superseded, failed }
 
 /// What each of [sections] of the file [text] plays, the file parsed once
 /// for all of them — on another isolate when it is big enough to hold the

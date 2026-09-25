@@ -19,6 +19,31 @@ import '../support/scripted_store.dart';
 import 'store_fixture.dart';
 
 void main() {
+  test('failed catalog refresh retains the last good folders', () async {
+    final files = ScriptedFiles(
+      listing: Repertoires([
+        folder('A', ['Main']),
+      ]),
+    );
+    final catalog = RepertoireCatalog(files: files, root: '/repertoires');
+    addTearDown(catalog.dispose);
+    await catalog.refresh();
+    files.listing = const RepertoiresUnreadable('blocked');
+    await catalog.refresh();
+    expect(catalog.repertoires.single.name, 'A');
+    expect(catalog.stale, isTrue);
+    expect(catalog.problem, 'blocked');
+    expect(catalog.version, 1);
+    files.listing = Repertoires([
+      folder('B', ['Main']),
+    ]);
+    await catalog.refresh();
+    expect(catalog.repertoires.single.name, 'B');
+    expect(catalog.stale, isFalse);
+    expect(catalog.problem, isNull);
+    expect(catalog.version, 2);
+  });
+
   test(
     'a failed mutation publishes nothing; concurrent commits survive coalescing',
     () async {
@@ -66,7 +91,7 @@ void main() {
       final book = Book(
         id: 'b',
         name: 'B',
-        chapters: {BookChapter('Course.pgn', 'B')},
+        chapters: {const BookChapter('Course.pgn', 'B')},
       );
       expect(book.includes('Course.pgn', sectionsInText(kept).single), isTrue);
       final store = ScriptedDocumentStore();

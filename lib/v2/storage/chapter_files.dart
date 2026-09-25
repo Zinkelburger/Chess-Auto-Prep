@@ -1,17 +1,19 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:path/path.dart' as p;
 
 import 'directory_entries.dart';
 import '../chess/pgn/chapter_heading.dart';
+import '../chess/pgn/chapter.dart' show readOffThreadFrom;
+import 'document_probe.dart';
 import '../chess/pgn/chapter_sections.dart';
 import '../diagnostics/log.dart';
 import 'document_ref.dart';
 import 'recovery_gate.dart';
 import 'relocation_notes.dart';
 import 'pgn_document_store.dart' as store;
-import 'relocation_notes.dart' show recoveryFolder;
 
 /// One chapter on disk: a file, or the games of a file that name one
 /// chapter by tag ([section]), plus what the lists show about it without
@@ -102,7 +104,15 @@ sealed class RepertoireListing {
 }
 
 final class Repertoires extends RepertoireListing {
-  const Repertoires(this.folders, {this.unreadable = const []});
+  const Repertoires(
+    this.folders, {
+    this.unreadable = const [],
+    this.revisions = const {},
+  });
+
+  /// Complete native read set, including draft chapters. Successful native
+  /// listings own an immutable map; no PGN text survives metadata parsing.
+  final Map<String, Revision> revisions;
 
   final List<RepertoireFolder> folders;
 
@@ -141,11 +151,22 @@ final class RepertoiresUnreadable extends RepertoireListing {
 /// real boundary, so this is an interface: [ChapterDirectory] in the app, a
 /// scripted one in tests.
 ///
-/// Listing and the one folder the library removes. A chapter's text is read,
-/// and written, through the document store, which is the one place that knows
-/// its revision.
+/// Listing and optional folder cleanup share the document store's recovery
+/// domain. Native membership and metadata observations use the same file
+/// revision proof as document reads.
 abstract interface class ChapterFiles {
   Future<RepertoireListing> list();
+
+  /// Checks complete membership and native revisions together under one
+  /// recovery domain. [observed] names additional reads used by a projection;
+  /// each must describe the same file as the listing. [additional] captures
+  /// related managed PGNs, such as downloaded games; null means absent. All
+  /// are validated under the same domain. Never nest guarded store calls.
+  Future<RepertoireValidation> validate(
+    Repertoires snapshot, {
+    required Map<String, Revision> observed,
+    Map<String, Revision?> additional = const {},
+  });
 
   /// The chapters deleted from every repertoire and still in recovery,
   /// which is what a restore can bring back.
@@ -167,6 +188,28 @@ abstract interface class ChapterFiles {
   Future<void> removeStaging(String folder);
 }
 
+sealed class RepertoireValidation {
+  const RepertoireValidation();
+}
+
+final class RepertoireCurrent extends RepertoireValidation {
+  const RepertoireCurrent();
+}
+
+final class RepertoireChanged extends RepertoireValidation {
+  const RepertoireChanged();
+}
+
+final class RepertoireValidationFailed extends RepertoireValidation {
+  const RepertoireValidationFailed(this.detail);
+  final String detail;
+}
+
+/// Revision equality is deliberately content-only for saving. A projection
+/// also needs the native object that supplied those bytes.
+bool sameChapterRevision(Revision first, Revision second) =>
+    first == second && first.nativeIdentity == second.nativeIdentity;
+
 /// What an import's staging folder is called: a dot folder, which the
 /// listing skips, so a half-written import is never a repertoire.
 const stagingPrefix = '.import-';
@@ -174,12 +217,7 @@ const stagingPrefix = '.import-';
 /// One folder per repertoire, one `.pgn` per chapter, plus index files and
 /// sidecars the app ignores.
 final class ChapterDirectory implements ChapterFiles {
-  ChapterDirectory(
-    this.root, {
-    required RecoveryGate recovery,
-    store.PgnDocumentStore? documents,
-  }) : _recovery = recovery,
-       _documents = documents;
+  ChapterDirectory(this.root, {required this._recovery, this._documents});
 
   final RecoveryGate _recovery;
 
@@ -188,33 +226,133 @@ final class ChapterDirectory implements ChapterFiles {
   /// The `repertoires` directory itself.
   final Directory root;
 
-  /// The chapter names each file was last found to hold, with the size and
-  /// time it had then: a course is one file of thousands of games, and the
-  /// library is listed again after every write.
-  final _sections =
-      <String, ({int size, DateTime modified, List<String?> names})>{};
+  var _metadata = <String, ({Revision revision, _Metadata value})>{};
 
   @override
   Future<RepertoireListing> list() async {
     try {
-      // Migration calls the public store between scans, never while holding
-      // its non-reentrant recovery domain. Both scans observe a settled tree.
+      // Migration uses the public store outside the non-reentrant domain.
       await _migrateFlat();
-      return await _recovery.run(() async {
-        if (!await root.exists()) return const Repertoires([]);
-        final skipped = <UnreadableFolder>[];
-        final folders = await _scan(skipped);
-        folders.sort(_byName);
-        return Repertoires(
-          List.unmodifiable(folders),
-          unreadable: List.unmodifiable(skipped),
-        );
-      });
+      final captured = await _recovery.run(_capture);
+      final listing = await _listingOf(captured);
+      // An incomplete listing remains diagnostic, never a complete snapshot.
+      if (listing.unreadable.isNotEmpty) return listing;
+      return switch (await validate(listing, observed: const {})) {
+        RepertoireCurrent() => listing,
+        RepertoireChanged() => const RepertoiresUnreadable(
+          'The repertoire files changed while they were being read. Refresh to retry.',
+        ),
+        RepertoireValidationFailed(:final detail) => RepertoiresUnreadable(
+          detail,
+        ),
+      };
     } on RecoveryRequired catch (error) {
       return RepertoiresUnreadable(error.detail);
     } on FileSystemException catch (error) {
       return RepertoiresUnreadable(_detail(error));
+    } on FormatException catch (error) {
+      return RepertoiresUnreadable(error.message);
     }
+  }
+
+  @override
+  Future<RepertoireValidation> validate(
+    Repertoires snapshot, {
+    required Map<String, Revision> observed,
+    Map<String, Revision?> additional = const {},
+  }) async {
+    if (snapshot.unreadable.isNotEmpty) {
+      return RepertoireValidationFailed(snapshot.unreadable.first.detail);
+    }
+    final reads = Map<String, Revision>.unmodifiable(observed);
+    final related = Map<String, Revision?>.unmodifiable(additional);
+    try {
+      return await _recovery.run(() async {
+        final inventory = await _inventory();
+        if (inventory.unreadable.isNotEmpty) {
+          return RepertoireValidationFailed(inventory.unreadable.first.detail);
+        }
+        final paths = [for (final folder in inventory.folders) ...folder.files];
+        if (paths.length != snapshot.revisions.length ||
+            paths.any((file) => !snapshot.revisions.containsKey(file.path))) {
+          return const RepertoireChanged();
+        }
+        for (final entry in reads.entries) {
+          final captured = snapshot.revisions[entry.key];
+          if (captured == null || !sameChapterRevision(captured, entry.value)) {
+            return const RepertoireChanged();
+          }
+        }
+        for (final file in paths) {
+          switch (await probeDocument(file.path)) {
+            case FileFound(:final revision):
+              if (!sameChapterRevision(
+                snapshot.revisions[file.path]!,
+                revision,
+              )) {
+                return const RepertoireChanged();
+              }
+            case FileMissing():
+              return const RepertoireChanged();
+            case FileUnreadable(:final detail):
+              return RepertoireValidationFailed('${file.path}: $detail');
+          }
+        }
+        return _validateAdditional(related);
+      });
+    } on RecoveryRequired catch (error) {
+      return RepertoireValidationFailed(error.detail);
+    } on FileSystemException catch (error) {
+      return RepertoireValidationFailed(_detail(error));
+    }
+  }
+
+  Future<RepertoireValidation> _validateAdditional(
+    Map<String, Revision?> additional,
+  ) async {
+    for (final entry in additional.entries) {
+      final path = entry.key;
+      if (!await _managedRelatedPgn(path)) {
+        return const RepertoireValidationFailed(
+          'Related snapshot files must be managed PGNs without linked descendants.',
+        );
+      }
+      final expected = entry.value;
+      switch (await probeDocument(path)) {
+        case FileFound(:final revision):
+          if (expected == null || !sameChapterRevision(expected, revision)) {
+            return const RepertoireChanged();
+          }
+        case FileMissing():
+          if (expected != null) return const RepertoireChanged();
+        case FileUnreadable(:final detail):
+          return RepertoireValidationFailed('$path: $detail');
+      }
+    }
+    return const RepertoireCurrent();
+  }
+
+  Future<bool> _managedRelatedPgn(String path) async {
+    final documents = p.normalize(_recovery.documents.absolute.path);
+    if (!p.isAbsolute(path) ||
+        p.normalize(path) != path ||
+        path.contains('\u0000') ||
+        p.extension(path).toLowerCase() != '.pgn' ||
+        !p.isWithin(documents, path)) {
+      return false;
+    }
+    // A configured root alias is valid. Descendant aliases could enter a
+    // different profile whose writers do not share the domain held here.
+    var parent = p.dirname(path);
+    while (p.isWithin(documents, parent)) {
+      final type = await FileSystemEntity.type(parent, followLinks: false);
+      if (type != FileSystemEntityType.directory &&
+          type != FileSystemEntityType.notFound) {
+        return false;
+      }
+      parent = p.dirname(parent);
+    }
+    return true;
   }
 
   @override
@@ -282,8 +420,9 @@ final class ChapterDirectory implements ChapterFiles {
     for (final entry in entries) {
       if (entry is! File ||
           p.basename(entry.path).startsWith('.') ||
-          !_isChapter(entry.path))
+          !_isChapter(entry.path)) {
         continue;
+      }
       final ref = DocumentRef(entry.path);
       final read = await documents.open(ref);
       if (read is! store.Opened) continue;
@@ -301,95 +440,190 @@ final class ChapterDirectory implements ChapterFiles {
     }
   }
 
-  Future<List<RepertoireFolder>> _scan(List<UnreadableFolder> skipped) async {
-    final folders = <RepertoireFolder>[];
+  Future<_Inventory> _inventory() async {
+    final folders = <_FolderFiles>[];
+    final unreadable = <UnreadableFolder>[];
+    if (!await root.exists()) return (folders: folders, unreadable: unreadable);
     await for (final entry in directoryEntries(root, followLinks: false)) {
       if (p.basename(entry.path).startsWith('.')) continue;
-      if (entry is File && _isChapter(entry.path)) {
-        final stat = await entry.stat();
-        folders.add(
-          RepertoireFolder(
-            name: p.basenameWithoutExtension(entry.path),
-            path: entry.path,
-            modified: stat.modified,
-            chapters: [
-              for (final section in await _sectionsOf(entry, stat))
-                ChapterRef.at(
-                  entry.path,
-                  section: section,
-                  heading: await _headingOf(entry),
-                ),
-            ],
-          ),
-        );
-        continue;
-      }
-      if (entry is! Directory) continue;
-      final name = p.basename(entry.path);
-      if (name.startsWith('.')) continue;
-      // One folder the app may not open is that repertoire's problem, not
-      // the library's: the others are still listed and the user is told
-      // which one is missing.
-      final RepertoireFolder folder;
-      try {
-        folder = await _read(entry, name);
-      } on FileSystemException catch (error) {
-        log.w('list the repertoire ${entry.path}', error);
-        skipped.add(
+      if (entry is Link) {
+        unreadable.add(
           UnreadableFolder(
-            name: name,
+            name: p.basename(entry.path),
             path: entry.path,
-            detail: _detail(error),
+            detail:
+                'Linked repertoire content cannot be included in a complete snapshot.',
           ),
         );
         continue;
       }
-      // A folder with no chapters is not a repertoire. It is what a deleted
-      // one leaves behind — the recovery folder its chapters went into — and
-      // showing "0 chapters" after a delete would say the delete failed.
-      if (folder.chapters.isNotEmpty) folders.add(folder);
+      if (entry is File && _isChapter(entry.path)) {
+        folders.add((
+          path: entry.path,
+          name: p.basenameWithoutExtension(entry.path),
+          modified: (await entry.stat()).modified,
+          files: [entry],
+        ));
+      } else if (entry is Directory) {
+        try {
+          final files = await _chapterFiles(entry).toList();
+          files.sort(_byFileName);
+          folders.add((
+            path: entry.path,
+            name: p.basename(entry.path),
+            modified: (await entry.stat()).modified,
+            files: files,
+          ));
+        } on FileSystemException catch (error) {
+          unreadable.add(
+            UnreadableFolder(
+              name: p.basename(entry.path),
+              path: entry.path,
+              detail: _detail(error),
+            ),
+          );
+        }
+      }
     }
-    return folders;
+    return (folders: folders, unreadable: unreadable);
   }
 
-  Future<RepertoireFolder> _read(Directory folder, String name) async {
-    final files = <File>[];
-    var modified = (await folder.stat()).modified;
-    await for (final file in _chapterFiles(folder)) {
-      files.add(file);
+  Future<_CapturedLibrary> _capture() async {
+    final inventory = await _inventory();
+    final documents = <String, _CapturedChapter>{};
+    for (final folder in inventory.folders) {
+      for (final file in folder.files) {
+        final observed = await probeDocument(file.path);
+        if (observed is! FileFound) {
+          throw FileSystemException(
+            'Cannot read a complete repertoire snapshot',
+            file.path,
+          );
+        }
+        documents[file.path] = (
+          revision: observed.revision,
+          modified: (await file.stat()).modified,
+        );
+      }
     }
-    files.sort(_byFileName);
-    final chapters = <ChapterRef>[];
-    for (final file in files) {
-      final stat = await file.stat();
-      if (stat.modified.isAfter(modified)) modified = stat.modified;
-      final heading = await _headingOf(file);
-      // A file's chapters are listed in the order the file gives them.
-      for (final section in await _sectionsOf(file, stat)) {
-        chapters.add(
-          ChapterRef(
-            repertoire: name,
-            name: section ?? p.basenameWithoutExtension(file.path),
-            path: file.path,
-            heading: heading,
-            section: section,
+    return (inventory: inventory, documents: documents);
+  }
+
+  Future<_Metadata> _metadataOf(String path, Revision expected) async {
+    final observed = await _recovery.run(() => probeDocument(path));
+    if (observed is! FileFound) {
+      throw FileSystemException('Cannot read chapter metadata', path);
+    }
+    if (!sameChapterRevision(expected, observed.revision)) {
+      throw FileSystemException(
+        'The repertoire files changed while reading metadata. Refresh to retry.',
+        path,
+      );
+    }
+    return _readMetadata(utf8.decode(observed.bytes));
+  }
+
+  /// Metadata parsing happens after capture releases the recovery domain.
+  /// Only one uncached PGN is materialized at a time, against its captured
+  /// proof. Content-addressed metadata is cached, bounded to this listing.
+  Future<Repertoires> _listingOf(_CapturedLibrary captured) async {
+    final folders = <RepertoireFolder>[];
+    final metadata = <String, ({Revision revision, _Metadata value})>{};
+    for (final folder in captured.inventory.folders) {
+      final chapters = <ChapterRef>[];
+      var modified = folder.modified;
+      for (final file in folder.files) {
+        final read = captured.documents[file.path]!;
+        if (read.modified.isAfter(modified)) modified = read.modified;
+        final known = _metadata[file.path];
+        final value = known?.revision == read.revision
+            ? known!.value
+            : await _metadataOf(file.path, read.revision);
+        metadata[file.path] = (revision: read.revision, value: value);
+        for (final section in value.names) {
+          chapters.add(
+            ChapterRef(
+              repertoire: folder.name,
+              name: section ?? p.basenameWithoutExtension(file.path),
+              path: file.path,
+              heading: value.heading,
+              section: section,
+            ),
+          );
+        }
+      }
+      if (chapters.isNotEmpty) {
+        folders.add(
+          RepertoireFolder(
+            name: folder.name,
+            path: folder.path,
+            modified: modified,
+            chapters: List.unmodifiable(chapters),
           ),
         );
       }
     }
-    return RepertoireFolder(
-      name: name,
-      path: folder.path,
-      modified: modified,
-      chapters: List.unmodifiable(chapters),
+    folders.sort(_byName);
+    _metadata = metadata;
+    return Repertoires(
+      List.unmodifiable(folders),
+      unreadable: List.unmodifiable(captured.inventory.unreadable),
+      revisions: Map.unmodifiable({
+        for (final entry in captured.documents.entries)
+          entry.key: entry.value.revision,
+      }),
     );
   }
+}
+
+typedef _FolderFiles = ({
+  String path,
+  String name,
+  DateTime modified,
+  List<File> files,
+});
+typedef _Inventory = ({
+  List<_FolderFiles> folders,
+  List<UnreadableFolder> unreadable,
+});
+typedef _CapturedChapter = ({Revision revision, DateTime modified});
+typedef _CapturedLibrary = ({
+  _Inventory inventory,
+  Map<String, _CapturedChapter> documents,
+});
+typedef _Metadata = ({List<String?> names, ChapterHeading heading});
+
+Future<_Metadata> _readMetadata(String text) async {
+  _Metadata parse() {
+    final heading = readHeading(text);
+    return (
+      names: List.unmodifiable(
+        text.contains('[$chapterNameTag ')
+            ? sectionsInText(text)
+            : <String?>[null],
+      ),
+      heading: ChapterHeading(
+        rootMoves: List.unmodifiable(heading.rootMoves),
+        draft: heading.draft,
+      ),
+    );
+  }
+
+  return text.length < readOffThreadFrom ? parse() : Isolate.run(parse);
 }
 
 /// Traverse shelves without following links or visiting recovery/staging data.
 Stream<File> _chapterFiles(Directory folder) async* {
   await for (final entry in directoryEntries(folder, followLinks: false)) {
     if (p.basename(entry.path).startsWith('.')) continue;
+    // A link may name an entire subtree. Do not follow it or quietly certify
+    // a complete inventory without knowing the chapters it hides.
+    if (entry is Link) {
+      throw FileSystemException(
+        'Linked repertoire content cannot be listed',
+        entry.path,
+      );
+    }
     if (entry is Directory) {
       yield* _chapterFiles(entry);
     } else if (entry is File && _isChapter(entry.path)) {
@@ -397,53 +631,6 @@ Stream<File> _chapterFiles(Directory folder) async* {
     }
   }
 }
-
-extension on ChapterDirectory {
-  /// The chapter names [file] holds, from the cache while the file is as it
-  /// was. A file that cannot be read lists as one chapter; opening it is
-  /// where the user is told why.
-  Future<List<String?>> _sectionsOf(File file, FileStat stat) async {
-    final known = _sections[file.path];
-    if (known != null &&
-        known.size == stat.size &&
-        known.modified == stat.modified) {
-      return known.names;
-    }
-    List<String?> names = const [null];
-    try {
-      final text = utf8.decode(await file.readAsBytes(), allowMalformed: true);
-      if (text.contains('[$chapterNameTag ')) names = sectionsInText(text);
-    } on FileSystemException catch (error) {
-      log.w('read the chapters of ${file.path}', error);
-    }
-    _sections[file.path] = (
-      size: stat.size,
-      modified: stat.modified,
-      names: names,
-    );
-    return names;
-  }
-}
-
-/// The `//` lines above the first game, read off the top of the file: a
-/// chapter of ten thousand lines costs the listing one kilobyte, not the
-/// file. A file that cannot be read here still lists; opening it is where
-/// the user is told why.
-Future<ChapterHeading> _headingOf(File file) async {
-  try {
-    final head = await file.openRead(0, _headingBytes).toList();
-    return readHeading(
-      utf8.decode(head.expand((chunk) => chunk).toList(), allowMalformed: true),
-    );
-  } on FileSystemException catch (error) {
-    log.w('read the heading of ${file.path}', error);
-    return ChapterHeading.none;
-  }
-}
-
-/// More than any heading the old app writes; a preamble longer than this
-/// loses its root line to the list, not to the chapter.
-const _headingBytes = 1024;
 
 /// A chapter is a `.pgn` that is not one of the raw-game sidecars generation
 /// writes beside a chapter; the old app hides those from its list too.

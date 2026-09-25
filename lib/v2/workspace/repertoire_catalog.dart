@@ -11,11 +11,10 @@ import '../storage/document_repository.dart';
 /// the refresh completes. Consumers observe whole committed listings.
 final class RepertoireCatalog extends ChangeNotifier {
   RepertoireCatalog({
-    required ChapterFiles files,
-    DocumentRepository? documents,
+    required this._files,
+    this._documents,
     required this.root,
-  }) : _files = files,
-       _documents = documents {
+  }) {
     _documents?.addListener(_changed);
   }
 
@@ -35,6 +34,13 @@ final class RepertoireCatalog extends ChangeNotifier {
   Future<void>? _reading;
   bool _dirty = false;
   bool _disposed = false;
+  bool _stale = true;
+  String? _problem;
+  int _version = 0;
+
+  bool get stale => _stale;
+  String? get problem => _problem;
+  int get version => _version;
 
   void _changed() {
     final change = _documents?.lastChange;
@@ -56,6 +62,7 @@ final class RepertoireCatalog extends ChangeNotifier {
   Future<void> _refresh() {
     if (_disposed) return Future<void>.value();
     _dirty = true;
+    _stale = true;
     return _reading ??= _read().whenComplete(() => _reading = null);
   }
 
@@ -78,7 +85,20 @@ final class RepertoireCatalog extends ChangeNotifier {
   }
 
   void _publish(RepertoireListing next) {
-    _listing = next;
+    final complete = next is Repertoires && next.unreadable.isEmpty;
+    if (complete) {
+      _listing = next;
+      _problem = null;
+      _stale = false;
+      _version++;
+    } else {
+      _listing ??= next;
+      _stale = true;
+      _problem = switch (next) {
+        RepertoiresUnreadable(:final detail) => detail,
+        Repertoires(:final unreadable) => unreadable.first.detail,
+      };
+    }
     changes = List.unmodifiable(_pendingChanges);
     reloaded = _manualRefresh;
     _pendingChanges.clear();

@@ -32,6 +32,28 @@ void main() {
       ((await ChapterDirectory(root, recovery: recovery).list()) as Repertoires)
           .folders;
 
+  test(
+    'equal size and timestamp do not reuse stale section metadata',
+    () async {
+      await put(
+        'Course/Main.pgn',
+        '[Event "Line"]\n[ChapterName "Old"]\n\n1. e4 *',
+      );
+      final file = File(p.join(root.path, 'Course', 'Main.pgn'));
+      final modified = (await file.stat()).modified;
+      final files = ChapterDirectory(root, recovery: recovery);
+      final before = await files.list() as Repertoires;
+      expect(before.folders.single.chapters.single.section, 'Old');
+      await put(
+        'Course/Main.pgn',
+        '[Event "Line"]\n[ChapterName "New"]\n\n1. e4 *',
+      );
+      await file.setLastModified(modified);
+      final after = await files.list() as Repertoires;
+      expect(after.folders.single.chapters.single.section, 'New');
+    },
+  );
+
   test('one folder per repertoire, chapters by name', () async {
     await put('KID/Main.pgn', '*');
     await put('KID/aux.pgn', '*');

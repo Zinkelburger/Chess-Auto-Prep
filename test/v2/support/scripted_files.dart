@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
+import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 
 /// A repertoire listing the test writes, whose timing the test controls:
 /// every call waits until the test releases it.
@@ -52,6 +53,27 @@ final class ScriptedFiles implements ChapterFiles {
     listings++;
     await _wait();
     return listing;
+  }
+
+  /// Explicit substitute for the native whole-readset validation boundary.
+  /// Tests may hold it independently from listing/PGN reads.
+  Future<RepertoireValidation> Function(Repertoires, Map<String, Revision>)?
+  validateWith;
+
+  final additionalValidations = <Map<String, Revision?>>[];
+
+  @override
+  Future<RepertoireValidation> validate(
+    Repertoires snapshot, {
+    required Map<String, Revision> observed,
+    Map<String, Revision?> additional = const {},
+  }) async {
+    additionalValidations.add(Map.unmodifiable(additional));
+    return validateWith == null
+        ? (identical(snapshot, listing)
+              ? const RepertoireCurrent()
+              : const RepertoireChanged())
+        : validateWith!(snapshot, observed);
   }
 
   @override
