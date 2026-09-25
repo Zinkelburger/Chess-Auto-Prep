@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'directory_entries.dart';
 import 'book_snapshot.dart';
 import 'training_snapshot.dart';
+import 'game_store.dart';
 import 'recovery_files.dart';
 import '../chess/pgn/chapter_heading.dart';
 import '../chess/pgn/chapter.dart' show readOffThreadFrom;
@@ -216,12 +217,15 @@ abstract interface class ChapterFiles {
   /// PGNs without whole-repertoire membership (a single-chapter scope). Book
   /// and training proofs address only their fixed configured profile files.
   /// Never nest guarded store calls.
+  /// [archive] adds the optional SQLite selected-corpus transaction to this
+  /// same final guard; it is a logical row proof, not a database-file hash.
   Future<RepertoireValidation> validate(
     Repertoires? snapshot, {
     required Map<String, Revision> observed,
     Map<String, Revision?> additional = const {},
     BookSource? book,
     TrainingReadSet? training,
+    StoredGamesSource? archive,
   });
 
   /// The chapters deleted from every repertoire and still in recovery,
@@ -318,6 +322,7 @@ final class ChapterDirectory implements ChapterFiles {
     Map<String, Revision?> additional = const {},
     BookSource? book,
     TrainingReadSet? training,
+    StoredGamesSource? archive,
   }) async {
     if (snapshot != null && snapshot.unreadable.isNotEmpty) {
       return RepertoireValidationFailed(snapshot.unreadable.first.detail);
@@ -379,7 +384,7 @@ final class ChapterDirectory implements ChapterFiles {
         }
         final other = await _validateAdditional(related);
         if (other is! RepertoireCurrent) return other;
-        return _validateProfile(book, training);
+        return _validateProfile(book, training, archive);
       });
     } on RecoveryRequired catch (error) {
       return RepertoireValidationFailed(error.detail);
@@ -393,6 +398,7 @@ final class ChapterDirectory implements ChapterFiles {
   Future<RepertoireValidation> _validateProfile(
     BookSource? book,
     TrainingReadSet? training,
+    StoredGamesSource? archive,
   ) async {
     if (!_profileBound(book, training)) return const RepertoireChanged();
     final reads = <String, Revision?>{
@@ -414,6 +420,9 @@ final class ChapterDirectory implements ChapterFiles {
         case FileUnreadable(:final detail):
           return RepertoireValidationFailed('${entry.key}: $detail');
       }
+    }
+    if (archive != null && !await archive.isCurrent()) {
+      return const RepertoireChanged();
     }
     // A configured alias may change while an off-thread probe is running.
     // Certify the same profile binding after the last asynchronous observation.

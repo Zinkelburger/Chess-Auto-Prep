@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
+import 'package:chess_auto_prep/v2/storage/game_store.dart';
 import 'package:chess_auto_prep/v2/storage/book_snapshot.dart';
 import 'package:chess_auto_prep/v2/storage/training_snapshot.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
@@ -73,6 +74,7 @@ final class ScriptedFiles implements ChapterFiles {
     Map<String, Revision?> additional = const {},
     BookSource? book,
     TrainingReadSet? training,
+    StoredGamesSource? archive,
   }) async {
     additionalValidations.add(Map.unmodifiable(additional));
     profileValidations.add((book: book, training: training));
