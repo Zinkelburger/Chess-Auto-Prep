@@ -40,40 +40,23 @@ void main() {
   });
 
   test(
-    'unavailable account retains its last value and retries before login',
+    'an account that cannot be read is signed out and login works',
     () async {
-      var fails = false;
-      var writes = 0;
       final state = LichessAccountState(
         login: login,
-        read: () async {
-          if (fails) throw StateError('private-test-token');
-          return someone();
-        },
-        write: (_) async {
-          writes++;
+        read: () async => throw StateError('private-test-token'),
+        write: (account) async {
+          saved = account;
           return true;
         },
       );
       addTearDown(state.dispose);
       await state.load();
-      fails = true;
-      await state.load();
-      expect(state.status, isA<SignedIn>());
-      expect(state.problem, contains('could not be read'));
-      expect(state.problem, isNot(contains('private-test-token')));
-      await state.logOut();
-      expect(await state.useToken('replacement'), isFalse);
-      await state.logIn();
-      expect(login.logins, 0);
-      expect(login.revoked, isEmpty);
-      expect(login.tokensTried, isEmpty);
-      expect(writes, 0);
-      fails = false;
-      await state.load();
+      expect(state.status, isA<SignedOut>());
       expect(state.problem, isNull);
-      await state.logOut();
-      expect(writes, 1);
+      login.tokenOutcome = loggedIn(personal: true);
+      expect(await state.useToken('lip_secret'), isTrue);
+      expect(saved?.token, 'lip_secret');
     },
   );
 
@@ -204,34 +187,17 @@ void main() {
     },
   );
 
-  test('retry saves the exact grant without asking Lichess again', () async {
+  test('a failed save is followed by a working second try', () async {
     login.tokenOutcome = loggedIn(personal: true);
     writeFails = true;
     final state = owner();
     expect(await state.useToken('lip_secret'), isFalse);
-    expect(state.canRetrySave, isTrue);
+    expect(state.problem, contains('could not be saved'));
     writeFails = false;
-    await state.retrySave();
-    expect(login.tokensTried, ['lip_secret']);
-    expect(saved?.token, 'lip_secret');
+    expect(await state.useToken('lip_secret'), isTrue);
+    expect(state.status, isA<SignedIn>());
     expect(await pending.settle(), isNull);
   });
-
-  test(
-    'failed removal retries local deletion without revoking twice',
-    () async {
-      saved = someone();
-      final state = owner();
-      await state.load();
-      writeFails = true;
-      await state.logOut();
-      writeFails = false;
-      await state.retrySave();
-      expect(login.revoked, ['lip_secret']);
-      expect(saved, isNull);
-      expect(await pending.settle(), isNull);
-    },
-  );
 
   test('logging out revokes the token and forgets the account', () async {
     saved = someone();

@@ -506,19 +506,6 @@ swallowed, because a broken log must not break the app reporting through it.
 "some red error message" can be answered from the log. Remaining `debugPrint`
 call sites are listed as a cleanup in [FUTURE_FEATURES](FUTURE_FEATURES.md).
 
-The v2 saved-data diagnostic is `storage/profile_integrity.dart`, injected by
-`AppEnvironment`. It reads without mutation locks and calls concrete recovery owners' read-only
-`inspect` methods; it never runs recovery or delays saves. Files are observed
-individually, so concurrent writes can affect findings.
-`book_integrity.dart` shares the strict book-reference decoder, while
-`saved_artifact_checks.dart` validates generated formats and compares bughouse
-BPGN to the authoritative JSON decoder in a worker. Unrelated links and
-unreadable discovery folders are ignored; known artifact paths are diagnosed. The
-foundation-only `features/settings/integrity_check.dart` owns report lifetime;
-`integrity_dialog.dart` cancels remaining scan work on close and presents dated findings and skipped checks from Settings
-and the unavailable-settings startup screen. No repair or source write occurs.
-See [v2 Settings](v2/features/settings.md#read-only-saved-data-check-v2) for scope.
-
 ### App modes (`AppMode`)
 
 | Mode | Screen | Primary use |
@@ -1427,12 +1414,11 @@ import path remains separate.
 
 | Component | Implemented boundary / API |
 |---|---|
-| `features/tactics/my_games.dart` — `MyGames` | Captures account names for a run, fetches each site independently and queues only persisted corpus rows for review. `load()` consumes `AccountsSnapshot` / `AccountsUnavailable`, retaining prior names and blocking new downloads on read failure or any owner's unresolved account-write obligation. `downloadProblems`, `corpusProblems`, `accountsUnavailable`, `retryDownloads()` and `retryUsernames()` drive explicit save/read retries. Mining Retry consumes the retained checkpoint before filtering completed games or acquiring another engine; review failures release the acquired engine. |
+| `features/tactics/my_games.dart` — `MyGames` | Fetches each site independently, saves each download to the cache (a failed save is logged and the fetched games are reviewed anyway) and dates the account afterwards. `load()` keeps the names already shown when the accounts cannot be read. A failed username save sets `accountProblem` and blocks nothing; saving again retries. Mining Retry consumes the retained checkpoint before filtering completed games or acquiring another engine; review failures release the acquired engine. |
 | `features/tactics/set_additions.dart` — `SetAdditions` | Freezes one mined game's puzzles and completion marker into an app-owned `PendingWrites` obligation. `add()` / `retry()` retain the accepted payload and added count; `acknowledge()` consumes its receipt. `analyzed()` reads persisted markers only. Open-set changes use the session saver; closed writes hold `DocumentAccess` through publication, and exact lost-ack retries preserve the original count. |
-| `features/tactics/download_saves.dart` — `DownloadSaves` | Freezes returned games, site, username and time into per-corpus `PendingWrites` obligations. `accept()` and `retry()` retain failed outcomes across owner disposal and retry without HTTP; successors wait behind unresolved writes to the same corpus. |
 | `storage/my_games_files.dart` — `GamesCache` | `keep()` returns `GamesKept` / `GamesNotKept`, publishing deduplicated PGN bytes before the `.fetched` note. Dedup uses site ID or trimmed PGN text when metadata has no ID. Typed `snapshotNewest()` separates absent input from an unreadable corpus. Unverified stamp staging files are refused and preserved. |
 | `storage/my_accounts.dart` — `AccountStore` / `PreferencesAccounts` | Immutable `AccountsSnapshot` plus owner `revision`, or `AccountsUnavailable`. `setDownloaded(..., expectedUsername:)` serializes with username writes and refuses a changed account; failed optimistic preference timestamps stay masked until acknowledged. The legacy `read()` compatibility wrapper still maps unavailable to empty, but `MyGames` uses `snapshot()`. |
-| `features/tactics/my_games_block.dart` — `MyGamesBlock` | Shows separate account, download-save and saved-corpus-read errors. Retry uses the retained operation or rereads saved inputs; unresolved errors cannot display an overall completed result or authorize a new download. |
+| `features/tactics/my_games_block.dart` — `MyGamesBlock` | Accounts, one Get games / Pause / Resume button and one status line; a failed username save shows one line. |
 
 The accepted HTTP response is retained in memory, not in a persistent queue.
 It survives screen disposal; a crash before corpus publication can lose it.

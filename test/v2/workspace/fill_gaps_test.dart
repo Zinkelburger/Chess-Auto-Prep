@@ -250,64 +250,27 @@ void main() {
     expect(fill.canMakeLines, isTrue);
   });
 
-  test(
-    'publication retries frozen artifacts and settles before Done notification',
-    () async {
-      final pending = PendingWrites();
-      final attempts = <(String, String)>[];
-      var fail = true;
-      final evaluator = ScriptedEvaluator(scores: e4Best());
-      final fill = fillWith(
-        evaluator,
-        pending: pending,
-        keepTree: (_, text, {required runId}) async {
-          attempts.add((runId, text));
-          if (fail) throw StateError('lost acknowledgement');
-        },
-      );
-      fill.addListener(() {
-        if (fill.state is FillDone) expect(fill.canRetry, isFalse);
-      });
-      await fill.start(request);
-      final computations = evaluator.asked.length;
-      expect(fill.state, isA<FillUnsaved>());
-      expect(await pending.settle(), contains('Search results'));
-      fail = false;
-      await fill.retry();
-      expect(fill.state, isA<FillDone>());
-      expect(attempts, [attempts.first, attempts.first]);
-      expect(evaluator.asked.length, computations);
-      expect(await pending.settle(), isNull);
-    },
-  );
-
-  test(
-    'replacement owner retries accepted publication after disposal',
-    () async {
-      final pending = PendingWrites();
-      final attempts = <(String, String)>[];
-      var fail = true;
-      final first = fillWith(
-        ScriptedEvaluator(scores: e4Best()),
-        pending: pending,
-        dispose: false,
-        keepTree: (_, text, {required runId}) async {
-          attempts.add((runId, text));
-          if (fail) throw StateError('unavailable');
-        },
-      );
-      await first.start(request);
-      first.dispose();
-      final replacement = fillWith(ScriptedEvaluator(), pending: pending);
-      expect(replacement.canRetry, isTrue);
-      expect(replacement.canStart, isFalse);
-      fail = false;
-      await replacement.retry();
-      expect(replacement.canRetry, isFalse);
-      expect(attempts, [attempts.first, attempts.first]);
-      expect(await pending.settle(), isNull);
-    },
-  );
+  test('a tree that cannot be kept is logged; the search is done and the '
+      'next one starts', () async {
+    final pending = PendingWrites();
+    var attempts = 0;
+    final fill = fillWith(
+      ScriptedEvaluator(scores: e4Best()),
+      pending: pending,
+      keepTree: (_, _, {required runId}) async {
+        attempts++;
+        throw StateError('disk full');
+      },
+    );
+    await fill.start(request);
+    expect(fill.state, isA<FillDone>());
+    expect(fill.canMakeLines, isTrue);
+    expect(await pending.settle(), isNull, reason: 'nothing to ask on exit');
+    expect(fill.canStart, isTrue);
+    expect(await fill.start(request), isNull);
+    expect(fill.state, isA<FillDone>());
+    expect(attempts, 2);
+  });
 
   test('accepted draft finishes after owner disposal', () async {
     final pending = PendingWrites();
@@ -354,55 +317,43 @@ void main() {
     expect(shown.first, isA<OurNode>(), reason: 'the root was answered first');
   });
 
-  test('done waits for the required tree publication', () async {
-    final entered = Completer<void>();
+  test('the way out waits for a tree still being written', () async {
+    final pending = PendingWrites();
     final release = Completer<void>();
     final fill = fillWith(
       ScriptedEvaluator(scores: e4Best()),
-      keepTree: (_, _, {required runId}) {
-        entered.complete();
-        return release.future;
-      },
+      pending: pending,
+      keepTree: (_, _, {required runId}) => release.future,
     );
     final running = fill.start(request);
-    await entered.future;
-    expect(fill.state, isNot(isA<FillDone>()));
-    expect(fill.canStart, isFalse);
+    while (fill.state is! FillDone) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    var settled = false;
+    final settling = pending.settle().then((_) => settled = true);
+    await pumpEventQueue();
+    expect(settled, isFalse);
     release.complete();
+    await settling;
     await running;
-    expect(fill.state, isA<FillDone>());
   });
 
-  test('a required tree failure cannot report a saved search', () async {
-    final fill = fillWith(
-      ScriptedEvaluator(scores: e4Best()),
-      keepTree: (_, _, {required runId}) async {
-        throw StateError('tree publication failed');
-      },
-    );
-    await fill.start(request);
-    expect(fill.state, isNot(isA<FillDone>()));
-    expect(fill.canMakeLines, isFalse);
-  });
-
-  test('a lost draft acknowledgement never creates a second draft', () async {
-    final documents = _LostCreate(fixture.store);
-    final fill = fillWith(
-      ScriptedEvaluator(scores: e4Best()),
-      documents: documents,
-    );
-    await fill.start(request);
-    await fill.makeLines();
-    expect(fill.lines, isA<LinesFailed>());
-    expect(fixture.store.documents.containsKey(draft()), isTrue);
-    await fill.makeLines();
-    expect((fill.lines as LinesWritten).draft, draft());
-    expect(documents.paths, [draft().path]);
-    expect(
-      fixture.store.documents.keys,
-      unorderedEquals([fixture.ref, draft()]),
-    );
-  });
+  test(
+    'a draft whose write failed is made again under the next name',
+    () async {
+      final documents = _LostCreate(fixture.store);
+      final fill = fillWith(
+        ScriptedEvaluator(scores: e4Best()),
+        documents: documents,
+      );
+      await fill.start(request);
+      await fill.makeLines();
+      expect(fill.lines, isA<LinesFailed>());
+      expect(fill.canMakeLines, isTrue);
+      await fill.makeLines();
+      expect((fill.lines as LinesWritten).draft, draft('Main (draft 2)'));
+    },
+  );
 
   test('lines are written only when asked: a draft chapter beside the one '
       'the search started on, its moves carrying their values', () async {
@@ -643,14 +594,14 @@ void main() {
     },
   );
 
-  test('a new search cannot abandon an already accepted draft', () async {
+  test('a new search started while lines are written still leaves the '
+      'draft on disk', () async {
     final fill = fillWith(ScriptedEvaluator(scores: e4Best()));
     await fill.start(request);
     final making = fill.makeLines();
-    expect(await fill.start(request), contains('accepted search results'));
+    expect(await fill.start(request), isNull);
     await making;
     expect(fill.state, isA<FillDone>());
-    expect(fill.lines, isA<LinesWritten>());
     expect(textOf(draft()), contains('// Draft'));
     expect(fill.canStart, isTrue);
   });

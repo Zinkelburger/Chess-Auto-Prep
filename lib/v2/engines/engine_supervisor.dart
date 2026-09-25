@@ -135,16 +135,12 @@ final class EngineSupervisor {
     Duration patience,
   ) async {
     final SpawnedProcess process;
-    final Map<String, Object?> identity;
+    final identity = {
+      'engine_sha256': await fileSha256(files.executable),
+      'network_sha256': await fileSha256(files.model),
+      'cores': cores,
+    };
     try {
-      identity = {
-        'engine_sha256':
-            (await sha256.bind(File(files.executable).openRead()).first)
-                .toString(),
-        'network_sha256':
-            (await sha256.bind(File(files.model).openRead()).first).toString(),
-        'cores': cores,
-      };
       if (_disposed) return const HivemindStartFailed('The app is closing.');
       process = await SpawnedProcess.start(
         files.executable,
@@ -235,6 +231,30 @@ final class EngineSupervisor {
       for (final engine in _running.toList()) engine.quit(),
       ..._starts,
     ]);
+  }
+}
+
+final _hashes = <String, ({int size, DateTime modified, String hash})>{};
+
+/// The SHA-256 of the file at [path], recorded with saved bughouse analysis
+/// so it says which engine and network made it. Worked out once per file
+/// version (size and modification time) rather than on every start. Null
+/// when the file cannot be read: provenance is never a reason not to start.
+Future<String?> fileSha256(String path) async {
+  try {
+    final stat = await File(path).stat();
+    final known = _hashes[path];
+    if (known != null &&
+        known.size == stat.size &&
+        known.modified == stat.modified) {
+      return known.hash;
+    }
+    final hash = (await sha256.bind(File(path).openRead()).first).toString();
+    _hashes[path] = (size: stat.size, modified: stat.modified, hash: hash);
+    return hash;
+  } on Object catch (error) {
+    log.w('hash ${p.basename(path)}', error);
+    return null;
   }
 }
 

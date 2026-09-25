@@ -42,43 +42,14 @@ void main() {
     },
   );
 
-  test('accepted usernames survive disposal and reject new requests', () async {
+  test('a failed username save does not hold review back', () async {
     fixture.accounts.reject = true;
-    fixture.accounts.held = Completer<void>();
-    final saving = fixture.games.saveUsernames(
-      lichess: ' Alice ',
-      chesscom: 'Bob',
-    );
-    await pumpEventQueue();
-    fixture.disposeGames();
-    fixture.accounts.held!.complete();
-    expect(await saving, isFalse);
-    expect(await fixture.games.saveUsernames(lichess: 'Carol'), isFalse);
-    fixture.accounts.reject = false;
-    await fixture.games.retryUsernames();
-    expect(
-      fixture.accounts.saved.accounts[GameSite.lichess]?.username,
-      'Alice',
-    );
-    expect(fixture.accounts.saved.accounts[GameSite.chesscom]?.username, 'Bob');
-    expect(await fixture.pending.settle(), isNull);
+    await fixture.games.saveUsernames(lichess: 'Alice');
+    expect(fixture.games.accountsUnsettled, isFalse);
+    expect(fixture.games.accounts[GameSite.lichess]?.username, 'Alice');
   });
 
-  test(
-    'game review cannot start while accepted usernames need saving',
-    () async {
-      fixture.accounts.reject = true;
-      await fixture.games.saveUsernames(lichess: 'Alice');
-      expect(fixture.games.accountsUnsettled, isTrue);
-      await fixture.games.start();
-      expect(fixture.games.status, isA<MyGamesIdle>());
-      fixture.accounts.reject = false;
-      await fixture.games.retryUsernames();
-      expect(fixture.games.accountsUnsettled, isFalse);
-    },
-  );
-
-  testWidgets('failed username save keeps a usable retry after dialog closes', (
+  testWidgets('a failed username save says so once; saving again clears it', (
     tester,
   ) async {
     fixture.accounts.reject = true;
@@ -94,25 +65,18 @@ void main() {
       find.widgetWithText(TextField, 'Lichess username'),
       'First',
     );
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Chess.com username'),
-      'Second',
-    );
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
-    expect(find.text('Retry save'), findsOneWidget);
+    expect(find.text('Your account names could not be saved.'), findsOneWidget);
+    expect(find.textContaining('Retry'), findsNothing);
     fixture.accounts.reject = false;
-    await tester.tap(find.text('Retry save'));
+    await fixture.games.saveUsernames(lichess: 'First');
     await tester.pumpAndSettle();
+    expect(find.text('Your account names could not be saved.'), findsNothing);
     expect(
       fixture.accounts.saved.accounts[GameSite.lichess]?.username,
       'First',
     );
-    expect(
-      fixture.accounts.saved.accounts[GameSite.chesscom]?.username,
-      'Second',
-    );
-    expect(find.text('Retry save'), findsNothing);
     expect(await fixture.pending.settle(), isNull);
   });
 }

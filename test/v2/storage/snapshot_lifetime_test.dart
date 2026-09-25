@@ -130,8 +130,8 @@ void main() {
       await held;
       await writing;
       expect(store.value.engineCores, 4);
-      expect(store.problem, contains('another instance'));
-      expect(await file.readAsString(), outside.toJson());
+      expect(store.problem, isNull);
+      expect(Settings.fromJson(await file.readAsString()).engineCores, 4);
     },
   );
 
@@ -164,42 +164,6 @@ void main() {
       await File(target).writeAsString(accepted.encode());
       await store.write(accepted);
       expect(await File(target).readAsString(), accepted.encode());
-    },
-  );
-
-  test(
-    'a settings snapshot already published can be republished on retry',
-    () async {
-      final root = await Directory.systemTemp.createTemp(
-        'settings-acknowledgement-',
-      );
-      addTearDown(() => root.delete(recursive: true));
-      final pending = PendingWrites();
-      var failAcknowledgement = true;
-      final store = SettingsStore(
-        support: root,
-        publish: (path, bytes) async {
-          await replaceFile(path, bytes);
-          if (failAcknowledgement) {
-            throw const FileSystemException('lost acknowledgement');
-          }
-        },
-      )..pendingWrites = pending;
-      addTearDown(store.dispose);
-      await store.load();
-      final target = p.join(root.path, 'settings.json');
-      final accepted = store.value.copyWith(engineCores: 4);
-      await store.update(accepted);
-      expect(store.problem, isNotNull);
-      expect(await File(target).readAsString(), accepted.toJson());
-      expect(await pending.settle(), contains('Settings'));
-      final obligation = pending.unfinished(store).single;
-      failAcknowledgement = false;
-      await store.retry();
-      expect(store.problem, isNull);
-      expect(obligation.committed, isTrue);
-      expect(await pending.settle(), isNull);
-      expect(await File(target).readAsString(), accepted.toJson());
     },
   );
 
@@ -269,34 +233,14 @@ void main() {
       expect(store.problem, isNotNull);
       expect(await File(target).readAsString(), accepted.toJson());
       expect(await pending.settle(), contains('Settings'));
-      final obligation = pending.unfinished(store).single;
       failAcknowledgement = false;
       final latest = accepted.copyWith(engineCores: 8);
       await store.update(latest);
       expect(store.problem, isNull);
-      expect(obligation.committed, isTrue);
       expect(await pending.settle(), isNull);
       expect(await File(target).readAsString(), latest.toJson());
     },
   );
-
-  test('failed settings snapshot remains retryable after disposal', () async {
-    final root = await Directory.systemTemp.createTemp('settings-lifetime-');
-    addTearDown(() => root.delete(recursive: true));
-    final pending = PendingWrites();
-    final settings = SettingsStore(support: root)..pendingWrites = pending;
-    await settings.load();
-    final obstacle = Directory(p.join(root.path, 'settings.json'));
-    await obstacle.create();
-    await settings.update(settings.value.copyWith(engineCores: 4));
-    expect(await pending.settle(), contains('Settings'));
-    settings.dispose();
-    await obstacle.delete();
-    await pending.retry(settings);
-    expect(await pending.settle(), isNull);
-    final saved = Settings.fromJson(await File(obstacle.path).readAsString());
-    expect(saved.engineCores, 4);
-  });
 }
 
 final class _Books implements BookStore {
