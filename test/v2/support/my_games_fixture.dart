@@ -113,6 +113,7 @@ final class AnsweringEngine implements Engine {
   final asked = <Fen>[];
   void Function()? onSearch;
   bool quitCalled = false;
+  Object? quitError;
   final _exited = Completer<EngineExit>();
 
   @override
@@ -133,6 +134,7 @@ final class AnsweringEngine implements Engine {
   Future<void> quit() async {
     quitCalled = true;
     if (!_exited.isCompleted) _exited.complete(EngineExit.ended);
+    if (quitError case final error?) throw error;
   }
 }
 

@@ -105,8 +105,10 @@ final class _Review {
     await games.start();
   }
 
+  bool gamesDisposed = false;
+
   void dispose() {
-    games.dispose();
+    if (!gamesDisposed) games.dispose();
     set.dispose();
     session.dispose();
     saver.dispose();
@@ -401,6 +403,134 @@ void main() {
     },
   );
 
+  test(
+    'accepting a checkpoint freezes the mined puzzle list before awaiting',
+    () async {
+      r = _Review();
+      final found = [minedScholarsMate()];
+      final adding = r.additions.add('lichess_AbCd1234', found);
+      found.clear();
+      expect((await adding as Added).added, 1);
+      expect(r.puzzlesOnDisk, hasLength(6));
+    },
+  );
+
+  test(
+    'an engine quit failure stays visible and retains the saved count',
+    () async {
+      r = _Review(accounts: {GameSite.lichess: const Account('Me')});
+      r.engine.quitError = StateError('engine exit acknowledgement failed');
+      await r.start();
+      expect(r.games.status, isA<MyGamesFailed>());
+      expect(r.games.running, isFalse);
+      expect(r.games.newPuzzles, 1);
+      expect(
+        myGamesLine(r.games.status),
+        contains('engine exit acknowledgement failed'),
+      );
+      expect(r.puzzlesOnDisk, hasLength(6));
+      expect(r.engine.quitCalled, isTrue);
+    },
+  );
+
+  test(
+    'an unexpected mining failure releases the engine and reports failure',
+    () async {
+      r = _Review(accounts: {GameSite.lichess: const Account('Me')});
+      r.engine.onSearch = () => throw StateError('search transport failed');
+      await r.start();
+      expect(r.games.status, isA<MyGamesFailed>());
+      expect(r.engine.quitCalled, isTrue);
+      expect(r.games.running, isFalse);
+      expect(analyzedIn(r.setText), isNot(contains('lichess_AbCd1234')));
+    },
+  );
+
+  test('an unsaved mined marker is not an analyzed checkpoint', () async {
+    r = _Review(accounts: {GameSite.lichess: const Account('Me')});
+    await r.session.open(tacticsRef, game: 0);
+    r.store.saves.add(const IoFailure('set disk full'));
+    await r.start();
+    expect(r.games.status, isA<MyGamesFailed>());
+    expect(
+      analyzedIn(r.session.chapter!.preamble),
+      contains('lichess_AbCd1234'),
+    );
+    expect(await r.additions.analyzed(), isNot(contains('lichess_AbCd1234')));
+    expect(await r.games.pendingWrites.settle(), contains('set'));
+  });
+
+  test(
+    'retry saves the captured mined result and its original added count',
+    () async {
+      r = _Review(accounts: {GameSite.lichess: const Account('Me')});
+      r.store.saves.add(const IoFailure('set disk full'));
+      await r.start();
+      final searches = r.engine.asked.length;
+      expect(r.games.status, isA<MyGamesFailed>());
+      await r.games.start();
+      expect(
+        r.engine.asked,
+        hasLength(searches),
+        reason: 'retry performs no mining',
+      );
+      expect((r.games.status as MyGamesDone).added, 1);
+      expect(r.puzzlesOnDisk, hasLength(6));
+      expect(await r.games.pendingWrites.settle(), isNull);
+    },
+  );
+
+  test(
+    'open-set retry neither skips an unsaved game nor loses its added count',
+    () async {
+      r = _Review(accounts: {GameSite.lichess: const Account('Me')});
+      await r.session.open(tacticsRef, game: 0);
+      r.store.saves.add(const IoFailure('set disk full'));
+      await r.start();
+      final searches = r.engine.asked.length;
+      await r.games.start();
+      expect((r.games.status as MyGamesDone).added, 1);
+      expect(r.puzzlesOnDisk, hasLength(6));
+      expect(r.saver.settled, isTrue);
+      expect(r.engine.asked, hasLength(searches));
+    },
+  );
+
+  test(
+    'accepted mined puzzles survive disposal of the reviewing owner',
+    () async {
+      r = _Review(accounts: {GameSite.lichess: const Account('Me')});
+      r.store.saves.add(const IoFailure('set disk full'));
+      await r.start();
+      final entries = r.games.pendingWrites.unfinished(r.additions);
+      expect(entries, hasLength(1));
+      r.games.dispose();
+      r.gamesDisposed = true;
+      await r.games.pendingWrites.retry(r.additions);
+      expect(r.puzzlesOnDisk, hasLength(6));
+      expect(analyzedIn(r.setText), contains('lichess_AbCd1234'));
+      expect(await r.games.pendingWrites.settle(), isNull);
+    },
+  );
+
+  test(
+    'a registry-completed checkpoint is counted once without a new engine',
+    () async {
+      r = _Review(accounts: {GameSite.lichess: const Account('Me')});
+      r.store.saves.add(const IoFailure('set disk full'));
+      await r.start();
+      final searches = r.engine.asked.length;
+      await r.games.pendingWrites.retry(r.additions);
+      expect(r.puzzlesOnDisk, hasLength(6));
+      await r.games.start();
+      expect((r.games.status as MyGamesDone).added, 1);
+      expect(r.engine.asked, hasLength(searches));
+      await r.games.start();
+      expect((r.games.status as MyGamesDone).added, 0);
+      expect(r.puzzlesOnDisk, hasLength(6));
+    },
+  );
+
   test('a game either app has reviewed is never reviewed again', () async {
     r = _Review();
     await r.start();
@@ -542,39 +672,44 @@ void main() {
     expect(r.setText, tacticsSet);
   });
 
-  test('a set the workspace opens while the review is reading it takes the '
-      'puzzles through the session, whose own saves still land', () async {
-    r = _Review();
-    r.store.hold = true;
-    final adding = r.additions.add('lichess_AbCd1234', [minedScholarsMate()]);
-    await pumpEventQueue();
-    expect(r.store.waiting, 1, reason: 'the review is reading the set');
-    final opening = r.session.open(tacticsRef, game: 0);
-    await pumpEventQueue();
-    // The session's read lands first; then the review's.
-    r.store.releaseLast();
-    await pumpEventQueue();
-    expect(r.session.source, tacticsRef);
-    r.store.hold = false;
-    r.store.releaseAll();
-    expect(await adding, isA<Added>());
-    await opening;
+  test(
+    'opening a set waits for its accepted checkpoint before editing it',
+    () async {
+      r = _Review();
+      r.store.hold = true;
+      final adding = r.additions.add('lichess_AbCd1234', [minedScholarsMate()]);
+      await pumpEventQueue();
+      expect(r.store.waiting, 1, reason: 'the review is reading the set');
+      final opening = r.session.open(tacticsRef, game: 0);
+      await pumpEventQueue();
+      expect(
+        r.store.waiting,
+        1,
+        reason: 'navigation waits behind the checkpoint',
+      );
+      expect(r.session.source, isNull);
+      r.store.hold = false;
+      r.store.releaseAll();
+      expect(await adding, isA<Added>());
+      await opening;
+      expect(r.session.source, tacticsRef);
 
-    expect(r.session.chapter!.lines, hasLength(6));
-    r.session.apply(
-      (set) => recordAttempt(
-        set,
-        index: 0,
-        solved: true,
-        seconds: 4,
-        now: tacticsToday,
-      ),
-    );
-    await r.saver.flush();
-    expect(r.saver.settled, isTrue);
-    expect(r.puzzlesOnDisk, hasLength(6));
-    expect(r.puzzlesOnDisk.first.stats.reviews, 1);
-  });
+      expect(r.session.chapter!.lines, hasLength(6));
+      r.session.apply(
+        (set) => recordAttempt(
+          set,
+          index: 0,
+          solved: true,
+          seconds: 4,
+          now: tacticsToday,
+        ),
+      );
+      await r.saver.flush();
+      expect(r.saver.settled, isTrue);
+      expect(r.puzzlesOnDisk, hasLength(6));
+      expect(r.puzzlesOnDisk.first.stats.reviews, 1);
+    },
+  );
 
   test('saving usernames downloads nothing and forgets the other account\'s '
       'date', () async {

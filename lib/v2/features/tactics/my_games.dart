@@ -134,7 +134,7 @@ final class MyGames extends ChangeNotifier {
     required SetAdditions set,
     required ReviewEngine engine,
     DateTime Function() now = DateTime.now,
-  }) : pendingWrites = pendingWrites ?? PendingWrites(),
+  }) : pendingWrites = pendingWrites ?? set.pendingWrites,
        _store = accounts,
        _sites = sites,
        _cache = cache,
@@ -399,13 +399,16 @@ final class MyGames extends ChangeNotifier {
     if (downloadProblems.isNotEmpty || corpusProblems.isNotEmpty) {
       return retryDownloads();
     }
-    final (added, notReached) = switch (_status) {
+    var (added, notReached) = switch (_status) {
       MyGamesPaused(:final added, :final notReached) => (added, notReached),
       MyGamesFailed(:final added) => (added, const <GameSite>{}),
       _ => (0, const <GameSite>{}),
     };
     if (_queue.isNotEmpty) {
       _become(MyGamesReviewing(done: 0, total: _queue.length, added: added));
+      final retried = await _retryCheckpoints(added);
+      if (retried == null || _disposed) return;
+      added = retried;
       if (!await _dropDone()) return;
       if (_queue.isEmpty) {
         return _become(MyGamesDone(reviewed: 0, added: added));
@@ -414,6 +417,30 @@ final class MyGames extends ChangeNotifier {
     }
     final missed = await _download();
     if (missed != null) await _review(missed, 0);
+  }
+
+  Future<int?> _retryCheckpoints(int added) async {
+    while (_queue.isNotEmpty && _set.retained(_queue.first.id)) {
+      final id = _queue.first.id;
+      switch (await _set.retry(id)) {
+        case Added(added: final more):
+          added += more;
+          _set.acknowledge(id);
+          _queue = _queue.sublist(1);
+        case NotAdded(:final reason):
+          _become(
+            MyGamesFailed(
+              MyGamesProblem.notSaved,
+              detail: reason,
+              added: added,
+            ),
+          );
+          return null;
+        case null:
+          return added;
+      }
+    }
+    return added;
   }
 
   /// Stops after the game being reviewed, or once the games are in.
@@ -590,9 +617,28 @@ final class MyGames extends ChangeNotifier {
         );
       case Started(:final engine):
         _quit = engine.quit;
-        final ended = await _reviewQueue(engine, total, added, notReached);
-        _quit = null;
-        await engine.quit();
+        MyGamesStatus ended;
+        try {
+          ended = await _reviewQueue(engine, total, added, notReached);
+        } on Object catch (error) {
+          ended = MyGamesFailed(
+            MyGamesProblem.engine,
+            detail: '$error',
+            added: newPuzzles,
+          );
+        } finally {
+          try {
+            await engine.quit();
+          } on Object catch (error) {
+            ended = MyGamesFailed(
+              MyGamesProblem.engine,
+              detail: 'Could not confirm Stockfish stopped: $error',
+              added: newPuzzles,
+            );
+          } finally {
+            _quit = null;
+          }
+        }
         if (!_disposed) _become(ended);
     }
   }
@@ -626,6 +672,7 @@ final class MyGames extends ChangeNotifier {
           );
         case Added(added: final more):
           added += more;
+          _set.acknowledge(game.id);
       }
       _queue = _queue.sublist(1);
       done++;
