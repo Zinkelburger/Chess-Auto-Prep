@@ -135,6 +135,73 @@ List<SettingGroup> settingGroups({
         ),
       ),
     ]),
+    SettingGroup('Training', [
+      for (final (label, value, update) in [
+        (
+          'New lines per sitting',
+          s.training.learnLimit,
+          (int n, Settings now) => now.training.copyWith(learnLimit: n),
+        ),
+        (
+          'Reviews per sitting',
+          s.training.reviewLimit,
+          (int n, Settings now) => now.training.copyWith(reviewLimit: n),
+        ),
+        (
+          'Drill lines per sitting',
+          s.training.drillLimit,
+          (int n, Settings now) => now.training.copyWith(drillLimit: n),
+        ),
+      ])
+        SettingRow(
+          label,
+          NumberSetting(
+            value: value,
+            min: 0,
+            max: 1000,
+            onChanged: (n) =>
+                change((now) => now.copyWith(training: update(n, now))),
+          ),
+          hint: '0 = all lines. Applies to the next sitting.',
+        ),
+      SettingRow(
+        'Move delay',
+        NumberSetting(
+          value: s.training.replyMillis,
+          min: 200,
+          max: 2000,
+          step: 100,
+          unit: 'ms',
+          onChanged: (n) => change(
+            (now) =>
+                now.copyWith(training: now.training.copyWith(replyMillis: n)),
+          ),
+        ),
+        hint: 'Time to see your move before the reply. Applies next sitting.',
+      ),
+      SettingRow(
+        'Replay missed moves',
+        ToggleSetting(
+          value: s.training.replayMistakes,
+          onChanged: (on) => change(
+            (now) => now.copyWith(
+              training: now.training.copyWith(replayMistakes: on),
+            ),
+          ),
+        ),
+      ),
+      SettingRow(
+        'Shuffle drills',
+        ToggleSetting(
+          value: s.training.shuffleDrill,
+          onChanged: (on) => change(
+            (now) =>
+                now.copyWith(training: now.training.copyWith(shuffleDrill: on)),
+          ),
+        ),
+        hint: 'Otherwise Drill follows the selected line order.',
+      ),
+    ]),
     SettingGroup('Engine', [
       SettingRow(
         'CPU cores',

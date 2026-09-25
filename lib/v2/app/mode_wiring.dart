@@ -110,6 +110,7 @@ final class TrainingWiring {
       ),
       lines: Trainer(
         session: session,
+        settings: env.settings,
         chapters: ScopeReader(
           files: env.chapterFiles,
           documents: env.store,

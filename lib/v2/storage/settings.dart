@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../chess/explorer_choice.dart';
+import '../chess/training/training_options.dart';
 import '../chess/tactics/puzzle_queue.dart';
 
 /// What the user has chosen about the app as a whole: the few things two
@@ -21,6 +22,7 @@ final class Settings {
     this.explorer = ExplorerChoice.defaults,
     this.puzzles = PuzzleFilter.defaults,
     this.autoAdvance = true,
+    this.training = TrainingOptions.defaults,
   });
 
   /// Rank and file letters on the board.
@@ -60,6 +62,8 @@ final class Settings {
   /// Whether a solved puzzle gives way to the next one by itself.
   final bool autoAdvance;
 
+  final TrainingOptions training;
+
   static const defaults = Settings();
 
   /// The most the engine rows accept: a table bigger than this or more
@@ -86,6 +90,7 @@ final class Settings {
     ExplorerChoice? explorer,
     PuzzleFilter? puzzles,
     bool? autoAdvance,
+    TrainingOptions? training,
   }) => Settings(
     boardCoordinates: boardCoordinates ?? this.boardCoordinates,
     engineCores: engineCores ?? this.engineCores,
@@ -98,6 +103,7 @@ final class Settings {
     explorer: explorer ?? this.explorer,
     puzzles: puzzles ?? this.puzzles,
     autoAdvance: autoAdvance ?? this.autoAdvance,
+    training: training ?? this.training,
   );
 
   /// The file's text. One flat object with plain names, so a person can
@@ -113,6 +119,7 @@ final class Settings {
     'explorer': explorer.toJson(),
     'puzzles': puzzles.toJson(),
     'autoAdvance': autoAdvance,
+    'training': training.toJson(),
   });
 
   /// Reads [text]; a field that is missing or of the wrong type keeps its
@@ -142,6 +149,7 @@ final class Settings {
       explorer: ExplorerChoice.fromJson(decoded['explorer']),
       puzzles: PuzzleFilter.fromJson(decoded['puzzles']),
       autoAdvance: pick('autoAdvance', defaults.autoAdvance),
+      training: TrainingOptions.fromJson(decoded['training']),
     );
   }
 
@@ -157,7 +165,8 @@ final class Settings {
       other.coverOnceIn == coverOnceIn &&
       other.explorer == explorer &&
       other.puzzles == puzzles &&
-      other.autoAdvance == autoAdvance;
+      other.autoAdvance == autoAdvance &&
+      other.training == training;
 
   @override
   int get hashCode => Object.hash(
@@ -171,5 +180,6 @@ final class Settings {
     explorer,
     puzzles,
     autoAdvance,
+    training,
   );
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show Random;
 
 import 'package:flutter/foundation.dart';
 
@@ -8,6 +9,8 @@ import '../../chess/training/line_order.dart';
 import '../../chess/training/schedule.dart';
 import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
+import '../../chess/training/training_options.dart';
+import '../../storage/settings_store.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/document_ref.dart';
@@ -124,6 +127,7 @@ class Trainer extends ChangeNotifier implements DocumentWriteGuard {
     required Books books,
     RepertoireCatalog? catalog,
     PendingWrites? pendingWrites,
+    this.settings,
   }) : pendingWrites = pendingWrites ?? PendingWrites(),
        _catalog = catalog,
        _books = books,
@@ -132,6 +136,7 @@ class Trainer extends ChangeNotifier implements DocumentWriteGuard {
        _files = files,
        _analysis = analysis,
        _time = time {
+    settings?.addListener(_settingsChanged);
     _session.addListener(_follow);
     _savedRevision = _session.persistedRevision;
     _session.persistedChanges.addListener(_saved);
@@ -180,6 +185,15 @@ class Trainer extends ChangeNotifier implements DocumentWriteGuard {
   TrainingProgress? _pausedProgress;
   Lesson? _pausedLesson;
   bool get documentWriting => _documentWrites != 0;
+  final SettingsStore? settings;
+  TrainingOptions get options =>
+      settings?.value.training ?? TrainingOptions.defaults;
+  void _settingsChanged() => notifyListeners();
+
+  int sittingCount(int count, int limit) =>
+      limit == 0 || count < limit ? count : limit;
+  int get learnCount => sittingCount(untrainedCount, options.learnLimit);
+  int get reviewCount => sittingCount(dueCount, options.reviewLimit);
 
   final RepertoireCatalog? _catalog;
   final PendingWrites pendingWrites;
@@ -367,24 +381,57 @@ class Trainer extends ChangeNotifier implements DocumentWriteGuard {
     return result is ProgressWrite ? result : null;
   }
 
-  /// A sitting of the lines never trained, [learnSitting] at a time.
+  /// A sitting of the lines never trained, up to the configured limit.
   void learn() => _sit(SittingKind.learn, (lines, progress) {
     return toLearn(
       lines,
       progress.reviews,
       progress.now,
-    ).take(learnSitting).toList();
+    ).take(learnCount).toList();
   });
 
-  /// A sitting of every line due now.
+  /// A sitting of the lines due now, up to the configured limit.
   void review() => _sit(
     SittingKind.review,
-    (lines, progress) => dueNow(lines, progress.reviews, progress.now),
+    (lines, progress) => dueNow(
+      lines,
+      progress.reviews,
+      progress.now,
+    ).take(reviewCount).toList(),
   );
 
+  /// Quiz a chosen set immediately, including lines not due yet. Each line
+  /// occurs once; ratings still update its schedule and mistakes are logged.
+  void drillLines(List<TrainingLine> wanted) =>
+      _sit(SittingKind.drill, (lines, progress) {
+        final keys = wanted.map((line) => line.key).toSet();
+        final picked = [
+          for (final line in ordered(
+            lines,
+            order,
+            reviews: progress.reviews,
+            now: progress.now,
+          ))
+            if (keys.contains(line.key) &&
+                line.yourMoves > 0 &&
+                !line.modelGame &&
+                progress.status(line) != LineStatus.excluded)
+              line,
+        ];
+        if (options.shuffleDrill) picked.shuffle(Random());
+        return picked
+            .take(sittingCount(picked.length, options.drillLimit))
+            .toList();
+      });
+
   /// A sitting of [line] alone, whatever its status.
-  void trainLine(TrainingLine line) =>
-      _sit(SittingKind.line, (_, _) => line.modelGame ? const [] : [line]);
+  void trainLine(TrainingLine line) => _sit(
+    SittingKind.line,
+    (_, progress) =>
+        line.modelGame || progress.status(line) == LineStatus.excluded
+        ? const []
+        : [line],
+  );
 
   /// Ends the sitting. A line not yet rated is left as it was.
   void leave() {
@@ -417,8 +464,12 @@ class Trainer extends ChangeNotifier implements DocumentWriteGuard {
     ];
     if (lines.isEmpty) return;
     leave();
-    _lesson = Lesson(kind: kind, lines: lines, progress: state.progress)
-      ..addListener(_lessonChanged);
+    _lesson = Lesson(
+      kind: kind,
+      lines: lines,
+      progress: state.progress,
+      options: options,
+    )..addListener(_lessonChanged);
     _analysis.pause(this, _pauseReason);
     _lessonChanged();
   }
@@ -629,6 +680,7 @@ class Trainer extends ChangeNotifier implements DocumentWriteGuard {
     // A load still reading is overtaken: it makes no progress to leak and
     // tells nobody.
     _loads++;
+    settings?.removeListener(_settingsChanged);
     _session.removeListener(_follow);
     _session.persistedChanges.removeListener(_saved);
     _books.removeListener(_bookChanged);

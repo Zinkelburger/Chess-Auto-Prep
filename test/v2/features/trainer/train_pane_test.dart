@@ -157,6 +157,27 @@ void main() {
     expect(find.text('Untrained'), findsNWidgets(2));
   });
 
+  testWidgets('Drill uses the searched lines and asks immediately', (
+    tester,
+  ) async {
+    await pump(tester);
+    expect(find.text('Drill 2'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, 'Italian');
+    await tester.pumpAndSettle();
+    expect(find.text('Drill 1'), findsOneWidget);
+    await tester.tap(find.text('Drill 1'));
+    await tester.pumpAndSettle();
+    expect(find.text('Your move'), findsOneWidget);
+    expect(find.text('Italian'), findsOneWidget);
+    expect(trainer.lesson!.left, 0);
+    for (final uci in ['e2e4', 'g1f3', 'f1c4']) {
+      await play(tester, uci);
+    }
+    await key(tester, LogicalKeyboardKey.digit3);
+    expect(find.text('Drill complete.'), findsOneWidget);
+    expect(files.history, hasLength(1));
+  });
+
   testWidgets('learning shows a move, Space asks for it, Escape leaves', (
     tester,
   ) async {

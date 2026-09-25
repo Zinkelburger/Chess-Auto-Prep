@@ -84,20 +84,27 @@ final class Drill {
     required this.pass,
     required this.shown,
     required this.stage,
+    this.replayMistakes = true,
     this.missed = const [],
     this.replaying = const [],
   });
 
   /// The line from its start: a walkthrough first when [learn], else the
   /// quiz straight away.
-  factory Drill.start(TrainingLine line, {required bool learn}) => Drill._(
+  factory Drill.start(
+    TrainingLine line, {
+    required bool learn,
+    bool replayMistakes = true,
+  }) => Drill._(
     line: line,
+    replayMistakes: replayMistakes,
     pass: learn ? Pass.walkthrough : Pass.quiz,
     shown: 0,
     stage: const Answered(),
   )._toNextAsk();
 
   final TrainingLine line;
+  final bool replayMistakes;
   final Pass pass;
 
   /// How many of the line's moves are on the board.
@@ -181,7 +188,8 @@ final class Drill {
   };
 
   /// The line again from the start, in the pass it began with.
-  Drill restart({required bool learn}) => Drill.start(line, learn: learn);
+  Drill restart({required bool learn}) =>
+      Drill.start(line, learn: learn, replayMistakes: replayMistakes);
 
   AttemptPhase get _phase => switch (pass) {
     Pass.walkthrough => AttemptPhase.learning,
@@ -209,7 +217,7 @@ final class Drill {
 
   Drill _passDone() => switch (pass) {
     Pass.walkthrough => _with(pass: Pass.quiz, shown: 0)._toNextAsk(),
-    Pass.quiz when missed.isNotEmpty => _with(
+    Pass.quiz when replayMistakes && missed.isNotEmpty => _with(
       pass: Pass.replay,
       replaying: [...missed]..sort(),
     )._ask(),
@@ -239,6 +247,7 @@ final class Drill {
     List<int>? replaying,
   }) => Drill._(
     line: line,
+    replayMistakes: replayMistakes,
     pass: pass ?? this.pass,
     shown: shown ?? this.shown,
     stage: stage ?? this.stage,

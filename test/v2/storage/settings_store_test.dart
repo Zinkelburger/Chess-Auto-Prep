@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/v2/chess/training/training_options.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/v2/storage/settings.dart';
@@ -49,6 +50,35 @@ void main() {
     expect(store.problem, isNull, reason: 'the next change wrote a fresh file');
     expect(await file().readAsString(), contains('"boardCoordinates": false'));
   });
+
+  test(
+    'training preferences survive a restart and invalid numbers are bounded',
+    () async {
+      final store = SettingsStore(support: support);
+      addTearDown(store.dispose);
+      await store.load();
+      const options = TrainingOptions(
+        learnLimit: 25,
+        reviewLimit: 40,
+        drillLimit: 0,
+        replyMillis: 1200,
+        replayMistakes: false,
+        shuffleDrill: true,
+      );
+      await store.update(store.value.copyWith(training: options));
+      final next = SettingsStore(support: support);
+      addTearDown(next.dispose);
+      await next.load();
+      expect(next.value.training, options);
+      final invalid = Settings.fromJson(
+        '{"training":{"learnLimit":-1,"replyMillis":99999,"drillLimit":"all"}}',
+      );
+      expect(invalid.training.learnLimit, 0);
+      expect(invalid.training.replyMillis, 2000);
+      expect(invalid.training.drillLimit, 10);
+      expect(Settings.fromJson('{}').training, TrainingOptions.defaults);
+    },
+  );
 
   test('a field an older file lacks keeps its default', () {
     final read = Settings.fromJson('{"engineCores": 2, "engineLines": "x"}');

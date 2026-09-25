@@ -64,12 +64,25 @@ void main() {
     await pump(tester);
     for (final place in [
       'Look',
+      'Training',
       'Engine',
       'Repertoire',
       'Files',
       'Accounts',
       'App',
     ]) {
+      if (place == 'App') {
+        await tester.scrollUntilVisible(
+          find.text('App'),
+          100,
+          scrollable: find
+              .descendant(
+                of: find.byType(ListView).first,
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+      }
       expect(find.text(place), findsOneWidget);
     }
     expect(find.text('Board coordinates'), findsOneWidget);
@@ -95,6 +108,21 @@ void main() {
     await tester.pumpAndSettle();
     expect(store.value.engineCores, 8, reason: 'kept inside the range');
   });
+
+  testWidgets(
+    'Training changes a session limit through the real settings row',
+    (tester) async {
+      await pump(tester);
+      await tester.tap(find.text('Training'));
+      await tester.pumpAndSettle();
+      expect(find.text('New lines per sitting'), findsOneWidget);
+      await tester.enterText(find.byType(TextField).at(1), '0');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(store.value.training.learnLimit, 0);
+      expect(store.value.training.drillLimit, 10);
+    },
+  );
 
   testWidgets('a choice and a switch write at once', (tester) async {
     await pump(tester);
@@ -296,6 +324,16 @@ void main() {
 
   testWidgets('the log folder opens from App', (tester) async {
     await pump(tester);
+    await tester.scrollUntilVisible(
+      find.text('App'),
+      100,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView).first,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     await tester.tap(find.text('App'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Open'));
