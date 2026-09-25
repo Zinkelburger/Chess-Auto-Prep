@@ -7,6 +7,7 @@ import '../../chess/pgn/pgn_reader.dart';
 import '../../chess/tactics/game_ids.dart';
 import '../../chess/tactics/mining.dart';
 import '../../engines/engine.dart';
+import '../../diagnostics/log.dart';
 import '../../engines/engine_line.dart';
 import '../../engines/engine_supervisor.dart';
 import '../../net/recent_games.dart';
@@ -134,7 +135,7 @@ final class MyGames extends ChangeNotifier {
     required SetAdditions set,
     required ReviewEngine engine,
     DateTime Function() now = DateTime.now,
-  }) : pendingWrites = pendingWrites ?? PendingWrites(),
+  }) : pendingWrites = pendingWrites ?? set.pendingWrites,
        _store = accounts,
        _sites = sites,
        _cache = cache,
@@ -399,13 +400,16 @@ final class MyGames extends ChangeNotifier {
     if (downloadProblems.isNotEmpty || corpusProblems.isNotEmpty) {
       return retryDownloads();
     }
-    final (added, notReached) = switch (_status) {
+    var (added, notReached) = switch (_status) {
       MyGamesPaused(:final added, :final notReached) => (added, notReached),
       MyGamesFailed(:final added) => (added, const <GameSite>{}),
       _ => (0, const <GameSite>{}),
     };
     if (_queue.isNotEmpty) {
       _become(MyGamesReviewing(done: 0, total: _queue.length, added: added));
+      final retried = await _retryCheckpoints(added);
+      if (retried == null || _disposed) return;
+      added = retried;
       if (!await _dropDone()) return;
       if (_queue.isEmpty) {
         return _become(MyGamesDone(reviewed: 0, added: added));
@@ -414,6 +418,30 @@ final class MyGames extends ChangeNotifier {
     }
     final missed = await _download();
     if (missed != null) await _review(missed, 0);
+  }
+
+  Future<int?> _retryCheckpoints(int added) async {
+    while (_queue.isNotEmpty && _set.retained(_queue.first.id)) {
+      final id = _queue.first.id;
+      switch (await _set.retry(id)) {
+        case Added(added: final more):
+          added += more;
+          _set.acknowledge(id);
+          _queue = _queue.sublist(1);
+        case NotAdded(:final reason):
+          _become(
+            MyGamesFailed(
+              MyGamesProblem.notSaved,
+              detail: reason,
+              added: added,
+            ),
+          );
+          return null;
+        case null:
+          return added;
+      }
+    }
+    return added;
   }
 
   /// Stops after the game being reviewed, or once the games are in.
@@ -578,9 +606,17 @@ final class MyGames extends ChangeNotifier {
         notReached: notReached,
       ),
     );
-    final start = await _engine();
+    final EngineStart start;
+    try {
+      start = await _engine();
+    } on Object catch (error) {
+      _become(
+        MyGamesFailed(MyGamesProblem.engine, detail: '$error', added: added),
+      );
+      return;
+    }
     if (_disposed) {
-      if (start case Started(:final engine)) await engine.quit();
+      if (start case Started(:final engine)) await _release(engine.quit);
       return;
     }
     switch (start) {
@@ -589,10 +625,31 @@ final class MyGames extends ChangeNotifier {
           MyGamesFailed(MyGamesProblem.engine, detail: reason, added: added),
         );
       case Started(:final engine):
-        _quit = engine.quit;
-        final ended = await _reviewQueue(engine, total, added, notReached);
-        _quit = null;
-        await engine.quit();
+        Future<void>? stopping;
+        Future<void> stop() => stopping ??= Future<void>.sync(engine.quit);
+        _quit = stop;
+        MyGamesStatus ended;
+        try {
+          ended = await _reviewQueue(engine, total, added, notReached);
+        } on Object catch (error) {
+          ended = MyGamesFailed(
+            MyGamesProblem.engine,
+            detail: '$error',
+            added: newPuzzles,
+          );
+        } finally {
+          try {
+            await stop();
+          } on Object catch (error) {
+            ended = MyGamesFailed(
+              MyGamesProblem.engine,
+              detail: 'Could not confirm Stockfish stopped: $error',
+              added: newPuzzles,
+            );
+          } finally {
+            _quit = null;
+          }
+        }
         if (!_disposed) _become(ended);
     }
   }
@@ -626,6 +683,7 @@ final class MyGames extends ChangeNotifier {
           );
         case Added(added: final more):
           added += more;
+          _set.acknowledge(game.id);
       }
       _queue = _queue.sublist(1);
       done++;
@@ -654,10 +712,20 @@ final class MyGames extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// A disposed view cannot display a stop failure, but must still consume it.
+  /// The supervisor retains native process ownership through confirmed exit.
+  Future<void> _release(Future<void> Function() stop) async {
+    try {
+      await stop();
+    } on Object catch (error) {
+      log.w('stop the tactics review engine', error.runtimeType);
+    }
+  }
+
   @override
   void dispose() {
     _disposed = true;
-    unawaited(_quit?.call());
+    if (_quit case final stop?) unawaited(_release(stop));
     super.dispose();
   }
 }

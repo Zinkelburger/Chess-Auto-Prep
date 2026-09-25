@@ -126,6 +126,7 @@ final class TrainingWiring {
         sites: env.gameSites,
         cache: games,
         set: SetAdditions(
+          pendingWrites: env.pendingWrites,
           documents: env.store,
           session: session,
           saver: workspace.saver,
@@ -144,7 +145,7 @@ final class TrainingWiring {
       ),
     );
     _catalog = catalog;
-    _catalog.addListener(modes.book.recheck);
+    _catalog.addListener(_repertoiresChanged);
     modes.myGames.addListener(_gamesMayHaveChanged);
   }
 
@@ -160,6 +161,14 @@ final class TrainingWiring {
   Map<GameSite, Account>? _accountsSeen;
   bool? _accountsUnsettledSeen;
 
+  int _catalogInputs = -1;
+  void _repertoiresChanged() {
+    if (_catalogInputs == _catalog.inputsRevision) return;
+    _catalogInputs = _catalog.inputsRevision;
+    final change = _catalog.admittedChange;
+    modes.book.repertoiresChanged([?change], all: change == null);
+  }
+
   void _gamesMayHaveChanged() {
     final accounts = modes.myGames.accounts;
     final changed = !identical(accounts, _accountsSeen);
@@ -172,7 +181,7 @@ final class TrainingWiring {
   }
 
   void dispose() {
-    _catalog.removeListener(modes.book.recheck);
+    _catalog.removeListener(_repertoiresChanged);
     modes.myGames.removeListener(_gamesMayHaveChanged);
     modes.dispose();
   }

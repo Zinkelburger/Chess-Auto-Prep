@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -11,7 +10,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../chess/fen.dart';
-import '../chess/generation/tree_wire_v4.dart' show treeWireVersion;
 import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
 import '../engines/hivemind_engine.dart';
@@ -23,13 +21,13 @@ import '../net/lichess_explorer.dart';
 import '../net/lichess_login.dart';
 import '../net/lichess_studies.dart';
 import '../net/recent_games.dart';
-import '../storage/atomic_write.dart';
 import '../storage/book_file.dart';
 import '../storage/bughouse_books.dart';
 import '../storage/bughouse_matches.dart';
 import '../storage/chapter_files.dart';
 import '../storage/eval_cache.dart';
 import '../storage/finds_store.dart';
+import '../storage/generation_trees.dart';
 import '../storage/game_store.dart';
 import '../storage/lichess_token.dart';
 import '../storage/master_book.dart';
@@ -203,7 +201,7 @@ final class AppEnvironment {
       ),
       stopEngines: engines.dispose,
       evalCache: () => evalCache.cache,
-      keepTree: _keepTreeBeside,
+      keepTree: GenerationTrees(documentsStore.recovery).keep,
       finds: () => finds.store,
       books: documentsStore.books,
       setFullScreen: _setFullScreen,
@@ -290,7 +288,7 @@ final class AppEnvironment {
   final BookStore books;
 
   /// Keeps a fill's search tree beside its chapter.
-  final Future<void> Function(ChapterRef chapter, String tree) keepTree;
+  final TreeKeeper keepTree;
 
   /// Puts the window in or out of full screen.
   final Future<void> Function(bool on) setFullScreen;
@@ -317,10 +315,16 @@ final class AppEnvironment {
   final void Function() close;
 
   /// A Stockfish with the threads and the table the settings give it now.
-  Future<EngineStart> startEngine() => launchEngine(
-    cores: settings.value.engineCores,
-    memoryMb: settings.value.engineMemoryMb,
-  );
+  Future<EngineStart> startEngine() => settings.ready
+      ? launchEngine(
+          cores: settings.value.engineCores,
+          memoryMb: settings.value.engineMemoryMb,
+        )
+      : Future.value(
+          const StartFailed(
+            'Saved settings must be read before starting an engine.',
+          ),
+        );
 
   /// Hivemind on half of this machine's cores, as BughouseDB runs it. Not
   /// the Stockfish setting: that defaults to one core, and a network engine
@@ -332,21 +336,6 @@ final class AppEnvironment {
 double _noJitter() => 0;
 
 void _nothingToClose() {}
-
-/// The tree beside its chapter, where the old app keeps its own:
-/// `.cap-generation/<chapter>.pgn/<run>/tree.json`, create-only.
-Future<void> _keepTreeBeside(ChapterRef chapter, String tree) async {
-  final stamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-  final folder = p.join(
-    p.dirname(chapter.path),
-    '.cap-generation',
-    p.basename(chapter.path),
-    'v2-$stamp',
-  );
-  await Directory(folder).create(recursive: true);
-  await replaceFile(p.join(folder, 'tree.json'), utf8.encode(tree));
-  log.i('kept the v$treeWireVersion tree of ${chapter.path} in $folder');
-}
 
 /// The window in or out of full screen. The window plugin wants its
 /// handshake before the first call; it is cheap and harmless to repeat.

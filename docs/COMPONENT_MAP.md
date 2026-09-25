@@ -452,6 +452,15 @@ These rules were added after the generation/traps remediation
 (`docs/REFACTOR_PLAN.md`). Violating them reintroduces the "lines don't show"
 and "infinite traps" class of bugs.
 
+The v2 Search tab has separate owners: `workspace/fill_gaps.dart` retains the
+accepted result publication in `PendingWrites`; `workspace/finds.dart` owns
+ordered, frozen SQLite finding batches; `storage/generation_trees.dart` owns
+create-only native v4 artifacts with a fixed run id. `workspace/generated_draft.dart`
+retains exact new-draft placement through uncertain create acknowledgement.
+`FillDone` follows all required saves; explicit retry never recomputes a run or
+silently allocates another draft after an uncertain write. See the
+[v2 generation contract](v2/features/generation.md#search-publication-and-retry-h5).
+
 1. **One owner of the generated tree.** `GenerationSessionController` holds a
    single `GeneratedRepertoire` bundle (`lib/core/generated_repertoire.dart`)
    containing the tree, `FenMap`, and trap index. All of
@@ -1420,7 +1429,8 @@ import path remains separate.
 
 | Component | Implemented boundary / API |
 |---|---|
-| `features/tactics/my_games.dart` — `MyGames` | Captures account names for a run, fetches each site independently and queues only persisted corpus rows for review. `load()` consumes `AccountsSnapshot` / `AccountsUnavailable`, retaining prior names and blocking new downloads on read failure or any owner's unresolved account-write obligation. `downloadProblems`, `corpusProblems`, `accountsUnavailable`, `retryDownloads()` and `retryUsernames()` drive explicit save/read retries. |
+| `features/tactics/my_games.dart` — `MyGames` | Captures account names for a run, fetches each site independently and queues only persisted corpus rows for review. `load()` consumes `AccountsSnapshot` / `AccountsUnavailable`, retaining prior names and blocking new downloads on read failure or any owner's unresolved account-write obligation. `downloadProblems`, `corpusProblems`, `accountsUnavailable`, `retryDownloads()` and `retryUsernames()` drive explicit save/read retries. Mining Retry consumes the retained checkpoint before filtering completed games or acquiring another engine; review failures release the acquired engine. |
+| `features/tactics/set_additions.dart` — `SetAdditions` | Freezes one mined game's puzzles and completion marker into an app-owned `PendingWrites` obligation. `add()` / `retry()` retain the accepted payload and added count; `acknowledge()` consumes its receipt. `analyzed()` reads persisted markers only. Open-set changes use the session saver; closed writes hold `DocumentAccess` through publication, and exact lost-ack retries preserve the original count. |
 | `features/tactics/download_saves.dart` — `DownloadSaves` | Freezes returned games, site, username and time into per-corpus `PendingWrites` obligations. `accept()` and `retry()` retain failed outcomes across owner disposal and retry without HTTP; successors wait behind unresolved writes to the same corpus. |
 | `storage/my_games_files.dart` — `GamesCache` | `keep()` returns `GamesKept` / `GamesNotKept`, publishing deduplicated PGN bytes before the `.fetched` note. Dedup uses site ID or trimmed PGN text when metadata has no ID. Typed `snapshotNewest()` separates absent input from an unreadable corpus. Unverified stamp staging files are refused and preserved. |
 | `storage/my_accounts.dart` — `AccountStore` / `PreferencesAccounts` | Immutable `AccountsSnapshot` plus owner `revision`, or `AccountsUnavailable`. `setDownloaded(..., expectedUsername:)` serializes with username writes and refuses a changed account; failed optimistic preference timestamps stay masked until acknowledged. The legacy `read()` compatibility wrapper still maps unavailable to empty, but `MyGames` uses `snapshot()`. |

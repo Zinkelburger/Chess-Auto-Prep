@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import '../storage/chapter_files.dart';
 import '../storage/document_repository.dart';
@@ -28,6 +29,10 @@ final class RepertoireCatalog extends ChangeNotifier {
     _ => const [],
   };
   List<DocumentChange> changes = const [];
+
+  /// The latest admission only; null is an explicit complete refresh. The
+  /// cumulative [changes] remains available for the final catalog publication.
+  DocumentChange? admittedChange;
   bool reloaded = false;
   final _pendingChanges = <DocumentChange>[];
   bool _manualRefresh = false;
@@ -37,20 +42,37 @@ final class RepertoireCatalog extends ChangeNotifier {
   bool _stale = true;
   String? _problem;
   int _version = 0;
+  int _inputsRevision = 0;
+
+  /// Admission of a committed change or explicit refresh, independent of the
+  /// later listing publication. Consumers handle each affected batch once.
+  int get inputsRevision => _inputsRevision;
 
   bool get stale => _stale;
   String? get problem => _problem;
   int get version => _version;
 
+  /// Nested PGNs belong to the top-level repertoire, matching the native
+  /// listing's recursive folder inventory even before a refresh completes.
+  String? repertoireOf(String path) {
+    if (!p.isWithin(root, path)) return null;
+    final parts = p.split(p.relative(path, from: root));
+    return parts.length > 1 ? p.join(root, parts.first) : root;
+  }
+
   void _changed() {
     final change = _documents?.lastChange;
     if (change == null || !change.touches(root)) return;
     _pendingChanges.add(change);
+    admittedChange = change;
+    _inputsRevision++;
     unawaited(_refresh());
   }
 
   Future<void> refresh() {
     _manualRefresh = true;
+    admittedChange = null;
+    _inputsRevision++;
     return _refresh();
   }
 
@@ -61,15 +83,12 @@ final class RepertoireCatalog extends ChangeNotifier {
 
   Future<void> _refresh() {
     if (_disposed) return Future<void>.value();
-    final wasStale = _stale;
     _dirty = true;
     _stale = true;
     final reading = _reading ??= _read().whenComplete(() => _reading = null);
-    if (!wasStale) {
-      changes = const [];
-      reloaded = false;
-      notifyListeners();
-    }
+    changes = List.unmodifiable(_pendingChanges);
+    reloaded = _manualRefresh;
+    notifyListeners();
     return reading;
   }
 

@@ -17,16 +17,25 @@ final class DocumentChange {
     required this.kind,
     this.movedTo,
     this.folder = false,
+    this.revision,
   });
   final DocumentChangeKind kind;
   final String path;
   final String? movedTo;
   final bool folder;
 
+  /// Native commit proof when this event has one. Owners may preserve live
+  /// work only after adopting this exact receipt, not merely its path.
+  final Revision? revision;
+
   bool touches(String root) =>
       path == root ||
       p.isWithin(root, path) ||
-      (movedTo != null && (movedTo == root || p.isWithin(root, movedTo!)));
+      (folder && p.isWithin(path, root)) ||
+      (movedTo != null &&
+          (movedTo == root ||
+              p.isWithin(root, movedTo!) ||
+              (folder && p.isWithin(movedTo!, root))));
 }
 
 /// The application's observable document boundary. All document writers use
@@ -73,7 +82,13 @@ final class DocumentRepository extends ChangeNotifier
       _store.save(ref, text, expected: expected, scope: scope),
     );
     if (result is Saved) {
-      _committed(DocumentChange(ref.path, kind: DocumentChangeKind.saved));
+      _committed(
+        DocumentChange(
+          ref.path,
+          kind: DocumentChangeKind.saved,
+          revision: result.receipt.committed,
+        ),
+      );
       final secondary = result.receipt.secondaryRef;
       if (secondary != null) {
         _committed(
@@ -100,7 +115,13 @@ final class DocumentRepository extends ChangeNotifier
     if (result is Saved) {
       for (final edit in [primary, secondary]) {
         _committed(
-          DocumentChange(edit.ref.path, kind: DocumentChangeKind.saved),
+          DocumentChange(
+            edit.ref.path,
+            kind: DocumentChangeKind.saved,
+            revision: identical(edit, primary)
+                ? result.receipt.committed
+                : null,
+          ),
         );
       }
     }

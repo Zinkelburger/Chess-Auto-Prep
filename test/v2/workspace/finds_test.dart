@@ -1,8 +1,12 @@
+import 'dart:io';
+
 import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/chess/generation/eval.dart';
 import 'package:chess_auto_prep/v2/chess/generation/finds.dart';
 import 'package:chess_auto_prep/v2/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/v2/storage/finds_store.dart';
+import 'package:chess_auto_prep/v2/storage/pending_writes.dart';
+import 'package:path/path.dart' as p;
 import 'package:chess_auto_prep/v2/workspace/finds.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
@@ -129,6 +133,110 @@ void main() {
       expect(kept.side, Side.black);
       expect(kept.elo, 1600);
     });
+
+    test(
+      'record freezes its accepted prefix and time before awaiting',
+      () async {
+        var now = DateTime(2026, 9, 23);
+        finds.dispose();
+        finds = Finds(store: () => store, clock: () => now);
+        final prefix = ['e4'];
+        final recording = finds.record(
+          onlyMoveAt('root', 300),
+          rootFen: Fen.initial,
+          prefix: prefix,
+          side: Side.white,
+          elo: 1800,
+        );
+        prefix.add('e5');
+        now = DateTime(2026, 9, 24);
+        await recording;
+        expect(store.all().single.find.sans, ['e4', 'Qd1']);
+        expect(store.all().single.foundAt, DateTime(2026, 9, 23));
+      },
+    );
+
+    test('an accepted record survives owner disposal', () async {
+      final recording = finds.record(
+        onlyMoveAt('retained', 300),
+        rootFen: Fen.initial,
+        prefix: const ['e4'],
+        side: Side.white,
+        elo: 1800,
+      );
+      finds.dispose();
+      finds = Finds(store: () => store);
+      await recording;
+      expect(store.all(), hasLength(1));
+    });
+
+    test('a failed SQLite keep is never reported as kept', () async {
+      final folder = await Directory.systemTemp.createTemp('finds-failed-');
+      addTearDown(() => folder.delete(recursive: true));
+      await Directory(p.join(folder.path, 'finds.db')).create();
+      final failed = FindsStore.open(folder);
+      addTearDown(failed.close);
+      finds.dispose();
+      finds = Finds(store: () => failed);
+      await finds.record(
+        onlyMoveAt('retained', 300),
+        rootFen: Fen.initial,
+        prefix: const ['e4'],
+        side: Side.white,
+        elo: 1800,
+      );
+      expect(finds.recorded, isNot(isA<FindsKept>()));
+    });
+
+    test(
+      'retained failed batches retry after disposal in acceptance order',
+      () async {
+        final folder = await Directory.systemTemp.createTemp('finds-retry-');
+        addTearDown(() => folder.delete(recursive: true));
+        final blocked = Directory(p.join(folder.path, 'finds.db'));
+        await blocked.create();
+        final disk = FindsStoreOnDemand(folder);
+        addTearDown(disk.close);
+        final pending = PendingWrites();
+        FindsStore open() => disk.store;
+        var now = DateTime(2026, 9, 23);
+        finds.dispose();
+        finds = Finds(store: open, pendingWrites: pending, clock: () => now);
+        await finds.record(
+          onlyMoveAt('root', 300),
+          rootFen: Fen.initial,
+          prefix: const ['e4'],
+          side: Side.white,
+          elo: 1800,
+        );
+        now = DateTime(2026, 9, 24);
+        await finds.record(
+          onlyMoveAt('root', 200),
+          rootFen: Fen.initial,
+          prefix: const ['d4'],
+          side: Side.white,
+          elo: 1900,
+        );
+        expect(await pending.settle(), contains('Search positions'));
+        finds.dispose();
+        finds = Finds(store: open, pendingWrites: pending);
+        expect(finds.canRetry, isTrue);
+        await blocked.delete();
+        expect(await finds.retry(), isTrue);
+        expect(await pending.settle(), isNull);
+        expect(disk.store.all(), hasLength(1));
+        final kept = disk.store.all().single;
+        expect(kept.foundAt, DateTime(2026, 9, 24));
+        expect(kept.find.sans, ['d4', 'Qd1']);
+        expect(kept.elo, 1900);
+        disk.close();
+        expect(
+          disk.store.all().single.foundAt,
+          kept.foundAt,
+          reason: 'committed values survive a native reopen',
+        );
+      },
+    );
 
     test('orders, filters and steps through what it shows', () {
       store.keep(

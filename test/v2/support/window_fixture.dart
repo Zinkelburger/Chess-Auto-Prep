@@ -171,7 +171,7 @@ final class WindowFixture {
               const StartFailed('no engine in this test'),
       stopEngines: () async {},
       evalCache: () => throw StateError('no eval cache in this test'),
-      keepTree: (_, _) async {},
+      keepTree: (_, _, {required runId}) async {},
       setFullScreen: (on) async => fullScreenAsked.add(on),
       bughouse: bughouse.outside,
       now: () => tacticsToday,

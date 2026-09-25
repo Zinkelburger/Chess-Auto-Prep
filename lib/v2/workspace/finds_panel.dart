@@ -104,6 +104,11 @@ class _FindsPanelState extends State<FindsPanel> {
             _Order(finds: finds),
             _Kinds(finds: finds),
             _CountLine(finds: finds),
+            if (finds.canRetry)
+              TextButton(
+                onPressed: () => unawaited(finds.retry()),
+                child: const Text('Retry saving positions'),
+              ),
             Expanded(child: _list(context, finds)),
           ],
         ),
@@ -250,6 +255,7 @@ class _CountLine extends StatelessWidget {
     final last = switch (finds.recorded) {
       FindsReading() => ' · reading the last search…',
       FindsKept(:final count) => ' · last search found $count',
+      FindsUnsaved() => ' · search positions not saved',
       null => '',
     };
     return Padding(

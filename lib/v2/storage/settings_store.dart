@@ -8,14 +8,15 @@ import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 import 'file_lock.dart';
 import 'pending_writes.dart';
+import 'recovery_files.dart';
 import 'settings.dart';
 
 /// The settings as one value, read once from `settings.json` in the app's
 /// support folder and written whole on every change.
 ///
 /// One writer for every key. A file that cannot be read does not quietly
-/// become the defaults: [problem] says so, the defaults are used for the
-/// session, and the first change writes a fresh file. A write that fails
+/// become the defaults: [problem] says so and [ready] prevents starting
+/// work or editing settings until a read succeeds. A write that fails
 /// keeps the value on screen and says so too. A store made with no folder
 /// keeps everything in memory, which is what a test wants.
 final class SettingsStore extends ChangeNotifier {
@@ -30,8 +31,10 @@ final class SettingsStore extends ChangeNotifier {
   String? _baseline;
   String? _attempted;
   bool _loaded = false;
+  Future<void>? _loading;
   Settings _value;
   String? _problem;
+  String? _readProblem;
   bool _disposed = false;
   int _revision = 0;
 
@@ -46,29 +49,41 @@ final class SettingsStore extends ChangeNotifier {
 
   /// Why the file could not be read or written, or null. One sentence, for
   /// the settings page to show beside the rows.
-  String? get problem => _problem;
+  String? get problem => _readProblem ?? _problem;
+  String? get readProblem => _readProblem;
+  bool get ready => _file == null || (_loaded && _readProblem == null);
 
   /// Reads the file. Nothing on disk is the first run and not a problem.
-  Future<void> load() async {
+  Future<void> load() =>
+      _loading ??= _load().whenComplete(() => _loading = null);
+
+  Future<void> _load() async {
     if (_disposed || _dirty || canRetry) return;
     final file = _file;
     if (file == null) return;
     final revision = ++_revision;
     try {
-      final baseline = await file.exists() ? await file.readAsString() : null;
+      final baseline = await recoveryText(file.path);
+      final value = baseline == null
+          ? Settings.defaults
+          : Settings.fromJson(
+              baseline.startsWith('\ufeff') ? baseline.substring(1) : baseline,
+            );
       if (_disposed || revision != _revision || canRetry) return;
       _baseline = baseline;
       _attempted = null;
       _loaded = true;
-      if (_baseline == null) return;
-      _value = Settings.fromJson(_baseline!);
+      _value = value;
+      _readProblem = null;
       _problem = null;
     } on Object catch (error) {
       if (_disposed || revision != _revision || canRetry) return;
-      log.w('read ${file.path}', error);
-      _problem =
-          'Your settings could not be read, so these are the '
-          'defaults. The next change writes a fresh file.';
+      // A FormatException can include the input text. Settings diagnostics
+      // name the failure without exporting the user's saved values.
+      log.w('read ${file.path}', error.runtimeType);
+      _readProblem =
+          'Your settings could not be read. Restore ${file.path} and retry. '
+          'The saved file has not been changed.';
     }
     _notify();
   }
@@ -84,6 +99,13 @@ final class SettingsStore extends ChangeNotifier {
     if (_disposed) return;
     if (next == _value) {
       if (canRetry) await retry();
+      return;
+    }
+    if (!ready) {
+      // `next` was derived before any read here could replace `_value`.
+      // Only an explicit successful load lets a caller edit that baseline.
+      _readProblem ??= 'Read your saved settings before editing them.';
+      _notify();
       return;
     }
     _revision++;
@@ -134,7 +156,7 @@ final class SettingsStore extends ChangeNotifier {
     try {
       await file.parent.create(recursive: true);
       await withDirectoryLock(file.parent, () async {
-        final current = await file.exists() ? await file.readAsString() : null;
+        final current = await recoveryText(file.path);
         final next = value.toJson();
         final knownAfter =
             current == next || (attempted != null && current == attempted);
@@ -150,6 +172,7 @@ final class SettingsStore extends ChangeNotifier {
         _baseline = current;
         _loaded = true;
         _attempted = next;
+        await requireUnusedRecoveryStage(file.path);
         await replaceFile(file.path, utf8.encode(next));
         _baseline = next;
         _attempted = null;
