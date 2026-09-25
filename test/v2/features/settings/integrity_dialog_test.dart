@@ -31,7 +31,7 @@ void main() {
     );
     expect(find.textContaining('Skipped:'), findsOneWidget);
     expect(
-      find.text('Read-only report. No recovery or repair is performed.'),
+      find.textContaining('Files are checked individually'),
       findsOneWidget,
     );
     reader.pending = Completer<IntegrityReport>();
