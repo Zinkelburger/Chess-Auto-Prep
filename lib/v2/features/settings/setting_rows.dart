@@ -148,11 +148,6 @@ List<SettingGroup> settingGroups({
           s.training.reviewLimit,
           (int n, Settings now) => now.training.copyWith(reviewLimit: n),
         ),
-        (
-          'Drill lines per sitting',
-          s.training.drillLimit,
-          (int n, Settings now) => now.training.copyWith(drillLimit: n),
-        ),
       ])
         SettingRow(
           label,
@@ -190,17 +185,6 @@ List<SettingGroup> settingGroups({
             ),
           ),
         ),
-      ),
-      SettingRow(
-        'Shuffle drills',
-        ToggleSetting(
-          value: s.training.shuffleDrill,
-          onChanged: (on) => change(
-            (now) =>
-                now.copyWith(training: now.training.copyWith(shuffleDrill: on)),
-          ),
-        ),
-        hint: 'Otherwise Drill follows the selected line order.',
       ),
     ]),
     SettingGroup('Engine', [

@@ -12,8 +12,8 @@ import '../../workspace/board_claim.dart';
 import 'progress.dart';
 
 /// What a sitting was started for: the lines never trained, the lines due,
-/// one line the user picked, or a set to quiz immediately.
-enum SittingKind { learn, review, line, drill }
+/// or one line the user picked.
+enum SittingKind { learn, review, line }
 
 /// How long each timed moment of a drill stays on the board.
 const correctionDelay = Duration(milliseconds: 1200);
@@ -71,13 +71,7 @@ class Lesson extends ChangeNotifier {
     required List<TrainingLine> lines,
     required TrainingProgress progress,
     TrainingOptions options = TrainingOptions.defaults,
-  }) : this._(
-         kind,
-         lines,
-         progress,
-         options,
-         kind != SittingKind.drill && _isNew(progress, lines.first),
-       );
+  }) : this._(kind, lines, progress, options, _isNew(progress, lines.first));
 
   Lesson._(
     this.kind,
@@ -219,7 +213,7 @@ class Lesson extends ChangeNotifier {
       return;
     }
     final line = _left.removeAt(0);
-    _learning = kind != SittingKind.drill && _isNew(_progress, line);
+    _learning = _isNew(_progress, line);
     _state = const Drilling();
     _drill = Drill.start(
       line,

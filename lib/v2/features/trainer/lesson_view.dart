@@ -203,11 +203,7 @@ class _Heading extends StatelessWidget {
       children: [
         Text(line.name, style: text.titleMedium),
         Text(
-          '${line.chapter} · ${lesson.kind == SittingKind.drill
-              ? 'Drilling'
-              : lesson.learning
-              ? 'Learning'
-              : 'Reviewing'}'
+          '${line.chapter} · ${lesson.learning ? 'Learning' : 'Reviewing'}'
           '${lesson.left > 0 ? ' · ${lesson.left} more after this' : ''}',
           style: text.bodySmall,
         ),

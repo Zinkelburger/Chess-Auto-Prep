@@ -100,7 +100,6 @@ class _LineListState extends State<LineList> {
               bookChip: widget.bookChip,
               onImport: widget.onImport,
               onSettings: widget.onSettings,
-              drillLines: _visibleLines(progress),
               onChange: (write, doing) =>
                   unawaited(_change(write, doing: doing)),
             ),
@@ -300,12 +299,10 @@ class _Header extends StatelessWidget {
     required this.ready,
     required this.bookChip,
     required this.onChange,
-    required this.drillLines,
     this.onImport,
     this.onSettings,
   });
 
-  final List<TrainingLine> drillLines;
   final Trainer trainer;
   final VoidCallback? onImport;
   final VoidCallback? onSettings;
@@ -320,17 +317,6 @@ class _Header extends StatelessWidget {
     final due = trainer.reviewCount;
     final untrained = counts[LineStatus.untrained]!;
     final learn = trainer.learnCount;
-    final drill = [
-      for (final line in drillLines)
-        if (!line.modelGame &&
-            line.yourMoves > 0 &&
-            progress.status(line) != LineStatus.excluded)
-          line,
-    ];
-    final drillCount = trainer.sittingCount(
-      drill.length,
-      trainer.options.drillLimit,
-    );
     final excluded = counts[LineStatus.excluded]!;
     final busy = progress.stale;
     return Column(
@@ -370,15 +356,6 @@ class _Header extends StatelessWidget {
               onPressed: learn == 0 || busy ? null : trainer.learn,
               child: Text(
                 learn == 0 ? 'Nothing left to learn' : 'Learn $learn',
-              ),
-            ),
-            Tooltip(
-              message: 'Quiz these lines now, once each, then rate them',
-              child: OutlinedButton(
-                onPressed: drillCount == 0 || busy
-                    ? null
-                    : () => trainer.drillLines(drill),
-                child: Text('Drill $drillCount'),
               ),
             ),
           ],

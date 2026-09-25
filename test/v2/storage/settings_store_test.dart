@@ -176,10 +176,8 @@ void main() {
       const options = TrainingOptions(
         learnLimit: 25,
         reviewLimit: 40,
-        drillLimit: 0,
         replyMillis: 1200,
         replayMistakes: false,
-        shuffleDrill: true,
       );
       await store.update(store.value.copyWith(training: options));
       final next = SettingsStore(support: support);
@@ -187,11 +185,13 @@ void main() {
       await next.load();
       expect(next.value.training, options);
       final invalid = Settings.fromJson(
-        '{"training":{"learnLimit":-1,"replyMillis":99999,"drillLimit":"all"}}',
+        '{"training":{"learnLimit":-1,"replyMillis":99999,"drillLimit":10,"shuffleDrill":true}}',
       );
       expect(invalid.training.learnLimit, 0);
       expect(invalid.training.replyMillis, 2000);
-      expect(invalid.training.drillLimit, 10);
+      expect(invalid.training.reviewLimit, 0);
+      expect(invalid.training.toJson(), isNot(contains('drillLimit')));
+      expect(invalid.training.toJson(), isNot(contains('shuffleDrill')));
       expect(Settings.fromJson('{}').training, TrainingOptions.defaults);
     },
   );

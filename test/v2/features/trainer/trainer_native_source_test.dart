@@ -142,42 +142,35 @@ void main() {
     await fixture.dispose();
   });
 
-  for (final drill in [false, true]) {
-    test(
-      'retained ${drill ? 'drill selection' : 'line action'} uses current moves after source replacement',
-      () async {
-        await trainer.reload();
-        final old = (trainer.state as TrainerReady).lines.single;
-        await File(ref.path).rename('${ref.path}.original');
-        await File(ref.path).writeAsString(text.replaceFirst('e4 e5', 'c4 c5'));
-        await session.reloadFromDisk();
-        await trainer.reload();
-        final ready = trainer.state as TrainerReady;
-        final current = ready.lines.single;
-        expect(current.key, old.key);
-        expect(current.moves.first.san, 'c4');
-        expect(old.moves.first.san, 'e4');
-        expect(
-          await ready.progress.finished(current, Rating.good, clean: true),
-          isA<ProgressWritten>(),
-        );
-        if (drill) {
-          trainer.drillLines([old]);
-        } else {
-          trainer.trainLine(old);
-        }
-        expect(trainer.lesson!.line, same(current));
-        trainer.lesson!.play('c2c4');
-        expect(await pending.settle(), isNull);
-        final attempts = await File(
-          p.join(fixture.documents.path, attemptsFile),
-        ).readAsString();
-        expect(attempts, contains('"expectedSan":"c4"'));
-        expect(attempts, contains('"correct":true'));
-      },
-    );
-  }
-
+  test(
+    'retained line action uses current moves after source replacement',
+    () async {
+      await trainer.reload();
+      final old = (trainer.state as TrainerReady).lines.single;
+      await File(ref.path).rename('${ref.path}.original');
+      await File(ref.path).writeAsString(text.replaceFirst('e4 e5', 'c4 c5'));
+      await session.reloadFromDisk();
+      await trainer.reload();
+      final ready = trainer.state as TrainerReady;
+      final current = ready.lines.single;
+      expect(current.key, old.key);
+      expect(current.moves.first.san, 'c4');
+      expect(old.moves.first.san, 'e4');
+      expect(
+        await ready.progress.finished(current, Rating.good, clean: true),
+        isA<ProgressWritten>(),
+      );
+      trainer.trainLine(old);
+      expect(trainer.lesson!.line, same(current));
+      trainer.lesson!.play('c2c4');
+      expect(await pending.settle(), isNull);
+      final attempts = await File(
+        p.join(fixture.documents.path, attemptsFile),
+      ).readAsString();
+      expect(attempts, contains('"expectedSan":"c4"'));
+      expect(attempts, contains('"correct":true'));
+    },
+  );
   test('retained line action cannot start outside the current scope', () async {
     await trainer.reload();
     final old = (trainer.state as TrainerReady).lines.single;

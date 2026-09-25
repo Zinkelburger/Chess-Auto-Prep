@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'dart:math' show Random;
-
 import 'package:flutter/foundation.dart';
 
 import '../../chess/pgn/chapter.dart';
@@ -454,30 +452,6 @@ class Trainer extends ChangeNotifier implements DocumentWriteGuard {
       progress.now,
     ).take(reviewCount).toList(),
   );
-
-  /// Quiz a chosen set immediately, including lines not due yet. Each line
-  /// occurs once; ratings still update its schedule and mistakes are logged.
-  void drillLines(List<TrainingLine> wanted) =>
-      _sit(SittingKind.drill, (lines, progress) {
-        final keys = wanted.map((line) => line.key).toSet();
-        final picked = [
-          for (final line in ordered(
-            lines,
-            order,
-            reviews: progress.reviews,
-            now: progress.now,
-          ))
-            if (keys.contains(line.key) &&
-                line.yourMoves > 0 &&
-                !line.modelGame &&
-                progress.status(line) != LineStatus.excluded)
-              line,
-        ];
-        if (options.shuffleDrill) picked.shuffle(Random());
-        return picked
-            .take(sittingCount(picked.length, options.drillLimit))
-            .toList();
-      });
 
   /// A retained row action selects its key in the current scope, never the
   /// old moves captured before a reload or document replacement.

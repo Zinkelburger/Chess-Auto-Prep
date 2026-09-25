@@ -104,35 +104,7 @@ void main() {
   }
 
   test(
-    'Drill quizzes new lines immediately and finishes once even with Again',
-    () {
-      fakeAsync((async) {
-        final trainer = ready(async);
-        final lines = readyState(trainer).lines;
-        trainer.drillLines([lines.last]);
-        final lesson = trainer.lesson!;
-        expect(lesson.kind, SittingKind.drill);
-        expect(lesson.learning, isFalse);
-        expect(lesson.drill.stage, isA<Asking>());
-        expect(lesson.line.name, 'Italian');
-        for (final uci in ['e2e4', 'g1f3', 'f1c4']) {
-          play(async, lesson, uci);
-        }
-        expect(lesson.state, isA<AwaitingRating>());
-        lesson.rate(Rating.again);
-        async.flushMicrotasks();
-        expect(lesson.state, isA<SittingOver>());
-        expect(files.history.single.rating, 'again');
-        expect(files.attempts, hasLength(3));
-        expect(trainer.board.value, isNull);
-        trainer.leave();
-        expect(analysis.paused, isFalse);
-      });
-    },
-  );
-
-  test(
-    'sitting limits and pacing are captured; excluded lines cannot be drilled',
+    'sitting limits and pacing are captured; excluded lines cannot be trained',
     () {
       fakeAsync((async) {
         final settings = SettingsStore(
@@ -140,7 +112,6 @@ void main() {
             training: TrainingOptions(
               learnLimit: 1,
               reviewLimit: 1,
-              drillLimit: 1,
               replyMillis: 2000,
             ),
           ),
@@ -153,21 +124,26 @@ void main() {
         trainer.learn();
         expect(trainer.lesson!.left, 0);
         trainer.leave();
-        trainer.drillLines(lines);
+        trainer.learn();
         final lesson = trainer.lesson!;
         expect(lesson.left, 0);
         settings.update(
           settings.value.copyWith(
-            training: const TrainingOptions(drillLimit: 0, replyMillis: 200),
+            training: const TrainingOptions(learnLimit: 0, replyMillis: 200),
           ),
         );
+        lesson.next();
         lesson.play('e2e4');
         async.elapse(const Duration(milliseconds: 700));
         expect(lesson.drill.stage, isA<Answered>());
         async.elapse(const Duration(milliseconds: 1300));
-        expect(lesson.drill.stage, isA<Asking>());
+        expect(
+          lesson.drill.shown,
+          2,
+          reason: 'opponent reply after original delay',
+        );
         trainer.leave();
-        trainer.drillLines(lines);
+        trainer.learn();
         expect(
           trainer.lesson!.left,
           1,
@@ -178,7 +154,7 @@ void main() {
         async.flushMicrotasks();
         trainer.trainLine(lines.first);
         expect(trainer.lesson, isNull);
-        trainer.drillLines(lines);
+        trainer.learn();
         expect(trainer.lesson!.line.key, lines.last.key);
         expect(trainer.lesson!.left, 0);
       });

@@ -163,7 +163,7 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(store.value.training.learnLimit, 0);
-      expect(store.value.training.drillLimit, 10);
+      expect(store.value.training.reviewLimit, 0);
     },
   );
 

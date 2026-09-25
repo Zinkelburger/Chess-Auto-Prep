@@ -21,7 +21,7 @@ order, Course order, and Most likely first when probability tags are present.
 Completed/model games can be read but are never drilled; excluded lines keep
 history and stay out of queues until included again.
 
-## Learn, review and drill
+## Learn and review
 
 - **Learn** takes new lines (10 by default). Each of your moves is shown, then
   taken back for you to play; the whole line follows as a quiz. New lines are
@@ -29,11 +29,6 @@ history and stay out of queues until included again.
 - **Review** takes due lines, oldest due first (all by default). Play from
   memory, then rate Again, Hard, Good or Easy. Again returns the line to the
   end of the Learn/Review sitting.
-- **Drill** quizzes immediately, even on untrained lines or lines not due yet.
-  It takes the currently searched lines in the selected order, or shuffles
-  them when enabled, then applies the session limit (10 by default). Each
-  line occurs once in the set, including when rated Again. Ratings still
-  update its schedule; attempts and mistakes are saved normally.
 
 Sittings fix their set when started. Play on the board or type SAN/UCI in the
 move field. The board faces your side and engine analysis pauses while the
@@ -51,10 +46,9 @@ the line's schedule unchanged; accepted writes remain owned by the app.
 ## Settings and progress
 
 **Training actions → Training settings…** opens the Training settings group.
-The app settings also contain it. New-line, review and drill limits accept
-0 for all lines; reply delay is 200–2000 ms. Replay missed moves and Shuffle
-drills are optional. Preferences persist in the existing settings file and
-are captured for a sitting, so changing them does not alter an active drill.
+The app settings also contain it. New-line and review limits accept
+0 for all lines; reply delay is 200–2000 ms. Replay missed moves is optional. Preferences persist in the existing settings file and
+are captured for a sitting, so changing them does not alter an active lesson.
 
 The list shows learned/due/untrained/excluded counts. Per-line actions read a
 line, open it in Builder, mark it known/untrained or include/exclude it. Bulk

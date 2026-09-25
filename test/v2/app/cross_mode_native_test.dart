@@ -101,7 +101,8 @@ void main() {
         expect(trainer.state, isA<TrainerReady>());
         final ready = trainer.state as TrainerReady;
         final line = ready.lines.singleWhere((line) => line.key.id == 'open');
-        trainer.drillLines([line]);
+        trainer.trainLine(line);
+        trainer.lesson!.next();
         expect(trainer.lesson, isNotNull);
         trainer.lesson!.play('e2e4');
         trainer.leave();

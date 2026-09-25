@@ -64,7 +64,6 @@ String sittingOver(SittingKind kind) => switch (kind) {
   SittingKind.learn => "That is this sitting's new lines — nicely done.",
   SittingKind.review => 'Review session done.',
   SittingKind.line => 'Line done.',
-  SittingKind.drill => 'Drill complete.',
 };
 
 String statusWord(LineStatus status, Review? review, DateTime now) =>
