@@ -1,9 +1,13 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:chess_auto_prep/v2/features/tactics/my_games_block.dart';
 
 import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/chapter_edit.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/games_written.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/study_edits.dart';
 import 'package:chess_auto_prep/v2/chess/tactics/analyzed_games.dart';
 import 'package:chess_auto_prep/v2/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/v2/chess/tactics/puzzle.dart';
@@ -414,6 +418,127 @@ void main() {
       expect(r.puzzlesOnDisk, hasLength(6));
     },
   );
+
+  for (final replace in [false, true]) {
+    test(
+      'a ${replace ? 'different puzzle at the same FEN' : 'deleted puzzle'} cannot certify the failed checkpoint',
+      () async {
+        r = _Review(accounts: {GameSite.lichess: const Account('Me')});
+        await r.session.open(tacticsRef, game: 0);
+        r.store.saves.add(const IoFailure('set disk full'));
+        await r.start();
+        if (replace) {
+          final other = parseChapter(
+            name: 'Default',
+            text: scholarsMatePuzzle.replaceAll(
+              'lichess_AbCd1234',
+              'lichess_other',
+            ),
+          ).lines.single;
+          r.session.apply(
+            (chapter) => ChapterEdited(
+              withLines(chapter, [...chapter.lines.take(5), other]),
+              GamesArranged(order: [0, 1, 2, 3, 4, null], before: 6),
+            ),
+          );
+        } else {
+          r.session.apply((chapter) => deleteChapter(chapter, index: 5));
+        }
+        await r.games.start();
+        expect(r.games.status, isA<MyGamesFailed>());
+        expect(r.games.newPuzzles, 0);
+        expect(
+          r.puzzlesOnDisk,
+          hasLength(replace ? 6 : 5),
+          reason: 'deleted accepted output is not reinserted',
+        );
+        expect(
+          r.puzzlesOnDisk.where(
+            (puzzle) => puzzle.gameId == 'lichess_AbCd1234',
+          ),
+          isEmpty,
+        );
+        expect(await r.games.pendingWrites.settle(), isNotNull);
+      },
+    );
+  }
+
+  test(
+    'review metadata on the appended puzzle preserves checkpoint identity',
+    () async {
+      r = _Review(accounts: {GameSite.lichess: const Account('Me')});
+      await r.session.open(tacticsRef, game: 0);
+      r.store.saves.add(const IoFailure('set disk full'));
+      await r.start();
+      r.session.apply(
+        (chapter) => recordAttempt(
+          chapter,
+          index: 5,
+          solved: true,
+          seconds: 4,
+          now: tacticsToday,
+        ),
+      );
+      await r.games.start();
+      expect((r.games.status as MyGamesDone).added, 1);
+      expect(r.puzzlesOnDisk.last.stats.reviews, 1);
+      expect(await r.games.pendingWrites.settle(), isNull);
+    },
+  );
+
+  test(
+    'a throwing engine factory reports failure and keeps queued input',
+    () async {
+      r = _Review(
+        accounts: {GameSite.lichess: const Account('Me')},
+        engine: () async => throw StateError('engine launch failed'),
+      );
+      await r.start();
+      expect(r.games.status, isA<MyGamesFailed>());
+      expect(r.games.running, isFalse);
+      expect(r.games.queued, 1);
+      expect(myGamesLine(r.games.status), contains('engine launch failed'));
+      expect(analyzedIn(r.setText), isNot(contains('lichess_AbCd1234')));
+    },
+  );
+
+  test(
+    'a late engine after disposal is released even when quit fails',
+    () async {
+      final launch = Completer<EngineStart>();
+      final requested = Completer<void>();
+      r = _Review(
+        accounts: {GameSite.lichess: const Account('Me')},
+        engine: () {
+          requested.complete();
+          return launch.future;
+        },
+      );
+      final running = r.start();
+      await requested.future;
+      expect(r.games.status, isA<MyGamesReviewing>());
+      r.engine.quitError = StateError('late exit failed');
+      r.games.dispose();
+      r.gamesDisposed = true;
+      launch.complete(Started(r.engine));
+      await running;
+      expect(r.engine.quitCalls, 1);
+      expect(r.engine.asked, isEmpty);
+    },
+  );
+
+  test('disposal and review cleanup share one handled engine quit', () async {
+    r = _Review(accounts: {GameSite.lichess: const Account('Me')});
+    r.engine.quitError = StateError('exit failed during disposal');
+    r.engine.onSearch = () {
+      r.engine.onSearch = null;
+      r.games.dispose();
+      r.gamesDisposed = true;
+    };
+    await r.start();
+    expect(r.engine.quitCalls, 1);
+    expect(analyzedIn(r.setText), isNot(contains('lichess_AbCd1234')));
+  });
 
   test(
     'an engine quit failure stays visible and retains the saved count',

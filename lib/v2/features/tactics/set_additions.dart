@@ -1,8 +1,13 @@
+import 'dart:convert';
+
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/chapter_edit.dart';
+import '../../chess/pgn/chapter_line.dart';
+import '../../chess/pgn/game_text.dart';
 import '../../chess/tactics/analyzed_games.dart';
 import '../../chess/tactics/mined_set.dart';
 import '../../chess/tactics/mining.dart';
+import '../../chess/tactics/puzzle.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/edit_scope.dart';
 import '../../storage/pgn_document_store.dart';
@@ -150,8 +155,7 @@ final class SetAdditions {
       final refused = _session.apply((set) {
         final edit = _edit(set, command.id, command.puzzles, older);
         if (edit is ChapterEdited) {
-          command.added = edit.chapter.lines.length - set.lines.length;
-          command.text = writeChapter(edit.chapter);
+          command.remember(set, edit.chapter);
         }
         return edit;
       });
@@ -163,9 +167,15 @@ final class SetAdditions {
     // an unknown save acknowledgement must not discard unrelated editor words.
     if (!_saver.settled) return const NotAdded('the set could not be saved');
     final read = await _documents.open(_set.ref);
-    if (read is! Opened ||
-        !(_idsIn(read.text, const {})?.contains(command.id) ?? false)) {
-      return const NotAdded('the mined game was not confirmed in the set');
+    if (read is! Opened)
+      return const NotAdded('the mined game could not be read');
+    final persisted = await readChapter(name: _set.ref.name, text: read.text);
+    if (!(_idsIn(persisted.preamble, const {})?.contains(command.id) ??
+            false) ||
+        !command.matches(persisted)) {
+      return const NotAdded(
+        'the mined puzzles were changed or removed before their checkpoint was confirmed',
+      );
     }
     return Added(command.added ?? 0);
   }
@@ -182,8 +192,7 @@ final class SetAdditions {
         final set = parseChapter(name: ref.name, text: '');
         final edit = _edit(set, command.id, command.puzzles, older);
         if (edit is! ChapterEdited) return _notEdited(edit);
-        command.text = writeChapter(edit.chapter);
-        command.added = edit.chapter.lines.length;
+        command.remember(set, edit.chapter);
         return switch (await _documents.create(ref, command.text!)) {
           Created() => Added(command.added!),
           Collision() => null,
@@ -209,8 +218,7 @@ final class SetAdditions {
         }
         final edit = _edit(set, command.id, command.puzzles, older);
         if (edit is! ChapterEdited) return _notEdited(edit);
-        command.text = writeChapter(edit.chapter);
-        command.added = edit.chapter.lines.length - set.lines.length;
+        command.remember(set, edit.chapter);
         return switch (await _documents.save(
           ref,
           command.text!,
@@ -287,4 +295,34 @@ final class _MinedCheckpoint {
   String? text;
   int? added;
   bool applied = false;
+  List<String> _appended = const [];
+
+  void remember(Chapter before, Chapter after) {
+    text = writeChapter(after);
+    added = after.lines.length - before.lines.length;
+    _appended = [
+      for (final line in after.lines.skip(before.lines.length)) _proof(line),
+    ];
+  }
+
+  bool matches(Chapter persisted) {
+    final present = [for (final line in persisted.lines) _proof(line)];
+    return _appended.every(present.remove);
+  }
+
+  /// Puzzle identity includes its source and solution, while review headers,
+  /// comments and unrelated display metadata can change independently.
+  static String _proof(ChapterLine line) => jsonEncode([
+    for (final key in [
+      'GameId',
+      'FEN',
+      'UserMove',
+      'MistakeType',
+      'OpponentBestResponse',
+      'SolutionPv',
+      'SourceMovetext',
+    ])
+      tagValue(line.tags, key),
+    puzzleOf(line, 0)?.answer,
+  ]);
 }

@@ -129,6 +129,17 @@ final class Books extends ChangeNotifier {
     return book != null && path != null && book.includes(path, ref.section);
   }
 
+  /// Native files and recursive folders on which a selected book depends.
+  Set<String> inputs(Book? book) => Set.unmodifiable({
+    if (book != null)
+      for (final path in [
+        ...book.repertoires,
+        for (final chapter in book.chapters) chapter.path,
+      ])
+        if (!p.posix.isAbsolute(path) && !p.posix.split(path).contains('..'))
+          p.joinAll([_root, ...p.posix.split(path)]),
+  });
+
   /// How much of [folder] [book] has: all of it, some or none.
   BookShare shareOf(Book book, RepertoireFolder folder) {
     final path = bookPath(_root, folder.path);

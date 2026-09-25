@@ -57,6 +57,7 @@ final class ScopeReader {
 
   Future<TrainingScopeRead> repertoireOf(ChapterLines open) => _capture(
     open: open,
+    boundaries: null,
     select: (listing) {
       final folder = listing.folders
           .where((folder) => folder.chapters.any((ref) => ref == open.ref))
@@ -72,9 +73,11 @@ final class ScopeReader {
 
   Future<TrainingScopeRead> chaptersWhere(
     bool Function(ChapterRef ref) wanted,
-    ChapterLines? open,
-  ) => _capture(
+    ChapterLines? open, {
+    required Set<String> boundaries,
+  }) => _capture(
     open: open,
+    boundaries: boundaries,
     select: (listing) => [
       for (final folder in listing.folders)
         for (final ref in folder.chapters)
@@ -84,6 +87,7 @@ final class ScopeReader {
 
   Future<TrainingScopeRead> _capture({
     required ChapterLines? open,
+    required Set<String>? boundaries,
     required List<ChapterRef> Function(Repertoires) select,
   }) async {
     try {
@@ -91,7 +95,14 @@ final class ScopeReader {
       if (listing is RepertoiresUnreadable) {
         return TrainingScopeFailed(listing.detail);
       }
-      final membership = listing as Repertoires;
+      final complete = listing as Repertoires;
+      final membership = complete.within(
+        boundaries ??
+            {
+              for (final folder in complete.folders)
+                if (folder.chapters.any((ref) => ref == open?.ref)) folder.path,
+            },
+      );
       if (membership.unreadable.isNotEmpty) {
         return TrainingScopeFailed(membership.unreadable.first.detail);
       }

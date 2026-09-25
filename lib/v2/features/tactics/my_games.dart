@@ -7,6 +7,7 @@ import '../../chess/pgn/pgn_reader.dart';
 import '../../chess/tactics/game_ids.dart';
 import '../../chess/tactics/mining.dart';
 import '../../engines/engine.dart';
+import '../../diagnostics/log.dart';
 import '../../engines/engine_line.dart';
 import '../../engines/engine_supervisor.dart';
 import '../../net/recent_games.dart';
@@ -605,9 +606,17 @@ final class MyGames extends ChangeNotifier {
         notReached: notReached,
       ),
     );
-    final start = await _engine();
+    final EngineStart start;
+    try {
+      start = await _engine();
+    } on Object catch (error) {
+      _become(
+        MyGamesFailed(MyGamesProblem.engine, detail: '$error', added: added),
+      );
+      return;
+    }
     if (_disposed) {
-      if (start case Started(:final engine)) await engine.quit();
+      if (start case Started(:final engine)) await _release(engine.quit);
       return;
     }
     switch (start) {
@@ -616,7 +625,9 @@ final class MyGames extends ChangeNotifier {
           MyGamesFailed(MyGamesProblem.engine, detail: reason, added: added),
         );
       case Started(:final engine):
-        _quit = engine.quit;
+        Future<void>? stopping;
+        Future<void> stop() => stopping ??= Future<void>.sync(engine.quit);
+        _quit = stop;
         MyGamesStatus ended;
         try {
           ended = await _reviewQueue(engine, total, added, notReached);
@@ -628,7 +639,7 @@ final class MyGames extends ChangeNotifier {
           );
         } finally {
           try {
-            await engine.quit();
+            await stop();
           } on Object catch (error) {
             ended = MyGamesFailed(
               MyGamesProblem.engine,
@@ -701,10 +712,20 @@ final class MyGames extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// A disposed view cannot display a stop failure, but must still consume it.
+  /// The supervisor retains native process ownership through confirmed exit.
+  Future<void> _release(Future<void> Function() stop) async {
+    try {
+      await stop();
+    } on Object catch (error) {
+      log.w('stop the tactics review engine', error.runtimeType);
+    }
+  }
+
   @override
   void dispose() {
     _disposed = true;
-    unawaited(_quit?.call());
+    if (_quit case final stop?) unawaited(_release(stop));
     super.dispose();
   }
 }

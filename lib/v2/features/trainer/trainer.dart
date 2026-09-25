@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'dart:math' show Random;
 
 import 'package:flutter/foundation.dart';
@@ -166,6 +167,18 @@ class Trainer extends ChangeNotifier implements DocumentWriteGuard {
   @override
   void resumeAfterWrite() {
     if (_documentWrites == 0 || --_documentWrites != 0) return;
+    final change = _guardedSourceChange;
+    _guardedSourceChange = null;
+    if (change != null) {
+      final adopted = _session.trainingSourceRevision;
+      final expected = change.revision;
+      if (change.path != _session.source?.path ||
+          adopted == null ||
+          expected == null ||
+          !sameChapterRevision(adopted, expected)) {
+        _reloadAfterWrite = true;
+      }
+    }
     _pausedProgress?.resume();
     _pausedLesson?.resume();
     _pausedProgress = null;
@@ -198,29 +211,40 @@ class Trainer extends ChangeNotifier implements DocumentWriteGuard {
   final PendingWrites pendingWrites;
   final Books _books;
 
+  ({String path, Revision? revision})? _guardedSourceChange;
+  int _catalogInputs = -1;
   void _catalogChanged() {
     if (_state is TrainerIdle) return;
     final catalog = _catalog!;
-    // A batch can contain an open-chapter save AND a sibling rename. Ignore
-    // only batches made entirely of saves the session already supplies.
-    final source = _session.source;
-    final wholeFile =
-        _session.game == null &&
-        source?.section == null &&
-        catalog.repertoires
-                .expand((folder) => folder.chapters)
-                .where((chapter) => chapter.path == source?.path)
-                .length <=
-            1;
-    // A course save may have changed another section of this same file.
-    if (wholeFile &&
-        !catalog.reloaded &&
-        catalog.changes.every(
-          (change) =>
-              change.kind == DocumentChangeKind.saved &&
-              change.path == _session.source?.path,
-        ))
-      return;
+    if (_catalogInputs == catalog.inputsRevision) return;
+    _catalogInputs = catalog.inputsRevision;
+    final change = catalog.admittedChange;
+    if (change != null) {
+      final source = _session.source;
+      final inputs = switch (_scope) {
+        TrainScope.book => _books.inputs(_books.active),
+        TrainScope.chapter => {if (source != null) source.path},
+        TrainScope.repertoire => {
+          if (source != null) ?catalog.repertoireOf(source.path),
+        },
+      };
+      if (!inputs.any(change.touches)) return;
+      final wholeFile =
+          _session.game == null &&
+          source?.section == null &&
+          catalog.repertoires
+                  .expand((folder) => folder.chapters)
+                  .where((chapter) => chapter.path == source?.path)
+                  .length <=
+              1;
+      if (wholeFile &&
+          documentWriting &&
+          change.kind == DocumentChangeKind.saved &&
+          change.path == source?.path) {
+        _guardedSourceChange = (path: change.path, revision: change.revision);
+        return;
+      }
+    }
     unawaited(_load(force: true));
   }
 
@@ -684,6 +708,7 @@ class Trainer extends ChangeNotifier implements DocumentWriteGuard {
     final captured = await _chapters.chaptersWhere(
       (ref) => _books.contains(book, ref),
       open,
+      boundaries: _books.inputs(book),
     );
     if (load != _loads) return;
     await _loaded(

@@ -9,6 +9,7 @@ import '../../chess/pgn/chapter.dart' show readOffThreadFrom;
 import '../../chess/tactics/game_ids.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/document_ref.dart';
+import '../../storage/document_repository.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/book_list.dart' show Book;
 import '../../storage/book_snapshot.dart';
@@ -224,6 +225,13 @@ final class GameBook extends ChangeNotifier {
     if (_watching > 0) unawaited(_read());
   }
 
+  /// A catalog publication only changes the comparison when one of the
+  /// selected book's native inputs changed (or the user explicitly refreshed).
+  void repertoiresChanged(List<DocumentChange> changes, {required bool all}) {
+    final inputs = _books.inputs(_books.active);
+    if (all || changes.any((change) => inputs.any(change.touches))) recheck();
+  }
+
   /// Refreshes the persisted selection too: an external book-file change can
   /// invalidate a comparison while the local membership owner is unchanged.
   Future<void> retry() async {
@@ -296,6 +304,7 @@ final class GameBook extends ChangeNotifier {
         version: version,
         additional: corpus.sources,
         book: bookSource,
+        boundaries: _books.inputs(book),
       );
       if (overtaken()) return;
       _requireCurrent(validation);

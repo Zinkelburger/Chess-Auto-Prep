@@ -62,6 +62,19 @@ void main() {
     });
   }
 
+  test(
+    'unrelated repertoire edits preserve the current answer snapshot',
+    () async {
+      final snapshot = await answers.capture(
+        main,
+        Side.white,
+        observed: {main.path: await disk.revisionOf(main)},
+      );
+      await disk.put(disk.ref('repertoires/Unrelated/Main.pgn'), text);
+      await snapshot.validate();
+    },
+  );
+
   test('unreadable sibling never becomes a current empty answer set', () async {
     final outside = await File(
       p.join(disk.root.path, 'outside.pgn'),

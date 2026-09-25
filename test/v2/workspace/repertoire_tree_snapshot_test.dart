@@ -141,6 +141,26 @@ void main() {
     },
   );
 
+  test(
+    'a new book reads changes previously irrelevant to the displayed book',
+    () async {
+      tree.watch();
+      await settled();
+      final previous = tree.state;
+      final path = fixture.ref('repertoires/White/B.pgn').path;
+      await File(
+        path,
+      ).writeAsString('// Color: White\n\n[Event "B"]\n\n1. c4 e5 *');
+      expect(tree.state, same(previous));
+      expect(tree.current, isTrue);
+      await fixture.store.books.write(second);
+      await books.load();
+      await settled();
+      expect(tree.current, isTrue);
+      expect((tree.state as TreeShown).rows.map((row) => row.san), ['c4']);
+    },
+  );
+
   test('reopening a cached tree validates its book source again', () async {
     tree.watch();
     await settled();
