@@ -9,6 +9,7 @@ import gzip
 import hashlib
 import json
 import os
+import platform
 from pathlib import Path
 import subprocess
 
@@ -19,9 +20,12 @@ def main():
     compressed = asset.read_bytes()
     lock = json.loads((root / 'tools/assets.lock.json').read_text())
     digest = hashlib.sha256(compressed).hexdigest()
-    for arch in ('arm64', 'x86_64'):
-        if digest != lock[f'stockfish-macos-{arch}']['output_sha256']:
-            raise RuntimeError('The universal macOS Stockfish does not match assets.lock.json')
+    # The fetcher refreshes only this host's entry. Although both entries
+    # describe the same universal binary, zlib versions can change the gzip
+    # container's hash, leaving the other architecture's entry unchanged.
+    arch = 'arm64' if platform.machine().lower() in ('arm64', 'aarch64') else 'x86_64'
+    if digest != lock[f'stockfish-macos-{arch}']['output_sha256']:
+        raise RuntimeError('The macOS Stockfish does not match assets.lock.json')
     contents = Path(os.environ['TARGET_BUILD_DIR']) / os.environ['CONTENTS_FOLDER_PATH']
     helper = contents / 'Helpers/stockfish-macos'
     helper.parent.mkdir(parents=True, exist_ok=True)
