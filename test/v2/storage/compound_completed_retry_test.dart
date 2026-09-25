@@ -36,6 +36,11 @@ void main() {
         () async {
           final original = disk.ref('repertoires/Course/Course.pgn');
           final expected = await disk.put(original, before);
+          // Receipts retain the canonical name even after it disappears.
+          // Windows temp paths may use 8.3 aliases; macOS /var is a symlink.
+          final canonicalOriginal = await File(
+            original.path,
+          ).resolveSymbolicLinks();
           final books = File(p.join(disk.support.path, 'books.json'));
           await books.writeAsString(
             BookList(
@@ -123,7 +128,7 @@ void main() {
             expect(result, isA<Saved>());
             expect(
               (result as Saved).receipt.compound!.documentPath,
-              original.path,
+              canonicalOriginal,
             );
             expect(await books.readAsString(), externalBooks);
             switch (change) {
