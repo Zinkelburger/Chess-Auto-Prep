@@ -476,6 +476,16 @@ are bounded. Finite operations have deadlines, while continuous analysis has an
 explicit stop. Retries release failed processes. Stop/dispose also accounts for
 an engine that has been requested but has not finished starting.
 
+The UCI implementation now starts its finite deadline with the request's `go`,
+including the first request. `EngineSupervisor.start` accepts `finitePatience`
+(default ten minutes); callers with unusually deep searches can supply a larger
+budget. Continuous analysis remains uncapped until stopped. A finite deadline
+reports failure even after partial output; an explicit UCI stop waits up to five
+seconds before terminating an unresponsive process. The supervisor owns UCI and
+Hivemind startup through confirmed native exit, including disposal during spawn
+or handshake. Closing stdout alone does not confirm exit. Hivemind's active-search
+stop budget is unchanged by this increment.
+
 Shutdown rejects new commands, stops/checkpoints producers, resolves drafts,
 drains accepted writes, and then releases engines and stores. A timeout is not
 success. Explicit close-without-saving may abandon uncommitted drafts, but it

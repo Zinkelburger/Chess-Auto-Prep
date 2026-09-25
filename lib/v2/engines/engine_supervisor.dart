@@ -32,6 +32,9 @@ final class StartFailed extends EngineStart {
 /// [dispose]. One per app; nothing else spawns an engine.
 final class EngineSupervisor {
   final _running = <EngineProcess>{};
+  final _handshakes = <SpawnedProcess>{};
+  final _starts = <Future<void>>{};
+  Future<void>? _closing;
 
   /// Set once the app is on its way out: an engine that finishes starting
   /// after that is quit at once rather than kept.
@@ -39,15 +42,39 @@ final class EngineSupervisor {
 
   /// Process ids of the engines alive right now. Only the tests and the
   /// exit harness ask: the app never addresses an engine by its pid.
-  Iterable<int> get pids => _running.map((engine) => engine.pid);
+  Iterable<int> get pids => [
+    for (final engine in _running) engine.pid,
+    for (final process in _handshakes) process.pid,
+  ];
 
   /// [patience] is how long the handshake may take; a binary that is not a
-  /// UCI engine is killed after it.
+  /// UCI engine is killed after it. [finitePatience] bounds each fixed-depth
+  /// search from its `go`; continuous analysis is uncapped until stopped.
   Future<EngineStart> start(
     String executable, {
     Map<String, String> options = const {},
     Duration patience = const Duration(seconds: 10),
-  }) async {
+    Duration finitePatience = UciEngine.defaultFinitePatience,
+  }) {
+    if (_disposed) {
+      return Future.value(const StartFailed('The app is closing.'));
+    }
+    if (finitePatience <= Duration.zero) {
+      return Future.value(
+        const StartFailed('The finite search deadline must be positive.'),
+      );
+    }
+    return _own(
+      _start(executable, Map.unmodifiable(options), patience, finitePatience),
+    );
+  }
+
+  Future<EngineStart> _start(
+    String executable,
+    Map<String, String> options,
+    Duration patience,
+    Duration finitePatience,
+  ) async {
     final name = p.basename(executable);
     final SpawnedProcess process;
     try {
@@ -56,22 +83,39 @@ final class EngineSupervisor {
       log.e('start $name', e.message);
       return StartFailed('Could not start $name: ${e.message}');
     }
+    _handshakes.add(process);
     try {
+      if (_disposed) {
+        await process.kill();
+        return const StartFailed('The app is closing.');
+      }
       final engine = await UciEngine.start(
         process,
         options: options,
         patience: patience,
+        finitePatience: finitePatience,
       );
-      if (!_keep(engine)) return const StartFailed('The app is closing.');
+      if (!_keep(engine, process)) {
+        await engine.quit();
+        return const StartFailed('The app is closing.');
+      }
       return Started(engine);
     } on TimeoutException {
       await process.kill();
       log.e('start $name', 'no uciok; stderr: ${process.recentErrors}');
       return StartFailed('$name did not answer as a UCI engine');
     } on EngineFailure catch (e) {
+      await process.kill();
+      if (_disposed) return const StartFailed('The app is closing.');
       final said = process.recentErrors.join(' ');
       log.e('start $name', '$e; stderr: ${process.recentErrors}');
       return StartFailed('$name failed to start: ${e.message}. $said'.trim());
+    } on Object catch (error) {
+      await process.kill();
+      log.e('start $name', error);
+      return StartFailed('$name failed to start: $error');
+    } finally {
+      _handshakes.remove(process);
     }
   }
 
@@ -81,7 +125,15 @@ final class EngineSupervisor {
     HivemindFiles files, {
     required int cores,
     Duration patience = const Duration(seconds: 90),
-  }) async {
+  }) => _disposed
+      ? Future.value(const HivemindStartFailed('The app is closing.'))
+      : _own(_startHivemind(files, cores, patience));
+
+  Future<HivemindStart> _startHivemind(
+    HivemindFiles files,
+    int cores,
+    Duration patience,
+  ) async {
     final SpawnedProcess process;
     final Map<String, Object?> identity;
     try {
@@ -93,6 +145,7 @@ final class EngineSupervisor {
             (await sha256.bind(File(files.model).openRead()).first).toString(),
         'cores': cores,
       };
+      if (_disposed) return const HivemindStartFailed('The app is closing.');
       process = await SpawnedProcess.start(
         files.executable,
         // Named from the engine's own folder: on Windows the support folder
@@ -105,47 +158,83 @@ final class EngineSupervisor {
       log.e('start the bughouse engine', '$e');
       return HivemindStartFailed('Could not start the bughouse engine: $e');
     }
-    final engine = await HivemindProcess.start(
-      process,
-      options: const {'Hash': '256', 'BatchSize': '8'},
-      provenance: identity,
-      patience: patience,
-    );
-    if (engine == null) {
-      final said = process.recentErrors.join(' ');
-      final code = await process.exitCode
-          .then<int?>((code) => code)
-          .timeout(const Duration(seconds: 2), onTimeout: () => null);
-      log.e('start the bughouse engine', 'no uciok; exit $code; stderr: $said');
-      return HivemindStartFailed(
-        [
-          'The bughouse engine did not start.',
-          ?hivemindExitReason(code),
-          said,
-        ].where((part) => part.isNotEmpty).join(' '),
+    _handshakes.add(process);
+    try {
+      if (_disposed) {
+        await process.kill();
+        return const HivemindStartFailed('The app is closing.');
+      }
+      final engine = await HivemindProcess.start(
+        process,
+        options: const {'Hash': '256', 'BatchSize': '8'},
+        provenance: identity,
+        patience: patience,
       );
+      if (engine == null) {
+        if (_disposed) return const HivemindStartFailed('The app is closing.');
+        final said = process.recentErrors.join(' ');
+        final code = await process.exitCode;
+        log.e(
+          'start the bughouse engine',
+          'no uciok; exit $code; stderr: $said',
+        );
+        return HivemindStartFailed(
+          [
+            'The bughouse engine did not start.',
+            ?hivemindExitReason(code),
+            said,
+          ].where((part) => part.isNotEmpty).join(' '),
+        );
+      }
+      if (!_keep(engine, process)) {
+        await engine.quit();
+        return const HivemindStartFailed('The app is closing.');
+      }
+      await limitCores(process.pid, cores);
+      if (_disposed) {
+        await engine.quit();
+        return const HivemindStartFailed('The app is closing.');
+      }
+      return HivemindStarted(engine);
+    } on Object catch (error) {
+      await process.kill();
+      log.e('start the bughouse engine', error);
+      return HivemindStartFailed('Could not start the bughouse engine: $error');
+    } finally {
+      _handshakes.remove(process);
     }
-    if (!_keep(engine)) return const HivemindStartFailed('The app is closing.');
-    await limitCores(process.pid, cores);
-    return HivemindStarted(engine);
   }
 
-  /// Keeps [engine] to end on the way out; answers false, having quit it,
-  /// when the way out has already begun.
-  bool _keep(EngineProcess engine) {
-    if (_disposed) {
-      unawaited(engine.quit());
-      return false;
-    }
+  /// Transfers a handshaking process to its protocol owner without a gap.
+  /// On refusal the starter awaits its quit before its owned future settles.
+  bool _keep(EngineProcess engine, SpawnedProcess process) {
+    _handshakes.remove(process);
+    if (_disposed) return false;
     _running.add(engine);
     unawaited(engine.exited.then((_) => _running.remove(engine)));
     return true;
   }
 
-  /// Quits every engine, killing any that has not left within two seconds.
+  /// Holds even a start whose native spawn has not returned. Late arrivals
+  /// see [_disposed] and confirm their own cleanup before this future ends.
+  Future<T> _own<T>(Future<T> start) {
+    late final Future<void> settled;
+    settled = start
+        .then<void>((_) {}, onError: (Object _) {})
+        .whenComplete(() => _starts.remove(settled));
+    _starts.add(settled);
+    return start;
+  }
+
+  /// Rejects new starts, kills handshakes, and waits for every accepted start
+  /// and running engine to confirm exit. Repeated calls share that same wait.
   Future<void> dispose() {
     _disposed = true;
-    return Future.wait(_running.toList().map((engine) => engine.quit()));
+    return _closing ??= Future.wait([
+      for (final process in _handshakes.toList()) process.kill(),
+      for (final engine in _running.toList()) engine.quit(),
+      ..._starts,
+    ]);
   }
 }
 
