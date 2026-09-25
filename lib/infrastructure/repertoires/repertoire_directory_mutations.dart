@@ -163,6 +163,10 @@ class RepertoireDirectoryMutations {
     Set<String> roots, {
     required bool terminal,
   }) {
+    if (value is Map<String, Object?> && value['version'] == 2) {
+      _checkCompoundPair(value, id, roots, terminal: terminal);
+      return;
+    }
     if (value is! Map<String, Object?> ||
         value.length != _compoundFields.length ||
         !value.keys.toSet().containsAll(_compoundFields) ||
@@ -188,13 +192,66 @@ class RepertoireDirectoryMutations {
       final text = value[field] as String?;
       if (text == null) continue;
       if (text.contains('\u0000') ||
-          utf8.decode(utf8.encode(text)) != text ||
+          utf8.decode(utf8.encode('x$text')) != 'x$text' ||
           (field.startsWith('books') &&
               jsonDecode(text) is! Map<String, Object?>)) {
         throw FormatException('Invalid compound snapshot: $id');
       }
     }
-    final path = value['documentPath'];
+    _checkCompoundPath(value['documentPath'], id, roots);
+  }
+
+  void _checkCompoundPair(
+    Map<String, Object?> value,
+    String id,
+    Set<String> roots, {
+    required bool terminal,
+  }) {
+    const fields = {'version', 'id', 'state', 'documents'};
+    if (value.length != fields.length ||
+        !value.keys.every(fields.contains) ||
+        value['version'] is! int ||
+        value['version'] != 2 ||
+        value['id'] != id ||
+        !(terminal
+                ? const {'complete', 'cancelled'}
+                : const {'prepared', 'committing', 'complete', 'cancelled'})
+            .contains(value['state']) ||
+        value['documents'] is! List ||
+        (value['documents'] as List).length != 2) {
+      throw FormatException('Pending or unknown two-PGN operation: $id');
+    }
+    final paths = <String>[];
+    for (final entry in value['documents'] as List) {
+      const documentFields = {'path', 'before', 'after'};
+      if (entry is! Map<String, Object?> ||
+          entry.length != documentFields.length ||
+          !entry.keys.every(documentFields.contains)) {
+        throw FormatException('Invalid compound participant: $id');
+      }
+      _checkCompoundPath(entry['path'], id, roots);
+      for (final key in ['before', 'after']) {
+        final text = entry[key];
+        if (text is! String ||
+            text.contains('\u0000') ||
+            utf8.decode(utf8.encode('x$text')) != 'x$text') {
+          throw FormatException('Invalid compound snapshot: $id');
+        }
+      }
+      final path = entry['path']! as String;
+      // Configured and resolved profile roots name the same Documents. Compare
+      // their relative names too, without consulting historical participants.
+      final matching = roots.where((root) => p.isWithin(root, path)).toList()
+        ..sort((a, b) => b.length.compareTo(a.length));
+      final relative = p.relative(path, from: matching.first);
+      if (paths.any((previous) => p.equals(previous, relative))) {
+        throw FormatException('Repeated compound document: $id');
+      }
+      paths.add(relative);
+    }
+  }
+
+  void _checkCompoundPath(Object? path, String id, Set<String> roots) {
     if (path is! String ||
         path.contains('\u0000') ||
         !p.isAbsolute(path) ||

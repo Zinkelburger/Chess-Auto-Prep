@@ -26,6 +26,8 @@ import 'document_projection.dart';
 import 'document_history.dart';
 import 'session_results.dart';
 
+part 'external_document_edits.dart';
+
 /// The document open in the workspace, where the user is in it, and the
 /// edits they make to it.
 ///
@@ -53,6 +55,7 @@ final class DocumentSession extends ChangeNotifier {
   final store.PgnDocumentStore _store;
   final DocumentSaver _saver;
   final access = DocumentAccess();
+  late final externalEdits = ExternalDocumentEdits(this);
 
   /// The persisted input behind the shown draft; training must retain this
   /// native observation rather than adopt whichever file later has its path.

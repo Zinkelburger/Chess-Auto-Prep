@@ -11,9 +11,16 @@ import 'document_ref.dart';
 import 'relocation_notes.dart' show RecoveryRequired;
 import 'recovery_files.dart';
 
-enum CompoundWriteStep { prepared, intent, document, books, completed }
+enum CompoundWriteStep {
+  prepared,
+  intent,
+  document,
+  secondaryDocument,
+  books,
+  completed,
+}
 
-/// One PGN edit and its book references, under locks owned by the caller.
+/// One PGN and books, or two PGNs, under locks owned by the caller.
 /// Prepared snapshots alone authorize nothing: durable committing intent is
 /// required before publication. Complete receipts remain for exact retries.
 final class CompoundWrites {
@@ -21,9 +28,8 @@ final class CompoundWrites {
     required Directory documents,
     required Directory support,
     this.testHook,
-    Future<void> Function(String) synchronize = syncDirectory,
-  }) : _synchronize = synchronize,
-       _configuredDocuments = documents,
+    this._synchronize = syncDirectory,
+  }) : _configuredDocuments = documents,
        _configuredSupport = support,
        documents = canonicalRecoveryRoot(documents),
        support = canonicalRecoveryRoot(support) {
@@ -41,8 +47,9 @@ final class CompoundWrites {
   // Native receipts exist only for publications observed by this process.
   // A replayed completion never authorizes training against an arbitrary
   // replacement now occupying the path; reopening supplies a new observation.
-  final _published = <String, Revision>{};
-  Revision? publishedRevision(String id) => _published[id];
+  final _published = <(String, String?), Revision>{};
+  Revision? publishedRevision(String id, {String? path}) =>
+      _published[(id, path)];
 
   Directory get _folder => Directory(p.join(support.path, 'compound-writes'));
   String get _books => p.join(support.path, 'books.json');
@@ -64,19 +71,38 @@ final class CompoundWrites {
     CompoundCommit command,
     Directory configured,
   ) {
-    final path = command.documentPath;
-    if (path.contains('\u0000') ||
-        !p.isAbsolute(path) ||
-        p.normalize(path) != path) {
-      throw RecoveryRequired('Compound document is not a managed PGN: $path.');
+    String canonical(String path) {
+      if (path.contains('\u0000') ||
+          !p.isAbsolute(path) ||
+          p.normalize(path) != path) {
+        throw RecoveryRequired(
+          'Compound document is not a managed PGN: $path.',
+        );
+      }
+      final originalRoot = p.normalize(p.absolute(configured.path));
+      return p.isWithin(originalRoot, path)
+          ? p.join(documents.path, p.relative(path, from: originalRoot))
+          : path;
     }
-    final originalRoot = p.normalize(p.absolute(configured.path));
-    final canonicalPath = p.isWithin(originalRoot, path)
-        ? p.join(documents.path, p.relative(path, from: originalRoot))
-        : path;
+
+    if (command.secondary case final secondary?) {
+      return CompoundCommit.pair(
+        id: command.id,
+        primary: CompoundDocument(
+          path: canonical(command.documentPath),
+          before: command.documentBefore,
+          after: command.documentAfter,
+        ),
+        secondary: CompoundDocument(
+          path: canonical(secondary.path),
+          before: secondary.before,
+          after: secondary.after,
+        ),
+      );
+    }
     return CompoundCommit(
       id: command.id,
-      documentPath: canonicalPath,
+      documentPath: canonical(command.documentPath),
       documentBefore: command.documentBefore,
       documentAfter: command.documentAfter,
       booksBefore: command.booksBefore,
@@ -166,8 +192,19 @@ final class CompoundWrites {
       documentId: command.id,
     );
     await testHook?.call(CompoundWriteStep.document);
-    await _publish(_books, command.booksBefore, command.booksAfter);
-    await testHook?.call(CompoundWriteStep.books);
+    if (command.secondary case final secondary?) {
+      await _publish(
+        secondary.path,
+        secondary.before,
+        secondary.after,
+        documentId: command.id,
+        primary: false,
+      );
+      await testHook?.call(CompoundWriteStep.secondaryDocument);
+    } else {
+      await _publish(_books, command.booksBefore, command.booksAfter);
+      await testHook?.call(CompoundWriteStep.books);
+    }
     await _record(note, _State.complete);
     await testHook?.call(CompoundWriteStep.completed);
   }
@@ -180,31 +217,38 @@ final class CompoundWrites {
       throw const RecoveryRequired('The Documents directory is missing.');
     }
     await recoveryDirectory(support);
-    final root = p.normalize(p.absolute(documents.path));
+    for (final document in command.documents) {
+      await _documentParents(document.path);
+      _expect(
+        document.path,
+        await _text(document.path),
+        document.before,
+        allowAfter ? document.after : document.before,
+      );
+      // Validate the whole staging read set before either participant changes.
+      await requireUnusedRecoveryStage(document.path);
+    }
+    if (command.secondary == null) {
+      _expect(
+        _books,
+        await _text(_books),
+        command.booksBefore,
+        allowAfter ? command.booksAfter : command.booksBefore,
+      );
+      await requireUnusedRecoveryStage(_books);
+    }
+  }
+
+  Future<void> _documentParents(String path) async {
+    final root = documents.path;
     var parent = root;
-    final parts = p.split(
-      p.relative(p.dirname(command.documentPath), from: root),
-    );
-    for (final part in parts) {
+    for (final part in p.split(p.relative(p.dirname(path), from: root))) {
+      if (part == '.') continue;
       parent = p.join(parent, part);
       if (!await recoveryDirectory(Directory(parent))) {
         throw RecoveryRequired('The document directory is missing: $parent.');
       }
     }
-    final document = await _text(command.documentPath);
-    final books = await _text(_books);
-    _expect(
-      command.documentPath,
-      document,
-      command.documentBefore,
-      allowAfter ? command.documentAfter : command.documentBefore,
-    );
-    _expect(
-      _books,
-      books,
-      command.booksBefore,
-      allowAfter ? command.booksAfter : command.booksBefore,
-    );
   }
 
   Future<void> _publish(
@@ -212,6 +256,7 @@ final class CompoundWrites {
     String? before,
     String? after, {
     String? documentId,
+    bool primary = true,
   }) async {
     final current = await _text(path);
     _expect(path, current, before, after);
@@ -232,10 +277,14 @@ final class CompoundWrites {
       utf8.encode(after),
       installed: documentId == null
           ? null
-          : (file) => _published[documentId] = Revision(
-              file.sha256Hex!,
-              nativeIdentity: file.identity,
-            ),
+          : (file) {
+              final revision = Revision(
+                file.sha256Hex!,
+                nativeIdentity: file.identity,
+              );
+              _published[(documentId, path)] = revision;
+              if (primary) _published[(documentId, null)] = revision;
+            },
     );
   }
 
@@ -276,16 +325,26 @@ final class CompoundWrites {
   void _validate(CompoundCommit command) {
     _validateId(command.id);
     final root = p.normalize(p.absolute(documents.path));
-    final path = command.documentPath;
-    if (path.contains('\u0000') ||
-        !p.isAbsolute(path) ||
-        p.normalize(path) != path ||
-        !p.isWithin(root, path) ||
-        p.extension(path).toLowerCase() != '.pgn') {
-      throw RecoveryRequired('Compound document is not a managed PGN: $path.');
+    if (command.secondary case final secondary?
+        when p.equals(secondary.path, command.documentPath)) {
+      throw const RecoveryRequired(
+        'Compound PGN participants must be distinct.',
+      );
     }
-    _utf8(command.documentBefore);
-    _utf8(command.documentAfter);
+    for (final document in command.documents) {
+      final path = document.path;
+      if (path.contains('\u0000') ||
+          !p.isAbsolute(path) ||
+          p.normalize(path) != path ||
+          !p.isWithin(root, path) ||
+          p.extension(path).toLowerCase() != '.pgn') {
+        throw RecoveryRequired(
+          'Compound document is not a managed PGN: $path.',
+        );
+      }
+      _utf8(document.before);
+      _utf8(document.after);
+    }
     for (final books in [command.booksBefore, command.booksAfter]) {
       if (books == null) continue;
       _utf8(books);
@@ -303,19 +362,38 @@ final class _Note {
   final CompoundCommit command;
   _State state;
 
-  Map<String, Object?> json(_State phase) => {
-    'version': 1,
-    'id': command.id,
-    'state': phase.name,
-    'documentPath': command.documentPath,
-    'documentBefore': command.documentBefore,
-    'documentAfter': command.documentAfter,
-    'booksBefore': command.booksBefore,
-    'booksAfter': command.booksAfter,
-  };
+  Map<String, Object?> json(_State phase) => command.secondary != null
+      ? {
+          'version': 2,
+          'id': command.id,
+          'state': phase.name,
+          'documents': [
+            for (final document in command.documents)
+              {
+                'path': document.path,
+                'before': document.before,
+                'after': document.after,
+              },
+          ],
+        }
+      : {
+          'version': 1,
+          'id': command.id,
+          'state': phase.name,
+          'documentPath': command.documentPath,
+          'documentBefore': command.documentBefore,
+          'documentAfter': command.documentAfter,
+          'booksBefore': command.booksBefore,
+          'booksAfter': command.booksAfter,
+        };
 }
 
 _Note _decode(String id, Object? json) {
+  if (json is Map<String, Object?> &&
+      json['version'] is int &&
+      json['version'] == 2) {
+    return _decodePair(id, json);
+  }
   const fields = {
     'version',
     'id',
@@ -342,8 +420,9 @@ _Note _decode(String id, Object? json) {
   final state = _State.values
       .where((state) => state.name == json['state'])
       .firstOrNull;
-  if (state == null)
+  if (state == null) {
     throw RecoveryRequired('Unsupported compound state in $id.');
+  }
   return _Note(
     CompoundCommit(
       id: id,
@@ -357,13 +436,57 @@ _Note _decode(String id, Object? json) {
   );
 }
 
+_Note _decodePair(String id, Map<String, Object?> json) {
+  const fields = {'version', 'id', 'state', 'documents'};
+  final entries = json['documents'];
+  if (json.length != fields.length ||
+      !json.keys.every(fields.contains) ||
+      json['id'] != id ||
+      entries is! List<Object?> ||
+      entries.length != 2) {
+    throw RecoveryRequired('Unsupported compound pair schema in $id.');
+  }
+  CompoundDocument document(Object? entry) {
+    if (entry is! Map<String, Object?> ||
+        entry.length != 3 ||
+        entry['path'] is! String ||
+        entry['before'] is! String ||
+        entry['after'] is! String) {
+      throw RecoveryRequired('Unsupported compound participant in $id.');
+    }
+    return CompoundDocument(
+      path: entry['path'] as String,
+      before: entry['before'] as String,
+      after: entry['after'] as String,
+    );
+  }
+
+  final state = _State.values
+      .where((state) => state.name == json['state'])
+      .firstOrNull;
+  if (state == null) {
+    throw RecoveryRequired('Unsupported compound state in $id.');
+  }
+  return _Note(
+    CompoundCommit.pair(
+      id: id,
+      primary: document(entries[0]),
+      secondary: document(entries[1]),
+    ),
+    state,
+  );
+}
+
 bool _same(CompoundCommit a, CompoundCommit b) =>
     a.id == b.id &&
     a.documentPath == b.documentPath &&
     a.documentBefore == b.documentBefore &&
     a.documentAfter == b.documentAfter &&
     a.booksBefore == b.booksBefore &&
-    a.booksAfter == b.booksAfter;
+    a.booksAfter == b.booksAfter &&
+    a.secondary?.path == b.secondary?.path &&
+    a.secondary?.before == b.secondary?.before &&
+    a.secondary?.after == b.secondary?.after;
 
 void _validateId(String id) {
   if (RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$').stringMatch(id) != id) {
@@ -372,7 +495,8 @@ void _validateId(String id) {
 }
 
 void _utf8(String text) {
-  if (text.contains('\u0000') || utf8.decode(utf8.encode(text)) != text) {
+  if (text.contains('\u0000') ||
+      utf8.decode(utf8.encode('x$text')) != 'x$text') {
     throw const RecoveryRequired('A compound snapshot is not safe UTF-8 text.');
   }
 }
@@ -391,7 +515,14 @@ Future<String?> _text(String path) async {
       'Compound file is unreadable or unsupported: $path.',
     );
   }
-  return utf8.decode(observed.bytes!);
+  final bytes = observed.bytes!;
+  final marked =
+      bytes.length >= 3 &&
+      bytes[0] == 0xef &&
+      bytes[1] == 0xbb &&
+      bytes[2] == 0xbf;
+  final text = utf8.decode(bytes);
+  return marked ? '\uFEFF$text' : text;
 }
 
 Future<T> _checked<T>(Future<T> Function() work) async {

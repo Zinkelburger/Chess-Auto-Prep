@@ -32,8 +32,9 @@ void main() {
     testHook: interrupt == null
         ? null
         : (step) async {
-            if (step == interrupt)
+            if (step == interrupt) {
               throw StateError('interrupted at ${step.name}');
+            }
           },
   );
   File note([String id = 'rename-1']) =>
@@ -107,7 +108,9 @@ void main() {
     },
   );
 
-  for (final step in CompoundWriteStep.values) {
+  for (final step in CompoundWriteStep.values.where(
+    (step) => step != CompoundWriteStep.secondaryDocument,
+  )) {
     test(
       'interruption after ${step.name} recovers on two restarts without duplication',
       () async {

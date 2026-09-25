@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Each v2 rule fires on a small bad input and stays quiet on a good one."""
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import check_v2
 
 from check_v2 import LIB, MAX_FUNCTION_LINES, TEST, check_classes, check_functions, check_imports
 
@@ -84,6 +89,41 @@ class FunctionsTest(unittest.TestCase):
         check_functions(TEST / "x_test.dart", lines, findings)
         self.assertEqual(len(findings), 1)
         self.assertIn(":2: function is", findings[0])
+
+
+class PartsTest(unittest.TestCase):
+    def findings(self, child: str, owner: str = "part 'worker.dart';\nclass Owner {}"):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            folder = root / "lib/v2/workspace"
+            folder.mkdir(parents=True)
+            (folder / "owner.dart").write_text(owner)
+            (folder / "worker.dart").write_text(child)
+            with patch.multiple(check_v2, REPO=root, LIB=root / "lib/v2", TEST=root / "test/v2"):
+                findings = []
+                for path in folder.glob("*.dart"):
+                    check_v2.check_file(path, findings)
+                return findings
+
+    def test_complete_collaborator_classes_are_allowed(self):
+        self.assertFalse(self.findings("part of 'owner.dart';\nfinal class Worker { void run() {} }"))
+
+    def test_part_cannot_hide_extension_methods_of_owner(self):
+        self.assertTrue(self.findings("part of 'owner.dart';\nextension Work on Owner { void run() {} }"))
+
+    def test_part_cannot_hide_owner_mixin_or_top_level_methods(self):
+        for fragment in ["mixin Work { void run() {} }", "void run() {}"]:
+            self.assertTrue(self.findings("part of 'owner.dart';\n" + fragment))
+
+    def test_part_must_name_owner_in_same_directory(self):
+        self.assertTrue(self.findings("part of '../owner.dart';\nclass Worker {}"))
+        self.assertTrue(self.findings("part of other;\nclass Worker {}"))
+
+    def test_part_keeps_file_and_function_caps(self):
+        child = "part of 'owner.dart';\nclass Worker {\n  void run() {\n" + "    work();\n" * 1001 + "  }\n}"
+        found = self.findings(child)
+        self.assertTrue(any("lines (max 1000)" in f for f in found))
+        self.assertTrue(any("function is" in f for f in found))
 
 
 if __name__ == "__main__":

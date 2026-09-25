@@ -204,6 +204,14 @@ linked or unknown metadata instructs the user to reopen v2, preserving all files
 predecessor chain and proven native previous copies without replaying commands
 or consulting historical source paths. Pending or unknown training evidence
 blocks document/training access before legacy recovery can run.
+The compound decoder also recognizes strict version-2 two-PGN receipts. It
+accepts terminal history without consulting former participant paths and
+refuses pending or invalid records before legacy recovery. V2's `savePair`
+validates and preserves both PGNs, publishes under one recovery boundary, and
+returns one authenticated inverse. Workspace external-edit preparation holds
+source adoption through publication; historical retry requires fresh native
+proof before updating the editor. Library cross-file command wiring remains
+pending; the two-PGN protocol does not include training or book changes.
 The v2 protocol and remaining migration work are described in
 [architecture renewal](ARCHITECTURE_RENEWAL.md#course-files).
 
