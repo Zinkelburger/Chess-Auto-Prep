@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:chess_auto_prep/v2/net/lichess_http.dart';
+import 'package:chess_auto_prep/v2/diagnostics/log.dart';
 import 'package:chess_auto_prep/v2/net/lichess_login.dart';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
@@ -85,6 +86,30 @@ void main() {
     openBrowser: (_) async => opens,
     wait: wait ?? const Duration(seconds: 5),
     random: Random(7),
+  );
+
+  test(
+    'credential-bearing transport and parse errors never reach diagnostics',
+    () async {
+      final lines = <String>[];
+      void sink(LogEntry entry) => lines.add(entry.line);
+      log.install(sink);
+      addTearDown(() => log.remove(sink));
+      const secret = 'private-test-token';
+      final broken = LichessLoginApi(
+        MockClient((_) async => throw StateError(secret)),
+        openBrowser: (_) async => false,
+      );
+      expect(await broken.withToken(secret), isA<LoginFailed>());
+      await broken.revoke(secret);
+      final malformed = LichessLoginApi(
+        MockClient((_) async => http.Response('{"secret":"$secret",', 200)),
+        openBrowser: (_) async => false,
+      );
+      await malformed.withToken(secret);
+      expect(lines, isNotEmpty);
+      expect(lines.join(), isNot(contains(secret)));
+    },
   );
 
   test('the page asks Lichess with S256 and a loopback redirect', () async {

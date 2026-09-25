@@ -62,12 +62,19 @@ The title bar reads `Settings` with a close button (`Close settings`, Escape). N
   declined.`, `No answer from the browser in five minutes.`, `Could not open a port for the browser
   to come back to.`, `Could not reach lichess.org — it needs a connection.`, `Lichess turned the
   login away.`, `Lichess rejected that token. Check it was copied fully and has not been revoked.`,
-  `Logged in, but the account could not be saved. Try again.` A second row, `Personal access token`,
+  `Logged in, but the account could not be saved. Retry the save.` A second row, `Personal access token`,
   shows only while signed out: a secret field, checked with `/api/account` when left or submitted.
   The flow is the old app's PKCE one (port 8919, or any free port when it is taken; `state` checked
   on the way back; the browser gets a plain `Logged in.` page), the keys are the old app's, so both
-  apps share the account, and an expired OAuth token reads as signed out. Usernames for game
-  downloads are not built yet.
+  apps share the account. An expired OAuth token reads as signed out only after its local removal
+  succeeds. Credential reads and writes serialize within v2; a failed platform write cannot expose
+  the plugin's optimistic token cache as a confirmed account. Read failures retain the last
+  confirmed presentation, hide authentication edits and offer `Retry read`; failed saves retain
+  the accepted grant and offer `Retry save` without another browser/token request. Transport and
+  malformed-response diagnostics include only the action and error type, never response text or
+  credentials. The v1 preference keys remain unchanged and are not a crash-atomic multi-key store
+  or an OS keychain. Only one supported app may use a profile at a time. Game-download usernames
+  are separate, in Tactics' My accounts dialog.
 - **`Repertoire`** (v2, 2026-09-21) — `Opponent rating` (1100–2900, default 2200, step 100; what
   the Replies table, gaps and coverage are predicted for) and `Cover replies met once in` (5–1000
   games, default 50). The v2 dialog is 760×440 (2026-09-24): a full-width Search settings field,

@@ -17,14 +17,19 @@ void main() {
   late LichessAccountState account;
   LichessAccount? saved;
   var opened = 0;
+  var readFails = false;
 
   setUp(() {
     store = SettingsStore();
     login = ScriptedLogin();
     saved = null;
+    readFails = false;
     account = LichessAccountState(
       login: login,
-      read: () async => saved,
+      read: () async {
+        if (readFails) throw StateError('private-test-token');
+        return saved;
+      },
       write: (next) async {
         saved = next;
         return true;
@@ -57,6 +62,25 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('unavailable credentials show Retry read and hide token edits', (
+    tester,
+  ) async {
+    readFails = true;
+    await account.load();
+    await pump(tester);
+    await tester.tap(find.text('Accounts'));
+    await tester.pumpAndSettle();
+    expect(find.text('Retry read'), findsOneWidget);
+    expect(find.text('Log in'), findsNothing);
+    expect(find.text('Personal access token'), findsNothing);
+    readFails = false;
+    await tester.tap(find.text('Retry read'));
+    await tester.pumpAndSettle();
+    expect(find.text('Log in'), findsOneWidget);
+    expect(find.text('Personal access token'), findsOneWidget);
+    expect(find.text('Retry read'), findsNothing);
+  });
 
   testWidgets('opens on Look, with one place per group and no more', (
     tester,

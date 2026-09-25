@@ -153,7 +153,7 @@ final class LichessLoginApi implements LichessLogin {
     try {
       server = await _bind();
     } on SocketException catch (error) {
-      log.w('log into Lichess', error);
+      log.w('log into Lichess', error.runtimeType);
       return const LoginFailed(LoginProblem.portBusy);
     }
     final verifier = _randomToken(64);
@@ -178,7 +178,7 @@ final class LichessLoginApi implements LichessLogin {
     try {
       opened = await _openBrowser(page);
     } on Object catch (error) {
-      log.w('open the browser for the Lichess login', error);
+      log.w('open the browser for the Lichess login', error.runtimeType);
     }
     if (!opened) log.w('open the browser for the Lichess login', 'declined');
     waiting(page, opened: opened);
@@ -229,7 +229,7 @@ final class LichessLoginApi implements LichessLogin {
         ..write(_page(ok));
       await request.response.close();
     } on Object catch (error) {
-      log.w('answer the browser after the Lichess login', error);
+      log.w('answer the browser after the Lichess login', error.runtimeType);
     }
     if (!isCallback || flow.code.isCompleted) return;
     flow.code.complete(ok ? code : const _Denied());
@@ -256,7 +256,7 @@ final class LichessLoginApi implements LichessLogin {
           )
           .timeout(_requestTimeout);
     } on Object catch (error) {
-      log.w('swap the Lichess code for a token', error);
+      log.w('swap the Lichess code for a token', error.runtimeType);
       return const LoginFailed(LoginProblem.unreachable);
     }
     if (response.statusCode != 200) {
@@ -277,7 +277,7 @@ final class LichessLoginApi implements LichessLogin {
         _ => _defaultLife,
       };
     } on Object catch (error) {
-      log.w('read the Lichess token answer', error);
+      log.w('read the Lichess token answer', error.runtimeType);
       return const LoginFailed(LoginProblem.http);
     }
     final named = await _account(token);
@@ -323,7 +323,7 @@ final class LichessLoginApi implements LichessLogin {
           .get(Uri.parse(_accountUrl), headers: lichessHeaders(token: token))
           .timeout(_requestTimeout);
     } on Object catch (error) {
-      log.w('ask Lichess whose token this is', error);
+      log.w('ask Lichess whose token this is', error.runtimeType);
       return const LoginFailed(LoginProblem.unreachable);
     }
     if (response.statusCode == 401 || response.statusCode == 403) {
@@ -340,7 +340,7 @@ final class LichessLoginApi implements LichessLogin {
           (json.decode(response.body) as Map<String, Object?>)['username']
               as String?;
     } on Object catch (error) {
-      log.w('read the Lichess account answer', error);
+      log.w('read the Lichess account answer', error.runtimeType);
     }
     return LoggedIn(LichessGrant(token: token, username: name));
   }
@@ -352,7 +352,7 @@ final class LichessLoginApi implements LichessLogin {
         ..headers.addAll(lichessHeaders(token: token));
       await _client.send(request).timeout(_requestTimeout);
     } on Object catch (error) {
-      log.w('revoke the Lichess token', error);
+      log.w('revoke the Lichess token', error.runtimeType);
     }
   }
 
