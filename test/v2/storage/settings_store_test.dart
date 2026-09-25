@@ -129,6 +129,44 @@ void main() {
     },
   );
 
+  for (final staged in [false, true]) {
+    test(
+      'failed ${staged ? 'stage' : 'read'} preflight cannot claim externally published settings',
+      () async {
+        var publications = 0;
+        final store = SettingsStore(
+          support: support,
+          publish: (path, bytes) async {
+            publications++;
+            await replaceFile(path, bytes);
+          },
+        );
+        addTearDown(store.dispose);
+        await store.load();
+        final FileSystemEntity obstacle = staged
+            ? await File(
+                temporaryPathFor(file().path),
+              ).writeAsString('unknown stage')
+            : await Directory(file().path).create();
+        final accepted = store.value.copyWith(engineCores: 4);
+        await store.update(accepted);
+        expect(store.canRetry, isTrue);
+        expect(publications, 0);
+        await obstacle.delete();
+        // These bytes came from another writer: our publication never ran.
+        await file().writeAsString(accepted.toJson());
+        await store.update(accepted.copyWith(engineCores: 8));
+        expect(store.problem, contains('another instance'));
+        expect(store.canRetry, isTrue);
+        expect(publications, 0);
+        expect(await file().readAsString(), accepted.toJson());
+        await store.retry();
+        expect(publications, 0);
+        expect(await file().readAsString(), accepted.toJson());
+      },
+    );
+  }
+
   test(
     'training preferences survive a restart and invalid numbers are bounded',
     () async {

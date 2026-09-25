@@ -20,13 +20,19 @@ import 'settings.dart';
 /// keeps the value on screen and says so too. A store made with no folder
 /// keeps everything in memory, which is what a test wants.
 final class SettingsStore extends ChangeNotifier {
-  SettingsStore({Directory? support, Settings initial = Settings.defaults})
-    : _file = support == null
-          ? null
-          : File(p.join(support.path, 'settings.json')),
-      _value = initial;
+  SettingsStore({
+    Directory? support,
+    Settings initial = Settings.defaults,
+    this.publish = replaceFile,
+  }) : _file = support == null
+           ? null
+           : File(p.join(support.path, 'settings.json')),
+       _value = initial;
 
   final File? _file;
+
+  /// Native publication boundary, including failures after replacement lands.
+  final Future<void> Function(String, List<int>) publish;
   PendingWrites? pendingWrites;
   String? _baseline;
   String? _attempted;
@@ -171,9 +177,9 @@ final class SettingsStore extends ChangeNotifier {
         // including when a newer accepted snapshot supersedes it.
         _baseline = current;
         _loaded = true;
-        _attempted = next;
         await requireUnusedRecoveryStage(file.path);
-        await replaceFile(file.path, utf8.encode(next));
+        _attempted = next;
+        await publish(file.path, utf8.encode(next));
         _baseline = next;
         _attempted = null;
       });

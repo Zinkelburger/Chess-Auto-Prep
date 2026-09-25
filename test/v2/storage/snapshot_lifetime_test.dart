@@ -175,19 +175,29 @@ void main() {
       );
       addTearDown(() => root.delete(recursive: true));
       final pending = PendingWrites();
-      final store = SettingsStore(support: root)..pendingWrites = pending;
+      var failAcknowledgement = true;
+      final store = SettingsStore(
+        support: root,
+        publish: (path, bytes) async {
+          await replaceFile(path, bytes);
+          if (failAcknowledgement) {
+            throw const FileSystemException('lost acknowledgement');
+          }
+        },
+      )..pendingWrites = pending;
       addTearDown(store.dispose);
       await store.load();
       final target = p.join(root.path, 'settings.json');
-      final obstacle = await Directory(target).create();
       final accepted = store.value.copyWith(engineCores: 4);
       await store.update(accepted);
       expect(store.problem, isNotNull);
-      await obstacle.delete();
-      // Model replacement having landed despite a failed acknowledgement.
-      await File(target).writeAsString(accepted.toJson());
+      expect(await File(target).readAsString(), accepted.toJson());
+      expect(await pending.settle(), contains('Settings'));
+      final obligation = pending.unfinished(store).single;
+      failAcknowledgement = false;
       await store.retry();
       expect(store.problem, isNull);
+      expect(obligation.committed, isTrue);
       expect(await pending.settle(), isNull);
       expect(await File(target).readAsString(), accepted.toJson());
     },
@@ -241,20 +251,30 @@ void main() {
       );
       addTearDown(() => root.delete(recursive: true));
       final pending = PendingWrites();
-      final store = SettingsStore(support: root)..pendingWrites = pending;
+      var failAcknowledgement = true;
+      final store = SettingsStore(
+        support: root,
+        publish: (path, bytes) async {
+          await replaceFile(path, bytes);
+          if (failAcknowledgement) {
+            throw const FileSystemException('lost acknowledgement');
+          }
+        },
+      )..pendingWrites = pending;
       addTearDown(store.dispose);
       await store.load();
       final target = p.join(root.path, 'settings.json');
-      final obstacle = await Directory(target).create();
       final accepted = store.value.copyWith(engineCores: 4);
       await store.update(accepted);
       expect(store.problem, isNotNull);
-      await obstacle.delete();
-      // Model replacement having landed despite a failed acknowledgement.
-      await File(target).writeAsString(accepted.toJson());
+      expect(await File(target).readAsString(), accepted.toJson());
+      expect(await pending.settle(), contains('Settings'));
+      final obligation = pending.unfinished(store).single;
+      failAcknowledgement = false;
       final latest = accepted.copyWith(engineCores: 8);
       await store.update(latest);
       expect(store.problem, isNull);
+      expect(obligation.committed, isTrue);
       expect(await pending.settle(), isNull);
       expect(await File(target).readAsString(), latest.toJson());
     },

@@ -148,6 +148,17 @@ display, and database preferences to factory defaults?` → those four sections 
 above → `Settings restored to defaults`, or `Some preferences could not be saved. Retry the failed
 section.`
 
+## Saved settings (v2)
+
+V2 stores its settings snapshot in Support `settings.json`. An unavailable or
+malformed read blocks edits and engine startup until `Retry settings` succeeds;
+it never authorizes replacing the saved file with defaults. Writes validate the
+loaded bytes and preserve unknown staging files. Only a dispatched publication
+can supply the expected after-bytes for a later retry or superseding edit: a
+failed read or staging check cannot claim bytes subsequently written by another
+instance. Tests inject lost acknowledgments after a real native replacement.
+Account and credential preferences retain their separate existing stores.
+
 ## Read-only saved-data check (v2)
 
 `App` → `Saved data` → `Check` opens a dated report. `Check saved data` is also
