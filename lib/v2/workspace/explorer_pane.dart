@@ -109,7 +109,7 @@ class _ExplorerPaneState extends State<ExplorerPane>
 
   void _play(ExplorerRow row) {
     _leave();
-    widget.session.playMove(row.uci);
+    if (widget.explorer.canPlay(row)) widget.session.playMove(row.uci);
   }
 
   @override

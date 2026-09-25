@@ -15,6 +15,7 @@ import 'package:chess_auto_prep/v2/workspace/local_games.dart';
 import 'package:chessground/chessground.dart' show StaticChessboard;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/my_games_fixture.dart';
@@ -220,6 +221,7 @@ void main() {
       scriptedRevision(mine),
     );
     final myGames = MyGamesTree(
+      files: ScriptedFiles(),
       accounts: MemoryAccounts({GameSite.lichess: const Account('Me')}),
       cache: cache,
       store: ScriptedGameStore(),
@@ -243,6 +245,43 @@ void main() {
     expect(find.text('0-1'), findsOneWidget);
     await tester.tap(find.text('Me – Rival'));
     expect(opened.single.id, 'lichess_Mine1234');
+  });
+
+  testWidgets('a focused My games move refuses a newly stale account', (
+    tester,
+  ) async {
+    final documents = ScriptedDocumentStore();
+    final cache = GamesCache(documents, folder: '/games_library');
+    final accounts = MemoryAccounts({GameSite.lichess: const Account('Me')});
+    const text = '[Event "Mine"]\n\n1. d4 d5 *';
+    documents.documents[cache.refFor(GameSite.lichess, 'Me')] = Opened(
+      text,
+      scriptedRevision(text),
+    );
+    final myGames = MyGamesTree(
+      accounts: accounts,
+      cache: cache,
+      store: ScriptedGameStore(),
+      files: ScriptedFiles(),
+    );
+    addTearDown(myGames.dispose);
+    await show(tester, myGames: myGames);
+    await tester.tap(find.text('My games'));
+    await tester.pumpAndSettle();
+    final move = find.text('d4');
+    await _tabTo(tester, move);
+    final before = fixture.session.fen;
+    // No rebuild or tree notification between admission and the focused key.
+    await accounts.setUsername(GameSite.lichess, 'Other');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    expect(fixture.session.fen, before);
+    await accounts.setUsername(GameSite.lichess, 'Me');
+    await explorer.retry();
+    await tester.pumpAndSettle();
+    await _tabTo(tester, move);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    expect(fixture.session.fen, isNot(before));
   });
 
   testWidgets('a failure is a sentence with Try again, and the table comes '
@@ -304,4 +343,13 @@ void main() {
     expect(tester.getSize(draws).height, explorerBarHeight);
     expect(find.text('5%'), findsNothing);
   });
+}
+
+Future<void> _tabTo(WidgetTester tester, Finder control) async {
+  for (var step = 0; step < 30; step++) {
+    if (Focus.of(tester.element(control)).hasFocus) return;
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+  }
+  fail('Keyboard traversal did not reach $control');
 }

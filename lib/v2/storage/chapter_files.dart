@@ -364,6 +364,10 @@ final class ChapterDirectory implements ChapterFiles {
   }
 
   bool _profileBound(BookSource? book, TrainingReadSet? training) {
+    // PGN-only consumers also depend on the configured Documents binding.
+    if (canonicalRecoveryRoot(_recovery.documents).path !=
+        _recovery.training.documents.path)
+      return false;
     if (book != null &&
         (book.supportPath != p.normalize(_recovery.support.absolute.path) ||
             book.canonicalSupport != _recovery.compounds.support.path ||
