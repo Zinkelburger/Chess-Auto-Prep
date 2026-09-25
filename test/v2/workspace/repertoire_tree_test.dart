@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:chess_auto_prep/v2/chess/pgn/chapter_heading.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
@@ -154,73 +152,6 @@ void main() {
       fixture.session.goTo(at.child(children.indexWhere((n) => n.san == san)));
     }
   }
-
-  test(
-    'another consumer rebuilding the shared shelf refreshes visible rows',
-    () async {
-      walk(['e4', 'e5', 'Nf3', 'Nc6']);
-      expect(rows().any((row) => row.san == 'Bb5'), isTrue);
-      fixture.store.documents[chapterRef('e4', 'Ruy')] = Opened(
-        italian,
-        scriptedRevision(italian),
-      );
-      shelf.forget();
-      await shelf.read(gone: () => false);
-      await pumpEventQueue();
-      expect(rows().any((row) => row.san == 'Bb5'), isFalse);
-      expect(rows().singleWhere((row) => row.san == 'Bc4').lines, 4);
-    },
-  );
-
-  test(
-    'failed shelf refresh cannot publish retained indexes as current',
-    () async {
-      expect(tree.state, isA<TreeShown>());
-      final original = fixture.store.documents[chapterRef('e4', 'Ruy')]!;
-      fixture.store.documents[chapterRef('e4', 'Ruy')] = const Unreadable(
-        'unreadable sibling',
-      );
-      tree.forget();
-      await pumpEventQueue();
-      expect(tree.state, isNot(isA<TreeShown>()));
-      fixture.store.documents[chapterRef('e4', 'Ruy')] = original;
-      tree.forget();
-      await pumpEventQueue();
-      expect(tree.state, isA<TreeShown>());
-    },
-  );
-
-  test(
-    'cursor projections reuse the validated inputs without another file read',
-    () async {
-      final reads = files.listings;
-      final fences = files.profileValidations.length;
-      walk(['e4', 'e5', 'Nf3', 'Nc6']);
-      expect(tree.current, isTrue);
-      expect(rows().map((row) => row.san), ['Bb5', 'Bc4', 'd4']);
-      await pumpEventQueue();
-      expect(files.listings, reads);
-      expect(files.profileValidations, hasLength(fences));
-    },
-  );
-
-  test(
-    'a cursor changed during the final fence uses the latest position',
-    () async {
-      tree.unwatch();
-      final fence = Completer<RepertoireValidation>();
-      files.validateWith = (_, _) => fence.future;
-      tree.watch();
-      await pumpEventQueue();
-      expect(tree.state, isA<TreeReading>());
-      expect(tree.current, isFalse);
-      walk(['e4', 'e5', 'Nf3', 'Nc6']);
-      fence.complete(const RepertoireCurrent());
-      await pumpEventQueue();
-      expect(tree.current, isTrue);
-      expect(rows().map((row) => row.san), ['Bb5', 'Bc4', 'd4']);
-    },
-  );
 
   test('lists every file of the side, most lines first', () async {
     walk(['e4', 'e5', 'Nf3', 'Nc6']);

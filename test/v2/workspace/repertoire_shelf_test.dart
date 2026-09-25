@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
@@ -89,22 +87,6 @@ void main() {
     };
   }
 
-  test('disposal revokes a validation already in flight', () async {
-    await shelf.read(gone: () => false);
-    final entered = Completer<void>();
-    final release = Completer<RepertoireValidation>();
-    files.validateWith = (_, _) {
-      entered.complete();
-      return release.future;
-    };
-    final validating = shelf.validate(version: shelf.version);
-    await entered.future;
-    shelf.dispose();
-    release.complete(const RepertoireCurrent());
-    expect(await validating, isA<RepertoireChanged>());
-    expect(shelf.stale, isTrue);
-  });
-
   test('failure retains the last complete index as stale', () async {
     await shelf.read(gone: () => false);
     final previous = shelf.indexOf(italian);
@@ -116,14 +98,13 @@ void main() {
     expect(shelf.stale, isTrue);
   });
 
-  test('an unreadable member never becomes a fresh partial index', () async {
+  test('an unreadable chapter is left out and the rest are indexed', () async {
     await shelf.read(gone: () => false);
-    final previous = shelf.indexOf(italian);
     store.documents[const DocumentRef(_path)] = const Unreadable('blocked');
     shelf.forget();
     await shelf.read(gone: () => false);
-    expect(shelf.indexOf(italian), same(previous));
-    expect(shelf.stale, isTrue);
+    expect(shelf.stale, isFalse);
+    expect(shelf.indexOf(italian), isNull);
   });
 
   test('cancellation during the final document read cannot publish', () async {
@@ -137,101 +118,6 @@ void main() {
     await reading;
     expect(shelf.refs, isEmpty);
     expect(shelf.stale, isTrue);
-  });
-
-  test('cancellation during final validation cannot publish', () async {
-    final checking = Completer<void>();
-    final release = Completer<RepertoireValidation>();
-    files.validateWith = (_, _) {
-      checking.complete();
-      return release.future;
-    };
-    var canceled = false;
-    final reading = shelf.read(gone: () => canceled);
-    await checking.future;
-    canceled = true;
-    release.complete(const RepertoireCurrent());
-    await reading;
-    expect(shelf.refs, isEmpty);
-    expect(shelf.version, 0);
-    expect(shelf.stale, isTrue);
-  });
-
-  test(
-    'invalidation during validation rejects the old result and rebuilds',
-    () async {
-      final checking = Completer<void>();
-      final release = Completer<RepertoireValidation>();
-      var validations = 0;
-      files.validateWith = (_, _) async {
-        validations++;
-        if (validations == 1) {
-          checking.complete();
-          return release.future;
-        }
-        return const RepertoireCurrent();
-      };
-      final reading = shelf.read(gone: () => false);
-      await checking.future;
-      write(course.replaceFirst('3. Bb5 f5 4. Nc3', '3. Bb5 f5 4. d3'));
-      shelf.forget();
-      release.complete(const RepertoireCurrent());
-      await reading;
-      expect(validations, 2);
-      expect(shelf.version, 1);
-      expect(shelf.stale, isFalse);
-    },
-  );
-
-  test(
-    'a failed validation retains a usable old index until explicit retry',
-    () async {
-      await shelf.read(gone: () => false);
-      final previous = shelf.indexOf(italian);
-      files.validateWith = (_, _) async =>
-          const RepertoireValidationFailed('blocked');
-      shelf.forget();
-      await shelf.read(gone: () => false);
-      expect(shelf.version, 1);
-      expect(shelf.problem, contains('blocked'));
-      expect(shelf.indexOf(italian), same(previous));
-      files.validateWith = null;
-      await shelf.read(gone: () => false);
-      expect(shelf.version, 2);
-      expect(shelf.stale, isFalse);
-      expect(shelf.problem, isNull);
-    },
-  );
-
-  test('a newer shelf cannot validate work derived from old indexes', () async {
-    await shelf.read(gone: () => false);
-    final before = shelf.version;
-    shelf.forget();
-    await shelf.read(gone: () => false);
-    expect(await shelf.validate(version: before), isA<RepertoireChanged>());
-    expect(
-      await shelf.validate(version: shelf.version),
-      isA<RepertoireCurrent>(),
-    );
-  });
-
-  test('shelf validation checks invalidation after its final await', () async {
-    await shelf.read(gone: () => false);
-    final checking = Completer<void>();
-    final release = Completer<RepertoireValidation>();
-    files.validateWith = (_, _) {
-      checking.complete();
-      return release.future;
-    };
-    final validating = shelf.validate(
-      version: shelf.version,
-      additional: const {'/games/site.pgn': null},
-    );
-    await checking.future;
-    shelf.forget();
-    release.complete(const RepertoireCurrent());
-    expect(await validating, isA<RepertoireChanged>());
-    expect(files.additionalValidations.last, {'/games/site.pgn': null});
   });
 
   test('each chapter of a course file is indexed from its own games', () async {

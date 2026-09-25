@@ -236,7 +236,7 @@ void main() {
 
   for (final directory in [false, true]) {
     test(
-      'a visible linked ${directory ? 'folder' : 'PGN'} preserves the last good view',
+      'a visible linked ${directory ? 'folder' : 'PGN'} is left out of the index',
       () async {
         final catalog = RepertoireCatalog(files: files, root: files.root.path);
         addTearDown(catalog.dispose);
@@ -263,9 +263,8 @@ void main() {
           catalog.repertoires.expand((folder) => folder.chapters),
           isNot(contains(previous)),
         );
-        expect(shelf.refs, [previous]);
-        expect(shelf.stale, isTrue);
-        expect(shelf.problem, isNotNull);
+        expect(shelf.refs, isNot(contains(previous)));
+        expect(shelf.stale, isFalse);
       },
       skip: !Platform.isLinux,
     );
@@ -277,15 +276,13 @@ void main() {
   });
 
   test(
-    'native membership changed during final open is never published',
+    'a repertoire added while the index is read is picked up next time',
     () async {
       final reads = ScriptedDocumentStore();
       reads.documents[a] = await disk.store.open(a);
       final shelf = RepertoireShelf(files: files, documents: reads);
       await shelf.read(gone: () => false);
       final ref = shelf.refs.single;
-      final previous = shelf.indexOf(ref);
-      final version = shelf.version;
       shelf.forget();
       reads.hold = true;
       final rebuilding = shelf.read(gone: () => false);
@@ -294,12 +291,9 @@ void main() {
       reads.releaseAll();
       await rebuilding;
       expect(shelf.refs, [ref]);
-      expect(shelf.indexOf(ref), same(previous));
-      expect(shelf.stale, isTrue);
-      expect(shelf.problem, contains('changed'));
-      expect(shelf.version, version);
+      expect(shelf.stale, isFalse);
 
-      // A fresh native rebuild sees the complete new membership.
+      // The next read, as the change's notice asks for, has both.
       final fresh = RepertoireShelf(files: files, documents: disk.store);
       await fresh.read(gone: () => false);
       expect(fresh.refs, hasLength(2));

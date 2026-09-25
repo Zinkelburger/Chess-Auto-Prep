@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../chess/book/book_check.dart';
@@ -6,7 +8,6 @@ import '../../ui/theme.dart';
 import '../../workspace/document_session.dart';
 import 'book_words.dart';
 import 'game_book.dart';
-import 'book_comparison_status.dart';
 
 /// The two ways the column lists what the book says: game by game, or
 /// grouped by where the games left it, most often first.
@@ -101,11 +102,17 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
               child: widget.bookChip,
             ),
           ),
-          BookComparisonStatus(book: widget.book),
           Expanded(
             child: switch (widget.book.state) {
-              BookReading() when widget.book.problem != null =>
-                const SizedBox.shrink(),
+              BookReading() when widget.book.problem != null => Column(
+                children: [
+                  const _Message('Could not compare your games.'),
+                  TextButton(
+                    onPressed: () => unawaited(widget.book.retry()),
+                    child: const Text('Try again'),
+                  ),
+                ],
+              ),
               BookReading() => const _Message(
                 'Reading your games and repertoires…',
               ),
@@ -116,23 +123,12 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
               BookChecked(:final games) when games.isEmpty => const _Message(
                 'No games saved yet. Get games above to download them.',
               ),
-              final BookChecked checked => IgnorePointer(
-                ignoring: widget.book.stale,
-                child: ExcludeFocus(
-                  excluding: widget.book.stale,
-                  child: _checked(checked),
-                ),
-              ),
+              final BookChecked checked => _checked(checked),
             },
           ),
         ],
       ),
     );
-  }
-
-  void _open(CheckedGame checked) {
-    if (widget.book.stale) return;
-    widget.onOpen(checked);
   }
 
   Widget _checked(BookChecked checked) => Column(
@@ -159,7 +155,7 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
       Expanded(
         child: switch (_view) {
           _View.games => _games(checked),
-          _View.openings => _Openings(checked: checked, onOpen: _open),
+          _View.openings => _Openings(checked: checked, onOpen: widget.onOpen),
         },
       ),
     ],
@@ -198,7 +194,7 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
                   itemBuilder: (context, at) => _GameRow(
                     checked: shown[at],
                     open: _isOpen(shown[at]),
-                    onOpen: () => _open(shown[at]),
+                    onOpen: () => widget.onOpen(shown[at]),
                   ),
                 ),
         ),

@@ -9,7 +9,6 @@ import '../chess/pgn/move_label.dart' show continuation;
 import '../chess/repertoire_index.dart';
 import '../chess/pgn/tree_edit.dart' show moveNode;
 import '../storage/chapter_files.dart';
-import '../diagnostics/log.dart';
 import 'board_claim.dart';
 import 'books.dart';
 import 'document_session.dart';
@@ -84,12 +83,6 @@ final class TreeNothing extends TreeState {
   final String sentence;
 }
 
-/// A required input could not be read or has not finished saving.
-final class TreeUnavailable extends TreeState {
-  const TreeUnavailable(this.detail);
-  final String detail;
-}
-
 /// Every line of the user's repertoires, looked up by position: what they play
 /// from the position on the board, in whichever file, however the board
 /// got there.
@@ -119,9 +112,7 @@ final class RepertoireTree extends ChangeNotifier {
        _shelf = shelf,
        _books = books {
     _session.anyChange.addListener(_followTheBoard);
-    _bookRevision = _books.revision;
-    _books.addListener(_bookChanged);
-    _shelf.addListener(_shelfChanged);
+    _books.addListener(_refresh);
   }
 
   /// Plies of a line's continuation a row shows.
@@ -151,27 +142,6 @@ final class RepertoireTree extends ChangeNotifier {
   final _off = <MoveNode>[];
 
   TreeState get state => _state;
-
-  int? _shownShelf;
-  int? _shownBook;
-  ({int book, int? shelf})? _validated;
-  Future<void>? _reading;
-  int _generation = 0;
-
-  /// Cursor projections reuse one validated immutable shelf/selection pair.
-  bool get _bundleCurrent =>
-      _validated ==
-      (
-        book: _books.revision,
-        shelf: _books.active == null ? null : _shelf.version,
-      );
-  bool get current =>
-      _inputsCurrent &&
-      _bundleCurrent &&
-      _shownShelf == _shelf.version &&
-      _shownBook == _books.revision;
-  bool get _inputsCurrent =>
-      _books.current && (_books.active == null || !_shelf.stale);
 
   /// Whether a pane showing the tree is up, and the board is its.
   bool get watching => _watching > 0;
@@ -247,33 +217,14 @@ final class RepertoireTree extends ChangeNotifier {
   /// else when one comes up, and only the ones whose bytes changed are
   /// parsed again. The board stays where it is, free board and all.
   void forget() {
-    _validated = null;
     _shelf.forget();
     _refresh();
-  }
-
-  /// Retry the complete inputs, including a retained failed selection save.
-  Future<void> retry() async {
-    if (_disposed) return;
-    _validated = null;
-    if (_books.canRetry) {
-      await _books.retry();
-    } else {
-      await _books.load();
-    }
-    if (_disposed) return;
-    forget();
-    while (_reading != null) {
-      await _reading;
-    }
   }
 
   /// A pane showing the tree says so while it is up: the files are read
   /// and the board followed only while someone is looking.
   void watch() {
     if (_watching++ == 0) {
-      _generation++;
-      _validated = null;
       _board = null;
       _followTheBoard();
     }
@@ -283,10 +234,7 @@ final class RepertoireTree extends ChangeNotifier {
   void unwatch() {
     if (_disposed) return;
     if (_watching > 0) _watching--;
-    if (_watching == 0) {
-      _generation++;
-      backToFile();
-    }
+    if (_watching == 0) backToFile();
   }
 
   void _followTheBoard() {
@@ -315,102 +263,19 @@ final class RepertoireTree extends ChangeNotifier {
   /// The rows for the position now, once the files are read: a reader that
   /// gave up, or another that told the shelf the files changed, leaves it
   /// stale, and then it is read again first.
-  int _bookRevision = 0;
-  void _bookChanged() {
-    if (_bookRevision != _books.revision) {
-      _bookRevision = _books.revision;
-      // Files outside the previous selection may have changed without
-      // invalidating its displayed bundle. Observe the new selection afresh.
-      _shelf.forget();
-    }
-    _refresh();
-  }
-
   void _refresh() {
     if (_disposed || _watching == 0) return;
-    if (!_books.current) {
-      _validated = null;
-      _show(
-        TreeUnavailable(
-          _books.problem ?? 'The book selection is being saved or read.',
-        ),
-      );
-    } else if (!_inputsCurrent || !_bundleCurrent) {
-      _show(const TreeReading());
+    if (_shelf.stale) {
       unawaited(_readThenShow());
     } else {
       _showHere();
     }
   }
 
-  void _shelfChanged() {
+  Future<void> _readThenShow() async {
+    await _shelf.read(gone: () => _disposed);
     if (_disposed || _watching == 0) return;
-    if (_shelf.problem != null) {
-      _showHere();
-    } else {
-      _refresh();
-    }
-  }
-
-  Future<void> _readThenShow() => _reading ??= _readInputs().whenComplete(() {
-    _reading = null;
-    // An owner change during the fence leaves Reading for the replacement;
-    // an actual failed read stays unavailable until an explicit retry.
-    if (!_disposed && _watching > 0 && _state is TreeReading) _refresh();
-  });
-
-  Future<void> _readInputs() async {
-    final generation = _generation;
-    final bookRevision = _books.revision;
-    final source = _books.source;
-    final hasBook = _books.active != null;
-    bool gone() =>
-        _disposed ||
-        _watching == 0 ||
-        generation != _generation ||
-        bookRevision != _books.revision ||
-        !_books.current;
-    try {
-      if (hasBook) {
-        await _shelf.read(gone: gone);
-        if (gone()) return;
-        if (_shelf.stale) {
-          // A fresh invalidation can land between read completion and this
-          // continuation. Let the queued replacement read run; only a failed
-          // shelf read is an unavailable input.
-          if (_shelf.problem case final detail?) _unavailable(detail);
-          return;
-        }
-      }
-      final version = hasBook ? _shelf.version : null;
-      final checked = hasBook
-          ? await _shelf.validate(
-              version: version!,
-              book: source,
-              boundaries: _books.inputs(_books.active),
-            )
-          : await _shelf.validateBook(source);
-      if (gone()) return;
-      if (hasBook && (_shelf.stale || version != _shelf.version)) return;
-      switch (checked) {
-        case RepertoireCurrent():
-          _validated = (book: bookRevision, shelf: version);
-          // The cursor is intentionally read now, synchronously: it is a
-          // projection of the validated bundle, not another native input.
-          _showHere();
-        case RepertoireChanged():
-          _unavailable('The book inputs changed. Retry.');
-        case RepertoireValidationFailed(:final detail):
-          _unavailable(detail);
-      }
-    } on Object catch (error) {
-      if (!gone()) _unavailable('The book could not be read: $error');
-    }
-  }
-
-  void _unavailable(String detail) {
-    log.w('read the repertoire tree inputs', detail);
-    _show(TreeUnavailable(detail));
+    _showHere();
   }
 
   /// The file on the board when it is one of the repertoires, indexed from the
@@ -433,14 +298,6 @@ final class RepertoireTree extends ChangeNotifier {
   }
 
   void _showHere() {
-    if (!_inputsCurrent || !_bundleCurrent) {
-      _show(
-        TreeUnavailable(
-          _books.problem ?? _shelf.problem ?? 'The book inputs changed. Retry.',
-        ),
-      );
-      return;
-    }
     final fen = this.fen;
     final key = fen.position;
     final side = this.side;
@@ -507,13 +364,6 @@ final class RepertoireTree extends ChangeNotifier {
   void _show(TreeState state) {
     if (_disposed) return;
     _state = state;
-    if (state is TreeShown || state is TreeNothing) {
-      _shownShelf = _shelf.version;
-      _shownBook = _books.revision;
-    } else {
-      _shownShelf = null;
-      _shownBook = null;
-    }
     notifyListeners();
   }
 
@@ -521,8 +371,7 @@ final class RepertoireTree extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _session.anyChange.removeListener(_followTheBoard);
-    _books.removeListener(_bookChanged);
-    _shelf.removeListener(_shelfChanged);
+    _books.removeListener(_refresh);
     board.dispose();
     super.dispose();
   }
