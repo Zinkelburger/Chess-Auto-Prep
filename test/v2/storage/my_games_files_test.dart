@@ -13,6 +13,7 @@ import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/my_games_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_file_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -226,6 +227,55 @@ void main() {
           isA<GamesKept>(),
         );
         expect(await cache.all(GameSite.lichess, 'me'), [first, second]);
+      },
+    );
+
+    test(
+      'native reopen refetches an unpublished response without false freshness or duplicates',
+      () async {
+        final ref = cache.refFor(GameSite.lichess, 'me');
+        final obstruction = Directory(ref.path);
+        await obstruction.create(recursive: true);
+        expect(
+          await cache.keep(GameSite.lichess, 'me', [
+            scholarsMate,
+          ], DateTime(2025)),
+          isA<GamesNotKept>(),
+        );
+        expect(await File('${ref.path}.fetched').exists(), isFalse);
+        await obstruction.delete();
+        GamesCache reopened() => GamesCache(
+          PgnFileStore(documents: fixture.documents, support: fixture.support),
+          folder: cache.folder,
+        );
+        final afterRestart = reopened();
+        expect(
+          (await afterRestart.snapshotNewest(GameSite.lichess, 'me', max: 20)
+                  as CachedGamesSnapshot)
+              .revision,
+          isNull,
+        );
+        final fetched = DateTime(2026);
+        expect(
+          await afterRestart.keep(GameSite.lichess, 'me', [
+            scholarsMate,
+          ], fetched),
+          isA<GamesKept>(),
+        );
+        final published = await File(ref.path).readAsBytes();
+        expect(
+          await File('${ref.path}.fetched').readAsString(),
+          '${fetched.millisecondsSinceEpoch}',
+        );
+        final secondRestart = reopened();
+        expect(
+          await secondRestart.keep(GameSite.lichess, 'me', [
+            scholarsMate,
+          ], fetched),
+          isA<GamesKept>(),
+        );
+        expect(await File(ref.path).readAsBytes(), published);
+        expect(await secondRestart.all(GameSite.lichess, 'me'), [scholarsMate]);
       },
     );
 

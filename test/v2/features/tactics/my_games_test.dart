@@ -368,6 +368,39 @@ void main() {
     },
   );
 
+  test(
+    "another disposed owner's failed usernames block downloads and remain retryable",
+    () async {
+      r = _Review(accounts: {GameSite.lichess: const Account('Me')});
+      await r.games.load();
+      final writer = MyGames(
+        accounts: r.accounts,
+        pendingWrites: r.games.pendingWrites,
+        sites: const [],
+        cache: r.cache,
+        set: r.additions,
+        engine: () async => const StartFailed('unused'),
+      );
+      r.accounts.rejectUsernames = true;
+      expect(await writer.saveUsernames(lichess: 'New'), isFalse);
+      writer.dispose();
+      expect(r.games.accountsUnsettled, isTrue);
+      await r.games.start();
+      expect(r.lichess.asked, isEmpty);
+      await r.games.load();
+      expect(r.games.accounts[GameSite.lichess]!.username, 'Me');
+      expect(r.games.accountProblem, isNotNull);
+      r.accounts.rejectUsernames = false;
+      await r.games.retryUsernames();
+      expect(r.games.accountsUnsettled, isFalse);
+      expect(r.games.accountProblem, isNull);
+      expect(r.games.accounts[GameSite.lichess]!.username, 'New');
+      await r.games.start();
+      expect(r.lichess.asked, ['New']);
+      expect(await r.games.pendingWrites.settle(), isNull);
+    },
+  );
+
   test('a game either app has reviewed is never reviewed again', () async {
     r = _Review();
     await r.start();

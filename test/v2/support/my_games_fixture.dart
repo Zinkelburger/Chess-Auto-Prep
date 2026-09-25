@@ -162,6 +162,7 @@ final class MemoryAccounts implements AccountStore {
 
   final Map<GameSite, Account> accounts;
   bool rejectDownloaded = false;
+  bool rejectUsernames = false;
   bool unavailable = false;
   void Function()? onDownloaded;
 
@@ -197,6 +198,7 @@ final class MemoryAccounts implements AccountStore {
 
   @override
   Future<bool> setUsername(GameSite site, String? username) async {
+    if (rejectUsernames) return false;
     _revision++;
     final name = username?.trim() ?? '';
     if (name.isEmpty) {

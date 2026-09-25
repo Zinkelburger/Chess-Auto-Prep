@@ -215,13 +215,18 @@ final class MyGames extends ChangeNotifier {
   String? _accountProblem;
   String? _accountReadProblem;
 
-  String? get accountProblem => _accountProblem ?? _accountReadProblem;
+  String? get accountProblem =>
+      _accountProblem ??
+      _accountReadProblem ??
+      (!savingAccounts && pendingWrites.unfinished(_store).isNotEmpty
+          ? 'Account changes are waiting to be saved.'
+          : null);
   bool get accountsUnavailable => _accountReadProblem != null;
   bool get savingAccounts => _accountSaves > 0;
   bool get accountsUnsettled =>
       savingAccounts ||
       accountsUnavailable ||
-      (_accountWrite != null && !_accountWrite!.committed);
+      pendingWrites.unfinished(_store).isNotEmpty;
 
   /// The accounts with a username, and when each last downloaded.
   Map<GameSite, Account> get accounts => _accounts;
@@ -248,9 +253,11 @@ final class MyGames extends ChangeNotifier {
     if (_disposed) return;
     final revision = _accountRevision;
     await pendingWrites.settleFor(_store);
-    if (_disposed ||
-        revision != _accountRevision ||
-        pendingWrites.unfinished(_store).isNotEmpty) {
+    if (_disposed || revision != _accountRevision) return;
+    if (pendingWrites.unfinished(_store).isNotEmpty) {
+      _accountReadProblem =
+          'Account changes have not been saved. Retry saving the usernames.';
+      notifyListeners();
       return;
     }
     AccountsRead read;
@@ -362,14 +369,14 @@ final class MyGames extends ChangeNotifier {
   /// dialog or owner goes away; retrying does not ask for the names again.
   Future<void> retryUsernames() async {
     if (savingAccounts) return;
-    if (_accountWrite == null || _accountWrite!.committed) return load();
     _accountSaves++;
     if (!_disposed) notifyListeners();
     try {
       await pendingWrites.retry(_store);
-      _accountProblem = _accountWrite!.committed
+      _accountProblem = pendingWrites.unfinished(_store).isEmpty
           ? null
           : 'Your account names could not be saved.';
+      await load();
     } finally {
       _accountSaves--;
       if (!_disposed) notifyListeners();
@@ -378,9 +385,14 @@ final class MyGames extends ChangeNotifier {
 
   /// Downloads and reviews, or carries on with the games a pause or a
   /// failure left queued.
-  Future<void> start() => _disposed || accountsUnsettled
-      ? Future.value()
-      : pendingWrites.track(this, _start(), label: 'Game review');
+  Future<void> start() {
+    if (_disposed) return Future.value();
+    if (accountsUnsettled) {
+      notifyListeners();
+      return Future.value();
+    }
+    return pendingWrites.track(this, _start(), label: 'Game review');
+  }
 
   Future<void> _start() async {
     if (running || _retryingDownloads) return;
