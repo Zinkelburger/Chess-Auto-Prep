@@ -246,6 +246,17 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       switch (tab) {
         WorkspaceTab.train => TrainPane(
           trainer: _train.lines,
+          onImport: () => unawaited(_importTrainingCourse()),
+          onSettings: () => unawaited(
+            showSettingsDialog(
+              context,
+              store: _ws.settings,
+              groups: () => widget
+                  .settingRows()
+                  .where((g) => g.name == 'Training')
+                  .toList(),
+            ),
+          ),
           moves: _moves,
           onRead: (line) => unawaited(_readLine(line)),
           offerBuilder: _view.offersBuilder,
@@ -253,6 +264,13 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         ),
         _ => null,
       };
+
+  Future<void> _importTrainingCourse() async {
+    final result = await _requests.importFile();
+    if (!mounted || result is! RequestDone) return;
+    _train.lines.setScope(TrainScope.chapter);
+    _tabs.show(WorkspaceTab.train);
+  }
 
   /// Space shows the answer while a puzzle is on the board; otherwise it
   /// is the mode's: the viewer's autoplay.

@@ -18,9 +18,13 @@ class TrainPane extends StatefulWidget {
     required this.onRead,
     this.offerBuilder = true,
     this.bookChip,
+    this.onImport,
+    this.onSettings,
   });
 
   final Trainer trainer;
+  final VoidCallback? onImport;
+  final VoidCallback? onSettings;
 
   /// Which book is trained, shown while the scope is the book.
   final Widget? bookChip;
@@ -74,6 +78,18 @@ class _TrainPaneState extends State<TrainPane> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TrainScopeButtons(trainer: trainer),
+                if (widget.onImport != null) ...[
+                  const SizedBox(height: Space.m),
+                  FilledButton.icon(
+                    onPressed: widget.onImport,
+                    icon: const Icon(Icons.file_open_outlined),
+                    label: const Text('Import course PGN…'),
+                  ),
+                  const SizedBox(height: Space.s),
+                  const Text(
+                    'Choose a downloaded Chessable course or repertoire PGN.',
+                  ),
+                ],
                 if (trainer.scope == TrainScope.book) ?widget.bookChip,
                 const SizedBox(height: Space.s),
                 Text(
@@ -100,6 +116,8 @@ class _TrainPaneState extends State<TrainPane> {
             onRead: widget.onRead,
             offerBuilder: widget.offerBuilder,
             bookChip: widget.bookChip,
+            onImport: widget.onImport,
+            onSettings: widget.onSettings,
           ),
         };
       },
