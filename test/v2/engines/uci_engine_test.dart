@@ -292,4 +292,147 @@ void main() {
     await pumpEventQueue();
     expect(done, isTrue);
   });
+  test('the first silent finite search fails at its own deadline', () {
+    fakeAsync((clock) {
+      final (engine, process) = _readyIn(clock);
+      final errors = <Object>[];
+      var done = false;
+      EngineExit? exited;
+      unawaited(engine.exited.then((why) => exited = why));
+      engine
+          .analyse(Fen.initial, multiPv: 1, depth: 15)
+          .lines
+          .listen(null, onError: errors.add, onDone: () => done = true);
+      clock.flushMicrotasks();
+      clock.elapse(const Duration(seconds: 61));
+      expect(process.killed, isTrue);
+      expect(done, isTrue);
+      expect(errors.single, isA<EngineFailure>());
+      expect(exited, EngineExit.unresponsive);
+      expect(
+        process.sent.where((line) => line.startsWith('go ')),
+        hasLength(1),
+      );
+    });
+  });
+
+  test('default finite budget permits a healthy search beyond one minute', () {
+    fakeAsync((clock) {
+      final (engine, process) = _readyIn(
+        clock,
+        patience: UciEngine.defaultFinitePatience,
+      );
+      var done = false;
+      engine
+          .analyse(Fen.initial, multiPv: 1, depth: 60)
+          .lines
+          .listen(null, onDone: () => done = true);
+      clock.flushMicrotasks();
+      clock.elapse(const Duration(minutes: 2));
+      expect(process.killed, isFalse);
+      expect(done, isFalse);
+      process.say('bestmove e2e4');
+      clock.flushMicrotasks();
+      expect(done, isTrue);
+      process.exit(0);
+      clock.flushMicrotasks();
+    });
+  });
+
+  test('partial finite results without bestmove still end as a failure', () {
+    fakeAsync((clock) {
+      final (engine, process) = _readyIn(clock);
+      final lines = <EngineLine>[];
+      final errors = <Object>[];
+      engine
+          .analyse(Fen.initial, multiPv: 1, depth: 15)
+          .lines
+          .listen(lines.add, onError: errors.add);
+      clock.flushMicrotasks();
+      process.say('info depth 15 score cp 20 pv e2e4');
+      clock.flushMicrotasks();
+      expect(lines.single.depth, 15);
+      clock.elapse(const Duration(seconds: 61));
+      expect(errors.single, isA<EngineFailure>());
+      expect(process.killed, isTrue);
+    });
+  });
+
+  test('a later request does not postpone the running finite deadline', () {
+    fakeAsync((clock) {
+      final (engine, process) = _readyIn(clock);
+      engine
+          .analyse(Fen.initial, multiPv: 1, depth: 15)
+          .lines
+          .listen(null, onError: (Object _) {});
+      clock.flushMicrotasks();
+      clock.elapse(const Duration(seconds: 50));
+      var nextDone = false;
+      engine
+          .analyse(after1e4, multiPv: 1)
+          .lines
+          .listen(null, onDone: () => nextDone = true);
+      clock.flushMicrotasks();
+      clock.elapse(const Duration(seconds: 11));
+      expect(process.killed, isTrue);
+      expect(nextDone, isTrue);
+      expect(process.sent, isNot(contains('position fen ${after1e4.value}')));
+    });
+  });
+
+  test(
+    'continuous analysis has no finite deadline but explicit stop is bounded',
+    () {
+      fakeAsync((clock) {
+        final (engine, process) = _readyIn(clock);
+        final search = engine.analyse(Fen.initial, multiPv: 1);
+        search.lines.listen(null);
+        clock.flushMicrotasks();
+        clock.elapse(const Duration(minutes: 2));
+        expect(process.killed, isFalse);
+        var stopped = false;
+        unawaited(search.stop().then((_) => stopped = true));
+        clock.flushMicrotasks();
+        clock.elapse(const Duration(seconds: 6));
+        expect(stopped, isTrue);
+        expect(process.killed, isTrue);
+      });
+    },
+  );
+
+  test('a completed finite deadline cannot kill a later continuous search', () {
+    fakeAsync((clock) {
+      final (engine, process) = _readyIn(clock);
+      engine.analyse(Fen.initial, multiPv: 1, depth: 15).lines.listen(null);
+      clock.flushMicrotasks();
+      clock.elapse(const Duration(seconds: 10));
+      process.say('bestmove e2e4');
+      clock.flushMicrotasks();
+      engine.analyse(after1e4, multiPv: 1).lines.listen(null);
+      clock.flushMicrotasks();
+      clock.elapse(const Duration(minutes: 2));
+      expect(process.killed, isFalse);
+      expect(process.sent.last, 'go infinite');
+      process.exit(0);
+      clock.flushMicrotasks();
+    });
+  });
+}
+
+(UciEngine, FakeProcess) _readyIn(
+  FakeAsync clock, {
+  Duration patience = const Duration(minutes: 1),
+}) {
+  final process = FakeProcess();
+  late UciEngine engine;
+  unawaited(
+    UciEngine.start(
+      process,
+      finitePatience: patience,
+    ).then((started) => engine = started),
+  );
+  clock.flushMicrotasks();
+  process.answerHandshake();
+  clock.flushMicrotasks();
+  return (engine, process);
 }

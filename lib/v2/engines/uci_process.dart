@@ -68,9 +68,14 @@ final class SpawnedProcess implements UciProcess {
   /// Bytes that are not UTF-8 read as replacement characters rather than
   /// an error nobody listens for.
   @override
-  Stream<String> get lines => _process.stdout
-      .transform(const Utf8Decoder(allowMalformed: true))
-      .transform(const LineSplitter());
+  Stream<String> get lines async* {
+    yield* _process.stdout
+        .transform(const Utf8Decoder(allowMalformed: true))
+        .transform(const LineSplitter());
+    // A program may close stdout and keep running. The protocol owners use
+    // stream completion as exit, so do not release ownership at pipe EOF.
+    await _process.exitCode;
+  }
 
   @override
   void send(String line) => _process.stdin.writeln(line);
