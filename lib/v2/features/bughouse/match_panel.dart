@@ -40,6 +40,22 @@ class MatchPanel extends StatelessWidget {
                   style: TextStyle(color: scheme.error),
                 ),
               ),
+            if (matches.canRetry)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => unawaited(matches.retrySave()),
+                  child: const Text('Retry save'),
+                ),
+              ),
+            if (matches.problem is CannotLoad)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => unawaited(matches.load()),
+                  child: const Text('Retry'),
+                ),
+              ),
             const SizedBox(height: Space.s),
             if (matches.matches.isEmpty)
               Text(
@@ -69,6 +85,7 @@ String _said(MatchProblem problem) => switch (problem) {
   NotAPosition() => notAPosition,
   CannotCreate(:final detail) =>
     'Could not create the match directory: $detail',
+  CannotLoad(:final detail) => 'Could not read the matches: $detail',
   CannotSave(:final detail) => 'Could not save the match: $detail',
   CannotDelete(:final detail) => 'Could not delete the match: $detail',
   EngineWouldNotStart(:final reason) => reason,
@@ -83,7 +100,7 @@ class _Head extends StatelessWidget {
 
   Future<void> _new(BuildContext context) async {
     final config = await showNewMatchDialog(context, lab);
-    if (config != null) unawaited(matches.start(config));
+    if (context.mounted && config != null) unawaited(matches.start(config));
   }
 
   @override
@@ -94,7 +111,7 @@ class _Head extends StatelessWidget {
       return Align(
         alignment: Alignment.centerLeft,
         child: FilledButton(
-          onPressed: () => unawaited(_new(context)),
+          onPressed: matches.writable ? () => unawaited(_new(context)) : null,
           child: const Text('New match'),
         ),
       );
@@ -206,7 +223,7 @@ class _Chosen extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final muted = TextStyle(color: scheme.onSurfaceVariant);
-    final idle = matches.running == null;
+    final idle = matches.running == null && matches.writable;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

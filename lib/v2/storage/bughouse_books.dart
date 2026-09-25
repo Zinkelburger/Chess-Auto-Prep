@@ -3,12 +3,15 @@ import 'dart:convert';
 import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart' show Side;
+import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
 
 import '../chess/bughouse/hivemind.dart';
 import '../chess/bughouse/table.dart';
 import '../diagnostics/log.dart';
+import 'hivemind_write.dart';
+import 'recovery_files.dart';
 
 /// The two bughouse books the Python tools build under
 /// `~/.local/share/chess-prep/bughouse-db/`:
@@ -117,7 +120,7 @@ abstract interface class HivemindBook {
   Future<HivemindLookup> lookup(TablePosition position);
 
   /// Adds [entry], replacing what the book had for its position and clock.
-  Future<HivemindSave> save(HivemindEntry entry);
+  Future<HivemindSave> save(HivemindEntry entry, {HivemindWrite? write});
 }
 
 /// `tools/bughouse_db/hivemind_book.py`'s tables, for a book the lab starts.
@@ -144,7 +147,11 @@ CREATE TABLE IF NOT EXISTS current_analysis(
 ''';
 
 final class SqliteHivemindBook implements HivemindBook {
-  SqliteHivemindBook(this.places);
+  SqliteHivemindBook(this.places, {this.afterCommit, this.beforeCommit});
+
+  /// Acknowledgment boundary, after SQLite has committed the accepted analysis.
+  final Future<void> Function()? afterCommit;
+  final Future<void> Function()? beforeCommit;
 
   /// Where the file may be, first found wins.
   final List<String> places;
@@ -242,10 +249,18 @@ final class SqliteHivemindBook implements HivemindBook {
       db.select("SELECT 1 FROM meta WHERE key = 'seats'").isNotEmpty;
 
   @override
-  Future<HivemindSave> save(HivemindEntry entry) async {
+  Future<HivemindSave> save(HivemindEntry entry, {HivemindWrite? write}) async {
     final path = _file.path ?? _existing(places) ?? places.first;
     try {
-      await _saveBook(path, entry);
+      final accepted = write ?? HivemindWrite(entry);
+      final destination = canonicalRecoveryRoot(Directory(path)).path;
+      accepted.bind(destination, entry);
+      await beforeCommit?.call();
+      if (canonicalRecoveryRoot(Directory(path)).path != destination) {
+        throw StateError('The configured analysis book directory changed.');
+      }
+      await _saveBook(destination, accepted);
+      await afterCommit?.call();
       return const HivemindSaved();
     } on Object catch (error) {
       log.w('save to the Hivemind book at $path', error);
@@ -254,7 +269,7 @@ final class SqliteHivemindBook implements HivemindBook {
   }
 
   // Isolate.run captures only serializable inputs, never the reader connection.
-  static Future<void> _saveBook(String path, HivemindEntry entry) =>
+  static Future<void> _saveBook(String path, HivemindWrite write) =>
       Isolate.run(() {
         final fresh = !File(path).existsSync();
         Directory(p.dirname(path)).createSync(recursive: true);
@@ -263,18 +278,23 @@ final class SqliteHivemindBook implements HivemindBook {
           db.execute('PRAGMA busy_timeout = 10000');
           if (fresh) db.execute('PRAGMA journal_mode = WAL');
           db.execute(_hivemindSchema);
-          _write(db, entry);
+          _write(db, write);
         } finally {
           db.close();
         }
       });
 
-  static void _write(Database db, HivemindEntry entry) {
+  static void _write(Database db, HivemindWrite write) {
+    final entry = write.entry;
     final position = entry.position;
     final key = position.bookKey;
     final clock = entry.clock.bookName;
     db.execute('BEGIN IMMEDIATE');
     try {
+      if (_alreadySaved(db, write)) {
+        db.execute('COMMIT');
+        return;
+      }
       // Keep the database's existing convention. Rewriting a large legacy
       // book just to cache one position is unnecessary and would hold its
       // writer lock for the whole database. An empty book starts current.
@@ -310,10 +330,11 @@ final class SqliteHivemindBook implements HivemindBook {
         'nodes': entry.nodes,
         'child_nodes': entry.childNodes,
         'seconds': entry.took.inMilliseconds / 1000,
-        'completed_at': DateTime.now().toUtc().toIso8601String(),
+        'completed_at': write.completedAt,
+        'accepted_payload_sha256': write.digest,
         'score_method': 'calibrated-q-v1',
         'writer': 'desktop-v2',
-      });
+      }, id: write.id);
       db.execute('COMMIT');
     } on Object {
       db.execute('ROLLBACK');
@@ -390,9 +411,10 @@ final class SqliteHivemindBook implements HivemindBook {
     Database db,
     int key,
     String clock,
-    Map<String, Object?> provenance,
-  ) {
-    final id = '${DateTime.now().microsecondsSinceEpoch}-$key-$clock';
+    Map<String, Object?> provenance, {
+    String? id,
+  }) {
+    id ??= '${DateTime.now().microsecondsSinceEpoch}-$key-$clock';
     String rows(String table) => jsonEncode([
       for (final row in db.select(
         'SELECT * FROM $table WHERE pos=? AND clock=?',
@@ -401,16 +423,23 @@ final class SqliteHivemindBook implements HivemindBook {
         Map<String, Object?>.from(row),
     ]);
     final seats = db.select("SELECT value FROM meta WHERE key='seats'");
+    final picks = rows('pick');
+    final moves = rows('move');
+    final metadata = jsonEncode({
+      ...provenance,
+      'seats': seats.isEmpty ? 'AC/BD' : seats.first['value'],
+    });
+    final checksum = _snapshotHash(key, clock, metadata, picks, moves);
     db.execute('INSERT INTO analysis_history VALUES(?, ?, ?, ?, ?, ?)', [
       id,
       key,
       clock,
       jsonEncode({
-        ...provenance,
-        'seats': seats.isEmpty ? 'AC/BD' : seats.first['value'],
+        ...jsonDecode(metadata) as Map<String, Object?>,
+        'snapshot_sha256': checksum,
       }),
-      rows('pick'),
-      rows('move'),
+      picks,
+      moves,
     ]);
     db.execute('INSERT OR REPLACE INTO current_analysis VALUES(?, ?, ?)', [
       key,
@@ -418,6 +447,42 @@ final class SqliteHivemindBook implements HivemindBook {
       id,
     ]);
   }
+
+  static bool _alreadySaved(Database db, HivemindWrite write) {
+    final found = db.select('SELECT * FROM analysis_history WHERE id=?', [
+      write.id,
+    ]);
+    if (found.isEmpty) return false;
+    final row = found.single;
+    final metadata =
+        jsonDecode(row['provenance'] as String) as Map<String, Object?>;
+    final checksum = metadata.remove('snapshot_sha256');
+    if (row['pos'] != write.entry.position.bookKey ||
+        row['clock'] != write.entry.clock.bookName ||
+        metadata['accepted_payload_sha256'] != write.digest ||
+        checksum !=
+            _snapshotHash(
+              row['pos'] as int,
+              row['clock'] as String,
+              jsonEncode(metadata),
+              row['picks'] as String,
+              row['moves'] as String,
+            )) {
+      throw StateError('The accepted analysis history changed.');
+    }
+    // Completion settles this operation; it does not make it current again.
+    return true;
+  }
+
+  static String _snapshotHash(
+    int key,
+    String clock,
+    String provenance,
+    String picks,
+    String moves,
+  ) => sha256
+      .convert(utf8.encode(jsonEncode([key, clock, provenance, picks, moves])))
+      .toString();
 
   static String? _existing(List<String> places) =>
       places.where((place) => File(place).existsSync()).firstOrNull;

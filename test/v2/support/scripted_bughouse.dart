@@ -7,6 +7,7 @@ import 'package:chess_auto_prep/v2/engines/engine.dart';
 import 'package:chess_auto_prep/v2/engines/hivemind_engine.dart';
 import 'package:chess_auto_prep/v2/chess/bughouse/match.dart';
 import 'package:chess_auto_prep/v2/storage/bughouse_books.dart';
+import 'package:chess_auto_prep/v2/storage/hivemind_write.dart';
 import 'package:chess_auto_prep/v2/storage/bughouse_matches.dart';
 
 /// A Hivemind the test drives. Each search answers [answer] — by default a
@@ -66,8 +67,13 @@ final class ScriptedHivemind implements Hivemind {
 
   bool get gone => _exited.isCompleted;
 
+  Future<void> Function()? quitting;
+
   @override
-  Future<void> quit() async => crash();
+  Future<void> quit() async {
+    await quitting?.call();
+    crash();
+  }
 }
 
 /// Up to three lines, one per legal move of the searched team on the first
@@ -109,7 +115,7 @@ final class ScriptedHivemindBook implements HivemindBook {
   final saved = <HivemindEntry>[];
 
   @override
-  Future<HivemindSave> save(HivemindEntry entry) async {
+  Future<HivemindSave> save(HivemindEntry entry, {HivemindWrite? write}) async {
     if (saving != null) return saving!(entry);
     saved.add(entry);
     return const HivemindSaved();
@@ -143,10 +149,16 @@ final class ScriptedMatchStore implements MatchStore {
   final saved = <String, StoredMatch>{};
   final deleted = <String>[];
   String? failCreate;
+  String? failSave;
+  String? failList;
 
   @override
-  Future<List<StoredMatch>> list() async =>
-      [...saved.values]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  Future<List<StoredMatch>> list() async {
+    if (failList != null) throw StateError(failList!);
+    return [
+      for (final match in saved.values) StoredMatch.fromJson(match.toJson()),
+    ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
 
   @override
   Future<MatchCreate> create(MatchConfig config, DateTime now) async {
@@ -163,7 +175,11 @@ final class ScriptedMatchStore implements MatchStore {
   }
 
   @override
-  Future<MatchWriteProblem> save(StoredMatch match) async {
+  Future<MatchWriteProblem> save(
+    StoredMatch match, {
+    MatchCheckpoint? checkpoint,
+  }) async {
+    if (failSave != null) return failSave;
     saved[match.id] = match;
     return null;
   }
