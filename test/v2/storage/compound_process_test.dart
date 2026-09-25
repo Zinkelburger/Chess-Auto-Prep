@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chess_auto_prep/features/repertoires/models/repertoire_recovery_required.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
@@ -63,20 +62,14 @@ void main() {
 
   for (final checkpoint in ['prepared', 'document']) {
     test(
-      'SIGKILL after $checkpoint: v1 refuses, v2 recovers compound once',
+      'SIGKILL after $checkpoint: v1 still reads, v2 finishes the edit once',
       () async {
         final child = await _start(harness, documents, support, checkpoint);
         addTearDown(child.close);
-        final note =
-            (await Directory(
-                  p.join(support.path, 'compound-writes'),
-                ).list().toList()).single
-                as File;
-        final interrupted = await note.readAsString();
-        expect(
-          jsonDecode(interrupted)['state'],
-          checkpoint == 'prepared' ? 'prepared' : 'committing',
-        );
+        final journal = Directory(p.join(support.path, 'compound-writes'));
+        final pending = await journal.list().toList();
+        // Nothing is written down until the edit is ready to publish.
+        expect(pending, hasLength(checkpoint == 'prepared' ? 0 : 1));
         expect(
           await document.readAsString(),
           checkpoint == 'prepared' ? _before : _after,
@@ -85,27 +78,18 @@ void main() {
         expect(child.process.kill(ProcessSignal.sigkill), isTrue);
         await child.process.exitCode.timeout(const Duration(seconds: 10));
 
+        // The old app is not locked out by the unfinished edit.
         final old = IOStorageService(
           documentsRoot: documents,
           supportRoot: support,
         );
-        await expectLater(
-          old.readFile(document.path),
-          throwsA(isA<RepertoireRecoveryRequired>()),
-        );
-        await expectLater(
-          old.writeFile(document.path, 'must not land'),
-          throwsA(isA<RepertoireRecoveryRequired>()),
-        );
-        expect(await note.readAsString(), interrupted);
         expect(
-          await document.readAsString(),
+          await old.readFile(document.path),
           checkpoint == 'prepared' ? _before : _after,
         );
-        expect(await books.readAsString(), _books);
 
-        // Reopen through a configured root alias to cover domain and receipt
-        // identity across a genuine process restart, not just object recreation.
+        // Reopen through a configured root alias to cover the domain lock
+        // across a genuine process restart, not just object recreation.
         final alias = Directory(p.join(profile.path, 'Documents-alias'));
         await Link(alias.path).create(documents.path);
         final store = PgnFileStore(documents: alias, support: support);
@@ -120,11 +104,7 @@ void main() {
           (opened as Opened).text,
           checkpoint == 'prepared' ? _before : _after,
         );
-        final completed = await note.readAsString();
-        expect(
-          jsonDecode(completed)['state'],
-          checkpoint == 'prepared' ? 'cancelled' : 'complete',
-        );
+        expect(await journal.list().toList(), isEmpty);
         final recoveredBooks = await books.readAsString();
         expect(
           recoveredBooks,
@@ -132,13 +112,12 @@ void main() {
               ? _books
               : _books.replaceFirst('"section":"Before"', '"section":"After"'),
         );
-        expect(
-          await old.readFile(document.path),
-          checkpoint == 'prepared' ? _before : _after,
-        );
         expect(await store.open(ref), isA<Opened>());
-        expect(await note.readAsString(), completed);
         expect(await books.readAsString(), recoveredBooks);
+        expect(
+          Directory(p.join(support.path, 'recovery-quarantine')).existsSync(),
+          isFalse,
+        );
         for (final name in _training) {
           expect(
             await File(p.join(documents.path, name)).readAsString(),

@@ -121,40 +121,38 @@ void main() {
     );
   }
 
-  test(
-    'foreign unfinished metadata refuses training, documents and library',
-    () async {
-      await seedTraining();
-      final pending = await Directory(
-        p.join(profile.path, 'unfinished-moves'),
-      ).create();
-      final note = File(p.join(pending.path, 'unknown.json'));
-      await note.writeAsString('{unknown');
-      final io = storage();
-      final before = await File(
-        p.join(profile.path, 'repertoire_reviews.csv'),
-      ).readAsString();
-      for (final action in <Future<Object?> Function()>[
-        () => io.readRepertoireReviewsCsv(),
-        () => io.updateFile('repertoire_reviews.csv', (_) => 'overwritten'),
-        () => io.readFile(chapter),
-        () => io.fileStat(chapter),
-        () => io.listChapters(source.path),
-        () => io.listRepertoires(),
-        () => io.renameFile(chapter, p.join(source.path, 'Other.pgn')),
-      ]) {
-        await expectLater(action(), throwsA(isA<RepertoireRecoveryRequired>()));
-      }
-      expect(await note.readAsString(), '{unknown');
-      expect(
-        await File(
-          p.join(profile.path, 'repertoire_reviews.csv'),
-        ).readAsString(),
-        before,
-      );
-    },
-    skip: !Platform.isLinux,
-  );
+  test('v2 recovery files never stop v1 reading, writing or listing', () async {
+    await seedTraining();
+    final study = File(await storage().studyFilePath('Example'));
+    await study.writeAsString('1. e4 *');
+    final notes = await Directory(
+      p.join(profile.path, 'unfinished-moves'),
+    ).create();
+    final note = File(p.join(notes.path, 'unknown.json'));
+    await note.writeAsString('{unknown');
+    final compound = await Directory(
+      p.join(profile.path, 'compound-writes'),
+    ).create();
+    final pending = File(p.join(compound.path, 'rename.json'));
+    await pending.writeAsString('{"version":1,"state":"committing"}');
+    final elsewhere = await Directory(p.join(profile.path, 'other')).create();
+    await Link(
+      p.join(profile.path, 'relocation-writes'),
+    ).create(elsewhere.path);
+    final io = storage();
+    expect(await io.readFile(chapter), isNotNull);
+    expect(await io.readRepertoireReviewsCsv(), contains(chapter));
+    expect(await io.listChapters(source.path), isNotEmpty);
+    expect(await io.listRepertoires(), isNotEmpty);
+    expect(await io.listStudyFiles(), isNotEmpty);
+    await io.listTacticsSets();
+    await io.writeFile(study.path, '1. d4 *');
+    expect(await study.readAsString(), '1. d4 *');
+    // v1 leaves v2's records alone for v2 to finish.
+    expect(await note.readAsString(), '{unknown');
+    expect(await pending.exists(), isTrue);
+    expect(await elsewhere.list().toList(), isEmpty);
+  }, skip: !Platform.isLinux);
 
   test(
     'training read waits behind the complete native move without reentry',
@@ -197,22 +195,6 @@ void main() {
   );
 
   test(
-    'linked foreign recovery storage blocks without following or changing it',
-    () async {
-      final elsewhere = await Directory(p.join(profile.path, 'other')).create();
-      final link = Link(p.join(profile.path, 'unfinished-moves'));
-      await link.create(elsewhere.path);
-      await expectLater(
-        storage().readFile(chapter),
-        throwsA(isA<RepertoireRecoveryRequired>()),
-      );
-      expect(await link.target(), elsewhere.path);
-      expect(await elsewhere.list().toList(), isEmpty);
-    },
-    skip: !Platform.isLinux,
-  );
-
-  test(
     'guarded file rename rewrites attempts without acquiring the domain twice',
     () async {
       await seedTraining();
@@ -225,37 +207,6 @@ void main() {
       );
       expect(attempts, contains(next));
       expect(await File(chapter).exists(), isFalse);
-    },
-    skip: !Platform.isLinux,
-  );
-
-  test(
-    'foreign note blocks study PGN reads, writes and complete listings',
-    () async {
-      final study = File(await storage().studyFilePath('Example'));
-      await study.writeAsString('1. e4 *');
-      final pending = await Directory(
-        p.join(profile.path, 'unfinished-moves'),
-      ).create();
-      await File(p.join(pending.path, 'move.json')).writeAsString('{}');
-      final io = storage();
-      await expectLater(
-        io.readFile(study.path),
-        throwsA(isA<RepertoireRecoveryRequired>()),
-      );
-      await expectLater(
-        io.writeFile(study.path, 'replacement'),
-        throwsA(isA<RepertoireRecoveryRequired>()),
-      );
-      await expectLater(
-        io.listStudyFiles(),
-        throwsA(isA<RepertoireRecoveryRequired>()),
-      );
-      await expectLater(
-        io.listTacticsSets(),
-        throwsA(isA<RepertoireRecoveryRequired>()),
-      );
-      expect(await study.readAsString(), '1. e4 *');
     },
     skip: !Platform.isLinux,
   );

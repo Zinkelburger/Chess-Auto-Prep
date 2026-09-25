@@ -9,6 +9,7 @@ import 'backups.dart';
 import 'backup_relocation.dart';
 import 'book_references.dart';
 import 'directory_entries.dart';
+import '../diagnostics/log.dart';
 import 'journal_records.dart';
 import 'recovery_quarantine.dart';
 import 'document_probe.dart';
@@ -66,9 +67,12 @@ final class FileRelocations {
   final Directory support;
   final Future<void> Function(FileRelocationStep)? testHook;
 
-  // Moves this process finished, so a retry of the same id is answered
-  // without moving again. Retries only come from this process.
-  final _completed = <String, RelocationRecord>{};
+  // Moves this process finished, so a retry of the same id — through any
+  // store of this profile — is answered without moving again. Retries only
+  // come from this process: the caller's retry token is in memory too.
+  static final _finished = <String, Map<String, RelocationRecord>>{};
+  Map<String, RelocationRecord> get _completed =>
+      _finished.putIfAbsent(support.path, () => {});
   Directory get _folder => Directory(p.join(support.path, 'relocation-writes'));
   BackupArchive get _backups =>
       BackupArchive(Directory(p.join(support.path, 'backups')));
@@ -423,20 +427,25 @@ final class FileRelocations {
     );
   }
 
-  /// Finishes the moves a stopped process began. One that cannot be finished
-  /// is set aside and logged; the rest still run.
+  /// Finishes the moves a stopped process began. One that can never be
+  /// finished — its file is gone or replaced, or the record is damaged — is
+  /// set aside and logged; the rest still run.
   Future<void> recover() async {
     _checkRoots();
     for (final (file, note) in await _readAll()) {
       try {
         if (note.state != RelocationState.committing) {
           // Earlier builds kept finished and abandoned records too.
-          await file.delete();
+          await _forget(file);
           continue;
         }
         await _finish(note);
-      } on Object catch (error) {
+      } on RecoveryRequired catch (error) {
         await quarantine(support, file, error);
+      } on Object catch (error) {
+        // Most likely passing (a full disk, a file held open): try again at
+        // the next start rather than setting the move aside.
+        log.w('finish the move recorded at ${file.path}', error);
       }
     }
   }
@@ -504,10 +513,15 @@ final class FileRelocations {
       await testHook?.call(FileRelocationStep.backups);
     }
     _completed[record.id] = record;
-    final journal = File(_path(record.id));
+    if (_completed.length > 256) _completed.remove(_completed.keys.first);
+    await _forget(File(_path(record.id)));
+    await testHook?.call(FileRelocationStep.completed);
+  }
+
+  /// Removes a finished move's journal; the move itself is on disk.
+  Future<void> _forget(File journal) async {
     if (await journal.exists()) await journal.delete();
     await flushRecoveryDirectory(_folder.path, synchronize: _synchronize);
-    await testHook?.call(FileRelocationStep.completed);
   }
 
   /// The training rewrite as planned, or planned again from the files as they
@@ -584,7 +598,10 @@ final class FileRelocations {
           'The recorded folder location or identity changed.',
         );
       }
-      await record.snapshot.verify(before ? record.from : record.to);
+      // The whole tree is checked before it moves. Once moved it is the
+      // user's again: edits inside it, or a history offered back as a deleted
+      // chapter, must not stop the rest of the move from finishing.
+      if (before) await record.snapshot.verify(record.from);
       return before;
     }
     final file = record as FileRelocationRecord;

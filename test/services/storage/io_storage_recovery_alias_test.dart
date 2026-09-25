@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
-import 'package:chess_auto_prep/features/repertoires/models/repertoire_recovery_required.dart';
 import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
 import 'package:chess_auto_prep/infrastructure/training/move_attempt_store.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
@@ -48,102 +47,58 @@ void main() {
     return alias.path;
   }
 
+  // v2 may leave a note behind after a crash. It is v2's to finish; it never
+  // stops v1 using a document, whichever spelling reaches the document.
   for (final nested in [false, true]) {
     test(
-      'public open refuses foreign recovery through ${nested ? 'chapter' : 'Documents'} alias',
+      'open through a ${nested ? 'chapter' : 'Documents'} alias works beside a v2 note',
       () async {
         final target = nested ? chapter.parent : documents;
         final alias = await aliasTo(target, 'external-alias');
         final path = p.join(alias, p.relative(chapter.path, from: target.path));
         final note = await foreignNote();
-        final result = await store.open(path);
-        expect(result, isA<PgnReadFailed>());
-        expect(
-          (result as PgnReadFailed).error,
-          isA<RepertoireRecoveryRequired>(),
-        );
-        await expectLater(
-          io.readFile(path),
-          throwsA(isA<RepertoireRecoveryRequired>()),
-        );
-        expect(await chapter.readAsString(), '1. e4 e5 *');
+        expect(await store.open(path), isA<PgnOpened>());
+        expect(await io.readFile(path), '1. e4 e5 *');
         expect(await note.readAsString(), '{unknown');
       },
       skip: !Platform.isLinux,
     );
   }
 
-  test(
-    'public save through an alias cannot replace bytes while recovery is owed',
-    () async {
-      final opened = await store.open(chapter.path) as PgnOpened;
-      final alias = await aliasTo(chapter.parent, 'external-alias');
-      final baseline = PgnSnapshot(
-        path: p.join(alias, 'Main.pgn'),
-        revision: opened.snapshot.revision,
-        content: opened.snapshot.content,
-      );
-      await foreignNote();
-      final result = await store.save(baseline, '1. d4 d5 *');
-      expect(result, isA<PgnWriteFailed>());
-      expect(
-        (result as PgnWriteFailed).error,
-        isA<RepertoireRecoveryRequired>(),
-      );
-      expect(await chapter.readAsString(), '1. e4 e5 *');
-    },
-    skip: !Platform.isLinux,
-  );
+  test('save through an alias works beside a v2 note', () async {
+    final opened = await store.open(chapter.path) as PgnOpened;
+    final alias = await aliasTo(chapter.parent, 'external-alias');
+    final baseline = PgnSnapshot(
+      path: p.join(alias, 'Main.pgn'),
+      revision: opened.snapshot.revision,
+      content: opened.snapshot.content,
+    );
+    await foreignNote();
+    expect(
+      await store.save(baseline, '1. d4 d5 *'),
+      isNot(isA<PgnWriteFailed>()),
+    );
+    expect(await chapter.readAsString(), '1. d4 d5 *');
+  }, skip: !Platform.isLinux);
 
-  test(
-    'missing descendants beneath an alias are guarded before creation',
-    () async {
-      final alias = await aliasTo(documents, 'external-alias');
-      await foreignNote();
-      final path = p.join(alias, 'new', 'nested', 'Main.pgn');
-      final result = await store.create(path, '1. d4 *');
-      expect(result, isA<PgnWriteFailed>());
-      expect(
-        (result as PgnWriteFailed).error,
-        isA<RepertoireRecoveryRequired>(),
-      );
-      expect(await Directory(p.join(documents.path, 'new')).exists(), isFalse);
-    },
-    skip: !Platform.isLinux,
-  );
+  test('create beneath an alias works beside a v2 note', () async {
+    final alias = await aliasTo(documents, 'external-alias');
+    await foreignNote();
+    final path = p.join(alias, 'new', 'nested', 'Main.pgn');
+    expect(await store.create(path, '1. d4 *'), isNot(isA<PgnWriteFailed>()));
+    expect(
+      await File(p.join(documents.path, 'new', 'nested', 'Main.pgn')).exists(),
+      isTrue,
+    );
+  }, skip: !Platform.isLinux);
 
-  test(
-    'independent configured and candidate aliases share recovery membership',
-    () async {
-      final configured = await aliasTo(documents, 'configured');
-      final candidate = await aliasTo(chapter.parent, 'candidate');
-      final configuredIo = IOStorageService(
-        documentsRoot: Directory(configured),
-        supportRoot: support,
-      );
-      await foreignNote();
-      await expectLater(
-        configuredIo.readFile(p.join(candidate, 'Main.pgn')),
-        throwsA(isA<RepertoireRecoveryRequired>()),
-      );
-    },
-    skip: !Platform.isLinux,
-  );
-
-  test(
-    'a parent traversal after an alias still belongs to Documents',
-    () async {
-      final alias = await aliasTo(chapter.parent, 'external-alias');
-      final sibling = File(p.join(documents.path, 'repertoires', 'Other.pgn'));
-      await sibling.writeAsString('1. c4 *');
-      await foreignNote();
-      await expectLater(
-        io.readFile('$alias/../Other.pgn'),
-        throwsA(isA<RepertoireRecoveryRequired>()),
-      );
-    },
-    skip: !Platform.isLinux,
-  );
+  test('a parent traversal after an alias reads the sibling', () async {
+    final alias = await aliasTo(chapter.parent, 'external-alias');
+    final sibling = File(p.join(documents.path, 'repertoires', 'Other.pgn'));
+    await sibling.writeAsString('1. c4 *');
+    await foreignNote();
+    expect(await io.readFile('$alias/../Other.pgn'), '1. c4 *');
+  }, skip: !Platform.isLinux);
 
   test('unrelated external reads stay outside managed recovery', () async {
     final outside = File(p.join(root.path, 'external.pgn'));
@@ -172,25 +127,17 @@ void main() {
     skip: !Platform.isLinux || Platform.environment['USER'] == 'root',
   );
 
-  test(
-    'external rename cannot rewrite managed attempts past foreign recovery',
-    () async {
-      final source = File(p.join(root.path, 'outside.pgn'));
-      final destination = File(p.join(root.path, 'renamed.pgn'));
-      await source.writeAsString('1. d4 *');
-      final attempts = File(p.join(documents.path, MoveAttemptStore.fileName));
-      final bytes =
-          '${jsonEncode({'repertoireId': source.path, 'lineId': 'line'})}\n';
-      await attempts.writeAsString(bytes);
-      await foreignNote();
-      await expectLater(
-        io.renameFile(source.path, destination.path),
-        throwsA(isA<RepertoireRecoveryRequired>()),
-      );
-      expect(await source.readAsString(), '1. d4 *');
-      expect(await destination.exists(), isFalse);
-      expect(await attempts.readAsString(), bytes);
-    },
-    skip: !Platform.isLinux,
-  );
+  test('external rename rewrites managed attempts beside a v2 note', () async {
+    final source = File(p.join(root.path, 'outside.pgn'));
+    final destination = File(p.join(root.path, 'renamed.pgn'));
+    await source.writeAsString('1. d4 *');
+    final attempts = File(p.join(documents.path, MoveAttemptStore.fileName));
+    await attempts.writeAsString(
+      '${jsonEncode({'repertoireId': source.path, 'lineId': 'line'})}\n',
+    );
+    await foreignNote();
+    await io.renameFile(source.path, destination.path);
+    expect(await destination.readAsString(), '1. d4 *');
+    expect(await attempts.readAsString(), contains(destination.path));
+  }, skip: !Platform.isLinux);
 }

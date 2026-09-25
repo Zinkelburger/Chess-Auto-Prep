@@ -32,15 +32,21 @@ void main() {
       File(p.join(fixture.support.path, 'relocation-writes', '$_id.json'));
   File books() => File(p.join(fixture.support.path, 'books.json'));
   File participant(String name) => File(p.join(fixture.documents.path, name));
-  FileRelocations owner({FileRelocationStep? interrupt}) => FileRelocations(
-    documents: fixture.documents,
-    support: fixture.support,
-    testHook: interrupt == null
-        ? null
-        : (step) async {
-            if (step == interrupt) throw StateError('interrupted ${step.name}');
-          },
-  );
+  FileRelocations owner({FileRelocationStep? interrupt}) {
+    var interrupted = false;
+    return FileRelocations(
+      documents: fixture.documents,
+      support: fixture.support,
+      testHook: interrupt == null
+          ? null
+          : (step) async {
+              if (step == interrupt && !interrupted) {
+                interrupted = true;
+                throw StateError('interrupted ${step.name}');
+              }
+            },
+    );
+  }
 
   setUp(() async {
     fixture = await StoreFixture.create();
@@ -96,8 +102,10 @@ void main() {
   }
 
   for (final step in FileRelocationStep.values) {
+    final recorded = step != FileRelocationStep.prepared;
+
     test(
-      'delete interrupted at ${step.name} recovers, retries and restores all participants',
+      'delete interrupted at ${step.name} finishes on the next start and restores',
       () async {
         expect(
           await owner(
@@ -105,33 +113,36 @@ void main() {
           ).delete(from, expected: revision, operationId: _id),
           isA<IoFailure>(),
         );
+        await owner().recover();
+        await expectLocation(deleted: recorded);
+        expect(await journal().exists(), isFalse);
+        await owner().recover();
+        await expectLocation(deleted: recorded);
+        if (recorded) await restore();
+      },
+    );
+
+    test(
+      'delete interrupted at ${step.name} is finished by its own retry',
+      () async {
+        final engine = owner(interrupt: step);
         expect(
-          (jsonDecode(await journal().readAsString()) as Map)['kind'],
-          'delete',
+          await engine.delete(from, expected: revision, operationId: _id),
+          isA<IoFailure>(),
         );
-        await owner().recover();
-        await expectLocation(deleted: step != FileRelocationStep.prepared);
-        final settled = await journal().readAsBytes();
-        await owner().recover();
-        expect(await journal().readAsBytes(), settled);
-        final result = await fixture.store.delete(
+        final result = await engine.delete(
           from,
           expected: revision,
           operationId: _id,
         );
-        expect(result, isA<Deleted>());
         expect((result as Deleted).recoveredTo, quarantine.path);
         await expectLocation(deleted: true);
-        final completed = await journal().readAsBytes();
         expect(
-          await fixture.store.delete(
-            from,
-            expected: revision,
-            operationId: _id,
-          ),
+          await engine.delete(from, expected: revision, operationId: _id),
           isA<Deleted>(),
         );
-        expect(await journal().readAsBytes(), completed);
+        await expectLocation(deleted: true);
+        expect(await journal().exists(), isFalse);
         await restore();
       },
     );
@@ -144,7 +155,7 @@ void main() {
         await fixture.store.delete(from, expected: revision, operationId: _id),
         isA<Deleted>(),
       );
-      final completed = await journal().readAsBytes();
+      expect(await journal().exists(), isFalse);
       await File(from.path).writeAsString(versions.last);
       final replacement = await fixture.revisionOf(from);
       expect(replacement.nativeIdentity, isNot(revision.nativeIdentity));
@@ -158,7 +169,6 @@ void main() {
       expect(await File(quarantine.path).readAsString(), versions.last);
       expect(fixture.keptTexts(quarantine), versions);
       expect(fixture.backupFolder(from).existsSync(), isFalse);
-      expect(await journal().readAsBytes(), completed);
       expect(
         await fixture.store.delete(
           from,
@@ -192,7 +202,6 @@ void main() {
             isA<Moved>(),
           );
         }
-        final completed = await journal().readAsBytes();
         final Object retry = initialKind == 'delete'
             ? await engine.move(
                 from,
@@ -202,7 +211,6 @@ void main() {
               )
             : await engine.delete(from, expected: revision, operationId: _id);
         expect(retry, isA<IoFailure>());
-        expect(await journal().readAsBytes(), completed);
         expect(await File(from.path).exists(), isFalse);
         expect(await File(quarantine.path).readAsString(), versions.last);
       },
@@ -266,25 +274,25 @@ void main() {
   });
 
   test(
-    'backup refusal leaves original document and all references intact',
+    'an unreadable list of kept versions does not stop the delete',
     () async {
       final index = File(p.join(fixture.backupFolder(from).path, 'index.json'));
       await index.writeAsString('unrecognized index');
-      expect(
-        await fixture.store.delete(from, expected: revision, operationId: _id),
-        isA<IoFailure>(),
+      final result = await fixture.store.delete(
+        from,
+        expected: revision,
+        operationId: _id,
       );
-      expect(await File(from.path).readAsString(), versions.last);
-      expect(await File(quarantine.path).exists(), isFalse);
-      expect(await journal().exists(), isFalse);
-      expect(await index.readAsString(), 'unrecognized index');
-      for (final entry in rows.entries) {
-        expect(
-          await participant(entry.key).readAsBytes(),
-          utf8.encode(entry.value),
-        );
-      }
-      expect(await books().readAsString(), _books);
+      expect((result as Deleted).recoveredTo, quarantine.path);
+      expect(await File(quarantine.path).readAsString(), versions.last);
+      expect(await File(from.path).exists(), isFalse);
+      // The damaged list is kept aside with the history, never deleted.
+      final kept = fixture.backupFolder(quarantine).listSync();
+      expect(
+        kept.map((e) => p.basename(e.path)),
+        contains(startsWith('index.json.corrupt-')),
+      );
+      expect(fixture.keptTexts(quarantine), versions);
     },
   );
 }

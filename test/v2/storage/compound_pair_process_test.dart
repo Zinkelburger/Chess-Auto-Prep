@@ -83,10 +83,8 @@ void main() {
         final note = File(
           p.join(support.path, 'compound-writes', 'pair-process.json'),
         );
-        expect(
-          (jsonDecode(await note.readAsString()) as Map)['state'],
-          checkpoint == 'completed' ? 'complete' : 'committing',
-        );
+        // The record is removed as soon as both files are written.
+        expect(await note.exists(), checkpoint != 'completed');
         expect(await first.readAsString(), _firstAfter);
         expect(
           await second.readAsString(),
@@ -97,7 +95,6 @@ void main() {
           await child.process.exitCode.timeout(const Duration(seconds: 10)),
           isNot(0),
         );
-        List<int>? completeReceipt;
         for (var iteration = 0; iteration < 2; iteration++) {
           final result = await Process.run(
             'dart',
@@ -119,14 +116,11 @@ void main() {
               'untouched $name\n',
             );
           }
-          final receipt = await note.readAsBytes();
-          final decoded = jsonDecode(utf8.decode(receipt)) as Map;
-          expect(decoded['version'], 2);
-          expect(decoded['state'], 'complete');
-          expect(decoded.keys.toSet(), {'version', 'id', 'state', 'documents'});
-          expect(decoded['documents'], hasLength(2));
-          if (completeReceipt != null) expect(receipt, completeReceipt);
-          completeReceipt = receipt;
+          expect(await note.exists(), isFalse);
+          expect(
+            Directory(p.join(support.path, 'recovery-quarantine')).existsSync(),
+            isFalse,
+          );
         }
       },
       timeout: const Timeout(Duration(seconds: 90)),

@@ -38,12 +38,12 @@ import 'training_writes.dart';
 
 /// A change accepted by [TrainingStore] and not yet written.
 final class _Accepted {
-  _Accepted(this.payload, this.sources);
+  _Accepted(this.operation, this.payload);
+  final ProgressOperation operation;
   final String payload;
-  final Map<String, Revision> sources;
 
-  /// Files an earlier attempt already wrote, which a retry skips.
-  final written = <String>{};
+  /// The bytes an earlier attempt set out to publish, per file.
+  final attempted = <String, List<int>>{};
 }
 
 /// A row as read and as it is to be written; `before` is null for a row the
@@ -72,6 +72,9 @@ final class ProgressOperation {
   final Map<String, Revision> sources;
 
   (String, String)? _identity;
+
+  /// How this change was written, once it has been, or refused for good.
+  ProgressWrite? _settled;
 }
 
 /// The training files. The filesystem is a real boundary, so this is an
@@ -147,9 +150,6 @@ final class TrainingStore implements ProgressFiles {
   /// writes the earlier ones first, so rows land in the order they were
   /// projected.
   final _queued = <String, _Accepted>{};
-
-  /// Changes written, or refused for good, by operation id.
-  final _settled = <String, ProgressWrite>{};
 
   /// The folder the four files sit in, beside `repertoires/`.
   final Directory documents;
@@ -288,11 +288,8 @@ final class TrainingStore implements ProgressFiles {
     } on FormatException catch (error) {
       return ProgressRejected(ProgressFailed(error.message));
     }
-    if (!_settled.containsKey(operation.id)) {
-      _queued.putIfAbsent(
-        operation.id,
-        () => _Accepted(payload, Map.of(operation.sources)),
-      );
+    if (operation._settled == null) {
+      _queued.putIfAbsent(operation.id, () => _Accepted(operation, payload));
     }
     return const ProgressEnqueued();
   }
@@ -305,7 +302,7 @@ final class TrainingStore implements ProgressFiles {
         'Enqueue this training command before applying it.',
       );
     }
-    if (_settled[operation.id] case final settled?) return settled;
+    if (operation._settled case final settled?) return settled;
     if (!_queued.containsKey(operation.id)) {
       return const ProgressFailed('This training change was not accepted.');
     }
@@ -313,9 +310,9 @@ final class TrainingStore implements ProgressFiles {
       if (_destination() != identity.$1) {
         throw const TrainingChanged('Operation destination');
       }
-      for (final MapEntry(key: id, value: change) in _queued.entries.toList()) {
-        final outcome = await _apply(id, change);
-        if (id == operation.id) return outcome;
+      for (final change in _queued.values.toList()) {
+        final outcome = await _apply(change);
+        if (change.operation.id == operation.id) return outcome;
       }
       return const ProgressWritten();
     });
@@ -326,26 +323,29 @@ final class TrainingStore implements ProgressFiles {
   /// Writes one accepted change. A change that can never be written — its
   /// source or a row it replaces changed — leaves the queue with that
   /// answer, so the changes after it still land.
-  Future<ProgressWrite> _apply(String id, _Accepted change) async {
+  Future<ProgressWrite> _apply(_Accepted change) async {
     try {
       await _writer.apply(
         change.payload,
-        change.sources,
+        change.operation.sources,
         trainingRoot: p.normalize(p.absolute(documents.path)),
-        done: change.written,
+        attempted: change.attempted,
       );
     } on TrainingChanged catch (error) {
       log.w('save training progress in ${documents.path}', error.detail);
-      return _settle(id, const ProgressConflict());
+      return _settle(change, const ProgressConflict());
     } on TrainingUnreadable catch (unreadable) {
-      return _settle(id, ProgressUnreadable(unreadable.file, unreadable.line));
+      return _settle(
+        change,
+        ProgressUnreadable(unreadable.file, unreadable.line),
+      );
     }
-    return _settle(id, const ProgressWritten());
+    return _settle(change, const ProgressWritten());
   }
 
-  ProgressWrite _settle(String id, ProgressWrite result) {
-    _queued.remove(id);
-    _settled[id] = result;
+  ProgressWrite _settle(_Accepted change, ProgressWrite result) {
+    _queued.remove(change.operation.id);
+    change.operation._settled = result;
     return result;
   }
 

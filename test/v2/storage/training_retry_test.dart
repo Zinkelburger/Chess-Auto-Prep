@@ -165,28 +165,26 @@ void main() {
     },
   );
 
-  test(
-    'retry refuses intervening bytes before applying any remaining file',
-    () async {
-      var publications = 0;
-      final store = TrainingStore(
-        documents,
-        support: Directory(p.join(documents.path, 'Support')),
-        publish: (path, bytes) async {
-          await replaceFile(path, bytes);
-          if (++publications == 1)
-            throw const FileSystemException('acknowledgement lost');
-        },
-      );
-      final operation = accepted();
-      expect(await rate(store, operation), isA<ProgressFailed>());
-      await file(historyFile).writeAsString('another writer\n');
-      expect(await rate(store, operation), isA<ProgressConflict>());
-      expect(await file(historyFile).readAsString(), 'another writer\n');
-      expect(await file(streaksFile).exists(), isFalse);
-      expect(publications, 1);
-    },
-  );
+  test('a retry keeps rows another writer added in between', () async {
+    var publications = 0;
+    final store = TrainingStore(
+      documents,
+      support: Directory(p.join(documents.path, 'Support')),
+      publish: (path, bytes) async {
+        await replaceFile(path, bytes);
+        if (++publications == 1)
+          throw const FileSystemException('acknowledgement lost');
+      },
+    );
+    final operation = accepted();
+    expect(await rate(store, operation), isA<ProgressFailed>());
+    await file(historyFile).writeAsString('$historyHeader\nanother,writer\n');
+    expect(await rate(store, operation), isA<ProgressWritten>());
+    final lines = await file(historyFile).readAsLines();
+    expect(lines.take(2), [historyHeader, 'another,writer']);
+    expect(lines, hasLength(3));
+    expect(await file(streaksFile).exists(), isTrue);
+  });
 
   test('operation cannot change its payload or destination', () async {
     var publications = 0;

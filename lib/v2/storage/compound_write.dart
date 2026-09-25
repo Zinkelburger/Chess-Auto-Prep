@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
+import '../diagnostics/log.dart';
 import 'journal_records.dart';
 import 'recovery_quarantine.dart';
 import 'atomic_write.dart';
@@ -50,11 +51,15 @@ final class CompoundWrites {
   final Directory support;
   final Future<void> Function(CompoundWriteStep)? testHook;
 
-  // What this process published, so a retry of the same id is answered
-  // without writing again. Retries only come from this process: the caller's
-  // retry token is in memory too.
-  final _published = <(String, String?), Revision>{};
-  final _completed = <String, CompoundCommit>{};
+  // What this process finished, so a retry of the same id — through any store
+  // of this profile — is answered without writing again. Retries only come
+  // from this process: the caller's retry token is in memory too.
+  static final _finished = <String, Map<String, CompoundCommit>>{};
+  static final _revisions = <String, Map<(String, String?), Revision>>{};
+  Map<String, CompoundCommit> get _completed =>
+      _finished.putIfAbsent(support.path, () => {});
+  Map<(String, String?), Revision> get _published =>
+      _revisions.putIfAbsent(support.path, () => {});
   Revision? publishedRevision(String id, {String? path}) =>
       _published[(id, path)];
 
@@ -165,19 +170,24 @@ final class CompoundWrites {
     return (await _readAll()).any((note) => note.$2.pending);
   });
 
-  /// Finishes the edits a stopped process began. One that cannot be finished
-  /// is set aside and logged; the rest still run.
+  /// Finishes the edits a stopped process began. One that can never be
+  /// finished — a file changed since, or the record is damaged — is set aside
+  /// and logged; the rest still run.
   Future<void> recover() async {
     _checkRoots();
     for (final (file, note) in await _readAll()) {
       try {
         if (!note.pending) {
-          await file.delete();
+          await _forget(file);
           continue;
         }
         await _finish(note);
-      } on Object catch (error) {
+      } on RecoveryRequired catch (error) {
         await quarantine(support, file, error);
+      } on Object catch (error) {
+        // Most likely passing (a full disk, a file held open): try again at
+        // the next start rather than setting the edit aside.
+        log.w('finish the edit recorded at ${file.path}', error);
       }
     }
   }
@@ -188,7 +198,7 @@ final class CompoundWrites {
     return _completed[id];
   }
 
-  Future<void> _finish(_Note note) => _checked(() async {
+  Future<void> _finish(_Note note) async {
     final command = note.command;
     // Check the complete read set before completing any remaining write.
     await _preflight(command, allowAfter: true);
@@ -213,11 +223,20 @@ final class CompoundWrites {
       await testHook?.call(CompoundWriteStep.books);
     }
     _completed[command.id] = command;
-    final record = File(_path(command.id));
-    if (await record.exists()) await record.delete();
-    await flushRecoveryDirectory(_folder.path, synchronize: _synchronize);
+    if (_completed.length > _remembered) {
+      final oldest = _completed.keys.first;
+      _completed.remove(oldest);
+      _published.removeWhere((key, _) => key.$1 == oldest);
+    }
+    await _forget(File(_path(command.id)));
     await testHook?.call(CompoundWriteStep.completed);
-  });
+  }
+
+  /// Removes a finished edit's journal; the edit itself is on disk.
+  Future<void> _forget(File journal) async {
+    if (await journal.exists()) await journal.delete();
+    await flushRecoveryDirectory(_folder.path, synchronize: _synchronize);
+  }
 
   Future<void> _preflight(
     CompoundCommit command, {
@@ -458,6 +477,9 @@ _Note _decodePair(String id, Map<String, Object?> json) {
     pending: state == 'committing',
   );
 }
+
+/// How many finished edits a profile remembers for exact retries.
+const _remembered = 256;
 
 const _states = {'prepared', 'committing', 'complete', 'cancelled'};
 

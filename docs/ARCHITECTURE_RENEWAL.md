@@ -398,37 +398,22 @@ adopting an unrelated equal-content file.
 
 `TrainingProgress` derives accepted rows against a private projection of earlier
 accepted changes; displayed progress advances only after commit acknowledgement.
-`ProgressFiles.enqueueWrite` and `enqueueAttempt` persist those frozen rows or
-answers before `commit` waits for predecessors. A missing predecessor intent is
-an unsaved acceptance, retained for ordered retry. A known optimistic conflict
-is refused before enqueue; a conflict arising after durable acceptance preserves
-the command and requires recovery.
+`ProgressFiles.enqueueWrite` and `enqueueAttempt` accept those frozen rows or
+answers in memory; `commit` writes the accepted changes in order, each once.
+`TrainingWriter` replaces each of the four files whole and atomically, so a
+stopped process leaves every file as it was or as the change makes it; a change
+spanning several files can lose only its own remainder. A change whose source
+PGN or replaced row changed returns a conflict for that change alone and later
+changes still land. The earlier per-answer journal (`Support/training-writes/`)
+is cleared on first access: finished receipts are removed and unfinished ones
+are moved to `Support/recovery-quarantine/` with a log line.
 
-`TrainingWrites` owns the ordered private `Support/training-writes/` queue.
-Queued intents recover forward. At the head, one command captures all four
-training files as exact nullable byte snapshots, including unchanged files and
-torn historical attempt bytes. A committing record binds the complete before/
-after plan to the frozen command; replay validates every participant and source
-before publishing anything. Completion replaces full snapshots with a compact
-receipt retaining command, order, profile and source proofs. An exact completed
-retry acknowledges that receipt without replacing subsequent data. Native old
-journal copies remain admissible only with a verified forward transition to the
-current receipt.
-
-Recovery inspects all protocols before replay. Simultaneously pending training
-and namespace operations have no established ordering and block access. Normal
-access drains training before a new structural operation; accepting another
-training command can validate its projected predecessor state without publishing
-that predecessor. V1 accepts only strictly validated completed training history
-and refuses every pending or unknown training journal before its own recovery.
-Completed receipts are retained and scanned, so per-command/read cost still
-grows with receipt count; retained native previous copies can also keep old full
-snapshots. Native reads batch up to 32 candidates with a 16 MiB byte budget
-(one oversized record is allowed), while every record is still validated. A
-warm Linux measurement with 5,000 minimal compact receipts reduced median
-inspection from 467 ms to 153 ms; four normal command scans still cost about
-0.52–0.61 seconds before source reads and publication. This does not certify
-long-running training-history scale.
+Recovery never blocks access. The shared gate finishes what a stopped process
+left once per store and again after a failed access; each unfinished operation
+is finished on its own, and one that cannot be finished or read is moved to
+`Support/recovery-quarantine/<time>/` and logged. Leftover staged copies
+(`.<name>.v2-tmp`, and Windows `.previous-N-N` copies of journals) are removed.
+V1 does not inspect v2 journals, and v2 only logs pending v1 receipts.
 
 Relocation completion and recovery flush both endpoint directories and their
 containing entries before rewriting references or retiring the recovery note.
@@ -999,48 +984,41 @@ listed and restored. Native affected access first takes the canonical repertoire
 recovery domain shared with supported v1 on Linux, then the Documents namespace
 and distinct leaf locks. V2 PGN access, training reads/writes, library/deleted/
 study scans and PGN imports recover its existing relocation notes before access.
-Malformed, unsupported, unreadable or ambiguous notes remain intact and block
-access; a matching native identity must prove whether a move landed. V1 refuses
-unfinished v2 notes, and v2 refuses pending/unknown v1 move and publication
-receipts with an instruction to reopen v1. Valid completed v1 history remains
-readable. V1 conservatively guards supported Documents accesses, including the
-four training files. No foreign journal is replayed and no metadata format is
-introduced by this gate. Non-Linux v1 recovery remains unverified.
+A note that is malformed or whose move cannot be proven is moved to
+`Support/recovery-quarantine/` and logged; a matching native identity still
+decides whether a move landed. Neither app refuses access because of the
+other's journals. V1 conservatively guards supported Documents accesses,
+including the four training files, with the shared lock. No foreign journal
+is replayed. Non-Linux v1 recovery remains unverified.
 
 File rename, move, quarantine delete and file restore now use `FileRelocations`
-and private version-1 `Support/relocation-writes/<id>.json` records. Each record captures the
-PGN's canonical endpoints, native identity and hash; all four training files'
-exact before/after text (including absent and unchanged participants); raw book
-selectors; and the complete backup-directory identity, index and file inventory.
-The captured Documents spelling preserves training keys reached through a
-configured alias alongside canonical keys. Pending recovery verifies that alias
-still resolves to the pinned Documents root. No current paths are consulted to
-reinterpret a terminal receipt's intended operation.
+and private `Support/relocation-writes/<id>.json` records, written once before
+anything moves and removed when the move finishes. Each record captures the
+PGN's canonical endpoints, native identity and hash, the training files' planned
+before/after text, raw book selectors and which kept-version folder follows the
+file. The captured Documents spelling preserves training keys reached through a
+configured alias alongside canonical keys. Exact retries in the same process are
+answered from memory.
 
 Preparation validates every participant and preserves changed training inputs
-under `.cap-reference-history/<id>/` before durable commit intent. Recovery
-validates the complete read set before moving the PGN, publishing rows and book
-selectors, and transferring backup ownership. Occupied destination history moves
-to a deterministic preserved aside; a chapter with no incoming history cannot
-inherit it. Namespace flush failures retain intent, and replay flushes both
-endpoints and their ancestors. `Moved` is returned only after completion.
-`AcceptedFileChanges` retains the original id and revision through UI and registry
-retry, coordinates books and open drafts, and follows or closes only the
-matching accepted file observation. V1 refuses pending, malformed or unknown
-relocation records before its own recovery/access; validated complete/cancelled
-records remain readable. Native Windows replacement can leave an old copy
-beside a journal if cleanup is interrupted. Recovery retains that copy and
-accepts it only when its reserved name, complete immutable payload and recorded
-phase prove it belongs to the current valid receipt; it never replays the old
-copy. Backup-index recovery similarly checks retained replacement copies
-against the captured index. Unknown or conflicting artifacts still block access.
+under `.cap-reference-history/<id>/` before writing the record. Finishing a
+recovered move re-plans the training rows and book selectors from their current
+contents when they changed meanwhile, so training done in between is repointed
+rather than refused. Kept versions follow the file but never decide whether it
+may move: a history that cannot be moved stays under its old id. A history
+already under the target id (left by an outside rename) is offered back as a
+deleted chapter in `.cap-pgn-history/` with its versions, instead of being
+set aside where no restore could reach it. Namespace flush failures keep the
+record, and replay flushes both endpoints and their ancestors. `Moved` is
+returned only after completion. `AcceptedFileChanges` retains the original id
+and revision through UI and registry retry, coordinates books and open drafts,
+and follows or closes only the matching accepted file observation.
 
 Folder moves use a version-2 variant in the same journal and recovery loop.
 `DirectorySnapshot` captures every regular file and directory, including binary
 sidecars, empty folders, nested quarantines and uppercase PGNs. Each entry has
 its native identity; files also have their content hash. Relative paths retain
-the host's spelling. Recovery verifies the entire tree at its recorded endpoint
-and all training, book and backup participants before publishing anything else.
+the host's spelling. Recovery verifies the entire tree at its recorded endpoint before moving it.
 Every captured PGN has an explicit backup-ownership plan. Links, unsupported
 nodes, metadata-root overlap and cross-filesystem moves are refused before
 intent. The original note decoder still recovers older moves; its writer is
@@ -1063,11 +1041,10 @@ restored file: occupied history is preserved separately rather than merged by
 guesswork. Those historical ownership links remain unverified.
 
 Existing unfinished folder notes continue through their original recovery
-protocol. Accepted training commands use the durable queue described under
+protocol. Training writes are described under
 [Identity and undo](#identity-and-undo). Multi-file edits remain H3c work.
-Completed relocation snapshots are retained;
-pruning and scan costs remain explicit follow-up work. The tested native
-recovery platform is Linux; Windows/macOS durability is unverified.
+The tested native recovery platform is Linux; Windows/macOS durability is
+unverified.
 
 - **One file, one write path.** A chapter of a course file opens as a
   `SectionView`: its games in file order as an ordinary `Chapter`, so every
@@ -1173,32 +1150,27 @@ reference snapshot together. The store checks section lineage independently
 of the ordinary game-byte scope and preserves unknown book fields. Book edits
 accepted beforehand settle first; controls wait while references are committing.
 
-This operation uses private version-1 `Support/compound-writes/<id>.json`
-receipts containing canonical document paths and exact before/after content
-(the content itself is the comparison, rather than a separately stored hash).
-The outer shared domain, Documents and distinct participating directory locks
-cover recovery and publication. Prepared receipts cancel without publishing;
-committing receipts finish only participants at their expected before/after
-bytes. Unknown, malformed, unreadable or externally changed participants block
-with retained recovery material. V1 recognizes the envelope and refuses pending
-or unsupported receipts before its own recovery, directing the user to v2.
+This operation uses private `Support/compound-writes/<id>.json` records
+containing canonical document paths and exact before/after content (the content
+itself is the comparison, rather than a separately stored hash), written once
+before either file changes and removed when both have. The outer shared domain,
+Documents and distinct participating directory locks cover recovery and
+publication. A recovered record finishes only participants at their expected
+before/after bytes; one that cannot finish is moved to
+`Support/recovery-quarantine/` and logged, and other documents stay usable.
 
-A completed receipt authenticates the inverse; undo validates both participants
-and journals that inverse as another operation. Failed acknowledgements retain
-the original operation id and exact draft or inverse for explicit retry, while
-new document edits are blocked. Training paths and stable line IDs are unchanged
-by a section rename. Complete receipts currently retain full snapshots and are
-validated on each recovery access; space and scan cost grow with structural
-history. Pruning or compact terminal receipts require a separate compatible
-protocol, not deletion of material still used by retry or undo. These durability
-and coexistence paths have native Linux tests; Windows/macOS remain unverified.
+Undo applies the inverse as another operation, checked against both files on
+disk. Failed acknowledgements retain the original operation id and exact draft
+or inverse for explicit retry. Training paths and stable line IDs are unchanged
+by a section rename. These durability and coexistence paths have native Linux
+tests; Windows/macOS remain unverified.
 
 `savePair` extends this boundary to exactly two PGNs through strict version-2
 compound receipts. Each participant carries its own expected revision, edit
 scope and preserved before-content; both are validated before publication.
-Books and training files are outside this receipt. Exact retry authenticates
-both participants, and one inverse restores both or refuses an intervening
-change. Repository notifications cover both configured document references,
+Books and training files are outside this record. An exact retry in the same
+process is answered from memory, and one inverse restores both or refuses an
+intervening change. Repository notifications cover both configured document references,
 including a Documents-root alias.
 
 `DocumentSession.externalEdits` prepares a source edit without changing the

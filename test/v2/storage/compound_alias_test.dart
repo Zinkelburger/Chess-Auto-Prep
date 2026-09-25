@@ -53,17 +53,14 @@ void main() {
   }, skip: Platform.isWindows ? 'symlink privileges not assumed' : false);
 
   test(
-    'configured Support alias still refuses linked relocation metadata',
+    'linked relocation metadata is never followed and never blocks access',
     () async {
       final outside = await Directory(
         p.join(root.path, 'notes-outside'),
       ).create();
       await Link(p.join(support.path, 'unfinished-moves')).create(outside.path);
       final gate = RecoveryGate(documents: documents, support: supportAlias);
-      await expectLater(
-        gate.run(() async => 'unsafe'),
-        throwsA(isA<RecoveryRequired>()),
-      );
+      expect(await gate.run(() async => 'opened'), 'opened');
       expect(await outside.list().toList(), isEmpty);
     },
     skip: Platform.isWindows ? 'symlink privileges not assumed' : false,
@@ -131,31 +128,20 @@ void main() {
           documents: startAliased ? documents : documentAlias,
           support: startAliased ? support : supportAlias,
         );
-        await reopened.recover();
-        final retried = await reopened.commit(
-          command(
-            p.join(
-              (startAliased ? documents : documentAlias).path,
-              'Course.pgn',
-            ),
-          ),
+        final note = File(
+          p.join(support.path, 'compound-writes', 'alias-rename.json'),
         );
-        expect(retried.documentPath, document.path);
+        final recorded = jsonDecode(await note.readAsString()) as Map;
+        expect(recorded['documentPath'], document.path);
+        await reopened.recover();
         expect(await document.readAsString(), after);
         expect(
           await File(p.join(support.path, 'books.json')).readAsString(),
           booksAfter,
         );
-        final note = File(
-          p.join(support.path, 'compound-writes', 'alias-rename.json'),
-        );
-        final bytes = await note.readAsBytes();
-        expect(
-          (jsonDecode(utf8.decode(bytes)) as Map)['documentPath'],
-          document.path,
-        );
+        expect(await note.exists(), isFalse);
         await reopened.recover();
-        expect(await note.readAsBytes(), bytes);
+        expect(await document.readAsString(), after);
       },
       skip: Platform.isWindows ? 'symlink privileges not assumed' : false,
     );

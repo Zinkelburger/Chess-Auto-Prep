@@ -104,16 +104,13 @@ Future<void> requireUnusedRecoveryStage(String path) async {
 /// and truncate whatever it points at.
 Future<void> discardLeftoverStage(String path) async {
   final stage = temporaryPathFor(path);
-  switch (await FileSystemEntity.type(stage, followLinks: false)) {
-    case FileSystemEntityType.notFound:
-      return;
-    case FileSystemEntityType.file:
-      await File(stage).delete();
-    case FileSystemEntityType.link:
-      await Link(stage).delete();
-    default:
-      throw FileSystemException('Something other than a file is staged', stage);
+  final type = await FileSystemEntity.type(stage, followLinks: false);
+  if (type == FileSystemEntityType.notFound) return;
+  if (type != FileSystemEntityType.file && type != FileSystemEntityType.link) {
+    throw FileSystemException('Something other than a file is staged', stage);
   }
+  await (type == FileSystemEntityType.link ? Link(stage) : File(stage))
+      .delete();
   log.w('removed the staged copy a stopped write left at $stage');
 }
 

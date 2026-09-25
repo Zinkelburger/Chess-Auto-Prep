@@ -2,10 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chess_auto_prep/features/repertoires/models/repertoire_recovery_required.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 import 'package:chess_auto_prep/v2/storage/recovery_gate.dart';
-import 'package:chess_auto_prep/v2/storage/relocation_notes.dart';
 import 'package:chess_auto_prep/v2/storage/training_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -83,7 +81,7 @@ void main() {
     );
 
     test(
-      'killing $holder releases domain and the other app refuses retained recovery',
+      'killing $holder releases the domain and the other app keeps working',
       () async {
         final child = await _hold(harness, holder, documents, support, true);
         addTearDown(child.close);
@@ -97,22 +95,20 @@ void main() {
         expect(await metadata.readAsString(), 'interrupted-json');
         expect(child.process.kill(ProcessSignal.sigkill), isTrue);
         await child.process.exitCode.timeout(const Duration(seconds: 10));
+        // The other app's leftover is its owner's to finish: it is logged,
+        // never a reason to refuse this app's own access.
         final Future<Object?> reading = holder == 'v1'
             ? RecoveryGate(
                 documents: alias,
                 support: support,
-              ).run(() async => 'unsafe success')
+              ).run(() async => 'read')
             : IOStorageService(
                 documentsRoot: alias,
                 supportRoot: support,
               ).readRepertoireReviewsCsv();
-        await expectLater(
-          reading.timeout(const Duration(seconds: 10)),
-          throwsA(
-            holder == 'v1'
-                ? isA<RecoveryRequired>()
-                : isA<RepertoireRecoveryRequired>(),
-          ),
+        expect(
+          await reading.timeout(const Duration(seconds: 10)),
+          holder == 'v1' ? 'read' : 'unchanged',
         );
         expect(await metadata.readAsString(), 'interrupted-json');
         expect(
@@ -126,7 +122,7 @@ void main() {
       timeout: const Timeout(Duration(seconds: 60)),
     );
     test(
-      'killed $holder landed move is refused by the other app then recovered once',
+      'killed $holder landed move leaves the other app working, then recovers once',
       () async {
         final from = p.join(documents.path, 'repertoires', 'Old', 'Main.pgn');
         final to = p.join(documents.path, 'repertoires', 'New', 'Main.pgn');
@@ -166,14 +162,14 @@ void main() {
             documents,
             support: support,
           ).read({to});
-          expect(foreignRead, isA<ProgressFailed>());
+          expect(foreignRead, isA<ProgressLoaded>());
         } else {
-          await expectLater(
-            IOStorageService(
+          expect(
+            await IOStorageService(
               documentsRoot: documents,
               supportRoot: support,
             ).readRepertoireReviewsCsv(),
-            throwsA(isA<RepertoireRecoveryRequired>()),
+            contains(from),
           );
         }
         expect(await note.readAsString(), recorded);
@@ -334,7 +330,6 @@ Future<void> main(List<String> args) async {
     final moves = RepertoireDirectoryMutations(
       root: Directory(p.join(documents.path, 'repertoires')),
       journals: Directory(p.join(support.path, 'repertoire-mutations')),
-      foreignRecoveryNotes: Directory(p.join(support.path, 'unfinished-moves')),
       repoint: (_, _, _) async {},
       testHook: (step) async {
         if (args[3] == 'checkpoint' && step == RepertoireMoveStep.moved) await hold();

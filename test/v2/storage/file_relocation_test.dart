@@ -122,10 +122,13 @@ void main() {
         );
       }
       expect(await File(from.path).exists(), isFalse);
-      final receipt = await File(
-        p.join(fixture.support.path, 'relocation-writes', 'alias-move.json'),
-      ).readAsString();
-      expect(jsonDecode(receipt)['trainingRoot'], alias.path);
+      // A finished move leaves no record behind.
+      expect(
+        await File(
+          p.join(fixture.support.path, 'relocation-writes', 'alias-move.json'),
+        ).exists(),
+        isFalse,
+      );
     },
     skip: !Platform.isLinux,
   );

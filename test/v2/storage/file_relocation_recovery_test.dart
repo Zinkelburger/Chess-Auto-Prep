@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/file_relocation.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/v2/storage/relocation_notes.dart';
 import 'package:chess_auto_prep/v2/storage/training_records.dart' as training;
 import 'package:chess_auto_prep/v2/storage/training_rows.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,16 +27,30 @@ void main() {
   File books() => File(p.join(fixture.support.path, 'books.json'));
   File note() =>
       File(p.join(fixture.support.path, 'relocation-writes', '$id.json'));
-  FileRelocations engine({FileRelocationStep? interrupt}) => FileRelocations(
-    documents: fixture.documents,
-    support: fixture.support,
-    testHook: interrupt == null
-        ? null
-        : (step) async {
-            if (step == interrupt)
-              throw StateError('interrupted at ${step.name}');
-          },
-  );
+  FileRelocations engine({FileRelocationStep? interrupt}) {
+    var interrupted = false;
+    return FileRelocations(
+      documents: fixture.documents,
+      support: fixture.support,
+      testHook: interrupt == null
+          ? null
+          : (step) async {
+              if (step == interrupt && !interrupted) {
+                interrupted = true;
+                throw StateError('interrupted at ${step.name}');
+              }
+            },
+    );
+  }
+
+  List<File> quarantined() {
+    final folder = Directory(
+      p.join(fixture.support.path, 'recovery-quarantine'),
+    );
+    if (!folder.existsSync()) return const [];
+    return folder.listSync(recursive: true).whereType<File>().toList();
+  }
+
   Future<MoveResult> move(FileRelocations owner) =>
       owner.move(from, to, expected: revision, operationId: id);
 
@@ -88,81 +101,93 @@ void main() {
     );
   }
 
+  Future<void> expectKeptTraining() async {
+    for (final file in plan.files) {
+      final backup = File(
+        p.join(fixture.documents.path, '.cap-reference-history', id, file.name),
+      );
+      expect(await backup.readAsBytes(), utf8.encode(file.before!));
+    }
+  }
+
   for (final step in FileRelocationStep.values) {
+    // The journal is written after `prepared`; a stop before it leaves
+    // nothing to finish, and nothing moved.
+    final recorded = step != FileRelocationStep.prepared;
+
     test(
-      'interruption at ${step.name} recovers twice and acknowledges exact retry',
+      'interruption at ${step.name} finishes on the next start, once',
       () async {
         expect(await move(engine(interrupt: step)), isA<IoFailure>());
-        final preparedOnly = step == FileRelocationStep.prepared;
         await engine().recover();
-        await expectState(moved: !preparedOnly);
-        final settled = await note().readAsBytes();
-        expect(
-          jsonDecode(utf8.decode(settled))['state'],
-          preparedOnly ? 'cancelled' : 'complete',
-        );
+        await expectState(moved: recorded);
+        expect(await note().exists(), isFalse);
         await engine().recover();
-        expect(await note().readAsBytes(), settled);
-        expect(await move(engine()), isA<Moved>());
-        await expectState(moved: true);
-        final complete = await note().readAsBytes();
-        expect(await move(engine()), isA<Moved>());
-        expect(await note().readAsBytes(), complete);
-        for (final file in plan.files) {
-          final backup = File(
-            p.join(
-              fixture.documents.path,
-              '.cap-reference-history',
-              id,
-              file.name,
-            ),
-          );
-          expect(await backup.readAsBytes(), utf8.encode(file.before!));
-        }
+        await expectState(moved: recorded);
+        if (recorded) await expectKeptTraining();
       },
       skip: !Platform.isLinux,
     );
-  }
 
-  for (final original in [null, '', ' \r\n']) {
     test(
-      'intent refuses external change to ${original == null ? 'absent' : 'unchanged'} participant before PGN movement',
+      'interruption at ${step.name} is finished by retrying the same move',
       () async {
-        if (original == null) {
-          await participant(attemptsFile).delete();
-        } else {
-          await participant(attemptsFile).writeAsString(original);
-        }
-        expect(
-          await move(engine(interrupt: FileRelocationStep.intent)),
-          isA<IoFailure>(),
-        );
-        final metadata = await note().readAsBytes();
-        const foreign = '{"repertoireId":"/foreign.pgn","keep":true}\n';
-        await participant(attemptsFile).writeAsString(foreign);
-        for (var restart = 0; restart < 2; restart++) {
-          await expectLater(
-            engine().recover(),
-            throwsA(isA<RecoveryRequired>()),
-          );
-          expect(await File(from.path).readAsString(), documentText);
-          expect(await File(to.path).exists(), isFalse);
-          expect(
-            await participant(reviewsFile).readAsBytes(),
-            utf8.encode(before[reviewsFile]!),
-          );
-          expect(await participant(attemptsFile).readAsString(), foreign);
-          expect(await books().readAsString(), booksBefore);
-          expect(await note().readAsBytes(), metadata);
-        }
+        final owner = engine(interrupt: step);
+        expect(await move(owner), isA<IoFailure>());
+        expect(await move(owner), isA<Moved>());
+        await expectState(moved: true);
+        expect(await note().exists(), isFalse);
+        // A second retry in the same process answers without writing.
+        await participant(historyFile).writeAsString('later history');
+        expect(await move(owner), isA<Moved>());
+        expect(await participant(historyFile).readAsString(), 'later history');
+        await expectKeptTraining();
       },
       skip: !Platform.isLinux,
     );
   }
 
-  for (final field in ['after', 'rowsChanged', 'extra']) {
+  test(
+    'training trained between the plan and a restart is repointed as it is now',
+    () async {
+      expect(
+        await move(engine(interrupt: FileRelocationStep.intent)),
+        isA<IoFailure>(),
+      );
+      // Another app records a review of the chapter before this one restarts.
+      await participant(historyFile).writeAsString(
+        '${before[historyFile]}'
+        '${from.path},line,2026-09-01T00:00:00Z,good,false,trainer\n',
+      );
+      await engine().recover();
+      expect(await File(from.path).exists(), isFalse);
+      expect(await File(to.path).readAsString(), documentText);
+      final history = await participant(historyFile).readAsLines();
+      expect(history, hasLength(3));
+      expect(history.skip(1), everyElement(startsWith('${to.path},')));
+      expect(await note().exists(), isFalse);
+      expect(quarantined(), isEmpty);
+    },
+    skip: !Platform.isLinux,
+  );
+
+  test('books changed after the plan are repointed as they are now', () async {
+    expect(
+      await move(engine(interrupt: FileRelocationStep.intent)),
+      isA<IoFailure>(),
+    );
+    final changed = booksBefore.replaceFirst('"Book"', '"Renamed book"');
+    await books().writeAsString(changed);
+    await engine().recover();
+    expect(
+      await books().readAsString(),
+      changed.replaceFirst('Course/Before.pgn', 'Course/After.pgn'),
+    );
+  }, skip: !Platform.isLinux);
+
+  for (final field in ['after', 'rowsChanged', 'extra', 'json']) {
     test(
-      'altered $field journal is rejected before pending namespace move',
+      'an altered $field record is set aside and moves still work',
       () async {
         expect(
           await move(engine(interrupt: FileRelocationStep.intent)),
@@ -179,36 +204,39 @@ void main() {
           case 'extra':
             metadata['future'] = true;
         }
-        final altered = jsonEncode(metadata);
+        final altered = field == 'json' ? '{not json' : jsonEncode(metadata);
         await note().writeAsString(altered);
-        await expectLater(engine().recover(), throwsA(isA<RecoveryRequired>()));
+        await engine().recover();
         await expectState(moved: false);
-        expect(await note().readAsString(), altered);
+        expect(await note().exists(), isFalse);
+        expect(await quarantined().single.readAsString(), altered);
+        expect(await move(engine()), isA<Moved>());
+        await expectState(moved: true);
       },
       skip: !Platform.isLinux,
     );
   }
 
   test(
-    'identical replacement source cannot inherit pending move authority',
+    'a replaced source is not moved by a stale record, which is set aside',
     () async {
       expect(
         await move(engine(interrupt: FileRelocationStep.intent)),
         isA<IoFailure>(),
       );
-      final metadata = await note().readAsBytes();
       await File(from.path).rename('${from.path}.original');
       await File(from.path).writeAsString(documentText);
-      await expectLater(engine().recover(), throwsA(isA<RecoveryRequired>()));
+      await engine().recover();
       await expectState(moved: false);
       expect(await File('${from.path}.original').readAsString(), documentText);
-      expect(await note().readAsBytes(), metadata);
+      expect(await note().exists(), isFalse);
+      expect(quarantined(), hasLength(1));
     },
     skip: !Platform.isLinux,
   );
 
   test(
-    'pending captured alias retarget refuses even through canonical roots',
+    'a record made through a retargeted alias is set aside, not followed',
     () async {
       final alias = Link(p.join(fixture.root.path, 'Documents-alias'));
       await alias.create(fixture.documents.path);
@@ -235,28 +263,24 @@ void main() {
         ),
         isA<IoFailure>(),
       );
-      final metadata = await note().readAsBytes();
       final foreign = await Directory(
         p.join(fixture.root.path, 'Foreign'),
       ).create();
       await alias.delete();
       await alias.create(foreign.path);
-      await expectLater(engine().recover(), throwsA(isA<RecoveryRequired>()));
-      await expectState(moved: false);
-      expect(await note().readAsBytes(), metadata);
-      expect(await foreign.list().toList(), isEmpty);
-      await alias.delete();
-      await alias.create(fixture.documents.path);
       await engine().recover();
-      await expectState(moved: true);
+      await expectState(moved: false);
+      expect(await foreign.list().toList(), isEmpty);
+      expect(quarantined(), hasLength(1));
       expect(await move(engine()), isA<Moved>());
+      await expectState(moved: true);
     },
     skip: !Platform.isLinux,
   );
 
   for (final checkpoint in ['document', 'reviews']) {
     test(
-      'SIGKILL after $checkpoint resumes the retained complete operation',
+      'SIGKILL after $checkpoint finishes the move on the next start',
       () async {
         final folder = await Directory(
           p.join(Directory.current.path, '.dart_tool'),
@@ -274,10 +298,8 @@ void main() {
         await child.process.exitCode.timeout(const Duration(seconds: 10));
         await engine().recover();
         await expectState(moved: true);
-        final completed = await note().readAsBytes();
+        expect(await note().exists(), isFalse);
         await engine().recover();
-        expect(await move(engine()), isA<Moved>());
-        expect(await note().readAsBytes(), completed);
         await expectState(moved: true);
       },
       skip: !Platform.isLinux,
@@ -288,19 +310,19 @@ void main() {
   test(
     'completed retry does not overwrite later edits or reused source',
     () async {
-      expect(await move(engine()), isA<Moved>());
-      final metadata = await note().readAsBytes();
+      final owner = engine();
+      expect(await move(owner), isA<Moved>());
+      expect(await note().exists(), isFalse);
       await File(from.path).writeAsString(documentText);
       await File(to.path).writeAsString(oneGame('1. d4'));
       await participant(historyFile).writeAsString('later history');
       await books().writeAsString('{"later":true}');
-      await engine().recover();
-      expect(await move(engine()), isA<Moved>());
+      await owner.recover();
+      expect(await move(owner), isA<Moved>());
       expect(await File(from.path).readAsString(), documentText);
       expect(await File(to.path).readAsString(), oneGame('1. d4'));
       expect(await participant(historyFile).readAsString(), 'later history');
       expect(await books().readAsString(), '{"later":true}');
-      expect(await note().readAsBytes(), metadata);
     },
     skip: !Platform.isLinux,
   );

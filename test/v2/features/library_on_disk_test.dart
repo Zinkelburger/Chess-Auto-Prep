@@ -69,21 +69,20 @@ void main() {
     await support.delete(recursive: true);
   });
 
-  test(
-    'blocked recovery returns import failure without deleting retained staging',
-    () async {
-      final note = File(p.join(support.path, 'unfinished-moves', 'bad.json'));
-      await note.parent.create(recursive: true);
-      await note.writeAsString('{');
-      final result = await library.importText(
-        '[Event "Study"]\n\n1. e4 *\n',
-        name: 'Study',
-      );
-      expect(result, isA<LibraryFailure>());
-      expect(await note.readAsString(), '{');
-      expect(exists('repertoires/Study/Study.pgn'), isFalse);
-    },
-  );
+  test('a damaged recovery note does not stop an import', () async {
+    final note = File(p.join(support.path, 'unfinished-moves', 'bad.json'));
+    await note.parent.create(recursive: true);
+    await note.writeAsString('{');
+    final result = await library.importText(
+      '[Event "Study"]\n\n1. e4 *\n',
+      name: 'Study',
+    );
+    expect(result, isA<LibraryAdded>());
+    expect(File((result as LibraryAdded).first.path).existsSync(), isTrue);
+    // Nothing is deleted: the note waits for the next start, which sets it
+    // aside if it still cannot be read.
+    expect(await note.readAsString(), '{');
+  });
 
   test('a new repertoire is a folder with one chapter in it', () async {
     expect(

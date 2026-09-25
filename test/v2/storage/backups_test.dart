@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 
 import 'package:chess_auto_prep/v2/storage/atomic_write.dart';
+import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -140,31 +141,74 @@ void main() {
     expect(staged.existsSync(), isTrue, reason: 'nothing here deletes it');
   });
 
-  test('a history already kept under the new name is not braided in', () async {
-    // A chapter that used to have the name, removed outside this app, so its
-    // versions are still kept under the id that name hashes to.
-    final taken = fixture.ref('KID/Mainline.pgn');
-    final first = await fixture.put(taken, older);
-    await fixture.edit(taken, newer, first);
-    await File(taken.path).delete();
+  test(
+    'a history already kept under the new name is offered as a deleted chapter',
+    () async {
+      // A chapter that used to have the name, removed outside this app, so its
+      // versions are still kept under the id that name hashes to.
+      final taken = fixture.ref('KID/Mainline.pgn');
+      final first = await fixture.put(taken, older);
+      await fixture.edit(taken, newer, first);
+      await File(taken.path).delete();
+      // Staging an earlier build left beside it is not touched.
+      final legacy = Directory('${fixture.backupFolder(taken).path}.adopting');
+      await legacy.create(recursive: true);
+      await File(p.join(legacy.path, 'retained')).writeAsString('legacy');
 
+      final ref = fixture.ref('KID/Main.pgn');
+      final revision = await fixture.put(ref, a);
+      final saved = await fixture.edit(ref, b, revision) as Saved;
+      final moved = await fixture.store.rename(
+        ref,
+        'Mainline.pgn',
+        expected: saved.receipt.committed,
+      );
+
+      expect(moved, isA<Moved>());
+      // The two histories are not braided: the moved chapter keeps its own.
+      expect(fixture.keptTexts(taken), [a]);
+      expect(fixture.backupFolder(ref).existsSync(), isFalse);
+      // The displaced one is a deleted chapter that can be restored, and its
+      // versions follow it.
+      final listing = await listDeleted(fixture.documents) as DeletedChapters;
+      final chapter = listing.chapters.single;
+      expect(chapter.name, 'Mainline');
+      expect(await File(chapter.path).readAsString(), older);
+      expect(fixture.keptTexts(DocumentRef(chapter.path)), [older]);
+      expect(
+        await File(p.join(legacy.path, 'retained')).readAsString(),
+        'legacy',
+      );
+    },
+  );
+
+  test('a damaged old version does not stop a rename', () async {
     final ref = fixture.ref('KID/Main.pgn');
-    final revision = await fixture.put(ref, a);
-    final saved = await fixture.edit(ref, b, revision) as Saved;
+    var revision = await fixture.put(ref, a);
+    revision =
+        (await fixture.edit(ref, b, revision) as Saved).receipt.committed;
+    revision =
+        (await fixture.edit(ref, c, revision) as Saved).receipt.committed;
+    final versions =
+        fixture
+            .backupFolder(ref)
+            .listSync()
+            .whereType<File>()
+            .where((f) => f.path.endsWith('.pgn'))
+            .toList()
+          ..sort((x, y) => x.path.compareTo(y.path));
+    await versions.first.writeAsString('damaged');
+    await versions.last.delete();
+
     final moved = await fixture.store.rename(
       ref,
-      'Mainline.pgn',
-      expected: saved.receipt.committed,
+      'Renamed.pgn',
+      expected: revision,
     );
-
     expect(moved, isA<Moved>());
-    expect(fixture.keptTexts(taken), [a]);
-    final superseded = Directory(p.join(fixture.support.path, 'backups'))
-        .listSync()
-        .whereType<Directory>()
-        .where((d) => p.basename(d.path).contains('.superseded-'))
-        .single;
-    expect(superseded.listSync(), hasLength(2));
+    final renamed = fixture.ref('KID/Renamed.pgn');
+    expect(await File(renamed.path).readAsString(), c);
+    expect(fixture.backupFolder(renamed).existsSync(), isTrue);
   });
 
   test('versions committed in one millisecond keep one order', () async {
@@ -195,47 +239,6 @@ void main() {
       for (final name in names.reversed) '$name *\n',
     ]);
     expect(fixture.keptTexts(ref).last, a);
-  });
-
-  test('a journaled move preserves histories beside legacy staging', () async {
-    final taken = fixture.ref('KID/Mainline.pgn');
-    final first = await fixture.put(taken, older);
-    await fixture.edit(taken, newer, first);
-    await File(taken.path).delete();
-    final occupied = fixture.backupFolder(taken);
-    final occupantHeld = occupied.listSync().map((e) => p.basename(e.path));
-
-    final ref = fixture.ref('KID/Main.pgn');
-    final revision = await fixture.put(ref, a);
-    final saved = await fixture.edit(ref, b, revision) as Saved;
-    final mineHeld = fixture
-        .backupFolder(ref)
-        .listSync()
-        .map((e) => p.basename(e.path));
-    // Legacy staging is preserved; the journal uses its own recorded aside.
-    final legacy = Directory('${occupied.path}.adopting');
-    await legacy.create();
-    await File(p.join(legacy.path, 'retained')).writeAsString('legacy bytes');
-
-    final moved = await fixture.store.rename(
-      ref,
-      'Mainline.pgn',
-      expected: saved.receipt.committed,
-    );
-
-    expect(moved, isA<Moved>());
-    expect(occupied.listSync().map((e) => p.basename(e.path)), mineHeld);
-    expect(fixture.backupFolder(ref).existsSync(), isFalse);
-    final aside = Directory(p.join(fixture.support.path, 'backups'))
-        .listSync()
-        .whereType<Directory>()
-        .singleWhere((e) => p.basename(e.path).contains('.superseded-'));
-    expect(aside.listSync().map((e) => p.basename(e.path)), occupantHeld);
-    expect(
-      await File(p.join(legacy.path, 'retained')).readAsString(),
-      'legacy bytes',
-    );
-    expect(fixture.keptTexts(taken), [a]);
   });
 
   test(

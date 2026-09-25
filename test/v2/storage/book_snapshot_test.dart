@@ -228,16 +228,23 @@ void main() {
     );
   });
 
-  test('a linked book stage cannot truncate an unrelated file', () async {
-    await support.create();
-    final target = File(p.join(root.path, 'unrelated.txt'));
-    const preserved = 'Keep this unrelated document intact.';
-    await target.writeAsString(preserved);
-    final stage = Link(temporaryPathFor(p.join(support.path, 'books.json')));
-    await stage.create(target.path);
-    await expectLater(store.write(books), throwsA(isA<Exception>()));
-    expect(await target.readAsString(), preserved);
-    expect(await stage.exists(), isTrue);
-    expect(await File(p.join(support.path, 'books.json')).exists(), isFalse);
-  }, skip: !Platform.isLinux);
+  test(
+    'a leftover linked book stage is removed without truncating its target',
+    () async {
+      await support.create();
+      final target = File(p.join(root.path, 'unrelated.txt'));
+      const preserved = 'Keep this unrelated document intact.';
+      await target.writeAsString(preserved);
+      final stage = Link(temporaryPathFor(p.join(support.path, 'books.json')));
+      await stage.create(target.path);
+      await store.write(books);
+      expect(await target.readAsString(), preserved);
+      expect(
+        await FileSystemEntity.type(stage.path, followLinks: false),
+        FileSystemEntityType.notFound,
+      );
+      expect(await File(p.join(support.path, 'books.json')).exists(), isTrue);
+    },
+    skip: !Platform.isLinux,
+  );
 }

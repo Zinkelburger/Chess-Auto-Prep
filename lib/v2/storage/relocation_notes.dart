@@ -29,6 +29,7 @@ import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
 import 'directory_entries.dart';
+import '../diagnostics/log.dart';
 import 'journal_records.dart';
 import 'recovery_quarantine.dart';
 import 'atomic_write.dart';
@@ -99,8 +100,10 @@ final class RelocationNotes {
       try {
         await _notes._validate(move);
         await _finish(move);
-      } on Object catch (error) {
+      } on RecoveryRequired catch (error) {
         await quarantine(_notes.support, file, error);
+      } on Object catch (error) {
+        log.w('finish the move noted at ${file.path}', error);
       }
     }
   }
@@ -117,6 +120,10 @@ final class RelocationNotes {
           DocumentRef(move.from),
           DocumentRef(move.to),
         );
+        if (result is IoFailure) {
+          // Passing: the note stays and the next start tries again.
+          throw FileSystemException(result.detail, move.to);
+        }
         if (!_settled(result)) {
           throw RecoveryRequired(
             'Training rows for ${move.from} could not be recovered: '

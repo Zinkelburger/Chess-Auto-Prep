@@ -9,7 +9,7 @@ import 'package:chess_auto_prep/v2/storage/backups.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/file_relocation.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/v2/storage/relocation_notes.dart';
+import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/training_rows.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,23 +33,32 @@ void main() {
   tearDown(() => f.disk.dispose());
 
   for (final step in FileRelocationStep.values) {
+    // The journal is written after `prepared`; a stop before it leaves
+    // nothing to finish, and nothing moved.
+    final recorded = step != FileRelocationStep.prepared;
+
     test(
-      'folder interruption at ${step.name} recovers twice with exact retry',
+      'folder interruption at ${step.name} finishes on the next start',
       () async {
         expect(await f.move(f.owner(interrupt: step)), isA<FolderMoveFailed>());
-        expect((await f.metadata())['version'], 2);
-        final prepared = step == FileRelocationStep.prepared;
         await f.owner().recover();
-        await f.expectState(moved: !prepared);
-        final settled = await f.note.readAsBytes();
+        await f.expectState(moved: recorded);
+        expect(await f.note.exists(), isFalse);
         await f.owner().recover();
-        expect(await f.note.readAsBytes(), settled);
-        expect(await f.move(f.owner()), isA<FolderMoved>());
+        await f.expectState(moved: recorded);
+      },
+    );
+
+    test(
+      'folder interruption at ${step.name} is finished by its retry',
+      () async {
+        final engine = f.owner(interrupt: step);
+        expect(await f.move(engine), isA<FolderMoveFailed>());
+        expect(await f.move(engine), isA<FolderMoved>());
         await f.expectState(moved: true);
-        final completed = await f.note.readAsBytes();
-        expect(await f.move(f.owner()), isA<FolderMoved>());
-        expect(await f.note.readAsBytes(), completed);
+        expect(await f.move(engine), isA<FolderMoved>());
         await f.expectState(moved: true);
+        expect(await f.note.exists(), isFalse);
       },
     );
   }
@@ -59,66 +68,40 @@ void main() {
     FileRelocationStep.document,
   ]) {
     test(
-      'last malformed backup after ${checkpoint.name} prevents any remaining publication',
+      'a damaged kept-version folder after ${checkpoint.name} does not stop recovery',
       () async {
         expect(
           await f.move(f.owner(interrupt: checkpoint)),
           isA<FolderMoveFailed>(),
         );
         final last = f.disk.backupFolder(f.ref(f.from, _archived.last));
-        final index = File(p.join(last.path, 'index.json'));
-        final original = await index.readAsBytes();
-        await index.writeAsString('malformed last backup');
-        final note = await f.note.readAsBytes();
-        final participants = await f.readParticipants();
-        await expectLater(
-          f.owner().recover(),
-          throwsA(isA<RecoveryRequired>()),
-        );
-        expect(await f.readParticipants(), participants);
-        expect(await f.note.readAsBytes(), note);
-        expect(await index.readAsString(), 'malformed last backup');
-        expect(
-          await Directory(f.from).exists(),
-          checkpoint == FileRelocationStep.intent,
-        );
-        expect(
-          f.disk.backupFolder(f.ref(f.from, _archived.first)).existsSync(),
-          isTrue,
-        );
-        await index.writeAsBytes(original);
+        await File(
+          p.join(last.path, 'index.json'),
+        ).writeAsString('malformed last backup');
+        await File(
+          p.join(last.path, 'foreign.txt'),
+        ).writeAsString('preserve new backup material');
         await f.owner().recover();
-        await f.expectState(moved: true);
+        expect(await Directory(f.from).exists(), isFalse);
+        expect(await f.note.exists(), isFalse);
+        for (final entry in f.rows.entries) {
+          expect(
+            await f.participant(entry.key).readAsBytes(),
+            utf8.encode(entry.value.replaceAll(f.from, f.to)),
+          );
+        }
+        final moved = f.disk.backupFolder(f.ref(f.to, _archived.last));
+        expect(
+          await File(p.join(moved.path, 'index.json')).readAsString(),
+          'malformed last backup',
+        );
+        expect(
+          await File(p.join(moved.path, 'foreign.txt')).readAsString(),
+          'preserve new backup material',
+        );
       },
     );
   }
-
-  test(
-    'first transferred archive does not allow a late last archive conflict to be skipped',
-    () async {
-      expect(
-        await f.move(f.owner(interrupt: FileRelocationStep.backups)),
-        isA<FolderMoveFailed>(),
-      );
-      final last = File(
-        p.join(
-          f.disk.backupFolder(f.ref(f.from, _archived.last)).path,
-          'foreign.txt',
-        ),
-      );
-      await last.writeAsString('preserve new backup material');
-      final before = await f.readParticipants();
-      final note = await f.note.readAsBytes();
-      await expectLater(f.owner().recover(), throwsA(isA<RecoveryRequired>()));
-      expect(await f.readParticipants(), before);
-      expect(await f.note.readAsBytes(), note);
-      expect(await last.readAsString(), 'preserve new backup material');
-      expect(
-        f.disk.backupFolder(f.ref(f.from, _archived[1])).existsSync(),
-        isTrue,
-      );
-    },
-  );
 
   for (final change in [
     'added',
@@ -127,7 +110,7 @@ void main() {
     'changed sidecar',
   ]) {
     test(
-      '$change after intent refuses without publishing other participants',
+      '$change after intent sets the stale record aside; moving again works',
       () async {
         expect(
           await f.move(f.owner(interrupt: FileRelocationStep.intent)),
@@ -148,21 +131,21 @@ void main() {
             ).writeAsBytes([8, 9]);
         }
         final before = await f.readParticipants();
-        final note = await f.note.readAsBytes();
-        await expectLater(
-          f.owner().recover(),
-          throwsA(isA<RecoveryRequired>()),
-        );
+        await f.owner().recover();
         expect(await f.readParticipants(), before);
-        expect(await f.note.readAsBytes(), note);
+        expect(await f.note.exists(), isFalse);
+        expect(f.quarantined(), hasLength(1));
         expect(await Directory(f.from).exists(), isTrue);
         expect(await Directory(f.to).exists(), isFalse);
+        expect(await f.move(f.owner()), isA<FolderMoved>());
+        expect(await Directory(f.from).exists(), isFalse);
+        expect(await Directory(f.to).exists(), isTrue);
       },
     );
   }
 
   test(
-    'captured alias must remain bound through canonical-root recovery',
+    'a record made through a retargeted alias is set aside, not followed',
     () async {
       final alias = Link(p.join(f.disk.root.path, 'Documents-alias'));
       await alias.create(f.disk.documents.path);
@@ -184,19 +167,18 @@ void main() {
       ).create();
       await alias.delete();
       await alias.create(foreign.path);
-      final note = await f.note.readAsBytes();
-      await expectLater(f.owner().recover(), throwsA(isA<RecoveryRequired>()));
-      expect(await f.note.readAsBytes(), note);
+      await f.owner().recover();
       await f.expectState(moved: false);
       expect(await foreign.list().toList(), isEmpty);
+      expect(f.quarantined(), hasLength(1));
       await alias.delete();
       await alias.create(f.disk.documents.path);
-      await f.owner().recover();
+      expect(await f.move(f.owner()), isA<FolderMoved>());
       await f.expectState(moved: true);
     },
   );
 
-  test('wrong captured training root refuses pending recovery', () async {
+  test('a record with a foreign training root is set aside', () async {
     expect(
       await f.move(f.owner(interrupt: FileRelocationStep.intent)),
       isA<FolderMoveFailed>(),
@@ -207,46 +189,46 @@ void main() {
     final metadata = await f.metadata();
     metadata['trainingRoot'] = foreign.path;
     await f.note.writeAsString(jsonEncode(metadata));
-    final note = await f.note.readAsBytes();
-    await expectLater(f.owner().recover(), throwsA(isA<RecoveryRequired>()));
-    expect(await f.note.readAsBytes(), note);
+    await f.owner().recover();
+    expect(await f.note.exists(), isFalse);
+    expect(f.quarantined(), hasLength(1));
     await f.expectState(moved: false);
   });
 
   test(
     'historical retry neither moves reused root nor restores later rows',
     () async {
-      expect(await f.move(f.owner()), isA<FolderMoved>());
-      final note = await f.note.readAsBytes();
+      final engine = f.owner();
+      expect(await f.move(engine), isA<FolderMoved>());
       await Directory(f.from).create();
       await File(p.join(f.from, 'replacement.txt')).writeAsString('new root');
       await f.participant(historyFile).writeAsString('later history');
       await f.books.writeAsString('{"later":true}');
-      await f.owner().recover();
-      expect(await f.move(f.owner()), isA<FolderMoved>());
+      await engine.recover();
+      expect(await f.move(engine), isA<FolderMoved>());
       expect(
         await File(p.join(f.from, 'replacement.txt')).readAsString(),
         'new root',
       );
       expect(await f.participant(historyFile).readAsString(), 'later history');
       expect(await f.books.readAsString(), '{"later":true}');
-      expect(await f.note.readAsBytes(), note);
+      expect(await f.note.exists(), isFalse);
     },
   );
 
   test(
     'folder id cannot be reused for another target or file operation',
     () async {
-      expect(await f.move(f.owner()), isA<FolderMoved>());
-      final note = await f.note.readAsBytes();
+      final engine = f.owner();
+      expect(await f.move(engine), isA<FolderMoved>());
       expect(
-        await f.owner().moveFolder(f.from, '${f.to}-other', operationId: _id),
+        await engine.moveFolder(f.from, '${f.to}-other', operationId: _id),
         isA<FolderMoveFailed>(),
       );
       final source = f.ref(f.to, 'Main.pgn');
       final revision = await f.disk.revisionOf(source);
       expect(
-        await f.owner().move(
+        await engine.move(
           source,
           f.ref(f.to, 'Renamed.pgn'),
           expected: revision,
@@ -254,14 +236,13 @@ void main() {
         ),
         isA<IoFailure>(),
       );
-      expect(await f.note.readAsBytes(), note);
       await f.expectState(moved: true);
     },
   );
 
   for (final step in ['document', 'backups']) {
     test(
-      'SIGKILL after $step recovers the complete folder operation',
+      'SIGKILL after $step finishes the folder move on the next start',
       () async {
         final harness = await Directory(
           p.join(Directory.current.path, '.dart_tool'),
@@ -278,10 +259,8 @@ void main() {
         await child.process.exitCode.timeout(const Duration(seconds: 10));
         await f.owner().recover();
         await f.expectState(moved: true);
-        final note = await f.note.readAsBytes();
+        expect(await f.note.exists(), isFalse);
         await f.owner().recover();
-        expect(await f.move(f.owner()), isA<FolderMoved>());
-        expect(await f.note.readAsBytes(), note);
         await f.expectState(moved: true);
       },
       timeout: const Timeout(Duration(seconds: 90)),
@@ -299,15 +278,28 @@ final class _Fixture {
   File get books => File(p.join(disk.support.path, 'books.json'));
   File participant(String name) => File(p.join(disk.documents.path, name));
   DocumentRef ref(String root, String name) => DocumentRef(p.join(root, name));
-  FileRelocations owner({FileRelocationStep? interrupt}) => FileRelocations(
-    documents: disk.documents,
-    support: disk.support,
-    testHook: interrupt == null
-        ? null
-        : (step) async {
-            if (step == interrupt) throw StateError('interrupt ${step.name}');
-          },
-  );
+  FileRelocations owner({FileRelocationStep? interrupt}) {
+    var interrupted = false;
+    return FileRelocations(
+      documents: disk.documents,
+      support: disk.support,
+      testHook: interrupt == null
+          ? null
+          : (step) async {
+              if (step == interrupt && !interrupted) {
+                interrupted = true;
+                throw StateError('interrupt ${step.name}');
+              }
+            },
+    );
+  }
+
+  List<File> quarantined() {
+    final folder = Directory(p.join(disk.support.path, 'recovery-quarantine'));
+    if (!folder.existsSync()) return const [];
+    return folder.listSync(recursive: true).whereType<File>().toList();
+  }
+
   Future<FolderMoveResult> move(FileRelocations engine) =>
       engine.moveFolder(from, to, operationId: _id);
   Future<Map<String, Object?>> metadata() async =>
@@ -384,28 +376,20 @@ final class _Fixture {
       }
     }
     final target = ref(to, 'Main.pgn');
-    final aside = Directory(
-      '${disk.backupFolder(target).path}.superseded-$_id',
-    );
     if (!moved) {
       expect(disk.keptTexts(target), [_orphan]);
-      expect(await aside.exists(), isFalse);
       return;
     }
-    final index =
-        jsonDecode(await File(p.join(aside.path, 'index.json')).readAsString())
-            as Map;
-    final version = (index['versions'] as List).single as Map;
-    expect(
-      utf8.decode(
-        versionBytes(
-          await File(
-            p.join(aside.path, version['file'] as String),
-          ).readAsBytes(),
-        ),
-      ),
-      _orphan,
+    // The history that already held the target's id belonged to another
+    // chapter; it is offered back as a deleted chapter of the moved folder.
+    final listing =
+        await listDeleted(Directory(p.join(disk.documents.path, 'repertoires')))
+            as DeletedChapters;
+    final displaced = listing.chapters.singleWhere(
+      (chapter) => chapter.name == 'Main' && chapter.folder == to,
     );
+    expect(await File(displaced.path).readAsString(), _orphan);
+    expect(disk.keptTexts(DocumentRef(displaced.path)), [_orphan]);
   }
 }
 

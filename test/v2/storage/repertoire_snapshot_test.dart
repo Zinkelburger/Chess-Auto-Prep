@@ -269,9 +269,13 @@ void main() {
     );
   }
 
-  test('an unreadable PGN does not become unnamed metadata', () async {
+  test('a PGN that is not UTF-8 still lists under its file name', () async {
     await File(a.path).writeAsBytes([0xff, 0xfe, 0xff]);
-    expect(await files.list(), isA<RepertoiresUnreadable>());
+    final listing = await files.list() as Repertoires;
+    expect(
+      listing.folders.expand((folder) => folder.chapters).map((c) => c.name),
+      contains(p.basenameWithoutExtension(a.path)),
+    );
   });
 
   test(

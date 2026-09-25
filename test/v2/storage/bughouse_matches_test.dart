@@ -231,7 +231,7 @@ void main() {
     '.match.json.v2-tmp',
   ]) {
     test(
-      'linked $participant blocks repair and preserves its target',
+      'linked $participant never writes through to its target',
       () async {
         final made = await store.create(config, DateTime(2026)) as MatchCreated;
         final target = File(p.join(documents.path, 'outside'));
@@ -239,9 +239,18 @@ void main() {
         await Link(
           p.join(root, made.match.id, participant),
         ).create(target.path);
-        await expectLater(MatchFolder(root).list(), throwsA(anything));
+        if (participant == 'games.bpgn') {
+          await expectLater(MatchFolder(root).list(), throwsA(anything));
+        } else {
+          // A staged link is only a leftover: it is removed as a link.
+          await MatchFolder(root).list();
+        }
         expect(await target.readAsString(), 'keep');
-        expect(await store.save(made.match), isNotNull);
+        // A damaged export refuses; a leftover stage does not.
+        expect(
+          await store.save(made.match),
+          participant == 'games.bpgn' ? isNotNull : isNull,
+        );
         expect(await target.readAsString(), 'keep');
       },
       skip: Platform.isWindows

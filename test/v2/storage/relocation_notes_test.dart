@@ -9,6 +9,7 @@ import 'package:chess_auto_prep/v2/storage/atomic_write.dart';
 import 'package:chess_auto_prep/v2/storage/document_probe.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_file_store.dart';
 import 'package:chess_auto_prep/v2/storage/relocation_notes.dart';
 import 'package:document_file_io/document_file_io.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -43,6 +44,21 @@ void main() {
   Future<Revision> chapter(DocumentRef ref) =>
       fixture.put(ref, '[Event "x"]\n\n1. d4 *\n');
 
+  /// The store the next app session opens; it finishes the notes it finds.
+  PgnFileStore restarted() =>
+      PgnFileStore(documents: fixture.documents, support: fixture.support);
+
+  /// Whether a note was set aside rather than finished.
+  Future<bool> setAside(String id) async {
+    final folder = Directory(
+      p.join(fixture.support.path, 'recovery-quarantine'),
+    );
+    if (!await folder.exists()) return false;
+    return folder
+        .list(recursive: true)
+        .any((entry) => p.basename(entry.path) == 'unfinished-moves-$id.json');
+  }
+
   /// The native identity of the file at [ref], which is what a note
   /// carries.
   Future<String> identityOf(DocumentRef ref) async =>
@@ -67,7 +83,7 @@ void main() {
         folder: false,
       );
 
-      await fixture.store.rename(slav, 'Other.pgn', expected: other);
+      await restarted().rename(slav, 'Other.pgn', expected: other);
 
       expect(read(), contains(_row(kid.path)));
       expect(await notes.read(), isEmpty, reason: 'nothing is owed');
@@ -95,13 +111,13 @@ void main() {
       );
 
       expect(
-        await fixture.store.rename(slav, 'Other.pgn', expected: other),
-        isA<IoFailure>(),
+        await restarted().rename(slav, 'Other.pgn', expected: other),
+        isA<Moved>(),
       );
 
       expect(read(), contains(_row(kid.path)));
-      expect(await notes.read(), hasLength(1));
-      expect((await notes.read()).single.id, 'ambiguous');
+      expect(await notes.read(), isEmpty);
+      expect(await setAside('ambiguous'), isTrue);
     },
   );
 
@@ -125,7 +141,7 @@ void main() {
         folder: false,
       );
 
-      await fixture.store.rename(slav, 'Other.pgn', expected: other);
+      await restarted().rename(slav, 'Other.pgn', expected: other);
 
       expect(read(), contains(_row(renamed.path)));
       expect(read(), isNot(contains(_row(kid.path))));
@@ -134,7 +150,7 @@ void main() {
   );
 
   test(
-    'a landed move stays blocked when an external save replaced its identity',
+    'a landed move whose identity was replaced is set aside, not blocking',
     () async {
       final kid = fixture.ref('repertoires/KID/Main.pgn');
       final slav = fixture.ref('repertoires/Slav/Main.pgn');
@@ -160,17 +176,18 @@ void main() {
       expect(await identityOf(renamed), isNot(identity));
 
       expect(
-        await fixture.store.rename(slav, 'Other.pgn', expected: other),
-        isA<IoFailure>(),
+        await restarted().rename(slav, 'Other.pgn', expected: other),
+        isA<Moved>(),
       );
 
       expect(read(), contains(_row(kid.path)));
-      expect(await notes.read(), hasLength(1));
+      expect(await notes.read(), isEmpty);
+      expect(await setAside('landed'), isTrue);
     },
   );
 
   test(
-    'an unperformed move stays blocked after external identity replacement',
+    'an unperformed move whose identity was replaced is set aside',
     () async {
       final kid = fixture.ref('repertoires/KID/Main.pgn');
       final slav = fixture.ref('repertoires/Slav/Main.pgn');
@@ -191,17 +208,18 @@ void main() {
       expect(await identityOf(kid), isNot(identity));
 
       expect(
-        await fixture.store.rename(slav, 'Other.pgn', expected: other),
-        isA<IoFailure>(),
+        await restarted().rename(slav, 'Other.pgn', expected: other),
+        isA<Moved>(),
       );
 
       expect(read(), contains(_row(kid.path)));
-      expect(await notes.read(), hasLength(1));
+      expect(await notes.read(), isEmpty);
+      expect(await setAside('stopped-early'), isTrue);
     },
   );
 
   test(
-    'an unresolved move blocks the next move until its rows recover',
+    'rows a session could not write are finished by the next session',
     () async {
       final kid = fixture.ref('repertoires/KID/Main.pgn');
       final benko = fixture.ref('repertoires/Benko/Main.pgn');
@@ -224,17 +242,17 @@ void main() {
       );
       await File(kid.path).rename(moved.path);
       await Process.run('chmod', ['a-w', fixture.documents.path]);
-      final two = await fixture.store.rename(benko, 'B.pgn', expected: second);
+      final two = await restarted().rename(benko, 'B.pgn', expected: second);
       await Process.run('chmod', ['u+w', fixture.documents.path]);
 
       expect(two, isA<IoFailure>());
       expect(
         await notes.read(),
         hasLength(1),
-        reason: 'the first is still owed',
+        reason: 'a write that failed is kept for the next session',
       );
 
-      await fixture.store.rename(slav, 'C.pgn', expected: third);
+      await restarted().rename(slav, 'C.pgn', expected: third);
 
       final rows = read();
       expect(rows, contains(_row(fixture.ref('repertoires/KID/A.pgn').path)));
@@ -263,7 +281,7 @@ void main() {
       folder: true,
     );
 
-    await fixture.store.rename(slav, 'Other.pgn', expected: other);
+    await restarted().rename(slav, 'Other.pgn', expected: other);
 
     expect(read(), contains(_row(p.join(to, 'Main.pgn'))));
     expect(await notes.read(), isEmpty);

@@ -47,6 +47,14 @@ void main() {
   });
   tearDown(() => fixture.dispose());
 
+  List<File> quarantined() {
+    final folder = Directory(
+      p.join(fixture.support.path, 'recovery-quarantine'),
+    );
+    if (!folder.existsSync()) return const [];
+    return folder.listSync(recursive: true).whereType<File>().toList();
+  }
+
   File getRows() =>
       File(p.join(fixture.documents.path, 'repertoire_move_progress.csv'));
   Future<void> rowsFor(DocumentRef ref) => getRows().writeAsString(
@@ -55,68 +63,64 @@ void main() {
   );
 
   for (final endpoint in ['source', 'destination', 'ancestor']) {
-    test('folder retains its note when $endpoint flush fails', () async {
-      final from = fixture.ref('repertoires/Before/Main.pgn');
-      await fixture.put(from, oneGame('1. d4'));
-      await rowsFor(from);
-      final sourceParent = p.dirname(p.dirname(from.path));
-      final destinationParent = p.join(fixture.documents.path, 'nested');
-      await Directory(destinationParent).create();
-      failAt = canonical(switch (endpoint) {
-        'source' => sourceParent,
-        'destination' => destinationParent,
-        _ => fixture.documents.path,
-      });
-      // Replay a real original-format note without retaining its retired
-      // production writer. New folder commands use the complete journal.
-      final source = p.dirname(from.path);
-      final target = p.join(destinationParent, 'After');
-      await notes.record(
-        'old-folder',
-        from: source,
-        to: target,
-        identity: (await observeDirectory(source)).identity!,
-        folder: true,
-      );
-      await movePathNoReplace(source, target);
-      await expectLater(
-        notes.finishOwed(),
-        throwsA(isA<FileSystemException>()),
-      );
-      final owed = await pending.read();
-      expect(owed, hasLength(1));
-      final movedPath = p.join(owed.single.to, 'Main.pgn');
-      expect(await File(from.path).exists(), isFalse);
-      expect(await File(movedPath).readAsString(), oneGame('1. d4'));
-      expect(await getRows().readAsString(), contains(from.path));
-      await expectLater(
-        notes.finishOwed(),
-        throwsA(isA<FileSystemException>()),
-      );
-      expect(await pending.read(), hasLength(1));
-      failAt = null;
-      flushed.clear();
-      await notes.finishOwed();
-      expect(
-        flushed,
-        containsAll([
-          canonical(sourceParent),
-          canonical(destinationParent),
-          canonical(fixture.documents.path),
-        ]),
-      );
-      expect(await pending.read(), isEmpty);
-      expect(await getRows().readAsString(), contains(movedPath));
-      final committedRows = await getRows().readAsString();
-      await notes.finishOwed();
-      expect(await getRows().readAsString(), committedRows);
-    });
+    test(
+      'an old folder note whose $endpoint flush fails is finished later',
+      () async {
+        final from = fixture.ref('repertoires/Before/Main.pgn');
+        await fixture.put(from, oneGame('1. d4'));
+        await rowsFor(from);
+        final sourceParent = p.dirname(p.dirname(from.path));
+        final destinationParent = p.join(fixture.documents.path, 'nested');
+        await Directory(destinationParent).create();
+        failAt = canonical(switch (endpoint) {
+          'source' => sourceParent,
+          'destination' => destinationParent,
+          _ => fixture.documents.path,
+        });
+        // Replay a real original-format note without retaining its retired
+        // production writer. New folder commands use the complete journal.
+        final source = p.dirname(from.path);
+        final target = p.join(destinationParent, 'After');
+        await notes.record(
+          'old-folder',
+          from: source,
+          to: target,
+          identity: (await observeDirectory(source)).identity!,
+          folder: true,
+        );
+        await movePathNoReplace(source, target);
+        // A failed flush never throws at the caller and keeps the note for
+        // the next start rather than setting it aside.
+        await notes.finishOwed();
+        expect(await pending.read(), hasLength(1));
+        expect(quarantined(), isEmpty);
+        expect(await getRows().readAsString(), contains(from.path));
+        failAt = null;
+        flushed.clear();
+        await notes.finishOwed();
+        expect(
+          flushed,
+          containsAll([
+            canonical(sourceParent),
+            canonical(destinationParent),
+            canonical(fixture.documents.path),
+          ]),
+        );
+        expect(await pending.read(), isEmpty);
+        final movedPath = p.join(target, 'Main.pgn');
+        expect(await File(movedPath).readAsString(), oneGame('1. d4'));
+        expect(await getRows().readAsString(), contains(movedPath));
+        final committedRows = await getRows().readAsString();
+        await notes.finishOwed();
+        expect(await getRows().readAsString(), committedRows);
+      },
+    );
   }
 
   for (final operation in ['move', 'rename', 'delete']) {
     for (final endpoint in ['source', 'destination', 'ancestor']) {
       test(
-        '$operation retains committing journal when $endpoint flush fails',
+        '$operation whose $endpoint flush fails finishes on retry',
         () async {
           const id = '1780000000000000-f1';
           final from = fixture.ref('repertoires/Before/Main.pgn');
@@ -161,12 +165,12 @@ void main() {
           expect(await File(from.path).exists(), isFalse);
           expect(await File(to.path).readAsString(), oneGame('1. d4'));
           expect(await getRows().readAsBytes(), before);
-          await expectLater(owner.recover(), throwsA(isA<RecoveryRequired>()));
-          expect(await note.readAsBytes(), committing);
-          expect(await getRows().readAsBytes(), before);
           failAt = null;
           flushed.clear();
-          await owner.recover();
+          expect(
+            await run(),
+            operation == 'delete' ? isA<Deleted>() : isA<Moved>(),
+          );
           expect(
             flushed,
             containsAll([
@@ -175,7 +179,7 @@ void main() {
               canonical(fixture.documents.path),
             ]),
           );
-          expect(jsonDecode(await note.readAsString())['state'], 'complete');
+          expect(await note.exists(), isFalse);
           expect(await getRows().readAsString(), contains(to.path));
           final committed = await getRows().readAsBytes();
           expect(
@@ -385,25 +389,28 @@ void main() {
     expect(await pending.read(), hasLength(1));
   });
 
-  test('a cancelled move flush failure retains its recovery note', () async {
-    final from = fixture.ref('repertoires/Before/Main.pgn');
-    final to = fixture.ref('repertoires/Absent/Nested/Main.pgn');
-    await fixture.put(from, oneGame('1. d4'));
-    final identity = (await observeFile(from.path)).identity!;
-    await pending.record(
-      'cancelled',
-      from: from.path,
-      to: to.path,
-      identity: identity,
-      folder: false,
-    );
-    failAt = canonical(p.dirname(from.path));
-    await expectLater(notes.finishOwed(), throwsA(isA<FileSystemException>()));
-    expect(await pending.read(), hasLength(1));
-    failAt = null;
-    await notes.finishOwed();
-    expect(await pending.read(), isEmpty);
-    expect(await File(from.path).exists(), isTrue);
-    expect(flushed, contains(canonical(fixture.documents.path)));
-  });
+  test(
+    'a cancelled move whose flush fails keeps its note until it can finish',
+    () async {
+      final from = fixture.ref('repertoires/Before/Main.pgn');
+      final to = fixture.ref('repertoires/Absent/Nested/Main.pgn');
+      await fixture.put(from, oneGame('1. d4'));
+      final identity = (await observeFile(from.path)).identity!;
+      await pending.record(
+        'cancelled',
+        from: from.path,
+        to: to.path,
+        identity: identity,
+        folder: false,
+      );
+      failAt = canonical(p.dirname(from.path));
+      await notes.finishOwed();
+      expect(await pending.read(), hasLength(1));
+      failAt = null;
+      await notes.finishOwed();
+      expect(await pending.read(), isEmpty);
+      expect(quarantined(), isEmpty);
+      expect(await File(from.path).exists(), isTrue);
+    },
+  );
 }

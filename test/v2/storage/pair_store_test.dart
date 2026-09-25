@@ -134,7 +134,7 @@ void main() {
   });
 
   test(
-    'lost completion acknowledgement retries after restart without replacing later data',
+    'a lost acknowledgement retries in the same process without replacing later data',
     () async {
       final interrupted = PgnFileStore(
         documents: disk.documents,
@@ -150,13 +150,12 @@ void main() {
       );
       await File(source.ref.path).delete();
       await File(target.ref.path).writeAsString(oneGame('1. c4'));
-      final retry = await disk.store.savePair(
+      final retry = await interrupted.savePair(
         source,
         target,
         operationId: 'retry',
       );
       expect(retry, isA<Saved>());
-      expect((retry as Saved).receipt.committed.nativeIdentity, isNull);
       expect(await File(source.ref.path).exists(), isFalse);
       expect(await File(target.ref.path).readAsString(), oneGame('1. c4'));
       final changed = DocumentEdit(
@@ -166,9 +165,18 @@ void main() {
         scope: target.scope,
       );
       expect(
-        await disk.store.savePair(source, changed, operationId: 'retry'),
+        await interrupted.savePair(source, changed, operationId: 'retry'),
         isA<SaveRefused>(),
       );
+
+      // Another store of the same profile in this process knows the save
+      // finished too, and its retry changes nothing.
+      expect(
+        await disk.store.savePair(source, target, operationId: 'retry'),
+        isA<Saved>(),
+      );
+      expect(await File(source.ref.path).exists(), isFalse);
+      expect(await File(target.ref.path).readAsString(), oneGame('1. c4'));
     },
   );
   test(

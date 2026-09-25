@@ -151,7 +151,7 @@ void main() {
       },
     );
 
-    test('unrecognized fetched staging link preserves its target', () async {
+    test('a leftover staging link is removed, not written through', () async {
       final ref = cache.refFor(GameSite.lichess, 'me');
       await Directory(cache.folder).create(recursive: true);
       final outside = File(p.join(fixture.root.path, 'unrelated'));
@@ -164,10 +164,13 @@ void main() {
         await cache.keep(GameSite.lichess, 'me', [
           scholarsMate,
         ], DateTime(2026)),
-        isA<GamesNotKept>(),
+        isNot(isA<GamesNotKept>()),
       );
       expect(await outside.readAsString(), 'unrelated bytes');
-      expect(await stage.target(), outside.path);
+      expect(
+        await FileSystemEntity.type(stage.path, followLinks: false),
+        isNot(FileSystemEntityType.link),
+      );
     });
 
     for (final existing in [false, true]) {

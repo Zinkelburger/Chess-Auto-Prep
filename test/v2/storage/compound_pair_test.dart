@@ -55,6 +55,18 @@ void main() {
     await note().writeAsString(jsonEncode(value));
   }
 
+  Future<List<File>> quarantined() async {
+    final folder = Directory(p.join(support.path, 'recovery-quarantine'));
+    if (!await folder.exists()) return const [];
+    return [
+      await for (final entry in folder.list(recursive: true))
+        if (entry is File) entry,
+    ];
+  }
+
+  Future<bool> pending() async =>
+      await note().parent.exists() && !await note().parent.list().isEmpty;
+
   Future<void> expectPair(String source, String target) async {
     expect(await from.readAsString(), source);
     expect(await to.readAsString(), target);
@@ -105,10 +117,7 @@ void main() {
     await engine().recover();
     await engine().recover();
     await expectPair(after, targetAfter);
-    expect(
-      (await engine().completed(command.id))!.secondary!.after,
-      targetAfter,
-    );
+    expect(await pending(), isFalse);
   });
 
   for (final step in CompoundWriteStep.values.where(
@@ -121,43 +130,44 @@ void main() {
       );
       await engine().recover();
       await engine().recover();
+      expect(await pending(), isFalse);
       if (step == CompoundWriteStep.prepared) {
         await expectPair(before, targetBefore);
-        expect(await engine().completed(command.id), isNull);
-        await engine().commit(command);
       }
-      await expectPair(after, targetAfter);
+      // An exact retry through a new owner of the same profile succeeds
+      // and writes nothing again.
       await engine().commit(command);
       await expectPair(after, targetAfter);
     });
   }
 
-  test(
-    'complete retry preserves subsequent edits without native authority',
-    () async {
-      final first = engine();
-      await first.commit(command);
-      expect(first.publishedRevision(command.id)?.nativeIdentity, isNotNull);
-      expect(
-        first.publishedRevision(command.id, path: to.path)?.nativeIdentity,
-        isNotNull,
-      );
-      await from.delete();
-      await to.writeAsString('external replacement');
-      final restarted = engine();
-      final result = await restarted.commit(command);
-      expect(result.secondary!.after, targetAfter);
-      expect(await from.exists(), isFalse);
-      expect(await to.readAsString(), 'external replacement');
-      expect(restarted.publishedRevision(command.id), isNull);
-      expect(restarted.publishedRevision(command.id, path: to.path), isNull);
-    },
-  );
+  test('a retry never overwrites edits made after the pair finished', () async {
+    final first = engine();
+    await first.commit(command);
+    expect(first.publishedRevision(command.id)?.nativeIdentity, isNotNull);
+    expect(
+      first.publishedRevision(command.id, path: to.path)?.nativeIdentity,
+      isNotNull,
+    );
+    await from.delete();
+    await to.writeAsString('external replacement');
+    final result = await first.commit(command);
+    expect(result.secondary!.after, targetAfter);
+    final reopened = engine();
+    expect((await reopened.commit(command)).secondary!.after, targetAfter);
+    expect(await from.exists(), isFalse);
+    expect(await to.readAsString(), 'external replacement');
+    expect(
+      reopened.publishedRevision(command.id),
+      first.publishedRevision(command.id),
+    );
+  });
 
   test('same id cannot change only the second participant', () async {
-    await engine().commit(command);
+    final writes = engine();
+    await writes.commit(command);
     await expectLater(
-      engine().commit(
+      writes.commit(
         CompoundCommit.pair(
           id: command.id,
           primary: command.primary,
@@ -195,9 +205,10 @@ void main() {
     await record(metadata('committing'));
     await to.writeAsString('external');
     final kept = await note().readAsBytes();
-    await expectLater(engine().recover(), throwsA(isA<RecoveryRequired>()));
+    await engine().recover();
     await expectPair(before, 'external');
-    expect(await note().readAsBytes(), kept);
+    expect(await pending(), isFalse);
+    expect(await (await quarantined()).single.readAsBytes(), kept);
   });
 
   test('even an unchanged participant is a required read dependency', () async {
@@ -206,32 +217,37 @@ void main() {
     entries[1]['after'] = targetBefore;
     await record(value);
     await to.writeAsString('external');
-    await expectLater(engine().recover(), throwsA(isA<RecoveryRequired>()));
+    await engine().recover();
     expect(await from.readAsString(), before);
+    expect(await quarantined(), hasLength(1));
   });
 
   test(
-    'second participant stage symlink refuses before primary publication',
+    'a linked leftover stage is removed without touching its target',
     () async {
       final outside = await File(
         p.join(root.path, 'outside'),
       ).writeAsString('preserved');
       await Link(temporaryPathFor(to.path)).create(outside.path);
-      await expectLater(
-        engine().commit(command),
-        throwsA(isA<RecoveryRequired>()),
-      );
-      await expectPair(before, targetBefore);
+      await engine().commit(command);
+      await expectPair(after, targetAfter);
       expect(await outside.readAsString(), 'preserved');
-      expect(await Link(temporaryPathFor(to.path)).exists(), isTrue);
+      expect(
+        await FileSystemEntity.type(
+          temporaryPathFor(to.path),
+          followLinks: false,
+        ),
+        FileSystemEntityType.notFound,
+      );
     },
   );
 
   test(
-    'pair inverse is another exact transaction and preserves its receipt',
+    'pair inverse is another exact transaction that survives a restart',
     () async {
-      await engine().commit(command);
-      final kept = (await engine().completed(command.id))!;
+      final writes = engine();
+      await writes.commit(command);
+      final kept = (await writes.completed(command.id))!;
       CompoundDocument inverse(CompoundDocument document) => CompoundDocument(
         path: document.path,
         before: document.after,
@@ -247,10 +263,8 @@ void main() {
         throwsStateError,
       );
       await engine().recover();
-      await engine().commit(undo);
       await expectPair(before, targetBefore);
-      expect((await engine().completed(command.id))!.documentAfter, after);
-      expect((await engine().completed(undo.id))!.documentAfter, before);
+      expect(await pending(), isFalse);
     },
   );
 
@@ -292,14 +306,14 @@ void main() {
       documents: Directory(alias.path),
       support: support,
     );
-    await aliasEngine.commit(
+    final result = await aliasEngine.commit(
       CompoundCommit.pair(
         id: command.id,
         primary: aliased(command.primary),
         secondary: aliased(command.secondary!),
       ),
     );
-    expect((await engine().completed(command.id))!.secondary!.path, to.path);
+    expect(result.secondary!.path, to.path);
     await expectPair(after, targetAfter);
   });
 
@@ -325,17 +339,17 @@ void main() {
         ((value['documents']! as List)[1] as Map)['after'] = '\u0000',
   };
   for (final entry in corruptions.entries) {
-    test(
-      '${entry.key} refuses before mutation and preserves evidence',
-      () async {
-        final value = metadata('committing');
-        entry.value(value);
-        await record(value);
-        final kept = await note().readAsBytes();
-        await expectLater(engine().recover(), throwsA(isA<RecoveryRequired>()));
-        await expectPair(before, targetBefore);
-        expect(await note().readAsBytes(), kept);
-      },
-    );
+    test('${entry.key} record is set aside and the next edit works', () async {
+      final value = metadata('committing');
+      entry.value(value);
+      await record(value);
+      final kept = await note().readAsBytes();
+      await engine().recover();
+      await expectPair(before, targetBefore);
+      expect(await pending(), isFalse);
+      expect(await (await quarantined()).single.readAsBytes(), kept);
+      await engine().commit(command);
+      await expectPair(after, targetAfter);
+    });
   }
 }

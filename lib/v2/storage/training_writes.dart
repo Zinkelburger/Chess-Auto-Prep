@@ -41,10 +41,12 @@ final class TrainingWriter {
   final Future<void> Function(TrainingWriteStep)? testHook;
 
   /// Applies [payload], after checking that every PGN it names is still the
-  /// file it was read from ([sources]). Files named in [done] were already
-  /// written by an earlier attempt of the same change and are skipped, so a
-  /// retry never appends a history row or an answer twice; the names written
-  /// now are added to it.
+  /// file it was read from ([sources]).
+  ///
+  /// [attempted] carries the bytes an earlier attempt of the same change set
+  /// out to publish. A file that already holds them was written, even if that
+  /// attempt failed before it heard so, and is skipped: a retry never appends
+  /// a history row or an answer twice.
   ///
   /// Throws [TrainingChanged] when a source or a row changed since it was
   /// read, and [TrainingUnreadable] when a file is not rows.
@@ -52,7 +54,7 @@ final class TrainingWriter {
     String payload,
     Map<String, Revision> sources, {
     required String trainingRoot,
-    required Set<String> done,
+    required Map<String, List<int>> attempted,
   }) async {
     final change = TrainingPayload.decode(payload);
     await _checkSources(change, sources, trainingRoot);
@@ -60,17 +62,19 @@ final class TrainingWriter {
       for (final name in trainingFileNames) name: await _bytes(name),
     };
     final after = change.plan(before);
+    const equal = ListEquality<int>();
     for (final name in trainingFileNames) {
-      if (done.contains(name) ||
-          const ListEquality<int>().equals(before[name], after[name])) {
+      if ((attempted.containsKey(name) &&
+              equal.equals(before[name], attempted[name])) ||
+          equal.equals(before[name], after[name])) {
         continue;
       }
       final bytes = after[name]!;
       await _keepFirstVersion(name, before[name]);
       final path = p.join(documents.path, name);
       await discardLeftoverStage(path);
+      attempted[name] = bytes;
       await _publish(path, bytes);
-      done.add(name);
       await testHook?.call(_steps[trainingFileNames.indexOf(name)]);
     }
     if (!Platform.isWindows) await _synchronize(documents.path);

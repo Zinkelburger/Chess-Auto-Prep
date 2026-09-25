@@ -36,6 +36,20 @@ void main() {
   });
 
   File note([String id = 'move']) => File(p.join(folder.path, '$id.json'));
+
+  /// The bytes of a note set aside by recovery, or null when none was.
+  Future<String?> setAside([String id = 'move']) async {
+    final quarantine = Directory(p.join(support.path, 'recovery-quarantine'));
+    if (!await quarantine.exists()) return null;
+    await for (final entry in quarantine.list(recursive: true)) {
+      if (entry is File &&
+          p.basename(entry.path) == 'unfinished-moves-$id.json') {
+        return entry.readAsString();
+      }
+    }
+    return null;
+  }
+
   Map<String, Object?> valid() => {
     'from': from,
     'to': to,
@@ -45,14 +59,12 @@ void main() {
 
   for (final malformed in ['{', '[]', '{}', '{"folder":false}']) {
     test(
-      'malformed note $malformed blocks recovery and remains intact',
+      'malformed note $malformed is set aside intact without blocking',
       () async {
         await note().writeAsString(malformed);
-        await expectLater(
-          recovery.finishOwed(),
-          throwsA(isA<RecoveryRequired>()),
-        );
-        expect(await note().readAsString(), malformed);
+        await recovery.finishOwed();
+        expect(await note().exists(), isFalse);
+        expect(await setAside(), malformed);
       },
     );
   }
@@ -184,7 +196,7 @@ void main() {
 
   for (final replacementAt in ['from', 'to']) {
     test(
-      'one unrelated file at $replacementAt does not identify the move',
+      'one unrelated file at $replacementAt sets the note aside, rows untouched',
       () async {
         await File(from).writeAsString('original');
         final identity = (await observeFile(from)).identity!;
@@ -207,16 +219,14 @@ void main() {
           identity: identity,
           folder: false,
         );
-        await expectLater(
-          recovery.finishOwed(),
-          throwsA(isA<RecoveryRequired>()),
-        );
-        expect(await note().exists(), isTrue);
+        await recovery.finishOwed();
+        expect(await note().exists(), isFalse);
+        expect(await setAside(), isNotNull);
       },
     );
   }
 
-  test('failed row recovery keeps the note and fails the barrier', () async {
+  test('failed row recovery sets the note aside and keeps the rows', () async {
     await File(from).writeAsString('original');
     final identity = (await observeFile(from)).identity!;
     await File(from).rename(to);
@@ -229,8 +239,9 @@ void main() {
     );
     final rows = File(p.join(documents.path, 'repertoire_reviews.csv'));
     await rows.writeAsString('not a csv header\n');
-    await expectLater(recovery.finishOwed(), throwsA(isA<RecoveryRequired>()));
-    expect(await note().exists(), isTrue);
+    await recovery.finishOwed();
+    expect(await note().exists(), isFalse);
+    expect(await setAside(), isNotNull);
     expect(await rows.readAsString(), 'not a csv header\n');
   });
 }

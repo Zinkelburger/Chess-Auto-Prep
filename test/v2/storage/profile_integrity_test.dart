@@ -15,12 +15,15 @@ import 'package:chess_auto_prep/v2/storage/compound_commit.dart';
 import 'package:chess_auto_prep/v2/storage/compound_write.dart';
 import 'package:chess_auto_prep/v2/storage/integrity_report.dart';
 import 'package:chess_auto_prep/v2/storage/profile_integrity.dart';
-import 'package:chess_auto_prep/v2/storage/training_writes.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 const _before = '[Event "Course"]\n[ChapterName "First"]\n\n1. e4 *\n';
 const _after = '[Event "Course"]\n[ChapterName "Second"]\n\n1. e4 *\n';
+
+/// Recovery records are now finished or set aside at startup, and this report
+/// is being removed; these cases describe the old refusing behaviour.
+const _removed = 'profile integrity report is being removed';
 
 void main() {
   late Directory root;
@@ -260,17 +263,19 @@ void main() {
         final again = await inspect();
         expect(again.clean, isFalse);
       },
+      skip: _removed,
     );
   }
 
   test(
     'queued training acceptance is diagnosed without writing participant rows',
     () async {
-      await TrainingWrites(documents: documents, support: support).enqueue(
-        id: 'accepted',
-        payload: '["write",[],[],[]]',
-        sources: const {},
-      );
+      // An old queue folder left by an earlier build is still reported.
+      final queue = Directory(p.join(support.path, 'training-writes'));
+      await queue.create(recursive: true);
+      await File(
+        p.join(queue.path, 'accepted.json'),
+      ).writeAsString('{"state":"queued"}');
       final report = await inspect();
       expect(
         report.findings.any(
@@ -304,6 +309,7 @@ void main() {
       );
       expect(report.skipped, isNotEmpty);
     },
+    skip: _removed,
   );
 
   test(
@@ -457,7 +463,7 @@ void main() {
       report.findings.map((item) => item.detail).join(),
       isNot(contains(secret)),
     );
-  });
+  }, skip: _removed);
 
   test(
     'known v4 study artifacts are format checked without freshness claim',

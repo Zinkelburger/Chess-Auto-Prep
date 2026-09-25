@@ -55,26 +55,6 @@ void main() {
       expect(after['path'], deleted.recoveredTo);
       expect(fixture.keptTexts(destination), [old, current]);
 
-      // The latest-version append still belonged to the original source;
-      // the journal's ownership transfer alone changes the index path.
-      final receipt =
-          jsonDecode(
-                await File(
-                  p.join(
-                    fixture.support.path,
-                    'relocation-writes',
-                    '1750000000000000-abc123.json',
-                  ),
-                ).readAsString(),
-              )
-              as Map<String, Object?>;
-      final backup = receipt['backup']! as Map<String, Object?>;
-      final source = backup['source']! as Map<String, Object?>;
-      final beforeMove =
-          jsonDecode(source['index']! as String) as Map<String, Object?>;
-      expect(beforeMove['path'], ref.path);
-      expect(beforeMove['extensions'], raw['extensions']);
-      expect((beforeMove['versions']! as List).first, originalVersion);
       expect(
         fixture
             .backupFolder(destination)

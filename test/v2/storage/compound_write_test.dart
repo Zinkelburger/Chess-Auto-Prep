@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/v2/storage/compound_commit.dart';
 import 'package:chess_auto_prep/v2/storage/compound_write.dart';
+import 'package:chess_auto_prep/v2/storage/recovery_gate.dart';
 import 'package:chess_auto_prep/v2/storage/relocation_notes.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -83,30 +84,47 @@ void main() {
     );
   }
 
+  /// Journal records still waiting to finish.
+  Future<List<String>> pending() async {
+    final folder = note().parent;
+    if (!await folder.exists()) return const [];
+    return [await for (final entry in folder.list()) p.basename(entry.path)];
+  }
+
+  /// Records set aside because they could not be read or finished.
+  Future<List<String>> quarantined() async {
+    final folder = Directory(p.join(support.path, 'recovery-quarantine'));
+    if (!await folder.exists()) return const [];
+    return [
+      await for (final entry in folder.list(recursive: true))
+        if (entry is! Directory) p.basename(entry.path),
+    ];
+  }
+
   CompoundCommit changed({
     String? id,
     String? path,
+    String? before,
     String? after,
+    String? beforeBooks,
     String? afterBooks,
   }) => CompoundCommit(
     id: id ?? command.id,
     documentPath: path ?? command.documentPath,
-    documentBefore: command.documentBefore,
+    documentBefore: before ?? command.documentBefore,
     documentAfter: after ?? command.documentAfter,
-    booksBefore: command.booksBefore,
+    booksBefore: beforeBooks ?? command.booksBefore,
     booksAfter: afterBooks ?? command.booksAfter,
   );
 
-  test(
-    'commit publishes both exact snapshots and retains a complete receipt',
-    () async {
-      final result = await engine().commit(command);
-      expect(result.documentAfter, _after);
-      await expectPair(_after, _booksAfter);
-      expect((await metadata())['state'], 'complete');
-      expect((await engine().completed(command.id))!.documentBefore, _before);
-    },
-  );
+  test('commit publishes both snapshots and leaves no journal', () async {
+    final writes = engine();
+    final result = await writes.commit(command);
+    expect(result.documentAfter, _after);
+    await expectPair(_after, _booksAfter);
+    expect(await pending(), isEmpty);
+    expect((await writes.completed(command.id))!.documentBefore, _before);
+  });
 
   for (final step in CompoundWriteStep.values.where(
     (step) => step != CompoundWriteStep.secondaryDocument,
@@ -125,34 +143,27 @@ void main() {
           preparedOnly ? _before : _after,
           preparedOnly ? _booksBefore : _booksAfter,
         );
-        expect(
-          (await metadata())['state'],
-          preparedOnly ? 'cancelled' : 'complete',
-        );
-        expect(
-          await engine().completed(command.id),
-          preparedOnly ? isNull : isNotNull,
-        );
+        expect(await pending(), isEmpty);
+        expect(await quarantined(), isEmpty);
+        // The process remembers what it finished for this profile, so an
+        // exact retry through a new owner writes nothing again.
         await engine().commit(command);
         await expectPair(_after, _booksAfter);
-        expect(await note().parent.list().length, 1);
+        expect(await pending(), isEmpty);
       },
     );
   }
 
-  test(
-    'a completed exact retry leaves subsequent external edits intact',
-    () async {
-      await engine().commit(command);
-      await document.writeAsString('external document');
-      await books.writeAsString('{"external":true}');
-      await engine().recover();
-      final result = await engine().commit(command);
-      expect(result.documentAfter, _after);
-      await expectPair('external document', '{"external":true}');
-      expect((await engine().completed(command.id))!.booksBefore, _booksBefore);
-    },
-  );
+  test('an exact retry in the same process writes nothing again', () async {
+    final writes = engine();
+    await writes.commit(command);
+    await document.writeAsString('external document');
+    await books.writeAsString('{"external":true}');
+    await writes.recover();
+    final result = await writes.commit(command);
+    expect(result.documentAfter, _after);
+    await expectPair('external document', '{"external":true}');
+  });
 
   for (final participant in ['document', 'books']) {
     test(
@@ -175,56 +186,66 @@ void main() {
   }
 
   test(
-    'partial commit with external books conflict preserves both files and note',
+    'a half-done edit whose books changed since is set aside, not replayed',
     () async {
       await expectLater(
         engine(interrupt: CompoundWriteStep.document).commit(command),
         throwsA(isA<StateError>()),
       );
       await books.writeAsString('{"external":true}');
-      for (var restart = 0; restart < 2; restart++) {
-        await expectLater(engine().recover(), throwsA(isA<RecoveryRequired>()));
-        await expectPair(_after, '{"external":true}');
-        expect((await metadata())['state'], 'committing');
-      }
-      await books.writeAsString(_booksBefore);
       await engine().recover();
-      await expectPair(_after, _booksAfter);
+      await expectPair(_after, '{"external":true}');
+      expect(await pending(), isEmpty);
+      expect(await quarantined(), ['compound-writes-rename-1.json']);
+
+      // Later edits of the same files go ahead.
+      await engine().commit(
+        changed(
+          id: 'later',
+          before: _after,
+          after: _before,
+          beforeBooks: '{"external":true}',
+          afterBooks: _booksBefore,
+        ),
+      );
+      await expectPair(_before, _booksBefore);
     },
   );
 
   test(
-    'external document conflict after intent prevents book publication',
+    'an external document change after intent keeps both files as they are',
     () async {
       await expectLater(
         engine(interrupt: CompoundWriteStep.intent).commit(command),
         throwsA(isA<StateError>()),
       );
       await document.writeAsString('external');
-      await expectLater(engine().recover(), throwsA(isA<RecoveryRequired>()));
+      await engine().recover();
       await expectPair('external', _booksBefore);
+      expect(await quarantined(), ['compound-writes-rename-1.json']);
     },
   );
 
-  test('cancelled preparation must validate expected bytes again', () async {
+  test('an interrupted preparation leaves nothing to recover', () async {
     await expectLater(
       engine(interrupt: CompoundWriteStep.prepared).commit(command),
       throwsA(isA<StateError>()),
     );
     await engine().recover();
+    expect(await pending(), isEmpty);
     await books.writeAsString('{"external":true}');
     await expectLater(
       engine().commit(command),
       throwsA(isA<RecoveryRequired>()),
     );
     await expectPair(_before, '{"external":true}');
-    expect((await metadata())['state'], 'cancelled');
   });
 
   test('completed id cannot be reused for a different command', () async {
-    await engine().commit(command);
+    final writes = engine();
+    await writes.commit(command);
     await expectLater(
-      engine().commit(changed(after: 'different')),
+      writes.commit(changed(before: _after, after: 'different')),
       throwsA(isA<RecoveryRequired>()),
     );
     await expectPair(_after, _booksAfter);
@@ -258,6 +279,7 @@ void main() {
       await engine().recover();
       await engine().recover();
       await expectPair(_before, null);
+      expect(await pending(), isEmpty);
     },
   );
 
@@ -291,10 +313,10 @@ void main() {
 
   for (final invalid in ['version', 'state', 'extra', 'id', 'json']) {
     test(
-      'unsupported $invalid metadata is preserved and blocks recovery',
+      'unsupported $invalid record is set aside and the next edit works',
       () async {
         await expectLater(
-          engine(interrupt: CompoundWriteStep.prepared).commit(command),
+          engine(interrupt: CompoundWriteStep.intent).commit(command),
           throwsA(isA<StateError>()),
         );
         final data = await metadata();
@@ -310,12 +332,49 @@ void main() {
         }
         final text = invalid == 'json' ? '{' : jsonEncode(data);
         await note().writeAsString(text);
-        await expectLater(engine().recover(), throwsA(isA<RecoveryRequired>()));
+        await engine().recover();
         await expectPair(_before, _booksBefore);
-        expect(await note().readAsString(), text);
+        expect(await pending(), isEmpty);
+        final aside = Directory(p.join(support.path, 'recovery-quarantine'));
+        final kept = await aside
+            .list(recursive: true)
+            .where((entry) => entry is File)
+            .cast<File>()
+            .single;
+        expect(await kept.readAsString(), text);
+
+        await engine().commit(command);
+        await expectPair(_after, _booksAfter);
       },
     );
   }
+
+  test('the gate opens despite a damaged record', () async {
+    await note().parent.create();
+    await note().writeAsString('{');
+    final gate = RecoveryGate(documents: documents, support: support);
+    expect(await gate.run(() async => 'opened'), 'opened');
+    expect(await quarantined(), ['compound-writes-rename-1.json']);
+  });
+
+  test('a leftover staged journal from a kill is removed', () async {
+    await note().parent.create();
+    final stage = File(p.join(note().parent.path, '.rename-1.json.v2-tmp'));
+    await stage.writeAsString('{"half":');
+    await engine().recover();
+    expect(await stage.exists(), isFalse);
+    expect(await quarantined(), isEmpty);
+    await engine().commit(command);
+    await expectPair(_after, _booksAfter);
+  });
+
+  test('a leftover staged PGN from a kill does not block the edit', () async {
+    final stage = File(p.join(documents.path, '.Course.pgn.v2-tmp'));
+    await stage.writeAsString('half a document');
+    await engine().commit(command);
+    await expectPair(_after, _booksAfter);
+    expect(await stage.exists(), isFalse);
+  });
 
   test(
     'recovery can itself stop after the second publication and restart twice',
@@ -324,16 +383,15 @@ void main() {
         engine(interrupt: CompoundWriteStep.document).commit(command),
         throwsA(isA<StateError>()),
       );
-      await expectLater(
-        engine(interrupt: CompoundWriteStep.books).recover(),
-        throwsA(isA<StateError>()),
-      );
+      // A failure that is not about the record keeps it for the next start.
+      await engine(interrupt: CompoundWriteStep.books).recover();
       await expectPair(_after, _booksAfter);
-      expect((await metadata())['state'], 'committing');
+      expect(await pending(), ['rename-1.json']);
       await engine().recover();
       await engine().recover();
       await expectPair(_after, _booksAfter);
-      expect((await metadata())['state'], 'complete');
+      expect(await pending(), isEmpty);
+      expect(await quarantined(), isEmpty);
     },
   );
 
@@ -352,46 +410,34 @@ void main() {
     await expectPair(_before, _booksBefore);
   }, skip: Platform.isWindows ? 'symlink privileges not assumed' : false);
 
-  test(
-    'unknown metadata entries block preparation without being removed',
-    () async {
-      await note().parent.create();
-      final unknown = File(p.join(note().parent.path, 'unknown.future'));
-      await unknown.writeAsString('preserve');
-      await expectLater(
-        engine().commit(command),
-        throwsA(isA<RecoveryRequired>()),
-      );
-      expect(await unknown.readAsString(), 'preserve');
-      await expectPair(_before, _booksBefore);
-    },
-  );
+  test('an unknown entry in the journal folder is set aside', () async {
+    await note().parent.create();
+    final unknown = File(p.join(note().parent.path, 'unknown.future'));
+    await unknown.writeAsString('preserve');
+    await engine().commit(command);
+    await expectPair(_after, _booksAfter);
+    expect(await unknown.exists(), isFalse);
+    expect(await quarantined(), ['compound-writes-unknown.future']);
+  });
 
-  for (final protected in ['support', 'folder', 'note', 'books']) {
+  for (final protected in ['note', 'books']) {
     test(
-      'unreadable $protected cannot look like absent compound data',
+      'unreadable $protected sets the record aside without writing',
       () async {
         await expectLater(
           engine(interrupt: CompoundWriteStep.intent).commit(command),
           throwsA(isA<StateError>()),
         );
-        final path = switch (protected) {
-          'support' => support.path,
-          'folder' => note().parent.path,
-          'note' => note().path,
-          _ => books.path,
-        };
+        final path = protected == 'note' ? note().path : books.path;
         await Process.run('chmod', ['000', path]);
         try {
-          await expectLater(
-            engine().recover(),
-            throwsA(isA<RecoveryRequired>()),
-          );
+          await engine().recover();
         } finally {
-          await Process.run('chmod', ['u+rwX', path]);
+          await Process.run('chmod', ['-R', 'u+rwX', support.path]);
         }
         await expectPair(_before, _booksBefore);
-        expect((await metadata())['state'], 'committing');
+        expect(await pending(), isEmpty);
+        expect(await quarantined(), ['compound-writes-rename-1.json']);
       },
       skip: !Platform.isLinux || Platform.environment['USER'] == 'root'
           ? 'requires Linux permissions without root'
@@ -399,7 +445,7 @@ void main() {
     );
   }
 
-  for (final linked in ['document', 'books', 'folder', 'note']) {
+  for (final linked in ['document', 'books', 'folder']) {
     test(
       'linked $linked data cannot be followed by the compound engine',
       () async {
@@ -407,9 +453,6 @@ void main() {
         await saved.writeAsString(linked == 'books' ? _booksBefore : _before);
         if (linked == 'folder') {
           await Link(note().parent.path).create(root.path);
-        } else if (linked == 'note') {
-          await note().parent.create();
-          await Link(note().path).create(saved.path);
         } else {
           final file = linked == 'document' ? document : books;
           await file.delete();
@@ -427,4 +470,15 @@ void main() {
       skip: Platform.isWindows ? 'symlink privileges not assumed' : false,
     );
   }
+
+  test('a linked journal record is set aside, not followed', () async {
+    final saved = File(p.join(root.path, 'untouched'));
+    await saved.writeAsString(_before);
+    await note().parent.create();
+    await Link(note().path).create(saved.path);
+    await engine().commit(command);
+    await expectPair(_after, _booksAfter);
+    expect(await saved.readAsString(), _before);
+    expect(await quarantined(), ['compound-writes-rename-1.json']);
+  }, skip: Platform.isWindows ? 'symlink privileges not assumed' : false);
 }

@@ -194,24 +194,9 @@ paths retain the journal and surface **Recover library** in the catalog.
 review history, move progress and mistake log, retaining prior text under
 Documents `.cap-reference-history/`, then updates the shared book selections.
 Reference failures resume from the journal without repeating the namespace move.
-Before any affected access or its own recovery, this owner also checks v2's
-private compound and file-relocation journals. `foreign_relocation_history.dart`
-validates `Support/relocation-writes/` without importing v2 or reading current
-participants: only complete/cancelled records are accepted. Pending, malformed,
-linked or unknown metadata instructs the user to reopen v2, preserving all files.
-`foreign_training_history.dart` applies the same refusal boundary to
-`Support/training-writes/`: it validates compact completed receipts, their
-predecessor chain and proven native previous copies without replaying commands
-or consulting historical source paths. Pending or unknown training evidence
-blocks document/training access before legacy recovery can run.
-The compound decoder also recognizes strict version-2 two-PGN receipts. It
-accepts terminal history without consulting former participant paths and
-refuses pending or invalid records before legacy recovery. V2's `savePair`
-validates and preserves both PGNs, publishes under one recovery boundary, and
-returns one authenticated inverse. Workspace external-edit preparation holds
-source adoption through publication; historical retry requires fresh native
-proof before updating the editor. Library cross-file command wiring remains
-pending; the two-PGN protocol does not include training or book changes.
+V1 no longer inspects v2's journals: v2 finishes or sets aside its own
+unfinished operations when it next starts, so nothing v2 leaves behind stops
+v1 from opening documents or training files.
 The v2 protocol and remaining migration work are described in
 [architecture renewal](ARCHITECTURE_RENEWAL.md#course-files).
 
