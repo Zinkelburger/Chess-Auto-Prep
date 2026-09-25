@@ -77,7 +77,7 @@ final class ScriptedFiles implements ChapterFiles {
     additionalValidations.add(Map.unmodifiable(additional));
     profileValidations.add((book: book, training: training));
     return validateWith == null
-        ? ((snapshot == null || identical(snapshot, listing))
+        ? ((snapshot == null || _sameMembership(snapshot))
               ? const RepertoireCurrent()
               : const RepertoireChanged())
         : validateWith!(snapshot, observed);
@@ -100,6 +100,20 @@ final class ScriptedFiles implements ChapterFiles {
   @override
   Future<void> removeStaging(String folder) async {
     stagingRemoved.add(folder);
+  }
+
+  bool _sameMembership(Repertoires snapshot) {
+    if (snapshot.boundaries == null) return identical(snapshot, listing);
+    final current = listing;
+    if (current is! Repertoires) return false;
+    final selected = current.within(snapshot.boundaries!);
+    final expected = {
+      for (final folder in snapshot.folders) ...folder.chapters,
+    };
+    final actual = {for (final folder in selected.folders) ...folder.chapters};
+    return selected.unreadable.isEmpty &&
+        actual.length == expected.length &&
+        actual.every(expected.contains);
   }
 
   Future<void> _wait() {

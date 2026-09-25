@@ -193,9 +193,23 @@ final class WorkspaceWiring {
 
   /// The repertoire files were listed anew: what the gaps and the explorer's Book
   /// read from them is read again.
+  int _catalogInputs = -1;
   void _filesChanged() {
-    _gaps.refreshAnswers();
-    _tree.forget();
+    if (_catalogInputs == _catalog.inputsRevision) return;
+    _catalogInputs = _catalog.inputsRevision;
+    final change = _catalog.admittedChange;
+    final all = change == null;
+    final source = _session.source;
+    final repertoire = source == null
+        ? null
+        : _catalog.repertoireOf(source.path);
+    if (all || (repertoire != null && change.touches(repertoire))) {
+      _gaps.refreshAnswers();
+    }
+    final inputs = _books.inputs(_books.active);
+    if (all || inputs.any(change.touches)) {
+      _tree.forget();
+    }
   }
 
   void dispose() {

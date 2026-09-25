@@ -119,7 +119,8 @@ final class RepertoireTree extends ChangeNotifier {
        _shelf = shelf,
        _books = books {
     _session.anyChange.addListener(_followTheBoard);
-    _books.addListener(_refresh);
+    _bookRevision = _books.revision;
+    _books.addListener(_bookChanged);
     _shelf.addListener(_shelfChanged);
   }
 
@@ -314,6 +315,17 @@ final class RepertoireTree extends ChangeNotifier {
   /// The rows for the position now, once the files are read: a reader that
   /// gave up, or another that told the shelf the files changed, leaves it
   /// stale, and then it is read again first.
+  int _bookRevision = 0;
+  void _bookChanged() {
+    if (_bookRevision != _books.revision) {
+      _bookRevision = _books.revision;
+      // Files outside the previous selection may have changed without
+      // invalidating its displayed bundle. Observe the new selection afresh.
+      _shelf.forget();
+    }
+    _refresh();
+  }
+
   void _refresh() {
     if (_disposed || _watching == 0) return;
     if (!_books.current) {
@@ -372,7 +384,11 @@ final class RepertoireTree extends ChangeNotifier {
       }
       final version = hasBook ? _shelf.version : null;
       final checked = hasBook
-          ? await _shelf.validate(version: version!, book: source)
+          ? await _shelf.validate(
+              version: version!,
+              book: source,
+              boundaries: _books.inputs(_books.active),
+            )
           : await _shelf.validateBook(source);
       if (gone()) return;
       if (hasBook && (_shelf.stale || version != _shelf.version)) return;
@@ -505,7 +521,7 @@ final class RepertoireTree extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _session.anyChange.removeListener(_followTheBoard);
-    _books.removeListener(_refresh);
+    _books.removeListener(_bookChanged);
     _shelf.removeListener(_shelfChanged);
     board.dispose();
     super.dispose();

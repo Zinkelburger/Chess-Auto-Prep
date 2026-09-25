@@ -111,7 +111,55 @@ final class Repertoires extends RepertoireListing {
     this.folders, {
     this.unreadable = const [],
     this.revisions = const {},
+    this.boundaries,
   });
+
+  /// Null captures the whole catalog. Otherwise membership is complete only
+  /// under these absolute directories or individual PGNs, including absence.
+  final Set<String>? boundaries;
+
+  bool includesPath(String path) =>
+      boundaries == null ||
+      boundaries!.any((root) => root == path || p.isWithin(root, path));
+
+  bool intersectsPath(String path) =>
+      includesPath(path) ||
+      (boundaries?.any((root) => p.isWithin(path, root)) ?? false);
+
+  /// Keeps exactly the membership a projection depends on. The final storage
+  /// fence still discovers newly created/deleted files under these boundaries.
+  Repertoires within(Set<String> paths) {
+    final bounds = Set<String>.unmodifiable(paths);
+    bool includes(String path) =>
+        bounds.any((root) => path == root || p.isWithin(root, path));
+    return Repertoires(
+      List.unmodifiable([
+        for (final folder in folders)
+          if (includes(folder.path) ||
+              folder.chapters.any((ref) => includes(ref.path)))
+            RepertoireFolder(
+              name: folder.name,
+              path: folder.path,
+              modified: folder.modified,
+              chapters: List.unmodifiable(
+                folder.chapters.where((ref) => includes(ref.path)),
+              ),
+            ),
+      ]),
+      unreadable: List.unmodifiable(
+        unreadable.where(
+          (entry) =>
+              includes(entry.path) ||
+              bounds.any((root) => p.isWithin(entry.path, root)),
+        ),
+      ),
+      revisions: Map.unmodifiable({
+        for (final entry in revisions.entries)
+          if (includes(entry.key)) entry.key: entry.value,
+      }),
+      boundaries: bounds,
+    );
+  }
 
   /// Complete native read set, including draft chapters. Successful native
   /// listings own an immutable map; no PGN text survives metadata parsing.
@@ -279,14 +327,25 @@ final class ChapterDirectory implements ChapterFiles {
     try {
       return await _recovery.run(() async {
         if (snapshot != null) {
-          final inventory = await _inventory();
-          if (inventory.unreadable.isNotEmpty) {
-            return RepertoireValidationFailed(
-              inventory.unreadable.first.detail,
+          if (snapshot.boundaries?.any(
+                (path) => path != root.path && !p.isWithin(root.path, path),
+              ) ??
+              false) {
+            return const RepertoireValidationFailed(
+              'Snapshot boundaries must be managed repertoire paths.',
             );
           }
+          final inventory = await _inventory();
+          final unavailable = inventory.unreadable.where(
+            (entry) => snapshot.intersectsPath(entry.path),
+          );
+          if (unavailable.isNotEmpty) {
+            return RepertoireValidationFailed(unavailable.first.detail);
+          }
           final paths = [
-            for (final folder in inventory.folders) ...folder.files,
+            for (final folder in inventory.folders)
+              for (final file in folder.files)
+                if (snapshot.includesPath(file.path)) file,
           ];
           if (paths.length != snapshot.revisions.length ||
               paths.any((file) => !snapshot.revisions.containsKey(file.path))) {

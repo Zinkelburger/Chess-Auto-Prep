@@ -1,6 +1,7 @@
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import '../chess/pgn/chapter.dart';
 import '../chess/pgn/chapter_sections.dart';
@@ -64,14 +65,22 @@ final class RepertoireShelf extends ChangeNotifier {
     required int version,
     Map<String, Revision?> additional = const {},
     BookSource? book,
+    Set<String>? boundaries,
   }) async {
     final snapshot = _snapshot;
     if (snapshot == null || stale || version != _version) {
       return const RepertoireChanged();
     }
     final result = await _files.validate(
-      snapshot,
-      observed: _revisions,
+      boundaries == null ? snapshot : snapshot.within(boundaries),
+      observed: {
+        for (final entry in _revisions.entries)
+          if (boundaries == null ||
+              boundaries.any(
+                (root) => root == entry.key || p.isWithin(root, entry.key),
+              ))
+            entry.key: entry.value,
+      },
       additional: additional,
       book: book,
     );

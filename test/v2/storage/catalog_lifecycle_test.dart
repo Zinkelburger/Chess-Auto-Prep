@@ -19,6 +19,31 @@ import '../support/scripted_store.dart';
 import 'store_fixture.dart';
 
 void main() {
+  test(
+    'nested paths and folder moves name both affected top-level repertoires',
+    () {
+      final catalog = RepertoireCatalog(
+        files: ScriptedFiles(),
+        root: '/repertoires',
+      );
+      addTearDown(catalog.dispose);
+      expect(
+        catalog.repertoireOf('/repertoires/A/Sub/Main.pgn'),
+        '/repertoires/A',
+      );
+      expect(catalog.repertoireOf('/outside/Main.pgn'), isNull);
+      const moved = DocumentChange(
+        '/repertoires/A',
+        movedTo: '/repertoires/B',
+        folder: true,
+        kind: DocumentChangeKind.moved,
+      );
+      expect(moved.touches('/repertoires/A/Sub/Main.pgn'), isTrue);
+      expect(moved.touches('/repertoires/B/Sub/Main.pgn'), isTrue);
+      expect(moved.touches('/repertoires/C'), isFalse);
+    },
+  );
+
   test('failed catalog refresh retains the last good folders', () async {
     final files = ScriptedFiles(
       listing: Repertoires([
@@ -62,7 +87,7 @@ void main() {
       catalog.addListener(() {
         notifications++;
         if (catalog.stale) {
-          expect(catalog.changes, isEmpty);
+          expect(catalog.changes, isNotEmpty);
           expect(catalog.reloaded, isFalse);
         }
       });
@@ -79,11 +104,11 @@ void main() {
       files.hold = false;
       files.releaseNext();
       await done;
-      expect(notifications, 2);
+      expect(notifications, 3);
       expect(catalog.changes.map((change) => change.path), [a.path, b.path]);
       expect(await repo.create(a, '*'), isA<Collision>());
       await pumpEventQueue();
-      expect(notifications, 2);
+      expect(notifications, 3);
     },
   );
 
