@@ -8,7 +8,29 @@ The page supports both boards, captures sent to the partner's reserve, legal
 drops (click or drag), promotions, board flipping, a move list and step
 buttons per board (each board steps back and forth on its own), a FEN and
 reserve boxes per board, joint Hivemind recommendations, clock-advantage and
-required-board settings, and Stop. It is an analysis tool, not a four-player
+required-board settings, and Stop. The Lab saves the accepted line, both
+history cursors and analysis settings in local storage. Refresh restores the
+line; Copy link includes the complete line and settings in a URL fragment
+(the fragment is not sent to the server). New game has an Undo action.
+
+**Copy moves** (the overlapping-squares icon) and **Download** export the
+currently played prefix as FICS-style BPGN: e.g. `1A. e4 1a. d5 2A. exd5
+1B. e4 1b. P@e6`. Board letters are A/B (boards 1/2), uppercase for White and
+lowercase for Black; these are not the player-seat names. Interleaving is
+preserved, including drops and underpromotions. Custom starts include
+`SetUp` and a dual `FEN` tag. Download uses `.bpgn`; a plain single-board PGN
+would lose the capture/drop dependencies. Copy link also retains forward
+moves beyond the displayed cursors. If clipboard access fails, a selectable
+text dialog provides a manual copy fallback.
+
+Setup fields are behind Edit position. SAN/UCI move entry provides keyboard
+access to both boards, including promotions (`a8=N`, `a7a8n`) and drops
+(`N@f3`). Moving a pawn to the final rank opens all four promotion choices;
+Cancel and Escape leave the accepted position and history unchanged. The
+board announces its pieces/turn through its accessible description and
+highlights check. Invalid per-board navigation rolls back atomically.
+
+It is an analysis tool, not a four-player
 online game with live clocks. The boards, move lists and setup boxes are
 shared with `/bughousedb` (`src/bughouse/boards.ts`,
 `src/components/BughouseBoards.astro`, `src/styles/bughouse-board.css`).
@@ -25,7 +47,7 @@ Use the existing Chess Auto Prep Pages project:
 | Build environment | Node 22.12+ and Python 3.11+ (standard Pages build environment) |
 | Bughouse environment variables / bindings | None |
 
-The `prebuild` step downloads the existing checksum-pinned Hivemind network,
+The `prebuild` step first runs the state regressions and Astro type check, then downloads the existing checksum-pinned Hivemind network,
 splits its gzip bytes into two files smaller than 25 MiB, and copies the ONNX
 Runtime Web files from the pinned npm dependency. The compressed network is
 about 32 MB; the complete initial engine download is about 44 MB. The browser
@@ -95,7 +117,21 @@ transposition table. Results and speed can differ from the native app;
 search strength depends on the visitor's device and chosen time budget.
 The UI offers 3, 10 or 30 seconds per team, plus model initialization time.
 Stop finishes the current inference rather than terminating the worker and
-throwing away the loaded model.
+throwing away the loaded model. The same worker and inference session survive
+moves, setup changes, New game, repeated searches and Stop. A bounded cache
+keeps the last 32 completed analyses for the exact position/settings/budget;
+returning to one does not search or download again. Suggestions appear after
+the first search while the second calibrates the score; stopping at that point
+keeps the suggestions. The UI labels the time as **per team** and explains
+the approximate total.
+
+A full page reload necessarily recreates worker memory and the inference
+session, but verified model chunks are read from Cache Storage when available.
+Private mode, storage eviction or quota limits can require another download.
+Stop aborts an active manifest/model transfer, completed chunks remain cached,
+and transfers have timeouts. Inference tensors are disposed even on errors.
+Long played lines are replayed in batches within the WASM parser's 256-move
+limit; the compiled rules and engine port are unchanged.
 
 Advantage is `(q_ours - q_theirs) / 2`, using two searches at the same budget.
 It is displayed only when both teams have usable evaluations; otherwise the
@@ -130,6 +166,7 @@ exact engine source, browser adapters, licenses and compilation instructions.
 ## Verification
 
 ```sh
+scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test:bughouse
 scripts/ci.sh with -- python3 tools/bughouse_web/test_rules.py
 scripts/ci.sh with -- python3 tools/bughouse_web/check_browser.py
 scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend exec -- \
@@ -151,16 +188,16 @@ It fails if the page makes an API request or sends any POST. The server and
 browser are closed afterward. Screenshots go to ignored
 `build/bughouse-web/` for visual inspection.
 
-The final clean install/build, Astro check, browser check, rules comparison,
-and repository `analyze lint` checks passed. Browser verification used desktop
-Chrome and a phone-sized viewport, not physical iOS/Android devices.
-
-The clean install's npm audit reports 11 findings (one critical, nine high,
-one low) in the site's existing Astro/build dependency tree. All 11 affected
-package versions are unchanged from the starting checkout; none is in the
-new ONNX dependency tree. Updating the existing site's build dependencies
-remains separate maintenance. This build deploys static HTML/JS, without an
-Astro server or development server.
+The focused state tests cover independent rollback snapshots, BPGN chronology,
+custom-start/promotion exports, saved-link validation, reserve limits and
+worker reuse. The browser check covers both colours and all four promotions,
+Cancel/Escape, promoted captures, repeated rejected undo, copying/downloading,
+link and refresh restoration, download cancellation, cached repeated analyses,
+Stop/recovery and new-position offline inference. It also reloads the page to
+check that the model chunks are reused and checks a phone-sized layout.
+Physical iOS/Android testing remains separate from desktop Chrome's viewport
+checks. Run these checks on the current revision rather than treating an old
+successful run as a release gate.
 
 References: [Pages asset limits](https://developers.cloudflare.com/pages/platform/limits/),
 [Emscripten Asyncify](https://emscripten.org/docs/porting/asyncify.html),

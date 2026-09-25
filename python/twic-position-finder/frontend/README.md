@@ -18,7 +18,8 @@ pages; `/book` is an unlisted booking page.
 npm install
 npm run dev        # http://localhost:4321 — set PUBLIC_API_URL to point at a local server.py
 npm run build      # → dist/
-npx astro check    # type-check .ts and .astro (the clock's script is untyped JS and reports errors; everything else is clean)
+npx astro check    # type-check .ts and .astro
+npm run test:bughouse  # state, export, persistence and worker lifecycle regressions
 ```
 
 Environment (build-time): `PUBLIC_API_URL` (default `https://api.chessautoprep.com`),
@@ -82,7 +83,14 @@ so this trainer, the Dart app, and Lichess agree on what a mistake is.
 
 ## Smoke-testing
 
-There is no unit-test harness; `astro check` + `npm run build` gate the code,
+`npm run test:bughouse` bundles the focused TypeScript state tests with esbuild
+and runs them in Node. `astro check` + `npm run build` check the site,
 and a headless Chrome run (`puppeteer-core` is a dev dependency, Chrome must be
 installed) exercises the real pages. Lichess answers non-browser user agents
 with 404, so a headless run needs `page.setUserAgent(...)`.
+
+The Bughouse Lab stores the accepted session locally and supports Copy moves,
+BPGN download and Copy link. Its worker retains Hivemind between analyses and
+Stop; model chunks survive reload when browser storage is available. See the
+[static Bughouse guide](../../../tools/bughouse_web/README.md) for the export
+format, cache boundaries and real-engine browser verification command.

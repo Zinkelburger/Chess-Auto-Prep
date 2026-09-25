@@ -328,6 +328,15 @@ choose whether to move at all, which the team up on the diagonal clock has —
 replaces the older "clock advantage" wording throughout the Lab, the book and
 BughouseDB: `AB may sit`, `Equal` (the default) or `CD may sit`.
 
+The website's `/bughouse` is a separate static Lab. Its shared Chessground
+view is in `frontend/src/bughouse/boards.ts`; `lines.ts` owns independent
+history snapshots and `session.ts` owns validated saved sessions and BPGN
+exports. Copy moves/download preserve cross-board chronology; Copy link also
+preserves forward history and settings. One worker retains WASM and ONNX
+between moves/searches/Stop, with a bounded result cache and persistent model
+chunks. The [static Lab guide](../tools/bughouse_web/README.md) documents
+promotion, keyboard entry, cache boundaries and the required browser checks.
+
 `tools/bughouse_db/hivemind_book.py` builds a precomputed Hivemind book beside
 the FICS book (`~/.local/share/chess-prep/bughouse-db/hivemind_book.db`, same
 position key): every legal move on both boards, scored for the priority cases

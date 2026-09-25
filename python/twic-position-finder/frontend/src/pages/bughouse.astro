@@ -6,23 +6,35 @@ import '../styles/bughouse.css';
 const CHOICES = [
   { name: 'team', label: 'Our team', checked: 0, options: [['white', 'A + B'], ['black', 'C + D']] },
   { name: 'required', label: 'Must move on', checked: 0, options: [['none', 'Either'], ['A', 'Board 1'], ['B', 'Board 2']] },
-  { name: 'budget', label: 'Search', checked: 0, options: [['3000', '3 s'], ['10000', '10 s'], ['30000', '30 s']] },
+  { name: 'budget', label: 'Per team', checked: 0, options: [['3000', '3 s'], ['10000', '10 s'], ['30000', '30 s']] },
   // Hivemind's only clock inputs are the two diagonals, A vs D and C vs B:
   // the team that is up may choose not to move.
   { name: 'clock', label: 'Time', checked: 1, options: [['AB', 'A + B may sit', 'A + B are up on the diagonal clock, so they can wait rather than move'], ['even', 'Even', 'Neither team is up on the clock: both have to move'], ['CD', 'C + D may sit', 'C + D are up on the diagonal clock, so they can wait rather than move']] },
 ];
 ---
 <Base title="Bughouse Lab" description="Explore two-board bughouse positions with Hivemind. Move, drop, and analyse in your browser." fill>
-  <div id="bughouse-lab" class="bb-app">
-    <h1 class="visually-hidden">Bughouse Lab</h1>
+  <div id="bughouse-lab" class="bb-app" data-editing="false">
+    <header class="bh-toolbar">
+      <div><h1>Bughouse Lab</h1><span id="bh-save-status" class="dim">Your line is saved on this device</span></div>
+      <div class="bh-tools">
+        <button id="bh-copy" class="btn btn-outline" type="button" title="Copy moves as BPGN" aria-label="Copy moves">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h4"/></svg> Copy moves
+        </button>
+        <button id="bh-download" class="btn btn-outline" type="button" title="Save both boards’ played moves as a .bpgn file">Download</button>
+        <button id="bh-share" class="btn btn-outline" type="button" title="Copy a link with both boards and the full line">Copy link</button>
+      </div>
+      <span id="bh-copy-status" role="status" class="dim"></span>
+    </header>
     <noscript><p class="alert alert-error">Enable JavaScript to move pieces and request analysis.</p></noscript>
 
     <form id="bh-position-form" class="bb-left" novalidate>
-      <BughouseBoards prefix="bh" />
+      <BughouseBoards prefix="bh" accessible />
     </form>
 
     <div class="bb-right bh-panel">
       <form id="bh-analyse-form" class="bh-find" aria-label="Find a move">
+        <details class="bh-settings" open>
+          <summary>Analysis settings</summary>
         {CHOICES.map((c) => (
           <div class="bh-row">
             <span class="bh-label">{c.label}</span>
@@ -33,15 +45,33 @@ const CHOICES = [
             </div>
           </div>
         ))}
+        </details>
+        <p id="bh-budget-note" class="bh-note dim">About 6 seconds total. First analysis downloads ~44 MB; later searches reuse the engine.</p>
         <div class="bh-go">
           <button class="btn btn-primary" id="bh-analyse" type="submit">Analyze</button>
           <button class="btn btn-outline" id="bh-stop" type="button" hidden>Stop</button>
+          <a id="bh-jump" class="btn btn-outline" href="#bh-result" hidden>View analysis</a>
+        </div>
+        <p id="bh-availability" class="bh-note" role="status"></p>
+        <p id="bh-status" class="bh-status" role="status" aria-live="polite">Loading the browser engine…</p>
+        <div class="bh-actions">
+          <button class="btn btn-outline" id="bh-edit" type="button" aria-expanded="false" aria-controls="bh-position-form">Edit position</button>
           <button class="btn btn-outline" id="bh-flip" type="button">Flip boards</button>
           <button class="btn btn-outline" id="bh-reset" type="button">New game</button>
+          <button class="btn btn-outline" id="bh-undo-reset" type="button" hidden>Undo new game</button>
         </div>
-        <p id="bh-status" class="bh-status" role="status" aria-live="polite">Loading the browser engine…</p>
       </form>
       <div id="bh-result" class="bh-result" aria-live="polite"></div>
+      <details class="bh-keyboard"><summary>Enter a move with keyboard</summary>
+      <form id="bh-move-form" class="bh-move-entry" aria-label="Enter a move">
+        <label for="bh-move-board">Play on</label>
+        <select id="bh-move-board" aria-label="Move board"><option value="A">Board 1</option><option value="B">Board 2</option></select>
+        <label for="bh-move" class="visually-hidden">Move in SAN or UCI</label>
+        <input id="bh-move" placeholder="e4, N@f3, a8=N" aria-describedby="bh-move-help" autocomplete="off" spellcheck="false" />
+        <button class="btn btn-outline" type="submit">Play</button>
+        <p id="bh-move-help" class="dim">Enter SAN or UCI. Partners are A + B and C + D. Captures go to your partner’s reserve.</p>
+      </form>
+      </details>
       <p class="bh-links dim">
         Runs in your browser; nothing is uploaded. ·
         <a href="/bughouse-engine/hivemind-source.tar.gz">Engine source</a> ·
@@ -49,6 +79,7 @@ const CHOICES = [
         <a href="/bughouse-engine/ONNXRUNTIME_THIRD_PARTY_NOTICES.txt">Runtime notices</a>
       </p>
     </div>
+    <dialog id="bh-copy-dialog" aria-labelledby="bh-copy-title"><h2 id="bh-copy-title">Copy your analysis</h2><textarea id="bh-copy-text" aria-label="Analysis to copy" readonly></textarea><button id="bh-copy-close" class="btn btn-outline" type="button">Close</button></dialog>
     <dialog id="bh-promotion" aria-labelledby="bh-promotion-title"><h2 id="bh-promotion-title">Promote to</h2><div id="bh-promotion-options" class="bh-promotion-options"></div><button id="bh-promotion-cancel" class="btn btn-outline" type="button">Cancel</button></dialog>
   </div>
 </Base>
