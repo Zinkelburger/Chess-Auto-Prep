@@ -73,6 +73,20 @@ final class FileRelocations {
   static final _finished = <String, Map<String, RelocationRecord>>{};
   Map<String, RelocationRecord> get _completed =>
       _finished.putIfAbsent(support.path, () => {});
+
+  // Every path this process moved something away from, in order, so a change
+  // accepted before a move can tell that its chapter's path now names
+  // something else.
+  static final _movedFrom = <String>[];
+
+  /// A mark to pass to [movedAwaySince] later.
+  static int get moveMark => _movedFrom.length;
+
+  /// Whether a move after [mark] took the file at canonical [path], or a
+  /// folder holding it, away.
+  static bool movedAwaySince(int mark, String path) => _movedFrom
+      .skip(mark)
+      .any((from) => p.equals(from, path) || p.isWithin(from, path));
   Directory get _folder => Directory(p.join(support.path, 'relocation-writes'));
   BackupArchive get _backups =>
       BackupArchive(Directory(p.join(support.path, 'backups')));
@@ -505,6 +519,7 @@ final class FileRelocations {
       await testHook?.call(FileRelocationStep.backups);
     }
     _completed[record.id] = record;
+    _movedFrom.add(record.from);
     if (_completed.length > 256) _completed.remove(_completed.keys.first);
     await _forget(File(_path(record.id)));
     await testHook?.call(FileRelocationStep.completed);

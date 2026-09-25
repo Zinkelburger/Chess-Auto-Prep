@@ -2,6 +2,7 @@
 // user out: every scenario here ends with opening, saving and training
 // working, and whatever could not be understood kept under
 // Support/recovery-quarantine rather than deleted.
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
@@ -149,39 +150,46 @@ void main() {
       expect(await setAside(), ['training-writes-queued.json']);
     });
 
-    test('a change whose chapter changed does not hold up the next', () async {
+    test(
+      'an autosave between accepting and writing keeps the answer',
+      () async {
+        final store = training();
+        final loaded = await store.read({source}) as ProgressLoaded;
+        final operation = ProgressOperation(sources: loaded.sources);
+        expect(
+          await store.enqueueAttempt(answer('d4'), operation: operation),
+          isA<ProgressEnqueued>(),
+        );
+        // The document saver publishes the chapter atomically, as it does.
+        await replaceFile(source, utf8.encode(oneGame('1. e4 e5')));
+        expect(await store.commit(operation), isA<ProgressWritten>());
+        final lines = await file(attemptsFile).readAsLines();
+        expect(lines.single, contains('"playedSan":"d4"'));
+      },
+    );
+
+    test('a change whose chapter is gone does not hold up the next', () async {
       final store = training();
-      final stale = await store.read({source}) as ProgressLoaded;
-      final first = ProgressOperation(sources: stale.sources);
+      final loaded = await store.read({source}) as ProgressLoaded;
+      final first = ProgressOperation(sources: loaded.sources);
       expect(
         await store.enqueueAttempt(answer('d4'), operation: first),
         isA<ProgressEnqueued>(),
       );
-      // The chapter is saved before the queued answer is written.
-      await File(source).writeAsString(oneGame('1. e4 e5'));
-      final fresh = await store.read({source}) as ProgressLoaded;
-      final second = ProgressOperation(
-        sources: fresh.sources,
-        predecessorId: first.id,
-      );
-      expect(
-        await store.enqueueAttempt(answer('c4'), operation: second),
-        isA<ProgressEnqueued>(),
-      );
-      expect(await store.commit(second), isA<ProgressWritten>());
+      final text = await File(source).readAsString();
+      await File(source).delete();
       expect(await store.commit(first), isA<ProgressConflict>());
-      final lines = await file(attemptsFile).readAsLines();
-      expect(lines, hasLength(1));
-      expect(lines.single, contains('"playedSan":"c4"'));
-      // And the answers after it keep landing.
+      await File(source).writeAsString(text);
+      final again = await store.read({source}) as ProgressLoaded;
       expect(
         await store.logAttempt(
-          answer('Nf3'),
-          operation: ProgressOperation(sources: fresh.sources),
+          answer('c4'),
+          operation: ProgressOperation(sources: again.sources),
         ),
         isA<ProgressWritten>(),
       );
-      expect(await file(attemptsFile).readAsLines(), hasLength(2));
+      final lines = await file(attemptsFile).readAsLines();
+      expect(lines.single, contains('"playedSan":"c4"'));
     });
 
     test(

@@ -41,7 +41,7 @@ final class TrainingWriter {
   final Future<void> Function(TrainingWriteStep)? testHook;
 
   /// Applies [payload], after checking that every PGN it names is still the
-  /// file it was read from ([sources]), though perhaps edited since.
+  /// file it was read from ([sources]) or a later save of it.
   ///
   /// [attempted] carries the bytes an earlier attempt of the same change set
   /// out to publish. A file that already holds them was written, even if that
@@ -55,9 +55,10 @@ final class TrainingWriter {
     Map<String, Revision> sources, {
     required String trainingRoot,
     required Map<String, List<int>> attempted,
+    bool Function(String path) movedAway = _never,
   }) async {
     final change = TrainingPayload.decode(payload);
-    await _checkSources(change, sources, trainingRoot);
+    await _checkSources(change, sources, trainingRoot, movedAway);
     final before = {
       for (final name in trainingFileNames) name: await _bytes(name),
     };
@@ -85,6 +86,7 @@ final class TrainingWriter {
     TrainingPayload change,
     Map<String, Revision> sources,
     String trainingRoot,
+    bool Function(String path) movedAway,
   ) async {
     for (final path in change.sources) {
       final expected = sources[path];
@@ -92,14 +94,12 @@ final class TrainingWriter {
       final canonical = p.isWithin(documents.path, path)
           ? path
           : p.join(documents.path, p.relative(path, from: trainingRoot));
-      // An edit saved to the chapter since (an autosave, say) keeps its rows
-      // meaningful: they name the file and a stable line id. Only a file that
-      // is gone or was replaced by another at that path refuses the change.
-      final observed = await probeDocument(canonical);
-      if (observed is! FileFound ||
-          (expected.nativeIdentity != null &&
-              observed.identity != expected.nativeIdentity) ||
-          (expected.nativeIdentity == null && observed.revision != expected)) {
+      // A chapter saved since (an autosave publishes a new file under the
+      // same name) keeps the rows meaningful: they name the path and a stable
+      // line id. A chapter that is gone, or moved away so that its path now
+      // names something else, refuses the change.
+      if (movedAway(canonical) ||
+          await probeDocument(canonical) is! FileFound) {
         throw TrainingChanged('Training source $path');
       }
     }
@@ -128,6 +128,8 @@ final class TrainingWriter {
     await createFileExclusively(path, before);
   }
 }
+
+bool _never(String path) => false;
 
 const _steps = [
   TrainingWriteStep.reviews,

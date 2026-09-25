@@ -156,19 +156,14 @@ void main() {
     },
   );
 
-  test(
-    'an accepted write keeps its original source through an own edit',
-    () async {
-      final operation = await accepted();
-      expect(
-        await fixture.edit(source, oneGame('1. e4 e5'), opened.revision),
-        isA<Saved>(),
-      );
-      expect(await write('history', operation), isA<ProgressConflict>());
-      opened = await fixture.store.open(source) as Opened;
-      expect(await write('history', await accepted()), isA<ProgressWritten>());
-    },
-  );
+  test('an accepted write survives a save of its chapter', () async {
+    final operation = await accepted();
+    expect(
+      await fixture.edit(source, oneGame('1. e4 e5'), opened.revision),
+      isA<Saved>(),
+    );
+    expect(await write('history', operation), isA<ProgressWritten>());
+  });
 
   test('a valid first review still writes', () async {
     expect(await write('review', await accepted()), isA<ProgressWritten>());

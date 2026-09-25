@@ -27,6 +27,7 @@ import 'csv_records.dart';
 import 'document_probe.dart';
 import 'document_ref.dart';
 import 'file_lock.dart';
+import 'file_relocation.dart';
 import 'recovery_gate.dart';
 import 'recovery_files.dart';
 import 'relocation_notes.dart';
@@ -61,7 +62,12 @@ final class ProgressOperation {
     this.predecessorId,
     Map<String, Revision> sources = const {},
   }) : id = id ?? newCompoundId(),
-       sources = Map.unmodifiable(sources);
+       sources = Map.unmodifiable(sources),
+       _moveMark = FileRelocations.moveMark;
+
+  /// Chapter moves made before the sources were read; a later move of one
+  /// of them means its path names something else now.
+  final int _moveMark;
 
   final String id;
 
@@ -330,6 +336,8 @@ final class TrainingStore implements ProgressFiles {
         change.operation.sources,
         trainingRoot: p.normalize(p.absolute(documents.path)),
         attempted: change.attempted,
+        movedAway: (path) =>
+            FileRelocations.movedAwaySince(change.operation._moveMark, path),
       );
     } on TrainingChanged catch (error) {
       log.w('save training progress in ${documents.path}', error.detail);
