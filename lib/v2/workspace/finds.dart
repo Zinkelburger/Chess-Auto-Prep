@@ -9,6 +9,7 @@ import '../chess/generation/finds.dart';
 import '../chess/generation/search_node.dart';
 import '../diagnostics/log.dart';
 import '../storage/finds_store.dart';
+import '../storage/pending_writes.dart';
 
 /// How the Positions list is ordered.
 enum FindOrder {
@@ -31,6 +32,11 @@ final class FindsReading extends FindsRecorded {
   const FindsReading();
 }
 
+final class FindsUnsaved extends FindsRecorded {
+  const FindsUnsaved(this.reason);
+  final String reason;
+}
+
 final class FindsKept extends FindsRecorded {
   const FindsKept(this.count);
 
@@ -45,13 +51,22 @@ final class FindsKept extends FindsRecorded {
 /// holds is worked out off the window's isolate when it is big, then kept
 /// in the store. The store is read the first time the list is shown.
 final class Finds extends ChangeNotifier {
-  Finds({required FindsStore Function() store, DateTime Function()? clock})
-    : _store = store,
-      _clock = clock ?? DateTime.now;
+  Finds({
+    required FindsStore Function() store,
+    DateTime Function()? clock,
+    PendingWrites? pendingWrites,
+  }) : _store = store,
+       _pending = pendingWrites ?? PendingWrites(),
+       _clock = clock ?? DateTime.now;
 
   /// Opens the store; asked once, when it is first needed.
   final FindsStore Function() _store;
-  late final FindsStore _db = _store();
+  FindsStore? _opened;
+  FindsStore get _db =>
+      (_opened?.available ?? false) ? _opened! : _opened = _store();
+  final PendingWrites _pending;
+  PendingObligation<FindsRecorded>? _latest;
+  bool get canRetry => _pending.unfinished(_store).isNotEmpty;
   final DateTime Function() _clock;
 
   List<KeptFind>? _all;
@@ -76,7 +91,11 @@ final class Finds extends ChangeNotifier {
   int? get selected => _selected;
 
   /// What the last search added, once one has stopped.
-  FindsRecorded? get recorded => _recorded;
+  FindsRecorded? get recorded =>
+      _recorded ??
+      (canRetry
+          ? const FindsUnsaved('Search positions have not been saved.')
+          : null);
 
   /// The finds of the kinds shown, in the order chosen.
   List<KeptFind> get shown => _shown ??= _sorted([
@@ -132,24 +151,77 @@ final class Finds extends ChangeNotifier {
 
   /// Works out the finds of a stopped search's [tree] and keeps them. The
   /// tree starts where the board stood, [prefix] from [rootFen].
-  Future<void> record(
+  Future<FindsRecorded> record(
     SearchNode tree, {
     required Fen rootFen,
     required List<String> prefix,
     required Side side,
     required int elo,
-  }) async {
+  }) {
+    if (_disposed)
+      return Future.value(const FindsUnsaved('The search owner is closed.'));
+    final acceptedAt = _clock();
+    final acceptedPrefix = List<String>.unmodifiable(prefix);
+    List<Find>? lines;
+    final entry = _pending.accept<FindsRecorded>(
+      resource: _store,
+      label: 'Search positions',
+      work: () async {
+        try {
+          lines ??= [
+            for (final find in await _findsIn(tree)) find.after(acceptedPrefix),
+          ];
+          final kept = _db.keep(
+            lines!,
+            side: side,
+            rootFen: rootFen,
+            elo: elo,
+            at: acceptedAt,
+          );
+          return kept
+              ? FindsKept(lines!.length)
+              : const FindsUnsaved(
+                  'Search positions could not be saved. Retry saving them.',
+                );
+        } on Object catch (error) {
+          log.w('keep search positions', error);
+          return const FindsUnsaved(
+            'Search positions could not be saved. Retry saving them.',
+          );
+        }
+      },
+      problem: (result) => result is FindsUnsaved ? result.reason : null,
+      blocked: () =>
+          const FindsUnsaved('An earlier search still needs saving.'),
+    );
+    _latest = entry;
     _recorded = const FindsReading();
-    if (!_disposed) notifyListeners();
-    final found = await _findsIn(tree);
-    if (_disposed) return;
-    final lines = [for (final find in found) find.after(prefix)];
-    _db.keep(lines, side: side, rootFen: rootFen, elo: elo, at: _clock());
-    log.i('search finds: ${lines.length} kept');
-    _recorded = FindsKept(lines.length);
-    // Read again only once the list has been: the store is the truth, and
-    // a find kept before replaced one of the same place.
-    if (_all != null) _all = _db.all();
+    notifyListeners();
+    return _record(entry);
+  }
+
+  Future<FindsRecorded> _record(PendingObligation<FindsRecorded> entry) async {
+    final result = await entry.run();
+    if (!_disposed && identical(_latest, entry)) _adopt(result);
+    return result;
+  }
+
+  /// Retry accepted batches in order; their frozen timestamps and payloads
+  /// belong to the app registry even after this list is replaced.
+  Future<bool> retry() async {
+    final entries = _pending.unfinished(_store);
+    await _pending.retry(_store);
+    if (_disposed) return !canRetry;
+    if (entries.isNotEmpty) {
+      final result = entries.last.result;
+      if (result is FindsRecorded) _adopt(result);
+    }
+    return !canRetry;
+  }
+
+  void _adopt(FindsRecorded result) {
+    _recorded = result;
+    if (result is FindsKept && _all != null) _all = _db.all();
     _changed();
   }
 

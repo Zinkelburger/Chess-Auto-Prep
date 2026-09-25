@@ -102,29 +102,20 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         child: _places(groups),
                       ),
                       const VerticalDivider(width: 1),
-                      Expanded(child: _rows(groups)),
+                      Expanded(
+                        child: AbsorbPointer(
+                          absorbing: !widget.store.ready,
+                          child: ExcludeFocus(
+                            excluding: !widget.store.ready,
+                            child: _rows(groups),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 const Divider(height: 1),
-                if (widget.store.problem case final problem?)
-                  _Problem(problem)
-                else
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: Space.l,
-                      vertical: Space.s,
-                    ),
-                    child: Text(
-                      'Changes save automatically',
-                      style: theme.textTheme.labelSmall,
-                    ),
-                  ),
-                if (widget.store.canRetry && widget.store.problem != null)
-                  TextButton(
-                    onPressed: () => unawaited(widget.store.retry()),
-                    child: const Text('Retry save'),
-                  ),
+                ..._saveStatus(theme),
               ],
             );
           },
@@ -132,6 +123,32 @@ class _SettingsDialogState extends State<SettingsDialog> {
       ),
     );
   }
+
+  List<Widget> _saveStatus(ThemeData theme) => [
+    if (widget.store.problem case final problem?)
+      _Problem(problem)
+    else
+      Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Space.l,
+          vertical: Space.s,
+        ),
+        child: Text(
+          'Changes save automatically',
+          style: theme.textTheme.labelSmall,
+        ),
+      ),
+    if (widget.store.canRetry && widget.store.problem != null)
+      TextButton(
+        onPressed: () => unawaited(widget.store.retry()),
+        child: const Text('Retry save'),
+      ),
+    if (widget.store.readProblem != null)
+      TextButton(
+        onPressed: () => unawaited(widget.store.load()),
+        child: const Text('Retry read'),
+      ),
+  ];
 
   Widget _places(List<SettingGroup> groups) => ListView(
     padding: const EdgeInsets.all(Space.s),
