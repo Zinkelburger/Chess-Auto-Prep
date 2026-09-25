@@ -40,6 +40,7 @@ final class WorkspaceWiring {
        _filter = filter,
        _gamesCache = games {
     _catalog.addListener(_filesChanged);
+    _env.store.addListener(_corpusChanged);
   }
 
   final AppEnvironment _env;
@@ -213,8 +214,18 @@ final class WorkspaceWiring {
     }
   }
 
+  /// Download timestamps are not the source: revoke the corpus at its actual
+  /// committed PGN boundary, including creations and folder relocations.
+  void _corpusChanged() {
+    final change = _env.store.lastChange;
+    if (change != null && change.touches(_gamesCache.folder)) {
+      _myGamesTree.forget();
+    }
+  }
+
   void dispose() {
     _disposed = true;
+    _env.store.removeListener(_corpusChanged);
     _env.settings.removeListener(_engineSettings);
     _catalog.removeListener(_filesChanged);
     _fill.dispose();
