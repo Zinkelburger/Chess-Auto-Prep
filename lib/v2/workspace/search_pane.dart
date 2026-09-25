@@ -180,11 +180,6 @@ class _SearchPaneState extends State<SearchPane>
           children: [
             _form(context),
             _status(context),
-            if (widget.fill.canRetry)
-              TextButton(
-                onPressed: () => unawaited(widget.fill.retry()),
-                child: const Text('Retry saving search'),
-              ),
             const Divider(height: 1),
             Expanded(child: _table(context)),
             ?_linesRow(context),
@@ -295,8 +290,6 @@ class _SearchPaneState extends State<SearchPane>
             '${_findsWords()}',
         false,
       ),
-      FillSaving() => ('Saving search results…', false),
-      FillUnsaved(:final reason) => (reason, true),
       FillFailed(:final reason) => (reason, true),
     };
     return Padding(

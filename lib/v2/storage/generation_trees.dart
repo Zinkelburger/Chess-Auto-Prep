@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:document_file_io/document_file_io.dart';
-import 'package:flutter/foundation.dart' show listEquals;
 import 'package:path/path.dart' as p;
 
+import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 import 'chapter_files.dart';
 import 'file_lock.dart';
@@ -20,9 +20,11 @@ typedef TreeKeeper =
       required String runId,
     });
 
-/// Immutable artifacts in the existing `.cap-generation` layout. Publication
-/// shares the document recovery domain, so a supported folder move cannot pass
-/// between checking managed ancestry and publishing its derived tree.
+/// Search trees in the existing `.cap-generation` layout beside the chapter.
+/// They are derived data: a tree that cannot be kept — the chapter was moved
+/// or deleted meanwhile, the disk is full — is logged and skipped, and never
+/// stops the next search. Writing shares the document lock, so a folder move
+/// cannot pass between checking the chapter and writing its tree.
 final class GenerationTrees {
   GenerationTrees(this.recovery, {this.afterPublish});
 
@@ -59,10 +61,8 @@ final class GenerationTrees {
         }
         await _ancestry(root.path, p.dirname(source), create: false);
         if ((await observeFile(source)).status != 0) {
-          throw FileSystemException(
-            'The source chapter is unavailable.',
-            source,
-          );
+          log.i('search tree not kept: $source is gone');
+          return;
         }
         await _ancestry(root.path, folder, create: true);
         if (canonicalRecoveryRoot(recovery.documents).path != root.path) {
@@ -75,30 +75,16 @@ final class GenerationTrees {
     );
   }
 
+  /// A tree already written for this run is left as it is. Whatever a crash
+  /// left at the staging name is removed first — unlinked, never followed.
   Future<void> _publish(String path, List<int> bytes) async {
-    final current = await observeFile(path);
-    if (current.status == 0 && !listEquals(current.bytes, bytes)) {
-      throw FileSystemException(
-        'A different search tree already occupies this run.',
-        path,
-      );
+    if ((await observeFile(path)).status != 1) return;
+    final stage = temporaryPathFor(path);
+    if (await FileSystemEntity.type(stage, followLinks: false) !=
+        FileSystemEntityType.notFound) {
+      await File(stage).delete();
     }
-    if (current.status != 0 && current.status != 1) {
-      throw FileSystemException(
-        'The search tree is unreadable or unsupported.',
-        path,
-      );
-    }
-    // A crash may leave our complete stage. Only the exact frozen bytes are
-    // disposable; unknown or linked staging material is preserved and refused.
-    final stagePath = temporaryPathFor(path);
-    final stage = await observeFile(stagePath);
-    if (stage.status == 0 && listEquals(stage.bytes, bytes)) {
-      await File(stagePath).delete();
-    } else {
-      await requireUnusedRecoveryStage(path);
-    }
-    if (current.status == 1) await createFileExclusively(path, bytes);
+    await createFileExclusively(path, bytes);
   }
 
   Future<void> _ancestry(

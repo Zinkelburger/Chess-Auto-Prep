@@ -133,10 +133,10 @@ void main() {
     expect(store.value.engineCores, 4, reason: 'the choice stays on screen');
     expect(store.problem, contains('could not be saved'));
     fail = false;
-    await store.update(store.value.copyWith(engineLines: 3));
+    await store.update(store.value.copyWith(engineLines: 5));
     expect(store.problem, isNull);
     final saved = Settings.fromJson(await file().readAsString());
-    expect((saved.engineCores, saved.engineLines), (4, 3));
+    expect((saved.engineCores, saved.engineLines), (4, 5));
   });
 
   test(

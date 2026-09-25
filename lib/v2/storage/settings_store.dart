@@ -39,6 +39,9 @@ final class SettingsStore extends ChangeNotifier {
   String? _problem;
   bool _disposed = false;
 
+  /// Counts changes, so a read that finishes after one does not undo it.
+  int _edits = 0;
+
   /// The write in flight, and whether [_value] changed since it started.
   /// Two writes at once would share the staged copy's name.
   Future<void>? _writing;
@@ -55,7 +58,8 @@ final class SettingsStore extends ChangeNotifier {
 
   Future<void> _load() async {
     final file = _file;
-    if (_disposed || _dirty || file == null) return;
+    if (_disposed || file == null) return;
+    final edits = _edits;
     Settings value;
     try {
       final text = await _target(file).readAsString();
@@ -70,7 +74,7 @@ final class SettingsStore extends ChangeNotifier {
       await _moveAside(file);
       value = Settings.defaults;
     }
-    if (_disposed || _dirty) return;
+    if (_disposed || edits != _edits) return;
     _value = value;
     _notify();
   }
@@ -84,6 +88,7 @@ final class SettingsStore extends ChangeNotifier {
   /// completes once that is on disk.
   Future<void> update(Settings next) async {
     if (_disposed || next == _value) return;
+    _edits++;
     _value = next;
     _notify();
     final file = _file;

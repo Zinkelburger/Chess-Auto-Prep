@@ -13,14 +13,14 @@ final class DraftWritten extends DraftPublication {
 }
 
 final class DraftNotWritten extends DraftPublication {
-  const DraftNotWritten(this.reason, {this.retryable = true});
+  const DraftNotWritten(this.reason);
   final String reason;
-  final bool retryable;
 }
 
-/// One accepted derived draft. Clean collisions select the next candidate;
-/// an uncertain outcome permanently binds this command to its exact path and
-/// bytes. Retrying may acknowledge those bytes, never silently allocate a copy.
+/// A search's lines as a new draft chapter beside the one it was run on,
+/// under the first free name: "Chapter (draft)", "Chapter (draft 2)", …
+/// A draft is only ever created, never written over; a failed write leaves
+/// at worst a draft the user can delete, and asking again picks a new name.
 final class GeneratedDraft {
   GeneratedDraft({
     required this.documents,
@@ -33,69 +33,28 @@ final class GeneratedDraft {
   final String folder;
   final String chapter;
   final String Function(String name) textFor;
-  int _next = 1;
-  ChapterRef? _ref;
-  String? _text;
-  bool _uncertain = false;
-  DraftWritten? _done;
+
+  static const _names = 20;
 
   Future<DraftPublication> write() async {
-    if (_done case final done?) return done;
     try {
-      while (_next <= 20) {
-        final name = _next == 1
-            ? '$chapter (draft)'
-            : '$chapter (draft $_next)';
-        final ref = _ref ??= ChapterRef.at(p.join(folder, '$name.pgn'));
-        final text = _text ??= textFor(name);
-        final result = await _publish(ref, text);
-        if (result != null) return result;
-        _next++;
-        _ref = null;
-        _text = null;
+      for (var n = 1; n <= _names; n++) {
+        final name = n == 1 ? '$chapter (draft)' : '$chapter (draft $n)';
+        final ref = ChapterRef.at(p.join(folder, '$name.pgn'));
+        switch (await documents.create(ref, textFor(name))) {
+          case Created():
+            return DraftWritten(ref);
+          case Collision():
+            continue;
+          case IoFailure(:final detail):
+            return DraftNotWritten('The draft could not be written: $detail');
+        }
       }
       return const DraftNotWritten(
         'Too many drafts of this chapter already; delete some first.',
-        retryable: false,
       );
     } on Object catch (error) {
       return DraftNotWritten('The draft could not be written: $error');
-    }
-  }
-
-  /// Null means a proven clean collision, so another candidate may be chosen.
-  Future<DraftPublication?> _publish(ChapterRef ref, String text) async {
-    if (_uncertain) {
-      switch (await documents.open(ref)) {
-        case Opened(text: final current):
-          return current == text
-              ? _done = DraftWritten(ref)
-              : const DraftNotWritten(
-                  'The draft destination changed. Its accepted contents are retained.',
-                );
-        case Unreadable():
-          return const DraftNotWritten(
-            'The draft destination could not be checked. Retry when it is available.',
-          );
-        case Absent():
-          break;
-      }
-    }
-    final wasUncertain = _uncertain;
-    _uncertain = true;
-    switch (await documents.create(ref, text)) {
-      case Created():
-        return _done = DraftWritten(ref);
-      case Collision():
-        if (wasUncertain) {
-          return const DraftNotWritten(
-            'The draft destination appeared during retry. Retry to check its exact contents.',
-          );
-        }
-        _uncertain = false;
-        return null;
-      case IoFailure(:final detail):
-        return DraftNotWritten('The draft could not be written: $detail');
     }
   }
 }

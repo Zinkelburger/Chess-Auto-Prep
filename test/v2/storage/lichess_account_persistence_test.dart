@@ -16,9 +16,11 @@ void main() {
       lichessExpiryKey: DateTime(2020).millisecondsSinceEpoch,
     });
     await SharedPreferences.getInstance();
-    SharedPreferencesStorePlatform.instance = _Backend(failRemovals: true);
+    final backend = _Backend(failRemovals: true);
+    SharedPreferencesStorePlatform.instance = backend;
     expect(await readLichessAccount(), isNull);
     expect(await readLichessToken(), isNull);
+    backend.failRemovals = false;
     expect(
       await writeLichessAccount(
         const LichessAccount(token: 'new', username: 'New', personal: true),
@@ -58,7 +60,7 @@ void main() {
 class _Backend extends InMemorySharedPreferencesStore {
   _Backend({this.failRemovals = false, this.failToken = false})
     : super.empty();
-  final bool failRemovals;
+  bool failRemovals;
   bool failToken;
 
   @override
