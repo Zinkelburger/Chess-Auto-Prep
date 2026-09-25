@@ -306,8 +306,11 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// Ctrl+O and `Open PGN file…` are one door whose other side depends on
   /// the mode: in the builder a file becomes a repertoire, everywhere else
   /// it is read in the viewer.
-  Future<RequestResult> openPgnFile() =>
-      _mode == Mode.repertoires ? importFile() : browse();
+  Future<RequestResult> openPgnFile() => _inLibrary ? importFile() : browse();
+
+  /// The builder and the trainer both list the repertoires: a file opened
+  /// or pasted in either becomes one, and stays in the mode that took it.
+  bool get _inLibrary => _mode == Mode.repertoires || _mode == Mode.trainer;
 
   /// The desktop's file dialog, then the same door as the recent list.
   Future<RequestResult> browse() async {
@@ -437,7 +440,7 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// new repertoire in the builder; anywhere else it does nothing.
   Future<RequestResult> paste() async {
     if (_session.isScratch) return pasteOntoBoard();
-    if (_mode == Mode.repertoires) return pasteRepertoire();
+    if (_inLibrary) return pasteRepertoire();
     return const RequestDropped();
   }
 
@@ -553,7 +556,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     required String name,
   }) {
     if (result is LibraryAdded) {
-      switchTo(Mode.repertoires);
+      if (!_inLibrary) switchTo(Mode.repertoires);
       return _open(ticket, result.first);
     }
     final sentence = libraryMessage(

@@ -21,6 +21,7 @@ import '../workspace/file_filter.dart';
 /// document and the draft in it are the same whichever is showing.
 enum Mode {
   repertoires('Repertoire builder'),
+  trainer('Repertoire trainer'),
   books('Books'),
   pgnViewer('PGN Viewer'),
   study('Study'),

@@ -85,7 +85,7 @@ class _LessonViewState extends State<LessonView> {
     if (rating != null) {
       lesson.rate(rating);
     } else if (key == LogicalKeyboardKey.space) {
-      lesson.next();
+      lesson.proceed();
     } else if (key == LogicalKeyboardKey.arrowDown) {
       lesson.skip();
     } else if (key == LogicalKeyboardKey.escape) {
@@ -259,7 +259,7 @@ class _Control extends StatelessWidget {
           ),
         ),
       ),
-      AwaitingRating() => _Ratings(lesson: lesson),
+      AwaitingRating(:final graded) => _Ratings(lesson: lesson, graded: graded),
       SavingLine() => Text('Saving…', style: text.bodySmall),
       LineNotSaved(:final failure) => Row(
         children: [
@@ -280,10 +280,13 @@ class _Control extends StatelessWidget {
 }
 
 /// How well the user knew the line, each button saying what it schedules.
+/// The grade the line's mistakes earned is the filled one, and Space takes
+/// it.
 class _Ratings extends StatelessWidget {
-  const _Ratings({required this.lesson});
+  const _Ratings({required this.lesson, required this.graded});
 
   final Lesson lesson;
+  final Rating graded;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -300,11 +303,21 @@ class _Ratings extends StatelessWidget {
         children: [
           for (final (i, rating) in Rating.values.indexed)
             Tooltip(
-              message: withKey(ratingLabel(rating, lesson.review), '${i + 1}'),
-              child: OutlinedButton(
-                onPressed: () => lesson.rate(rating),
-                child: Text(ratingLabel(rating, lesson.review)),
-              ),
+              message: rating == graded
+                  ? withKey(
+                      ratingLabel(rating, lesson.review),
+                      '${i + 1}, Space',
+                    )
+                  : withKey(ratingLabel(rating, lesson.review), '${i + 1}'),
+              child: rating == graded
+                  ? FilledButton(
+                      onPressed: () => lesson.rate(rating),
+                      child: Text(ratingLabel(rating, lesson.review)),
+                    )
+                  : OutlinedButton(
+                      onPressed: () => lesson.rate(rating),
+                      child: Text(ratingLabel(rating, lesson.review)),
+                    ),
             ),
         ],
       ),

@@ -197,15 +197,12 @@ abstract base class _DocumentModeView extends ModeView {
   }
 }
 
-/// The Repertoire builder: the user's repertoires on the left.
-final class RepertoiresView extends _DocumentModeView {
-  RepertoiresView(Workspace workspace, WorkspaceRequests requests, this._modes)
-    : super(workspace, newWorkspaceTabs(), requests);
+/// The two modes with the user's repertoires on the left: the builder and
+/// the trainer. A file opened or pasted in either becomes a repertoire.
+abstract base class _LibraryView extends _DocumentModeView {
+  _LibraryView(super.workspace, super.tabs, super.requests, this._modes);
 
   final DocumentModes _modes;
-
-  @override
-  bool get offersBuilder => false;
 
   @override
   Widget list(Widget toggle) => ListenableBuilder(
@@ -226,6 +223,33 @@ final class RepertoiresView extends _DocumentModeView {
     shortcut: workspace.session.isScratch ? null : 'Ctrl+V',
     group: 'File',
   );
+}
+
+/// The Repertoire builder: the user's repertoires on the left.
+final class RepertoiresView extends _LibraryView {
+  RepertoiresView(
+    Workspace workspace,
+    WorkspaceRequests requests,
+    DocumentModes modes,
+  ) : super(workspace, newWorkspaceTabs(), requests, modes);
+
+  @override
+  bool get offersBuilder => false;
+}
+
+/// The Repertoire trainer: the same repertoires on the left, and the Train
+/// tab first on the card and always there. It is the builder's Train tab
+/// with the building put away, for someone who came to drill.
+final class TrainerView extends _LibraryView {
+  TrainerView(
+    Workspace workspace,
+    WorkspaceRequests requests,
+    DocumentModes modes,
+  ) : super(workspace, trainerTabs(), requests, modes);
+
+  /// Coming here is coming to train, whichever tab was left up.
+  @override
+  void entered() => tabs.show(WorkspaceTab.train);
 }
 
 /// The files the PGN Viewer has open or has had open.
@@ -603,6 +627,7 @@ Map<Mode, ModeView> modeViews({
   for (final mode in Mode.values)
     mode: switch (mode) {
       Mode.repertoires => RepertoiresView(workspace, requests, documents),
+      Mode.trainer => TrainerView(workspace, requests, documents),
       Mode.books => BooksView(workspace, requests, documents),
       Mode.pgnViewer => ViewerView(workspace, requests, documents),
       Mode.study => StudyView(workspace, requests, documents),

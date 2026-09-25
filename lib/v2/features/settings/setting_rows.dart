@@ -186,6 +186,17 @@ List<SettingGroup> settingGroups({
           ),
         ),
       ),
+      SettingRow(
+        'Rate reviews myself',
+        ToggleSetting(
+          value: s.training.rateReviews,
+          onChanged: (on) => change(
+            (now) =>
+                now.copyWith(training: now.training.copyWith(rateReviews: on)),
+          ),
+        ),
+        hint: 'Off: graded from your mistakes. On: 1–4 after each line.',
+      ),
     ]),
     SettingGroup('Engine', [
       SettingRow(

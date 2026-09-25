@@ -53,6 +53,18 @@ PaneTabs<WorkspaceTab> readingTabs() => PaneTabs(
   open: const [WorkspaceTab.explorer, WorkspaceTab.search],
 );
 
+/// The card's tabs in the Repertoire trainer: Train first and always
+/// there, the moves beside it to read a line in, and the explorer to be
+/// shown when wanted.
+PaneTabs<WorkspaceTab> trainerTabs() => PaneTabs(
+  const [
+    PaneTab(WorkspaceTab.train, 'Train', pinned: true),
+    PaneTab(WorkspaceTab.moves, 'Moves'),
+    PaneTab(WorkspaceTab.explorer, 'Explorer'),
+  ],
+  open: const [WorkspaceTab.moves],
+);
+
 /// The card's tabs in Tactics: the puzzle first and always there, the game
 /// it came from beside it, and the explorer to be shown when wanted. The
 /// repertoire's tabs mean nothing here and are not offered.

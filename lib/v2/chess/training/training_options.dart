@@ -5,12 +5,19 @@ final class TrainingOptions {
     this.reviewLimit = 0,
     this.replyMillis = 700,
     this.replayMistakes = true,
+    this.rateReviews = false,
   });
 
   final int learnLimit;
   final int reviewLimit;
   final int replyMillis;
   final bool replayMistakes;
+
+  /// Whether a reviewed line waits for the user's Again/Hard/Good/Easy,
+  /// Anki's way, rather than being graded from its mistakes as Chessable
+  /// grades it; the grade the mistakes earned is then the one Space takes.
+  /// A line new to the sitting is always graded.
+  final bool rateReviews;
 
   static const defaults = TrainingOptions();
 
@@ -19,11 +26,13 @@ final class TrainingOptions {
     int? reviewLimit,
     int? replyMillis,
     bool? replayMistakes,
+    bool? rateReviews,
   }) => TrainingOptions(
     learnLimit: learnLimit ?? this.learnLimit,
     reviewLimit: reviewLimit ?? this.reviewLimit,
     replyMillis: replyMillis ?? this.replyMillis,
     replayMistakes: replayMistakes ?? this.replayMistakes,
+    rateReviews: rateReviews ?? this.rateReviews,
   );
 
   Map<String, Object> toJson() => {
@@ -31,6 +40,7 @@ final class TrainingOptions {
     'reviewLimit': reviewLimit,
     'replyMillis': replyMillis,
     'replayMistakes': replayMistakes,
+    'rateReviews': rateReviews,
   };
 
   factory TrainingOptions.fromJson(Object? value) {
@@ -47,6 +57,9 @@ final class TrainingOptions {
       replayMistakes: value['replayMistakes'] is bool
           ? value['replayMistakes'] as bool
           : true,
+      rateReviews: value['rateReviews'] is bool
+          ? value['rateReviews'] as bool
+          : false,
     );
   }
 
@@ -56,9 +69,15 @@ final class TrainingOptions {
       learnLimit == other.learnLimit &&
       reviewLimit == other.reviewLimit &&
       replyMillis == other.replyMillis &&
-      replayMistakes == other.replayMistakes;
+      replayMistakes == other.replayMistakes &&
+      rateReviews == other.rateReviews;
 
   @override
-  int get hashCode =>
-      Object.hash(learnLimit, reviewLimit, replyMillis, replayMistakes);
+  int get hashCode => Object.hash(
+    learnLimit,
+    reviewLimit,
+    replyMillis,
+    replayMistakes,
+    rateReviews,
+  );
 }

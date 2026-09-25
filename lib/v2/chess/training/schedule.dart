@@ -132,6 +132,12 @@ final class Review {
   );
 }
 
+/// The grade a line earns by how it went, as Chessable grades it: Good
+/// when every move was right, Again when any was missed. Again, because the
+/// schedule is the line's — a forgotten move has to come back soon, and
+/// Hard would still stretch the interval.
+Rating gradeOf({required bool clean}) => clean ? Rating.good : Rating.again;
+
 /// [review] after the user rated its line [rating] at [now]. [clean] is
 /// whether the line went without a mistake; [jitter], in −1..1, spreads the
 /// interval (see the table above).

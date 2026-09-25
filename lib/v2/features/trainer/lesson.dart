@@ -20,6 +20,9 @@ const correctionDelay = Duration(milliseconds: 1200);
 const rewindDelay = Duration(milliseconds: 800);
 const replayDelay = Duration(milliseconds: 500);
 
+/// How long a graded line stays on the board, whole, before the next one.
+const finishedPause = Duration(milliseconds: 1000);
+
 /// Where a sitting is.
 sealed class LessonState {
   const LessonState();
@@ -31,11 +34,14 @@ final class Drilling extends LessonState {
 }
 
 /// A reviewed line is done and waits for the user's rating. [clean] is
-/// whether it went without a mistake.
+/// whether it went without a mistake; [graded] is what its mistakes earn,
+/// which Space accepts.
 final class AwaitingRating extends LessonState {
   const AwaitingRating({required this.clean});
 
   final bool clean;
+
+  Rating get graded => gradeOf(clean: clean);
 }
 
 final class SavingLine extends LessonState {
@@ -61,9 +67,10 @@ final class SittingOver extends LessonState {
 ///
 /// The set is fixed when the sitting starts, so finishing a line cannot pull
 /// new ones in behind it. A line rated Again is due now, so it goes to the
-/// back of the sitting and comes round once more. A line never trained is
-/// walked through first and rated for the user — Good when the quiz went
-/// clean, Again when not — so the four buttons appear only for a review.
+/// back of the sitting and comes round once more. Every line is graded from
+/// its mistakes — Good when the quiz went clean, Again when not — unless
+/// the user rates reviews themselves ([TrainingOptions.rateReviews]); a line
+/// never trained is walked through first and always graded for them.
 /// [lines] is never empty: the trainer starts no sitting with nothing in it.
 class Lesson extends ChangeNotifier {
   Lesson({
@@ -86,6 +93,7 @@ class Lesson extends ChangeNotifier {
         learn: learning,
         replayMistakes: options.replayMistakes,
       ) {
+    if (learning) _newHere.add(lines.first.key);
     _arm();
   }
 
@@ -98,6 +106,13 @@ class Lesson extends ChangeNotifier {
   /// Whether the line on the board began as one never trained, and so is
   /// walked through first and rated for the user.
   bool _learning;
+
+  /// The lines that came into this sitting never trained. Rated Again, one
+  /// comes round again as trained, and is still graded for the user.
+  final Set<LineKey> _newHere = {};
+
+  /// The lines rated in this sitting, each once however often it came round.
+  final Set<LineKey> _rated = {};
   LessonState _state = const Drilling();
   ({int lines, int right, int wrong}) _tally = (lines: 0, right: 0, wrong: 0);
 
@@ -153,7 +168,8 @@ class Lesson extends ChangeNotifier {
     final answered = _drill.answer(uci);
     if (answered == null) return;
     final (drill, answer) = answered;
-    if (_drill.pass != Pass.walkthrough) {
+    // The quiz is what counts: a replayed miss is not a second one.
+    if (_drill.pass == Pass.quiz) {
       _tally = answer.correct
           ? (lines: _tally.lines, right: _tally.right + 1, wrong: _tally.wrong)
           : (lines: _tally.lines, right: _tally.right, wrong: _tally.wrong + 1);
@@ -166,6 +182,13 @@ class Lesson extends ChangeNotifier {
   void next() {
     if (_disposed || _suspended) return;
     if (_state is Drilling && _drill.stage is Showing) _changed(_drill.next());
+  }
+
+  /// Space: goes on from a move being shown, or takes the grade the line's
+  /// mistakes earned when a rating is asked for.
+  void proceed() {
+    if (_state case AwaitingRating(:final graded)) return rate(graded);
+    next();
   }
 
   /// The user's rating of the line just reviewed.
@@ -214,6 +237,7 @@ class Lesson extends ChangeNotifier {
     }
     final line = _left.removeAt(0);
     _learning = _isNew(_progress, line);
+    if (_learning) _newHere.add(line.key);
     _state = const Drilling();
     _drill = Drill.start(
       line,
@@ -225,16 +249,10 @@ class Lesson extends ChangeNotifier {
 
   void _changed(Drill drill) {
     _drill = drill;
-    if (drill.stage case Finished(:final clean)) {
-      _timer?.cancel();
-      if (_learning) {
-        unawaited(_save(clean ? Rating.good : Rating.again, clean: clean));
-      } else {
-        _state = AwaitingRating(clean: clean);
-      }
-    } else {
-      _arm();
+    if (drill.stage case Finished(:final clean) when !_graded) {
+      _state = AwaitingRating(clean: clean);
     }
+    _arm();
     notifyListeners();
   }
 
@@ -242,6 +260,7 @@ class Lesson extends ChangeNotifier {
     _timer?.cancel();
     if (_disposed || _suspended) return;
     final wait = switch (_drill.stage) {
+      Finished() => _graded && _state is Drilling ? finishedPause : null,
       Missed() => correctionDelay,
       Corrected() when _drill.pass == Pass.walkthrough => rewindDelay,
       Answered() when _drill.pass == Pass.replay => replayDelay,
@@ -250,7 +269,12 @@ class Lesson extends ChangeNotifier {
     };
     if (wait == null) return;
     _timer = Timer(wait, () {
-      if (!_disposed) _changed(_drill.tick());
+      if (_disposed) return;
+      if (_drill.stage case Finished(:final clean)) {
+        unawaited(_save(gradeOf(clean: clean), clean: clean));
+      } else {
+        _changed(_drill.tick());
+      }
     });
   }
 
@@ -282,17 +306,18 @@ class Lesson extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    _tally = (
-      lines: _tally.lines + 1,
-      right: _tally.right,
-      wrong: _tally.wrong,
-    );
+    _rated.add(line.key);
+    _tally = (lines: _rated.length, right: _tally.right, wrong: _tally.wrong);
     if (rating == Rating.again &&
         (kind == SittingKind.learn || kind == SittingKind.review))
       _left.add(line);
     _nextLine();
     notifyListeners();
   }
+
+  /// Whether the line on the board is graded from its mistakes rather than
+  /// rated by the user.
+  bool get _graded => !options.rateReviews || _newHere.contains(line.key);
 
   static bool _isNew(TrainingProgress progress, TrainingLine line) =>
       progress.status(line) == LineStatus.untrained;
