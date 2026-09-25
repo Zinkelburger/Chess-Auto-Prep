@@ -100,7 +100,7 @@ void main() {
     expect(q['scope'], 'preference:read study:read');
     expect(q['state'], isNotEmpty);
     final redirect = Uri.parse(q['redirect_uri']!);
-    expect(redirect.host, 'localhost');
+    expect(redirect.host, '127.0.0.1');
     expect(redirect.path, '/callback');
     await login.cancel();
     expect(await outcome, isA<LoginCancelled>());
@@ -206,11 +206,10 @@ void main() {
   });
 
   test('a busy old port is passed over for another', () async {
-    // Both loopbacks, as a server on the wildcard holds them.
+    // Hold the address the redirect actually names, on every operating system.
     final busy = await HttpServer.bind(
-      InternetAddress.anyIPv6,
+      InternetAddress.loopbackIPv4,
       lichessCallbackPort,
-      v6Only: false,
     );
     try {
       final login = api();

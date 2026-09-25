@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import 'directory_entries.dart';
 import '../chess/pgn/chapter_heading.dart';
 import '../chess/pgn/chapter_sections.dart';
 import '../diagnostics/log.dart';
@@ -234,7 +235,7 @@ final class ChapterDirectory implements ChapterFiles {
   Future<void> _removeIfEmpty(String folder) async {
     final directory = Directory(folder);
     try {
-      if (await directory.list().isEmpty) await directory.delete();
+      if (await directoryEntries(directory).isEmpty) await directory.delete();
     } on FileSystemException catch (error) {
       log.w('remove the empty folder $folder', error);
     }
@@ -275,7 +276,7 @@ final class ChapterDirectory implements ChapterFiles {
     if (documents == null) return;
     final entries = await _recovery.run(
       () async => await root.exists()
-          ? await root.list(followLinks: false).toList()
+          ? await directoryEntries(root, followLinks: false).toList()
           : <FileSystemEntity>[],
     );
     for (final entry in entries) {
@@ -302,7 +303,7 @@ final class ChapterDirectory implements ChapterFiles {
 
   Future<List<RepertoireFolder>> _scan(List<UnreadableFolder> skipped) async {
     final folders = <RepertoireFolder>[];
-    await for (final entry in root.list(followLinks: false)) {
+    await for (final entry in directoryEntries(root, followLinks: false)) {
       if (p.basename(entry.path).startsWith('.')) continue;
       if (entry is File && _isChapter(entry.path)) {
         final stat = await entry.stat();
@@ -387,7 +388,7 @@ final class ChapterDirectory implements ChapterFiles {
 
 /// Traverse shelves without following links or visiting recovery/staging data.
 Stream<File> _chapterFiles(Directory folder) async* {
-  await for (final entry in folder.list(followLinks: false)) {
+  await for (final entry in directoryEntries(folder, followLinks: false)) {
     if (p.basename(entry.path).startsWith('.')) continue;
     if (entry is Directory) {
       yield* _chapterFiles(entry);
@@ -523,7 +524,7 @@ Future<DeletedListing> listDeleted(Directory root) async {
   if (!await root.exists()) return const DeletedChapters([]);
   final found = <DeletedChapter>[];
   try {
-    await for (final entry in root.list(followLinks: false)) {
+    await for (final entry in directoryEntries(root, followLinks: false)) {
       if (entry is! Directory || p.basename(entry.path).startsWith('.')) {
         continue;
       }
@@ -539,7 +540,7 @@ Future<DeletedListing> listDeleted(Directory root) async {
 
 Future<List<DeletedChapter>> _deletedBelow(Directory directory) async {
   final found = await _deletedIn(directory.path);
-  await for (final entry in directory.list(followLinks: false)) {
+  await for (final entry in directoryEntries(directory, followLinks: false)) {
     if (entry is Directory && !p.basename(entry.path).startsWith('.')) {
       found.addAll(await _deletedBelow(entry));
     }
@@ -552,7 +553,7 @@ Future<List<DeletedChapter>> _deletedIn(String folder) async {
   final found = <DeletedChapter>[];
   try {
     if (!await trash.exists()) return found;
-    await for (final entry in trash.list()) {
+    await for (final entry in directoryEntries(trash)) {
       if (entry is! File) continue;
       final chapter = readRecoveryName(entry.path, folder: folder);
       if (chapter != null) found.add(chapter);

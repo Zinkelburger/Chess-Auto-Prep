@@ -38,6 +38,87 @@ external int _installNew(Pointer<Utf8> from, Pointer<Utf8> to);
 external int _movePathNoReplace(Pointer<Utf8> from, Pointer<Utf8> to);
 @Native<Int32 Function(Pointer<Utf8>)>(symbol: 'cap_sync_directory')
 external int _syncDirectory(Pointer<Utf8> path);
+@Native<Int32 Function(Pointer<Utf8>)>(symbol: 'cap_sync_file')
+external int _syncFile(Pointer<Utf8> path);
+@Native<Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>)>(
+  symbol: 'cap_replace_file',
+)
+external int _replaceFile(
+  Pointer<Utf8> from,
+  Pointer<Utf8> to,
+  Pointer<Utf8> backup,
+);
+
+/// Publishes a staged file. Windows preserves destination metadata with
+/// ReplaceFileW; a missing destination is created without replacing a racer.
+/// Antivirus and indexer handles may deny sharing briefly. Retry only those
+/// errors, leaving the old file in place throughout the wait.
+Future<void> replaceFileContents(String source, String destination) async {
+  _checkPath(source);
+  _checkPath(destination);
+  final baseline = Platform.isWindows ? await observeFile(destination) : null;
+  if (baseline != null && baseline.status != 0 && baseline.status != 1) {
+    throw FileSystemException(
+      'Cannot safely observe the replacement destination',
+      destination,
+    );
+  }
+  final deadline = DateTime.now().add(const Duration(seconds: 2));
+  final recovery =
+      '$source.previous-$pid-${DateTime.now().microsecondsSinceEpoch}';
+  while (true) {
+    final error = await Isolate.run(() {
+      final from = source.toNativeUtf8(), to = destination.toNativeUtf8();
+      final backup = recovery.toNativeUtf8();
+      try {
+        return _replaceFile(from, to, backup);
+      } finally {
+        malloc.free(from);
+        malloc.free(to);
+        malloc.free(backup);
+      }
+    });
+    if (error == 0) return;
+    if (!Platform.isWindows ||
+        !const [32, 33].contains(error) ||
+        DateTime.now().isAfter(deadline)) {
+      throw FileSystemException(
+        'File replacement failed. Recovery copy, if present: $recovery',
+        destination,
+        OSError('Native replacement', error),
+      );
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final current = await observeFile(destination);
+    if (current.status != baseline!.status ||
+        current.identity != baseline.identity ||
+        current.sha256Hex != baseline.sha256Hex) {
+      throw FileSystemException(
+        'The file changed while waiting to replace it',
+        destination,
+      );
+    }
+  }
+}
+
+/// Flushes staged bytes, including the drive cache on macOS, before a name
+/// is published. Failure must leave the destination untouched.
+Future<void> syncFile(String path) => Isolate.run(() {
+  _checkPath(path);
+  final value = path.toNativeUtf8();
+  try {
+    final error = _syncFile(value);
+    if (error != 0) {
+      throw FileSystemException(
+        'File synchronization failed',
+        path,
+        OSError('Native file sync', error),
+      );
+    }
+  } finally {
+    malloc.free(value);
+  }
+});
 
 /// Bytes and identity from the same native file handle, checked against its
 /// path after reading. Missing/failed observations never contain partial bytes.

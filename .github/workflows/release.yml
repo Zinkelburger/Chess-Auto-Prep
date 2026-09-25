@@ -278,6 +278,18 @@ jobs:
           zip -ry ../../../../../chess-auto-prep-${{ github.ref_name }}-macos-${{ matrix.arch }}.zip *.app
           ls -lh ../../../../../chess-auto-prep-${{ github.ref_name }}-macos-${{ matrix.arch }}.zip
 
+      - name: Packaged v2 documents, Stockfish, Maia and login sockets
+        run: |
+          APP=$(ls -d build/macos/Build/Products/Release/*.app)
+          EXEC=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")
+          python3 tools/test_desktop_bundle.py "$APP/Contents/MacOS/$EXEC" --report desktop-release.json
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: macos-desktop-release-report-${{ matrix.arch }}
+          path: desktop-release.json
+
       - uses: actions/upload-artifact@v7
         with:
           name: macos-${{ matrix.arch }}-build

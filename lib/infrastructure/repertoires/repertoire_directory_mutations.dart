@@ -12,6 +12,7 @@ import '../../services/storage/file_mutation_service.dart';
 import '../../utils/atomic_file.dart';
 import '../../utils/file_operation_lock.dart';
 import 'foreign_relocation_history.dart';
+import 'foreign_recovery_copies.dart';
 
 enum RepertoireMoveStep { prepared, moved, referencesUpdated, completed }
 
@@ -131,9 +132,12 @@ class RepertoireDirectoryMutations {
       if (await documents.exists()) {
         roots.add(p.normalize(await documents.resolveSymbolicLinks()));
       }
-      await for (final entry in notes.list(followLinks: false)) {
-        await _checkCompoundHistory(entry, roots);
-      }
+      await checkForeignRecoveryHistory(
+        notes,
+        validate: (value, id, terminal) {
+          _checkCompoundHistory(value, id, roots, terminal: terminal);
+        },
+      );
     } on Object catch (error) {
       throw RepertoireRecoveryRequired(
         notes.path,
@@ -146,31 +150,42 @@ class RepertoireDirectoryMutations {
     }
   }
 
-  Future<void> _checkCompoundHistory(
-    FileSystemEntity entry,
-    Set<String> roots,
-  ) async {
-    final id = p.basenameWithoutExtension(entry.path);
-    if (entry is! File ||
-        p.extension(entry.path) != '.json' ||
-        RegExp(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$').stringMatch(id) != id ||
-        await FileSystemEntity.type(entry.path, followLinks: false) !=
-            FileSystemEntityType.file) {
-      throw FormatException('Unknown compound metadata: ${entry.path}');
-    }
-    final value = jsonDecode(await entry.readAsString());
+  void _checkCompoundHistory(
+    Object? value,
+    String id,
+    Set<String> roots, {
+    required bool terminal,
+  }) {
     if (value is! Map<String, Object?> ||
         value.length != _compoundFields.length ||
         !value.keys.toSet().containsAll(_compoundFields) ||
         value['version'] is! int ||
         value['version'] != 1 ||
         value['id'] != id ||
-        !{'complete', 'cancelled'}.contains(value['state']) ||
+        !(terminal
+                ? const {'complete', 'cancelled'}
+                : const {'prepared', 'committing', 'complete', 'cancelled'})
+            .contains(value['state']) ||
         value['documentBefore'] is! String ||
         value['documentAfter'] is! String ||
         (value['booksBefore'] != null && value['booksBefore'] is! String) ||
         (value['booksAfter'] != null && value['booksAfter'] is! String)) {
       throw FormatException('Pending or unknown compound operation: $id');
+    }
+    for (final field in [
+      'documentBefore',
+      'documentAfter',
+      'booksBefore',
+      'booksAfter',
+    ]) {
+      final text = value[field] as String?;
+      if (text == null) continue;
+      if (text.contains('\u0000') ||
+          utf8.decode(utf8.encode(text)) != text ||
+          (field.startsWith('books') &&
+              jsonDecode(text) is! Map<String, Object?>)) {
+        throw FormatException('Invalid compound snapshot: $id');
+      }
     }
     final path = value['documentPath'];
     if (path is! String ||

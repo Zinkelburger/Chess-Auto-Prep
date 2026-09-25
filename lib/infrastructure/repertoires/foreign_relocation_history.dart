@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import '../../features/repertoires/models/repertoire_recovery_required.dart';
+import 'foreign_recovery_copies.dart';
 
 /// Compatibility boundary for v2 file relocations. Terminal metadata is
 /// self-contained history: validate its complete schema, never today's PGN,
@@ -28,17 +29,12 @@ Future<void> checkForeignRelocationHistory(
       p.normalize(await documents.resolveSymbolicLinks()),
     };
     final support = await notes.parent.resolveSymbolicLinks();
-    await for (final entry in notes.list(followLinks: false)) {
-      final id = p.basenameWithoutExtension(entry.path);
-      if (entry is! File ||
-          p.extension(entry.path) != '.json' ||
-          !_matches(_operation, id) ||
-          await FileSystemEntity.type(entry.path, followLinks: false) !=
-              FileSystemEntityType.file) {
-        throw const FormatException('Unknown relocation metadata entry.');
-      }
-      _record(jsonDecode(await entry.readAsString()), id, roots, support);
-    }
+    await checkForeignRecoveryHistory(
+      notes,
+      validate: (value, id, terminal) {
+        _record(value, id, roots, support, terminal: terminal);
+      },
+    );
   } on Object catch (error) {
     throw RepertoireRecoveryRequired(
       notes.path,
@@ -49,7 +45,13 @@ Future<void> checkForeignRelocationHistory(
   }
 }
 
-void _record(Object? raw, String id, Set<String> roots, String support) {
+void _record(
+  Object? raw,
+  String id,
+  Set<String> roots,
+  String support, {
+  required bool terminal,
+}) {
   final value = _fields(raw, const {
     'version',
     'id',
@@ -70,7 +72,10 @@ void _record(Object? raw, String id, Set<String> roots, String support) {
       value['version'] != 1 ||
       value['id'] != id ||
       !{'move', 'delete'}.contains(value['kind']) ||
-      !{'complete', 'cancelled'}.contains(value['state']) ||
+      !(terminal
+              ? const {'complete', 'cancelled'}
+              : const {'prepared', 'committing', 'complete', 'cancelled'})
+          .contains(value['state']) ||
       !_nonempty(value['identity']) ||
       !_matches(_hash, value['hash']) ||
       value['rowsChanged'] is! int ||
@@ -329,7 +334,6 @@ bool _relative(Object? value) =>
     !p.windows.isAbsolute(value) &&
     p.posix.normalize(value) == value &&
     !p.posix.split(value).contains('..');
-final _operation = RegExp(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$');
 final _hash = RegExp(r'^[0-9a-f]{64}$');
 const _trainingFiles = [
   'repertoire_reviews.csv',

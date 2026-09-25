@@ -21,10 +21,13 @@ $ErrorActionPreference = 'Stop'
 $temp = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { $env:TEMP }
 
 function Last-EngineFolder {
-  $last = Get-ChildItem $temp -Filter 'self-test-*.json' -ErrorAction SilentlyContinue |
-    Sort-Object LastWriteTime | Select-Object -Last 1
-  if (-not $last) { return $null }
-  return (Get-Content $last.FullName -Raw | ConvertFrom-Json).engineFolder
+  $reports = Get-ChildItem $temp -Filter 'self-test-*.json' -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending
+  foreach ($report in $reports) {
+    $folder = (Get-Content $report.FullName -Raw | ConvertFrom-Json).engineFolder
+    if ($folder) { return $folder }
+  }
+  return $null
 }
 
 $network = $null

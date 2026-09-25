@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import 'directory_entries.dart';
 import '../chess/bughouse/match.dart';
 import '../diagnostics/log.dart';
 import 'atomic_write.dart';
@@ -59,7 +60,7 @@ final class MatchFolder implements MatchStore {
     final folder = Directory(root);
     if (!await folder.exists()) return const [];
     final found = <StoredMatch>[];
-    await for (final entry in folder.list(followLinks: false)) {
+    await for (final entry in directoryEntries(folder, followLinks: false)) {
       if (entry is! Directory || p.basename(entry.path).startsWith('.')) {
         continue;
       }

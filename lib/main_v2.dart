@@ -1,7 +1,6 @@
 // The v2 entry point: `flutter run -t lib/main_v2.dart`.
 //
-// `debug/agent_driver.dart` is headless-test tooling shared with the old
-// app, not application code; it is the one import from outside `lib/v2/`.
+// `debug/` supplies the optional headless driver and packaged-app checks.
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -9,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'debug/agent_driver.dart';
+import 'debug/desktop_self_test.dart';
 import 'v2/app/app.dart';
 import 'v2/app/error_log.dart';
 import 'v2/app/self_test.dart';
@@ -18,6 +18,9 @@ import 'v2/storage/log_file.dart';
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   installAgentDriver();
+  if (desktopReportPath(args) case final report?) {
+    await runDesktopSelfTest(report);
+  }
   final documents = await getApplicationDocumentsDirectory();
   final support = await getApplicationSupportDirectory();
   final logFolder = Directory(p.join(support.path, 'logs'));

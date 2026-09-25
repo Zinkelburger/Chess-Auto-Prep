@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Focused local checks. Full batch checks run in .github/workflows/ci.yml.
 # ci.sh [analyze|lint|format|test [FILES/OPTIONS...]|tools|integration [FILES...]|profile [FILE]|full]
-# ci.sh with -- COMMAND... runs any heavy command under the same limits.
+# ci.sh with [--headless] -- COMMAND... runs any heavy command under the same limits.
 set -uo pipefail
 CALLER_PWD=$PWD
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -102,9 +102,14 @@ case "$1" in
     exec "${JOB[@]}" status ;;
   with)
     shift
+    job_options=()
+    if [[ ${1:-} == --headless ]]; then
+      job_options+=(--headless)
+      shift
+    fi
     [[ ${1:-} == -- ]] && shift
     cd "$CALLER_PWD"
-    exec "${JOB[@]}" run -- "$@" ;;
+    exec "${JOB[@]}" run "${job_options[@]}" -- "$@" ;;
   full) set -- format analyze test tools lint integration ;;
   -h|--help)
     sed -n '2,4p' "$0"; exit 0 ;;

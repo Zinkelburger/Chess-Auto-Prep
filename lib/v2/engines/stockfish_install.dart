@@ -27,7 +27,8 @@ final class StockfishMissing extends StockfishLocation {
 
 /// Puts the bundled Stockfish where it can run.
 ///
-/// The build ships the engine gzipped as an asset, with its checksums in
+/// macOS runs the signed helper inside the app bundle. Other platforms ship
+/// the engine gzipped as an asset, with its checksums in
 /// `tools/assets.lock.json`. The first run writes it to the support folder
 /// beside a stamp naming the release, so a new release replaces it and an
 /// unchanged one costs one stat. The old app keeps the same file and
@@ -68,6 +69,26 @@ final class StockfishInstall {
   }
 
   Future<StockfishLocation> _locate() async {
+    if (Platform.isMacOS) {
+      final executableFolder = Directory(
+        p.dirname(Platform.resolvedExecutable),
+      );
+      final contents = executableFolder.parent;
+      if (p.basename(executableFolder.path) == 'MacOS' &&
+          p.basename(contents.path) == 'Contents') {
+        // Xcode verifies the pinned asset, then signs this helper with sandbox
+        // inheritance. Run it in place: unpacking the upstream binary would
+        // restore a signature that cannot run inside the app's sandbox.
+        final helper = File(
+          p.join(contents.path, 'Helpers', 'stockfish-macos'),
+        );
+        return await helper.exists()
+            ? StockfishReady(helper.path)
+            : const StockfishMissing(
+                'This build has no signed Stockfish helper',
+              );
+      }
+    }
     final bytes = await readAsset(_lockAsset);
     if (bytes == null) {
       return const StockfishMissing('This build has no Stockfish checksums');

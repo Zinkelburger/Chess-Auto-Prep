@@ -160,7 +160,7 @@ final class LichessLoginApi implements LichessLogin {
     final state = _randomToken(24);
     final flow = _Flow(server, verifier: verifier, state: state);
     _flow = flow;
-    final redirect = 'http://localhost:${server.port}/callback';
+    final redirect = 'http://127.0.0.1:${server.port}/callback';
     server.listen((request) => unawaited(_answer(request, flow)));
 
     // Built by hand: `Uri` would encode the colons of the scopes, and the
@@ -199,23 +199,16 @@ final class LichessLoginApi implements LichessLogin {
     }
   }
 
-  /// The loopback on both families where it can be, so a browser that
-  /// resolves `localhost` to either finds the server; the old app's port
-  /// first, any free one when it is taken.
+  /// Bind the same literal loopback address the redirect names. A dual-stack
+  /// IPv6 bind behaves differently on macOS; letting localhost choose a
+  /// family can send the browser to a different process on the other one.
+  /// Try the old app's port first, then any free port on this address.
   Future<HttpServer> _bind() async {
     for (final port in [lichessCallbackPort, 0]) {
       try {
-        return await HttpServer.bind(
-          InternetAddress.loopbackIPv6,
-          port,
-          v6Only: false,
-        );
+        return await HttpServer.bind(InternetAddress.loopbackIPv4, port);
       } on SocketException {
-        try {
-          return await HttpServer.bind(InternetAddress.loopbackIPv4, port);
-        } on SocketException {
-          if (port != lichessCallbackPort) rethrow;
-        }
+        if (port != lichessCallbackPort) rethrow;
       }
     }
     throw const SocketException('no loopback port');

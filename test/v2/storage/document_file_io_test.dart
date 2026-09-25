@@ -76,7 +76,14 @@ void main() {
       // and a store that thinks it holds a document holds half of one.
       await written('one.pgn', 'x');
       // Dart makes only symbolic links; a second hard name needs `ln`.
-      final linked = await Process.run('ln', [at('one.pgn'), at('two.pgn')]);
+      final linked = Platform.isWindows
+          ? await Process.run('fsutil', [
+              'hardlink',
+              'create',
+              at('two.pgn'),
+              at('one.pgn'),
+            ])
+          : await Process.run('ln', [at('one.pgn'), at('two.pgn')]);
       expect(linked.exitCode, 0, reason: '${linked.stderr}');
       expect((await observeFile(at('one.pgn'))).status, 4);
       await File(at('two.pgn')).delete();
@@ -235,6 +242,13 @@ void main() {
   group('syncDirectory', () {
     test('flushes a folder, and refuses a path that is not one', () async {
       await Directory(at('KID')).create();
+      if (Platform.isWindows) {
+        await expectLater(
+          syncDirectory(at('KID')),
+          throwsA(isA<FileSystemException>()),
+        );
+        return;
+      }
       await syncDirectory(at('KID'));
       await written('a.pgn', 'x');
       await expectLater(

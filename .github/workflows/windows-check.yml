@@ -28,6 +28,9 @@ on:
     branches: [windows-check]
 
 jobs:
+  v2-contracts:
+    uses: ./.github/workflows/desktop-contracts.yml
+
   build:
     uses: ./.github/workflows/windows-build.yml
     with:
@@ -111,6 +114,8 @@ jobs:
           $dir = Join-Path $env:RUNNER_TEMP 'portable é 棋'
           Expand-Archive dist\chess-auto-prep-v0.0.0-windows-check-windows.zip -DestinationPath $dir
           ./tools/windows_self_test.ps1 -Exe (Join-Path $dir 'chess_auto_prep.exe') -Name portable
+          python tools/test_desktop_bundle.py (Join-Path $dir 'chess_auto_prep.exe') --report (Join-Path $env:RUNNER_TEMP 'self-test-desktop-portable.json')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: setup — silent install into a folder with spaces
         timeout-minutes: 10
@@ -139,6 +144,8 @@ jobs:
           $exe = Join-Path $env:INSTALL_DIR 'chess_auto_prep.exe'
           ./tools/windows_self_test.ps1 -Exe $exe -Name installed -Fresh
           ./tools/windows_self_test.ps1 -Exe $exe -Name repaired -Damage
+          python tools/test_desktop_bundle.py $exe --report (Join-Path $env:RUNNER_TEMP 'self-test-desktop-installed.json')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: setup — the installed app boots to its window
         timeout-minutes: 5

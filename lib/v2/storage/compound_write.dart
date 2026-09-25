@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
+import 'recovery_copies.dart';
 import 'atomic_write.dart';
 import 'compound_commit.dart';
 import 'document_ref.dart';
@@ -20,11 +21,17 @@ final class CompoundWrites {
     required Directory documents,
     required Directory support,
     this.testHook,
-  }) : _configuredDocuments = documents,
+    Future<void> Function(String) synchronize = syncDirectory,
+  }) : _synchronize = synchronize,
+       _configuredDocuments = documents,
        _configuredSupport = support,
        documents = canonicalRecoveryRoot(documents),
-       support = canonicalRecoveryRoot(support);
+       support = canonicalRecoveryRoot(support) {
+    _metadataBoundary = recoveryMetadataBoundary(this.support);
+  }
 
+  final Future<void> Function(String) _synchronize;
+  late final String _metadataBoundary;
   final Directory _configuredDocuments;
   final Directory _configuredSupport;
   final Directory documents;
@@ -95,6 +102,11 @@ final class CompoundWrites {
     final note = existing ?? _Note(command, _State.prepared);
     await recoveryDirectory(support, create: true);
     await recoveryDirectory(_folder, create: true);
+    await flushRecoveryAncestry(
+      _folder.path,
+      through: _metadataBoundary,
+      synchronize: _synchronize,
+    );
     await _record(note, _State.prepared, fresh: existing == null);
     await testHook?.call(CompoundWriteStep.prepared);
     await _record(note, _State.committing);
@@ -237,27 +249,18 @@ final class CompoundWrites {
   }
 
   Future<List<_Note>> _readAll() async {
-    if (!await recoveryDirectory(support) || !await recoveryDirectory(_folder))
+    if (!await recoveryDirectory(support) ||
+        !await recoveryDirectory(_folder)) {
       return [];
-    final entries = await _folder.list(followLinks: false).toList();
-    entries.sort((a, b) => a.path.compareTo(b.path));
-    final notes = <_Note>[];
-    for (final entry in entries) {
-      if (entry is! File || p.extension(entry.path) != '.json') {
-        throw RecoveryRequired(
-          'Unsupported compound metadata at ${entry.path}.',
-        );
-      }
-      final id = p.basenameWithoutExtension(entry.path);
-      _validateId(id);
-      final text = await _text(entry.path);
-      if (text == null)
-        throw RecoveryRequired('Compound metadata disappeared: $id.');
-      final note = _decode(id, jsonDecode(text));
-      _validate(note.command);
-      notes.add(note);
     }
-    return notes;
+    return readRecoveryRecords(
+      _folder,
+      decode: (value, id) {
+        final note = _decode(id, value);
+        _validate(note.command);
+        return note;
+      },
+    );
   }
 
   void _validate(CompoundCommit command) {

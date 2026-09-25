@@ -28,6 +28,7 @@ import 'dart:math';
 import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
+import 'directory_entries.dart';
 import 'atomic_write.dart';
 import 'document_ref.dart';
 import 'training_records.dart';
@@ -184,9 +185,14 @@ final class PendingRepoints {
     Future<void> Function(String) synchronize = syncDirectory,
   }) : _configuredSupport = support,
        _synchronize = synchronize,
-       support = _supportRoot(support);
+       support = _supportRoot(support) {
+    // Capture before backups or another preparation creates nested Support
+    // folders. A retry through this owner must flush the same ancestry.
+    _metadataBoundary = _existingParent(this.support).path;
+  }
 
   final Directory _configuredSupport;
+  late final String _metadataBoundary;
   final Future<void> Function(String) _synchronize;
 
   /// The Support folder itself; the notes are one folder inside it.
@@ -219,12 +225,12 @@ final class PendingRepoints {
         await _type(temporaryPathFor(path)) != FileSystemEntityType.notFound) {
       throw RecoveryRequired('Relocation metadata already exists for $id.');
     }
-    // Support may itself have been created recursively, including by an
-    // earlier failed preparation. Persist that ancestry before the note can
-    // authorize a move; this remains necessary when those folders now exist.
+    // Persist new Support ancestry and its containing entry, including on
+    // retry after failed preparation. Ancestors above the pre-existing parent
+    // were not changed and may be outside the macOS sandbox's permissions.
     await _syncAncestors(
       [_folder.path],
-      root: p.rootPrefix(support.path),
+      root: _metadataBoundary,
       synchronize: _synchronize,
     );
     await createFileExclusively(path, utf8.encode(jsonEncode(move.toJson())));
@@ -251,27 +257,29 @@ final class PendingRepoints {
 
   /// Every owed move, oldest first. Unknown metadata is preserved and stops
   /// recovery; ignoring it would let later work obscure an unfinished move.
-  Future<List<UnfinishedMove>> read() =>
-      _checked('Read relocation notes', () async {
-        if (!await _checkFolder()) return const [];
-        final names = <String>[];
-        await for (final entry in _folder.list(followLinks: false)) {
-          if (entry is! File || p.extension(entry.path) != '.json') {
-            throw RecoveryRequired(
-              'Unsupported relocation metadata at ${entry.path}.',
-            );
-          }
-          final id = p.basenameWithoutExtension(entry.path);
-          _validateId(id);
-          names.add(id);
+  Future<List<UnfinishedMove>> read() => _checked(
+    'Read relocation notes',
+    () async {
+      if (!await _checkFolder()) return const [];
+      final names = <String>[];
+      await for (final entry in directoryEntries(_folder, followLinks: false)) {
+        if (entry is! File || p.extension(entry.path) != '.json') {
+          throw RecoveryRequired(
+            'Unsupported relocation metadata at ${entry.path}.',
+          );
         }
-        names.sort();
-        final moves = <UnfinishedMove>[];
-        for (final name in names) {
-          moves.add(await _readOne(name));
-        }
-        return moves;
-      });
+        final id = p.basenameWithoutExtension(entry.path);
+        _validateId(id);
+        names.add(id);
+      }
+      names.sort();
+      final moves = <UnfinishedMove>[];
+      for (final name in names) {
+        moves.add(await _readOne(name));
+      }
+      return moves;
+    },
+  );
 
   Future<UnfinishedMove> _readOne(String id) async {
     final observed = await observeFile(_pathOf(id));
@@ -361,13 +369,33 @@ final class PendingRepoints {
 
 // Resolve configured aliases once, before any asynchronous operation. The
 // pinned directory and its metadata descendants still receive no-follow probes.
-Directory _supportRoot(Directory directory) => Directory(
-  p.normalize(
-    directory.existsSync()
-        ? directory.resolveSymbolicLinksSync()
-        : p.absolute(directory.path),
-  ),
-);
+Directory _supportRoot(Directory directory) {
+  final absolute = Directory(p.normalize(p.absolute(directory.path)));
+  final ancestor = absolute.existsSync() ? absolute : _existingParent(absolute);
+  return Directory(
+    p.normalize(
+      p.join(
+        ancestor.resolveSymbolicLinksSync(),
+        p.relative(absolute.path, from: ancestor.path),
+      ),
+    ),
+  );
+}
+
+Directory _existingParent(Directory directory) {
+  var parent = directory.parent;
+  while (!parent.existsSync()) {
+    final next = parent.parent;
+    if (next.path == parent.path) {
+      throw FileSystemException(
+        'No accessible Support ancestor',
+        directory.path,
+      );
+    }
+    parent = next;
+  }
+  return parent;
+}
 
 /// Recovery cannot safely finish, so the caller must not read or mutate this
 /// Documents domain until the retained metadata is reconciled.

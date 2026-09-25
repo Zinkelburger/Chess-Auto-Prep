@@ -7,10 +7,17 @@
 /// both sides can have it.
 library;
 
+import 'dart:convert';
+
 /// The longest name a file may be given. Every desktop filesystem this app
 /// runs on allows more; 120 is what the old app settled on, and a name a
 /// column cannot show is not a name anyone wants.
 const maxNameLength = 120;
+
+/// Leave room below common 255-byte component limits for `.pgn`, staging,
+/// collision numbers and native recovery names. Count UTF-8 on every host so
+/// a library synced from Windows can also be written on Linux.
+const maxNameBytes = 180;
 
 final _illegalCharacters = RegExp(r'[<>:"/\\|?*\x00-\x1F]');
 
@@ -48,6 +55,9 @@ String? nameProblem(String name) {
   if (trimmed.length > maxNameLength) {
     return 'Names must be $maxNameLength characters or fewer.';
   }
+  if (utf8.encode(trimmed).length > maxNameBytes) {
+    return 'This name is too long to store. Please shorten it.';
+  }
   return null;
 }
 
@@ -81,9 +91,21 @@ const maxImportedNameLength = 100;
 String importedName(String name, {required String fallback}) {
   var safe = name.replaceAll(_illegalCharacters, '_').trim();
   safe = safe.replaceFirst(RegExp(r'^\.+'), '');
-  if (safe.length > maxImportedNameLength) {
-    safe = safe.substring(0, maxImportedNameLength);
-  }
+  safe = _shortened(safe);
   safe = safe.replaceFirst(RegExp(r'[. ]+$'), '');
   return nameProblem(safe) == null ? safe : fallback;
+}
+
+String _shortened(String name) {
+  final result = StringBuffer();
+  var bytes = 0;
+  var units = 0;
+  for (final rune in name.runes) {
+    final character = String.fromCharCode(rune);
+    bytes += utf8.encode(character).length;
+    units += character.length;
+    if (bytes > maxNameBytes || units > maxImportedNameLength) break;
+    result.write(character);
+  }
+  return result.toString();
 }

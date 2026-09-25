@@ -8,6 +8,8 @@ import 'atomic_write.dart';
 import 'backups.dart';
 import 'backup_relocation.dart';
 import 'book_references.dart';
+import 'directory_entries.dart';
+import 'recovery_copies.dart';
 import 'document_probe.dart';
 import 'document_ref.dart';
 import 'pgn_document_store.dart';
@@ -43,9 +45,14 @@ final class FileRelocations {
        _configuredDocuments = documents,
        _configuredSupport = support,
        documents = canonicalRecoveryRoot(documents),
-       support = canonicalRecoveryRoot(support);
+       support = canonicalRecoveryRoot(support) {
+    // Backup preparation can create Support before the journal is written.
+    // Retain its original containing ancestor through every retry.
+    _metadataBoundary = recoveryMetadataBoundary(this.support);
+  }
 
   final Future<void> Function(String) _synchronize;
+  late final String _metadataBoundary;
   final Directory _configuredDocuments;
   final Directory _configuredSupport;
   final Directory documents;
@@ -253,7 +260,11 @@ final class FileRelocations {
     await recoveryDirectory(support, create: true);
     await recoveryDirectory(_folder, create: true);
     // New profile/journal ancestry must survive loss of this process too.
-    await flushRecoveryAncestry(_folder.path, synchronize: _synchronize);
+    await flushRecoveryAncestry(
+      _folder.path,
+      through: _metadataBoundary,
+      synchronize: _synchronize,
+    );
     await _record(record, RelocationState.prepared, fresh: fresh);
     await testHook?.call(FileRelocationStep.prepared);
     await _keepTraining(record);
@@ -444,30 +455,18 @@ final class FileRelocations {
         !await recoveryDirectory(_folder)) {
       return [];
     }
-    final entries = await _folder.list(followLinks: false).toList()
-      ..sort((a, b) => a.path.compareTo(b.path));
-    final notes = <RelocationRecord>[];
-    for (final entry in entries) {
-      if (entry is! File || p.extension(entry.path) != '.json') {
-        throw RecoveryRequired(
-          'Unsupported relocation metadata at ${entry.path}.',
+    return readRecoveryRecords(
+      _folder,
+      decode: (value, id) {
+        final note = RelocationRecord.fromJson(
+          value,
+          id: id,
+          documents: documents,
         );
-      }
-      final id = p.basenameWithoutExtension(entry.path);
-      validateRelocationId(id);
-      final text = await recoveryText(entry.path);
-      if (text == null) {
-        throw RecoveryRequired('Relocation metadata disappeared: $id.');
-      }
-      final note = RelocationRecord.fromJson(
-        jsonDecode(text),
-        id: id,
-        documents: documents,
-      );
-      note.validate(documents: documents, support: support);
-      notes.add(note);
-    }
-    return notes;
+        note.validate(documents: documents, support: support);
+        return note;
+      },
+    );
   }
 
   void _checkRoots() {
@@ -526,7 +525,8 @@ final class FileRelocations {
       try {
         if ((await observeDirectory(path)).identity != identity) return;
         final directory = Directory(path);
-        if (!await directory.list(followLinks: false).isEmpty) return;
+        if (!await directoryEntries(directory, followLinks: false).isEmpty)
+          return;
         await directory.delete();
         await flushRecoveryDirectory(
           p.dirname(path),

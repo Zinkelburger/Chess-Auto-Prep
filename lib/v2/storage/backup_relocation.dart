@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import 'atomic_write.dart';
 import 'backups.dart';
+import 'directory_entries.dart';
 import 'relocation_notes.dart' show RecoveryRequired;
 
 enum BackupMoveStep { destinationAside, sourceMoved, indexPublished }
@@ -309,7 +310,10 @@ Future<_DirectoryPlan?> _snapshot(String path) async {
   if (identity == null) return null;
   final files = <String, String>{};
   String? index;
-  await for (final entry in Directory(path).list(followLinks: false)) {
+  await for (final entry in directoryEntries(
+    Directory(path),
+    followLinks: false,
+  )) {
     final name = p.basename(entry.path);
     if (entry is! File ||
         !_component(name) ||
@@ -343,12 +347,31 @@ bool _same(
   String? indexAfter,
 }) {
   if (actual == null || expected == null) return actual == expected;
-  return actual.identity == expected.identity &&
-      (actual.index == expected.index ||
-          (indexAfter != null && actual.index == indexAfter)) &&
-      actual.files.length == expected.files.length &&
-      actual.files.entries.every((e) => expected.files[e.key] == e.value);
+  if (actual.identity != expected.identity ||
+      (actual.index != expected.index &&
+          (indexAfter == null || actual.index != indexAfter)) ||
+      !expected.files.entries.every((e) => actual.files[e.key] == e.value)) {
+    return false;
+  }
+  // ReplaceFileW may retain its old index beside the staged path after the
+  // ownership move. Only new, byte-exact copies of this plan's old index are
+  // evidence of that publication. Captured files still have to match above,
+  // and source/aside checks never allow additional entries.
+  final oldIndexHash = indexAfter != null && expected.index != null
+      ? sha256.convert(utf8.encode(expected.index!)).toString()
+      : null;
+  return actual.files.entries.every(
+    (entry) =>
+        expected.files.containsKey(entry.key) ||
+        (oldIndexHash != null &&
+            _indexRecoveryCopy.stringMatch(entry.key) == entry.key &&
+            entry.value == oldIndexHash),
+  );
 }
+
+final _indexRecoveryCopy = RegExp(
+  r'^\.index\.json\.v2-tmp\.previous-[1-9][0-9]*-[1-9][0-9]*$',
+);
 
 Map<String, Object?> _index(String text, Map<String, String> files) {
   final json = jsonDecode(text.startsWith('\ufeff') ? text.substring(1) : text);

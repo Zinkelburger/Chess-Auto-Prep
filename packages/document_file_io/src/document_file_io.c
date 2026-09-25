@@ -18,6 +18,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+#include <wchar.h>
 #include <errno.h>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -47,15 +49,102 @@ typedef struct {
 static wchar_t *wide_path(const char *path) {
   int size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, NULL, 0);
   if (!size) return NULL;
-  wchar_t *out = calloc((size_t)size, sizeof(wchar_t));
-  if (out) MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, out, size);
+  wchar_t *wide = calloc((size_t)size, sizeof(wchar_t));
+  if (!wide) return NULL;
+  MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, wide, size);
+  for (wchar_t *p = wide; *p; ++p) if (*p == L'/') *p = L'\\';
+  /* Already extended, including UNC. Do not normalize this namespace again. */
+  if (wcsncmp(wide, L"\\\\?\\", 4) == 0) return wide;
+  DWORD length = GetFullPathNameW(wide, 0, NULL, NULL);
+  if (!length) { free(wide); return NULL; }
+  wchar_t *absolute = calloc((size_t)length, sizeof(wchar_t));
+  if (!absolute) { free(wide); return NULL; }
+  DWORD copied = GetFullPathNameW(wide, length, absolute, NULL);
+  free(wide);
+  if (!copied || copied >= length) { free(absolute); return NULL; }
+  int unc = wcsncmp(absolute, L"\\\\", 2) == 0;
+  const wchar_t *prefix = unc ? L"\\\\?\\UNC\\" : L"\\\\?\\";
+  wchar_t *out = calloc(wcslen(absolute) + 9, sizeof(wchar_t));
+  if (out) {
+    wcscpy(out, prefix);
+    wcscat(out, absolute + (unc ? 2 : 0));
+  }
+  free(absolute);
   return out;
 }
 static HANDLE open_read(const wchar_t *path) {
   return CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-    NULL, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+    NULL, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_SEQUENTIAL_SCAN |
+    FILE_FLAG_BACKUP_SEMANTICS, NULL);
 }
 #endif
+
+/* Publish a staged file, preserving the existing Windows ACL and metadata.
+ * Never delete the destination first or fall back to a lossy copy. Sharing
+ * violations are retried by the Dart caller without blocking its isolate. */
+CAP_EXPORT int32_t cap_replace_file(const char *source, const char *destination,
+                                  const char *recovery) {
+#ifdef _WIN32
+  wchar_t *from = wide_path(source), *to = wide_path(destination), *backup = wide_path(recovery);
+  if (!from || !to || !backup) {
+    free(from); free(to); free(backup); return ERROR_INVALID_NAME;
+  }
+  if (GetFileAttributesW(backup) != INVALID_FILE_ATTRIBUTES) {
+    free(from); free(to); free(backup); return ERROR_FILE_EXISTS;
+  }
+  int32_t error;
+  if (ReplaceFileW(to, from, backup, 0, NULL, NULL)) {
+    error = 0;
+    /* Cleanup must not turn a committed save into a reported failure. */
+    DeleteFileW(backup);
+  } else {
+    error = GetLastError();
+    /* Unlike a backup-less replacement, a failed namespace move retains
+     * the old bytes. Restore exclusively; if this fails, leave the recovery
+     * copy and staged bytes for recovery rather than destroying either. */
+    if (error == ERROR_UNABLE_TO_MOVE_REPLACEMENT_2) {
+      MoveFileExW(backup, to, MOVEFILE_WRITE_THROUGH);
+    }
+    /* ReplaceFile requires an existing destination. A new name is claimed
+     * exclusively, so an external creator racing this check is not erased. */
+    if (error == ERROR_FILE_NOT_FOUND &&
+        GetFileAttributesW(to) == INVALID_FILE_ATTRIBUTES &&
+        GetLastError() == ERROR_FILE_NOT_FOUND) {
+      error = MoveFileExW(from, to, MOVEFILE_WRITE_THROUGH) ? 0 : GetLastError();
+    }
+  }
+  free(from); free(to); free(backup); return error;
+#else
+  (void)recovery;
+  return rename(source, destination) == 0 ? 0 : errno;
+#endif
+}
+
+/* Flush the staged bytes before publishing the name. macOS fsync alone does
+ * not request a drive-cache flush; F_FULLFSYNC supplies that stronger step. */
+CAP_EXPORT int32_t cap_sync_file(const char *path) {
+#ifdef _WIN32
+  wchar_t *wide = wide_path(path);
+  if (!wide) return ERROR_INVALID_NAME;
+  HANDLE fd = CreateFileW(wide, GENERIC_WRITE, FILE_SHARE_READ, NULL,
+    OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+  free(wide);
+  if (fd == INVALID_HANDLE_VALUE) return GetLastError();
+  int32_t error = FlushFileBuffers(fd) ? 0 : GetLastError();
+  CloseHandle(fd); return error;
+#else
+  int fd = open(path, O_WRONLY | O_CLOEXEC | O_NOFOLLOW);
+  if (fd < 0) return errno;
+  int result;
+#if defined(__APPLE__)
+  do { result = fcntl(fd, F_FULLFSYNC); } while (result < 0 && errno == EINTR);
+#else
+  do { result = fsync(fd); } while (result < 0 && errno == EINTR);
+#endif
+  int error = result < 0 ? errno : 0;
+  close(fd); return error;
+#endif
+}
 
 CAP_EXPORT cap_snapshot *cap_snapshot_read(const char *path) {
   cap_snapshot *out = calloc(1, sizeof(cap_snapshot));

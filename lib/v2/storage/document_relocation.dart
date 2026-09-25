@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
+import 'directory_entries.dart';
 import '../diagnostics/log.dart';
 import 'backups.dart';
 import 'document_ref.dart';
@@ -119,9 +120,11 @@ final class DocumentRelocation {
   Future<List<String>?> _documentsIn(String folder) async {
     final names = <String>[];
     try {
-      await for (final entry in Directory(
-        folder,
-      ).list(recursive: true, followLinks: false)) {
+      await for (final entry in directoryEntries(
+        Directory(folder),
+        recursive: true,
+        followLinks: false,
+      )) {
         if (entry is File && p.extension(entry.path) == '.pgn') {
           names.add(p.relative(entry.path, from: folder));
         }

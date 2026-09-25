@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:chess_auto_prep/v2/ui/file_names.dart';
 import 'package:chess_auto_prep/v2/ui/name_dialog.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
@@ -90,5 +92,16 @@ void main() {
   test('a name longer than the cap is refused', () {
     expect(nameProblem('a' * 120), isNull);
     expect(nameProblem('a' * 121), 'Names must be 120 characters or fewer.');
+  });
+
+  test('Unicode names fit the filesystem including recovery suffixes', () {
+    expect(nameProblem('棋' * 90), isNotNull);
+    final name = importedName('棋' * 90, fallback: 'Chapter');
+    expect(name, isNot('Chapter'));
+    expect(nameProblem(name), isNull);
+    expect(utf8.encode(name).length, lessThanOrEqualTo(maxNameBytes));
+    final astral = importedName('😀' * 90, fallback: 'Chapter');
+    expect(utf8.decode(utf8.encode(astral)), astral);
+    expect(astral.contains('\uFFFD'), isFalse);
   });
 }

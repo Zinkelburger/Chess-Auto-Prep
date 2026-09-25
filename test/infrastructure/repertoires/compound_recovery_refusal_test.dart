@@ -62,6 +62,54 @@ void main() {
     await profile.delete(recursive: true);
   });
 
+  for (final phase in ['prepared', 'committing', 'complete', 'cancelled']) {
+    test(
+      'terminal current permits proven native $phase recovery copy',
+      () async {
+        final note = await put(record('complete'));
+        final prior = {...record('complete'), 'state': phase};
+        final copy = await File(
+          p.join(notes.path, '.rename-1.json.v2-tmp.previous-123-100'),
+        ).writeAsString(jsonEncode(prior));
+        final before = await copy.readAsString();
+        expect(await storage().readFile(document.path), '1. e4 *');
+        expect(await copy.readAsString(), before);
+        expect(await note.exists(), isTrue);
+      },
+      skip: !Platform.isLinux,
+    );
+  }
+  for (final issue in [
+    'missing current',
+    'wrong id',
+    'wrong payload',
+    'unknown old phase',
+    'unknown current phase',
+  ]) {
+    test('native recovery copy $issue refuses legacy access', () async {
+      final note = await put(record('complete'));
+      final prior = {...record('complete'), 'state': 'prepared'};
+      if (issue == 'wrong id') prior['id'] = 'other';
+      if (issue == 'wrong payload')
+        prior['booksBefore'] = '{"version":1,"books":[]}';
+      if (issue == 'unknown old phase') prior['state'] = 'invented';
+      final copy = await File(
+        p.join(notes.path, '.rename-1.json.v2-tmp.previous-123-100'),
+      ).writeAsString(jsonEncode(prior));
+      if (issue == 'missing current') await note.delete();
+      if (issue == 'unknown current phase')
+        await note.writeAsString(
+          jsonEncode({...record('complete'), 'state': 'invented'}),
+        );
+      final before = await copy.readAsString();
+      await expectLater(
+        storage().readFile(document.path),
+        throwsA(isA<RepertoireRecoveryRequired>()),
+      );
+      expect(await copy.readAsString(), before);
+    }, skip: !Platform.isLinux);
+  }
+
   for (final state in ['prepared', 'committing', 'unknown']) {
     test(
       'first read and write refuse $state compound operation without changing it',

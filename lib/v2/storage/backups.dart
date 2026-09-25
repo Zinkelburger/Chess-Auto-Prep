@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
+import 'directory_entries.dart';
 import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 import 'backup_relocation.dart';
@@ -225,7 +226,7 @@ final class BackupArchive {
   /// does not match, and never a truncated version listed as a real one.
   Future<List<BackupVersion>> _rebuilt(Directory folder) async {
     final versions = <BackupVersion>[];
-    await for (final entry in folder.list()) {
+    await for (final entry in directoryEntries(folder)) {
       if (entry is! File || !_isVersion(entry.path)) continue;
       final version = await _describe(entry);
       if (version != null) versions.add(version);

@@ -96,7 +96,9 @@ final class StoreFixture {
 
   Future<void> dispose() async {
     // A test may have taken permissions away to provoke a failure.
-    await Process.run('chmod', ['-R', 'u+rwX', root.path]);
+    if (!Platform.isWindows) {
+      await Process.run('chmod', ['-R', 'u+rwX', root.path]);
+    }
     await root.delete(recursive: true);
   }
 }

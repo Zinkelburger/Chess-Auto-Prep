@@ -66,6 +66,23 @@ Directory canonicalRecoveryRoot(Directory directory) {
   return Directory(p.joinAll([resolved, ...absent.reversed]));
 }
 
+/// Capture before preparation creates metadata directories. Flushing through
+/// this pre-existing parent persists every new entry without requiring access
+/// to unrelated ancestors outside the profile's sandbox. [directory] is pinned
+/// by [canonicalRecoveryRoot] first, so configured aliases keep one spelling.
+String recoveryMetadataBoundary(Directory directory) {
+  var current = directory.parent.path;
+  while (true) {
+    final type = FileSystemEntity.typeSync(current, followLinks: false);
+    if (type == FileSystemEntityType.directory) return current;
+    final parent = p.dirname(current);
+    if (type != FileSystemEntityType.notFound || parent == current) {
+      throw RecoveryRequired('Metadata ancestry is unavailable: $current.');
+    }
+    current = parent;
+  }
+}
+
 /// Confirm every newly reachable directory, including the entry naming it.
 /// [through] includes that ancestor; omitted means all the way to the root.
 Future<void> flushRecoveryAncestry(
