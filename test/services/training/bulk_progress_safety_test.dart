@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/features/training/models/training_history_operation.dart';
+import '../../support/training_source_fixture.dart';
+import 'package:chess_auto_prep/features/training/models/training_source_context.dart';
 import 'dart:async';
 
 import 'package:chess_auto_prep/features/training/controllers/review_progress_store.dart';
@@ -20,6 +23,7 @@ class _Reviews extends FakeReviewService {
   @override
   Future<void> saveAll(
     List<RepertoireReviewEntry> entries, {
+    required TrainingSourceContext source,
     String? repertoireId,
   }) async {
     writes.add((repertoireId, List.of(entries)));
@@ -30,7 +34,7 @@ class _Reviews extends FakeReviewService {
         !failAfterWrite) {
       throw StateError('reviews unavailable');
     }
-    await super.saveAll(entries, repertoireId: repertoireId);
+    await super.saveAll(entries, repertoireId: repertoireId, source: source);
     if (failStage == 'reviews' &&
         (failSource == null || failSource == repertoireId)) {
       throw StateError('reviews acknowledgement lost');
@@ -38,12 +42,16 @@ class _Reviews extends FakeReviewService {
   }
 
   @override
-  Future<void> appendHistory(List<RepertoireReviewHistoryEntry> entries) async {
+  Future<void> appendHistory(
+    List<RepertoireReviewHistoryEntry> entries, {
+    required TrainingSourceContext source,
+    required TrainingHistoryOperation operation,
+  }) async {
     stages.add('history:${entries.first.repertoireId}');
     if (failStage == 'history' && !failAfterWrite) {
       throw StateError('history unavailable');
     }
-    await super.appendHistory(entries);
+    await super.appendHistory(entries, source: source, operation: operation);
     if (failStage == 'history') {
       throw StateError('history acknowledgement lost');
     }
@@ -59,8 +67,9 @@ class _Headers implements TrainingHeaderRepository {
   @override
   Future<bool> updateManyLineReviewHeaders(
     String sourcePath,
-    Map<String, RepertoireReviewEntry> entries,
-  ) async {
+    Map<String, RepertoireReviewEntry> entries, {
+    required TrainingSourceContext source,
+  }) async {
     writes.add((sourcePath, Map.of(entries)));
     await gate?.future;
     if (fail || sourcePath == failPath) throw StateError('headers unavailable');
@@ -77,12 +86,21 @@ void main() {
     reviews = _Reviews();
     headers = _Headers();
     source = '/one.pgn';
-    store = ReviewProgressStore(
-      reviewService: reviews,
-      headers: headers,
-      settings: () => TrainingSettings(),
-      repertoireId: () => source,
-    );
+    store =
+        ReviewProgressStore(
+            reviewService: reviews,
+            headers: headers,
+            settings: () => TrainingSettings(),
+            repertoireId: () => source,
+          )
+          ..sources = scriptedTrainingSources([
+            '/a.pgn',
+            '/b.pgn',
+            '/course/a.pgn',
+            '/course/b.pgn',
+            '/one.pgn',
+            '/two.pgn',
+          ]);
   });
   tearDown(() => store.dispose());
 
@@ -142,6 +160,14 @@ void main() {
             reason: 'no history replay',
           );
           store.adopt(
+            sources: scriptedTrainingSources([
+              '/a.pgn',
+              '/b.pgn',
+              '/course/a.pgn',
+              '/course/b.pgn',
+              '/one.pgn',
+              '/two.pgn',
+            ]),
             byLine: {for (final entry in reviews.entries) entry.lineId: entry},
             moveProgress: {},
             otherRepertoires: [],
@@ -171,7 +197,19 @@ void main() {
       headers.gate = Completer();
       final oldFlush = store.flushHeaders();
       source = '/two.pgn';
-      store.adopt(byLine: {}, moveProgress: {}, otherRepertoires: []);
+      store.adopt(
+        sources: scriptedTrainingSources([
+          '/a.pgn',
+          '/b.pgn',
+          '/course/a.pgn',
+          '/course/b.pgn',
+          '/one.pgn',
+          '/two.pgn',
+        ]),
+        byLine: {},
+        moveProgress: {},
+        otherRepertoires: [],
+      );
       final bulk = store.applyLearnedSelection([line], {'A'});
       await Future<void>.delayed(Duration.zero);
       expect(reviews.writes, hasLength(1));
@@ -286,6 +324,14 @@ void main() {
         await Future<void>.delayed(Duration.zero);
         final replacement = <String, RepertoireReviewEntry>{};
         store.adopt(
+          sources: scriptedTrainingSources([
+            '/a.pgn',
+            '/b.pgn',
+            '/course/a.pgn',
+            '/course/b.pgn',
+            '/one.pgn',
+            '/two.pgn',
+          ]),
           byLine: replacement,
           moveProgress: {},
           otherRepertoires: [],
@@ -412,7 +458,19 @@ void main() {
       headers.gate = Completer<void>();
       headers.fail = true;
       final flushing = store.flushHeaders();
-      store.adopt(byLine: {}, moveProgress: {}, otherRepertoires: []);
+      store.adopt(
+        sources: scriptedTrainingSources([
+          '/a.pgn',
+          '/b.pgn',
+          '/course/a.pgn',
+          '/course/b.pgn',
+          '/one.pgn',
+          '/two.pgn',
+        ]),
+        byLine: {},
+        moveProgress: {},
+        otherRepertoires: [],
+      );
       headers.gate!.complete();
       await flushing;
       expect(errors, isEmpty);

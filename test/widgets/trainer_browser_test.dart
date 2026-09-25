@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/features/training/models/training_source_context.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'dart:async';
 import 'package:chess_auto_prep/models/repertoire_line.dart';
@@ -51,11 +52,12 @@ class _DelayedReviews extends FakeReviewService {
   @override
   Future<void> saveAll(
     List<RepertoireReviewEntry> entries, {
+    required TrainingSourceContext source,
     String? repertoireId,
   }) async {
     attempts++;
     await gate.future;
-    await super.saveAll(entries, repertoireId: repertoireId);
+    await super.saveAll(entries, repertoireId: repertoireId, source: source);
   }
 }
 

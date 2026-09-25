@@ -1,3 +1,4 @@
+import 'training_source_fixture.dart';
 import 'package:chess_auto_prep/app/training_dependencies.dart';
 import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_board_controller.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
@@ -42,6 +43,7 @@ Future<TrainingSessionController> trainerBrowserSession({
     ),
   );
   session.isLoading = false;
+  session.progress.sources = scriptedTrainingSources(['rep.pgn']);
   session.lines = lines;
   session.reviewMap.addAll(reviewMap);
   await session.loadSettings();

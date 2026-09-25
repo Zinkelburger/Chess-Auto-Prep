@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import '../../support/generation_artifacts_fixture.dart';
 import 'package:chess_auto_prep/app/training_dependencies.dart';
 import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_board_controller.dart';
@@ -25,7 +26,9 @@ void main() {
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('drill_phase_test');
+    StorageFactory.instanceForTest = null;
     PathProviderPlatform.instance = FakePathProvider(tempDir.path);
+    await File('${tempDir.path}/rep.pgn').writeAsString('1. e4 *');
     SharedPreferences.setMockInitialValues({});
     repService = FakeRepertoireService();
     reviewService = FakeReviewService();
@@ -40,6 +43,7 @@ void main() {
 
   tearDown(() async {
     controller.dispose();
+    StorageFactory.instanceForTest = null;
     await tempDir.delete(recursive: true);
   });
 

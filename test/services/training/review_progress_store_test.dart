@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/features/training/models/training_history_operation.dart';
+import '../../support/training_source_fixture.dart';
+import 'package:chess_auto_prep/features/training/models/training_source_context.dart';
 import 'package:chess_auto_prep/models/repertoire_line.dart';
 import 'package:chess_auto_prep/models/repertoire_move_progress.dart';
 import 'package:chess_auto_prep/models/repertoire_review_entry.dart';
@@ -37,6 +40,7 @@ class _FakeReviewService extends RepertoireReviewService {
   @override
   Future<void> saveAll(
     List<RepertoireReviewEntry> entries, {
+    required TrainingSourceContext source,
     String? repertoireId,
   }) async {
     saved = List.of(entries);
@@ -46,13 +50,18 @@ class _FakeReviewService extends RepertoireReviewService {
   @override
   Future<void> saveMoveProgress(
     List<RepertoireMoveProgress> entries, {
+    required TrainingSourceContext source,
     String? repertoireId,
   }) async {
     savedProgress = List.of(entries);
   }
 
   @override
-  Future<void> appendHistory(List<RepertoireReviewHistoryEntry> entries) async {
+  Future<void> appendHistory(
+    List<RepertoireReviewHistoryEntry> entries, {
+    required TrainingSourceContext source,
+    required TrainingHistoryOperation operation,
+  }) async {
     history.addAll(entries);
   }
 }
@@ -78,12 +87,21 @@ void main() {
     repertoire = _FakeRepertoireService();
     settings = TrainingSettings();
     repertoireId = '/rep.pgn';
-    store = ReviewProgressStore(
-      reviewService: review,
-      headers: repertoire.files,
-      settings: () => settings,
-      repertoireId: () => repertoireId,
-    );
+    store =
+        ReviewProgressStore(
+            reviewService: review,
+            headers: repertoire.files,
+            settings: () => settings,
+            repertoireId: () => repertoireId,
+          )
+          ..sources = scriptedTrainingSources([
+            '/a,b.pgn',
+            '/course/one.pgn',
+            '/first.pgn',
+            '/other.pgn',
+            '/rep.pgn',
+            '/second.pgn',
+          ]);
   });
 
   tearDown(() => store.dispose());
@@ -253,8 +271,21 @@ void main() {
         hadMistake: false,
       );
       final oldPath = repertoireId;
+      await store.prepareSourceLoad();
       repertoireId = '/other.pgn';
-      store.adopt(byLine: {}, moveProgress: {}, otherRepertoires: []);
+      store.adopt(
+        sources: scriptedTrainingSources([
+          '/a,b.pgn',
+          '/course/one.pgn',
+          '/first.pgn',
+          '/other.pgn',
+          '/rep.pgn',
+          '/second.pgn',
+        ]),
+        byLine: {},
+        moveProgress: {},
+        otherRepertoires: [],
+      );
       await pumpEventQueue();
 
       expect(repertoire.headerUpdates, ['A']);
@@ -269,7 +300,19 @@ void main() {
           lineId: 'Z',
           lineName: 'Other',
         );
-        store.adopt(byLine: {}, moveProgress: {}, otherRepertoires: [other]);
+        store.adopt(
+          sources: scriptedTrainingSources([
+            '/a,b.pgn',
+            '/course/one.pgn',
+            '/first.pgn',
+            '/other.pgn',
+            '/rep.pgn',
+            '/second.pgn',
+          ]),
+          byLine: {},
+          moveProgress: {},
+          otherRepertoires: [other],
+        );
 
         await store.recordRating(
           line('A'),
@@ -468,12 +511,21 @@ void main() {
 
   test('supplier reads follow the owner’s current repertoire id', () async {
     var id = '/first.pgn';
-    final s = ReviewProgressStore(
-      reviewService: review,
-      headers: repertoire.files,
-      settings: () => settings,
-      repertoireId: () => id,
-    );
+    final s =
+        ReviewProgressStore(
+            reviewService: review,
+            headers: repertoire.files,
+            settings: () => settings,
+            repertoireId: () => id,
+          )
+          ..sources = scriptedTrainingSources([
+            '/a,b.pgn',
+            '/course/one.pgn',
+            '/first.pgn',
+            '/other.pgn',
+            '/rep.pgn',
+            '/second.pgn',
+          ]);
     await s.recordRating(
       line('A'),
       ReviewRating.good,

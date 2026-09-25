@@ -1,3 +1,7 @@
+import 'package:chess_auto_prep/features/training/models/training_history_operation.dart';
+import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
+import 'package:chess_auto_prep/features/training/models/training_source_context.dart';
+import '../../support/training_source_fixture.dart';
 import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
 import 'package:chess_auto_prep/models/pgn_game_entry.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
@@ -379,6 +383,13 @@ void main() {
     },
   );
 
+  Future<TrainingSourceContext> sourceAt(String path) async {
+    final file = File(path);
+    await file.parent.create(recursive: true);
+    if (!await file.exists()) await file.writeAsString('1. e4 *');
+    return captureTrainingSource(NativePgnDocumentStore(), path);
+  }
+
   test(
     'Regression: commas in repertoire paths roundtrip through progress and history',
     () async {
@@ -391,7 +402,9 @@ void main() {
         learned: false,
       );
       final svc = RepertoireReviewService();
-      await svc.saveMoveProgress([progress]);
+      await svc.saveMoveProgress([
+        progress,
+      ], source: await sourceAt(progress.repertoireId));
       expect(
         (await svc.loadMoveProgress()).single.repertoireId,
         progress.repertoireId,
@@ -403,7 +416,11 @@ void main() {
         rating: 'good',
         hadMistake: false,
       );
-      await svc.appendHistory([history]);
+      await svc.appendHistory(
+        [history],
+        source: await sourceAt(progress.repertoireId),
+        operation: TrainingHistoryOperation(),
+      );
       expect(
         (await svc.loadHistory()).single.repertoireId,
         progress.repertoireId,
@@ -416,17 +433,27 @@ void main() {
     () async {
       final storage = IOStorageService();
       final svc = RepertoireReviewService(storage: storage);
+      final path = '${root.path}/rep.pgn';
+      final source = await sourceAt(path);
       RepertoireReviewHistoryEntry row(String id) =>
           RepertoireReviewHistoryEntry(
-            repertoireId: 'rep',
+            repertoireId: path,
             lineId: id,
             timestampUtc: DateTime.utc(2026),
             rating: 'good',
             hadMistake: false,
           );
       await Future.wait([
-        svc.appendHistory([row('A')]),
-        svc.appendHistory([row('B')]),
+        svc.appendHistory(
+          [row('A')],
+          source: source,
+          operation: TrainingHistoryOperation(),
+        ),
+        svc.appendHistory(
+          [row('B')],
+          source: source,
+          operation: TrainingHistoryOperation(),
+        ),
       ]);
       expect((await svc.loadHistory()).length, 2);
     },
@@ -536,17 +563,34 @@ void main() {
         lineName: 'Line',
       );
       final seed = RepertoireReviewService();
-      await seed.saveAll([entry('a'), entry('b')]);
+      final aPath = '${root.path}/a.pgn';
+      final bPath = '${root.path}/b.pgn';
+      final aSource = await sourceAt(aPath);
+      final bSource = await sourceAt(bPath);
+      await seed.saveAll([entry(aPath)], source: aSource);
+      await seed.saveAll([entry(bPath)], source: bSource);
       final first = RepertoireReviewService();
       final second = RepertoireReviewService();
       final a = await first.loadAll();
       final b = await second.loadAll();
-      await first.saveAll([a.first.copyWith(passCount: 1)], repertoireId: 'a');
-      await second.saveAll([b.last.copyWith(passCount: 2)], repertoireId: 'b');
+      await first.saveAll(
+        [a.first.copyWith(passCount: 1)],
+        repertoireId: aPath,
+        source: aSource,
+      );
+      await second.saveAll(
+        [b.last.copyWith(passCount: 2)],
+        repertoireId: bPath,
+        source: bSource,
+      );
       final actual = await seed.loadAll();
       expect(actual.map((e) => e.passCount), [1, 2]);
       await expectLater(
-        second.saveAll([b.first.copyWith(passCount: 3)], repertoireId: 'a'),
+        second.saveAll(
+          [b.first.copyWith(passCount: 3)],
+          repertoireId: aPath,
+          source: aSource,
+        ),
         throwsStateError,
       );
       expect((await seed.loadAll()).first.passCount, 1);
@@ -556,15 +600,17 @@ void main() {
   test(
     'legacy unquoted comma paths are repaired and raw CSV is backed up',
     () async {
-      const raw =
-          'repertoire_id,line_id,move_index,correct_streak,learned\nFrench, main,line1,3,2,0\n';
+      final path = '${root.path}/French, main.pgn';
+      final source = await sourceAt(path);
+      final raw =
+          'repertoire_id,line_id,move_index,correct_streak,learned\n$path,line1,3,2,0\n';
       await File(
         '${root.path}/repertoire_move_progress.csv',
       ).writeAsString(raw);
       final service = RepertoireReviewService();
       final entries = await service.loadMoveProgress();
-      expect(entries.single.repertoireId, 'French, main');
-      await service.saveMoveProgress(entries);
+      expect(entries.single.repertoireId, path);
+      await service.saveMoveProgress(entries, source: source);
       expect(
         await File(
           '${root.path}/repertoire_move_progress.csv.pre-csv-v2.bak',
@@ -692,25 +738,31 @@ void main() {
     'concurrent move-progress sessions reject stale changes to the same move',
     () async {
       final seed = RepertoireReviewService();
+      final path = '${root.path}/rep.pgn';
+      final source = await sourceAt(path);
       final progress = RepertoireMoveProgress(
-        repertoireId: 'rep',
+        repertoireId: path,
         lineId: 'line',
         moveIndex: 0,
         correctStreak: 1,
         learned: false,
       );
-      await seed.saveMoveProgress([progress]);
+      await seed.saveMoveProgress([progress], source: source);
       final a = RepertoireReviewService();
       final b = RepertoireReviewService();
       final fromA = (await a.loadMoveProgress()).single;
       final fromB = (await b.loadMoveProgress()).single;
-      await a.saveMoveProgress([
-        fromA.copyWith(correctStreak: 2),
-      ], repertoireId: 'rep');
+      await a.saveMoveProgress(
+        [fromA.copyWith(correctStreak: 2)],
+        repertoireId: path,
+        source: source,
+      );
       await expectLater(
-        b.saveMoveProgress([
-          fromB.copyWith(correctStreak: 3),
-        ], repertoireId: 'rep'),
+        b.saveMoveProgress(
+          [fromB.copyWith(correctStreak: 3)],
+          repertoireId: path,
+          source: source,
+        ),
         throwsStateError,
       );
       expect((await seed.loadMoveProgress()).single.correctStreak, 2);

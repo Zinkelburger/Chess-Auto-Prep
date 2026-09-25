@@ -1,3 +1,5 @@
+import '../../support/training_source_fixture.dart';
+import 'package:chess_auto_prep/features/training/models/training_source_context.dart';
 import 'dart:async';
 import 'package:chess_auto_prep/app/training_dependencies.dart';
 import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_board_controller.dart';
@@ -19,11 +21,12 @@ class _Reviews extends FakeReviewService {
   @override
   Future<void> saveAll(
     List<RepertoireReviewEntry> entries, {
+    required TrainingSourceContext source,
     String? repertoireId,
   }) async {
     await gate.future;
     if (fail) throw StateError('storage unavailable');
-    await super.saveAll(entries, repertoireId: repertoireId);
+    await super.saveAll(entries, repertoireId: repertoireId, source: source);
   }
 }
 
@@ -52,6 +55,7 @@ void main() {
         addTearDown(session.dispose);
         addTearDown(configuration.dispose);
         final line = fakeLine('line', ['e4']);
+        session.progress.sources = scriptedTrainingSources(['']);
         session.lines = [line];
         session.isLoading = false;
         session.currentLine = line;
@@ -115,6 +119,7 @@ void main() {
       addTearDown(session.dispose);
       addTearDown(configuration.dispose);
       final line = fakeLine('line', ['e4']);
+      session.progress.sources = scriptedTrainingSources(['']);
       session.lines = [line];
       session.isLoading = false;
       session.currentLine = line;
