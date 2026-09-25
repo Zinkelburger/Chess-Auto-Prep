@@ -181,6 +181,9 @@ final class PgnFileStore implements PgnDocumentStore {
     required EditScope scope,
   }) async {
     try {
+      if (scope is RestoredVersion && scope.inverse?.secondary != null) {
+        return await _restorePair(ref, text, expected, scope.inverse!);
+      }
       final expectedBooks = scope.references == null
           ? null
           : await books.expectedText();
@@ -198,6 +201,197 @@ final class PgnFileStore implements PgnDocumentStore {
       return IoFailure(failureDetail(error));
     }
   }
+
+  @override
+  Future<SaveResult> savePair(
+    DocumentEdit primary,
+    DocumentEdit secondary, {
+    required String operationId,
+  }) async {
+    if ([primary, secondary].any(
+      (edit) =>
+          documentBackupIdFor(documents, edit.ref) == null ||
+          edit.scope.references != null ||
+          (edit.scope is RestoredVersion &&
+              (edit.scope as RestoredVersion).inverse != null),
+    )) {
+      return const SaveRefused('The pair must name two managed PGN edits.');
+    }
+    try {
+      return await _guard(
+        () => lockedForRelocation(
+          documents,
+          primary.ref,
+          [folderOf(primary.ref), folderOf(secondary.ref), recovery.support],
+          () => _savePair(primary, secondary, operationId),
+          IoFailure.new,
+        ),
+        IoFailure.new,
+      );
+    } on Object catch (error) {
+      return IoFailure(failureDetail(error));
+    }
+  }
+
+  Future<SaveResult> _savePair(
+    DocumentEdit primary,
+    DocumentEdit secondary,
+    String id,
+  ) async {
+    final edits = [primary, secondary];
+    final paths = [for (final edit in edits) await _completedPath(edit.ref)];
+    if (p.equals(paths[0], paths[1])) {
+      return const SaveRefused('A pair must name two distinct PGN files.');
+    }
+    final retried = await _retriedPair(edits, paths, id);
+    if (retried != null) return retried;
+    // Prepare and validate both scopes before preserving either preimage.
+    final inputs = <({DocumentEdit edit, FileFound found, String before})>[];
+    for (final edit in edits) {
+      final observed = await probeDocument(edit.ref.path);
+      switch (observed) {
+        case FileMissing():
+          return const Conflict(null);
+        case FileUnreadable(:final detail):
+          return IoFailure(detail);
+        case FileFound(:final revision, :final bytes):
+          if (revision != edit.expected ||
+              (edit.expected.nativeIdentity != null &&
+                  revision.nativeIdentity != edit.expected.nativeIdentity)) {
+            return Conflict(revision);
+          }
+          final prepared = await _prepared(
+            edit.ref.path,
+            bytes,
+            revision.contentHash,
+            edit.text,
+            edit.scope,
+          );
+          switch (prepared) {
+            case _NotReplaceable(:final result):
+              return result;
+            case _OutsideScope(:final detail):
+              return SaveRefused(detail);
+            case _Unchanged(:final before):
+              inputs.add((edit: edit, found: observed, before: before));
+            case _Ready(:final before, :final hash, :final undeclared):
+              if (undeclared) log.w('save pair ${edit.ref.path}', _undeclared);
+              if (edit.scope is RestoredVersion) {
+                final refused = await _keptHere(edit.ref, hash);
+                if (refused != null) return refused;
+              }
+              inputs.add((edit: edit, found: observed, before: before));
+          }
+      }
+    }
+    for (final input in inputs) {
+      if (input.before == input.edit.text) continue;
+      final failed = await keepReplacedVersion(
+        backups: _backups,
+        documents: documents,
+        ref: input.edit.ref,
+        bytes: input.found.bytes,
+        hash: input.found.revision.contentHash,
+      );
+      if (failed != null) return failed;
+    }
+    final command = CompoundCommit.pair(
+      id: id,
+      primary: CompoundDocument(
+        path: paths[0],
+        before: inputs[0].before,
+        after: primary.text,
+      ),
+      secondary: CompoundDocument(
+        path: paths[1],
+        before: inputs[1].before,
+        after: secondary.text,
+      ),
+    );
+    final committed = await recovery.compounds.commit(command);
+    return Saved(
+      _compoundReceipt(
+        committed,
+        beforeRevision: inputs.first.found.revision,
+        secondaryRef: secondary.ref,
+      ),
+    );
+  }
+
+  Future<SaveResult?> _retriedPair(
+    List<DocumentEdit> edits,
+    List<String> paths,
+    String id,
+  ) async {
+    final completed = await recovery.compounds.completed(id);
+    if (completed != null) {
+      final participants = completed.documents;
+      if (participants.length != 2 ||
+          edits.indexed.any(
+            (entry) =>
+                participants[entry.$1].path != paths[entry.$1] ||
+                participants[entry.$1].after != entry.$2.text ||
+                _textRevision(participants[entry.$1].before) !=
+                    entry.$2.expected,
+          )) {
+        return const SaveRefused('The pair id belongs to another edit.');
+      }
+      return Saved(_compoundReceipt(completed, secondaryRef: edits[1].ref));
+    }
+    return null;
+  }
+
+  Future<SaveResult> _restorePair(
+    DocumentRef ref,
+    String text,
+    Revision expected,
+    CompoundCommit inverse,
+  ) => _guard(() async {
+    final original = await recovery.compounds.completed(inverse.id);
+    if (original == null ||
+        original.secondary == null ||
+        original.documents.length != inverse.documents.length ||
+        original.documents.indexed.any(
+          (entry) =>
+              entry.$2.path != inverse.documents[entry.$1].path ||
+              entry.$2.before != inverse.documents[entry.$1].before ||
+              entry.$2.after != inverse.documents[entry.$1].after,
+        ) ||
+        inverse.documentPath != await _completedPath(ref) ||
+        inverse.documentBefore != text ||
+        _textRevision(inverse.documentAfter) != expected) {
+      return const RestoreRefused(
+        'The pair inverse is not a committed receipt from this profile.',
+      );
+    }
+    final primary = DocumentEdit(
+      ref: ref,
+      text: text,
+      expected: expected,
+      scope: const RestoredVersion(),
+    );
+    final second = inverse.secondary!;
+    final secondary = DocumentEdit(
+      ref: DocumentRef(
+        p.join(
+          documents.path,
+          p.relative(second.path, from: recovery.compounds.documents.path),
+        ),
+      ),
+      text: second.before,
+      expected: _textRevision(second.after),
+      scope: const RestoredVersion(),
+    );
+    // Already inside the recovery domain: acquire participants directly,
+    // never recursively enter the public save boundary.
+    return lockedForRelocation(
+      documents,
+      ref,
+      [folderOf(ref), folderOf(secondary.ref), recovery.support],
+      () => _savePair(primary, secondary, '${inverse.id}-undo'),
+      IoFailure.new,
+    );
+  }, IoFailure.new);
 
   Future<SaveResult> _save(
     DocumentRef ref,
@@ -393,6 +587,7 @@ final class PgnFileStore implements PgnDocumentStore {
   Receipt _compoundReceipt(
     CompoundCommit command, {
     Revision? beforeRevision,
+    DocumentRef? secondaryRef,
   }) => Receipt(
     committed:
         recovery.compounds.publishedRevision(command.id) ??
@@ -400,6 +595,7 @@ final class PgnFileStore implements PgnDocumentStore {
     before: command.documentBefore,
     beforeRevision: beforeRevision ?? _textRevision(command.documentBefore),
     compound: command,
+    secondaryRef: secondaryRef,
   );
 
   Revision _textRevision(String text) =>

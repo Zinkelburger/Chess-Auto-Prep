@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
+import 'package:chess_auto_prep/v2/storage/compound_commit.dart';
 import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/training_records.dart';
@@ -97,6 +98,25 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
     }
     final queued = _next(saves);
     if (queued != null) return queued;
+    if (scope is RestoredVersion && scope.inverse?.secondary != null) {
+      final inverse = scope.inverse!;
+      final secondary = inverse.secondary!;
+      return _pair(
+        DocumentEdit(
+          ref: ref,
+          text: text,
+          expected: expected,
+          scope: const RestoredVersion(),
+        ),
+        DocumentEdit(
+          ref: DocumentRef(secondary.path),
+          text: secondary.before,
+          expected: scriptedRevision(secondary.after),
+          scope: const RestoredVersion(),
+        ),
+        '${inverse.id}-undo',
+      );
+    }
     final before = documents[_file(ref)];
     if (before is! Opened) return const Conflict(null);
     if (before.revision != expected) return Conflict(before.revision);
@@ -107,6 +127,83 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
         committed: committed,
         before: before.text,
         beforeRevision: before.revision,
+      ),
+    );
+  }
+
+  @override
+  Future<SaveResult> savePair(
+    DocumentEdit primary,
+    DocumentEdit secondary, {
+    required String operationId,
+  }) async {
+    for (final edit in [primary, secondary]) {
+      requestedSaves.add(
+        SaveRequest(edit.ref, edit.text, edit.expected, edit.scope),
+      );
+    }
+    await _turn();
+    final thrown = throwOnSave;
+    if (thrown != null) {
+      throwOnSave = null;
+      throw thrown;
+    }
+    final queued = _next(saves);
+    return queued ?? _pair(primary, secondary, operationId);
+  }
+
+  final _pairs = <String, Saved>{};
+
+  SaveResult _pair(DocumentEdit primary, DocumentEdit secondary, String id) {
+    final done = _pairs[id];
+    if (done != null) {
+      final parts = done.receipt.compound!.documents;
+      final edits = [primary, secondary];
+      for (var i = 0; i < 2; i++) {
+        if (parts[i].path != edits[i].ref.path ||
+            parts[i].after != edits[i].text ||
+            scriptedRevision(parts[i].before) != edits[i].expected) {
+          return const SaveRefused('The pair id belongs to another edit.');
+        }
+      }
+      return done;
+    }
+    if (primary.ref.path == secondary.ref.path) {
+      return const SaveRefused('A pair requires two files.');
+    }
+    final prior = <Opened>[];
+    for (final edit in [primary, secondary]) {
+      final before = documents[_file(edit.ref)];
+      if (before is! Opened) return const Conflict(null);
+      if (before.revision != edit.expected) return Conflict(before.revision);
+      prior.add(before);
+    }
+    final compound = CompoundCommit.pair(
+      id: id,
+      primary: CompoundDocument(
+        path: primary.ref.path,
+        before: prior[0].text,
+        after: primary.text,
+      ),
+      secondary: CompoundDocument(
+        path: secondary.ref.path,
+        before: prior[1].text,
+        after: secondary.text,
+      ),
+    );
+    for (final edit in [primary, secondary]) {
+      documents[_file(edit.ref)] = Opened(
+        edit.text,
+        scriptedRevision(edit.text),
+      );
+    }
+    return _pairs[id] = Saved(
+      Receipt(
+        committed: scriptedRevision(primary.text),
+        before: prior[0].text,
+        beforeRevision: prior[0].revision,
+        compound: compound,
+        secondaryRef: secondary.ref,
       ),
     );
   }

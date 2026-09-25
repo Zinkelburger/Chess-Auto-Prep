@@ -39,6 +39,16 @@ abstract interface class PgnDocumentStore {
     required EditScope scope,
   });
 
+  /// Commits two existing PGNs as one recoverable operation. Both revisions
+  /// and edit scopes must validate before either file is published. Retain the
+  /// operation id and immutable inputs through retry; the primary receipt owns
+  /// the complete guarded inverse.
+  Future<SaveResult> savePair(
+    DocumentEdit primary,
+    DocumentEdit secondary, {
+    required String operationId,
+  });
+
   /// Gives [ref] a new file name, such as `Main.pgn`, in the same folder.
   Future<MoveResult> rename(
     DocumentRef ref,
@@ -78,6 +88,21 @@ abstract interface class PgnDocumentStore {
     required Revision expected,
     String? operationId,
   });
+}
+
+/// Frozen input for one participant of a two-document publication.
+final class DocumentEdit {
+  const DocumentEdit({
+    required this.ref,
+    required this.text,
+    required this.expected,
+    required this.scope,
+  });
+
+  final DocumentRef ref;
+  final String text;
+  final Revision expected;
+  final EditScope scope;
 }
 
 sealed class DocumentRead {
@@ -120,6 +145,7 @@ final class Receipt {
     required this.before,
     required this.beforeRevision,
     this.compound,
+    this.secondaryRef,
   });
 
   /// The revision the file now has.
@@ -132,6 +158,11 @@ final class Receipt {
 
   /// Required participants for a guarded compound inverse, when present.
   final CompoundCommit? compound;
+
+  /// The secondary participant in this caller's configured path spelling,
+  /// for committed-change notifications. The journal's canonical path remains
+  /// the authority for recovery and undo.
+  final DocumentRef? secondaryRef;
 }
 
 sealed class CreateResult {

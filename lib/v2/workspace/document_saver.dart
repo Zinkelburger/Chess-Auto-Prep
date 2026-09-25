@@ -48,11 +48,12 @@ final class DocumentSaver extends ChangeNotifier {
   // A compound publication cannot absorb another edit after an uncertain
   // acknowledgement. Its exact draft and command id must settle first.
   bool _committingReferences = false;
+  Object? _externalOwner;
   _UndoWrite? _failedUndo;
 
   /// A two-file publication must settle before another edit can change its
   /// exact input. The session checks this before changing its shown chapter.
-  bool get referencesPending => _committingReferences;
+  bool get referencesPending => _committingReferences || _externalOwner != null;
 
   /// An undo retry must also put its restored words back on screen. A plain
   /// [flush] cannot do that, so the session retries through its undo command.
@@ -123,6 +124,7 @@ final class DocumentSaver extends ChangeNotifier {
     _clock.hurry();
     _undo.clear();
     _committingReferences = false;
+    _externalOwner = null;
     _failedUndo = null;
     _set(readOnly == null ? const Saved() : DocumentReadOnly(readOnly));
   }
@@ -167,15 +169,21 @@ final class DocumentSaver extends ChangeNotifier {
   /// afterwards — would leave the rename racing an answer it cannot see, and
   /// a lost race means the user is told their file changed on disk when the
   /// only thing that wrote it was this app.
-  Future<T?> holdStill<T>(Future<T> Function(Revision revision) action) {
+  Future<T?> holdStill<T>(
+    Future<T> Function(Revision revision) action, {
+    Object? continuing,
+  }) {
     if (_hold != _Hold.none || _disposed) return Future<T?>.value();
     _hold = _Hold.settling;
-    final held = _holding(action);
+    final held = _holding(action, continuing);
     _clock.waitsFor(held);
     return held;
   }
 
-  Future<T?> _holding<T>(Future<T> Function(Revision revision) action) async {
+  Future<T?> _holding<T>(
+    Future<T> Function(Revision revision) action,
+    Object? continuing,
+  ) async {
     try {
       // The words waiting on the clock were typed into this file, so they go
       // to it before [action] renames, moves or deletes it. Written
@@ -185,12 +193,64 @@ final class DocumentSaver extends ChangeNotifier {
       await flush();
       _hold = _Hold.held;
       final target = _target;
-      if (_disposed || target == null || !settled) return null;
+      final retry =
+          continuing != null &&
+          identical(_externalOwner, continuing) &&
+          _pending.isEmpty;
+      if (_disposed || target == null || (!settled && !retry)) return null;
       return await action(target.revision);
     } finally {
       _hold = _Hold.none;
       await _write();
     }
+  }
+
+  /// Called inside [holdStill] after the accepted source is checked.
+  bool beginExternal(Object command, Revision expected) {
+    if (_hold != _Hold.held ||
+        _disposed ||
+        revision != expected ||
+        revision?.nativeIdentity != expected.nativeIdentity ||
+        (_externalOwner != null && !identical(_externalOwner, command)))
+      return false;
+    _externalOwner = command;
+    _set(const Saving());
+    return true;
+  }
+
+  /// Receipt, undo and shown words become observable together. [show] updates
+  /// the session before saver listeners can observe the new persisted revision.
+  void adoptExternal(
+    Object command,
+    store.Receipt receipt,
+    EditScope scope,
+    void Function() show,
+  ) {
+    if (!identical(_externalOwner, command) || _disposed) return;
+    final target = _target!;
+    _externalOwner = null;
+    _received(target.ref, receipt);
+    _undo.keep(receipt, scope);
+    _state = const Saved();
+    show();
+    if (!_disposed) notifyListeners();
+  }
+
+  /// A lost acknowledgement retains the exact command's edit barrier. If its
+  /// editor was superseded, reopening supplies the only safe displayed input.
+  void endExternal(
+    Object command,
+    store.SaveResult result,
+    EditScope scope, {
+    required bool uncertain,
+  }) {
+    if (!identical(_externalOwner, command) || _disposed) return;
+    if (result is store.Saved) {
+      _set(const SaveStopped());
+      return;
+    }
+    if (!uncertain) _externalOwner = null;
+    _adopt(result, _target!.ref, scope);
   }
 
   /// The open document is now at [ref]: the same file with the same bytes
@@ -213,6 +273,7 @@ final class DocumentSaver extends ChangeNotifier {
     _clock.hurry();
     _undo.clear();
     _committingReferences = false;
+    _externalOwner = null;
     _failedUndo = null;
     _set(const Saved());
   }
@@ -293,7 +354,7 @@ final class DocumentSaver extends ChangeNotifier {
   }
 
   /// Whether this saver is still writing this document at all.
-  bool get takesWords => !_committingReferences && _state.takesWords;
+  bool get takesWords => !referencesPending && _state.takesWords;
 
   /// The store's answer to one write, with an exception it was not supposed
   /// to throw turned into the failure it is. A throw that got out would
@@ -398,6 +459,7 @@ final class DocumentSaver extends ChangeNotifier {
         target == null ||
         entry == null ||
         _hold != _Hold.none ||
+        _externalOwner != null ||
         _writing ||
         !_pending.isEmpty) {
       return const UndoRefused();
@@ -807,6 +869,7 @@ final class UndoHistory {
         before: previous.receipt.before,
         beforeRevision: previous.receipt.beforeRevision,
         compound: previous.receipt.compound,
+        secondaryRef: previous.receipt.secondaryRef,
       ),
       scope: previous.scope,
     );

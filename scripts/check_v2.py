@@ -300,17 +300,58 @@ def _check_listening(where, name, header, members, line, findings) -> None:
     )
 
 
+def check_parts(path: Path, source: str, findings: list[str]) -> None:
+    """Allow whole collaborator classes, not methods split out of an owner.
+
+    A part shares its library's imports, so keep it beside that library to
+    preserve the same dependency boundary. File/function caps still apply to
+    every part; extensions and mixins cannot move a class's methods elsewhere.
+    """
+    clean = blank_literals(source)
+    directives = list(re.finditer(r"^\s*part\b[^;]*;", clean, re.M))
+    if not directives:
+        return
+    where = path.relative_to(REPO)
+    is_part = False
+    for directive in directives:
+        raw = source[directive.start():directive.end()]
+        parsed = re.fullmatch(r"\s*part\s+(of\s+)?['\"]([^'\"]+)['\"]\s*;", raw)
+        if not parsed:
+            findings.append(f"{where}: part must name a file in the same directory")
+            continue
+        is_part |= parsed.group(1) is not None
+        target = (path.parent / parsed.group(2)).resolve()
+        if target.parent != path.parent.resolve() or not target.is_file():
+            findings.append(f"{where}: part must name a file in the same directory")
+    if not is_part:
+        return
+    # Dart does not permit a class declaration to span source files. Requiring
+    # complete declarations also rejects the extension/mixin pattern that hid
+    # the old application's large State classes in many small files.
+    remaining = list(clean)
+    for directive in directives:
+        remaining[directive.start():directive.end()] = " " * (directive.end() - directive.start())
+    for match in CLASS.finditer(clean):
+        depth, end = 1, match.end()
+        while end < len(clean) and depth:
+            depth += {"{": 1, "}": -1}.get(clean[end], 0)
+            end += 1
+        if depth == 0:
+            remaining[match.start():end] = " " * (end - match.start())
+    if "".join(remaining).strip() or not CLASS.search(clean):
+        findings.append(f"{where}: a part may contain only complete collaborator classes")
+
+
 def check_file(path: Path, findings: list[str]) -> None:
     lines = path.read_text().splitlines()
     where = path.relative_to(REPO)
     if len(lines) > MAX_FILE_LINES:
         findings.append(f"{where}: {len(lines)} lines (max {MAX_FILE_LINES})")
+    check_parts(path, "\n".join(lines), findings)
     is_lib = LIB in path.parents
     folder = relative_folder(path) if is_lib else None
     for n, line in enumerate(lines, 1):
         code = line.split("//")[0]
-        if re.match(r"^\s*part\b", code):
-            findings.append(f"{where}:{n}: `part` is not allowed")
         if re.search(r"\bdynamic\b", code):
             findings.append(f"{where}:{n}: `dynamic`")
         if is_lib and folder != "ui" and LITERAL_STYLE.search(code):

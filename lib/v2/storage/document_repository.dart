@@ -72,8 +72,38 @@ final class DocumentRepository extends ChangeNotifier
       ref.path,
       _store.save(ref, text, expected: expected, scope: scope),
     );
-    if (result is Saved)
+    if (result is Saved) {
       _committed(DocumentChange(ref.path, kind: DocumentChangeKind.saved));
+      final secondary = result.receipt.secondaryRef;
+      if (secondary != null) {
+        _committed(
+          DocumentChange(secondary.path, kind: DocumentChangeKind.saved),
+        );
+      }
+    }
+    return result;
+  }
+
+  @override
+  Future<SaveResult> savePair(
+    DocumentEdit primary,
+    DocumentEdit secondary, {
+    required String operationId,
+  }) async {
+    final result = await _write(
+      primary.ref.path,
+      _write(
+        secondary.ref.path,
+        _store.savePair(primary, secondary, operationId: operationId),
+      ),
+    );
+    if (result is Saved) {
+      for (final edit in [primary, secondary]) {
+        _committed(
+          DocumentChange(edit.ref.path, kind: DocumentChangeKind.saved),
+        );
+      }
+    }
     return result;
   }
 
