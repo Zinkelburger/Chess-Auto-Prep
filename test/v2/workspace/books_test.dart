@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:chess_auto_prep/v2/storage/book_file.dart';
+import 'package:chess_auto_prep/v2/storage/book_snapshot.dart';
 import 'package:chess_auto_prep/v2/storage/book_list.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/workspace/books.dart';
@@ -16,7 +17,13 @@ final class _Unreadable implements BookStore {
   Future<BookList> read() async => throw const FormatException('torn');
 
   @override
-  Future<void> write(BookList books) async => writes++;
+  Future<BookSnapshot> snapshot() async => BookSnapshot(value: await read());
+
+  @override
+  Future<BookSnapshot> write(BookList books) async {
+    writes++;
+    return BookSnapshot(value: books);
+  }
 }
 
 void main() {
@@ -360,10 +367,14 @@ final class _HeldBooks implements BookStore {
   }
 
   @override
-  Future<void> write(BookList books) async {
+  Future<BookSnapshot> snapshot() async => BookSnapshot(value: await read());
+
+  @override
+  Future<BookSnapshot> write(BookList books) async {
     writes++;
     await writeGate?.future;
     if (fail) throw StateError('write unavailable');
     value = books;
+    return BookSnapshot(value: books);
   }
 }

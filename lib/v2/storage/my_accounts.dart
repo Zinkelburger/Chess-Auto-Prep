@@ -69,7 +69,11 @@ abstract interface class AccountStore {
   /// Answers whether the preferences took it.
   Future<bool> setUsername(GameSite site, String? username);
 
-  Future<bool> setDownloaded(GameSite site, DateTime when);
+  Future<bool> setDownloaded(
+    GameSite site,
+    DateTime when, {
+    String? expectedUsername,
+  });
 }
 
 final class PreferencesAccounts implements AccountStore {
@@ -84,6 +88,9 @@ final class PreferencesAccounts implements AccountStore {
   bool? _readable;
   Future<void> _usernameTail = Future.value();
   Future<AccountsRead>? _reading;
+  // The preferences plugin mutates its cache before platform acknowledgement.
+  // Retain the last acknowledged timestamp while a date write is uncertain.
+  final _dates = <GameSite, ({String username, DateTime? date})>{};
 
   @override
   int get revision => _revision;
@@ -122,7 +129,7 @@ final class PreferencesAccounts implements AccountStore {
         for (final site in GameSite.values)
           if (prefs.getString(_usernameKeys[site]!)?.trim() case final name?
               when name.isNotEmpty)
-            site: Account(name, downloaded: _date(prefs, site)),
+            site: Account(name, downloaded: _confirmedDate(prefs, site, name)),
       };
       final changed =
           _names == null ||
@@ -164,6 +171,15 @@ final class PreferencesAccounts implements AccountStore {
     return ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
   }
 
+  DateTime? _confirmedDate(
+    SharedPreferences prefs,
+    GameSite site,
+    String name,
+  ) {
+    final held = _dates[site];
+    return held?.username == name ? held!.date : _date(prefs, site);
+  }
+
   @override
   Future<bool> setUsername(GameSite site, String? username) {
     // Admission invalidates a captured comparison before any platform await.
@@ -193,13 +209,16 @@ final class PreferencesAccounts implements AccountStore {
       // A failed platform write already changed the plugin cache. Reissue
       // persistence even when its cached username matches this exact retry.
       final dateKey = _downloadedKeys[site]!;
-      final date = unchanged ? prefs.getInt(dateKey) : null;
+      final date = unchanged
+          ? _confirmedDate(prefs, site, name)?.millisecondsSinceEpoch
+          : null;
       final downloaded = date == null
           ? await prefs.remove(dateKey)
           : await prefs.setInt(dateKey, date);
       final saved = name.isEmpty
           ? await prefs.remove(key)
           : await prefs.setString(key, name);
+      if (saved && downloaded) _dates.remove(site);
       return saved && downloaded;
     } on Object catch (error) {
       log.w('save the ${site.label} username', error);
@@ -208,13 +227,38 @@ final class PreferencesAccounts implements AccountStore {
   }
 
   @override
-  Future<bool> setDownloaded(GameSite site, DateTime when) async {
+  Future<bool> setDownloaded(
+    GameSite site,
+    DateTime when, {
+    String? expectedUsername,
+  }) {
+    final written = _usernameTail.then(
+      (_) => _writeDownloaded(site, when, expectedUsername),
+    );
+    _usernameTail = written.then((_) {});
+    return written;
+  }
+
+  Future<bool> _writeDownloaded(
+    GameSite site,
+    DateTime when,
+    String? expectedUsername,
+  ) async {
     try {
       final prefs = await _preferences();
-      return await prefs.setInt(
+      final name = prefs.getString(_usernameKeys[site]!)?.trim() ?? '';
+      if (name.isEmpty ||
+          (expectedUsername != null && name != expectedUsername)) {
+        return false;
+      }
+      final prior = _confirmedDate(prefs, site, name);
+      _dates[site] = (username: name, date: prior);
+      final saved = await prefs.setInt(
         _downloadedKeys[site]!,
         when.millisecondsSinceEpoch,
       );
+      if (saved) _dates.remove(site);
+      return saved;
     } on Object catch (error) {
       log.w('save when ${site.label} games came down', error);
       return false;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/v2/chess/pgn/chapter_heading.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
@@ -185,6 +187,38 @@ void main() {
       tree.forget();
       await pumpEventQueue();
       expect(tree.state, isA<TreeShown>());
+    },
+  );
+
+  test(
+    'cursor projections reuse the validated inputs without another file read',
+    () async {
+      final reads = files.listings;
+      final fences = files.profileValidations.length;
+      walk(['e4', 'e5', 'Nf3', 'Nc6']);
+      expect(tree.current, isTrue);
+      expect(rows().map((row) => row.san), ['Bb5', 'Bc4', 'd4']);
+      await pumpEventQueue();
+      expect(files.listings, reads);
+      expect(files.profileValidations, hasLength(fences));
+    },
+  );
+
+  test(
+    'a cursor changed during the final fence uses the latest position',
+    () async {
+      tree.unwatch();
+      final fence = Completer<RepertoireValidation>();
+      files.validateWith = (_, _) => fence.future;
+      tree.watch();
+      await pumpEventQueue();
+      expect(tree.state, isA<TreeReading>());
+      expect(tree.current, isFalse);
+      walk(['e4', 'e5', 'Nf3', 'Nc6']);
+      fence.complete(const RepertoireCurrent());
+      await pumpEventQueue();
+      expect(tree.current, isTrue);
+      expect(rows().map((row) => row.san), ['Bb5', 'Bc4', 'd4']);
     },
   );
 

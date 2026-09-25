@@ -11,6 +11,7 @@ import '../../storage/chapter_files.dart';
 import '../../storage/document_ref.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/book_list.dart' show Book;
+import '../../storage/book_snapshot.dart';
 import '../../storage/my_accounts.dart';
 import '../../storage/my_games_files.dart';
 import '../../workspace/books.dart';
@@ -223,6 +224,16 @@ final class GameBook extends ChangeNotifier {
     if (_watching > 0) unawaited(_read());
   }
 
+  /// Refreshes the persisted selection too: an external book-file change can
+  /// invalidate a comparison while the local membership owner is unchanged.
+  Future<void> retry() async {
+    if (_disposed) return;
+    final reads = _reads;
+    _books.canRetry ? await _books.retry() : await _books.load();
+    // Load notifications already start the current comparison when observed.
+    if (!_disposed && _reads == reads) recheck();
+  }
+
   /// Another book is in use, or the one in use was edited.
   void _bookChanged() {
     final inputs = _bookInput;
@@ -236,6 +247,7 @@ final class GameBook extends ChangeNotifier {
     bool overtaken() => _disposed || ticket != _reads || _watching == 0;
     final book = _books.active;
     final bookRevision = _books.revision;
+    final bookSource = _books.source;
     _bookSeen = _bookInput;
     final wasChecking = _checking;
     _checking = true;
@@ -248,18 +260,29 @@ final class GameBook extends ChangeNotifier {
           _books.problem ?? 'The book selection is being saved or read.',
         );
       }
-      if (book == null) return _become(const BookNotSet());
+      if (book == null) {
+        return await _empty(
+          const BookNotSet(),
+          bookRevision: bookRevision,
+          source: bookSource,
+          overtaken: overtaken,
+        );
+      }
       final accountRead = await _accounts.snapshot();
       if (overtaken()) return;
       if (accountRead is AccountsUnavailable)
         throw StateError(accountRead.detail);
       final accountSnapshot = accountRead as AccountsSnapshot;
       final accounts = accountSnapshot.accounts;
-      if (accounts.isEmpty)
-        return _become(
+      if (accounts.isEmpty) {
+        return await _empty(
           const BookNoAccounts(),
+          bookRevision: bookRevision,
+          source: bookSource,
+          overtaken: overtaken,
           accountRevision: accountSnapshot.revision,
         );
+      }
       final corpus = await _readCorpus(accounts, overtaken);
       if (corpus == null || overtaken()) return;
       _shelf.forget();
@@ -272,18 +295,10 @@ final class GameBook extends ChangeNotifier {
       final validation = await _shelf.validate(
         version: version,
         additional: corpus.sources,
+        book: bookSource,
       );
       if (overtaken()) return;
-      switch (validation) {
-        case RepertoireChanged():
-          throw StateError(
-            'The games or repertoires changed during comparison. Retry.',
-          );
-        case RepertoireValidationFailed(:final detail):
-          throw StateError(detail);
-        case RepertoireCurrent():
-          break;
-      }
+      _requireCurrent(validation);
       // No asynchronous work follows the native whole-input fence. Account
       // mutation admission increments its owner token synchronously.
       if (_books.revision != bookRevision ||
@@ -301,6 +316,35 @@ final class GameBook extends ChangeNotifier {
       _problem = '$error';
       log.w('compare downloaded games with the repertoire', error);
       notifyListeners();
+    }
+  }
+
+  Future<void> _empty(
+    BookState state, {
+    required int bookRevision,
+    required BookSource? source,
+    required bool Function() overtaken,
+    int? accountRevision,
+  }) async {
+    final validation = await _shelf.validateBook(source);
+    if (overtaken()) return;
+    _requireCurrent(validation);
+    if (!_books.current ||
+        _books.revision != bookRevision ||
+        (accountRevision != null && _accounts.revision != accountRevision)) {
+      throw StateError('The comparison inputs changed. Retry.');
+    }
+    _become(state, accountRevision: accountRevision);
+  }
+
+  static void _requireCurrent(RepertoireValidation validation) {
+    switch (validation) {
+      case RepertoireChanged():
+        throw StateError('The comparison inputs changed. Retry.');
+      case RepertoireValidationFailed(:final detail):
+        throw StateError(detail);
+      case RepertoireCurrent():
+        break;
     }
   }
 

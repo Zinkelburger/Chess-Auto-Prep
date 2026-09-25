@@ -25,7 +25,7 @@ class BookComparisonStatus extends StatelessWidget {
               'Could not update comparison: $problem',
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
-            TextButton(onPressed: book.recheck, child: const Text('Retry')),
+            TextButton(onPressed: book.retry, child: const Text('Retry')),
           ],
         ],
       ),

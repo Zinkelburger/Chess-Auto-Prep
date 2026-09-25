@@ -5,7 +5,9 @@ import 'package:chess_auto_prep/v2/chess/training/schedule.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/chapter_sections.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/features/trainer/trainer.dart';
+import 'package:chess_auto_prep/v2/features/trainer/training_scope.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
+import 'package:chess_auto_prep/v2/storage/book_list.dart';
 import 'package:chess_auto_prep/v2/storage/atomic_write.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart' as store;
 import 'package:chess_auto_prep/v2/storage/pending_writes.dart';
@@ -96,6 +98,41 @@ void main() {
       time: (now: () => DateTime.utc(2026), jitter: () => 0),
     );
   });
+  test('explicit book retry observes new committed membership', () async {
+    final first = BookList(
+      active: 'a',
+      books: [
+        Book(
+          id: 'a',
+          name: 'A',
+          chapters: {const BookChapter('Course/Main.pgn', 'First')},
+        ),
+      ],
+    );
+    final second = BookList(
+      active: 'a',
+      books: [
+        Book(
+          id: 'a',
+          name: 'A',
+          chapters: {const BookChapter('Course/Main.pgn', 'Second')},
+        ),
+      ],
+    );
+    await fixture.store.books.write(first);
+    await books.load();
+    await fixture.store.books.write(second);
+    // This bypasses the Books owner exactly as another window would.
+    trainer.setScope(TrainScope.book);
+    await pumpEventQueue();
+    await trainer.reload();
+    final state = trainer.state;
+    expect(state, isA<TrainerReady>());
+    expect((state as TrainerReady).chapters.map((c) => c.ref.section), [
+      'Second',
+    ]);
+  });
+
   tearDown(() async {
     trainer.dispose();
     analysis.dispose();

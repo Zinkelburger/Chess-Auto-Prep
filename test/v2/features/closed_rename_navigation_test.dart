@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/features/library/library.dart';
 import 'package:chess_auto_prep/v2/features/library/library_state.dart';
 import 'package:chess_auto_prep/v2/storage/book_file.dart';
+import 'package:chess_auto_prep/v2/storage/book_snapshot.dart';
 import 'package:chess_auto_prep/v2/storage/book_list.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/workspace/books.dart';
@@ -127,9 +128,12 @@ final class _DelayedBooks implements BookStore {
   @override
   Future<BookList> read() => inner.read();
   @override
-  Future<void> write(BookList value) async {
+  Future<BookSnapshot> snapshot() => inner.snapshot();
+
+  @override
+  Future<BookSnapshot> write(BookList value) async {
     entered.complete();
     await release.future;
-    await inner.write(value);
+    return inner.write(value);
   }
 }

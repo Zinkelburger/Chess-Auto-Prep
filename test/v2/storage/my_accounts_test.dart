@@ -24,6 +24,52 @@ void main() {
     },
   );
 
+  test('failed date acknowledgement never becomes cached freshness', () async {
+    SharedPreferences.setMockInitialValues({'lichess_username': 'Me'});
+    await SharedPreferences.getInstance();
+    final backend = _Backend()..rejectDates = true;
+    SharedPreferencesStorePlatform.instance = backend;
+    addTearDown(() => SharedPreferences.setMockInitialValues({}));
+    final source = PreferencesAccounts();
+    final when = DateTime(2026, 9, 24);
+    expect(
+      await source.setDownloaded(
+        GameSite.lichess,
+        when,
+        expectedUsername: 'Me',
+      ),
+      isFalse,
+    );
+    expect((await source.read())[GameSite.lichess]!.downloaded, isNull);
+    backend.rejectDates = false;
+    expect(
+      await source.setDownloaded(
+        GameSite.lichess,
+        when,
+        expectedUsername: 'Me',
+      ),
+      isTrue,
+    );
+    expect((await source.read())[GameSite.lichess]!.downloaded, when);
+  });
+
+  test(
+    'a delayed old account date cannot stamp the replacement username',
+    () async {
+      SharedPreferences.setMockInitialValues({'lichess_username': 'Old'});
+      final source = PreferencesAccounts();
+      final rename = source.setUsername(GameSite.lichess, 'New');
+      final stamp = source.setDownloaded(
+        GameSite.lichess,
+        DateTime(2026),
+        expectedUsername: 'Old',
+      );
+      expect(await rename, isTrue);
+      expect(await stamp, isFalse);
+      expect((await source.read())[GameSite.lichess]!.downloaded, isNull);
+    },
+  );
+
   test('reads the usernames and dates the old app saved', () async {
     SharedPreferences.setMockInitialValues({
       'lichess_username': 'Me',
@@ -200,9 +246,11 @@ void main() {
 class _Backend extends InMemorySharedPreferencesStore {
   _Backend() : super.empty();
   bool reject = true;
+  bool rejectDates = false;
   final names = <Object>[];
   @override
   Future<bool> setValue(String type, String key, Object value) async {
+    if (key == 'flutter.lichess_last_fetch_ms' && rejectDates) return false;
     if (key == 'flutter.lichess_username') {
       names.add(value);
       if (reject) return false;

@@ -7,6 +7,7 @@ import '../chess/pgn/chapter_sections.dart';
 import '../chess/repertoire_index.dart';
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
+import '../storage/book_snapshot.dart';
 import '../storage/document_ref.dart';
 import '../storage/pgn_document_store.dart';
 
@@ -62,6 +63,7 @@ final class RepertoireShelf extends ChangeNotifier {
   Future<RepertoireValidation> validate({
     required int version,
     Map<String, Revision?> additional = const {},
+    BookSource? book,
   }) async {
     final snapshot = _snapshot;
     if (snapshot == null || stale || version != _version) {
@@ -71,9 +73,15 @@ final class RepertoireShelf extends ChangeNotifier {
       snapshot,
       observed: _revisions,
       additional: additional,
+      book: book,
     );
     return stale || version != _version ? const RepertoireChanged() : result;
   }
+
+  /// Empty comparisons use only the persisted book selection, without claiming
+  /// to have read repertoire membership or indexes.
+  Future<RepertoireValidation> validateBook(BookSource? source) =>
+      _files.validate(null, observed: const {}, book: source);
 
   /// [ref]'s index in the last complete snapshot, or null if it was absent.
   RepertoireIndex? indexOf(ChapterRef ref) => _indexed[ref];

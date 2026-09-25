@@ -470,6 +470,33 @@ partial scoring, complete scoring and saved scoring, and retries missing work.
 The concrete job owns its checkpoint format; shared code only manages lifetime,
 resource budgets and progress delivery.
 
+The implemented download publication path freezes site, username, returned PGNs
+and fetch time in `DownloadSaves`. Its per-corpus `PendingWrites` obligations
+outlive the screen and retry in acceptance order without another HTTP request.
+`GamesCache.keep` returns `GamesKept` only after the corpus and its `.fetched`
+note are acknowledged; failures return `GamesNotKept`. Exact retries deduplicate
+by site game ID, or by trimmed PGN text when no ID exists. Account freshness is
+written afterward, bound to the captured username and serialized with username
+changes; an unacknowledged preferences value is not exposed as a saved date.
+Reviews consume persisted corpus snapshots. Unavailable accounts retain the
+last names and block new downloads. Any owner's unresolved username obligation
+also blocks admission until the shared account resource settles successfully.
+Unavailable corpora remain distinct per-site errors with read retry, rather
+than empty results or a completed review.
+
+This download tranche has an explicit restart boundary: accepted HTTP results
+are retained **in memory** until corpus publication, with no durable enqueue
+journal. They survive owner disposal and an ordinary failed-write retry, but a
+process crash before publication can lose that response. Once published, the
+corpus survives restart even if its freshness note or account timestamp fails;
+reopening and retrying an already published batch does not append it again.
+Corpus publication and freshness are separate writes, not one transaction.
+On restart the old freshness remains eligible for refetch; deduplication makes
+refetch safe when publication actually landed before its acknowledgement was
+lost. No persistent HTTP spool is required by this boundary. This tranche does
+not complete H5's mining, generation or bughouse work, or certify Windows/macOS
+durability.
+
 The engine supervisor owns each process through startup, active requests, stop
 and confirmed exit. Responses carry request identity; buffers and work queues
 are bounded. Finite operations have deadlines, while continuous analysis has an
@@ -527,11 +554,32 @@ book selection drafts remain editable but cannot certify a committed comparison.
 Library, reply, repertoire-tree and game-comparison views expose unavailable
 inputs and Retry; stale derived actions cannot be activated by mouse or keyboard.
 
-H4 remains incomplete: training scope reads still need complete membership
-snapshots, native `books.json` changes need to join the final comparison fence,
-and invalidation needs to target affected inputs across the remaining consumers.
-An owner revision proves an observed or accepted local selection, not an
-unobserved external edit to its backing file.
+The next H4 increment joins native `books.json` and all four training-file
+proofs to that same final fence. `BookSnapshot` pairs immutable membership with
+its exact native source, including absence; an unacknowledged write cannot
+advance the owner's committed proof. `TrainingReadSet` records the same bytes
+used to decode progress. Fixed profile participants stay bound to the configured
+and pinned canonical roots, checked again after the last native observation.
+`ScopeReader` in `features/trainer/training_scope.dart` captures complete fresh
+membership; missing or unreadable included chapters refuse the whole scope.
+The Trainer validates that snapshot with book/progress inputs, then checks local
+editor, accepted-write and cancellation authority before publishing. Single-chapter
+training retains the intentional draft overlay with its persisted source proof.
+Explicit book-scope and comparison Retry refresh native membership, first
+retrying a retained failed selection write when necessary. Even no-book and
+no-account comparisons validate the inputs supporting that empty result.
+
+The repertoire tree uses the same native book/shelf fence when inputs change,
+then projects cursor movement synchronously from that validated pair. Its Retry
+also resolves a retained failed selection write. `MyGamesTree` captures all
+configured downloaded corpora, including absent files, checks account admission
+and a final native PGN fence, and withholds stale answers and keyboard actions.
+The optional SQLite archive still lacks a source generation proof, so this does
+not establish a coherent snapshot across that archive and the downloaded PGNs.
+
+H4 remains in progress while targeted invalidation and combined verification
+are completed. An owner revision proves an observed or accepted local selection,
+not an unobserved external edit to its backing file.
 
 ### Compatibility, diagnosis and acceptance
 
@@ -1332,8 +1380,8 @@ per batch and use tests and commits as the implementation record.
 | H3a | H2 | Existing relocation recovery before affected reads; document guards, training reads, startup; reconcile v1 domain locks/order | Kill during a move, reopen/train from either supported app; no missing or duplicate progress; incompatible access blocks safely | Done 2026-09-24 on Linux: canonical shared domain before affected Documents access; strict v2 notes recover before PGN/training reads and complete scans, foreign receipts refuse without mutation, and UI shows the recovery reason with Retry. Regression-first tests, independent reviews, 2,232 v2 tests, final focused storage/legacy checks and analyze/lint passed. Six real-process tests cover cross-app exclusion, SIGKILL and all four training files recovering once; headless refusal/retry verified. No new metadata format. Windows/macOS recovery guarantees remain unverified; v1 native recovery is still Linux-only. |
 | H3b | H3a | One compound operation for course rename/book references and its inverse; Library, storage, session history | Rename and undo agree across PGN/book state, including crash and external-conflict cases | Done 2026-09-24 on Linux: explicit section intent follows held/coalesced drafts; one guarded private receipt commits PGN and books, preserves unknown fields and validates the complete inverse. Exact retry, external conflicts, navigation admission and v1 refusal have regression tests; 2,381 v2 tests, focused legacy/process checks and analyze/lint pass. Real SIGKILL preparation/publication tests and headless partial book-write failure, Retry and undo verified both participants. Complete receipts remain retained with growing scan/storage cost; Windows/macOS durability unverified. |
 | H3c | H3b | Apply the proven operation boundary to supported file/folder moves, delete/restore and multi-file edits | Every existing command has an explicit required read/write set, recovery path and compatible undo behavior | In progress: source admission, file/folder relocation, delete/restore, retained import placement and durable accepted training verified 2026-09-25 on Linux. Relocation preserves four training files, books, backup ownership and complete folder inventories; prior 2,722 v2/264 legacy tests and headless interrupted rename/delete/restore proofs passed. Training freezes accepted commands in an ordered persistent queue, validates all participants before replay, and compacts completion receipts. Latest full v2 suite: 2,773 passed, four Windows-only skips; final focused native/storage/legacy/frontend suite: 903 passed, four Windows-only skips; analyze/lint and independent review passed. Three actual SIGKILL boundaries recover distinct commands exactly once. Headless interrupted mark-known plus queued exclusion survived restart, blocked access until Retry, then recovered the original timestamp and one history row; a second reopen left all four training files byte-identical. Native receipt batching improved measured scan cost, which still grows with history. Two-PGN commit/inverse and workspace preparation/adoption are now verified foundations: 1,463 focused storage/workspace/Library/legacy tests passed with four Windows-only skips, including three real process-kill boundaries and historical-retry conflicts. Library cross-file moves remain unfinished pending the training-progress policy decision; Windows/macOS durability remains unverified. |
-| H4 | H2, H3c | Versioned input snapshots for catalog, shelf, gaps, book comparison and training; targeted invalidation | A late computation cannot replace a newer result; a fresh rebuild equals the displayed committed projection | In progress: complete native repertoire snapshots and final read-set validation; explicit failed/stale catalog, shelf, gap, tree and game-comparison reads; committed book/account owner revisions and keyboard guards. Frozen v2 suite: 2,911 passed, four Windows-only skips; headless Library, gaps and game-comparison failure/retry checks retained prior views and blocked stale actions. Training membership, native book-file proof and remaining targeted invalidation are outstanding. |
-| H5 | H2, H3c | Generation, mining, downloads, bughouse and engine lifetimes; job-specific checkpoints and truthful completion | Stop/retry/restart neither duplicates saved units nor loses promised results; resources return to baseline | In progress: finite UCI watchdogs and supervisor ownership through startup/disposal are integrated; 144 focused tests passed, including eight native Linux startup/exit checks. Download, mining, generation and bughouse checkpoints remain. Windows/macOS lifecycle guarantees are unverified locally. |
+| H4 | H2, H3c | Versioned input snapshots for catalog, shelf, gaps, book comparison and training; targeted invalidation | A late computation cannot replace a newer result; a fresh rebuild equals the displayed committed projection | In progress: complete native repertoire snapshots and final read-set validation; explicit failed/stale catalog, shelf, gap, tree and game-comparison reads; committed book/account owner revisions and keyboard guards. The next increment adds native book/training proof, complete Trainer scope reads, repertoire-tree selection validation and downloaded-corpus/account fences with stale keyboard guards. Latest frozen v2 suite: 2,990 passed, four Windows-only skips; analyze/lint passed. Headless Linux Library, gaps and game-comparison checks retained prior views and blocked stale actions; native book and training-file failures also blocked Trainer/book-tree actions, and Retry restored the original lines. Additional MyGames UI proof was not run; its native and keyboard regressions passed. Targeted invalidation remains outstanding; the optional SQLite archive still lacks a cross-source proof. |
+| H5 | H2, H3c | Generation, mining, downloads, bughouse and engine lifetimes; job-specific checkpoints and truthful completion | Stop/retry/restart neither duplicates saved units nor loses promised results; resources return to baseline | In progress: finite UCI watchdogs and supervisor ownership through startup/disposal are integrated; 144 focused tests passed, including eight native Linux startup/exit checks. The download publication/retry tranche now retains frozen HTTP results in app-owned obligations, confirms corpus before freshness, preserves independent site results, and exposes account/corpus read failures with retry. Failure-first checks: 97 focused tests passed, followed by 62 native/cache/account/owner tests including fresh-store refetch, lost acknowledgements, missing-ID deduplication and a disposed owner's username barrier; analyze/lint passed. Headless Linux production-component fixtures verified save and read errors, retained usernames, blocked download admission and working retries. Accepted HTTP results are retained in RAM until publication; restart can refetch with old freshness and deduplicate published games. Mining, generation and bughouse checkpoints remain. Windows/macOS lifecycle and durability guarantees are unverified locally. |
 | H6 | H4, H5 | All existing modes: focus/shortcuts/navigation/close, settings, credentials, diagnostics and integrity checks | The complete cross-mode sequence below passes with real disposable storage, offline/error cases and headless UI checks | In progress: settings read/startup admission fixes under validation. Credentials, diagnostics/integrity and the complete cross-mode sequence remain. |
 | H7 | H6 | Remaining approved player/prep, database and tournament features, following their product rows | Each adds its own source/derived classification, durable unit and failure/restart tests while meeting the shared contracts | Not started |
 | H8 | H7 | Platform/scale/compatibility gates, data migration rehearsal and switch-over readiness | No untested supported-platform durability claim; recovery and parity gates pass before old code is retired | Not started |

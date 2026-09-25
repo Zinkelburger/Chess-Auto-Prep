@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
+import 'package:chess_auto_prep/v2/storage/book_snapshot.dart';
+import 'package:chess_auto_prep/v2/storage/training_snapshot.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 
 /// A repertoire listing the test writes, whose timing the test controls:
@@ -57,20 +59,25 @@ final class ScriptedFiles implements ChapterFiles {
 
   /// Explicit substitute for the native whole-readset validation boundary.
   /// Tests may hold it independently from listing/PGN reads.
-  Future<RepertoireValidation> Function(Repertoires, Map<String, Revision>)?
+  Future<RepertoireValidation> Function(Repertoires?, Map<String, Revision>)?
   validateWith;
 
   final additionalValidations = <Map<String, Revision?>>[];
+  final profileValidations =
+      <({BookSource? book, TrainingReadSet? training})>[];
 
   @override
   Future<RepertoireValidation> validate(
-    Repertoires snapshot, {
+    Repertoires? snapshot, {
     required Map<String, Revision> observed,
     Map<String, Revision?> additional = const {},
+    BookSource? book,
+    TrainingReadSet? training,
   }) async {
     additionalValidations.add(Map.unmodifiable(additional));
+    profileValidations.add((book: book, training: training));
     return validateWith == null
-        ? (identical(snapshot, listing)
+        ? ((snapshot == null || identical(snapshot, listing))
               ? const RepertoireCurrent()
               : const RepertoireChanged())
         : validateWith!(snapshot, observed);
