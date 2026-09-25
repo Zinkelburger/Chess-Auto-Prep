@@ -244,6 +244,8 @@ final class FillGaps extends ChangeNotifier {
   FillFound? _found;
   LinesState? _lines;
   Future<void> Function()? _release;
+  Future<void>? _releasing;
+  bool _active = false;
   bool _disposed = false;
 
   FillState get state => _state;
@@ -284,6 +286,7 @@ final class FillGaps extends ChangeNotifier {
   /// hidden, and no search is running.
   bool get canStart =>
       !_disposed &&
+      !_active &&
       !running &&
       _state is! FillSaving &&
       !canRetry &&
@@ -304,7 +307,8 @@ final class FillGaps extends ChangeNotifier {
   /// shows. Null when it started.
   Future<String?> start(FillRequest request) async {
     if (_disposed) return 'The search owner is closed.';
-    if (running || _state is FillSaving) return 'A search is already running.';
+    if (_active || running || _state is FillSaving)
+      return 'A search is already running.';
     if (canRetry)
       return 'Save the accepted search results before starting another search.';
     final chapter = _session.chapter;
@@ -328,6 +332,8 @@ final class FillGaps extends ChangeNotifier {
       side: side,
       chapter: drafting ? (chapter, source) : null,
     );
+    _active = true;
+    _releasing = null;
     _found = null;
     _lines = null;
     _publication = null;
@@ -337,8 +343,13 @@ final class FillGaps extends ChangeNotifier {
     _analysis.pause(this, 'Paused while searching');
     try {
       await _run(request, target, root);
+    } on Object catch (error) {
+      log.w('search ${target.label}', error);
+      _set(
+        const FillFailed('The search could not finish. Try starting it again.'),
+      );
     } finally {
-      _analysis.resume(this);
+      await _finishRun();
     }
     return null;
   }
@@ -359,12 +370,12 @@ final class FillGaps extends ChangeNotifier {
     // Disposed or cancelled while the engine was starting: dispose and
     // cancel had nothing to release then, so this engine is let go here or
     // its process outlives the run.
+    _release = tools.release;
     if (_discarded) {
-      await tools.release();
+      await _released();
       _set(const FillIdle());
       return;
     }
-    _release = tools.release;
     final config = SearchConfig(
       side: target.side,
       horizonPlies: request.depthPlies,
@@ -451,7 +462,7 @@ final class FillGaps extends ChangeNotifier {
           return null;
         } on Object catch (error) {
           log.w('save search results', error);
-          return 'The search tree could not be saved: $error';
+          return 'The search tree could not be saved. Retry when storage is available.';
         }
       },
       problem: (result) => result,
@@ -592,7 +603,7 @@ final class FillGaps extends ChangeNotifier {
   void cancel() {
     if (_state case final FillRunning running) {
       _set(running.copyWith(cancelling: true));
-      unawaited(_released());
+      _releaseSoon();
     }
   }
 
@@ -617,10 +628,41 @@ final class FillGaps extends ChangeNotifier {
     }
   }
 
-  Future<void> _released() async {
+  /// Every path awaits the same release, including a cancellation that began
+  /// cleanup before the search's last engine answer arrived.
+  Future<void> _released() {
+    if (_releasing case final releasing?) return releasing;
     final release = _release;
     _release = null;
-    if (release != null) await release();
+    if (release == null) return Future.value();
+    return _releasing = Future<void>.sync(release);
+  }
+
+  void _releaseSoon() {
+    unawaited(
+      _released().catchError((Object error) {
+        // The active run still observes this failure and reports it. Detached
+        // cancel/dispose must also consume it, rather than create a zone error.
+        log.w('release search tools', error);
+      }),
+    );
+  }
+
+  Future<void> _finishRun() async {
+    try {
+      await _released();
+    } on Object catch (error) {
+      log.w('release search tools', error);
+      _set(
+        const FillFailed(
+          'The search tools could not close cleanly. Try starting the search again.',
+        ),
+      );
+    } finally {
+      _active = false;
+      _analysis.resume(this);
+      if (!_disposed) notifyListeners();
+    }
   }
 
   void _progress(SearchProgress progress) {
@@ -643,7 +685,7 @@ final class FillGaps extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    unawaited(_released());
+    _releaseSoon();
     super.dispose();
   }
 }

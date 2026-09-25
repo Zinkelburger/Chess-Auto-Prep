@@ -351,3 +351,11 @@ SQLite findings and native tree/PGN artifacts survive reopening; unfinished
 search computation and uncommitted in-memory payloads are not a restartable job
 spool. Linux native publication is tested; Windows/macOS power-loss guarantees
 remain limited by their existing file adapters.
+
+Headless Linux verification used a deliberately blocked generation directory:
+the Search tab showed the failure and Retry, then acknowledged one v4 artifact
+after repair without recomputing. Make lines wrote one draft. After stopping the
+app, a fresh SQLite connection found seven findings, the native artifact parsed,
+and the original chapter remained unchanged. Lost acknowledgements, exact
+payload retry, disposal and unrelated destination contents are covered by the
+focused owner/native tests.

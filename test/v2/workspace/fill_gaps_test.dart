@@ -82,16 +82,20 @@ void main() {
     PgnDocumentStore? documents,
     PendingWrites? pending,
     bool dispose = true,
+    FillToolsFactory? tools,
+    Future<void> Function()? release,
   }) {
     final fill = FillGaps(
       session: fixture.session,
       analysis: analysis,
       documents: documents ?? fixture.store,
-      tools: (_) async => FillReady(
-        evaluator: evaluator,
-        policy: policy,
-        release: () async => releases++,
-      ),
+      tools:
+          tools ??
+          (_) async => FillReady(
+            evaluator: evaluator,
+            policy: policy,
+            release: release ?? () async => releases++,
+          ),
       keepTree: keepTree,
       pendingWrites: pending,
       finds: finds,
@@ -113,6 +117,114 @@ void main() {
   Map<String, int> e4Best() => {
     afterUci(positionOf(kingAndPawn), 'e2e4').fen: -100,
   };
+
+  test('throwing tool startup reports failure and resumes analysis', () async {
+    final fill = fillWith(
+      ScriptedEvaluator(),
+      tools: (_) async => throw StateError('startup failed'),
+    );
+    expect(await fill.start(request), isNull);
+    expect(fill.state, isA<FillFailed>());
+    expect(fill.canStart, isTrue);
+    expect(analysis.paused, isFalse);
+  });
+
+  test(
+    'unexpected search decoding failure releases once and resumes analysis',
+    () async {
+      final fill = fillWith(
+        ScriptedEvaluator(),
+        policy: ScriptedPolicy(_BrokenWeights()),
+      );
+      expect(await fill.start(request), isNull);
+      expect(fill.state, isA<FillFailed>());
+      expect(releases, 1);
+      expect(analysis.paused, isFalse);
+    },
+  );
+
+  test(
+    'throwing release cannot report completion or strand running state',
+    () async {
+      final fill = fillWith(
+        ScriptedEvaluator(),
+        release: () async {
+          releases++;
+          throw StateError('release failed');
+        },
+      );
+      expect(await fill.start(request), isNull);
+      expect(fill.state, isA<FillFailed>());
+      expect(releases, 1);
+      expect(analysis.paused, isFalse);
+      expect(fill.canStart, isTrue);
+    },
+  );
+
+  test(
+    'cancel waits for already-started release and consumes its failure',
+    () async {
+      final evaluator = GatedEvaluator();
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      final fill = fillWith(
+        evaluator,
+        release: () async {
+          releases++;
+          evaluator.release();
+          entered.complete();
+          await release.future;
+          throw StateError('release failed');
+        },
+      );
+      final running = fill.start(request);
+      while (evaluator.asked.isEmpty) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      fill.cancel();
+      await entered.future;
+      await pumpEventQueue();
+      expect(analysis.paused, isTrue);
+      expect(fill.canStart, isFalse);
+      release.complete();
+      await running;
+      expect(fill.state, isA<FillFailed>());
+      expect(releases, 1);
+      expect(analysis.paused, isFalse);
+    },
+  );
+
+  test(
+    'disposal consumes a late throwing release without abandoning it',
+    () async {
+      final evaluator = GatedEvaluator();
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      final fill = fillWith(
+        evaluator,
+        dispose: false,
+        release: () async {
+          releases++;
+          evaluator.release();
+          entered.complete();
+          await release.future;
+          throw StateError('release failed');
+        },
+      );
+      final running = fill.start(request);
+      while (evaluator.asked.isEmpty) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      fill.dispose();
+      await entered.future;
+      await pumpEventQueue();
+      expect(analysis.paused, isTrue);
+      release.complete();
+      await running;
+      expect(releases, 1);
+      expect(analysis.paused, isFalse);
+    },
+  );
 
   test('a run keeps its tree for the Search tab and writes nothing', () async {
     final trees = <String>[];
@@ -659,6 +771,15 @@ final class _LostCreate implements PgnDocumentStore {
 
   @override
   Future<DocumentRead> open(DocumentRef ref) => inner.open(ref);
+  @override
+  Never noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('${invocation.memberName}');
+}
+
+/// Decoder-shaped failure after the model port has successfully returned.
+final class _BrokenWeights implements Map<String, double> {
+  @override
+  double? operator [](Object? key) => throw StateError('malformed weights');
   @override
   Never noSuchMethod(Invocation invocation) =>
       throw UnimplementedError('${invocation.memberName}');
