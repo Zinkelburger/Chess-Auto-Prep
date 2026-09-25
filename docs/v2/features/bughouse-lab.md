@@ -80,8 +80,11 @@ filling as it goes, and adds the finished position to the book for that clock (t
 status `done`). About two minutes for an opening position on half of an eight-core desktop. Searches are
 remembered for the session. After an engine failure, switching it on again starts a fresh engine and
 finishes the missing scores. A failed book save keeps the completed entry for `Retry save`, including
-after changing positions or leaving and returning to the mode. It is only labelled saved after the
-database confirms the write. Unsaved entries remain in memory; crash recovery is not yet implemented.
+after changing positions, leaving the mode, or disposal of its original owner: the app's pending-write
+registry retains the frozen analysis and its retry. It is only labelled saved after the database confirms
+the write. An accepted write keeps one history ID across retries; an acknowledged historical retry never
+replaces a newer current analysis. Unsaved entries remain in memory until SQLite commits; a process crash
+before commit still loses that unsaved analysis.
 **Read the score** — Hivemind's own scale (`180·tan(1.56·Q)`), re-centred: each team's search of the
 position gives the offset, `(q_A+B + q_C+D) / 2`, taken off in Q; when a team has no move the level-table
 offset stands in. 0.00 is level. The book stores the same scale.
@@ -100,7 +103,11 @@ first 8 joint actions a move is drawn from the engine's top 3 within 0.05 of Q o
 game. A game ends when a team on move has no legal joint action (Hivemind's own rule), at the ply limit
 (a draw), after four joint actions in a row that sit on every board (a draw), or when the engine fails.
 Each game is written as it ends → `That is not a position yet — check the moves or the FEN.`, `Could not
-create the match directory: …`, `Could not save the match: …`, or the engine's reason.
+create the match directory: …`, `Could not save the match: …`, or the engine's reason. A failed
+checkpoint stops further games and retains the exact accepted snapshot for `Retry save`. New match,
+Resume and Delete wait for that obligation. Retry saves the checkpoint without replaying games; continuing
+a stopped run requires Resume. Final completion waits for confirmed engine exit and final publication.
+Accepted saves, including final engine shutdown, remain owned by the app after the panel is disposed.
 **Read a run** — click a history row; `Show` puts the opening on the boards, a game row puts that game on
 them at its end, `Follow the game being played` makes the boards follow the live game while the tables
 rest; `Stop` drops the game in flight so `Resume` plays it again (as does a last game the engine failed
@@ -140,7 +147,14 @@ moves the match to
   old app's keys: config with `participants`, `timeStance` ahead/level/behind, `variety`, `seed`; every game
   with its board-digit UCI moves `1e2e4`, `2P@f7`) and `games.bpgn` (four seat tags, `SetUpDualFEN` for a
   set-up start, movetext `1A. e4 1B. d4 1a. e5` in the order played). Both apps list and read the same
-  folders; a run either app left `running` reads as stopped. Deleting moves the folder to `.trash`.
+  folders; a run either app left `running` reads as stopped. JSON is authoritative; BPGN is a disposable,
+  deterministic export. V2 reopens supported, valid JSON under the per-match lock and repairs a missing
+  or differing export. It never repairs from invalid/newer metadata or through unreadable/linked files
+  or an unverified staged file. Unreadable metadata or a failed repair leaves the previous history visible with Retry. An integrity inspection only
+  compares the two files and does not repair them. V1 does not perform this repair, so an interrupted v2
+  export can remain stale until v2 reopens it. V2 save, repair and delete share a per-match lock; the v1
+  match writer does not take that lock, so this does not promise safe simultaneous cross-app editing.
+  Deleting moves the folder to `.trash`. Match JSON/BPGN formats are unchanged.
 - **Git backup** — consistent, checksummed snapshots of both books live in `data/bughouse-books/` as
   gzip chunks below the host’s file limit. The backup includes committed WAL data. Restore into an empty
   directory using `tools/bughouse_db/snapshot.py`; see [backup instructions](../../../data/bughouse-books/README.md).

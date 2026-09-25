@@ -289,6 +289,37 @@ void main() {
   );
 
   test(
+    'accepted analysis save remains retryable after owner disposal',
+    () async {
+      final pending = PendingWrites();
+      search.dispose();
+      search = TableSearch(
+        lab: lab,
+        book: outside.book,
+        startEngine: () => outside.outside.launch(cores: 2),
+        pendingWrites: pending,
+        passes: const [Duration(seconds: 1)],
+      );
+      outside.book.saving = (_) async => const HivemindSaveFailed('disk full');
+      search
+        ..open()
+        ..toggleEngine();
+      await pumpEventQueue();
+      expect(search.analysisSave, isA<AnalysisSaveFailed>());
+      search.dispose();
+      search = TableSearch(
+        lab: lab,
+        book: outside.book,
+        startEngine: () => outside.outside.launch(cores: 2),
+      );
+      outside.book.saving = null;
+      await pending.retry(outside.book);
+      expect(await pending.settle(), isNull);
+      expect(outside.book.saved, hasLength(1));
+    },
+  );
+
+  test(
     'save outcome belongs to the captured position after navigation',
     () async {
       final write = Completer<HivemindSave>();

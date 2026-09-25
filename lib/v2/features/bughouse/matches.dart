@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
@@ -25,16 +26,17 @@ import 'table_search.dart';
 final class Matches extends ChangeNotifier {
   Matches({
     required MatchStore store,
-    this.pendingWrites,
+    PendingWrites? pendingWrites,
     required Future<HivemindStart> Function() startEngine,
     required this.lab,
     required this.tables,
     DateTime Function() now = DateTime.now,
-  }) : _store = store,
+  }) : pendingWrites = pendingWrites ?? PendingWrites(),
+       _store = store,
        _startEngine = startEngine,
        _now = now;
 
-  final PendingWrites? pendingWrites;
+  final PendingWrites pendingWrites;
   bool _stopAsked = false;
   final MatchStore _store;
   final Future<HivemindStart> Function() _startEngine;
@@ -50,6 +52,43 @@ final class Matches extends ChangeNotifier {
   MatchProblem? _problem;
   bool _starting = false;
   bool _disposed = false;
+  PendingObligation<MatchWriteProblem>? _checkpoint;
+  PendingObligation<String?>? _exit;
+  StoredMatch? _accepted;
+
+  bool get canRetry =>
+      (_checkpoint != null && !_checkpoint!.committed) ||
+      (_exit != null && !_exit!.committed);
+  bool get writable => !canRetry && pendingWrites.unfinished(_store).isEmpty;
+
+  /// Save the same checkpoint, then leave resuming play to an explicit action.
+  Future<void> retrySave() async {
+    final exit = _exit;
+    if (exit != null) {
+      final detail = await exit.run();
+      if (_disposed) return;
+      if (detail != null) return _fail(MatchEngineFailed(detail));
+      _exit = null;
+    }
+    final checkpoint = _checkpoint;
+    final accepted = _accepted;
+    if (checkpoint == null || accepted == null) {
+      _problem = null;
+      if (!_disposed) notifyListeners();
+      return;
+    }
+    final detail = await checkpoint.run();
+    if (_disposed) return;
+    if (detail != null) return _fail(CannotSave(detail));
+    _problem = null;
+    _checkpoint = null;
+    _accepted = null;
+    _show(
+      accepted.status == MatchStatus.running
+          ? accepted.copyWith(status: MatchStatus.cancelled)
+          : accepted,
+    );
+  }
 
   /// Newest first.
   List<StoredMatch> get matches => _matches;
@@ -75,8 +114,14 @@ final class Matches extends ChangeNotifier {
   MatchProblem? get problem => _problem;
 
   Future<void> load() async {
-    final found = await _store.list();
+    List<StoredMatch> found;
+    try {
+      found = await _store.list();
+    } on Object catch (error) {
+      return _fail(CannotLoad('$error'));
+    }
     if (_disposed) return;
+    if (_problem is CannotLoad) _problem = null;
     // A match this app is playing is shown as its run knows it.
     final playing = _run == null ? null : _find(_run!.id);
     _matches = [
@@ -94,11 +139,10 @@ final class Matches extends ChangeNotifier {
   /// A new match from [config], seeded now: its folder first, then the
   /// games. A second press while the first is on its way does nothing.
   Future<void> start(MatchConfig config) =>
-      pendingWrites?.track(this, _start(config), label: 'Matches') ??
-      _start(config);
+      pendingWrites.track(this, _start(config), label: 'Matches');
 
   Future<void> _start(MatchConfig config) async {
-    if (_run != null || _starting) return;
+    if (_disposed || _run != null || _starting || !writable) return;
     _starting = true;
     _stopAsked = false;
     _problem = null;
@@ -114,6 +158,8 @@ final class Matches extends ChangeNotifier {
           _selected = match.id;
           await _play(match);
       }
+    } on Object catch (error) {
+      _fail(CannotCreate('$error'));
     } finally {
       _starting = false;
     }
@@ -123,10 +169,10 @@ final class Matches extends ChangeNotifier {
   /// as the file on disk has it — the old app may have written it since. A
   /// last game the engine failed in is played again.
   Future<void> resume(String id) =>
-      pendingWrites?.track(this, _resume(id), label: 'Matches') ?? _resume(id);
+      pendingWrites.track(this, _resume(id), label: 'Matches');
 
   Future<void> _resume(String id) async {
-    if (_run != null || _starting) return;
+    if (_disposed || _run != null || _starting || !writable) return;
     _starting = true;
     _stopAsked = false;
     _problem = null;
@@ -139,6 +185,8 @@ final class Matches extends ChangeNotifier {
       }
       _selected = id;
       await _play(onDisk.copyWith(clearError: true, games: games));
+    } on Object catch (error) {
+      _fail(CannotLoad('$error'));
     } finally {
       _starting = false;
     }
@@ -159,47 +207,73 @@ final class Matches extends ChangeNotifier {
     if (start == null) return _fail(const NotAPosition());
     final run = _run = _Run(match.id, match.games.length + 1)
       ..stopAsked = _stopAsked;
-    var current = match.copyWith(status: MatchStatus.running);
-    await _write(current);
-    final engine = await _engine();
-    if (engine == null) {
-      return _finish(
-        run,
-        current.copyWith(status: MatchStatus.failed, error: _failure),
+    final current = match.copyWith(status: MatchStatus.running);
+    Hivemind? engine;
+    StoredMatch? finished;
+    try {
+      if (!await _write(current)) return;
+      if (_disposed || run.stopAsked) {
+        finished = current.copyWith(status: MatchStatus.cancelled);
+        return;
+      }
+      engine = await _engine();
+      if (engine == null) {
+        finished = current.copyWith(
+          status: MatchStatus.failed,
+          error: _failure,
+        );
+      } else if (_disposed || run.stopAsked) {
+        finished = current.copyWith(status: MatchStatus.cancelled);
+      } else {
+        finished = await _games(run, current, start, engine);
+      }
+    } on Object catch (error) {
+      log.e('run bughouse match ${match.id}', error);
+      _fail(MatchEngineFailed('$error'));
+      finished = (_find(match.id) ?? current).copyWith(
+        status: MatchStatus.failed,
+        error: '$error',
       );
+    } finally {
+      // The run owns every engine returned by startup, even when an unexpected
+      // factory/search failure interrupts normal result handling.
+      try {
+        if (engine != null) await _quit(engine);
+        if (finished != null) await _finish(run, finished);
+      } finally {
+        _stopped(run);
+      }
     }
-    if (_disposed || run.stopAsked) {
-      unawaited(engine.quit());
-      return _finish(run, current.copyWith(status: MatchStatus.cancelled));
-    }
+  }
+
+  Future<StoredMatch?> _games(
+    _Run run,
+    StoredMatch current,
+    TablePosition start,
+    Hivemind engine,
+  ) async {
     final runner = run.runner = MatchRunner(
       engine: engine,
-      config: match.config,
+      config: current.config,
       now: _now,
     );
-    for (var i = current.games.length; i < match.config.games; i++) {
+    for (var i = current.games.length; i < current.config.games; i++) {
       if (_disposed || runner.stopped) break;
       run.game = i + 1;
       notifyListeners();
       final game = await runner.play(i, start, onMove: (m) => _moved(start, m));
       if (game == null) break;
       current = current.copyWith(games: [...current.games, game]);
-      await _write(current);
+      if (!await _write(current)) return null;
       if (game.ending == MatchEnding.engineFailure) {
-        current = current.copyWith(
-          status: MatchStatus.failed,
-          error: game.detail,
-        );
-        break;
+        return current.copyWith(status: MatchStatus.failed, error: game.detail);
       }
     }
-    unawaited(engine.quit());
-    final status = switch (current.status) {
-      MatchStatus.failed => MatchStatus.failed,
-      _ when runner.stopped || _disposed => MatchStatus.cancelled,
-      _ => MatchStatus.completed,
-    };
-    await _finish(run, current.copyWith(status: status));
+    return current.copyWith(
+      status: runner.stopped || _disposed
+          ? MatchStatus.cancelled
+          : MatchStatus.completed,
+    );
   }
 
   /// Why the engine would not start, for the match's record.
@@ -218,32 +292,84 @@ final class Matches extends ChangeNotifier {
 
   Future<void> _finish(_Run run, StoredMatch match) async {
     await _write(match.copyWith(finishedAt: _now()));
-    if (!identical(_run, run)) return;
-    _run = null;
-    if (_following) _unfollow();
     if (match.status == MatchStatus.failed) {
       _problem ??= MatchEngineFailed(match.error ?? '');
     }
+  }
+
+  Future<void> _quit(Hivemind engine) async {
+    final exit = _exit = pendingWrites.accept<String?>(
+      resource: _store,
+      label: 'Match engine exit',
+      work: () async {
+        try {
+          await engine.quit();
+          return null;
+        } on Object catch (error) {
+          log.w('quit bughouse match engine', error);
+          return 'Could not confirm engine exit: $error';
+        }
+      },
+      problem: (detail) => detail,
+    );
+    final detail = await exit.run();
+    if (detail == null) _exit = null;
+  }
+
+  void _stopped(_Run run) {
+    if (!identical(_run, run)) return;
+    _run = null;
+    if (_following) _unfollow();
+    final current = _find(run.id);
+    if (current?.status == MatchStatus.running) {
+      _show(current!.copyWith(status: MatchStatus.cancelled));
+    } else if (!_disposed) {
+      notifyListeners();
+    }
+  }
+
+  void _show(StoredMatch match) {
+    _matches = [for (final m in _matches) m.id == match.id ? match : m];
     if (!_disposed) notifyListeners();
   }
 
-  /// The match kept in the list and written; a write that fails is said,
-  /// and the run goes on — the next game writes the whole file again.
-  Future<void> _write(StoredMatch match) async {
-    _matches = [for (final m in _matches) m.id == match.id ? match : m];
-    final write = _store.save(match);
-    final problem =
-        await (pendingWrites?.track(
-              _store,
-              write,
-              label: 'Match results',
-              obligation: (_store, match.id),
-              problem: (detail) => detail,
-            ) ??
-            write);
-    if (_disposed) return;
-    if (problem != null) _problem = CannotSave(problem);
-    notifyListeners();
+  /// Admission freezes the whole checkpoint. The app registry owns its retry
+  /// even after this screen disappears; no later game can pass a failed write.
+  Future<bool> _write(StoredMatch match) async {
+    final encoded = jsonEncode(match.toJson());
+    final store = _store;
+    final token = MatchCheckpoint();
+    final exit = _exit;
+    final checkpoint = pendingWrites.accept<MatchWriteProblem>(
+      resource: store,
+      label: 'Match results',
+      work: () async {
+        final captured = StoredMatch.fromJson(
+          jsonDecode(encoded) as Map<String, Object?>,
+        ).copyWith(status: match.status);
+        try {
+          return await store.save(captured, checkpoint: token);
+        } on Object catch (error) {
+          log.e('save bughouse match ${captured.id}', error);
+          return '$error';
+        }
+      },
+      problem: (detail) => detail,
+      blocked: () => exit?.detail ?? 'Save the earlier match checkpoint first.',
+    );
+    _checkpoint = checkpoint;
+    _accepted = StoredMatch.fromJson(
+      jsonDecode(encoded) as Map<String, Object?>,
+    ).copyWith(status: match.status);
+    final detail = await checkpoint.run();
+    if (detail != null) {
+      _fail(CannotSave(detail));
+      return false;
+    }
+    _checkpoint = null;
+    _accepted = null;
+    _show(match);
+    return true;
   }
 
   void _moved(TablePosition start, List<String> moves) {
@@ -285,10 +411,10 @@ final class Matches extends ChangeNotifier {
   }
 
   Future<void> delete(String id) =>
-      pendingWrites?.track(this, _delete(id), label: 'Matches') ?? _delete(id);
+      pendingWrites.track(this, _delete(id), label: 'Matches');
 
   Future<void> _delete(String id) async {
-    if (_run?.id == id) return;
+    if (_disposed || _run?.id == id || !writable) return;
     final problem = await _store.delete(id);
     if (_disposed) return;
     if (problem != null) return _fail(CannotDelete(problem));
@@ -352,6 +478,9 @@ final class CannotSave extends MatchProblem {
   const CannotSave(this.detail);
 
   final String detail;
+
+  @override
+  String toString() => 'save: $detail';
 }
 
 final class CannotDelete extends MatchProblem {
@@ -374,4 +503,9 @@ final class MatchEngineFailed extends MatchProblem {
   const MatchEngineFailed(this.reason);
 
   final String reason;
+}
+
+final class CannotLoad extends MatchProblem {
+  const CannotLoad(this.detail);
+  final String detail;
 }

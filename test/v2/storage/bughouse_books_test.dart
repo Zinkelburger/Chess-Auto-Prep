@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:chess_auto_prep/v2/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/v2/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/v2/storage/bughouse_books.dart';
+import 'package:chess_auto_prep/v2/storage/hivemind_write.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -191,6 +192,97 @@ void main() {
         'engine_sha256': 'binary-hash',
         'network_sha256': 'network-hash',
       },
+    );
+
+    test(
+      'same accepted analysis retries once without replacing a newer analysis',
+      () async {
+        final path = p.join(dir.path, 'retry.db');
+        final book = SqliteHivemindBook([path]);
+        addTearDown(book.close);
+        final captured = entry(afterLine('A:e4'), ClockCase.even);
+        final write = HivemindWrite(captured);
+        expect(await book.save(captured, write: write), isA<HivemindSaved>());
+        expect(await book.save(captured), isA<HivemindSaved>());
+        final db = sqlite3.open(path);
+        addTearDown(db.close);
+        final latest = db
+            .select('SELECT id FROM current_analysis')
+            .single['id'];
+        expect(await book.save(captured, write: write), isA<HivemindSaved>());
+        expect(db.select('SELECT * FROM analysis_history'), hasLength(2));
+        expect(
+          db.select('SELECT id FROM current_analysis').single['id'],
+          latest,
+        );
+        expect(
+          await book.save(
+            entry(TablePosition.initial, ClockCase.even),
+            write: write,
+          ),
+          isA<HivemindSaveFailed>(),
+        );
+        expect(db.select('SELECT * FROM analysis_history'), hasLength(2));
+      },
+    );
+
+    test(
+      'analysis committed before a lost ack survives native retry',
+      () async {
+        final path = p.join(dir.path, 'ack.db');
+        var fail = true;
+        final book = SqliteHivemindBook(
+          [path],
+          afterCommit: () async {
+            if (fail) throw const FileSystemException('ack lost');
+          },
+        );
+        addTearDown(book.close);
+        final captured = entry(afterLine('A:e4'), ClockCase.even);
+        final write = HivemindWrite(captured);
+        expect(
+          await book.save(captured, write: write),
+          isA<HivemindSaveFailed>(),
+        );
+        fail = false;
+        expect(await book.save(captured, write: write), isA<HivemindSaved>());
+        final db = sqlite3.open(path);
+        addTearDown(db.close);
+        expect(db.select('SELECT * FROM analysis_history'), hasLength(1));
+        db.execute("UPDATE analysis_history SET moves='[]'");
+        expect(
+          await book.save(captured, write: write),
+          isA<HivemindSaveFailed>(),
+        );
+        expect(db.select('SELECT * FROM analysis_history'), hasLength(1));
+      },
+    );
+
+    test(
+      'retargeted book directory never receives the accepted write',
+      () async {
+        final first = await Directory(p.join(dir.path, 'first')).create();
+        final second = await Directory(p.join(dir.path, 'second')).create();
+        final alias = await Link(p.join(dir.path, 'alias')).create(first.path);
+        final book = SqliteHivemindBook(
+          [p.join(alias.path, 'book.db')],
+          beforeCommit: () async {
+            await alias.delete();
+            await alias.create(second.path);
+          },
+        );
+        addTearDown(book.close);
+        final captured = entry(afterLine('A:e4'), ClockCase.even);
+        expect(
+          await book.save(captured, write: HivemindWrite(captured)),
+          isA<HivemindSaveFailed>(),
+        );
+        expect(await File(p.join(second.path, 'book.db')).exists(), isFalse);
+        expect(await File(p.join(first.path, 'book.db')).exists(), isFalse);
+      },
+      skip: Platform.isWindows
+          ? 'Windows symbolic link privileges unavailable'
+          : false,
     );
 
     test('a blocked destination reports a failed save', () async {
