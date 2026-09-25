@@ -365,8 +365,11 @@ final class _Accounts implements AccountStore {
   Future<bool> setUsername(GameSite site, String? username) =>
       _inner.setUsername(site, username);
   @override
-  Future<bool> setDownloaded(GameSite site, DateTime when) =>
-      _inner.setDownloaded(site, when);
+  Future<bool> setDownloaded(
+    GameSite site,
+    DateTime when, {
+    String? expectedUsername,
+  }) => _inner.setDownloaded(site, when, expectedUsername: expectedUsername);
 }
 
 final class _HeldArchive implements GameStore {
