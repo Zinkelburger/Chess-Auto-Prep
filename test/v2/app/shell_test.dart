@@ -47,6 +47,26 @@ void main() {
     );
   });
 
+  testWidgets(
+    'training hides answer previews and restores the outline on leaving',
+    (tester) async {
+      await pump(tester);
+      await tester.tap(inLibrary(find.text('Main')).last);
+      await tester.pumpAndSettle();
+      expect(find.byType(OutlinePanel), findsOneWidget);
+      await tester.tap(find.text('Train'));
+      await tester.pumpAndSettle();
+      w.lineTrainer.learn();
+      await tester.pumpAndSettle();
+      expect(w.lineTrainer.board.value, isNotNull);
+      expect(find.byType(OutlinePanel), findsNothing);
+      await tester.tap(find.text('Back to lines'));
+      await tester.pumpAndSettle();
+      expect(find.byType(OutlinePanel), findsOneWidget);
+      expect(w.lineTrainer.board.value, isNull);
+    },
+  );
+
   testWidgets('a sitting ends when the mode it was started in is left', (
     tester,
   ) async {

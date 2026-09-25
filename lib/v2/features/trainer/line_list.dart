@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' show min;
 
 import 'package:flutter/material.dart';
 
@@ -30,9 +29,13 @@ class LineList extends StatefulWidget {
     required this.onRead,
     required this.offerBuilder,
     this.bookChip,
+    this.onImport,
+    this.onSettings,
   });
 
   final Trainer trainer;
+  final VoidCallback? onImport;
+  final VoidCallback? onSettings;
   final TrainerReady ready;
 
   /// Which book is trained, shown while the scope is the book.
@@ -95,6 +98,9 @@ class _LineListState extends State<LineList> {
               trainer: widget.trainer,
               ready: widget.ready,
               bookChip: widget.bookChip,
+              onImport: widget.onImport,
+              onSettings: widget.onSettings,
+              drillLines: _visibleLines(progress),
               onChange: (write, doing) =>
                   unawaited(_change(write, doing: doing)),
             ),
@@ -188,7 +194,7 @@ class _LineListState extends State<LineList> {
     ),
   );
 
-  Widget _lines(TrainingProgress progress) {
+  List<TrainingLine> _visibleLines(TrainingProgress progress) {
     final order = canOrder(widget.ready.lines, widget.trainer.order)
         ? widget.trainer.order
         : LineOrder.training;
@@ -198,10 +204,14 @@ class _LineListState extends State<LineList> {
       reviews: progress.reviews,
       now: progress.now,
     );
-    final lines = [
+    return [
       for (final line in all)
         if (_query.isEmpty || _searchText(line).contains(_query)) line,
     ];
+  }
+
+  Widget _lines(TrainingProgress progress) {
+    final lines = _visibleLines(progress);
     if (lines.isEmpty) {
       return _Muted(_query.isEmpty ? 'No lines here yet.' : 'No line matches.');
     }
@@ -290,9 +300,15 @@ class _Header extends StatelessWidget {
     required this.ready,
     required this.bookChip,
     required this.onChange,
+    required this.drillLines,
+    this.onImport,
+    this.onSettings,
   });
 
+  final List<TrainingLine> drillLines;
   final Trainer trainer;
+  final VoidCallback? onImport;
+  final VoidCallback? onSettings;
   final Widget? bookChip;
   final TrainerReady ready;
   final void Function(Future<ProgressWrite> write, String doing) onChange;
@@ -301,9 +317,20 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final progress = ready.progress;
     final counts = countsOf(ready.lines, progress.reviews, progress.now);
-    final due = trainer.dueCount;
+    final due = trainer.reviewCount;
     final untrained = counts[LineStatus.untrained]!;
-    final learn = min(trainer.untrainedCount, learnSitting);
+    final learn = trainer.learnCount;
+    final drill = [
+      for (final line in drillLines)
+        if (!line.modelGame &&
+            line.yourMoves > 0 &&
+            progress.status(line) != LineStatus.excluded)
+          line,
+    ];
+    final drillCount = trainer.sittingCount(
+      drill.length,
+      trainer.options.drillLimit,
+    );
     final excluded = counts[LineStatus.excluded]!;
     final busy = progress.stale;
     return Column(
@@ -331,17 +358,27 @@ class _Header extends StatelessWidget {
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: Space.s),
-        Row(
+        Wrap(
+          spacing: Space.s,
+          runSpacing: Space.s,
           children: [
             FilledButton(
               onPressed: due == 0 || busy ? null : trainer.review,
               child: Text(due == 0 ? 'Nothing due' : 'Review $due'),
             ),
-            const SizedBox(width: Space.s),
             OutlinedButton(
               onPressed: learn == 0 || busy ? null : trainer.learn,
               child: Text(
                 learn == 0 ? 'Nothing left to learn' : 'Learn $learn',
+              ),
+            ),
+            Tooltip(
+              message: 'Quiz these lines now, once each, then rate them',
+              child: OutlinedButton(
+                onPressed: drillCount == 0 || busy
+                    ? null
+                    : () => trainer.drillLines(drill),
+                child: Text('Drill $drillCount'),
               ),
             ),
           ],
@@ -353,6 +390,10 @@ class _Header extends StatelessWidget {
   Widget _actions(TrainingProgress progress) => RowActions(
     tooltip: 'Training actions',
     children: [
+      if (onImport != null)
+        rowAction('Import course PGN…', onImport!, busy: false),
+      if (onSettings != null)
+        rowAction('Training settings…', onSettings!, busy: false),
       rowAction(
         'Mark every line known',
         () => onChange(
@@ -411,7 +452,9 @@ class _LineRow extends StatelessWidget {
         : '…${numberedMoves(line.moves.skip(departs))}';
     return InkWell(
       // A game is there to be read; a line, to be trained.
-      onTap: status == LineStatus.game ? () => onRead(ReadIn.moves) : onTrain,
+      onTap: status == LineStatus.game || status == LineStatus.excluded
+          ? () => onRead(ReadIn.moves)
+          : onTrain,
       child: SizedBox(
         height: trainRowHeight,
         child: Row(
@@ -463,7 +506,8 @@ extension on _LineRow {
     if (status == LineStatus.game) return RowActions(children: reads);
     return RowActions(
       children: [
-        rowAction('Train this line', onTrain, busy: false),
+        if (status != LineStatus.excluded)
+          rowAction('Train this line', onTrain, busy: progress.stale),
         ...reads,
         if (trained)
           rowAction(

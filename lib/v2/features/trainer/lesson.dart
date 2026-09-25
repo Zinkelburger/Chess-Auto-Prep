@@ -6,16 +6,16 @@ import '../../chess/training/drill.dart';
 import '../../chess/training/schedule.dart';
 import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
+import '../../chess/training/training_options.dart';
 import '../../storage/training_store.dart';
 import '../../workspace/board_claim.dart';
 import 'progress.dart';
 
 /// What a sitting was started for: the lines never trained, the lines due,
-/// or one line the user picked.
-enum SittingKind { learn, review, line }
+/// one line the user picked, or a set to quiz immediately.
+enum SittingKind { learn, review, line, drill }
 
 /// How long each timed moment of a drill stays on the board.
-const replyDelay = Duration(milliseconds: 700);
 const correctionDelay = Duration(milliseconds: 1200);
 const rewindDelay = Duration(milliseconds: 800);
 const replayDelay = Duration(milliseconds: 500);
@@ -70,16 +70,33 @@ class Lesson extends ChangeNotifier {
     required SittingKind kind,
     required List<TrainingLine> lines,
     required TrainingProgress progress,
-  }) : this._(kind, lines, progress, _isNew(progress, lines.first));
+    TrainingOptions options = TrainingOptions.defaults,
+  }) : this._(
+         kind,
+         lines,
+         progress,
+         options,
+         kind != SittingKind.drill && _isNew(progress, lines.first),
+       );
 
-  Lesson._(this.kind, List<TrainingLine> lines, this._progress, bool learning)
-    : _left = lines.sublist(1),
+  Lesson._(
+    this.kind,
+    List<TrainingLine> lines,
+    this._progress,
+    this.options,
+    bool learning,
+  ) : _left = lines.sublist(1),
       _learning = learning,
-      _drill = Drill.start(lines.first, learn: learning) {
+      _drill = Drill.start(
+        lines.first,
+        learn: learning,
+        replayMistakes: options.replayMistakes,
+      ) {
     _arm();
   }
 
   final SittingKind kind;
+  final TrainingOptions options;
   final TrainingProgress _progress;
   final List<TrainingLine> _left;
   Drill _drill;
@@ -166,7 +183,13 @@ class Lesson extends ChangeNotifier {
   void restart() {
     if (_state is SavingLine || _state is SittingOver) return;
     _state = const Drilling();
-    _changed(Drill.start(line, learn: _learning));
+    _changed(
+      Drill.start(
+        line,
+        learn: _learning,
+        replayMistakes: options.replayMistakes,
+      ),
+    );
   }
 
   void _nextLine() {
@@ -176,9 +199,13 @@ class Lesson extends ChangeNotifier {
       return;
     }
     final line = _left.removeAt(0);
-    _learning = _isNew(_progress, line);
+    _learning = kind != SittingKind.drill && _isNew(_progress, line);
     _state = const Drilling();
-    _drill = Drill.start(line, learn: _learning);
+    _drill = Drill.start(
+      line,
+      learn: _learning,
+      replayMistakes: options.replayMistakes,
+    );
     _arm();
   }
 
@@ -203,7 +230,7 @@ class Lesson extends ChangeNotifier {
       Missed() => correctionDelay,
       Corrected() when _drill.pass == Pass.walkthrough => rewindDelay,
       Answered() when _drill.pass == Pass.replay => replayDelay,
-      Corrected() || Answered() => replyDelay,
+      Corrected() || Answered() => Duration(milliseconds: options.replyMillis),
       _ => null,
     };
     if (wait == null) return;
@@ -245,7 +272,9 @@ class Lesson extends ChangeNotifier {
       right: _tally.right,
       wrong: _tally.wrong,
     );
-    if (rating == Rating.again && kind != SittingKind.line) _left.add(line);
+    if (rating == Rating.again &&
+        (kind == SittingKind.learn || kind == SittingKind.review))
+      _left.add(line);
     _nextLine();
     notifyListeners();
   }
