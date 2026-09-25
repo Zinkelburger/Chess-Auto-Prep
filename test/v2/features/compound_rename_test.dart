@@ -143,10 +143,7 @@ void main() {
     () async {
       final before = await bookFile.readAsString();
       session.holdsEdits = true;
-      expect(
-        await library.renameChapter(original, 'B'),
-        isA<LibraryDone>().having((r) => r.draft, 'draft', true),
-      );
+      expect(await library.renameChapter(original, 'B'), isA<LibraryDone>());
       session.keepHeld();
       await saver.flush();
       expect(saver.settled, isTrue);
@@ -226,7 +223,7 @@ void main() {
   );
 
   test(
-    'closed-file rename retains its exact command after lost acknowledgement',
+    'a closed-file rename asked again after a lost acknowledgement is done',
     () async {
       session.closed();
       failAt = CompoundWriteStep.document;

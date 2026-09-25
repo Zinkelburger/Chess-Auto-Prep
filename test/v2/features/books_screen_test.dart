@@ -165,27 +165,6 @@ void main() {
     });
   });
 
-  testWidgets('book chip shows reference status and disables choosing', (
-    tester,
-  ) async {
-    await show(tester, chip: true);
-    final held = Completer<SaveResult>();
-    final saving = books.saveReferences(() => held.future);
-    await tester.pump();
-    expect(find.text('Updating book chapters…'), findsOneWidget);
-    expect(
-      tester.widget<TextButton>(find.byType(TextButton)).onPressed,
-      isNull,
-    );
-    held.complete(saved);
-    await saving;
-    await tester.pumpAndSettle();
-    expect(
-      tester.widget<TextButton>(find.byType(TextButton)).onPressed,
-      isNotNull,
-    );
-  });
-
   testWidgets('an already open book choice waits before activating', (
     tester,
   ) async {
@@ -202,25 +181,6 @@ void main() {
     await saving;
     await tester.pumpAndSettle();
     expect(books.active?.id, 'b');
-  });
-
-  testWidgets('a queued choice explains when books could not recover', (
-    tester,
-  ) async {
-    await show(tester, chip: true);
-    await tester.tap(find.text('No book set'));
-    await tester.pumpAndSettle();
-    final held = Completer<SaveResult>();
-    final saving = books.saveReferences(() => held.future);
-    await tester.pump();
-    await tester.tap(find.text('Event'));
-    await tester.pumpAndSettle();
-    store.failReads = true;
-    held.complete(saved);
-    await saving;
-    await tester.pumpAndSettle();
-    expect(books.active, isNull);
-    expect(find.text(books.problem!), findsOneWidget);
   });
 
   testWidgets('an already open delete confirmation waits before deleting', (

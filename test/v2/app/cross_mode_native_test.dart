@@ -321,10 +321,7 @@ Future<void> _until(Listenable owner, bool Function() ready) async {
 
 Future<void> _ready(Trainer trainer) => _until(
   trainer,
-  () =>
-      trainer.state is TrainerReady ||
-      trainer.state is TrainerFailed ||
-      trainer.state is TrainerUnsaved,
+  () => trainer.state is TrainerReady || trainer.state is TrainerFailed,
 );
 
 Future<Map<String, List<int>?>> _progressBytes(Directory documents) async => {

@@ -100,7 +100,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _Toolbar(
-            busy: !widget.library.canChange,
+            busy: widget.library.busy,
             onCreate: _newRepertoire,
             search: _search,
             onSearch: widget.library.search,
@@ -117,10 +117,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
     final library = widget.library;
     return switch (library.state) {
       LibraryLoading() => const Center(child: CircularProgressIndicator()),
-      LibraryLoadFailed(:final detail) => _Failure(
-        detail: detail,
-        onRetry: library.refresh,
-      ),
+      LibraryLoadFailed() => _Failure(onRetry: library.refresh),
       LibraryLoaded() => _loaded(library),
     };
   }
@@ -131,21 +128,6 @@ class _LibraryPanelState extends State<LibraryPanel> {
   Widget _loaded(Library library) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      if (library.stale)
-        Padding(
-          padding: const EdgeInsets.all(Space.m),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Previous repertoire list'),
-              Text(library.problem ?? 'Updating repertoires…'),
-              TextButton(
-                onPressed: library.busy ? null : library.refresh,
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
       for (final folder in library.unreadable) _Unreadable(folder: folder),
       Expanded(child: _listed(library)),
     ],
@@ -153,7 +135,6 @@ class _LibraryPanelState extends State<LibraryPanel> {
 
   Widget _listed(Library library) {
     if (library.repertoires.isEmpty) {
-      if (library.stale) return const SizedBox.shrink();
       return const _Message(
         'No repertoires yet\nCreate a repertoire to get started.',
       );
@@ -174,9 +155,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
         expanded: _expanded.contains(folder.path),
         onToggle: () => _toggle(folder),
         selected: widget.selected,
-        onOpen: (chapter) {
-          if (mounted && library.canChange) widget.onOpen(chapter);
-        },
+        onOpen: widget.onOpen,
       );
     },
   );
@@ -261,24 +240,22 @@ class _DeletedLink extends StatelessWidget {
 }
 
 class _Failure extends StatelessWidget {
-  const _Failure({required this.detail, required this.onRetry});
+  const _Failure({required this.onRetry});
 
-  final String detail;
   final Future<void> Function() onRetry;
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
+    return Padding(
       padding: const EdgeInsets.all(Space.l),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Could not load repertoires.',
-            style: Theme.of(context).textTheme.bodyMedium,
+            'Could not load repertoires. Please try again.',
+            style: Theme.of(context).textTheme.bodySmall,
           ),
-          const SizedBox(height: Space.s),
-          Text(detail, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: Space.s),
           FilledButton(onPressed: onRetry, child: const Text('Retry')),
         ],

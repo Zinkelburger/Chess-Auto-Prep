@@ -9,7 +9,12 @@ import '../storage/document_repository.dart';
 /// Shared repertoire metadata, independent of any mode's search or selection.
 /// Successful document mutations invalidate it at the repository boundary.
 /// Refreshes coalesce, and a mutation during a read forces another read before
-/// the refresh completes. Consumers observe whole committed listings.
+/// the refresh completes.
+///
+/// A listing that could not read some folders is still the listing: the
+/// readable repertoires are shown and usable, and the unreadable ones are
+/// named beside them. A root that cannot be listed at all keeps the
+/// previous listing on screen, so a failed read never blanks the panel.
 final class RepertoireCatalog extends ChangeNotifier {
   RepertoireCatalog({
     required this._files,
@@ -30,8 +35,8 @@ final class RepertoireCatalog extends ChangeNotifier {
   };
   List<DocumentChange> changes = const [];
 
-  /// The latest admission only; null is an explicit complete refresh. The
-  /// cumulative [changes] remains available for the final catalog publication.
+  /// The change that last bumped [inputsRevision]; null after an explicit
+  /// refresh, which may have changed anything.
   DocumentChange? admittedChange;
   bool reloaded = false;
   final _pendingChanges = <DocumentChange>[];
@@ -39,18 +44,11 @@ final class RepertoireCatalog extends ChangeNotifier {
   Future<void>? _reading;
   bool _dirty = false;
   bool _disposed = false;
-  bool _stale = true;
-  String? _problem;
-  int _version = 0;
   int _inputsRevision = 0;
 
-  /// Admission of a committed change or explicit refresh, independent of the
-  /// later listing publication. Consumers handle each affected batch once.
+  /// Counts committed changes and explicit refreshes as they happen, before
+  /// the listing is read again, so a consumer handles each one once.
   int get inputsRevision => _inputsRevision;
-
-  bool get stale => _stale;
-  String? get problem => _problem;
-  int get version => _version;
 
   /// Nested PGNs belong to the top-level repertoire, matching the native
   /// listing's recursive folder inventory even before a refresh completes.
@@ -84,7 +82,6 @@ final class RepertoireCatalog extends ChangeNotifier {
   Future<void> _refresh() {
     if (_disposed) return Future<void>.value();
     _dirty = true;
-    _stale = true;
     final reading = _reading ??= _read().whenComplete(() => _reading = null);
     changes = List.unmodifiable(_pendingChanges);
     reloaded = _manualRefresh;
@@ -111,20 +108,9 @@ final class RepertoireCatalog extends ChangeNotifier {
   }
 
   void _publish(RepertoireListing next) {
-    final complete = next is Repertoires && next.unreadable.isEmpty;
-    if (complete) {
-      _listing = next;
-      _problem = null;
-      _stale = false;
-      _version++;
-    } else {
-      _listing ??= next;
-      _stale = true;
-      _problem = switch (next) {
-        RepertoiresUnreadable(:final detail) => detail,
-        Repertoires(:final unreadable) => unreadable.first.detail,
-      };
-    }
+    // A root that cannot be listed keeps the repertoires already shown; with
+    // none shown, the failure is what there is to say.
+    if (next is Repertoires || repertoires.isEmpty) _listing = next;
     changes = List.unmodifiable(_pendingChanges);
     reloaded = _manualRefresh;
     _pendingChanges.clear();

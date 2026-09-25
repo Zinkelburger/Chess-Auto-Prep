@@ -9,6 +9,7 @@ import 'package:chess_auto_prep/v2/features/trainer/train_pane.dart';
 import 'package:chess_auto_prep/v2/chess/training/training_options.dart';
 import 'package:chess_auto_prep/v2/storage/settings.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
+import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
 import 'package:chess_auto_prep/v2/storage/training_store.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
@@ -92,33 +93,21 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets(
-    'the replacement scope offers a working retry for retained progress',
-    (tester) async {
-      await pump(tester);
-      final ready = trainer.state as TrainerReady;
-      files.nextWrite = const ProgressFailed('disk full');
-      await ready.progress.finished(
-        ready.lines.first,
-        Rating.good,
-        clean: true,
-      );
-      await trainer.reload();
-      await tester.pumpAndSettle();
-      expect(
-        find.textContaining('Accepted training progress has not been saved'),
-        findsOneWidget,
-      );
-      await tester.tap(find.text('Try again'));
-      await tester.pumpAndSettle();
-      expect(trainer.state, isA<TrainerReady>());
-      expect(files.history, hasLength(1));
-      expect(
-        find.textContaining('Accepted training progress has not been saved'),
-        findsNothing,
-      );
-    },
-  );
+  testWidgets('a rating that did not save does not stop the next sitting', (
+    tester,
+  ) async {
+    await pump(tester);
+    final ready = trainer.state as TrainerReady;
+    files.nextWrite = const ProgressFailed('disk full');
+    await ready.progress.finished(ready.lines.first, Rating.good, clean: true);
+    await trainer.reload();
+    await tester.pumpAndSettle();
+    expect(trainer.state, isA<TrainerReady>());
+    await tester.tap(find.text('Learn 2'));
+    await tester.pumpAndSettle();
+    expect(trainer.lesson, isNotNull);
+    expect(find.byType(LessonView), findsOneWidget);
+  });
 
   /// Plays [uci] for the lesson, as the board would, and lets it settle.
   Future<void> play(WidgetTester tester, String uci) async {
@@ -127,30 +116,27 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('saving preserves the lesson subtree and its focus', (
-    tester,
-  ) async {
-    await pump(tester);
-    trainer.learn();
-    await tester.pumpAndSettle();
-    final lessonState = tester.state(find.byType(LessonView));
-    final focus = FocusManager.instance.primaryFocus;
-    final lesson = trainer.lesson;
-    await trainer.pauseForWrite();
-    await tester.pump();
-    expect(find.text('Saving the training source…'), findsOneWidget);
-    expect(find.byType(LessonView), findsOneWidget);
-    if (find.byType(LessonView).evaluate().isNotEmpty) {
+  testWidgets(
+    'saving the chapter leaves the lesson, its keys and focus alone',
+    (tester) async {
+      await pump(tester);
+      trainer.learn();
+      await tester.pumpAndSettle();
+      final lessonState = tester.state(find.byType(LessonView));
+      final focus = FocusManager.instance.primaryFocus;
+      final lesson = trainer.lesson;
+      fixture.saver.save('$_chapter\n', const WholeDocument());
+      await fixture.saver.flush();
+      await tester.pumpAndSettle();
+      expect(fixture.saver.settled, isTrue);
+      expect(trainer.lesson, same(lesson));
       expect(tester.state(find.byType(LessonView)), same(lessonState));
-    }
-    expect(FocusManager.instance.primaryFocus, same(focus));
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    expect(trainer.lesson, same(lesson));
-    trainer.resumeAfterWrite();
-    await tester.pumpAndSettle();
-    expect(tester.state(find.byType(LessonView)), same(lessonState));
-    expect(FocusManager.instance.primaryFocus, same(focus));
-  });
+      expect(FocusManager.instance.primaryFocus, same(focus));
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(trainer.lesson, isNull, reason: 'the keys still reach the lesson');
+    },
+  );
 
   testWidgets('the lines, where they stand, and the ways in', (tester) async {
     await pump(tester);

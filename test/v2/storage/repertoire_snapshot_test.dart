@@ -258,9 +258,11 @@ void main() {
         await catalog.refresh();
         shelf.forget();
         await shelf.read(gone: () => false);
-        expect(catalog.repertoires.single.chapters.single, previous);
-        expect(catalog.stale, isTrue);
-        expect(catalog.problem, isNotNull);
+        // The list goes on without the linked entry rather than stopping.
+        expect(
+          catalog.repertoires.expand((folder) => folder.chapters),
+          isNot(contains(previous)),
+        );
         expect(shelf.refs, [previous]);
         expect(shelf.stale, isTrue);
         expect(shelf.problem, isNotNull);

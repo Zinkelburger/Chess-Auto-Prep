@@ -19,10 +19,7 @@ String? libraryMessage(
   required String name,
   required String failed,
 }) => switch (result) {
-  LibraryDone(:final training, :final draft) =>
-    draft
-        ? 'Change held in the draft. Keep edits to save it.'
-        : _stillPointingAtTheOldName(training),
+  LibraryDone(:final training) => _stillPointingAtTheOldName(training),
   LibraryAdded() => null,
   LibraryNothingToImport() => 'That PGN has no moves to train.',
   LibraryFileUnreadable() => 'Could not read that file.',
@@ -33,7 +30,7 @@ String? libraryMessage(
     'That $thing changed on disk while it was open. Reload it to take the '
         'version on disk, then try again.',
   LibraryBusy() => 'Another change is still running.',
-  LibraryFailure(:final detail) => detail.isEmpty ? failed : '$failed $detail',
+  LibraryFailure() => failed,
   LibraryStoppedAt(:final chapter) => '$failed It stopped at "$chapter".',
 };
 
@@ -69,64 +66,20 @@ Future<LibraryResult> announce(
 }) async {
   final say = StatusScope.of(context);
   final result = await command;
-  _sayResult(
-    say,
-    result,
-    thing: thing,
-    name: name,
-    failed: failed,
-    reload: reload,
-  );
-  return result;
-}
-
-void _sayResult(
-  void Function(String sentence, {StatusAction? action}) say,
-  LibraryResult result, {
-  required String thing,
-  required String name,
-  required String failed,
-  Future<OpenResult> Function()? reload,
-  bool retried = false,
-}) {
   final message = libraryMessage(
     result,
     thing: thing,
     name: name,
     failed: failed,
   );
-  if (message == null) {
-    if (retried) say('Change saved.');
-    return;
-  }
-  var retrying = false;
-  StatusAction? action;
-  if (result case LibraryFailure(retry: final retry?)) {
-    action = (
-      label: 'Retry',
-      onPressed: () async {
-        if (retrying) return;
-        retrying = true;
-        say('Retrying the change…');
-        final next = await retry();
-        _sayResult(
-          say,
-          next,
-          thing: thing,
-          name: name,
-          failed: failed,
-          reload: reload,
-          retried: true,
-        );
-      },
-    );
-  } else if (result is LibraryConflicted && reload != null) {
-    action = (
-      label: 'Reload',
-      onPressed: () => unawaited(_reloaded(say, reload)),
-    );
-  }
-  say(message, action: action);
+  if (message == null) return result;
+  say(
+    message,
+    action: result is LibraryConflicted && reload != null
+        ? (label: 'Reload', onPressed: () => unawaited(_reloaded(say, reload)))
+        : null,
+  );
+  return result;
 }
 
 /// Runs [reload] and says why when the chapter could not be read again: a

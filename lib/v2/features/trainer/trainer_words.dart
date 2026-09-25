@@ -9,13 +9,6 @@ import 'trainer.dart';
 
 /// The trainer's typed states in the words the tab shows.
 
-String unsavedProgressProblem(ProgressWrite failure) =>
-    'Accepted training progress has not been saved. ${switch (failure) {
-      ProgressConflict() => 'The files changed in another session. '
-          'Your unsaved changes are retained. Resolve the conflict before retrying.',
-      _ => progressProblem(failure, doing: 'save the training progress'),
-    }}';
-
 String progressProblem(Object failure, {required String doing}) =>
     switch (failure) {
       ProgressConflict() =>

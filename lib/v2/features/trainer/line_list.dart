@@ -116,13 +116,7 @@ class _LineListState extends State<LineList> {
                   action: ('Reload', () => unawaited(widget.trainer.reload())),
                 )
               else if (_problem case final problem?)
-                _Problem(
-                  problem,
-                  action: (
-                    'Retry save',
-                    () => unawaited(widget.trainer.retryPending()),
-                  ),
-                ),
+                _Problem(problem),
               const SizedBox(height: Space.m),
               _toolbar(progress),
               if (_showing == _Showing.lines && _orders.length > 1) ...[

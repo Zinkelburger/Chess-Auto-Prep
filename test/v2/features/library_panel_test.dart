@@ -93,104 +93,55 @@ void main() {
   });
 
   testWidgets(
-    'failed refresh retains rows and search while Retry restores actions',
+    'a list that cannot be read again keeps its rows, and chapters open',
     (tester) async {
       await show(tester, [kid, benko]);
-      await tester.enterText(find.byType(TextField), 'ki');
       await tester.tap(find.text('KID'));
       await tester.pumpAndSettle();
-      fixture.files.listing = const RepertoiresUnreadable(
-        'Catalog unavailable',
-      );
+      fixture.files.listing = const RepertoiresUnreadable('unavailable');
       await fixture.library.refresh();
       await tester.pumpAndSettle();
       expect(find.text('KID'), findsOneWidget);
-      expect(find.text('Classical'), findsOneWidget);
-      expect(find.text('Catalog unavailable'), findsOneWidget);
-      expect(find.text('Previous repertoire list'), findsOneWidget);
-      expect(
-        tester.widget<TextField>(find.byType(TextField)).controller!.text,
-        'ki',
-      );
-      expect(
-        tester
-            .widget<IconButton>(
-              find.byWidgetPredicate(
-                (widget) =>
-                    widget is IconButton && widget.tooltip == 'New repertoire',
-              ),
-            )
-            .onPressed,
-        isNull,
-      );
-      await tester.tap(find.text('Classical'));
-      expect(opened, isEmpty);
-      fixture.files.listing = Repertoires([kid, benko]);
-      await tester.tap(find.text('Retry'));
-      await tester.pumpAndSettle();
-      expect(find.text('Catalog unavailable'), findsNothing);
-      expect(find.text('Classical'), findsOneWidget);
       await tester.tap(find.text('Classical'));
       expect(opened.single, kid.chapters.first);
     },
   );
 
-  const recoveryReason =
-      'Reopen v1 to recover the unfinished repertoire move, then retry. '
-      'Your recovery files have been preserved.';
-
-  testWidgets(
-    'pending catalog invalidates retained activation before repaint',
-    (tester) async {
-      await show(tester, [kid]);
-      await tester.tap(find.text('KID'));
-      await tester.pumpAndSettle();
-      final activate = tester
-          .widget<InkWell>(
-            find
-                .ancestor(
-                  of: find.text('Classical'),
-                  matching: find.byType(InkWell),
-                )
-                .first,
-          )
-          .onTap!;
-      fixture.files.hold = true;
-      final refreshing = fixture.library.catalog.refresh();
-      try {
-        activate();
-        expect(opened, isEmpty);
-        await tester.pump();
-        expect(find.text('Updating repertoires…'), findsOneWidget);
-        expect(find.text('Classical'), findsOneWidget);
-      } finally {
-        fixture.files.hold = false;
-        fixture.files.releaseAll();
-        await refreshing;
-      }
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Classical'));
-      expect(opened.single, kid.chapters.first);
-    },
-  );
-
-  testWidgets('a failed library shows the recovery reason and Retry reloads', (
+  testWidgets('a list being read again does not stop a chapter opening', (
     tester,
   ) async {
+    await show(tester, [kid]);
+    await tester.tap(find.text('KID'));
+    await tester.pumpAndSettle();
+    fixture.files.hold = true;
+    final refreshing = fixture.library.catalog.refresh();
+    try {
+      await tester.pump();
+      await tester.tap(find.text('Classical'));
+      expect(opened.single, kid.chapters.first);
+    } finally {
+      fixture.files.hold = false;
+      fixture.files.releaseAll();
+      await refreshing;
+    }
+  });
+
+  testWidgets('a folder that cannot be read offers Retry', (tester) async {
     await show(tester, []);
-    fixture.files.listing = const RepertoiresUnreadable(recoveryReason);
+    fixture.files.listing = const RepertoiresUnreadable('Permission denied');
     await fixture.library.refresh();
     await tester.pumpAndSettle();
-    expect(find.text(recoveryReason), findsOneWidget);
-    expect(find.text('Previous repertoire list'), findsOneWidget);
+    expect(
+      find.text('Could not load repertoires. Please try again.'),
+      findsOneWidget,
+    );
     fixture.files.listing = Repertoires([kid]);
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
     expect(find.text('KID'), findsOneWidget);
-    expect(find.text(recoveryReason), findsNothing);
   });
 
-  testWidgets('an incomplete refresh reports failure over the previous list', (
+  testWidgets('a repertoire that cannot be read is named, not dropped', (
     tester,
   ) async {
     await show(tester, [kid]);
@@ -207,7 +158,10 @@ void main() {
     await fixture.library.refresh();
     await tester.pumpAndSettle();
     expect(find.text('KID'), findsOneWidget);
-    expect(find.text('Permission denied'), findsOneWidget);
+    expect(
+      find.text('Benko could not be read: Permission denied'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a new repertoire asks for a name only, and opens', (
@@ -441,20 +395,4 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Nothing deleted'), findsOneWidget);
   });
-
-  testWidgets(
-    'a failed deleted listing shows the recovery reason and Retry reloads',
-    (tester) async {
-      await show(tester, [kid]);
-      fixture.files.deletedListing = const DeletedUnreadable(recoveryReason);
-      await tester.tap(find.text('Deleted chapters'));
-      await tester.pumpAndSettle();
-      expect(find.text(recoveryReason), findsOneWidget);
-      fixture.files.deletedListing = const DeletedChapters([]);
-      await tester.tap(find.text('Retry'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Nothing deleted'), findsOneWidget);
-      expect(find.text(recoveryReason), findsNothing);
-    },
-  );
 }

@@ -12,6 +12,7 @@ import 'package:chess_auto_prep/v2/features/trainer/lesson.dart';
 import 'package:chess_auto_prep/v2/features/trainer/trainer.dart';
 import 'package:chess_auto_prep/v2/features/trainer/training_scope.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
+import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/training_store.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
@@ -425,7 +426,7 @@ void main() {
     });
   });
 
-  test('a conflicting change stays retained across reload until retried', () {
+  test('a conflicting change is cleared by reading the progress again', () {
     fakeAsync((async) {
       final trainer = ready(async);
       final progress = readyState(trainer).progress;
@@ -437,11 +438,9 @@ void main() {
       expect(trainer.lesson, isNull, reason: 'a stale scope is not trained');
       unawaited(trainer.reload());
       async.flushMicrotasks();
-      expect(trainer.state, isA<TrainerUnsaved>());
-      trainer.retryPending();
-      async.flushMicrotasks();
       expect(readyState(trainer).progress.stale, isFalse);
-      expect(files.reviews.values.single.excluded, isTrue);
+      trainer.learn();
+      expect(trainer.lesson, isNotNull);
     });
   });
 
@@ -743,22 +742,6 @@ void main() {
     });
   });
 
-  test('disposing while the read barrier settles starts no later read', () {
-    fakeAsync((async) {
-      final trainer = Trainer(
-        session: fixture.session,
-        chapters: ScopeReader(files: ScriptedFiles(), documents: fixture.store),
-        files: files,
-        analysis: analysis,
-        time: (now: () => _now, jitter: () => 0),
-        books: Books(store: MemoryBooks(), root: '/repertoires'),
-      )..show();
-      trainer.dispose();
-      async.flushMicrotasks();
-      expect(files.reads, 0);
-    });
-  });
-
   test('reading the progress again ends the sitting over the old copy', () {
     fakeAsync((async) {
       final trainer = ready(async)..learn();
@@ -768,6 +751,24 @@ void main() {
       expect(trainer.lesson, isNull);
       expect(trainer.board.value, isNull);
       expect(trainer.state, isA<TrainerReady>());
+    });
+  });
+
+  test('a rating that did not save never holds up saving the chapter', () {
+    fakeAsync((async) {
+      final trainer = ready(async)..learn();
+      final lesson = trainer.lesson;
+      final state = readyState(trainer);
+      files.nextWrite = const ProgressFailed('disk full');
+      unawaited(
+        state.progress.finished(state.lines.first, Rating.good, clean: true),
+      );
+      async.flushMicrotasks();
+      fixture.saver.save('$_chapter\n', const WholeDocument());
+      async.elapse(const Duration(seconds: 2));
+      expect(fixture.saver.settled, isTrue);
+      expect(fixture.onDisk, '$_chapter\n');
+      expect(trainer.lesson, same(lesson), reason: 'the sitting goes on');
     });
   });
 }

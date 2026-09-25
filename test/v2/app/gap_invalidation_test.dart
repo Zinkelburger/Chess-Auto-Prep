@@ -65,7 +65,6 @@ void main() {
         folder('KID', ['Main']),
       ]);
       await fixture.parts.env.store.create(ref('benko', 'Sibling'), sicilian);
-      expect(fixture.parts.catalog.stale, isTrue);
       expect(trainer.lesson, isNull);
       expect(workspace.gaps.currentWalk, isNull);
       expect(workspace.gaps.canNextGap, isFalse);

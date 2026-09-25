@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:chess_auto_prep/v2/features/library/library_state.dart';
+import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
+import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/training_records.dart' as training;
@@ -53,11 +55,20 @@ void main() {
 
   test('an unreadable folder is a typed failure, not an exception', () async {
     await start();
-    fixture.files.listing = const RepertoiresUnreadable('Permission denied');
-    await fixture.library.refresh();
-    expect(fixture.library.state, isA<LibraryLoaded>());
-    expect(fixture.library.stale, isTrue);
-    expect(fixture.library.problem, 'Permission denied');
+    final files = ScriptedFiles(
+      listing: const RepertoiresUnreadable('Permission denied'),
+    );
+    final store = ScriptedDocumentStore();
+    final saver = DocumentSaver(store);
+    final session = DocumentSession(store, saver);
+    final library = libraryOver(files, store, session, saver);
+    addTearDown(() {
+      library.dispose();
+      session.dispose();
+      saver.dispose();
+    });
+    await library.refresh();
+    expect((library.state as LibraryLoadFailed).detail, 'Permission denied');
   });
 
   test('search filters the list by name', () async {
@@ -70,24 +81,14 @@ void main() {
   });
 
   test(
-    'stale catalog refuses fresh writes while retaining its previous rows',
+    'a list that cannot be read again keeps its rows, and changes still work',
     () async {
       await start([kid]);
       fixture.files.listing = const RepertoiresUnreadable('Permission denied');
       await fixture.library.refresh();
       expect(fixture.library.repertoires, [kid]);
-      final before = Map.of(fixture.store.documents);
-      expect(
-        await fixture.library.createRepertoire('New'),
-        isA<LibraryFailure>(),
-      );
-      expect(
-        await fixture.library.renameChapter(kid.chapters.first, 'Changed'),
-        isA<LibraryFailure>(),
-      );
-      expect(fixture.store.documents, before);
+      expect(fixture.library.busy, isFalse);
       fixture.files.listing = Repertoires([kid]);
-      await fixture.library.refresh();
       expect(
         await fixture.library.createRepertoire('New'),
         isA<LibraryAdded>(),
@@ -95,24 +96,21 @@ void main() {
     },
   );
 
-  test(
-    'stale catalog blocks admission before a held refresh completes',
-    () async {
-      await start([kid]);
-      fixture.files.hold = true;
-      final refreshing = fixture.library.catalog.refresh();
-      final creating = fixture.library.createChapter(kid, 'New');
-      try {
-        await pumpEventQueue();
-        expect(fixture.textAt('/repertoires/KID/New.pgn'), isNull);
-      } finally {
-        fixture.files.hold = false;
-        fixture.files.releaseAll();
-        await refreshing;
-      }
-      expect(await creating, isA<LibraryFailure>());
-    },
-  );
+  test('a change made while the list is being read is not refused', () async {
+    await start([kid]);
+    fixture.files.hold = true;
+    final refreshing = fixture.library.catalog.refresh();
+    final creating = fixture.library.createChapter(kid, 'New');
+    try {
+      await pumpEventQueue();
+    } finally {
+      fixture.files.hold = false;
+      fixture.files.releaseAll();
+      await refreshing;
+    }
+    expect(await creating, isA<LibraryDone>());
+    expect(fixture.textAt('/repertoires/KID/New.pgn'), isNotNull);
+  });
 
   test('a new repertoire is a folder with one empty chapter', () async {
     await start([kid]);
