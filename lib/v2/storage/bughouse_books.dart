@@ -217,8 +217,7 @@ final class SqliteHivemindBook implements HivemindBook {
       )) {
         final clock = _clockNamed(row['clock'] as String);
         if (clock != null) {
-          provenance[clock] = (jsonDecode(row['provenance'] as String) as Map)
-              .cast<String, Object?>();
+          provenance[clock] = _analysisMetadata(row['provenance']);
         }
       }
     }
@@ -263,8 +262,11 @@ final class SqliteHivemindBook implements HivemindBook {
       await afterCommit?.call();
       return const HivemindSaved();
     } on Object catch (error) {
-      log.w('save to the Hivemind book at $path', error);
-      return HivemindSaveFailed('$error');
+      final detail = error is FormatException
+          ? 'Analysis history is malformed or unsupported.'
+          : '$error';
+      log.w('save to the Hivemind book at $path', detail);
+      return HivemindSaveFailed(detail);
     }
   }
 
@@ -454,8 +456,7 @@ final class SqliteHivemindBook implements HivemindBook {
     ]);
     if (found.isEmpty) return false;
     final row = found.single;
-    final metadata =
-        jsonDecode(row['provenance'] as String) as Map<String, Object?>;
+    final metadata = _analysisMetadata(row['provenance']);
     final checksum = metadata.remove('snapshot_sha256');
     if (row['pos'] != write.entry.position.bookKey ||
         row['clock'] != write.entry.clock.bookName ||
@@ -488,6 +489,23 @@ final class SqliteHivemindBook implements HivemindBook {
       places.where((place) => File(place).existsSync()).firstOrNull;
 
   void close() => _file.close();
+}
+
+Map<String, Object?> _analysisMetadata(Object? text) {
+  if (text is! String) {
+    throw const FormatException('Invalid analysis provenance.');
+  }
+  final Object? value;
+  try {
+    value = jsonDecode(text);
+  } on FormatException {
+    // A decoding error's source is saved user content, never a log message.
+    throw const FormatException('Invalid analysis provenance.');
+  }
+  if (value is! Map<String, Object?>) {
+    throw const FormatException('Invalid analysis provenance.');
+  }
+  return value;
 }
 
 ClockCase? _clockNamed(String name) =>

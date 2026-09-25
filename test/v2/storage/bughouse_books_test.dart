@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/v2/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/v2/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/v2/storage/bughouse_books.dart';
 import 'package:chess_auto_prep/v2/storage/hivemind_write.dart';
+import 'package:chess_auto_prep/v2/diagnostics/log.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -283,6 +284,37 @@ void main() {
       skip: Platform.isWindows
           ? 'Windows symbolic link privileges unavailable'
           : false,
+    );
+
+    test(
+      'malformed history refuses retry without logging stored user content',
+      () async {
+        final path = p.join(dir.path, 'malformed-history.db');
+        final book = SqliteHivemindBook([path]);
+        addTearDown(book.close);
+        final captured = entry(afterLine('A:e4'), ClockCase.even);
+        final write = HivemindWrite(captured);
+        expect(await book.save(captured, write: write), isA<HivemindSaved>());
+        final db = sqlite3.open(path);
+        addTearDown(db.close);
+        db.execute(
+          "UPDATE analysis_history SET provenance='private-preparation-content'",
+        );
+        final lines = <String>[];
+        void capture(LogEntry value) => lines.add(value.line);
+        log.install(capture);
+        addTearDown(() => log.remove(capture));
+        final failed =
+            await book.save(captured, write: write) as HivemindSaveFailed;
+        expect(failed.detail, isNot(contains('private-preparation-content')));
+        expect(lines.join(), isNot(contains('private-preparation-content')));
+        expect(
+          db
+              .select('SELECT provenance FROM analysis_history')
+              .single['provenance'],
+          'private-preparation-content',
+        );
+      },
     );
 
     test('a blocked destination reports a failed save', () async {
