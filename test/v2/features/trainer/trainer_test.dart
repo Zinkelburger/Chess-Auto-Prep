@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'package:chess_auto_prep/v2/chess/training/training_options.dart';
+import 'package:chess_auto_prep/v2/storage/settings.dart';
+import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 
 import 'package:chess_auto_prep/v2/chess/pgn/chapter_heading.dart';
 import 'package:chess_auto_prep/v2/chess/training/drill.dart';
@@ -66,9 +69,10 @@ void main() {
 
   String source() => fixture.ref.path;
 
-  Trainer trainerOver({ScriptedFiles? listing}) {
+  Trainer trainerOver({ScriptedFiles? listing, SettingsStore? settings}) {
     final trainer = Trainer(
       session: fixture.session,
+      settings: settings,
       chapters: ScopeReader(
         files: listing ?? ScriptedFiles(),
         documents: fixture.store,
@@ -97,6 +101,88 @@ void main() {
     lesson.play(uci);
     async.elapse(const Duration(seconds: 2));
   }
+
+  test(
+    'Drill quizzes new lines immediately and finishes once even with Again',
+    () {
+      fakeAsync((async) {
+        final trainer = ready(async);
+        final lines = readyState(trainer).lines;
+        trainer.drillLines([lines.last]);
+        final lesson = trainer.lesson!;
+        expect(lesson.kind, SittingKind.drill);
+        expect(lesson.learning, isFalse);
+        expect(lesson.drill.stage, isA<Asking>());
+        expect(lesson.line.name, 'Italian');
+        for (final uci in ['e2e4', 'g1f3', 'f1c4']) {
+          play(async, lesson, uci);
+        }
+        expect(lesson.state, isA<AwaitingRating>());
+        lesson.rate(Rating.again);
+        async.flushMicrotasks();
+        expect(lesson.state, isA<SittingOver>());
+        expect(files.history.single.rating, 'again');
+        expect(files.attempts, hasLength(3));
+        expect(trainer.board.value, isNull);
+        trainer.leave();
+        expect(analysis.paused, isFalse);
+      });
+    },
+  );
+
+  test(
+    'sitting limits and pacing are captured; excluded lines cannot be drilled',
+    () {
+      fakeAsync((async) {
+        final settings = SettingsStore(
+          initial: const Settings(
+            training: TrainingOptions(
+              learnLimit: 1,
+              reviewLimit: 1,
+              drillLimit: 1,
+              replyMillis: 2000,
+            ),
+          ),
+        );
+        addTearDown(settings.dispose);
+        final trainer = trainerOver(settings: settings)..show();
+        async.flushMicrotasks();
+        final lines = readyState(trainer).lines;
+        expect(trainer.learnCount, 1);
+        trainer.learn();
+        expect(trainer.lesson!.left, 0);
+        trainer.leave();
+        trainer.drillLines(lines);
+        final lesson = trainer.lesson!;
+        expect(lesson.left, 0);
+        settings.update(
+          settings.value.copyWith(
+            training: const TrainingOptions(drillLimit: 0, replyMillis: 200),
+          ),
+        );
+        lesson.play('e2e4');
+        async.elapse(const Duration(milliseconds: 700));
+        expect(lesson.drill.stage, isA<Answered>());
+        async.elapse(const Duration(milliseconds: 1300));
+        expect(lesson.drill.stage, isA<Asking>());
+        trainer.leave();
+        trainer.drillLines(lines);
+        expect(
+          trainer.lesson!.left,
+          1,
+          reason: 'new sitting takes updated limit',
+        );
+        trainer.leave();
+        readyState(trainer).progress.setExcluded(lines.first, excluded: true);
+        async.flushMicrotasks();
+        trainer.trainLine(lines.first);
+        expect(trainer.lesson, isNull);
+        trainer.drillLines(lines);
+        expect(trainer.lesson!.line.key, lines.last.key);
+        expect(trainer.lesson!.left, 0);
+      });
+    },
+  );
 
   test('nothing is read until the tab asks', () {
     fakeAsync((async) {

@@ -45,6 +45,20 @@ Drill _settle(Drill drill) {
 }
 
 void main() {
+  test(
+    'optional replay keeps a mistake in the result without another pass',
+    () {
+      var d = Drill.start(_line(_white), learn: false, replayMistakes: false);
+      d = _settle(_play(d, 'd2d4'));
+      d = _settle(_play(d, 'g1f3'));
+      d = _settle(_play(d, 'f1b5'));
+      expect(d.stage, isA<Finished>());
+      expect((d.stage as Finished).clean, isFalse);
+      expect(d.missed, [0]);
+      expect(d.restart(learn: false).replayMistakes, isFalse);
+    },
+  );
+
   test('asks for each of the user\'s moves and plays the replies', () {
     var d = Drill.start(_line(_white), learn: false);
     expect((d.pass, d.stage.runtimeType, d.shown), (Pass.quiz, Asking, 0));
