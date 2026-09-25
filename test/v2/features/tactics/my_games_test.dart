@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
-import 'package:chess_auto_prep/v2/features/tactics/my_games_block.dart';
 
 import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/chapter_edit.dart';
@@ -152,87 +150,41 @@ void main() {
     expect(await r.cache.read(GameSite.lichess, 'Me', max: 20), [scholarsMate]);
   });
 
-  test(
-    'failed corpus publication cannot claim a fresh download or mine it',
-    () async {
-      r = _Review(accounts: {GameSite.lichess: const Account('Me')});
-      r.store.creates.add(const IoFailure('disk full'));
-      await r.start();
-      expect(r.games.accounts[GameSite.lichess]!.downloaded, isNull);
-      expect(r.engine.asked, isEmpty);
-      expect(await r.games.pendingWrites.settle(), contains('disk full'));
-    },
-  );
-
-  test('failed freshness stamp cannot claim a fresh download', () async {
+  test('a download that cannot be saved is still reviewed and blocks '
+      'nothing', () async {
     r = _Review(accounts: {GameSite.lichess: const Account('Me')});
-    Directory(
-      '${r.cache.refFor(GameSite.lichess, 'Me').path}.fetched',
-    ).createSync();
+    r.store.creates.add(const IoFailure('disk full'));
     await r.start();
+    expect(r.games.status, isA<MyGamesDone>());
+    expect((r.games.status as MyGamesDone).reviewed, 1);
     expect(r.games.accounts[GameSite.lichess]!.downloaded, isNull);
-    expect(await r.games.pendingWrites.settle(), isNotNull);
+    expect(await r.games.saveUsernames(lichess: 'Other'), isTrue);
+    expect(r.games.accounts[GameSite.lichess]!.username, 'Other');
   });
 
-  test(
-    'retry keeps captured games and time without fetching or duplicating',
-    () async {
-      final when = DateTime(2026, 9, 24);
-      r = _Review(
-        accounts: {GameSite.lichess: const Account('Me')},
-        now: () => when,
-      );
-      final stamp = Directory(
-        '${r.cache.refFor(GameSite.lichess, 'Me').path}.fetched',
-      )..createSync();
-      await r.start();
-      expect(r.games.downloadProblems.keys, [GameSite.lichess]);
-      stamp.deleteSync();
-      await r.games.retryDownloads();
-      expect(r.lichess.asked, hasLength(1));
-      expect(r.games.downloadProblems, isEmpty);
-      expect(r.games.accounts[GameSite.lichess]!.downloaded, when);
-      expect(await r.cache.all(GameSite.lichess, 'Me'), [scholarsMate]);
-      expect(await r.games.pendingWrites.settle(), isNull);
-    },
-  );
-
-  test('one failed corpus leaves the other site saved and reviewed', () async {
+  test('one failed save leaves the other site saved and reviewed', () async {
     r = _Review();
     r.store.creates.add(const IoFailure('disk full'));
     await r.start();
-    expect(r.games.downloadProblems.keys, [GameSite.lichess]);
-    expect(r.games.accounts[GameSite.lichess]!.downloaded, isNull);
     expect(r.games.accounts[GameSite.chesscom]!.downloaded, isNotNull);
     expect(analyzedIn(r.setText), contains('chesscom_111'));
-    expect(analyzedIn(r.setText), isNot(contains('lichess_AbCd1234')));
-    await r.games.retryDownloads();
-    expect(r.lichess.asked, hasLength(1));
-    expect(r.chesscom.asked, hasLength(1));
+    await r.games.start();
+    expect(r.lichess.asked, hasLength(2), reason: 'the next start downloads');
   });
 
-  testWidgets('failed download has a working visible persistence retry', (
-    tester,
-  ) async {
-    r = _Review(accounts: {GameSite.lichess: const Account('Me')});
-    r.store.creates.add(const IoFailure('disk full'));
-    await tester.runAsync(r.start);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(body: MyGamesBlock(games: r.games)),
-      ),
+  test('a failed download date is logged and the next download dates it', () async {
+    final when = DateTime(2026, 9, 24);
+    r = _Review(
+      accounts: {GameSite.lichess: const Account('Me')},
+      now: () => when,
     );
-    expect(
-      find.textContaining('Lichess download not saved: disk full'),
-      findsOneWidget,
-    );
-    await tester.runAsync(() async {
-      await tester.tap(find.text('Retry download save'));
-      await r.games.pendingWrites.settle();
-    });
-    await tester.pumpAndSettle();
-    expect(find.text('Retry download save'), findsNothing);
-    expect(r.lichess.asked, hasLength(1));
+    r.accounts.rejectDownloaded = true;
+    await r.start();
+    expect(r.games.accounts[GameSite.lichess]!.downloaded, isNull);
+    expect(await r.cache.all(GameSite.lichess, 'Me'), [scholarsMate]);
+    r.accounts.rejectDownloaded = false;
+    await r.games.start();
+    expect(r.games.accounts[GameSite.lichess]!.downloaded, when);
   });
 
   test(
@@ -253,159 +205,45 @@ void main() {
     },
   );
 
-  test(
-    'failed account date stays retryable after corpus publication',
-    () async {
-      final when = DateTime(2026, 9, 24);
-      r = _Review(
-        accounts: {GameSite.lichess: const Account('Me')},
-        now: () => when,
-      );
-      r.accounts.rejectDownloaded = true;
-      await r.start();
-      expect(r.games.accounts[GameSite.lichess]!.downloaded, isNull);
-      expect(
-        r.games.downloadProblems[GameSite.lichess],
-        contains('date could not be saved'),
-      );
-      expect(await r.cache.all(GameSite.lichess, 'Me'), [scholarsMate]);
-      r.accounts.rejectDownloaded = false;
-      await r.games.retryDownloads();
-      expect(r.games.accounts[GameSite.lichess]!.downloaded, when);
-      expect(r.lichess.asked, hasLength(1));
-      expect(await r.cache.all(GameSite.lichess, 'Me'), [scholarsMate]);
-    },
-  );
+  test('accounts that cannot be read keep the names already shown', () async {
+    r = _Review(accounts: {GameSite.lichess: const Account('Me')});
+    await r.games.load();
+    r.accounts.unavailable = true;
+    await r.games.load();
+    expect(r.games.accounts[GameSite.lichess]?.username, 'Me');
+    await r.games.start();
+    expect(r.lichess.asked, hasLength(1));
+  });
 
-  test(
-    'unavailable accounts retain last names and block new downloads',
-    () async {
-      r = _Review(accounts: {GameSite.lichess: const Account('Me')});
-      await r.games.load();
-      r.accounts.unavailable = true;
-      await r.games.load();
-      expect(r.games.accounts[GameSite.lichess]?.username, 'Me');
-      expect(r.games.accountProblem, contains('could not be read'));
-      await r.games.start();
-      expect(r.lichess.asked, isEmpty);
-      r.accounts.unavailable = false;
-      await r.games.retryUsernames();
-      expect(r.games.accountProblem, isNull);
-      await r.games.start();
-      expect(r.lichess.asked, hasLength(1));
-    },
-  );
+  test('an unreadable saved file with no network reviews nothing and says '
+      'the site was not reached', () async {
+    r = _Review(
+      accounts: {GameSite.lichess: const Account('Me')},
+      lichess: const GamesNotFetched(GamesProblem.unreachable),
+    );
+    r.store.documents[r.cache.refFor(GameSite.lichess, 'Me')] =
+        const Unreadable('permission denied');
+    await r.start();
+    expect(r.games.status, isA<MyGamesNotDownloaded>());
+    expect(r.engine.asked, isEmpty);
+    await r.games.start();
+    expect(r.lichess.asked, hasLength(2), reason: 'start tries again');
+  });
 
-  test(
-    'unavailable offline corpus is not an empty successful review',
-    () async {
-      r = _Review(
-        accounts: {GameSite.lichess: const Account('Me')},
-        lichess: const GamesNotFetched(GamesProblem.unreachable),
-      );
-      r.store.documents[r.cache.refFor(GameSite.lichess, 'Me')] =
-          const Unreadable('permission denied');
-      await r.start();
-      expect(myGamesLine(r.games.status), contains('could not be read'));
-      expect(r.engine.asked, isEmpty);
-    },
-  );
-
-  test(
-    'corpus becoming unreadable after publication does not claim complete',
-    () async {
-      r = _Review(accounts: {GameSite.lichess: const Account('Me')});
-      r.accounts.onDownloaded = () {
-        r.store.documents[r.cache.refFor(GameSite.lichess, 'Me')] =
-            const Unreadable('read failed after save');
-      };
-      await r.start();
-      expect(myGamesLine(r.games.status), contains('could not be read'));
-      expect(r.engine.asked, isEmpty);
-    },
-  );
-
-  testWidgets(
-    'corpus error preserves the other site and has a read-only retry',
-    (tester) async {
-      r = _Review(lichess: const GamesNotFetched(GamesProblem.unreachable));
-      final ref = r.cache.refFor(GameSite.lichess, 'Me');
-      r.store.documents[ref] = const Unreadable('permission denied');
-      await tester.runAsync(r.start);
-      expect(analyzedIn(r.setText), contains('chesscom_111'));
-      expect(r.games.corpusProblems.keys, [GameSite.lichess]);
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(body: MyGamesBlock(games: r.games)),
-        ),
-      );
-      expect(
-        find.textContaining('Lichess saved games could not be read'),
-        findsOneWidget,
-      );
-      expect(find.textContaining('Review complete'), findsNothing);
-      r.store.documents[ref] = Opened(
-        '$scholarsMate\n',
-        scriptedRevision('$scholarsMate\n'),
-      );
-      await tester.runAsync(() async {
-        await tester.tap(find.text('Retry saved games'));
-        await pumpEventQueue();
-      });
-      await tester.pumpAndSettle();
-      expect(find.text('Retry saved games'), findsNothing);
-      expect(r.games.corpusProblems, isEmpty);
-      expect(r.lichess.asked, hasLength(1));
-      expect(r.chesscom.asked, hasLength(1));
-      expect(await r.cache.all(GameSite.lichess, 'Me'), [scholarsMate]);
-    },
-  );
-
-  test(
-    'account read failure at download admission never means no accounts',
-    () async {
-      r = _Review(accounts: {GameSite.lichess: const Account('Me')});
-      r.accounts.unavailable = true;
-      await r.games.start();
-      expect(r.games.status, isA<MyGamesFailed>());
-      expect(myGamesLine(r.games.status), contains('could not be read'));
-      expect(r.games.accountsUnavailable, isTrue);
-      expect(r.lichess.asked, isEmpty);
-    },
-  );
-
-  test(
-    "another disposed owner's failed usernames block downloads and remain retryable",
-    () async {
-      r = _Review(accounts: {GameSite.lichess: const Account('Me')});
-      await r.games.load();
-      final writer = MyGames(
-        accounts: r.accounts,
-        pendingWrites: r.games.pendingWrites,
-        sites: const [],
-        cache: r.cache,
-        set: r.additions,
-        engine: () async => const StartFailed('unused'),
-      );
-      r.accounts.rejectUsernames = true;
-      expect(await writer.saveUsernames(lichess: 'New'), isFalse);
-      writer.dispose();
-      expect(r.games.accountsUnsettled, isTrue);
-      await r.games.start();
-      expect(r.lichess.asked, isEmpty);
-      await r.games.load();
-      expect(r.games.accounts[GameSite.lichess]!.username, 'Me');
-      expect(r.games.accountProblem, isNotNull);
-      r.accounts.rejectUsernames = false;
-      await r.games.retryUsernames();
-      expect(r.games.accountsUnsettled, isFalse);
-      expect(r.games.accountProblem, isNull);
-      expect(r.games.accounts[GameSite.lichess]!.username, 'New');
-      await r.games.start();
-      expect(r.lichess.asked, ['New']);
-      expect(await r.games.pendingWrites.settle(), isNull);
-    },
-  );
+  test('a username save that failed does not block downloads', () async {
+    r = _Review(accounts: {GameSite.lichess: const Account('Me')});
+    await r.games.load();
+    r.accounts.rejectUsernames = true;
+    expect(await r.games.saveUsernames(lichess: 'New'), isFalse);
+    expect(r.games.accountProblem, isNotNull);
+    expect(r.games.accountsUnsettled, isFalse);
+    await r.games.start();
+    expect(r.lichess.asked, ['Me'], reason: 'the saved name is used');
+    r.accounts.rejectUsernames = false;
+    expect(await r.games.saveUsernames(lichess: 'New'), isTrue);
+    expect(r.games.accountProblem, isNull);
+    expect(await r.games.pendingWrites.settle(), isNull);
+  });
 
   test(
     'accepting a checkpoint freezes the mined puzzle list before awaiting',
