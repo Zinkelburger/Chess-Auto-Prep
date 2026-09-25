@@ -110,19 +110,6 @@ class IOStorageService implements StorageService {
           books: repertoireBooks,
         ).repoint,
         testHook: repertoireMoveHook,
-        foreignRecoveryNotes: Directory(
-          p.join((await _supportRoot()).path, 'unfinished-moves'),
-        ),
-        compoundRecoveryNotes: Directory(
-          p.join((await _supportRoot()).path, 'compound-writes'),
-        ),
-        relocationRecoveryNotes: Directory(
-          p.join((await _supportRoot()).path, 'relocation-writes'),
-        ),
-        trainingRecoveryNotes: Directory(
-          p.join((await _supportRoot()).path, 'training-writes'),
-        ),
-        compoundDocumentsRoot: await _documentsRoot(),
         recoverAdditional: () async => (await _publications()).recover(),
       );
 

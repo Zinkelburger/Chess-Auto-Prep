@@ -347,16 +347,9 @@ final class PgnFileStore implements PgnDocumentStore {
     Revision expected,
     CompoundCommit inverse,
   ) => _guard(() async {
-    final original = await recovery.compounds.completed(inverse.id);
-    if (original == null ||
-        original.secondary == null ||
-        original.documents.length != inverse.documents.length ||
-        original.documents.indexed.any(
-          (entry) =>
-              entry.$2.path != inverse.documents[entry.$1].path ||
-              entry.$2.before != inverse.documents[entry.$1].before ||
-              entry.$2.after != inverse.documents[entry.$1].after,
-        ) ||
+    // The pair commit compares both files with the inverse's texts under the
+    // lock, so the inverse needs no retained record to be safe to apply.
+    if (inverse.secondary == null ||
         inverse.documentPath != await _completedPath(ref) ||
         inverse.documentBefore != text ||
         _textRevision(inverse.documentAfter) != expected) {
@@ -553,14 +546,14 @@ final class PgnFileStore implements PgnDocumentStore {
     }
     if (inverse != null) {
       final kept = await recovery.compounds.completed(inverse.id);
-      if (kept == null ||
-          kept.documentPath != inverse.documentPath ||
-          kept.documentBefore != inverse.documentBefore ||
-          kept.documentAfter != inverse.documentAfter ||
-          kept.booksBefore != inverse.booksBefore ||
-          kept.booksAfter != inverse.booksAfter) {
+      if (kept != null &&
+          (kept.documentPath != inverse.documentPath ||
+              kept.documentBefore != inverse.documentBefore ||
+              kept.documentAfter != inverse.documentAfter ||
+              kept.booksBefore != inverse.booksBefore ||
+              kept.booksAfter != inverse.booksAfter)) {
         return const RestoreRefused(
-          'The compound inverse is not a committed receipt from this profile.',
+          'This inverse belongs to another edit.',
         );
       }
     }

@@ -230,7 +230,7 @@ final class GamesCache {
   Future<void> _stamp(DocumentRef ref, DateTime when) =>
       withDirectoryLock(Directory(p.dirname(ref.path)), () async {
         final path = '${ref.path}.fetched';
-        await requireUnusedRecoveryStage(path);
+        await discardLeftoverStage(path);
         await replaceFile(path, utf8.encode('${when.millisecondsSinceEpoch}'));
       });
 }

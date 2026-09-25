@@ -411,8 +411,6 @@ void _validateFolderBackups(
   Directory support,
 ) {
   final ids = <String>{};
-  final identities = <String>{};
-  final roots = <String?>{};
   for (final entry in record.backupByPath.entries) {
     final plan = entry.value;
     final from = p.join(record.from, entry.key);
@@ -426,19 +424,6 @@ void _validateFolderBackups(
         !ids.add(plan.toId)) {
       throw const RecoveryRequired('Folder backup ownership disagrees.');
     }
-    roots.add(plan.rootIdentity);
-    final json = plan.toJson();
-    for (final key in ['source', 'destination']) {
-      final value = json[key] as Map<String, Object?>?;
-      if (value != null &&
-          (value['identity'] == plan.rootIdentity ||
-              !identities.add(value['identity'] as String))) {
-        throw const RecoveryRequired('Folder backup identities overlap.');
-      }
-    }
-  }
-  if (roots.length > 1) {
-    throw const RecoveryRequired('Folder backup roots disagree.');
   }
 }
 
@@ -576,7 +561,7 @@ void validateFolderParticipantPaths(
     for (final name in [
       'relocation-writes',
       'compound-writes',
-      'training-writes',
+      'recovery-quarantine',
       'unfinished-moves',
       'backups',
       'books.json',

@@ -96,7 +96,7 @@ final class GenerationTrees {
     if (stage.status == 0 && listEquals(stage.bytes, bytes)) {
       await File(stagePath).delete();
     } else {
-      await requireUnusedRecoveryStage(path);
+      await discardLeftoverStage(path);
     }
     if (current.status == 1) await createFileExclusively(path, bytes);
   }

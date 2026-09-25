@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'csv_records.dart';
 import 'training_rows.dart';
+import 'recovery_files.dart';
 
 const trainingFileNames = [reviewsFile, streaksFile, historyFile, attemptsFile];
 
@@ -238,12 +239,7 @@ final class TrainingUnreadable implements Exception {
   final int line;
 }
 
-bool _marked(Uint8List? bytes) =>
-    bytes != null &&
-    bytes.length >= 3 &&
-    bytes[0] == 0xef &&
-    bytes[1] == 0xbb &&
-    bytes[2] == 0xbf;
+bool _marked(Uint8List? bytes) => bytes != null && hasByteOrderMark(bytes);
 
 void _safeStrings(Object? value) {
   if (value is String) {

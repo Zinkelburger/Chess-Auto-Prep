@@ -156,7 +156,7 @@ final class MatchFolder implements MatchStore {
     if (observed.status != 0) {
       throw FileSystemException('Match directory is unreadable', folder);
     }
-    await requireUnusedRecoveryStage(p.join(folder, _metadata));
+    await discardLeftoverStage(p.join(folder, _metadata));
     await _export(folder, decoded.bpgn);
     return StoredMatch(
       id: p.basename(folder),
@@ -172,7 +172,7 @@ final class MatchFolder implements MatchStore {
   Future<void> _export(String folder, String expected) async {
     final path = p.join(folder, _bpgn);
     final current = await _text(path);
-    await requireUnusedRecoveryStage(path);
+    await discardLeftoverStage(path);
     if (current != expected) await publish(path, utf8.encode(expected));
   }
 
@@ -262,7 +262,7 @@ final class MatchFolder implements MatchStore {
         // Validate both participants and staging paths before the first write.
         await _text(p.join(folder, _bpgn));
         for (final file in [path, p.join(folder, _bpgn)]) {
-          await requireUnusedRecoveryStage(file);
+          await discardLeftoverStage(file);
         }
         await publish(path, utf8.encode(after));
         await publish(p.join(folder, _bpgn), utf8.encode(decoded.bpgn));
@@ -357,7 +357,7 @@ Future<String?> _text(String path) async {
   }
   final bytes = observed.bytes!;
   try {
-    return '${bytes.length >= 3 && bytes[0] == 0xef && bytes[1] == 0xbb && bytes[2] == 0xbf ? '\ufeff' : ''}${utf8.decode(bytes)}';
+    return exactText(bytes);
   } on FormatException {
     throw FileSystemException('Match file is not valid UTF-8.', path);
   }

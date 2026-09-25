@@ -29,6 +29,8 @@ import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
 import 'directory_entries.dart';
+import 'journal_records.dart';
+import 'recovery_quarantine.dart';
 import 'atomic_write.dart';
 import 'document_ref.dart';
 import 'training_records.dart';
@@ -89,10 +91,17 @@ final class RelocationNotes {
   /// Validate every retained note without changing its namespace or rows.
   Future<bool> inspect() async => (await _notes.read()).isNotEmpty;
 
-  /// Finishes the rows every move that stopped half way still owes.
+  /// Finishes the rows every move that stopped half way still owes. A note
+  /// that cannot be finished is set aside and logged; the others still run.
   Future<void> finishOwed() async {
-    for (final move in await _notes.read()) {
-      await _finish(move);
+    final notes = await readJournal(_notes._folder, decode: decodeMoveNote);
+    for (final (file, move) in notes) {
+      try {
+        await _notes._validate(move);
+        await _finish(move);
+      } on Object catch (error) {
+        await quarantine(_notes.support, file, error);
+      }
     }
   }
 
@@ -291,29 +300,7 @@ final class PendingRepoints {
         'Relocation note $id cannot be read as a regular file.',
       );
     }
-    final json = jsonDecode(utf8.decode(observed.bytes!));
-    if (json is! Map<String, Object?> ||
-        json.length != 4 ||
-        !json.keys.every(const {'from', 'to', 'identity', 'folder'}.contains)) {
-      throw RecoveryRequired('Unsupported relocation schema in $id.');
-    }
-    final from = json['from'];
-    final to = json['to'];
-    final identity = json['identity'];
-    final folder = json['folder'];
-    if (from is! String ||
-        to is! String ||
-        identity is! String ||
-        folder is! bool) {
-      throw RecoveryRequired('Malformed relocation note $id.');
-    }
-    final move = UnfinishedMove(
-      id: id,
-      from: from,
-      to: to,
-      identity: identity,
-      folder: folder,
-    );
+    final move = decodeMoveNote(jsonDecode(utf8.decode(observed.bytes!)), id);
     await _validate(move);
     return move;
   }
@@ -368,6 +355,32 @@ final class PendingRepoints {
   }
 
   String _pathOf(String id) => p.join(_folder.path, '$id.json');
+}
+
+/// A note as written, or a [RecoveryRequired] saying why it is not one.
+UnfinishedMove decodeMoveNote(Object? json, String id) {
+  if (json is! Map<String, Object?> ||
+      json.length != 4 ||
+      !json.keys.every(const {'from', 'to', 'identity', 'folder'}.contains)) {
+    throw RecoveryRequired('Unsupported relocation schema in $id.');
+  }
+  final from = json['from'];
+  final to = json['to'];
+  final identity = json['identity'];
+  final folder = json['folder'];
+  if (from is! String ||
+      to is! String ||
+      identity is! String ||
+      folder is! bool) {
+    throw RecoveryRequired('Malformed relocation note $id.');
+  }
+  return UnfinishedMove(
+    id: id,
+    from: from,
+    to: to,
+    identity: identity,
+    folder: folder,
+  );
 }
 
 // Resolve configured aliases once, before any asynchronous operation. The

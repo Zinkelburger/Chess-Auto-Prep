@@ -177,7 +177,7 @@ final class SettingsStore extends ChangeNotifier {
         // including when a newer accepted snapshot supersedes it.
         _baseline = current;
         _loaded = true;
-        await requireUnusedRecoveryStage(file.path);
+        await discardLeftoverStage(file.path);
         _attempted = next;
         await publish(file.path, utf8.encode(next));
         _baseline = next;

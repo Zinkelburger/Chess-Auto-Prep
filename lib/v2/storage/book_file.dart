@@ -108,7 +108,7 @@ final class BookFile implements BookStore {
             'Books changed in another instance. Reload before editing.',
           );
         }
-        await requireUnusedRecoveryStage(_path);
+        await discardLeftoverStage(_path);
         // Keep both possible outcomes until publication is acknowledged. A
         // successor can follow verified prior bytes; an unrelated edit conflicts.
         _baseline = current;
@@ -154,18 +154,13 @@ final class BookFile implements BookStore {
       FileUnreadable(:final detail) => throw FileSystemException(detail, _path),
       FileFound(:final bytes, :final revision) => (
         // UTF-8 decoding strips a BOM. Keep it in the optimistic raw baseline.
-        text: '${_hasBom(bytes) ? '\ufeff' : ''}${utf8.decode(bytes)}',
+        text: exactText(bytes),
         source: _source(revision),
       ),
     };
   }
 }
 
-bool _hasBom(List<int> bytes) =>
-    bytes.length >= 3 &&
-    bytes[0] == 0xef &&
-    bytes[1] == 0xbb &&
-    bytes[2] == 0xbf;
 
 Revision _installedRevision(NativeFileObservation file) {
   final hash = file.sha256Hex;

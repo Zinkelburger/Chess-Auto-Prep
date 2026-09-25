@@ -9,6 +9,7 @@ import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
 import 'atomic_write.dart';
+import '../diagnostics/log.dart';
 import 'relocation_notes.dart' show RecoveryRequired;
 
 /// A native rename cannot cross volumes. Refuse that known impossibility
@@ -85,11 +86,30 @@ Future<bool> recoveryDirectory(
   return true;
 }
 
-Future<void> requireUnusedRecoveryStage(String path) async {
-  final stage = await observeFile(temporaryPathFor(path));
-  if (stage.status != 1) {
-    throw RecoveryRequired('An unverified staged file remains for $path.');
+/// Removes the staged copy a killed write left beside [path]. A staged copy is
+/// never the file itself: it holds bytes whose publication was not confirmed,
+/// and every writer here restages from its own input.
+Future<void> discardLeftoverStage(String path) async {
+  final stage = File(temporaryPathFor(path));
+  if (await FileSystemEntity.type(stage.path, followLinks: false) !=
+      FileSystemEntityType.file) {
+    return;
   }
+  log.w('remove the staged copy a stopped write left at ${stage.path}');
+  await stage.delete();
+}
+
+/// The native reader's allocation limit. A journal it could not read back
+/// after a restart is refused before it is written.
+const journalByteLimit = 512 * 1024 * 1024;
+
+/// Encodes [json] as a journal, refusing one the reader could not load.
+List<int> encodeJournal(Map<String, Object?> json) {
+  final bytes = utf8.encode(jsonEncode(json));
+  if (bytes.length > journalByteLimit) {
+    throw const RecoveryRequired('The operation is too large to record.');
+  }
+  return bytes;
 }
 
 Future<void> flushRecoveryDirectory(
@@ -162,12 +182,19 @@ Future<String?> recoveryText(String path) async {
       'Recovery participant is unreadable or linked: $path.',
     );
   }
-  final bytes = file.bytes!;
+  return exactText(file.bytes!);
+}
+
+/// Whether [bytes] open with a UTF-8 byte-order mark.
+bool hasByteOrderMark(List<int> bytes) =>
+    bytes.length >= 3 &&
+    bytes[0] == 0xef &&
+    bytes[1] == 0xbb &&
+    bytes[2] == 0xbf;
+
+/// UTF-8 text that keeps a leading byte-order mark, which [utf8] drops, so
+/// comparing it with a recorded snapshot compares the exact bytes.
+String exactText(List<int> bytes) {
   final text = utf8.decode(bytes);
-  final marked =
-      bytes.length >= 3 &&
-      bytes[0] == 0xef &&
-      bytes[1] == 0xbb &&
-      bytes[2] == 0xbf;
-  return marked ? '\ufeff$text' : text;
+  return hasByteOrderMark(bytes) ? '\ufeff$text' : text;
 }

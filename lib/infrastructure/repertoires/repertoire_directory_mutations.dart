@@ -11,9 +11,6 @@ import '../../utils/safe_file_name.dart';
 import '../../services/storage/file_mutation_service.dart';
 import '../../utils/atomic_file.dart';
 import '../../utils/file_operation_lock.dart';
-import 'foreign_relocation_history.dart';
-import 'foreign_training_history.dart';
-import 'foreign_recovery_copies.dart';
 
 enum RepertoireMoveStep { prepared, moved, referencesUpdated, completed }
 
@@ -27,11 +24,6 @@ class RepertoireDirectoryMutations {
     required this.repoint,
     this.testHook,
     this.recoverAdditional,
-    this.foreignRecoveryNotes,
-    this.compoundRecoveryNotes,
-    this.relocationRecoveryNotes,
-    this.trainingRecoveryNotes,
-    this.compoundDocumentsRoot,
     this.trash,
     this.trashAllowedRoot,
     FileMutationService? mutations,
@@ -42,15 +34,6 @@ class RepertoireDirectoryMutations {
   final Directory root;
   final Directory journals;
 
-  /// Existing v2 notes have no completed state: any entry requires v2 recovery.
-  final Directory? foreignRecoveryNotes;
-
-  /// Versioned v2 PGN/book operations. Terminal history remains compatible;
-  /// pending or unrecognized metadata requires its owning application's recovery.
-  final Directory? compoundRecoveryNotes;
-  final Directory? relocationRecoveryNotes;
-  final Directory? trainingRecoveryNotes;
-  final Directory? compoundDocumentsRoot;
   final Directory? trash;
   final Directory? trashAllowedRoot;
   final Future<void> Function(String from, String to, String operationId)
@@ -64,214 +47,12 @@ class RepertoireDirectoryMutations {
     return withFileOperationLock(
       p.join(canonicalRoot, '.cap-directory-domain'),
       () async {
-        await checkForeignTrainingHistory(
-          trainingRecoveryNotes,
-          documents: compoundDocumentsRoot,
-        );
-        await checkForeignRelocationHistory(
-          relocationRecoveryNotes,
-          documents: compoundDocumentsRoot,
-        );
-        await _refuseCompoundRecovery();
-        await _refuseForeignRecovery();
         await _recover();
         await recoverAdditional?.call();
         return action();
       },
     );
   }
-
-  Future<void> _refuseForeignRecovery() async {
-    final notes = foreignRecoveryNotes;
-    if (notes == null) return;
-    try {
-      final type = await FileSystemEntity.type(notes.path, followLinks: false);
-      if (type == FileSystemEntityType.notFound) return;
-      if (type != FileSystemEntityType.directory) {
-        throw const FormatException(
-          'Unfinished move storage is not a directory',
-        );
-      }
-      await for (final entry in notes.list(followLinks: false)) {
-        // Unknown names, partial files and links are evidence too. Never follow
-        // or remove them, and never mistake an unreadable note for no note.
-        throw RepertoireRecoveryRequired(
-          p.basename(entry.path),
-          'Unfinished v2 move',
-          message:
-              'Reopen v2 to recover the unfinished move '
-              '${p.basename(entry.path)} before accessing documents or training. '
-              'Its recovery files have been preserved.',
-        );
-      }
-    } on RepertoireRecoveryRequired {
-      rethrow;
-    } on Object catch (error) {
-      throw RepertoireRecoveryRequired(
-        notes.path,
-        error,
-        message:
-            'The unfinished v2 moves could not be checked. Reopen v2 '
-            'to resolve recovery before accessing documents or training. '
-            'Its recovery files have been preserved.',
-      );
-    }
-  }
-
-  Future<void> _refuseCompoundRecovery() async {
-    final notes = compoundRecoveryNotes;
-    if (notes == null) return;
-    try {
-      final type = await FileSystemEntity.type(notes.path, followLinks: false);
-      if (type == FileSystemEntityType.notFound) return;
-      if (type != FileSystemEntityType.directory) {
-        throw const FormatException(
-          'Compound write storage is not a directory',
-        );
-      }
-      final documents = compoundDocumentsRoot;
-      if (documents == null) {
-        throw const FormatException(
-          'Compound document boundary is unavailable',
-        );
-      }
-      final roots = {p.normalize(p.absolute(documents.path))};
-      if (await documents.exists()) {
-        roots.add(p.normalize(await documents.resolveSymbolicLinks()));
-      }
-      await checkForeignRecoveryHistory(
-        notes,
-        validate: (value, id, terminal) {
-          _checkCompoundHistory(value, id, roots, terminal: terminal);
-        },
-      );
-    } on Object catch (error) {
-      throw RepertoireRecoveryRequired(
-        notes.path,
-        error,
-        message:
-            'A compound document operation requires recovery. Reopen v2 '
-            'to resolve it before accessing documents or training. '
-            'Its recovery files have been preserved.',
-      );
-    }
-  }
-
-  void _checkCompoundHistory(
-    Object? value,
-    String id,
-    Set<String> roots, {
-    required bool terminal,
-  }) {
-    if (value is Map<String, Object?> && value['version'] == 2) {
-      _checkCompoundPair(value, id, roots, terminal: terminal);
-      return;
-    }
-    if (value is! Map<String, Object?> ||
-        value.length != _compoundFields.length ||
-        !value.keys.toSet().containsAll(_compoundFields) ||
-        value['version'] is! int ||
-        value['version'] != 1 ||
-        value['id'] != id ||
-        !(terminal
-                ? const {'complete', 'cancelled'}
-                : const {'prepared', 'committing', 'complete', 'cancelled'})
-            .contains(value['state']) ||
-        value['documentBefore'] is! String ||
-        value['documentAfter'] is! String ||
-        (value['booksBefore'] != null && value['booksBefore'] is! String) ||
-        (value['booksAfter'] != null && value['booksAfter'] is! String)) {
-      throw FormatException('Pending or unknown compound operation: $id');
-    }
-    for (final field in [
-      'documentBefore',
-      'documentAfter',
-      'booksBefore',
-      'booksAfter',
-    ]) {
-      final text = value[field] as String?;
-      if (text == null) continue;
-      if (text.contains('\u0000') ||
-          utf8.decode(utf8.encode('x$text')) != 'x$text' ||
-          (field.startsWith('books') &&
-              jsonDecode(text) is! Map<String, Object?>)) {
-        throw FormatException('Invalid compound snapshot: $id');
-      }
-    }
-    _checkCompoundPath(value['documentPath'], id, roots);
-  }
-
-  void _checkCompoundPair(
-    Map<String, Object?> value,
-    String id,
-    Set<String> roots, {
-    required bool terminal,
-  }) {
-    const fields = {'version', 'id', 'state', 'documents'};
-    if (value.length != fields.length ||
-        !value.keys.every(fields.contains) ||
-        value['version'] is! int ||
-        value['version'] != 2 ||
-        value['id'] != id ||
-        !(terminal
-                ? const {'complete', 'cancelled'}
-                : const {'prepared', 'committing', 'complete', 'cancelled'})
-            .contains(value['state']) ||
-        value['documents'] is! List ||
-        (value['documents'] as List).length != 2) {
-      throw FormatException('Pending or unknown two-PGN operation: $id');
-    }
-    final paths = <String>[];
-    for (final entry in value['documents'] as List) {
-      const documentFields = {'path', 'before', 'after'};
-      if (entry is! Map<String, Object?> ||
-          entry.length != documentFields.length ||
-          !entry.keys.every(documentFields.contains)) {
-        throw FormatException('Invalid compound participant: $id');
-      }
-      _checkCompoundPath(entry['path'], id, roots);
-      for (final key in ['before', 'after']) {
-        final text = entry[key];
-        if (text is! String ||
-            text.contains('\u0000') ||
-            utf8.decode(utf8.encode('x$text')) != 'x$text') {
-          throw FormatException('Invalid compound snapshot: $id');
-        }
-      }
-      final path = entry['path']! as String;
-      // Configured and resolved profile roots name the same Documents. Compare
-      // their relative names too, without consulting historical participants.
-      final matching = roots.where((root) => p.isWithin(root, path)).toList()
-        ..sort((a, b) => b.length.compareTo(a.length));
-      final relative = p.relative(path, from: matching.first);
-      if (paths.any((previous) => p.equals(previous, relative))) {
-        throw FormatException('Repeated compound document: $id');
-      }
-      paths.add(relative);
-    }
-  }
-
-  void _checkCompoundPath(Object? path, String id, Set<String> roots) {
-    if (path is! String ||
-        path.contains('\u0000') ||
-        !p.isAbsolute(path) ||
-        p.normalize(path) != path ||
-        p.extension(path).toLowerCase() != '.pgn' ||
-        !roots.any((root) => p.isWithin(root, path))) {
-      throw FormatException('Invalid compound document path: $id');
-    }
-  }
-
-  static const _compoundFields = {
-    'version',
-    'id',
-    'state',
-    'documentPath',
-    'documentBefore',
-    'documentAfter',
-    'booksBefore',
-    'booksAfter',
-  };
 
   Future<void> recover() => guard(() async {});
 

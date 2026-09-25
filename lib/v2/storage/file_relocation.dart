@@ -9,7 +9,8 @@ import 'backups.dart';
 import 'backup_relocation.dart';
 import 'book_references.dart';
 import 'directory_entries.dart';
-import 'recovery_copies.dart';
+import 'journal_records.dart';
+import 'recovery_quarantine.dart';
 import 'document_probe.dart';
 import 'document_ref.dart';
 import 'directory_snapshot.dart';
@@ -32,10 +33,15 @@ enum FileRelocationStep {
   completed,
 }
 
-/// A file's location, training, selectors and backup ownership commit together.
-/// The caller holds the profile domain, Documents and Support locks throughout.
-/// Intent authorizes forward recovery from immutable before/after snapshots;
-/// terminal receipts acknowledge exact retries without inspecting reused paths.
+/// A file's or folder's location, training rows, book selectors and kept
+/// versions change together. The caller holds the profile domain, Documents
+/// and Support locks throughout.
+///
+/// The move is written down in `Support/relocation-writes/<id>.json` before
+/// anything changes and removed once everything has. A stopped process leaves
+/// the record, and the next start finishes it: training rows and books that
+/// changed in the meantime are repointed as they now are. A move that cannot
+/// be finished is set aside and logged, never left in the way of other work.
 final class FileRelocations {
   FileRelocations({
     required Directory documents,
@@ -59,6 +65,10 @@ final class FileRelocations {
   final Directory documents;
   final Directory support;
   final Future<void> Function(FileRelocationStep)? testHook;
+
+  // Moves this process finished, so a retry of the same id is answered
+  // without moving again. Retries only come from this process.
+  final _completed = <String, RelocationRecord>{};
   Directory get _folder => Directory(p.join(support.path, 'relocation-writes'));
   BackupArchive get _backups =>
       BackupArchive(Directory(p.join(support.path, 'backups')));
@@ -86,10 +96,8 @@ final class FileRelocations {
       final target = _canonical(to);
       validateFolderRelocationPaths(documents, source, target);
       validateFolderParticipantPaths(documents, support, source, target);
-      final notes = await _readAll();
-      final existing = notes
-          .where((note) => note.id == operationId)
-          .firstOrNull;
+      final existing =
+          _completed[operationId] ?? await _pendingRecord(operationId);
       if (existing != null &&
           (existing is! FolderRelocationRecord ||
               existing.from != source ||
@@ -98,9 +106,8 @@ final class FileRelocations {
           'This relocation id belongs to another operation.',
         );
       }
-      await _recover(notes);
-      if (existing?.state == RelocationState.complete) {
-        return _folderResult(existing as FolderRelocationRecord);
+      if (_completed.containsKey(operationId)) {
+        return _folderResult(existing! as FolderRelocationRecord);
       }
       final FolderRelocationRecord record;
       if (existing != null) {
@@ -120,7 +127,7 @@ final class FileRelocations {
         }
         record = await _planFolder(operationId, source, target);
       }
-      await _prepare(record, fresh: existing == null);
+      if (existing == null) await _prepare(record);
       await _finish(record);
       return _folderResult(record);
     } on Object catch (error) {
@@ -175,7 +182,7 @@ final class FileRelocations {
       }
       final source = p.join(from, entry.path);
       final target = p.join(to, entry.path);
-      backups[entry.path] = await _backups.planMove(
+      backups[entry.path] = _backups.planMove(
         fromId: backupId(p.relative(source, from: documents.path)),
         toId: backupId(p.relative(target, from: documents.path)),
         documentPath: target,
@@ -246,8 +253,8 @@ final class FileRelocations {
       final source = _canonical(from.path);
       final target = _canonical(to.path);
       validateRelocationPaths(documents, source, target);
-      final notes = await _readAll();
-      final found = notes.where((n) => n.id == operationId).firstOrNull;
+      final found =
+          _completed[operationId] ?? await _pendingRecord(operationId);
       if (found != null && found is! FileRelocationRecord) {
         throw const RecoveryRequired(
           'This relocation id belongs to a folder move.',
@@ -268,10 +275,7 @@ final class FileRelocations {
           'This relocation id belongs to another move.',
         );
       }
-      await _recover(notes);
-      if (existing?.state == RelocationState.complete) {
-        return _result(existing!);
-      }
+      if (_completed.containsKey(operationId)) return _result(existing!);
       final FileRelocationRecord record;
       if (existing != null) {
         record = existing;
@@ -300,7 +304,7 @@ final class FileRelocations {
           keepCurrent: keepCurrent,
         );
       }
-      await _prepare(record, fresh: existing == null);
+      if (existing == null) await _prepare(record);
       await _finish(record);
       return _result(record);
     } on Object catch (error) {
@@ -350,13 +354,12 @@ final class FileRelocations {
       to: to,
       directory: false,
     );
-    Future<BackupMove> backupPlan() => _backups.planMove(
+    final backup = _backups.planMove(
       fromId: backupId(p.relative(from, from: documents.path)),
       toId: backupId(p.relative(to, from: documents.path)),
       documentPath: to,
       operationId: id,
     );
-    var backup = await backupPlan();
     if (keepCurrent) {
       final kept = await _backups.record(
         id: backup.fromId,
@@ -374,7 +377,6 @@ final class FileRelocations {
         through: support.path,
         synchronize: _synchronize,
       );
-      backup = await backupPlan();
     }
     return FileRelocationRecord(
       id: id,
@@ -391,7 +393,7 @@ final class FileRelocations {
     );
   }
 
-  Future<void> _prepare(RelocationRecord record, {required bool fresh}) async {
+  Future<void> _prepare(RelocationRecord record) async {
     record.validate(documents: documents, support: support);
     await _preflight(record, allowAfter: false);
     await recoveryDirectory(support, create: true);
@@ -402,53 +404,50 @@ final class FileRelocations {
       through: _metadataBoundary,
       synchronize: _synchronize,
     );
-    await _record(record, RelocationState.prepared, fresh: fresh);
     await testHook?.call(FileRelocationStep.prepared);
     await _keepTraining(record);
-    await _preflight(record, allowAfter: false);
-    await _record(record, RelocationState.committing);
+    final path = _path(record.id);
+    await discardLeftoverStage(path);
+    await createFileExclusively(
+      path,
+      encodeJournal(record.toJson(RelocationState.committing)),
+    );
     await testHook?.call(FileRelocationStep.intent);
   }
 
-  /// Validate every receipt without replay, before choosing recovery order.
+  /// Whether a move a stopped process began is still waiting to finish.
   Future<bool> inspect() async {
     _checkRoots();
-    try {
-      final notes = await _readAll();
-      return notes.any(
-        (note) =>
-            note.state == RelocationState.prepared ||
-            note.state == RelocationState.committing,
-      );
-    } on RecoveryRequired {
-      rethrow;
-    } on Object catch (error) {
-      throw RecoveryRequired('File relocation inspection failed: $error');
-    }
+    return (await _readAll()).any(
+      (note) => note.$2.state == RelocationState.committing,
+    );
   }
 
+  /// Finishes the moves a stopped process began. One that cannot be finished
+  /// is set aside and logged; the rest still run.
   Future<void> recover() async {
     _checkRoots();
-    try {
-      await _recover(await _readAll());
-    } on RecoveryRequired {
-      rethrow;
-    } on Object catch (error) {
-      throw RecoveryRequired('File relocation recovery failed: $error');
+    for (final (file, note) in await _readAll()) {
+      try {
+        if (note.state != RelocationState.committing) {
+          // Earlier builds kept finished and abandoned records too.
+          await file.delete();
+          continue;
+        }
+        await _finish(note);
+      } on Object catch (error) {
+        await quarantine(support, file, error);
+      }
     }
   }
 
-  Future<void> _recover(List<RelocationRecord> notes) async {
-    for (final note in notes) {
-      switch (note.state) {
-        case RelocationState.prepared:
-          await _record(note, RelocationState.cancelled);
-        case RelocationState.committing:
-          await _finish(note);
-        case RelocationState.complete || RelocationState.cancelled:
-          break;
+  Future<RelocationRecord?> _pendingRecord(String id) async {
+    for (final (_, note) in await _readAll()) {
+      if (note.id == id && note.state == RelocationState.committing) {
+        return note;
       }
     }
+    return null;
   }
 
   Future<void> _finish(RelocationRecord record) async {
@@ -480,25 +479,65 @@ final class FileRelocations {
       FileRelocationStep.history,
       FileRelocationStep.attempts,
     ];
-    for (var i = 0; i < record.training.files.length; i++) {
-      final file = record.training.files[i];
-      await _publish(
-        p.join(documents.path, file.name),
-        file.before,
-        file.after,
-      );
+    final rows = await _trainingNow(record);
+    for (var i = 0; i < rows.length; i++) {
+      final file = rows[i];
+      await _publish(p.join(documents.path, file.name), file.after);
       await testHook?.call(steps[i]);
     }
-    await _publish(_books, record.booksBefore, record.booksAfter);
+    final books = await recoveryText(_books);
+    await _publish(
+      _books,
+      books == record.booksBefore || books == record.booksAfter
+          ? record.booksAfter
+          : relocateBookReferences(
+              books,
+              repertoireRoot: p.join(documents.path, 'repertoires'),
+              from: record.from,
+              to: record.to,
+              directory: record is FolderRelocationRecord,
+            ),
+    );
     await testHook?.call(FileRelocationStep.books);
     for (final backup in record.backups) {
-      await _backups.applyMove(backup);
+      await _backups.applyMove(backup, documents: documents);
       await testHook?.call(FileRelocationStep.backups);
     }
-    await _record(record, RelocationState.complete);
+    _completed[record.id] = record;
+    final journal = File(_path(record.id));
+    if (await journal.exists()) await journal.delete();
+    await flushRecoveryDirectory(_folder.path, synchronize: _synchronize);
     await testHook?.call(FileRelocationStep.completed);
   }
 
+  /// The training rewrite as planned, or planned again from the files as they
+  /// are now when somebody trained between the plan and this finish.
+  Future<List<training.TrainingRepointFile>> _trainingNow(
+    RelocationRecord record,
+  ) async {
+    var current = true;
+    for (final file in record.training.files) {
+      final text = await recoveryText(p.join(documents.path, file.name));
+      if (text != file.before && text != file.after) current = false;
+    }
+    if (current) return record.training.files;
+    return (await training.TrainingRecords(documents).plan(
+      DocumentRef(record.from),
+      DocumentRef(record.to),
+      alternateFrom: DocumentRef(
+        p.join(
+          record.trainingRoot,
+          p.relative(record.from, from: documents.path),
+        ),
+      ),
+      alternateTo: DocumentRef(
+        p.join(record.trainingRoot, p.relative(record.to, from: documents.path)),
+      ),
+    )).files;
+  }
+
+  /// Before a move starts, its participants must still be what was planned;
+  /// when finishing one, only its location has to be recognisable.
   Future<bool> _preflight(
     RelocationRecord record, {
     required bool allowAfter,
@@ -518,20 +557,11 @@ final class FileRelocations {
         directory: record is FolderRelocationRecord,
       );
     }
-    for (final file in record.training.files) {
-      await _expect(
-        p.join(documents.path, file.name),
-        file.before,
-        allowAfter ? file.after : file.before,
-      );
-    }
-    await _expect(
-      _books,
-      record.booksBefore,
-      allowAfter ? record.booksAfter : record.booksBefore,
-    );
-    for (final backup in record.backups) {
-      await _backups.validateMove(backup, allowAfter: allowAfter);
+    if (!allowAfter) {
+      for (final file in record.training.files) {
+        await _expect(p.join(documents.path, file.name), file.before);
+      }
+      await _expect(_books, record.booksBefore);
     }
     return before;
   }
@@ -581,14 +611,9 @@ final class FileRelocations {
     for (final file in record.training.files.where((f) => f.changed)) {
       final path = p.join(folder.path, file.name);
       await _parents(path, create: true);
-      final kept = await recoveryText(path);
-      if (kept == null) {
-        await requireUnusedRecoveryStage(path);
+      if (await recoveryText(path) == null) {
+        await discardLeftoverStage(path);
         await createFileExclusively(path, utf8.encode(file.before!));
-      } else if (kept != file.before) {
-        throw RecoveryRequired(
-          'The retained training snapshot changed: $path.',
-        );
       }
       await flushRecoveryAncestry(
         folder.path,
@@ -598,55 +623,25 @@ final class FileRelocations {
     }
   }
 
-  Future<void> _publish(String path, String? before, String? after) async {
-    final current = await _expect(path, before, after);
-    if (current == after) {
+  Future<void> _publish(String path, String? after) async {
+    final current = await recoveryText(path);
+    if (current == after || after == null) {
       await flushRecoveryDirectory(p.dirname(path), synchronize: _synchronize);
-    } else if (after == null) {
-      throw const RecoveryRequired('Relocation cannot remove a participant.');
     } else {
-      await requireUnusedRecoveryStage(path);
+      await discardLeftoverStage(path);
       await replaceFile(path, utf8.encode(after));
     }
   }
 
-  Future<String?> _expect(String path, String? before, String? after) async {
-    final current = await recoveryText(path);
-    if (current != before && current != after) {
-      throw RecoveryRequired(
-        'A relocation participant changed externally: $path.',
-      );
+  Future<void> _expect(String path, String? expected) async {
+    if (await recoveryText(path) != expected) {
+      throw RecoveryRequired('$path changed while the move was prepared.');
     }
-    return current;
   }
 
-  Future<void> _record(
-    RelocationRecord record,
-    RelocationState state, {
-    bool fresh = false,
-  }) async {
-    final path = _path(record.id);
-    await requireUnusedRecoveryStage(path);
-    final bytes = utf8.encode(jsonEncode(record.toJson(state)));
-    if (bytes.length > 512 * 1024 * 1024) {
-      throw const RecoveryRequired(
-        'The relocation journal exceeds the native read limit.',
-      );
-    }
-    if (fresh) {
-      await createFileExclusively(path, bytes);
-    } else {
-      await replaceFile(path, bytes);
-    }
-    record.state = state;
-  }
-
-  Future<List<RelocationRecord>> _readAll() async {
-    if (!await recoveryDirectory(support) ||
-        !await recoveryDirectory(_folder)) {
-      return [];
-    }
-    return readRecoveryRecords(
+  Future<List<(File, RelocationRecord)>> _readAll() async {
+    if (!await recoveryDirectory(support)) return const [];
+    return readJournal(
       _folder,
       decode: (value, id) {
         final note = RelocationRecord.fromJson(

@@ -293,19 +293,8 @@ final class ChapterDirectory implements ChapterFiles {
     try {
       // Migration uses the public store outside the non-reentrant domain.
       await _migrateFlat();
-      final captured = await _recovery.run(_capture);
-      final listing = await _listingOf(captured);
-      // An incomplete listing remains diagnostic, never a complete snapshot.
-      if (listing.unreadable.isNotEmpty) return listing;
-      return switch (await validate(listing, observed: const {})) {
-        RepertoireCurrent() => listing,
-        RepertoireChanged() => const RepertoiresUnreadable(
-          'The repertoire files changed while they were being read. Refresh to retry.',
-        ),
-        RepertoireValidationFailed(:final detail) => RepertoiresUnreadable(
-          detail,
-        ),
-      };
+      // One read of each chapter, under the profile lock, is the snapshot.
+      return _listingOf(await _recovery.run(_capture));
     } on RecoveryRequired catch (error) {
       return RepertoiresUnreadable(error.detail);
     } on FileSystemException catch (error) {
@@ -646,50 +635,47 @@ final class ChapterDirectory implements ChapterFiles {
       for (final file in folder.files) {
         final observed = await probeDocument(file.path);
         if (observed is! FileFound) {
-          throw FileSystemException(
-            'Cannot read a complete repertoire snapshot',
-            file.path,
+          // One chapter that cannot be read is reported on its own; the
+          // rest of the library still lists.
+          inventory.unreadable.add(
+            UnreadableFolder(
+              name: p.basename(file.path),
+              path: file.path,
+              detail: observed is FileUnreadable
+                  ? observed.detail
+                  : 'The chapter disappeared while the library was read.',
+            ),
           );
+          continue;
         }
+        final known = _metadata[file.path];
         documents[file.path] = (
           revision: observed.revision,
           modified: (await file.stat()).modified,
+          metadata: known != null && known.revision == observed.revision
+              ? known.value
+              : await _readMetadata(
+                  utf8.decode(observed.bytes, allowMalformed: true),
+                ),
         );
       }
     }
     return (inventory: inventory, documents: documents);
   }
 
-  Future<_Metadata> _metadataOf(String path, Revision expected) async {
-    final observed = await _recovery.run(() => probeDocument(path));
-    if (observed is! FileFound) {
-      throw FileSystemException('Cannot read chapter metadata', path);
-    }
-    if (!sameChapterRevision(expected, observed.revision)) {
-      throw FileSystemException(
-        'The repertoire files changed while reading metadata. Refresh to retry.',
-        path,
-      );
-    }
-    return _readMetadata(utf8.decode(observed.bytes));
-  }
-
-  /// Metadata parsing happens after capture releases the recovery domain.
-  /// Only one uncached PGN is materialized at a time, against its captured
-  /// proof. Content-addressed metadata is cached, bounded to this listing.
-  Future<Repertoires> _listingOf(_CapturedLibrary captured) async {
+  /// Chapter names and headings come from the capture's own read of each
+  /// file; unchanged files reuse what the previous listing parsed.
+  Repertoires _listingOf(_CapturedLibrary captured) {
     final folders = <RepertoireFolder>[];
     final metadata = <String, ({Revision revision, _Metadata value})>{};
     for (final folder in captured.inventory.folders) {
       final chapters = <ChapterRef>[];
       var modified = folder.modified;
       for (final file in folder.files) {
-        final read = captured.documents[file.path]!;
+        final read = captured.documents[file.path];
+        if (read == null) continue;
         if (read.modified.isAfter(modified)) modified = read.modified;
-        final known = _metadata[file.path];
-        final value = known?.revision == read.revision
-            ? known!.value
-            : await _metadataOf(file.path, read.revision);
+        final value = read.metadata;
         metadata[file.path] = (revision: read.revision, value: value);
         for (final section in value.names) {
           chapters.add(
@@ -737,7 +723,11 @@ typedef _Inventory = ({
   List<_FolderFiles> folders,
   List<UnreadableFolder> unreadable,
 });
-typedef _CapturedChapter = ({Revision revision, DateTime modified});
+typedef _CapturedChapter = ({
+  Revision revision,
+  DateTime modified,
+  _Metadata metadata,
+});
 typedef _CapturedLibrary = ({
   _Inventory inventory,
   Map<String, _CapturedChapter> documents,

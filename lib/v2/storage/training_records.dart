@@ -31,6 +31,7 @@ import 'atomic_write.dart';
 import 'csv_records.dart';
 import 'document_ref.dart';
 import 'training_rows.dart';
+import 'recovery_files.dart';
 
 /// The training records under one Documents folder.
 final class TrainingRecords {
@@ -108,13 +109,7 @@ final class TrainingRecords {
       // Dart's UTF-8 decoder consumes a leading BOM. Retain that exact prefix
       // separately while the existing record codecs read the decoded body.
       text = utf8.decode(bytes);
-      prefix =
-          bytes.length >= 3 &&
-              bytes[0] == 0xef &&
-              bytes[1] == 0xbb &&
-              bytes[2] == 0xbf
-          ? '\ufeff'
-          : '';
+      prefix = hasByteOrderMark(bytes) ? '\ufeff' : '';
     } on FileSystemException catch (error) {
       log.e('read $name to repoint $from', error);
       throw IoFailure(_detail(error));

@@ -4,7 +4,8 @@ import 'dart:io';
 import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
-import 'recovery_copies.dart';
+import 'journal_records.dart';
+import 'recovery_quarantine.dart';
 import 'atomic_write.dart';
 import 'compound_commit.dart';
 import 'document_ref.dart';
@@ -21,8 +22,13 @@ enum CompoundWriteStep {
 }
 
 /// One PGN and books, or two PGNs, under locks owned by the caller.
-/// Prepared snapshots alone authorize nothing: durable committing intent is
-/// required before publication. Complete receipts remain for exact retries.
+///
+/// The edit is written down in `Support/compound-writes/<id>.json` before
+/// either file changes, and the record is removed once both have. A process
+/// killed in between leaves the record, and the next start finishes it
+/// ([recover]). A record that cannot be finished — a participant changed
+/// since, or the record is damaged — is set aside and logged rather than
+/// blocking every later open and save.
 final class CompoundWrites {
   CompoundWrites({
     required Directory documents,
@@ -44,10 +50,11 @@ final class CompoundWrites {
   final Directory support;
   final Future<void> Function(CompoundWriteStep)? testHook;
 
-  // Native receipts exist only for publications observed by this process.
-  // A replayed completion never authorizes training against an arbitrary
-  // replacement now occupying the path; reopening supplies a new observation.
+  // What this process published, so a retry of the same id is answered
+  // without writing again. Retries only come from this process: the caller's
+  // retry token is in memory too.
   final _published = <(String, String?), Revision>{};
+  final _completed = <String, CompoundCommit>{};
   Revision? publishedRevision(String id, {String? path}) =>
       _published[(id, path)];
 
@@ -112,20 +119,29 @@ final class CompoundWrites {
 
   Future<CompoundCommit> _commit(CompoundCommit command) async {
     _validate(command);
-    final notes = await _readAll();
-    final existing = notes
-        .where((note) => note.command.id == command.id)
+    final done = _completed[command.id];
+    if (done != null) {
+      if (!_same(done, command)) {
+        throw RecoveryRequired(
+          'Compound id ${command.id} belongs to another command.',
+        );
+      }
+      return done;
+    }
+    final pending = await _readAll();
+    final existing = pending
+        .where((note) => note.$2.pending && note.$2.command.id == command.id)
         .firstOrNull;
-    if (existing != null && !_same(existing.command, command)) {
+    if (existing != null && !_same(existing.$2.command, command)) {
       throw RecoveryRequired(
         'Compound id ${command.id} belongs to another command.',
       );
     }
-    await _recover(notes);
-    if (existing?.state == _State.complete) return existing!.command;
-    // A fresh or cancelled command has not published either participant.
+    if (existing != null) {
+      await _finish(existing.$2);
+      return command;
+    }
     await _preflight(command, allowAfter: false);
-    final note = existing ?? _Note(command, _State.prepared);
     await recoveryDirectory(support, create: true);
     await recoveryDirectory(_folder, create: true);
     await flushRecoveryAncestry(
@@ -133,55 +149,46 @@ final class CompoundWrites {
       through: _metadataBoundary,
       synchronize: _synchronize,
     );
-    await _record(note, _State.prepared, fresh: existing == null);
     await testHook?.call(CompoundWriteStep.prepared);
-    await _record(note, _State.committing);
+    final note = _Note(command);
+    final path = _path(command.id);
+    await discardLeftoverStage(path);
+    await createFileExclusively(path, encodeJournal(note.json()));
     await testHook?.call(CompoundWriteStep.intent);
     await _finish(note);
-    return note.command;
+    return command;
   }
 
-  /// Validate every receipt without replay, before choosing recovery order.
+  /// Whether an edit a stopped process began is still waiting to finish.
   Future<bool> inspect() => _checked(() async {
     _checkRoots();
-    final notes = await _readAll();
-    return notes.any(
-      (note) =>
-          note.state == _State.prepared || note.state == _State.committing,
-    );
+    return (await _readAll()).any((note) => note.$2.pending);
   });
 
-  Future<void> recover() => _checked(() async {
+  /// Finishes the edits a stopped process began. One that cannot be finished
+  /// is set aside and logged; the rest still run.
+  Future<void> recover() async {
     _checkRoots();
-    await _recover(await _readAll());
-  });
-
-  Future<CompoundCommit?> completed(String id) => _checked(() async {
-    _validateId(id);
-    _checkRoots();
-    final notes = await _readAll();
-    for (final note in notes) {
-      if (note.command.id == id && note.state == _State.complete) {
-        return note.command;
-      }
-    }
-    return null;
-  });
-
-  Future<void> _recover(List<_Note> notes) async {
-    for (final note in notes) {
-      switch (note.state) {
-        case _State.prepared:
-          await _record(note, _State.cancelled);
-        case _State.committing:
-          await _finish(note);
-        case _State.complete || _State.cancelled:
-          break;
+    for (final (file, note) in await _readAll()) {
+      try {
+        if (!note.pending) {
+          await file.delete();
+          continue;
+        }
+        await _finish(note);
+      } on Object catch (error) {
+        await quarantine(support, file, error);
       }
     }
   }
 
-  Future<void> _finish(_Note note) async {
+  /// The edit this process finished under [id], or null.
+  Future<CompoundCommit?> completed(String id) async {
+    _validateId(id);
+    return _completed[id];
+  }
+
+  Future<void> _finish(_Note note) => _checked(() async {
     final command = note.command;
     // Check the complete read set before completing any remaining write.
     await _preflight(command, allowAfter: true);
@@ -205,9 +212,12 @@ final class CompoundWrites {
       await _publish(_books, command.booksBefore, command.booksAfter);
       await testHook?.call(CompoundWriteStep.books);
     }
-    await _record(note, _State.complete);
+    _completed[command.id] = command;
+    final record = File(_path(command.id));
+    if (await record.exists()) await record.delete();
+    await flushRecoveryDirectory(_folder.path, synchronize: _synchronize);
     await testHook?.call(CompoundWriteStep.completed);
-  }
+  });
 
   Future<void> _preflight(
     CompoundCommit command, {
@@ -221,21 +231,18 @@ final class CompoundWrites {
       await _documentParents(document.path);
       _expect(
         document.path,
-        await _text(document.path),
+        await recoveryText(document.path),
         document.before,
         allowAfter ? document.after : document.before,
       );
-      // Validate the whole staging read set before either participant changes.
-      await requireUnusedRecoveryStage(document.path);
     }
     if (command.secondary == null) {
       _expect(
         _books,
-        await _text(_books),
+        await recoveryText(_books),
         command.booksBefore,
         allowAfter ? command.booksAfter : command.booksBefore,
       );
-      await requireUnusedRecoveryStage(_books);
     }
   }
 
@@ -258,7 +265,7 @@ final class CompoundWrites {
     String? documentId,
     bool primary = true,
   }) async {
-    final current = await _text(path);
+    final current = await recoveryText(path);
     _expect(path, current, before, after);
     if (current == after) {
       // A prior rename/delete may have landed but lost its directory-flush
@@ -271,7 +278,7 @@ final class CompoundWrites {
       await flushRecoveryDirectory(p.dirname(path));
       return;
     }
-    await requireUnusedRecoveryStage(path);
+    await discardLeftoverStage(path);
     await replaceFile(
       path,
       utf8.encode(after),
@@ -288,31 +295,9 @@ final class CompoundWrites {
     );
   }
 
-  Future<void> _record(_Note note, _State state, {bool fresh = false}) async {
-    final path = _path(note.command.id);
-    await requireUnusedRecoveryStage(path);
-    final bytes = utf8.encode(jsonEncode(note.json(state)));
-    // The native no-follow reader has this allocation limit. Never publish
-    // a journal it could not validate after a restart.
-    if (bytes.length > 512 * 1024 * 1024) {
-      throw const RecoveryRequired(
-        'The compound journal exceeds the native read limit.',
-      );
-    }
-    if (fresh) {
-      await createFileExclusively(path, bytes);
-    } else {
-      await replaceFile(path, bytes);
-    }
-    note.state = state;
-  }
-
-  Future<List<_Note>> _readAll() async {
-    if (!await recoveryDirectory(support) ||
-        !await recoveryDirectory(_folder)) {
-      return [];
-    }
-    return readRecoveryRecords(
+  Future<List<(File, _Note)>> _readAll() async {
+    if (!await recoveryDirectory(support)) return const [];
+    return readJournal(
       _folder,
       decode: (value, id) {
         final note = _decode(id, value);
@@ -355,18 +340,19 @@ final class CompoundWrites {
   }
 }
 
-enum _State { prepared, committing, complete, cancelled }
-
 final class _Note {
-  _Note(this.command, this.state);
+  _Note(this.command, {this.pending = true});
   final CompoundCommit command;
-  _State state;
 
-  Map<String, Object?> json(_State phase) => command.secondary != null
+  /// Earlier builds kept finished and abandoned records too; only a record
+  /// that reached `committing` still has anything to publish.
+  final bool pending;
+
+  Map<String, Object?> json() => command.secondary != null
       ? {
           'version': 2,
           'id': command.id,
-          'state': phase.name,
+          'state': 'committing',
           'documents': [
             for (final document in command.documents)
               {
@@ -379,7 +365,7 @@ final class _Note {
       : {
           'version': 1,
           'id': command.id,
-          'state': phase.name,
+          'state': 'committing',
           'documentPath': command.documentPath,
           'documentBefore': command.documentBefore,
           'documentAfter': command.documentAfter,
@@ -417,10 +403,8 @@ _Note _decode(String id, Object? json) {
       (json['booksAfter'] != null && json['booksAfter'] is! String)) {
     throw RecoveryRequired('Unsupported compound schema in $id.');
   }
-  final state = _State.values
-      .where((state) => state.name == json['state'])
-      .firstOrNull;
-  if (state == null) {
+  final state = json['state'];
+  if (!_states.contains(state)) {
     throw RecoveryRequired('Unsupported compound state in $id.');
   }
   return _Note(
@@ -432,7 +416,7 @@ _Note _decode(String id, Object? json) {
       booksBefore: json['booksBefore'] as String?,
       booksAfter: json['booksAfter'] as String?,
     ),
-    state,
+    pending: state == 'committing',
   );
 }
 
@@ -461,10 +445,8 @@ _Note _decodePair(String id, Map<String, Object?> json) {
     );
   }
 
-  final state = _State.values
-      .where((state) => state.name == json['state'])
-      .firstOrNull;
-  if (state == null) {
+  final state = json['state'];
+  if (!_states.contains(state)) {
     throw RecoveryRequired('Unsupported compound state in $id.');
   }
   return _Note(
@@ -473,9 +455,11 @@ _Note _decodePair(String id, Map<String, Object?> json) {
       primary: document(entries[0]),
       secondary: document(entries[1]),
     ),
-    state,
+    pending: state == 'committing',
   );
 }
+
+const _states = {'prepared', 'committing', 'complete', 'cancelled'};
 
 bool _same(CompoundCommit a, CompoundCommit b) =>
     a.id == b.id &&
@@ -505,24 +489,6 @@ void _expect(String path, String? current, String? before, String? after) {
   if (current != before && current != after) {
     throw RecoveryRequired('Compound participant changed externally: $path.');
   }
-}
-
-Future<String?> _text(String path) async {
-  final observed = await observeFile(path);
-  if (observed.status == 1) return null;
-  if (observed.status != 0) {
-    throw RecoveryRequired(
-      'Compound file is unreadable or unsupported: $path.',
-    );
-  }
-  final bytes = observed.bytes!;
-  final marked =
-      bytes.length >= 3 &&
-      bytes[0] == 0xef &&
-      bytes[1] == 0xbb &&
-      bytes[2] == 0xbf;
-  final text = utf8.decode(bytes);
-  return marked ? '\uFEFF$text' : text;
 }
 
 Future<T> _checked<T>(Future<T> Function() work) async {

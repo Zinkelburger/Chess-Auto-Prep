@@ -28,13 +28,23 @@ import 'document_probe.dart';
 import 'document_ref.dart';
 import 'file_lock.dart';
 import 'recovery_gate.dart';
+import 'recovery_files.dart';
 import 'relocation_notes.dart';
 import 'training_rows.dart';
 import 'training_snapshot.dart';
 import 'reference_change.dart';
-import 'training_intent.dart';
 import 'training_payload.dart';
 import 'training_writes.dart';
+
+/// A change accepted by [TrainingStore] and not yet written.
+final class _Accepted {
+  _Accepted(this.payload, this.sources);
+  final String payload;
+  final Map<String, Revision> sources;
+
+  /// Files an earlier attempt already wrote, which a retry skips.
+  final written = <String>{};
+}
 
 /// A row as read and as it is to be written; `before` is null for a row the
 /// file did not have.
@@ -43,8 +53,8 @@ typedef Change<T> = ({T? before, T after});
 /// Where one move's streak lives: its line and its ply.
 typedef StreakKey = ({LineKey line, int ply});
 
-/// Stable identity and source proofs captured before durable enqueue. The
-/// journal owns ordered recovery after acknowledgement, across process restarts.
+/// Stable identity and source proofs captured before a change is accepted.
+/// Retrying with the same operation never writes the change twice.
 final class ProgressOperation {
   ProgressOperation({
     String? id,
@@ -67,8 +77,8 @@ final class ProgressOperation {
 /// The training files. The filesystem is a real boundary, so this is an
 /// interface: [TrainingStore] in the app, a scripted one in tests.
 abstract interface class ProgressFiles {
-  /// Records frozen changes durably without waiting for earlier execution.
-  /// An uncertain acknowledgement must retry this same operation identity.
+  /// Accepts frozen changes without waiting for earlier ones to be written.
+  /// A retry must reuse this same operation.
   Future<ProgressAdmission> enqueueWrite({
     List<Change<Review>> reviews = const [],
     List<Change<MoveStreak>> streaks = const [],
@@ -80,7 +90,7 @@ abstract interface class ProgressFiles {
     required ProgressOperation operation,
   });
 
-  /// Applies the durable prefix through this command, exactly once.
+  /// Writes the accepted changes up to and including this one, each once.
   Future<ProgressWrite> commit(ProgressOperation operation);
 
   /// Everything recorded for these sources. When PGN input was already read,
@@ -117,9 +127,8 @@ final class TrainingStore implements ProgressFiles {
     Future<void> Function(String, List<int>) publish = replaceFile,
     Future<void> Function(TrainingWriteStep)? trainingHook,
     this._lock = withDirectoryLock,
-  }) : _writes = TrainingWrites(
-         documents: documents,
-         support: support,
+  }) : _writer = TrainingWriter(
+         documents: canonicalRecoveryRoot(documents),
          publish: publish,
          testHook: trainingHook,
        ),
@@ -127,12 +136,20 @@ final class TrainingStore implements ProgressFiles {
 
   final RecoveryGate _recovery;
 
-  final TrainingWrites _writes;
+  final TrainingWriter _writer;
   final Future<ProgressWrite> Function(
     Directory,
     Future<ProgressWrite> Function(),
   )
   _lock;
+
+  /// Changes accepted and not yet written, oldest first. A later commit
+  /// writes the earlier ones first, so rows land in the order they were
+  /// projected.
+  final _queued = <String, _Accepted>{};
+
+  /// Changes written, or refused for good, by operation id.
+  final _settled = <String, ProgressWrite>{};
 
   /// The folder the four files sit in, beside `repertoires/`.
   final Directory documents;
@@ -208,7 +225,7 @@ final class TrainingStore implements ProgressFiles {
       ),
       snapshot: TrainingReadSet(
         documentsPath: p.normalize(documents.absolute.path),
-        canonicalDocuments: _writes.documents.path,
+        canonicalDocuments: _writer.documents.path,
         files: participants,
       ),
     );
@@ -263,48 +280,73 @@ final class TrainingStore implements ProgressFiles {
       return const ProgressRejected(ProgressConflict());
     }
     operation._identity = identity;
-    final result = await _locked('accept training progress', () async {
+    try {
       final paths = TrainingPayload.decode(payload).sources;
-      final sources = {
-        for (final path in paths) path: ?operation.sources[path],
-      };
-      if (sources.length != paths.length) {
-        throw const TrainingChanged('Missing source authority');
+      if (paths.any((path) => !operation.sources.containsKey(path))) {
+        return const ProgressRejected(ProgressConflict());
       }
-      await _writes.enqueue(
-        id: operation.id,
-        payload: payload,
-        sources: sources,
-        predecessorId: operation.predecessorId,
+    } on FormatException catch (error) {
+      return ProgressRejected(ProgressFailed(error.message));
+    }
+    if (!_settled.containsKey(operation.id)) {
+      _queued.putIfAbsent(
+        operation.id,
+        () => _Accepted(payload, Map.of(operation.sources)),
       );
-      return const ProgressWritten();
-    });
-    return result is ProgressWritten
-        ? const ProgressEnqueued()
-        : ProgressRejected(result);
+    }
+    return const ProgressEnqueued();
   }
 
   @override
-  Future<ProgressWrite> commit(ProgressOperation operation) {
+  Future<ProgressWrite> commit(ProgressOperation operation) async {
     final identity = operation._identity;
     if (identity == null) {
-      return Future.value(
-        const ProgressFailed(
-          'Enqueue this training command before applying it.',
-        ),
+      return const ProgressFailed(
+        'Enqueue this training command before applying it.',
       );
     }
-    return _locked('commit training progress', () async {
+    if (_settled[operation.id] case final settled?) return settled;
+    if (!_queued.containsKey(operation.id)) {
+      return const ProgressFailed('This training change was not accepted.');
+    }
+    final result = await _locked('save training progress', () async {
       if (_destination() != identity.$1) {
         throw const TrainingChanged('Operation destination');
       }
-      await _writes.commit(
-        id: operation.id,
-        digest: trainingDigest(identity.$2),
-      );
-      _log = null;
+      for (final MapEntry(key: id, value: change) in _queued.entries.toList()) {
+        final outcome = await _apply(id, change);
+        if (id == operation.id) return outcome;
+      }
       return const ProgressWritten();
     });
+    _log = null;
+    return result;
+  }
+
+  /// Writes one accepted change. A change that can never be written — its
+  /// source or a row it replaces changed — leaves the queue with that
+  /// answer, so the changes after it still land.
+  Future<ProgressWrite> _apply(String id, _Accepted change) async {
+    try {
+      await _writer.apply(
+        change.payload,
+        change.sources,
+        trainingRoot: p.normalize(p.absolute(documents.path)),
+        done: change.written,
+      );
+    } on TrainingChanged catch (error) {
+      log.w('save training progress in ${documents.path}', error.detail);
+      return _settle(id, const ProgressConflict());
+    } on TrainingUnreadable catch (unreadable) {
+      return _settle(id, ProgressUnreadable(unreadable.file, unreadable.line));
+    }
+    return _settle(id, const ProgressWritten());
+  }
+
+  ProgressWrite _settle(String id, ProgressWrite result) {
+    _queued.remove(id);
+    _settled[id] = result;
+    return result;
   }
 
   @override
@@ -360,15 +402,7 @@ final class TrainingStore implements ProgressFiles {
     Future<ProgressWrite> Function() write,
   ) async {
     try {
-      return await _recovery.run(
-        () => _lock(
-          documents,
-          () => p.equals(_writes.documents.path, _writes.support.path)
-              ? write()
-              : withDirectoryLock(_writes.support, write),
-        ),
-        recoverTraining: false,
-      );
+      return await _recovery.run(() => _lock(documents, write));
     } on TrainingUnreadable catch (unreadable) {
       return ProgressUnreadable(unreadable.file, unreadable.line);
     } on TrainingChanged {
@@ -397,7 +431,7 @@ final class TrainingStore implements ProgressFiles {
     String name,
     Map<String, Revision?> versions,
   ) async {
-    switch (await probeDocument(p.join(_writes.documents.path, name))) {
+    switch (await probeDocument(p.join(_writer.documents.path, name))) {
       case FileFound(:final bytes, :final revision):
         versions[name] = revision;
         return bytes;
