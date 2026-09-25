@@ -236,10 +236,11 @@ void main() {
         books.includes(ChapterRef.at(original.path, section: 'B')),
         isTrue,
       );
-      final receipts = await Directory(
+      // Finished: no record is left to finish at the next start.
+      final records = await Directory(
         p.join(disk.support.path, 'compound-writes'),
       ).list().toList();
-      expect(receipts, hasLength(1));
+      expect(records, isEmpty);
     },
   );
 
