@@ -527,11 +527,24 @@ book selection drafts remain editable but cannot certify a committed comparison.
 Library, reply, repertoire-tree and game-comparison views expose unavailable
 inputs and Retry; stale derived actions cannot be activated by mouse or keyboard.
 
-H4 remains incomplete: training scope reads still need complete membership
-snapshots, native `books.json` changes need to join the final comparison fence,
-and invalidation needs to target affected inputs across the remaining consumers.
-An owner revision proves an observed or accepted local selection, not an
-unobserved external edit to its backing file.
+The next H4 increment joins native `books.json` and all four training-file
+proofs to that same final fence. `BookSnapshot` pairs immutable membership with
+its exact native source, including absence; an unacknowledged write cannot
+advance the owner's committed proof. `TrainingReadSet` records the same bytes
+used to decode progress. Fixed profile participants stay bound to the configured
+and pinned canonical roots, checked again after the last native observation.
+`ScopeReader` in `features/trainer/training_scope.dart` captures complete fresh
+membership; missing or unreadable included chapters refuse the whole scope.
+The Trainer validates that snapshot with book/progress inputs, then checks local
+editor, accepted-write and cancellation authority before publishing. Single-chapter
+training retains the intentional draft overlay with its persisted source proof.
+Explicit book-scope and comparison Retry refresh native membership, first
+retrying a retained failed selection write when necessary. Even no-book and
+no-account comparisons validate the inputs supporting that empty result.
+
+H4 remains in progress while repertoire-tree validation and targeted invalidation
+are verified across the remaining consumers. An owner revision proves an observed
+or accepted local selection, not an unobserved external edit to its backing file.
 
 ### Compatibility, diagnosis and acceptance
 

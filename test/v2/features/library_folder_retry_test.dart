@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:chess_auto_prep/v2/features/library/library.dart';
 import 'package:chess_auto_prep/v2/features/library/library_state.dart';
 import 'package:chess_auto_prep/v2/storage/book_file.dart';
+import 'package:chess_auto_prep/v2/storage/book_snapshot.dart';
 import 'package:chess_auto_prep/v2/storage/book_list.dart';
 import 'package:chess_auto_prep/v2/storage/book_references.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
@@ -299,8 +300,9 @@ final class _Fixture {
   );
   Future<LibraryResult> rename() => library.renameRepertoire(folder, 'Moved');
   Future<void> dispose() async {
-    if (bookStore.hold && !bookStore.release.isCompleted)
+    if (bookStore.hold && !bookStore.release.isCompleted) {
       bookStore.release.complete();
+    }
     files.hold = false;
     files.releaseAll();
     await pending.settle();
@@ -400,13 +402,17 @@ final class _BookStore implements BookStore {
   @override
   Future<BookList> read() async => value;
   @override
-  Future<void> write(BookList value) async {
+  Future<BookSnapshot> snapshot() async => BookSnapshot(value: await read());
+
+  @override
+  Future<BookSnapshot> write(BookList value) async {
     if (hold) {
       entered.complete();
       await release.future;
       hold = false;
     }
     this.value = value;
+    return BookSnapshot(value: value);
   }
 }
 

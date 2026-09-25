@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/v2/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/v2/features/my_games/book_words.dart';
 import 'package:chess_auto_prep/v2/features/my_games/game_book.dart';
 import 'package:chess_auto_prep/v2/storage/book_file.dart';
+import 'package:chess_auto_prep/v2/storage/book_snapshot.dart';
 import 'package:chess_auto_prep/v2/storage/book_list.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/my_accounts.dart';
@@ -273,7 +274,7 @@ void main() {
   );
 
   test(
-    'book membership publication gates comparison until acknowledged',
+    'book membership publication gates comparison and its Retry settles failed writes',
     () async {
       final store = _ReadableBooks();
       final books = Books(store: store, root: '/repertoires');
@@ -319,7 +320,7 @@ void main() {
       expect(comparison.stale, isTrue);
       expect(comparison.problem, isNotNull);
       store.failWrite = false;
-      await books.retry();
+      await comparison.retry();
       await pumpEventQueue();
       expect(comparison.stale, isFalse);
       expect(comparison.problem, isNull);
@@ -469,7 +470,7 @@ final class _ReadableBooks implements BookStore {
   bool unavailable = false;
   bool failWrite = false;
   Completer<void>? writeGate;
-  BookList books = BookList(
+  BookList books = const BookList(
     books: [
       Book(id: 'test', name: 'Test book', repertoires: {'e4', 'Najdorf'}),
     ],
@@ -483,9 +484,13 @@ final class _ReadableBooks implements BookStore {
   }
 
   @override
-  Future<void> write(BookList value) async {
+  Future<BookSnapshot> snapshot() async => BookSnapshot(value: await read());
+
+  @override
+  Future<BookSnapshot> write(BookList value) async {
     await writeGate?.future;
     if (failWrite) throw StateError('books write unavailable');
     books = value;
+    return BookSnapshot(value: value);
   }
 }

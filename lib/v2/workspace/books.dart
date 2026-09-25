@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../diagnostics/log.dart';
 import '../storage/book_file.dart';
 import '../storage/book_list.dart';
+import '../storage/book_snapshot.dart';
 import '../storage/chapter_files.dart';
 import '../storage/pending_writes.dart';
 import '../storage/pgn_document_store.dart' as documents;
@@ -31,6 +32,10 @@ final class Books extends ChangeNotifier {
   final String _root;
 
   BookList _list = BookList.empty;
+  BookSource? _source;
+
+  /// Native proof for the acknowledged membership, usable only while current.
+  BookSource? get source => _source;
   bool _loaded = false;
 
   /// The file is there and could not be read: nothing is written over it.
@@ -93,9 +98,10 @@ final class Books extends ChangeNotifier {
     _loading = revision;
     _notify();
     try {
-      final list = await _store.read();
+      final snapshot = await _store.snapshot();
       if (_disposed || revision != _revision || canRetry) return;
-      _list = _frozen(list);
+      _list = snapshot.value;
+      _source = snapshot.source;
       _problem = null;
       _unreadable = false;
       _loaded = true;
@@ -317,7 +323,7 @@ final class Books extends ChangeNotifier {
     }
     _revision++;
     _loading = null;
-    _list = _frozen(list);
+    _list = immutableBooks(list);
     _dirty = true;
     _notify();
     unawaited(_persist());
@@ -372,7 +378,9 @@ final class Books extends ChangeNotifier {
   Future<void> _readReferences() async {
     _loaded = true;
     try {
-      _list = _frozen(await _store.read());
+      final snapshot = await _store.snapshot();
+      _list = snapshot.value;
+      _source = snapshot.source;
       _problem = null;
       _unreadable = false;
     } on Object catch (error) {
@@ -416,7 +424,8 @@ final class Books extends ChangeNotifier {
     try {
       while (_dirty) {
         _dirty = false;
-        await _store.write(_list);
+        final snapshot = await _store.write(_list);
+        _source = snapshot.source;
       }
       if (_problem != null) {
         _problem = null;
@@ -433,20 +442,6 @@ final class Books extends ChangeNotifier {
 
   /// Waits for the write in flight, for a test.
   Future<void> get settled => _settling ?? Future.value();
-
-  /// Membership passed to projections cannot be edited behind its token.
-  static BookList _frozen(BookList list) => BookList(
-    active: list.active,
-    books: List.unmodifiable([
-      for (final book in list.books)
-        Book(
-          id: book.id,
-          name: book.name,
-          repertoires: Set.unmodifiable(book.repertoires),
-          chapters: Set.unmodifiable(book.chapters),
-        ),
-    ]),
-  );
 
   static int _made = 0;
 

@@ -14,6 +14,7 @@ import '../features/tactics/puzzle_trainer.dart';
 import '../features/tactics/set_additions.dart';
 import '../features/tactics/tactics_set.dart';
 import '../features/trainer/trainer.dart';
+import '../features/trainer/training_scope.dart';
 import '../storage/my_accounts.dart';
 import '../storage/my_games_files.dart';
 import '../workspace/books.dart';
@@ -111,11 +112,7 @@ final class TrainingWiring {
       lines: Trainer(
         session: session,
         settings: env.settings,
-        chapters: ScopeReader(
-          files: env.chapterFiles,
-          documents: env.store,
-          catalog: catalog,
-        ),
+        chapters: ScopeReader(files: env.chapterFiles, documents: env.store),
         files: env.progressFiles,
         analysis: workspace.analysis,
         time: (now: env.now, jitter: env.jitter),

@@ -108,6 +108,34 @@ void main() {
     expect(loaded.mistakes.single.played, 'd4');
   });
 
+  test(
+    'same-size external log replacement with restored mtime reloads mistakes',
+    () async {
+      final text = '${encodeAttempt(_attempt(mainline, correct: false))}\n';
+      final log = file(attemptsFile);
+      await log.writeAsString(text);
+      final timestamp = await log.lastModified();
+      expect((await read({kid})).mistakes.single.played, 'd4');
+      final replacement = file('replacement.jsonl');
+      await replacement.writeAsString(text.replaceAll('d4', 'c4'));
+      await replacement.setLastModified(timestamp);
+      await replacement.rename(log.path);
+      expect((await read({kid})).mistakes.single.played, 'c4');
+    },
+  );
+
+  test(
+    'a linked training participant is unavailable, never followed',
+    () async {
+      final outside = file('outside.csv');
+      await outside.writeAsString(
+        '$reviewsHeader\n${_review(kid, 'line_1')}\n',
+      );
+      await Link(file(reviewsFile).path).create(outside.path);
+      expect(await store.read({kid}), isA<ProgressFailed>());
+    },
+  );
+
   test('the log read again once it has grown, by either app', () async {
     await file(
       attemptsFile,

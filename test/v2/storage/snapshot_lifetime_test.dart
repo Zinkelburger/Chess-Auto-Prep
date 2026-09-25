@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:chess_auto_prep/v2/storage/book_file.dart';
+import 'package:chess_auto_prep/v2/storage/atomic_write.dart';
+import 'package:chess_auto_prep/v2/storage/book_snapshot.dart';
 import 'package:chess_auto_prep/v2/storage/recovery_gate.dart';
 import 'package:chess_auto_prep/v2/storage/book_list.dart';
 import 'package:chess_auto_prep/v2/storage/file_lock.dart';
@@ -198,8 +200,15 @@ void main() {
         'books-acknowledgement-',
       );
       addTearDown(() => root.delete(recursive: true));
+      var failAcknowledgement = true;
       final store = BookFile(
         root,
+        publish: (path, bytes, {installed}) async {
+          await replaceFile(path, bytes, installed: installed);
+          if (failAcknowledgement) {
+            throw const FileSystemException('lost acknowledgement');
+          }
+        },
         recovery: RecoveryGate(
           documents: Directory(p.join(root.path, 'Documents')),
           support: root,
@@ -207,7 +216,6 @@ void main() {
       );
       await store.read();
       final target = p.join(root.path, 'books.json');
-      final obstacle = await Directory(target).create();
       const accepted = BookList(
         books: [Book(id: 'a', name: 'Accepted')],
       );
@@ -215,9 +223,8 @@ void main() {
         store.write(accepted),
         throwsA(isA<FileSystemException>()),
       );
-      await obstacle.delete();
-      // Model replacement having landed despite a failed acknowledgement.
-      await File(target).writeAsString(accepted.encode());
+      expect(await File(target).readAsString(), accepted.encode());
+      failAcknowledgement = false;
       const latest = BookList(
         books: [Book(id: 'b', name: 'Latest')],
       );
@@ -280,9 +287,13 @@ final class _Books implements BookStore {
   @override
   Future<BookList> read() async => reading?.future ?? value;
   @override
-  Future<void> write(BookList next) async {
+  Future<BookSnapshot> snapshot() async => BookSnapshot(value: await read());
+
+  @override
+  Future<BookSnapshot> write(BookList next) async {
     if (writing case final held?) await held.future;
     if (fail) throw const FileSystemException('disk full');
     value = next;
+    return BookSnapshot(value: next);
   }
 }
