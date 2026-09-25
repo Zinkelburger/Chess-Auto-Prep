@@ -277,7 +277,7 @@ List<SettingGroup> settingGroups({
         hint: account.problem ?? _accountHint(account.status),
         warn: account.problem != null,
       ),
-      if (!account.canRetryRead)
+      if (account.available)
         if (account.status case SignedOut() || Checking())
           SettingRow(
             'Personal access token',

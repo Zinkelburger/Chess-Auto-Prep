@@ -47,7 +47,11 @@ final class LichessAccount {
 
 /// A credential read failed; deliberately carries no token or backend error.
 final class LichessAccountUnavailable implements Exception {
-  const LichessAccountUnavailable();
+  const LichessAccountUnavailable({this.restartRequired = false});
+
+  /// Desktop legacy preferences cache malformed typed keys in both Dart and
+  /// the platform adapter. Reload does not reliably re-read a repaired file.
+  final bool restartRequired;
 
   @override
   String toString() => 'The saved Lichess account could not be read.';
@@ -70,8 +74,10 @@ Future<T> _access<T>(Future<T> Function() action) {
 /// handed to clients as a confirmed token. The keys retain their v1 format.
 Future<LichessAccount?> readLichessAccount({DateTime? now}) =>
     _access(() async {
+      var obtained = false;
       try {
         final prefs = await SharedPreferences.getInstance();
+        obtained = true;
         if (identical(_expiryRemoval, prefs)) {
           if (!await _writeAccount(prefs, null)) {
             throw const LichessAccountUnavailable();
@@ -102,9 +108,12 @@ Future<LichessAccount?> readLichessAccount({DateTime? now}) =>
           return null;
         }
         return account;
-      } on Object {
+      } on Object catch (error) {
         log.w('read the saved Lichess account', 'the preferences read failed');
-        throw const LichessAccountUnavailable();
+        throw LichessAccountUnavailable(
+          restartRequired:
+              obtained && (error is TypeError || error is RangeError),
+        );
       }
     });
 

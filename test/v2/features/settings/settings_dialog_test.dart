@@ -18,15 +18,19 @@ void main() {
   LichessAccount? saved;
   var opened = 0;
   var readFails = false;
+  var readMalformed = false;
 
   setUp(() {
     store = SettingsStore();
     login = ScriptedLogin();
     saved = null;
     readFails = false;
+    readMalformed = false;
     account = LichessAccountState(
       login: login,
       read: () async {
+        if (readMalformed)
+          throw const LichessAccountUnavailable(restartRequired: true);
         if (readFails) throw StateError('private-test-token');
         return saved;
       },
@@ -62,6 +66,21 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('cached malformed credentials explain the required restart', (
+    tester,
+  ) async {
+    readMalformed = true;
+    await account.load();
+    await pump(tester);
+    await tester.tap(find.text('Accounts'));
+    await tester.pumpAndSettle();
+    expect(find.text('Restart required'), findsOneWidget);
+    expect(find.text('Retry read'), findsNothing);
+    expect(find.text('Log in'), findsNothing);
+    expect(find.text('Personal access token'), findsNothing);
+    expect(account.problem, contains('restart the app'));
+  });
 
   testWidgets('unavailable credentials show Retry read and hide token edits', (
     tester,

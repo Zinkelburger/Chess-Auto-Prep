@@ -69,7 +69,10 @@ The title bar reads `Settings` with a close button (`Close settings`, Escape). N
   apps share the account. An expired OAuth token reads as signed out only after its local removal
   succeeds. Credential reads and writes serialize within v2; a failed platform write cannot expose
   the plugin's optimistic token cache as a confirmed account. Read failures retain the last
-  confirmed presentation, hide authentication edits and offer `Retry read`; failed saves retain
+  confirmed presentation, hide authentication edits and offer `Retry read`. Malformed cached
+  credential values instead require repairing the preferences and restarting the app: the legacy
+  Linux/Windows plugin also caches values below the Dart singleton, so reload cannot reliably
+  observe an externally repaired file. Failed saves retain
   the accepted grant and offer `Retry save` without another browser/token request. Transport and
   malformed-response diagnostics include only the action and error type, never response text or
   credentials. The v1 preference keys remain unchanged and are not a crash-atomic multi-key store

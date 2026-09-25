@@ -40,9 +40,11 @@ final class LichessAccountState extends ChangeNotifier {
   PendingObligation<bool>? _saving;
   bool _removing = false;
   bool _readFailed = false;
+  bool _restartRequired = false;
   Future<void>? _loading;
 
-  bool get canRetryRead => _readFailed;
+  bool get canRetryRead => _readFailed && !_restartRequired;
+  bool get readRequiresRestart => _restartRequired;
   bool get available => !_readFailed && _loading == null;
 
   bool get canRetrySave => _saving != null && !_saving!.committed && !_working;
@@ -50,7 +52,7 @@ final class LichessAccountState extends ChangeNotifier {
   /// Reads the saved account. A failed read retains the last confirmed value;
   /// authentication changes wait until the account can be read again.
   Future<void> load() {
-    if (_disposed || _working) return Future.value();
+    if (_disposed || _working || _restartRequired) return Future.value();
     return _loading ??= _load();
   }
 
@@ -67,15 +69,18 @@ final class LichessAccountState extends ChangeNotifier {
       _readFailed = false;
       _loading = null;
       _set(saved == null ? const SignedOut() : SignedIn(saved), problem: null);
-    } on Object {
+    } on Object catch (error) {
       if (_disposed || revision != _revision) return;
       log.w('read the saved Lichess account', 'the preferences read failed');
       _readFailed = true;
+      _restartRequired =
+          error is LichessAccountUnavailable && error.restartRequired;
       _loading = null;
       _set(
         _status,
-        problem:
-            'The saved Lichess account could not be read. Retry reading it.',
+        problem: _restartRequired
+            ? 'The saved Lichess account is malformed. Repair the saved preferences and restart the app.'
+            : 'The saved Lichess account could not be read. Retry reading it.',
       );
     } finally {
       _loading = null;
