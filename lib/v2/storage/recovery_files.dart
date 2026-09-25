@@ -86,17 +86,35 @@ Future<bool> recoveryDirectory(
   return true;
 }
 
+/// Refuses while a staged copy remains beside [path]. Only the settings and
+/// generation-tree writers still use it, and their owner is replacing it with
+/// [discardLeftoverStage]; remove it once they have.
+Future<void> requireUnusedRecoveryStage(String path) async {
+  final stage = await observeFile(temporaryPathFor(path));
+  if (stage.status != 1) {
+    throw RecoveryRequired('An unverified staged file remains for $path.');
+  }
+}
+
 /// Removes the staged copy a killed write left beside [path]. A staged copy is
 /// never the file itself: it holds bytes whose publication was not confirmed,
 /// and every writer here restages from its own input.
+///
+/// A link there is removed as a link, so the next write cannot follow it
+/// and truncate whatever it points at.
 Future<void> discardLeftoverStage(String path) async {
-  final stage = File(temporaryPathFor(path));
-  if (await FileSystemEntity.type(stage.path, followLinks: false) !=
-      FileSystemEntityType.file) {
-    return;
+  final stage = temporaryPathFor(path);
+  switch (await FileSystemEntity.type(stage, followLinks: false)) {
+    case FileSystemEntityType.notFound:
+      return;
+    case FileSystemEntityType.file:
+      await File(stage).delete();
+    case FileSystemEntityType.link:
+      await Link(stage).delete();
+    default:
+      throw FileSystemException('Something other than a file is staged', stage);
   }
-  log.w('remove the staged copy a stopped write left at ${stage.path}');
-  await stage.delete();
+  log.w('removed the staged copy a stopped write left at $stage');
 }
 
 /// The native reader's allocation limit. A journal it could not read back
