@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/v2/chess/training/training_options.dart';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/v2/storage/atomic_write.dart';
@@ -40,132 +41,103 @@ void main() {
     expect(next.value.boardCoordinates, isTrue, reason: 'untouched');
   });
 
-  test(
-    'a directory at the settings path is unavailable, not a first run',
-    () async {
-      await Directory(file().path).create();
-      final store = SettingsStore(support: support);
-      addTearDown(store.dispose);
-      await store.load();
-      expect(store.ready, isFalse);
-      expect(store.problem, contains('could not be read'));
-    },
-  );
+  Directory quarantine() =>
+      Directory(p.join(support.path, 'recovery-quarantine'));
+
+  Future<List<String>> quarantined() async => [
+    await for (final entry in quarantine().list(recursive: true))
+      if (entry is File) await entry.readAsString(),
+  ];
 
   test(
-    'a failed read cannot authorize overwriting the saved settings',
+    'unreadable settings are moved aside and the app starts on defaults',
     () async {
       await file().writeAsString('not json');
       final store = SettingsStore(support: support);
       addTearDown(store.dispose);
       await store.load();
       expect(store.value, Settings.defaults);
-      expect(store.problem, contains('could not be read'));
-      await store.update(store.value.copyWith(boardCoordinates: false));
-      expect(await file().readAsString(), 'not json');
-      expect(store.value, Settings.defaults);
-      expect(store.problem, contains('could not be read'));
-      await file().writeAsString(const Settings(engineCores: 3).toJson());
-      await store.load();
       expect(store.problem, isNull);
-      expect(store.value.engineCores, 3);
-      await store.update(store.value.copyWith(boardCoordinates: false));
-      expect(
-        await file().readAsString(),
-        contains('"boardCoordinates": false'),
-      );
+      expect(await quarantined(), ['not json'], reason: 'kept, not deleted');
+      await store.update(store.value.copyWith(engineCores: 3));
+      expect(Settings.fromJson(await file().readAsString()).engineCores, 3);
     },
   );
 
-  test(
-    'retry after an unreadable file becomes absent clears the failure',
-    () async {
-      await file().writeAsString('not json');
+  for (final (name, bytes) in [
+    ('bad UTF-8', [0xff, 0xfe, 0x00]),
+    ('a JSON list', utf8.encode('[1, 2]')),
+  ]) {
+    test('$name is moved aside, not a blocked start', () async {
+      await file().writeAsBytes(bytes);
       final store = SettingsStore(support: support);
       addTearDown(store.dispose);
       await store.load();
-      await file().delete();
-      await store.load();
-      expect(store.problem, isNull);
       expect(store.value, Settings.defaults);
-    },
-  );
-
-  test(
-    'a failed reread preserves the last valid choices without authorizing edits',
-    () async {
-      final store = SettingsStore(support: support);
-      addTearDown(store.dispose);
-      await file().writeAsString(const Settings(engineCores: 5).toJson());
-      await store.load();
-      await file().writeAsString('damaged settings');
-      await store.load();
-      expect(store.value.engineCores, 5);
-      expect(store.ready, isFalse);
-      await store.update(store.value.copyWith(engineCores: 2));
-      expect(await file().readAsString(), 'damaged settings');
-      expect(store.value.engineCores, 5);
-    },
-  );
-
-  test(
-    'an unknown staged settings file survives a save and its exact retry',
-    () async {
-      final store = SettingsStore(support: support);
-      addTearDown(store.dispose);
-      await store.load();
-      final stage = File(temporaryPathFor(file().path));
-      await stage.writeAsString('unverified staged settings');
-      await store.update(store.value.copyWith(engineCores: 4));
-      expect(store.canRetry, isTrue);
       expect(await file().exists(), isFalse);
-      expect(await stage.readAsString(), 'unverified staged settings');
-      await store.retry();
-      expect(await stage.readAsString(), 'unverified staged settings');
-      await stage.delete();
-      await store.retry();
-      expect(store.canRetry, isFalse);
-      expect(Settings.fromJson(await file().readAsString()).engineCores, 4);
-    },
-  );
+      expect(await quarantine().exists(), isTrue);
+    });
+  }
 
-  for (final staged in [false, true]) {
-    test(
-      'failed ${staged ? 'stage' : 'read'} preflight cannot claim externally published settings',
-      () async {
-        var publications = 0;
-        final store = SettingsStore(
-          support: support,
-          publish: (path, bytes) async {
-            publications++;
-            await replaceFile(path, bytes);
-          },
-        );
-        addTearDown(store.dispose);
-        await store.load();
-        final FileSystemEntity obstacle = staged
-            ? await File(
-                temporaryPathFor(file().path),
-              ).writeAsString('unknown stage')
-            : await Directory(file().path).create();
-        final accepted = store.value.copyWith(engineCores: 4);
-        await store.update(accepted);
-        expect(store.canRetry, isTrue);
-        expect(publications, 0);
-        await obstacle.delete();
-        // These bytes came from another writer: our publication never ran.
-        await file().writeAsString(accepted.toJson());
-        await store.update(accepted.copyWith(engineCores: 8));
-        expect(store.problem, contains('another instance'));
-        expect(store.canRetry, isTrue);
-        expect(publications, 0);
-        expect(await file().readAsString(), accepted.toJson());
-        await store.retry();
-        expect(publications, 0);
-        expect(await file().readAsString(), accepted.toJson());
+  test('a directory at the settings path is moved aside too', () async {
+    await Directory(file().path).create();
+    final store = SettingsStore(support: support);
+    addTearDown(store.dispose);
+    await store.load();
+    expect(store.value, Settings.defaults);
+    await store.update(store.value.copyWith(engineCores: 2));
+    expect(store.problem, isNull);
+    expect(Settings.fromJson(await file().readAsString()).engineCores, 2);
+  });
+
+  test('a symlinked settings file is followed and stays a link', () async {
+    final dotfiles = await Directory.systemTemp.createTemp('v2-dotfiles-');
+    addTearDown(() => dotfiles.delete(recursive: true));
+    final target = File(p.join(dotfiles.path, 'settings.json'));
+    await target.writeAsString(const Settings(engineCores: 5).toJson());
+    await Link(file().path).create(target.path);
+    final store = SettingsStore(support: support);
+    addTearDown(store.dispose);
+    await store.load();
+    expect(store.value.engineCores, 5);
+    await store.update(store.value.copyWith(engineCores: 7));
+    expect(store.problem, isNull);
+    expect(await FileSystemEntity.isLink(file().path), isTrue);
+    expect(Settings.fromJson(await target.readAsString()).engineCores, 7);
+  });
+
+  test('a staged copy left by a crash does not block saving', () async {
+    final store = SettingsStore(support: support);
+    addTearDown(store.dispose);
+    await store.load();
+    await File(temporaryPathFor(file().path)).writeAsString('half a write');
+    await store.update(store.value.copyWith(engineCores: 4));
+    expect(store.problem, isNull);
+    expect(Settings.fromJson(await file().readAsString()).engineCores, 4);
+    await store.update(store.value.copyWith(engineCores: 6));
+    expect(Settings.fromJson(await file().readAsString()).engineCores, 6);
+  });
+
+  test('a failed write is reported and the next change saves', () async {
+    var fail = true;
+    final store = SettingsStore(
+      support: support,
+      publish: (path, bytes) async {
+        if (fail) throw const FileSystemException('disk full');
+        await replaceFile(path, bytes);
       },
     );
-  }
+    addTearDown(store.dispose);
+    await store.load();
+    await store.update(store.value.copyWith(engineCores: 4));
+    expect(store.value.engineCores, 4, reason: 'the choice stays on screen');
+    expect(store.problem, contains('could not be saved'));
+    fail = false;
+    await store.update(store.value.copyWith(engineLines: 5));
+    expect(store.problem, isNull);
+    final saved = Settings.fromJson(await file().readAsString());
+    expect((saved.engineCores, saved.engineLines), (4, 5));
+  });
 
   test(
     'training preferences survive a restart and invalid numbers are bounded',
@@ -236,27 +208,5 @@ void main() {
     await store.update(Settings.defaults);
     expect(told, 0);
     expect(await file().exists(), isFalse);
-  });
-
-  test('an edit made before reading cannot replace unseen settings', () async {
-    await file().writeAsString(const Settings(engineCores: 8).toJson());
-    final store = SettingsStore(support: support);
-    addTearDown(store.dispose);
-    final unseen = await file().readAsString();
-    await store.update(store.value.copyWith(boardCoordinates: false));
-    expect(await file().readAsString(), unseen);
-    await store.load();
-    expect(store.value.engineCores, 8);
-    await file().writeAsString('not json');
-    await store.load();
-    await file().writeAsString(const Settings(engineCores: 6).toJson());
-    final repaired = await file().readAsString();
-    await store.update(store.value.copyWith(boardCoordinates: false));
-    expect(await file().readAsString(), repaired);
-    await store.load();
-    await store.update(store.value.copyWith(boardCoordinates: false));
-    final saved = Settings.fromJson(await file().readAsString());
-    expect(saved.engineCores, 6);
-    expect(saved.boardCoordinates, isFalse);
   });
 }

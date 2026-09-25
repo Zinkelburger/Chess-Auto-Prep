@@ -7,27 +7,25 @@ void main() {
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  test(
-    'malformed credentials are unavailable, not a signed-out account',
-    () async {
-      SharedPreferences.setMockInitialValues({lichessTokenKey: 42});
-      await expectLater(
-        readLichessAccount(),
-        throwsA(
-          isA<LichessAccountUnavailable>().having(
-            (e) => e.restartRequired,
-            'restartRequired',
-            isTrue,
-          ),
-        ),
-      );
-      expect(
-        await readLichessToken(),
-        isNull,
-        reason: 'public clients may deliberately continue anonymously',
-      );
-    },
-  );
+  test('malformed credentials are signed out and removed', () async {
+    SharedPreferences.setMockInitialValues({
+      lichessTokenKey: 42,
+      lichessUsernameKey: 'Someone',
+    });
+    expect(await readLichessAccount(), isNull);
+    expect(await readLichessToken(), isNull);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.get(lichessTokenKey), isNull);
+    expect(prefs.get(lichessUsernameKey), isNull);
+    expect(
+      await writeLichessAccount(
+        const LichessAccount(token: 't', username: 'A'),
+      ),
+      isTrue,
+      reason: 'signing in again works',
+    );
+    expect(await readLichessToken(), 't');
+  });
 
   test('nothing saved is no account and no token', () async {
     expect(await readLichessAccount(), isNull);

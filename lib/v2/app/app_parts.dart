@@ -156,7 +156,7 @@ final class AppParts {
   Future<void> _start() async {
     if (_disposed || _started) return;
     await settings.load();
-    if (_disposed || !settings.ready) return;
+    if (_disposed) return;
     _started = true;
     unawaited(documents.library.refresh());
     unawaited(books.load());

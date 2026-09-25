@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:chess_auto_prep/v2/storage/integrity_report.dart';
-
 import 'package:chess_auto_prep/v2/app/environment.dart';
 import 'package:chess_auto_prep/v2/app/app_parts.dart';
 import 'package:chess_auto_prep/v2/app/exit_guard.dart';
@@ -174,7 +172,6 @@ final class WindowFixture {
       stopEngines: () async {},
       evalCache: () => throw StateError('no eval cache in this test'),
       keepTree: (_, _, {required runId}) async {},
-      integrity: _FixtureIntegrity(),
       setFullScreen: (on) async => fullScreenAsked.add(on),
       bughouse: bughouse.outside,
       now: () => tacticsToday,
@@ -275,15 +272,4 @@ final class ScriptedDraftQuestion implements DraftQuestion {
 
   @override
   void withdraw() {}
-}
-
-final class _FixtureIntegrity implements IntegrityReader {
-  @override
-  Future<IntegrityReport> read({bool Function()? isCancelled}) async =>
-      IntegrityReport(
-        checkedAt: DateTime(2026),
-        findings: const [],
-        checked: const ['Scripted fixture'],
-        skipped: const [],
-      );
 }

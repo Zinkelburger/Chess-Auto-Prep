@@ -1,10 +1,9 @@
 # Architecture renewal: a fresh app in `lib/v2/`
 
-**Status: Partially implemented; correctness hardening planned (2026-09-24).**
-The [data correctness contracts](#data-correctness-contracts) and
-[hardening batches](#correctness-hardening-order) below are the next design and
-verification work, not claims about guarantees already implemented. Existing
-feature statuses record delivery; they do not certify the new contracts.
+**Status: Partially implemented (2026-09-25).** The
+[data correctness contracts](#data-correctness-contracts) describe how v2 keeps
+data safe without locking the app; the [hardening batches](#correctness-hardening-order)
+record what is done.
 
 This is the third version of the rewrite plan, with its correctness design
 revised on 2026-09-24. The first (Sept 16, commit `6d980630`) migrated the app in place; its
@@ -173,545 +172,157 @@ cancel superseded opens even when the latest request selects the current file.
 file/section projection and `document_history.dart` owns held edits and board
 undo. These helpers have no widget or persistence side effects.
 
-`PendingWrites` belongs to the application, not to a mode. Accepted commands,
-queued reviews, books and settings writes remain tracked after their screen or
-progress owner is disposed. Closing disables new window input, pauses producers,
-flushes the document and drains accepted persistence before stopping engines.
-Failures and timeouts require an explicit close-without-saving choice. Training
-commands remain ordered by their shared progress store across scope replacement;
-failed commands retain their original timing, rows and stable operation id.
-Training acceptance is journaled before waiting for a failed predecessor;
-the queue can recover without the former screen, registry or process.
-Book and settings snapshots keep their latest unsaved value for retry, including
-after their presentation owner is disposed; loading cannot silently replace that
-value. Existing dialogs and puzzle delays pause during close and resume when it
-is cancelled. Books and settings use a directory lock plus a comparison with the loaded file before
-atomic replacement; another instance's edit is reported instead of overwritten.
+`PendingWrites` belongs to the application, not to a mode. Accepted writes of
+user data (documents, ratings, books, settings, usernames) stay tracked after
+their screen is disposed. Closing disables input, pauses producers, flushes the
+document and waits for those writes before stopping engines; only a write that
+failed is asked about. Derived writes (search trees, finds, download caches)
+are waited for but never asked about.
 
 ## Data correctness contracts
 
-**Target design; implementation is tracked in the hardening table.** Keep the
-shared workspace, pure chess code, concrete owners and existing storage formats.
-Make correctness a property of a complete operation, including its reads,
-dependent writes, recovery and publication. Directory boundaries alone cannot
-establish that property.
+Keep the shared workspace, pure chess code, concrete owners and the existing
+storage formats. A command is correct when its reads, its dependent writes and
+its recovery are correct together; directory boundaries alone do not give that.
+The ideas are the usual ones from *Designing Data-Intensive Applications*
+([chapter 12](https://www.oreilly.com/library/view/designing-data-intensive-applications/9781491903063/ch12.html)):
+know which bytes are the system of record, rebuild derived views from them,
+make retries idempotent, and give a document change and its reference changes
+one recoverable boundary. No broker, event store or new database is needed:
+SQLite transactions where data already shares one database, guarded file
+replacement for the formats that must stay files.
 
-### What DDIA contributes
+### Rules
 
-*Designing Data-Intensive Applications* explains transactions, derived data and
-end-to-end correctness; see the [first edition's final chapter](https://www.oreilly.com/library/view/designing-data-intensive-applications/9781491903063/ch12.html)
-or [second edition chapter 13](https://www.oreilly.com/library/view/designing-data-intensive-applications/9781098119058/ch13.html).
-The decisions below are our application of those ideas to this desktop app,
-not prescriptions attributed to the authors.
+1. **Never lock the app.** A problem affects at most the one item involved —
+   one document, one save, one job — never every open, every save or startup.
+   Preferences and derived data never block anything.
+2. **Never delete user data.** PGNs, training progress, puzzles and saved
+   matches are kept. A record the app cannot read, finish or replay is moved
+   whole into `Support/recovery-quarantine/<time>/`, logged, and the app carries
+   on without it.
+3. **Recover automatically.** Unfinished operations are finished on the first
+   access after a crash; leftover staging files are cleaned or adopted. The user
+   is never asked to repair a file by hand.
+4. **Derived data may be discarded.** Generation trees, finds, download caches,
+   indexes and staging files are rebuilt, refetched or recomputed. A failed
+   write of derived data is a log line, not a blocked feature.
+5. **Saves are Obsidian-style.** Debounced, one write per burst, byte-heavy work
+   off the UI isolate, no read-back verification, no gzip.
+6. **At most one short message** where the user must act; no status sentences,
+   no extra Retry buttons. The log holds the detail, never secrets or PGN text.
 
-| Idea | Decision for this app |
-|---|---|
-| Systems of record versus derived data | Identify which bytes cannot be reconstructed before defining caching or cleanup. |
-| Transaction isolation | Specify which competing operations and reads must behave as if performed in sequence; test those histories. |
-| The dual-write problem | A document change and its required reference changes have one recoverable operation boundary. |
-| Materialized views | Catalogs, gap walks and indexes name their inputs and can be rebuilt from authoritative state. |
-| Idempotence | Recovery and retry may execute again; their durable effects must not be duplicated. |
-| Integrity versus timeliness | Preserve correct source data; allow explicitly stale derived views where safe. |
+### Authority
 
-Kleppmann's [isolation tests](https://martin.kleppmann.com/2014/11/25/hermitage-testing-the-i-in-acid.html),
-[dual-write examples](https://martin.kleppmann.com/2015/05/27/logs-for-data-infrastructure.html)
-and [discussion of derived data](https://martin.kleppmann.com/2015/03/04/turning-the-database-inside-out.html)
-explain the relevant failure modes. His coauthored
-[local-first research](https://www.inkandswitch.com/essay/local-first/)
-also informs retaining user-owned files and offline operation.
-This design needs no distributed broker, global event store, new state framework
-or new source-of-truth database. Use SQLite transactions where the existing data
-already shares one database; use guarded file publication and recovery for the
-formats that must remain files.
+Rebuildable does not mean cheap; it means a failed write of it may be dropped.
 
-### Authority across the whole app
-
-Authority is assigned per data set, not per directory or file extension.
-Rebuildable does not mean cheap, and does not grant permission to delete.
-
-| Area | Authoritative state | Derived or temporary state | Durable unit |
-|---|---|---|---|
-| Workspace, viewer, library, study | PGN bytes, preserved versions, required references | Parsed tree, filter, cursor, selection; an unsaved draft is explicitly separate | Scoped edit; compound rename/move/delete/restore |
-| Books | Book definitions and membership | Expanded chapter set, counts | Membership edit; reference migration with its document operation |
-| Repertoire training | Existing schedule, streak, history and attempt files; do not assume one can reconstruct all the others | Due queues, scope lists, lesson board | One rating and its required records; reference migration |
-| Tactics | Puzzle PGN, review fields, analyzed-game markers; source games that have no other copy | Puzzle queue, current puzzle, mining computation | One analyzed game's puzzles and completion marker together |
-| My games | Saved corpus, account identity and download configuration | Opening index, book comparison, displayed freshness | Corpus publication; freshness advances only after publication |
-| Generation and checks | Accepted PGN edits, retained run artifacts, user choices | Search frontier, gaps, coverage, evaluations | Job-specific checkpoint; publish accepted output against its expected destination |
-| Players and prep | Player identities, corpus generations, prep notes and groups | Statistics, opening trees, opponent analysis | Corpus plus manifest; one saved prep edit |
-| Databases | Installed dataset identity and manifest; irreplaceable game rows in mixed databases | Position indexes, downloadable caches | Completed import unit or new dataset generation |
-| Engine tournaments | Run configuration, finished games and their outcomes | Live board, crosstable | One completed game and its outcome |
-| Bughouse | Saved matches and promised saved analysis, including provenance | Live search, partial move scores, archive queries | Completed analysis entry or match checkpoint |
-| Settings and accounts | Existing settings and credential stores | Form state, connection status | Settings update with conflict checks |
-| Navigation and layout | Persisted preferences only where the feature already saves them | Mode, focus, pane sizes, pending open request | No independent document writes |
-
-The player, database-management and tournament rows specify contracts for their
-future implementation. They do not authorize extra product features or change
-the owner's approved mode specs.
+| Area | Authoritative (kept, quarantined if unreadable) | Derived (may be discarded) |
+|---|---|---|
+| Workspace, viewer, library, study | PGN bytes, kept versions, required references | Parsed tree, filter, cursor, selection |
+| Books | Book definitions and membership | Expanded chapter set, counts |
+| Repertoire training | Schedule, streak, history and attempt files | Due queues, scope lists, lesson board |
+| Tactics | Puzzle PGN, review fields, analyzed-game markers | Puzzle queue, mining computation |
+| My games | Account usernames | Downloaded games cache, freshness dates, opening index, book comparison |
+| Generation and checks | Draft chapters written | Search trees, finds, gaps, coverage, evaluations |
+| Bughouse | Saved matches and saved analysis with provenance | Live search, archive queries |
+| Settings and accounts | Nothing irreplaceable: defaults are always a valid start | Form state, connection status |
 
 ### Consistency the user can observe
 
-| Operation or read | Required guarantee |
+| Operation or read | Guarantee |
 |---|---|
-| An edit on the active board | Read the current draft. Show its save state separately; another mode does not imply a save. |
-| A successful durable command | Its required writes are complete. A dependent command waits for that result and reads a coherent source snapshot. |
-| Training after an accepted rating | Wait for all relevant preceding writes, even across multiple scope reloads; a failed rating remains recoverable. |
-| Rename, move or committed undo | Document and essential references form one operation; readers do not treat an intermediate state as complete. |
-| Catalog, gaps, explorer, book check | May refresh asynchronously. Keep old content only when safe and visibly stale; navigation validates references before using it. |
-| Engine or network response | Publish only into the request and input version it answers. |
-| Reopen after a crash | Recover affected operations before exposing writable state or training against it. |
-| External edit or sync conflict | Revalidate; preserve ambiguous versions and report a conflict. App locks do not control other programs. |
+| An edit on the active board | Reads the current draft; its save state is shown separately. |
+| A successful durable command | Its required writes are complete; a dependent command reads the committed result. |
+| Training after an accepted rating | Later reads see the rating; a failed rating write is retried in order, not lost. |
+| Rename, move or committed undo | Document and references form one operation; a crash between them is finished on the next access. |
+| Catalog, gaps, explorer, book check | Refresh asynchronously; a late answer never replaces a newer one. |
+| Engine or network response | Published only into the request it answers. |
+| Reopen after a crash | Unfinished operations are finished or quarantined before the affected file is read. |
+| External edit or sync conflict | Revalidated; the user's draft is kept as a conflict, never overwritten. |
 
-An in-process notification is a wake-up hint, not durable evidence of a commit.
-A restart or newly mounted consumer must reconstruct current state without
-having heard earlier notifications. Freshness tokens local to one process are
-not global revisions and are never trusted across restarts.
+An in-process notification is a wake-up hint, not proof of a commit; a new
+consumer rebuilds from source.
 
-### Where the responsibilities live
+### How a save and its recovery work
 
-Extend existing owners as each batch needs them. These are responsibilities,
-not a request to create an interface or class for each row.
+1. **Edit.** The draft changes at once; a one-second clock starts. More edits
+   restart it. Leaving the file, the window losing focus or closing ends the
+   wait.
+2. **Write.** One write per burst: check the revision on disk against the one
+   loaded (a changed file is a conflict, never an overwrite), copy the version
+   being replaced into Support, write a staged copy beside the file, flush it,
+   rename it over the file, flush the directory. Nothing is read back.
+3. **Several files.** A command that must change more than one file (a
+   rename with its book and training references, a move, a delete) first
+   writes a small record under Support naming each participant's before and
+   after state, then applies the steps, then marks the record complete.
+4. **Crash.** On the next access the recovery gate looks at unfinished records
+   once. For each participant: still at "before" → apply; already at "after" →
+   accept; anything else → the record and its data go to
+   `recovery-quarantine/`, the log says why, and access continues. A staged
+   copy left beside a file is removed or overwritten by the next write.
+5. **Fail.** A write that fails keeps the draft on screen with one short
+   message; the next edit or save tries again. Closing asks only when a
+   write the user made is still unsaved.
 
-| Existing area | Responsibility after hardening |
-|---|---|
-| `chess/` | Pure transformations, reference mappings, scheduling and validation; no I/O or notifications. |
-| Feature command owner, such as `Library` | Interpret intent and construct the complete operation, including required dependent changes. Never repair references in an optional UI listener. |
-| `storage/`, including relocation and guards | Check revisions, lock, stage, preserve, commit and recover; typed terminal outcomes. |
-| `DocumentRepository` | Announce committed outcomes with affected references and revisions; never announce a partially completed semantic command as complete. |
-| `DocumentSession` / saver / history | Own the active draft, edit policy and receipt-based undo; keep draft operations distinct from committed operations. |
-| Training persistence / `PendingWrites` | Own accepted writes, their barriers and retry material across presentation lifetimes. |
-| Catalog and derived owners | Observe explicit input versions, invalidate affected results and reject obsolete completions. |
-| `AppParts`, requests and exit guard | Compose owners; coordinate startup recovery, navigation and shutdown. No chess or file-format rules. |
-
-Keep the import table below. A shared storage operation takes concrete data
-describing references and writes, not a dependency on the Books or Trainer UI.
-Extract shared mechanics only when two concrete operations need the same rule.
-
-### Commit and recovery protocol
-
-A single scoped PGN edit remains one guarded replacement. A transaction already
-inside one SQLite database uses that database's transaction. The following
-protocol is for a command that must update multiple authoritative resources.
-
-1. **Plan.** Capture intent, affected resources, expected revisions and explicit
-   reference mappings. Keep expensive parsing, network calls and engine work
-   outside commit locks. Assign an operation ID before retryable durable work.
-2. **Validate under the shared guards.** Recheck the read set, destination
-   collisions and collection assumptions. A folder operation protects namespace
-   membership, not just the files found during an earlier scan. Overlapping
-   operations use one documented, acyclic lock order compatible with v1.
-3. **Prepare durably.** Preserve required before-content and stage after-content.
-   Record a versioned recovery manifest with the operation ID, allowed paths,
-   expected before/after identities or hashes and the required steps. Preparation
-   failure changes no authoritative content. Recovery data contains no secrets.
-4. **Apply.** Once durable commit intent is recorded, complete the operation or
-   leave a recoverable obligation. Do not abandon it because a widget was
-   disposed or a navigation ticket changed. Hold conflicting managed reads and
-   writes behind the operation boundary.
-5. **Finish.** Confirm the required steps have their intended outcomes and
-   persist completion before returning success. Produce a receipt with the
-   resulting revisions and inverse information. Release guards before invoking
-   UI listeners. Refresh derived data separately.
-
-One storage entry point acquires the operation's guards; the participating
-storage routines must not recursively acquire the same locks. Drain preceding
-accepted work before taking guards it needs. Never wait for the entire pending
-registry from inside one of its own tracked operations.
-
-The manifest is recovery metadata; the existing files remain authoritative.
-Multiple file replacements are not one atomic filesystem operation. Cooperating
-readers see a coherent boundary because they use the same guards and recovery
-gate. Arbitrary external programs may observe intermediate bytes; this design
-does not claim transactional isolation against them.
-
-For example, rename course section A to B while a book includes only A:
-
-| Point | Durable state | What the app may claim |
-|---|---|---|
-| Before preparation | PGN names A; book names A | A is committed. |
-| Prepared | Before/after versions and the A-to-B mapping are recoverable | Rename is pending; cancellation before commit intent can still leave A. |
-| Interrupted after PGN replacement | PGN names B; book still names A; intent remains | Recovery required; affected readers cannot treat this as a complete rename. |
-| Recovered and completed | PGN and book both name B; completion is durable | B is committed; views refresh from that result. |
-| Undo requested | Receipt expects the completed participants | Validate all participants, then apply B-to-A as a new operation. |
-
-Training rows stay unchanged for this section rename because their file path
-and line IDs stay unchanged. A file rename additionally includes the training
-path mapping. Each operation names only the participants it actually changes.
-
-Recovery reuses the operation ID. For each step it distinguishes: still at the
-expected before-state, already at the intended after-state, or changed by
-somebody else. Apply the first once, accept the second, and preserve/block the
-third. A lost acknowledgment is an unknown outcome, not permission to create a
-new operation and append another rating. Where legacy formats lack operation
-IDs, staged replacement plus expected hashes and retained receipts must prove
-whether a write landed; do not blindly replay append/increment instructions.
-
-Startup checks pending manifests before affected reads. The same gate is needed
-at later reads/mutations because another app process can fail after startup.
-Unrelated data can remain usable. Malformed/unknown-version manifests produce
-an explicit recovery-required state, never an empty pending list. Retain recovery
-material until completion is durable; backup retention cannot remove content
-still needed by a pending operation or valid undo receipt.
-
-Required application states are `queued`, `preparing`, `applying`, `committed`,
-`rejected` (nothing changed), and `recoveryRequired` (completion needs resolution).
-An ordinary typed rejection is different from an exception whose durable result
-is unknown. Cancellation before commit intent can reject the operation; after
-intent it stops the caller waiting, not the obligation to finish safely.
+Required application states are *committed*, *rejected* (nothing changed) and
+*unknown* (a lost acknowledgement: retry with the same operation, never a new
+one that would append twice).
 
 ### Identity and undo
 
-Keep the existing path/section references and persistent `LineID` format during
-coexistence with v1. A content hash identifies a version, not the enduring
-identity of a document: two copies can have identical bytes and independent
-histories. Use one implementation of descendant membership and reference
-rewriting for books, training and recovery.
+Paths, course sections and `[LineID]` stay the shared identity with the old
+app. A content hash identifies a version, not a document. A rename or move
+produces an explicit old-to-new mapping that books and training follow; copy
+makes a new document; delete moves the file into the repertoire's quarantine
+and restore brings it and its references back. Draft undo changes only the
+draft; committed undo is a new guarded operation, refused when a participant
+changed since, keeping the history.
 
-A supported rename/move produces an explicit old-to-new mapping. Copy creates
-a separate document; delete moves content into recovery; restore validates the
-destination before restoring references. Preserve line IDs when identity is
-preserved. Cross-file line migration must state whether progress follows and
-how collisions are handled before that feature's deferred scope is implemented.
-Do not infer an external rename solely from matching content or display names.
+### Background work
 
-Before relocating an actively trained file, stop accepting ratings against the
-old reference and drain already accepted ones, then capture the migration's
-read set. Resuming uses the new reference. Include a test where a first-ever
-rating has no existing row: row-conflict detection alone cannot stop an old
-path being recreated after a move. A reused path is not permission to attach an
-old session to a new document. Supported v1 writers must satisfy the same
-ordering contract before coexistence is certified.
+`PendingWrites` is app-lifetime: accepted authoritative writes outlive the
+screen that made them, and closing waits for them. Derived writes are only
+watched, so the way out waits for one in flight but never asks about a failed
+one. Every job captures its input when it starts. Generation shows a run as
+done at once; its tree and finds are saved behind it. Mining writes a game's
+puzzles and its analyzed marker in one replacement. My games reviews the games
+it downloaded even when the cache could not save them. The engine supervisor
+owns each process from spawn to confirmed exit; finite searches have deadlines,
+continuous analysis an explicit stop. Hivemind's hashes for saved-analysis
+provenance are worked out once per file version and never fail a start.
 
-A training command carries the persisted source observation captured with its
-input, including native file identity as well as content hash. Under the shared
-recovery domain, validate that observation before publishing any training file;
-a first attempt or history-only write needs the same protection as a rating.
-Course sections loaded from the same file must agree on that observation. The
-open draft can still supply training lines, anchored to its persisted source;
-an acknowledged own save may refresh future commands only from its proven
-before/after receipt. Already accepted commands retain their original input.
-PGN save and undo pause training input and settle those accepted commands before
-replacing the source; the hold lasts through receipt and displayed-text adoption.
-A failed training write blocks publication while preserving the PGN draft and
-the current lesson. Closed-source Library writes and exact retries use the same
-barrier. An ordinary optimistic save cannot renew stale training authority by
-adopting an unrelated equal-content file.
+### Derived views
 
-`TrainingProgress` derives accepted rows against a private projection of earlier
-accepted changes; displayed progress advances only after commit acknowledgement.
-`ProgressFiles.enqueueWrite` and `enqueueAttempt` persist those frozen rows or
-answers before `commit` waits for predecessors. A missing predecessor intent is
-an unsaved acceptance, retained for ordered retry. A known optimistic conflict
-is refused before enqueue; a conflict arising after durable acceptance preserves
-the command and requires recovery.
+An index or analysis result names its inputs (document revisions, membership,
+corpus, settings) and publishes only while they still match; otherwise it is
+recomputed. Invalidate by affected input: a sibling deletion recomputes gaps, a
+membership change recomputes the book scope, a cursor move does neither. A
+failed rebuild keeps the last view; an unavailable source never becomes an
+empty success.
 
-`TrainingWrites` owns the ordered private `Support/training-writes/` queue.
-Queued intents recover forward. At the head, one command captures all four
-training files as exact nullable byte snapshots, including unchanged files and
-torn historical attempt bytes. A committing record binds the complete before/
-after plan to the frozen command; replay validates every participant and source
-before publishing anything. Completion replaces full snapshots with a compact
-receipt retaining command, order, profile and source proofs. An exact completed
-retry acknowledges that receipt without replacing subsequent data. Native old
-journal copies remain admissible only with a verified forward transition to the
-current receipt.
+### Compatibility and acceptance
 
-Recovery inspects all protocols before replay. Simultaneously pending training
-and namespace operations have no established ordering and block access. Normal
-access drains training before a new structural operation; accepting another
-training command can validate its projected predecessor state without publishing
-that predecessor. V1 accepts only strictly validated completed training history
-and refuses every pending or unknown training journal before its own recovery.
-Completed receipts are retained and scanned, so per-command/read cost still
-grows with receipt count; retained native previous copies can also keep old full
-snapshots. Native reads batch up to 32 candidates with a 16 MiB byte budget
-(one oversized record is allowed), while every record is still validated. A
-warm Linux measurement with 5,000 minimal compact receipts reduced median
-inspection from 467 ms to 153 ms; four normal command scans still cost about
-0.52–0.61 seconds before source reads and publication. This does not certify
-long-running training-history scale.
-
-Relocation completion and recovery flush both endpoint directories and their
-containing entries before rewriting references or retiring the recovery note.
-A flush failure leaves the note and reports an unresolved operation. Directory
-flushes are verified on Linux; the existing Windows adapter skips unsupported
-directory flushes, and macOS durability remains unverified.
-The legacy v1 Windows/macOS training adapter still uses an explicitly selected
-content-only check; it does not detect equal-content path reuse. Native object
-IDs also do not establish a history of arbitrary external unlink/recreation
-when the filesystem reuses an ID. Supported moves and recoverable deletes keep
-the original object, which is the identity boundary exercised here.
-
-Draft undo changes only the draft. Committed undo is a new guarded inverse
-operation covering all required participants. If any expected participant has
-changed, reject before applying the inverse and keep the receipt. Redo, where
-supported, obeys the same rule. Undo does not silently discard training performed
-after a rename or restore a book definition over someone else's edits.
-
-### Durable work and job lifetimes
-
-`PendingWrites` becomes an app-lifetime registry of individual obligations,
-not just futures associated with disposable owners. Each entry retains its
-operation identity, affected resources, typed result and retry/recovery material.
-A successful unrelated write cannot clear its failure. Read barriers outlive
-all the view replacements that wait on them. Persistent recovery is the store's
-job; an in-memory registry alone does not survive a crash.
-
-Distinguish accepted in memory, durably prepared, and committed. Only committed
-is shown as saved. Preserve failed drafts/outcomes for retry or explicit discard;
-do not dispose their last copy when a scope or mode changes. Replacing unsent
-autosave drafts is allowed; coalescing distinct training ratings is not.
-
-Every background job captures immutable input versions and configuration.
-Generation publishes against its destination revision. Mining checkpoints one
-game with its completion marker. Downloads advance freshness only after corpus
-publication. Database importers publish completed units/generations. Tournaments
-save completed games before counting them as durable results. Bughouse separates
-partial scoring, complete scoring and saved scoring, and retries missing work.
-The concrete job owns its checkpoint format; shared code only manages lifetime,
-resource budgets and progress delivery.
-
-Bughouse match checkpoints retain the exact accepted snapshot in `PendingWrites` and stop
-before another game after a publication failure. Final completion includes confirmed
-engine exit. `match.json` remains the existing authority; v2 repairs its deterministic
-`games.bpgn` export on reopen only from supported valid JSON, under a per-match lock.
-Read-only inspection never invokes that repair. V1 reads both formats but does not
-repair exports or share the v2 match lock; simultaneous cross-app match editing is
-not covered. Analysis saves retain frozen entries after owner disposal and reuse one
-SQLite history ID across lost acknowledgments, without replacing newer current rows.
-Uncommitted analysis and checkpoints that never reached JSON remain RAM obligations;
-this tranche makes no crash-survival claim for those bytes or Windows/macOS guarantees.
-
-The H5 generation owner now distinguishes computed results from acknowledged
-publication. `FillGaps` retains one run id/tree text and ordered Finds transaction,
-then shows completion only after both succeed. Failed batches remain retryable
-through owner replacement; drafts freeze their timestamp/path/text and compare
-an uncertain created file before ever choosing another destination. Native tree
-publication is create-only or exact-byte acknowledgement under the document
-recovery domain. The registry is app-lifetime retention, not a durable spool for
-unfinished computation; only committed artifacts are promised after restart.
-
-The implemented download publication path freezes site, username, returned PGNs
-and fetch time in `DownloadSaves`. Its per-corpus `PendingWrites` obligations
-outlive the screen and retry in acceptance order without another HTTP request.
-`GamesCache.keep` returns `GamesKept` only after the corpus and its `.fetched`
-note are acknowledged; failures return `GamesNotKept`. Exact retries deduplicate
-by site game ID, or by trimmed PGN text when no ID exists. Account freshness is
-written afterward, bound to the captured username and serialized with username
-changes; an unacknowledged preferences value is not exposed as a saved date.
-Reviews consume persisted corpus snapshots. Unavailable accounts retain the
-last names and block new downloads. Any owner's unresolved username obligation
-also blocks admission until the shared account resource settles successfully.
-Unavailable corpora remain distinct per-site errors with read retry, rather
-than empty results or a completed review.
-
-This download tranche has an explicit restart boundary: accepted HTTP results
-are retained **in memory** until corpus publication, with no durable enqueue
-journal. They survive owner disposal and an ordinary failed-write retry, but a
-process crash before publication can lose that response. Once published, the
-corpus survives restart even if its freshness note or account timestamp fails;
-reopening and retrying an already published batch does not append it again.
-Corpus publication and freshness are separate writes, not one transaction.
-On restart the old freshness remains eligible for refetch; deduplication makes
-refetch safe when publication actually landed before its acknowledgement was
-lost. No persistent HTTP spool is required by this boundary. This tranche does
-not complete H5's mining, generation or bughouse work, or certify Windows/macOS
-durability.
-
-The implemented mining checkpoint owns one game's frozen puzzles and completion
-marker in `SetAdditions`. An app-owned `PendingWrites` obligation retains the
-accepted result and its added count; Retry saves that result without another
-engine pass, including after the reviewing owner is disposed. Completion scans
-read the persisted tactics PGN rather than an unsaved editor preamble. When the
-set is open, the session saver remains its writer; a failed/conflicted draft
-stays visible and is not discarded to manufacture a successful checkpoint.
-A retry confirms the specific appended puzzles and solutions, not only their
-completion marker or position. Removing or replacing an accepted puzzle leaves
-the checkpoint unresolved; unrelated review metadata may still be edited.
-Closed-set writes hold the document-access barrier so an overlapping open reads
-the completed file. An exact published checkpoint can resolve a lost
-acknowledgement without adding its puzzles again or resetting its added count.
-Accepted mining results remain **in memory** before PGN publication. A crash
-before publication can require recomputation; after publication, the puzzles
-and completion marker restart together in the same PGN replacement. Every review
-exit awaits engine cleanup; a failed exit acknowledgement remains a visible
-failure with the already saved puzzle count. Startup failures are visible, and
-disposal shares one cleanup attempt with the running review, including when an
-engine finishes starting after disposal.
-
-The engine supervisor owns each process through startup, active requests, stop
-and confirmed exit. Responses carry request identity; buffers and work queues
-are bounded. Finite operations have deadlines, while continuous analysis has an
-explicit stop. Retries release failed processes. Stop/dispose also accounts for
-an engine that has been requested but has not finished starting.
-
-The UCI implementation now starts its finite deadline with the request's `go`,
-including the first request. `EngineSupervisor.start` accepts `finitePatience`
-(default ten minutes); callers with unusually deep searches can supply a larger
-budget. Continuous analysis remains uncapped until stopped. A finite deadline
-reports failure even after partial output; an explicit UCI stop waits up to five
-seconds before terminating an unresponsive process. The supervisor owns UCI and
-Hivemind startup through confirmed native exit, including disposal during spawn
-or handshake. Closing stdout alone does not confirm exit. Hivemind's active-search
-stop budget is unchanged by this increment.
-
-Shutdown rejects new commands, stops/checkpoints producers, resolves drafts,
-drains accepted writes, and then releases engines and stores. A timeout is not
-success. Explicit close-without-saving may abandon uncommitted drafts, but it
-does not erase recovery information for a partially applied operation.
-
-### Derived views and coherent reads
-
-An index or analysis result names its complete inputs: relevant document
-revisions, corpus fingerprint, book membership version, settings and engine/model
-version where applicable. Capture a coherent source snapshot using existing
-guards/transactions, or validate the entire read set before publication. Checking
-each file once at unrelated times is insufficient for a multi-file invariant.
-
-Committed changes identify affected resources and reference mappings. Catalog
-batches retain the relevant changes while coalescing notifications. A projection
-publishes only if its captured inputs still match current inputs; cancellation
-also stops wasted work, but cannot replace that check. A missing event after a
-crash is repaired by rebuilding from source, not by assuming the view is current.
-
-The active editor provides a draft overlay where the product promises immediate
-feedback. Persisted views never mistake that overlay for a committed revision.
-After a required write, dependent actions wait for the appropriate barrier or
-read the committed source directly. They do not use a known-stale gap walk or
-membership expansion to authorize a mutation.
-
-Invalidate by affected inputs: a sibling deletion recomputes gaps, a membership
-change recomputes the book scope, a cursor move does neither. Keep pure reusable
-indexes keyed by source version; bound cache size. A failed rebuild may leave a
-labelled old view, but its unavailable source must not become an empty success.
-
-The first H4 increment captures complete repertoire membership and native PGN
-revisions under the recovery domain, parses one file at a time, then validates
-the entire set before publishing. Catalog and shelf retain their last complete
-snapshot on failure. Gap navigation validates its captured answers again before
-using them. The book comparison includes present or absent downloaded PGNs in
-the same final file fence and checks synchronous account and committed-selection
-revisions afterward. Unreadable accounts and corpus files are explicit failures;
-book selection drafts remain editable but cannot certify a committed comparison.
-Library, reply, repertoire-tree and game-comparison views expose unavailable
-inputs and Retry; stale derived actions cannot be activated by mouse or keyboard.
-
-The next H4 increment joins native `books.json` and all four training-file
-proofs to that same final fence. `BookSnapshot` pairs immutable membership with
-its exact native source, including absence; an unacknowledged write cannot
-advance the owner's committed proof. `TrainingReadSet` records the same bytes
-used to decode progress. Fixed profile participants stay bound to the configured
-and pinned canonical roots, checked again after the last native observation.
-`ScopeReader` in `features/trainer/training_scope.dart` captures complete fresh
-membership; missing or unreadable included chapters refuse the whole scope.
-The Trainer validates that snapshot with book/progress inputs, then checks local
-editor, accepted-write and cancellation authority before publishing. Single-chapter
-training retains the intentional draft overlay with its persisted source proof.
-Explicit book-scope and comparison Retry refresh native membership, first
-retrying a retained failed selection write when necessary. Even no-book and
-no-account comparisons validate the inputs supporting that empty result.
-
-The repertoire tree uses the same native book/shelf fence when inputs change,
-then projects cursor movement synchronously from that validated pair. Its Retry
-also resolves a retained failed selection write. `MyGamesTree` captures all
-configured downloaded corpora, including absent files, checks account admission
-and a final native PGN fence, and withholds stale answers and keyboard actions.
-The optional SQLite archive captures its schema and exact selected rows in one
-read transaction. Its immutable proof names the configured/canonical database
-path, selected collections, absence, and a logical corpus fingerprint. The final
-PGN recovery guard validates that proof through a fresh SQLite transaction,
-including WAL commits, before publishing. Database/WAL/SHM bytes are neither
-copied nor hashed. This is a logical selected-corpus proof: an identical logical
-replacement remains valid, and no physical file-generation identity is claimed.
-An unreadable optional archive still produces explicitly labelled downloaded-only
-results; a previously captured archive that changes during a build refuses the
-whole result and offers Retry.
-
-Catalog admission exposes one affected-resource delta per input revision while
-retaining the complete batch for final listing publication. Scoped native fences
-include directory membership and absence, so unrelated repertoire changes do
-not restart gaps, training, tree or book comparisons. Nested chapters use their
-top-level repertoire boundary. Cursor movement projects an already-validated tree
-without rereading native inputs. Document saves never wait on training: the
-trainer moves its progress's source version on with each of the workspace's own
-saves, and reloads a scope whose files changed any other way. The repertoire
-index, gaps, the Book tree and the My games comparison leave an unreadable
-chapter or folder out rather than refusing the whole book. Committed downloaded-corpus edits also invalidate MyGamesTree at
-the repository boundary, before download timestamps or later UI notifications.
-
-H4 remains in progress pending combined verification and independent review.
-An owner revision proves an observed or accepted local selection, not an
-unobserved external edit to its backing file.
-
-### Compatibility, diagnosis and acceptance
-
-The promise that v1 and v2 can share a profile remains. Match both lock identity
-and lock order, including v1's repertoire domain guard. Locks alone cannot teach
-v1 to recover a new v2 manifest. Before enabling a new compound-write protocol,
-prove that both supported applications recover or refuse affected access after
-either crashes. A narrowly scoped v1 data-safety fix is allowed by the existing
-freeze policy. Do not enable the protocol while this compatibility gate fails.
-An unsupported older binary or arbitrary external tool is outside that guarantee.
-
-Keep public formats and paths compatible. New private recovery metadata is
-versioned and validated; unknown versions are preserved. Tools/MCP writers must
-use the compatible guarded protocol or be handled as external writers with
-revision validation and refresh. A filesystem watcher is only an invalidation
-hint, never proof of a coherent snapshot.
-
-Log operation/job ID, affected resource, expected/resulting revision and phase,
-without credentials or unnecessary user content. Report the same failure in the
-UI with a usable retry/recovery action. A read-only integrity check should find
-unfinished operations, dangling references and mismatched derived versions;
-repair reconstructs only disposable derived state automatically.
-
-The H6 read-only report now inspects strict settings and publication stages,
-concrete native recovery owners, book selectors, generated v4 formats and
-bughouse JSON/export agreement. It is reachable from Settings and unavailable
-startup settings. Checks preserve profile bytes and directory membership;
-unknown recovery metadata skips dependent work, and diagnostics exclude source
-bodies. Generated format validation covers visible Documents folders without
-claiming source freshness; match checks are individually locked observations.
-There is no automatic repair, credential check or general database audit in this
-tranche. Native inventory and owner/widget checks, independent review, analyze/lint
-and headless Linux startup-failure/report/recheck plus normal Settings entry
-checks passed. Both retained match-stage false-clean cases were reproduced
-before the fix. Three lock-overlap timeouts were also reproduced and fixed:
-canonical domain/root overlaps refuse before acquisition, and already-held
-match locks are not reacquired. Final merged focused checks: 77 passed;
-analyze/lint passed. Windows/macOS integrity behavior remains unverified locally.
-
-The H6 credential tranche distinguishes an unavailable read from signed out and
-blocks authentication changes until a successful read retry. Malformed cached
-credential values explicitly require repair and restart because the legacy
-desktop preferences backend itself caches them; no false reload guarantee is
-claimed. Shared preference
-credential operations serialize, including expiry removal, and unacknowledged
-cached grants are withheld from HTTP clients. Save retry keeps the exact grant;
-public requests can deliberately fall back to anonymous access. Authenticated Lichess client diagnostics
-redact transport and parse payloads, including study/game downloads and Explorer. Existing plaintext v1 keys remain unchanged:
-this does not certify crash-atomic multi-key writes or concurrent v1/v2 profiles.
+The old and new apps share one profile and take the same locks in the same
+order. Public formats and paths stay compatible; private recovery records are
+versioned, and an unknown one is quarantined, not obeyed. Tools and MCP writers
+go through the same store or are treated as external writers. Logs name the
+operation and file, never credentials or PGN text.
 
 | Proof | Observable invariant |
 |---|---|
 | Rename section, then undo while its book is active | Name, membership and training scope agree at each completed boundary. |
-| Hold a rating write; trigger two scope reloads | Neither reload exposes progress predating the accepted write as current. |
-| Delete/import a sibling that answers a gap | Gap and Replies views converge to the committed repertoire without reopening the chapter. |
-| Select nested chapters, then remove their repertoire | No descendant remains included by a stale explicit selection. |
-| Kill a worker after each durable step; reopen twice | Required state is recovered or blocked; retry duplicates no records. |
-| Fail an analysis save; fail an engine midway and retry | Unsaved is visible; incomplete scores do not count as finished. |
-| Disable puzzle auto-advance during its delay | No scheduled advance occurs afterward. |
-| Compete v1, v2 and another isolate; inject an external edit | Managed operations serialize; incompatible changes are preserved and reported. |
-| Drop a notification; rebuild a view from source | The view reaches the same result as a fresh derivation. |
-| Repeatedly open/close modes and jobs | Process, subscription and queue counts return to their documented baseline. |
+| Hold a rating write; trigger two scope reloads | Neither reload shows progress older than the accepted write. |
+| Delete/import a sibling that answers a gap | Gaps and Replies converge without reopening the chapter. |
+| Kill a worker after each durable step; reopen twice | State is recovered or quarantined; the app opens; nothing is duplicated. |
+| Corrupt `settings.json`, a recovery record or a staged file | The app starts, the bad file is kept aside, everything else works. |
+| Fail a derived write (tree, finds, download cache) | The feature keeps working; the next run tries again. |
+| Repeatedly open/close modes and jobs | Process, subscription and queue counts return to baseline. |
 
-Use real temporary profiles for storage/restart tests, controlled completions
-and fake time for concurrency tests, and production `AppParts` wiring for the
-user sequences. Add generated operation sequences against a simple reference
-model where interactions justify them. Domain algorithms use specification cases
-and deterministic v1 comparisons where v1 is a valid oracle. Measure representative
-large corpora and establish performance budgets before calling scale verified.
-State the supported filesystem/platform fault model; process-kill tests alone
-do not prove every device survives power loss.
+Use real temporary profiles for storage and restart tests, controlled
+completions for concurrency, and production `AppParts` wiring for user
+sequences. Process-kill tests prove crash recovery, not power loss on every
+device; Windows and macOS durability is not yet verified.
 
 ## Layout
 
@@ -979,7 +590,7 @@ recovery files.
 | Training | Review, progress and history CSVs and attempt JSONL, keyed by file path and line id | Scheduling and history across chapter rename, move, split and delete, and across edits that would change a derived line id |
 | Generation output | Versioned bundles via the artifact repository, plus legacy chapter-side files | Readability of old artifacts; user edits to companion PGNs |
 | Settings and accounts | V2 Support `settings.json`; existing SharedPreferences account/credential keys | Existing keys and values; no implicit account migration |
-| Recovery | Atomic-write journals, quarantine, PGN recovery snapshots, SQL `game_trash`, schema-upgrade backups, the training records a relocation replaced in Documents `.cap-reference-history/<operation>/`, and the Support note naming a move whose training rows are not rewritten yet | Each keeps its purpose; none of them is the version history — see [Backups](#backups) |
+| Recovery | Atomic-write journals, quarantine, `Support/recovery-quarantine/` for records and settings the app could not read, PGN recovery snapshots, SQL `game_trash`, schema-upgrade backups, the training records a relocation replaced in Documents `.cap-reference-history/<operation>/`, and the Support note naming a move whose training rows are not rewritten yet | Each keeps its purpose; none of them is the version history — see [Backups](#backups) |
 
 ### Course files
 
@@ -992,82 +603,16 @@ never opens a different surviving chapter; older whole-file references still
 read a singleton file. Book membership therefore survives sibling deletion.
 
 Listings traverse nested repertoire folders without following symlinks or
-entering hidden recovery/staging folders. Native startup/listing moves legacy
-root-level PGNs to `<name>/Main.pgn` through the guarded document store, carrying
-training references and backups; a collision leaves the original visible.
-Nested backup histories follow folder moves, and nested recovery files can be
-listed and restored. Native affected access first takes the canonical repertoire
-recovery domain shared with supported v1 on Linux, then the Documents namespace
-and distinct leaf locks. V2 PGN access, training reads/writes, library/deleted/
-study scans and PGN imports recover its existing relocation notes before access.
-Malformed, unsupported, unreadable or ambiguous notes remain intact and block
-access; a matching native identity must prove whether a move landed. V1 refuses
-unfinished v2 notes, and v2 refuses pending/unknown v1 move and publication
-receipts with an instruction to reopen v1. Valid completed v1 history remains
-readable. V1 conservatively guards supported Documents accesses, including the
-four training files. No foreign journal is replayed and no metadata format is
-introduced by this gate. Non-Linux v1 recovery remains unverified.
-
-File rename, move, quarantine delete and file restore now use `FileRelocations`
-and private version-1 `Support/relocation-writes/<id>.json` records. Each record captures the
-PGN's canonical endpoints, native identity and hash; all four training files'
-exact before/after text (including absent and unchanged participants); raw book
-selectors; and the complete backup-directory identity, index and file inventory.
-The captured Documents spelling preserves training keys reached through a
-configured alias alongside canonical keys. Pending recovery verifies that alias
-still resolves to the pinned Documents root. No current paths are consulted to
-reinterpret a terminal receipt's intended operation.
-
-Preparation validates every participant and preserves changed training inputs
-under `.cap-reference-history/<id>/` before durable commit intent. Recovery
-validates the complete read set before moving the PGN, publishing rows and book
-selectors, and transferring backup ownership. Occupied destination history moves
-to a deterministic preserved aside; a chapter with no incoming history cannot
-inherit it. Namespace flush failures retain intent, and replay flushes both
-endpoints and their ancestors. `Moved` is returned only after completion.
-The Library's `FileChanges` read the revision they act on when they run and keep
-nothing between attempts: a failed change is simply asked for again against the
-disk as it is then. They let the books settle and re-read around the change and
-follow or close the open file. V1 refuses pending, malformed or unknown
-relocation records before its own recovery/access; validated complete/cancelled
-records remain readable. Native Windows replacement can leave an old copy
-beside a journal if cleanup is interrupted. Recovery retains that copy and
-accepts it only when its reserved name, complete immutable payload and recorded
-phase prove it belongs to the current valid receipt; it never replays the old
-copy. Backup-index recovery similarly checks retained replacement copies
-against the captured index. Unknown or conflicting artifacts still block access.
-
-Folder moves use a version-2 variant in the same journal and recovery loop.
-`DirectorySnapshot` captures every regular file and directory, including binary
-sidecars, empty folders, nested quarantines and uppercase PGNs. Each entry has
-its native identity; files also have their content hash. Relative paths retain
-the host's spelling. Recovery verifies the entire tree at its recorded endpoint
-and all training, book and backup participants before publishing anything else.
-Every captured PGN has an explicit backup-ownership plan. Links, unsupported
-nodes, metadata-root overlap and cross-filesystem moves are refused before
-intent. The original note decoder still recovers older moves; its writer is
-retired.
-
-Folder renames hold navigation under both names while they run, so a late child
-load cannot cross the move, and the open chapter follows its folder. An import
-whose placement fails removes its staging folder and can simply be made again;
-a destination collision advances to the next free name.
-
-A quarantine delete keeps the current PGN version before preparation and moves
-its backup ownership with the file; restore brings that history back. Deletion
-ids follow the existing recovery filename grammar. Repertoire deletion stops at a
-chapter that refuses, leaving sidecars and prior quarantine contents in place;
-asking again deletes what the re-read list still holds.
-Pre-journal quarantines lack proof tying a former path's backup history to the
-restored file: occupied history is preserved separately rather than merged by
-guesswork. Those historical ownership links remain unverified.
-
-Existing unfinished folder notes continue through their original recovery
-protocol. Accepted training commands use the durable queue described under
-[Identity and undo](#identity-and-undo). Multi-file edits remain H3c work.
-Completed relocation snapshots are retained;
-pruning and scan costs remain explicit follow-up work. The tested native
-recovery platform is Linux; Windows/macOS durability is unverified.
+entering hidden recovery or staging folders. Root-level PGNs move to
+`<name>/Main.pgn` through the store, carrying training references and backups;
+a collision leaves the original visible. Rename, move, delete and restore of a
+file or folder go through `FileRelocations`, which writes a record under
+`Support/relocation-writes/` naming the PGN or folder inventory, the four
+training files, book selectors and backup ownership before and after, then
+applies them and marks the record complete. After a crash the recovery gate
+finishes or quarantines each record on the next access (see
+[How a save and its recovery work](#how-a-save-and-its-recovery-work)). Imports
+are written into a `.import-` staging folder and renamed into place.
 
 - **One file, one write path.** A chapter of a course file opens as a
   `SectionView`: its games in file order as an ordinary `Chapter`, so every
@@ -1166,49 +711,10 @@ first game that would have changed and writes nothing. Then the version being
 replaced is copied into Support, and only then is the file replaced. A create
 has no previous version, so there is nothing to declare and nothing to compare.
 
-Course-section renames attach explicit `SectionRename` intent to the ordinary
-edit scope. Held edits keep that intent in the draft; discard and draft undo
-write nothing. Keeping the draft commits its PGN and exact `books.json`
-reference snapshot together. The store checks section lineage independently
-of the ordinary game-byte scope and preserves unknown book fields. Book edits
-accepted beforehand settle first; controls wait while references are committing.
-
-This operation uses private version-1 `Support/compound-writes/<id>.json`
-receipts containing canonical document paths and exact before/after content
-(the content itself is the comparison, rather than a separately stored hash).
-The outer shared domain, Documents and distinct participating directory locks
-cover recovery and publication. Prepared receipts cancel without publishing;
-committing receipts finish only participants at their expected before/after
-bytes. Unknown, malformed, unreadable or externally changed participants block
-with retained recovery material. V1 recognizes the envelope and refuses pending
-or unsupported receipts before its own recovery, directing the user to v2.
-
-A completed receipt authenticates the inverse; undo validates both participants
-and journals that inverse as another operation. Failed acknowledgements retain
-the original operation id and exact draft or inverse for explicit retry, while
-new document edits are blocked. Training paths and stable line IDs are unchanged
-by a section rename. Complete receipts currently retain full snapshots and are
-validated on each recovery access; space and scan cost grow with structural
-history. Pruning or compact terminal receipts require a separate compatible
-protocol, not deletion of material still used by retry or undo. These durability
-and coexistence paths have native Linux tests; Windows/macOS remain unverified.
-
-`savePair` extends this boundary to exactly two PGNs through strict version-2
-compound receipts. Each participant carries its own expected revision, edit
-scope and preserved before-content; both are validated before publication.
-Books and training files are outside this receipt. Exact retry authenticates
-both participants, and one inverse restores both or refuses an intervening
-change. Repository notifications cover both configured document references,
-including a Documents-root alias.
-
-`DocumentSession.externalEdits` prepares a source edit without changing the
-editor and holds saving through publication and adoption. An uncertain accepted
-operation retains its retry barrier. Historical completion can settle that
-operation, but the editor adopts its result only after fresh content and native
-identity proof; a changed source retains the draft as a conflict. Navigation
-cannot make a completion replace another editor. This is a tested foundation:
-Library cross-file line moves still use their existing flow. Connecting them
-awaits the product decision about training progress when lines move or merge.
+A course-section rename commits its PGN and the matching `books.json`
+references as one compound operation (`Support/compound-writes/`), and
+`savePair` does the same for exactly two PGNs; undo is the guarded inverse.
+Training paths and line IDs do not change on a section rename.
 
 For an ordinary save, the store does not read the file back after the
 rename, and does not read its own backup back before it: a temp-and-rename on
@@ -1328,18 +834,18 @@ certification; Windows directory-entry durability remains unpromised.
 
 ## Settings
 
-- One writer per key. A failed read is different from an absent key and never
-  starts work with defaults. A failed save is shown as failed.
-- Jobs capture their configuration when they start.
-- Secrets never appear in snapshots, logs, Widgetbook or exports.
-
-`SettingsStore.ready` requires a successful native read (including confirmed
-absence). Malformed JSON, linked files and non-file paths preserve the saved
-bytes and block edits; a failed reread retains the last valid choices without
-authorizing their publication. Startup shows the file location with Retry
-settings before exposing modes or launching engines. Successful retry resumes
-startup once. Existing failed saves retain their own retry obligation; an
-unverified staging file is preserved. Read diagnostics omit source contents.
+- One writer, `SettingsStore`, for `settings.json` in Support; saved whole on
+  every change, the last write winning.
+- Preferences never block startup. A file that cannot be read (bad UTF-8 or
+  JSON, not an object, a directory) is moved into `recovery-quarantine/`,
+  logged, and the app starts on the defaults. A symlinked `settings.json` is
+  followed for reading and writing.
+- A failed save keeps the choice on screen with one line saying so; the next
+  change writes again.
+- Jobs capture their configuration when they start. Secrets never appear in
+  settings, logs or exports.
+- Lichess credentials keep the old app's SharedPreferences keys. Keys that
+  cannot be read, or hold the wrong type, read as signed out and are removed.
 
 ## Network and offline
 
@@ -1457,19 +963,19 @@ owner's public API and the theme alone.**
 These batches precede broad feature expansion. Each delivers a named user
 sequence and the smallest reusable mechanism needed for it. They are dependency
 groups, not a request to implement the whole design in one session. Split a
-batch into bounded operation-specific tasks when needed; keep one status cell
-per batch and use tests and commits as the implementation record.
+batch into bounded tasks when needed; keep one status line per batch and use
+tests and commits as the implementation record.
 
 | Batch | Depends on | Scope and first places to change | Exit condition | Status |
 |---|---|---|---|---|
-| H1 | None | Direct fixes: recursive book selection, gap invalidation, analysis-save errors, partial engine retry, puzzle timer; `books`, workspace wiring, bughouse stores/search, puzzle trainer | Their acceptance sequences above pass through real wiring; failures are visible | Done 2026-09-24: recursive book removal, catalog-driven gap refresh, typed analysis-save failures with exact-entry retry, partial engine retry and puzzle timer cancellation; regression failures reproduced before fixes, independent review, v2 suite and analyze/lint; headless Linux save failure/retry verified against disposable SQLite. Unsaved analysis remains in memory (H2/H5). |
-| H2 | H1 | Accepted ratings and writes outlive reload/dispose; `PendingWrites`, training progress/owner, exit guard | Two overlapping reloads cannot bypass the same pending rating; failed outcomes remain retryable; shutdown is honest | Done 2026-09-24: app-owned training obligations, ordered barriers and exact in-process retry survive reload/dispose; retained book/settings/account/recent-file/copy outcomes; shutdown covers existing dialogs and suspends puzzle timers. Failure-first regressions, independent reviews, 2,155 v2 tests and analyze/lint passed after merging current main. Headless Linux partial training publication survived scope replacement and retried with three history rows exactly once. Persistent crash recovery remains H3; Windows/macOS durability unverified. |
-| H3a | H2 | Existing relocation recovery before affected reads; document guards, training reads, startup; reconcile v1 domain locks/order | Kill during a move, reopen/train from either supported app; no missing or duplicate progress; incompatible access blocks safely | Done 2026-09-24 on Linux: canonical shared domain before affected Documents access; strict v2 notes recover before PGN/training reads and complete scans, foreign receipts refuse without mutation, and UI shows the recovery reason with Retry. Regression-first tests, independent reviews, 2,232 v2 tests, final focused storage/legacy checks and analyze/lint passed. Six real-process tests cover cross-app exclusion, SIGKILL and all four training files recovering once; headless refusal/retry verified. No new metadata format. Windows/macOS recovery guarantees remain unverified; v1 native recovery is still Linux-only. |
-| H3b | H3a | One compound operation for course rename/book references and its inverse; Library, storage, session history | Rename and undo agree across PGN/book state, including crash and external-conflict cases | Done 2026-09-24 on Linux: explicit section intent follows held/coalesced drafts; one guarded private receipt commits PGN and books, preserves unknown fields and validates the complete inverse. Exact retry, external conflicts, navigation admission and v1 refusal have regression tests; 2,381 v2 tests, focused legacy/process checks and analyze/lint pass. Real SIGKILL preparation/publication tests and headless partial book-write failure, Retry and undo verified both participants. Complete receipts remain retained with growing scan/storage cost; Windows/macOS durability unverified. |
-| H3c | H3b | Apply the proven operation boundary to supported file/folder moves, delete/restore and multi-file edits | Every existing command has an explicit required read/write set, recovery path and compatible undo behavior | In progress: source admission, file/folder relocation, delete/restore, retained import placement and durable accepted training verified 2026-09-25 on Linux. Relocation preserves four training files, books, backup ownership and complete folder inventories; prior 2,722 v2/264 legacy tests and headless interrupted rename/delete/restore proofs passed. Training freezes accepted commands in an ordered persistent queue, validates all participants before replay, and compacts completion receipts. Training checkpoint full v2 suite: 2,773 passed, four Windows-only skips; final focused native/storage/legacy/frontend suite: 903 passed, four Windows-only skips; analyze/lint and independent review passed. Three actual SIGKILL boundaries recover distinct commands exactly once. Headless interrupted mark-known plus queued exclusion survived restart, blocked access until Retry, then recovered the original timestamp and one history row; a second reopen left all four training files byte-identical. Native receipt batching improved measured scan cost, which still grows with history. Two-PGN commit/inverse and workspace preparation/adoption are now verified foundations: 1,463 focused storage/workspace/Library/legacy tests passed with four Windows-only skips, including three real process-kill boundaries and historical-retry conflicts. Library cross-file moves remain unfinished pending the training-progress policy decision; Windows/macOS durability remains unverified. |
-| H4 | H2, H3c | Versioned input snapshots for catalog, shelf, gaps, book comparison and training; targeted invalidation | A late computation cannot replace a newer result; a fresh rebuild equals the displayed committed projection | Done 2026-09-25 on Linux: complete native repertoire snapshots and final read-set validation; explicit failed/stale catalog, shelf, gap, tree and game-comparison reads; committed book/account owner revisions and keyboard guards. Includes native book/training proof, complete Trainer scope reads, repertoire-tree selection validation and downloaded-corpus/account fences with stale keyboard guards. H4 input-fence checkpoint suite: 2,990 passed, four Windows-only skips; analyze/lint passed. Headless Linux Library, gaps and game-comparison checks retained prior views and blocked stale actions; native book and training-file failures also blocked Trainer/book-tree actions, and Retry restored the original lines. Additional MyGames UI proof was not run; its native and keyboard regressions passed. Targeted committed-input invalidation, scoped membership fences and guarded own-save receipt checks are implemented. SQLite selected-corpus snapshots now join the downloaded-PGN final fence; 138 merged focused tests, analyze/lint and independent review passed. Windows/macOS native guarantees remain unverified. |
-| H5 | H2, H3c | Generation, mining, downloads, bughouse and engine lifetimes; job-specific checkpoints and truthful completion | Stop/retry/restart neither duplicates saved units nor loses promised results; resources return to baseline | Done 2026-09-25 on Linux: generation, mining, downloads and bughouse retain accepted outputs across owner disposal and failed publication, retry exact saved units, and report completion only after their required writes and cleanup. Finite UCI watchdogs and explicit startup/search/exit ownership bound engine lifetimes. Native regressions cover lost acknowledgments, later writes, immutable payloads, startup/cleanup failures and actual v1 match-writer compatibility. Independent reviews, focused tests and headless failure/Retry/Resume checks passed for each tranche; the final merged suite is recorded under H6. Published units survive reopening; unpublished computation and HTTP responses remain RAM obligations, without a durable spool. V1 does not share the bughouse match lock or repair its export, so simultaneous cross-app match editing is not covered. Windows/macOS lifecycle and durability guarantees remain unverified. |
-| H6 | H4, H5 | All existing modes: focus/shortcuts/navigation/close, settings, credentials, diagnostics and integrity checks | The complete cross-mode sequence below passes with real disposable storage, offline/error cases and headless UI checks | Done 2026-09-25 on Linux: settings read failures block edits/startup; credential failures remain visible with truthful retry or repair-and-restart guidance and redacted authenticated-client diagnostics. Settings tests now inject failure after real native replacement; a reproduced preflight-admission bug is fixed so blocked writes cannot claim later external bytes. The read-only integrity report checks settings/stages, recovery metadata, book selectors and derived formats, preserves source bytes, and handles overlapping locks without self-waiting. Combined native AppParts tests cover edits, ratings across two reloads and section rename, sibling removal, membership/progress/gaps, guarded undo or refusal, and recovery after an interrupted relocation. Shell tests cover every mode, focus/shortcuts, offline Retry, navigation and cancelled close. A cold launch of actual main_v2 confirmed the recovered book, learned line, note and native gap answers; all four training participants agreed on disk. Independent reviews and analyze/lint passed. Final complete v2 plus selected legacy recovery compatibility suite: 3,406 passed, four Windows-only skips. The initial broad-run failure exposed an outdated lost-ack fixture; corrected tests and the additional guard regression pass. Integrity does not repair files or certify global source freshness/credentials/databases; legacy plaintext credentials have no new multi-key crash-atomic guarantee. Windows/macOS native guarantees remain unverified. H3c cross-file command cutover remains separately unfinished pending the training-progress decision. |
+| H1 | None | Direct fixes: recursive book selection, gap invalidation, analysis-save errors, partial engine retry, puzzle timer; `books`, workspace wiring, bughouse stores/search, puzzle trainer | Their acceptance sequences above pass through real wiring; failures are visible | Done 2026-09-24: book removal, gap refresh, analysis-save failures, engine retry, puzzle timer. |
+| H2 | H1 | Accepted ratings and writes outlive reload/dispose; `PendingWrites`, training progress/owner, exit guard | Two overlapping reloads cannot bypass the same pending rating; failed outcomes remain retryable; shutdown is honest | Done 2026-09-24: accepted writes outlive reload and dispose; honest shutdown. |
+| H3a | H2 | Existing relocation recovery before affected reads; document guards, training reads, startup; reconcile v1 domain locks/order | Kill during a move, reopen/train from either supported app; no missing or duplicate progress; anything unrecoverable is quarantined and the app opens | Done 2026-09-24 (Linux): unfinished moves recover before affected reads. |
+| H3b | H3a | One compound operation for course rename/book references and its inverse; Library, storage, session history | Rename and undo agree across PGN/book state, including crash and external-conflict cases | Done 2026-09-24 (Linux): section rename and its book references commit and undo together. |
+| H3c | H3b | Apply the proven operation boundary to supported file/folder moves, delete/restore and multi-file edits | Every existing command has an explicit required read/write set, recovery path and compatible undo behavior | Partial 2026-09-25 (Linux): file/folder moves, delete/restore, imports and training queue; Library cross-file moves await the training-progress decision. |
+| H4 | H2, H3c | Versioned input snapshots for catalog, shelf, gaps, book comparison and training; targeted invalidation | A late computation cannot replace a newer result; a fresh rebuild equals the displayed committed projection | Done 2026-09-25 (Linux): catalog, gaps, training scope, book tree and game comparison read again when an input changes and leave an unreadable file out; none of them blocks opening, saving or training. |
+| H5 | H2, H3c | Generation, mining, downloads, bughouse and engine lifetimes; job-specific checkpoints and truthful completion | Stop/retry/restart neither duplicates saved units nor loses promised results; resources return to baseline | Done 2026-09-25 (Linux): generation, mining, downloads, bughouse and engines report truthfully; derived writes never block. |
+| H6 | H4, H5 | All existing modes: focus/shortcuts/navigation/close, settings, credentials, diagnostics | The complete cross-mode sequence below passes with real disposable storage, offline/error cases and headless UI checks | Done 2026-09-25 (Linux): modes, settings, credentials and close pass the cross-mode sequence; nothing blocks startup. |
 | H7 | H6 | Remaining approved player/prep, database and tournament features, following their product rows | Each adds its own source/derived classification, durable unit and failure/restart tests while meeting the shared contracts | Not started |
 | H8 | H7 | Platform/scale/compatibility gates, data migration rehearsal and switch-over readiness | No untested supported-platform durability claim; recovery and parity gates pass before old code is retired | Not started |
 
@@ -1529,7 +1035,7 @@ settings, lint and Widgetbook appear inside the row that first needs them.
 | 10 | **Players.** Player analysis, opponent search and prep sheets, tournaments, people directory, US Chess lookup. | Screenshot | Not started |
 | 11 | **Databases.** Master games, TWIC import and browser, broadcast collections, Scid export. | Screenshot | Not started |
 | 12 | **Engine tournament and Bughouse lab** on the shared supervisor. | Screenshot | Partial 2026-09-23, the Bughouse half (owner has not yet seen the screenshot): 6.4k lib lines against the old lab's 11.8k, 123 tests. Built from the web pages, spec in `docs/v2/features/bughouse-lab.md`: `chess/bughouse/` (two-board table, per-board line, setup boxes, Hivemind's scale and joint moves, matches and BPGN; keys, SAN and UCI checked against the Python tools on a generated fixture, `match.json` against an old-app fixture), `storage/bughouse_books.dart` (Hivemind book and FICS archive, read only), `storage/bughouse_matches.dart`, `engines/hivemind_*.dart` on the shared supervisor (install checked against the manifest before every launch), `features/bughouse/` (the table, scores from the book or a live search, Analyze, the archive, matches, the one screen). Screenshots: the start from the book; a live search filling in; Analyze; a match. Not built: the Engine tournament mode; the old lab's editable clocks, board editor palette and Compare clock scenarios (dropped, see the spec) |
-| 13 | **Services.** Settings screen, Lichess and chess.com accounts, updates, diagnostics (**Open log folder**, copy diagnostics); Widgetbook. | Screenshot | Partial 2026-09-21: the settings store and dialog. One `Settings` value in `storage/settings.dart`, one writer (`SettingsStore`, `settings.json` in the support folder, a failed read preserving the file and blocking startup until Retry succeeds); a 640×300 dialog (the gear at the right end of the top bar, Ctrl+,) with a list of five places — Look, Engine, Files, Accounts, App — and the chosen place's rows, one line each, searchable across places. Rows today: board coordinates; engine cores, memory and lines (the engine restarts for cores or memory, re-searches for lines); copy files from outside Documents on open; the Lichess account (2026-09-22: Log in through the old app's PKCE flow, the wait with Cancel and Copy link, Log out, a personal-token row while signed out; the old app's keys, so both apps share the account); Open log folder. Owner's rule for the page: a row only when two people want different values and the app cannot tell; a mode's own knobs stay in the mode. Not built: figurines, chess.com, updates, diagnostics copy, Widgetbook |
+| 13 | **Services.** Settings screen, Lichess and chess.com accounts, updates, diagnostics (**Open log folder**, copy diagnostics); Widgetbook. | Screenshot | Partial 2026-09-21: the settings store and dialog. One `Settings` value in `storage/settings.dart`, one writer (`SettingsStore`, `settings.json` in the support folder, a file that cannot be read moved aside and the defaults used); a 640×300 dialog (the gear at the right end of the top bar, Ctrl+,) with a list of five places — Look, Engine, Files, Accounts, App — and the chosen place's rows, one line each, searchable across places. Rows today: board coordinates; engine cores, memory and lines (the engine restarts for cores or memory, re-searches for lines); copy files from outside Documents on open; the Lichess account (2026-09-22: Log in through the old app's PKCE flow, the wait with Cancel and Copy link, Log out, a personal-token row while signed out; the old app's keys, so both apps share the account); Open log folder. Owner's rule for the page: a row only when two people want different values and the app cannot tell; a mode's own knobs stay in the mode. Not built: figurines, chess.com, updates, diagnostics copy, Widgetbook |
 | 14 | **Switch-over.** `main.dart` starts `v2`; delete the old code, tests, ledgers and checks; move `lib/v2/` to `lib/`; gather the folders the app writes in Documents (`repertoires/`, `studies/`, `pgn_collections/`, `games_library/`, `analysis_games/`, `tactics_sets/`, `opponents/`, `engine_tournaments/`, `exports/`, `repertoire_debug_runs/`, and the tools' `expectimax_runs/` and `lichess_broadcasts/`) under one `Documents/Chess Auto Prep/`, moving existing data once with a backup of every moved file and rewriting the settings keys and training references that name old paths (owner decision 2026-09-21; not earlier, because both apps must share the same folders until then); rewrite COMPONENT_MAP and the agent guides. | Old code gone | Not started |
 
 A row that turns out too large for one session is split into two rows here,

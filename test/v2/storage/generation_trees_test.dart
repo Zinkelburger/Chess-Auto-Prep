@@ -4,7 +4,6 @@ import 'package:chess_auto_prep/v2/storage/atomic_write.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/generation_trees.dart';
 import 'package:chess_auto_prep/v2/storage/recovery_gate.dart';
-import 'package:chess_auto_prep/v2/storage/relocation_notes.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -57,31 +56,28 @@ void main() {
       expect(await artifact.readAsString(), text);
       await owner().keep(chapter, text, runId: 'fixed-id');
       expect(await artifact.parent.parent.list().length, 1);
-      await expectLater(
-        owner().keep(chapter, 'different', runId: 'fixed-id'),
-        throwsA(isA<FileSystemException>()),
-      );
-      expect(await artifact.readAsString(), text);
+      await owner().keep(chapter, 'different', runId: 'fixed-id');
+      expect(await artifact.readAsString(), text, reason: 'one tree per run');
     },
   );
 
   test(
-    'matching abandoned stage is reusable; different bytes are preserved',
+    'a staged copy left by a crash does not block keeping the tree',
     () async {
       await artifact.parent.create(recursive: true);
       final stage = File(temporaryPathFor(artifact.path));
-      await stage.writeAsString('tree');
+      await stage.writeAsString('half a tree');
       await owner().keep(chapter, 'tree', runId: 'fixed-id');
       expect(await artifact.readAsString(), 'tree');
       expect(await stage.exists(), isFalse);
-      await stage.writeAsString('other accepted data');
-      await expectLater(
-        owner().keep(chapter, 'tree', runId: 'fixed-id'),
-        throwsA(isA<RecoveryRequired>()),
-      );
-      expect(await stage.readAsString(), 'other accepted data');
     },
   );
+
+  test('a chapter moved or deleted mid-search is skipped quietly', () async {
+    await File(chapter.path).delete();
+    await owner().keep(chapter, 'tree', runId: 'fixed-id');
+    expect(await artifact.exists(), isFalse);
+  });
 
   test('linked artifact ancestry and stage preserve external bytes', () async {
     final outside = await Directory(p.join(root.path, 'outside')).create();
@@ -97,12 +93,9 @@ void main() {
     await Link(generation.path).delete();
     await artifact.parent.create(recursive: true);
     await Link(temporaryPathFor(artifact.path)).create(target.path);
-    await expectLater(
-      owner().keep(chapter, 'tree', runId: 'fixed-id'),
-      throwsA(isA<RecoveryRequired>()),
-    );
+    await owner().keep(chapter, 'tree', runId: 'fixed-id');
     expect(await target.readAsString(), 'keep');
-    expect(await artifact.exists(), isFalse);
+    expect(await artifact.readAsString(), 'tree');
   }, skip: Platform.isWindows);
 
   test(

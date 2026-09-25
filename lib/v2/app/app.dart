@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 
 import '../diagnostics/log.dart';
 import '../features/settings/setting_rows.dart';
-import '../features/settings/integrity_dialog.dart';
 import '../ui/theme.dart';
 import '../workspace/copy_name_dialog.dart';
 import '../workspace/document_session.dart';
@@ -101,15 +100,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     coresAvailable: Platform.numberOfProcessors,
     account: _parts.account,
     openLogFolder: () => unawaited(openFolder(widget.logFolder)),
-    checkSavedData: _checkSavedData,
   );
-
-  void _checkSavedData() {
-    if (!mounted) return;
-    final context = _navigator.currentContext;
-    if (context != null)
-      unawaited(showIntegrityDialog(context, _parts.env.integrity));
-  }
 
   @override
   void initState() {
@@ -125,19 +116,15 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     unawaited(_start());
   }
 
-  bool _starting = false;
   bool _ready = false;
 
+  /// Settings never hold the window back: a file that cannot be read is
+  /// moved aside and the defaults are used, so starting always ends here.
   Future<void> _start() async {
-    if (_starting || _ready) return;
-    setState(() => _starting = true);
     await _parts.start();
     if (!mounted) return;
-    setState(() {
-      _starting = false;
-      _ready = _parts.settings.ready;
-    });
-    if (_ready) await _desktopFiles.start();
+    setState(() => _ready = true);
+    await _desktopFiles.start();
   }
 
   void _flushDraft() => unawaited(_parts.saver.flush());
@@ -180,32 +167,8 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     );
   }
 
-  Widget _startup() => Scaffold(
-    body: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(Space.l),
-        child: _starting
-            ? const CircularProgressIndicator()
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SelectableText(
-                    _parts.settings.problem ?? 'Settings are not available.',
-                  ),
-                  const SizedBox(height: Space.m),
-                  FilledButton(
-                    onPressed: () => unawaited(_start()),
-                    child: const Text('Retry settings'),
-                  ),
-                  TextButton(
-                    onPressed: _checkSavedData,
-                    child: const Text('Check saved data'),
-                  ),
-                ],
-              ),
-      ),
-    ),
-  );
+  Widget _startup() =>
+      const Scaffold(body: Center(child: CircularProgressIndicator()));
 }
 
 /// The way out of the app: what the user typed reaches the disk — or they

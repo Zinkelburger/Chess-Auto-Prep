@@ -322,22 +322,18 @@ Supersedes the Search tab section where they differ.
   result sets (My games mistakes, TWIC scan hits) through the same `FindsPanel` shape.
 
 
-## Search publication and retry (H5)
+## Saving a search
 
-A computed search says **Saving search results…** until its required Positions
-transaction and v4 tree publication have both been acknowledged. A failed save
-stays visible with **Retry saving search**. Positions also offers **Retry saving
-positions** when its SQLite transaction fails. Accepted batches keep their
-original move prefix, rating, timestamp and findings through navigation or owner
-disposal. Retrying uses the same ordered batch; another successful operation
-cannot clear its failure. SQLite uses full synchronous acknowledgement.
-
-`FillGaps` owns the accepted publication in the app's `PendingWrites` registry.
-`GenerationTrees` publishes one frozen run id and exact tree text below the
-existing `.cap-generation/<chapter>/v2-<run-id>/tree.json` layout, under the
-managed document recovery domain. It creates rather than overwrites; matching
-bytes acknowledge an uncertain earlier publication, and conflicting or linked
-files are preserved and refused. Existing artifact formats are unchanged.
+A search shows as done the moment it finishes. Its Positions batch and its v4
+tree (`.cap-generation/<chapter>/v2-<run-id>/tree.json`, the existing layout)
+are saved behind it; both are derived data, so a failed save is a log line and
+never holds the Search tab back — the next search starts at once and saves its
+own. A tree whose chapter was moved or deleted mid-search is skipped. A staged
+copy a crash left is removed before the next tree is written. `Make lines`
+writes a new draft chapter under the first free name; if the write fails the
+tab says why and `Make lines` tries again, under the next name if a partial
+draft was left. Closing waits for a save in flight but never asks about one
+that failed.
 
 **Make lines** freezes the accepted timestamp and generated text. A confirmed
 initial name collision can choose the next numbered draft. Once creation has an

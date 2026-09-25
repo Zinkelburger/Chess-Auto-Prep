@@ -28,8 +28,6 @@ import '../storage/chapter_files.dart';
 import '../storage/eval_cache.dart';
 import '../storage/finds_store.dart';
 import '../storage/generation_trees.dart';
-import '../storage/integrity_report.dart';
-import '../storage/profile_integrity.dart';
 import '../storage/game_store.dart';
 import '../storage/lichess_token.dart';
 import '../storage/master_book.dart';
@@ -104,7 +102,6 @@ final class AppEnvironment {
     required this.stopEngines,
     required this.evalCache,
     required this.keepTree,
-    required this.integrity,
     this.finds = FindsStore.inMemory,
     BookStore? books,
     required this.setFullScreen,
@@ -205,7 +202,6 @@ final class AppEnvironment {
       stopEngines: engines.dispose,
       evalCache: () => evalCache.cache,
       keepTree: GenerationTrees(documentsStore.recovery).keep,
-      integrity: ProfileIntegrity(documents: documents, support: support),
       finds: () => finds.store,
       books: documentsStore.books,
       setFullScreen: _setFullScreen,
@@ -293,7 +289,6 @@ final class AppEnvironment {
 
   /// Keeps a fill's search tree beside its chapter.
   final TreeKeeper keepTree;
-  final IntegrityReader integrity;
 
   /// Puts the window in or out of full screen.
   final Future<void> Function(bool on) setFullScreen;
@@ -320,16 +315,10 @@ final class AppEnvironment {
   final void Function() close;
 
   /// A Stockfish with the threads and the table the settings give it now.
-  Future<EngineStart> startEngine() => settings.ready
-      ? launchEngine(
-          cores: settings.value.engineCores,
-          memoryMb: settings.value.engineMemoryMb,
-        )
-      : Future.value(
-          const StartFailed(
-            'Saved settings must be read before starting an engine.',
-          ),
-        );
+  Future<EngineStart> startEngine() => launchEngine(
+    cores: settings.value.engineCores,
+    memoryMb: settings.value.engineMemoryMb,
+  );
 
   /// Hivemind on half of this machine's cores, as BughouseDB runs it. Not
   /// the Stockfish setting: that defaults to one core, and a network engine

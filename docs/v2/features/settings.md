@@ -62,21 +62,15 @@ The title bar reads `Settings` with a close button (`Close settings`, Escape). N
   declined.`, `No answer from the browser in five minutes.`, `Could not open a port for the browser
   to come back to.`, `Could not reach lichess.org — it needs a connection.`, `Lichess turned the
   login away.`, `Lichess rejected that token. Check it was copied fully and has not been revoked.`,
-  `Logged in, but the account could not be saved. Retry the save.` A second row, `Personal access token`,
+  `Logged in, but the account could not be saved. Try again.` A second row, `Personal access token`,
   shows only while signed out: a secret field, checked with `/api/account` when left or submitted.
   The flow is the old app's PKCE one (port 8919, or any free port when it is taken; `state` checked
   on the way back; the browser gets a plain `Logged in.` page), the keys are the old app's, so both
-  apps share the account. An expired OAuth token reads as signed out only after its local removal
-  succeeds. Credential reads and writes serialize within v2; a failed platform write cannot expose
-  the plugin's optimistic token cache as a confirmed account. Read failures retain the last
-  confirmed presentation, hide authentication edits and offer `Retry read`. Malformed cached
-  credential values instead require repairing the preferences and restarting the app: the legacy
-  Linux/Windows plugin also caches values below the Dart singleton, so reload cannot reliably
-  observe an externally repaired file. Failed saves retain
-  the accepted grant and offer `Retry save` without another browser/token request. Transport and
-  malformed-response diagnostics include only the action and error type, never response text or
-  credentials. The v1 preference keys remain unchanged and are not a crash-atomic multi-key store
-  or an OS keychain. Only one supported app may use a profile at a time. Game-download usernames
+  apps share the account. An expired OAuth token, keys of the wrong type or preferences that cannot
+  be read all show as signed out, and the bad keys are removed, so Log in always works. A failed
+  save says so on the row; logging in again tries again. Transport and malformed-response
+  diagnostics include only the action and error type, never response text or credentials. The v1
+  preference keys remain unchanged and are not an OS keychain. Game-download usernames
   are separate, in Tactics' My accounts dialog.
 - **`Repertoire`** (v2, 2026-09-21) — `Opponent rating` (1100–2900, default 2200, step 100; what
   the Replies table, gaps and coverage are predicted for) and `Cover replies met once in` (5–1000
@@ -150,35 +144,12 @@ section.`
 
 ## Saved settings (v2)
 
-V2 stores its settings snapshot in Support `settings.json`. An unavailable or
-malformed read blocks edits and engine startup until `Retry settings` succeeds;
-it never authorizes replacing the saved file with defaults. Writes validate the
-loaded bytes and preserve unknown staging files. Only a dispatched publication
-can supply the expected after-bytes for a later retry or superseding edit: a
-failed read or staging check cannot claim bytes subsequently written by another
-instance. Tests inject lost acknowledgments after a real native replacement.
-Account and credential preferences retain their separate existing stores.
-
-## Read-only saved-data check (v2)
-
-`App` → `Saved data` → `Check` opens a dated report. `Check saved data` is also
-available when startup cannot read settings. It diagnoses settings format and
-retained settings/book stages, unfinished or unsupported native recovery records,
-dangling book paths/sections, generated tree formats, and bughouse exports that
-differ from their authoritative match JSON. `Check again` rereads; closing the
-dialog ignores late delivery. Findings include a resource path and safe reason,
-never raw parser exceptions or document bodies.
-
-This action performs no recovery, repair or source writes. It reads files individually without mutation locks, inspecting existing concrete
-protocols. Concurrent saves may affect findings; check again after saves finish.
-Closing the dialog cancels the remaining scan. Pending or unknown recovery metadata skips dependent reference and
-artifact checks. Generated trees are scanned in visible Documents folders,
-including `.cap-generation`; hidden/quarantine ancestry is excluded. V4 files
-lack source revisions, so validation proves format only. Bughouse checkpoints
-are replayed in a worker, without locking saves. Unrelated links and unreadable
-discovery folders are ignored; known artifact paths still report problems.
-Credentials and unrelated databases are outside the report. Native tests compare
-all profile bytes and directory membership before and after each inspection.
+V2 stores its settings in Support `settings.json`, written whole on every
+change; the last write wins. Settings never block startup: a file that cannot
+be read is moved into `Support/recovery-quarantine/<time>/`, logged, and the
+app starts on the defaults. A symlinked `settings.json` is followed. A failed
+save is shown under the rows and the next change writes again. Account and
+credential preferences keep their separate existing stores.
 
 ## Data
 - Everything is SharedPreferences, one key per field, written individually and confirmed by rereading:

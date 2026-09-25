@@ -25,23 +25,13 @@ class MyGamesBlock extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (games.accountProblem case final problem?) ...[
+            if (games.accountProblem case final problem?)
               Text(
                 problem,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.error,
                 ),
               ),
-              TextButton(
-                onPressed: games.savingAccounts
-                    ? null
-                    : () => unawaited(games.retryUsernames()),
-                child: Text(
-                  games.accountsUnavailable ? 'Retry accounts' : 'Retry save',
-                ),
-              ),
-            ],
-            _DownloadProblems(games: games),
             games.accounts.isEmpty ? _setUp(context) : _ready(context),
           ],
         ),
@@ -71,11 +61,7 @@ class MyGamesBlock extends StatelessWidget {
 
   Widget _ready(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final line = games.downloadProblems.isNotEmpty && !games.running
-        ? 'Downloaded games are waiting to be saved.'
-        : games.corpusProblems.isNotEmpty && !games.running
-        ? 'Some saved games could not be read.'
-        : myGamesLine(games.status);
+    final line = myGamesLine(games.status);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -96,44 +82,6 @@ class MyGamesBlock extends StatelessWidget {
         ],
         const SizedBox(height: Space.s),
         const Divider(height: 1),
-      ],
-    );
-  }
-}
-
-/// Save and read errors remain separate: an unreadable corpus is not empty,
-/// and retrying it does not download replacement games.
-class _DownloadProblems extends StatelessWidget {
-  const _DownloadProblems({required this.games});
-  final MyGames games;
-
-  @override
-  Widget build(BuildContext context) {
-    final writes = games.downloadProblems;
-    final reads = games.corpusProblems;
-    if (writes.isEmpty && reads.isEmpty) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          [
-            for (final entry in writes.entries)
-              '${entry.key.label} download not saved: ${entry.value}',
-            for (final entry in reads.entries)
-              '${entry.key.label} saved games could not be read: ${entry.value}',
-          ].join('\n'),
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Theme.of(context).colorScheme.error,
-          ),
-        ),
-        TextButton(
-          onPressed: games.running || games.retryingDownloads
-              ? null
-              : () => unawaited(games.retryDownloads()),
-          child: Text(
-            writes.isNotEmpty ? 'Retry download save' : 'Retry saved games',
-          ),
-        ),
       ],
     );
   }
@@ -169,10 +117,7 @@ class _Usernames extends StatelessWidget {
           ),
         ),
         TextButton(
-          onPressed:
-              games.running ||
-                  games.savingAccounts ||
-                  games.downloadProblems.isNotEmpty
+          onPressed: games.running || games.savingAccounts
               ? null
               : () => unawaited(editAccounts(context, games)),
           child: const Text('Change'),
@@ -220,10 +165,7 @@ class _Transport extends StatelessWidget {
             ? null
             : games.running
             ? games.pause
-            : games.accountsUnsettled ||
-                  games.retryingDownloads ||
-                  games.corpusProblems.isNotEmpty ||
-                  games.downloadProblems.isNotEmpty
+            : games.savingAccounts
             ? null
             : () => unawaited(games.start()),
         icon: Icon(icon, size: IconSize.action),

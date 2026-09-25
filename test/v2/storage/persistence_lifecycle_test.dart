@@ -220,7 +220,7 @@ void main() {
   );
 
   test(
-    'a stale settings instance reports a conflict and preserves disk',
+    'two settings instances both keep saving; the last write wins',
     () async {
       final root = await Directory.systemTemp.createTemp(
         'settings-contention-',
@@ -233,22 +233,11 @@ void main() {
       await Future.wait([a.load(), b.load()]);
       await a.update(a.value.copyWith(engineCores: 4));
       await b.update(b.value.copyWith(engineLines: 7));
-      expect(b.problem, contains('another instance'));
+      expect(b.problem, isNull);
       final disk = Settings.fromJson(
         await File(p.join(root.path, 'settings.json')).readAsString(),
       );
-      expect(disk.engineCores, 4);
-      expect(disk.engineLines, Settings.defaults.engineLines);
-      await b.load();
-      await b.update(b.value.copyWith(engineLines: 7));
-      expect(b.problem, contains('another instance'));
-      expect(b.value.engineLines, 7, reason: 'the failed choice is retained');
-      expect(
-        Settings.fromJson(
-          await File(p.join(root.path, 'settings.json')).readAsString(),
-        ).engineLines,
-        Settings.defaults.engineLines,
-      );
+      expect(disk.engineLines, 7);
     },
   );
 }
