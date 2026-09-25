@@ -127,12 +127,17 @@ class NativeFileObservation {
     required this.status,
     required this.error,
     this.identity,
+    this.volume,
     this.bytes,
     this.sha256Hex,
   });
   final int status;
   final int error;
   final String? identity;
+
+  /// Native volume observed with this file, for same-filesystem admission.
+  /// This is not decoded from the opaque serialized identity.
+  final int? volume;
   final Uint8List? bytes;
   final String? sha256Hex;
 }
@@ -156,6 +161,7 @@ Future<NativeFileObservation> observeFile(String path) => Isolate.run(() {
       identity: value.status == 0
           ? '${value.volume}:${value.high}:${value.low}'
           : null,
+      volume: value.status == 0 ? value.volume : null,
       bytes: bytes,
       sha256Hex: bytes == null ? null : sha256.convert(bytes).toString(),
     );
@@ -172,26 +178,28 @@ class NativeNameCollision implements Exception {
 
 /// Native object identity for a directory, without following its final link.
 /// Missing is status 1; every other nonzero status must fail closed.
-Future<({int status, String? identity})> observeDirectory(String path) =>
-    Isolate.run(() {
-      _checkPath(path);
-      final nativePath = path.toNativeUtf8();
-      Pointer<_Snapshot> result = nullptr;
-      try {
-        result = _directoryIdentity(nativePath);
-        if (result == nullptr) throw const OutOfMemoryError();
-        final value = result.ref;
-        return (
-          status: value.status,
-          identity: value.status == 0
-              ? '${value.volume}:${value.high}:${value.low}'
-              : null,
-        );
-      } finally {
-        if (result != nullptr) _free(result);
-        malloc.free(nativePath);
-      }
-    });
+Future<({int status, String? identity, int? volume})> observeDirectory(
+  String path,
+) => Isolate.run(() {
+  _checkPath(path);
+  final nativePath = path.toNativeUtf8();
+  Pointer<_Snapshot> result = nullptr;
+  try {
+    result = _directoryIdentity(nativePath);
+    if (result == nullptr) throw const OutOfMemoryError();
+    final value = result.ref;
+    return (
+      status: value.status,
+      identity: value.status == 0
+          ? '${value.volume}:${value.high}:${value.low}'
+          : null,
+      volume: value.status == 0 ? value.volume : null,
+    );
+  } finally {
+    if (result != nullptr) _free(result);
+    malloc.free(nativePath);
+  }
+});
 
 Future<void> installNewFile(String source, String destination) =>
     Isolate.run(() {

@@ -63,10 +63,13 @@ abstract interface class PgnDocumentStore {
   /// A repertoire is a folder: chapters, the raw-game sidecars written beside
   /// them and the generation bundles under it. Moving it a document at a time
   /// could stop half way and leave one repertoire in two folders with the
-  /// rest of its files stranded, so this moves all of it or none of it. There
-  /// is no revision to name, because the documents inside are not read or
-  /// written — only the name of the folder above them changes.
-  Future<FolderMoveResult> moveFolder(String from, String to);
+  /// rest of its files stranded, so this moves all of it or none of it.
+  /// The store captures the source inventory; an exact retry retains its id.
+  Future<FolderMoveResult> moveFolder(
+    String from,
+    String to, {
+    String? operationId,
+  });
 
   /// Moves [ref] into the recovery folder the old app also deletes into, so
   /// the user has one place to look and nothing is unlinked.
@@ -153,7 +156,14 @@ sealed class FolderMoveResult {
 
 /// The folder and everything under it is at the new path.
 final class FolderMoved extends FolderMoveResult {
-  const FolderMoved({this.training = const NothingToRepoint()});
+  const FolderMoved({
+    this.training = const NothingToRepoint(),
+    this.files = const {},
+  });
+
+  /// Captured source PGNs, keyed by host-native relative path. These proofs
+  /// identify original editors even when a completed operation is replayed.
+  final Map<String, Revision> files;
 
   /// Whether the training rows naming documents inside the folder followed
   /// it. One answer for the whole folder: the rows are rewritten in one pass.
@@ -165,7 +175,8 @@ final class FolderNameTaken extends FolderMoveResult {
   const FolderNameTaken();
 }
 
-/// The folder could not be moved. It is where it was, whole.
+/// The command needs attention. The namespace move may already have landed;
+/// retry must retain the original operation id to finish its participants.
 final class FolderMoveFailed extends FolderMoveResult {
   const FolderMoveFailed(this.detail);
 

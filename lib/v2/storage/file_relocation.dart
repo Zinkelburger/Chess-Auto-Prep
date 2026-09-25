@@ -12,6 +12,7 @@ import 'directory_entries.dart';
 import 'recovery_copies.dart';
 import 'document_probe.dart';
 import 'document_ref.dart';
+import 'directory_snapshot.dart';
 import 'pgn_document_store.dart';
 import 'recovery_files.dart';
 import 'relocation_notes.dart' show RecoveryRequired;
@@ -73,6 +74,135 @@ final class FileRelocations {
     required String operationId,
   }) => _move(from, to, expected: expected, operationId: operationId);
 
+  Future<FolderMoveResult> moveFolder(
+    String from,
+    String to, {
+    required String operationId,
+  }) async {
+    try {
+      _checkRoots();
+      validateRelocationId(operationId);
+      final source = _canonical(from);
+      final target = _canonical(to);
+      validateFolderRelocationPaths(documents, source, target);
+      validateFolderParticipantPaths(documents, support, source, target);
+      final notes = await _readAll();
+      final existing = notes
+          .where((note) => note.id == operationId)
+          .firstOrNull;
+      if (existing != null &&
+          (existing is! FolderRelocationRecord ||
+              existing.from != source ||
+              existing.to != target)) {
+        throw const RecoveryRequired(
+          'This relocation id belongs to another operation.',
+        );
+      }
+      await _recover(notes);
+      if (existing?.state == RelocationState.complete) {
+        return _folderResult(existing as FolderRelocationRecord);
+      }
+      final FolderRelocationRecord record;
+      if (existing != null) {
+        record = existing as FolderRelocationRecord;
+      } else {
+        await _parents(source, create: false);
+        await _parents(target, create: false);
+        final destination = await observeDirectory(target);
+        if (destination.status == 0 ||
+            (await observeFile(target)).status == 0) {
+          return const FolderNameTaken();
+        }
+        if (destination.status != 1) {
+          throw const RecoveryRequired(
+            'The destination is unreadable or occupied.',
+          );
+        }
+        record = await _planFolder(operationId, source, target);
+      }
+      await _prepare(record, fresh: existing == null);
+      await _finish(record);
+      return _folderResult(record);
+    } on Object catch (error) {
+      return FolderMoveFailed(
+        'Folder relocation needs attention: ${_detail(error)}',
+      );
+    }
+  }
+
+  FolderMoved _folderResult(FolderRelocationRecord record) => FolderMoved(
+    training: record.training.rowsChanged == 0
+        ? const training.NothingToRepoint()
+        : training.Repointed(record.training.rowsChanged),
+    files: Map.unmodifiable({
+      for (final entry in record.snapshot.entries)
+        if (entry.kind == DirectoryEntryKind.file &&
+            p.extension(entry.path).toLowerCase() == '.pgn')
+          entry.path: Revision(entry.sha256!, nativeIdentity: entry.identity),
+    }),
+  );
+
+  Future<FolderRelocationRecord> _planFolder(
+    String id,
+    String from,
+    String to,
+  ) async {
+    await requireSameFileSystem(from, to, directory: true);
+    final snapshot = await DirectorySnapshot.capture(from);
+    final rows = await training.TrainingRecords(documents).plan(
+      DocumentRef(from),
+      DocumentRef(to),
+      alternateFrom: DocumentRef(
+        p.join(_trainingRoot, p.relative(from, from: documents.path)),
+      ),
+      alternateTo: DocumentRef(
+        p.join(_trainingRoot, p.relative(to, from: documents.path)),
+      ),
+    );
+    final books = await recoveryText(_books);
+    final booksAfter = relocateBookReferences(
+      books,
+      repertoireRoot: p.join(documents.path, 'repertoires'),
+      from: from,
+      to: to,
+      directory: true,
+    );
+    final backups = <String, BackupMove>{};
+    for (final entry in snapshot.entries) {
+      if (entry.kind != DirectoryEntryKind.file ||
+          p.extension(entry.path).toLowerCase() != '.pgn') {
+        continue;
+      }
+      final source = p.join(from, entry.path);
+      final target = p.join(to, entry.path);
+      backups[entry.path] = await _backups.planMove(
+        fromId: backupId(p.relative(source, from: documents.path)),
+        toId: backupId(p.relative(target, from: documents.path)),
+        documentPath: target,
+        operationId: id,
+      );
+    }
+    return FolderRelocationRecord(
+      id: id,
+      from: from,
+      to: to,
+      trainingRoot: _trainingRoot,
+      snapshot: snapshot,
+      training: rows,
+      booksBefore: books,
+      booksAfter: booksAfter,
+      backupByPath: backups,
+    );
+  }
+
+  String _detail(Object error) => switch (error) {
+    RecoveryRequired(:final detail) => detail,
+    training.Malformed(:final file, :final line) =>
+      'Training file $file is malformed at line $line.',
+    training.IoFailure(:final detail) => detail,
+    _ => '$error',
+  };
+
   /// Quarantine has a stable name and carries the file's complete history.
   /// Keeping its latest bytes is preparation; only intent authorizes movement.
   Future<DeleteResult> delete(
@@ -117,7 +247,13 @@ final class FileRelocations {
       final target = _canonical(to.path);
       validateRelocationPaths(documents, source, target);
       final notes = await _readAll();
-      final existing = notes.where((n) => n.id == operationId).firstOrNull;
+      final found = notes.where((n) => n.id == operationId).firstOrNull;
+      if (found != null && found is! FileRelocationRecord) {
+        throw const RecoveryRequired(
+          'This relocation id belongs to a folder move.',
+        );
+      }
+      final existing = found as FileRelocationRecord?;
       if (existing != null &&
           (existing.kind !=
                   (keepCurrent
@@ -136,7 +272,7 @@ final class FileRelocations {
       if (existing?.state == RelocationState.complete) {
         return _result(existing!);
       }
-      final RelocationRecord record;
+      final FileRelocationRecord record;
       if (existing != null) {
         record = existing;
       } else {
@@ -179,14 +315,14 @@ final class FileRelocations {
     }
   }
 
-  Moved _result(RelocationRecord record) => Moved(
+  Moved _result(FileRelocationRecord record) => Moved(
     Revision(record.hash, nativeIdentity: record.identity),
     training: record.training.rowsChanged == 0
         ? const training.NothingToRepoint()
         : training.Repointed(record.training.rowsChanged),
   );
 
-  Future<RelocationRecord> _plan(
+  Future<FileRelocationRecord> _plan(
     String id,
     String from,
     String to,
@@ -195,6 +331,7 @@ final class FileRelocations {
   }) async {
     await _parents(from, create: false);
     await _parents(to, create: false);
+    await requireSameFileSystem(from, to, directory: false);
     final rows = await training.TrainingRecords(documents).plan(
       DocumentRef(from),
       DocumentRef(to),
@@ -239,7 +376,7 @@ final class FileRelocations {
       );
       backup = await backupPlan();
     }
-    return RelocationRecord(
+    return FileRelocationRecord(
       id: id,
       kind: keepCurrent ? FileRelocationKind.delete : FileRelocationKind.move,
       from: from,
@@ -298,10 +435,9 @@ final class FileRelocations {
   }
 
   Future<void> _finish(RelocationRecord record) async {
-    await _preflight(record, allowAfter: true);
+    final atSource = await _preflight(record, allowAfter: true);
     await _keepTraining(record);
-    final source = await observeFile(record.from);
-    if (source.status == 0) {
+    if (atSource) {
       final created = await _parents(record.to, create: true);
       try {
         await movePathNoReplace(record.from, record.to);
@@ -338,13 +474,15 @@ final class FileRelocations {
     }
     await _publish(_books, record.booksBefore, record.booksAfter);
     await testHook?.call(FileRelocationStep.books);
-    await _backups.applyMove(record.backup);
-    await testHook?.call(FileRelocationStep.backups);
+    for (final backup in record.backups) {
+      await _backups.applyMove(backup);
+      await testHook?.call(FileRelocationStep.backups);
+    }
     await _record(record, RelocationState.complete);
     await testHook?.call(FileRelocationStep.completed);
   }
 
-  Future<void> _preflight(
+  Future<bool> _preflight(
     RelocationRecord record, {
     required bool allowAfter,
   }) async {
@@ -355,17 +493,12 @@ final class FileRelocations {
     }
     await _parents(record.from, create: false);
     await _parents(record.to, create: false);
-    final from = await observeFile(record.from);
-    final to = await observeFile(record.to);
-    bool owns(NativeFileObservation file) =>
-        file.status == 0 &&
-        file.identity == record.identity &&
-        file.sha256Hex == record.hash;
-    final before = owns(from) && to.status == 1;
-    final after = from.status == 1 && owns(to);
-    if (!before && !(allowAfter && after)) {
-      throw const RecoveryRequired(
-        'The recorded PGN location or identity changed.',
+    final before = await _namespaceBefore(record, allowAfter: allowAfter);
+    if (before) {
+      await requireSameFileSystem(
+        record.from,
+        record.to,
+        directory: record is FolderRelocationRecord,
       );
     }
     for (final file in record.training.files) {
@@ -380,7 +513,48 @@ final class FileRelocations {
       record.booksBefore,
       allowAfter ? record.booksAfter : record.booksBefore,
     );
-    await _backups.validateMove(record.backup, allowAfter: allowAfter);
+    for (final backup in record.backups) {
+      await _backups.validateMove(backup, allowAfter: allowAfter);
+    }
+    return before;
+  }
+
+  Future<bool> _namespaceBefore(
+    RelocationRecord record, {
+    required bool allowAfter,
+  }) async {
+    if (record is FolderRelocationRecord) {
+      final from = await observeDirectory(record.from);
+      final to = await observeDirectory(record.to);
+      final before =
+          from.status == 0 &&
+          from.identity == record.identity &&
+          to.status == 1;
+      final after =
+          from.status == 1 && to.status == 0 && to.identity == record.identity;
+      if (!before && !(allowAfter && after)) {
+        throw const RecoveryRequired(
+          'The recorded folder location or identity changed.',
+        );
+      }
+      await record.snapshot.verify(before ? record.from : record.to);
+      return before;
+    }
+    final file = record as FileRelocationRecord;
+    final from = await observeFile(file.from);
+    final to = await observeFile(file.to);
+    bool owns(NativeFileObservation observed) =>
+        observed.status == 0 &&
+        observed.identity == file.identity &&
+        observed.sha256Hex == file.hash;
+    final before = owns(from) && to.status == 1;
+    final after = from.status == 1 && owns(to);
+    if (!before && !(allowAfter && after)) {
+      throw const RecoveryRequired(
+        'The recorded PGN location or identity changed.',
+      );
+    }
+    return before;
   }
 
   Future<void> _keepTraining(RelocationRecord record) async {
@@ -516,17 +690,20 @@ final class FileRelocations {
     List<(String, String)> created,
     RelocationRecord record,
   ) async {
-    final source = await observeFile(record.from);
-    if (source.identity != record.identity ||
-        (await observeFile(record.to)).status != 1) {
-      return;
-    }
+    final source = record is FolderRelocationRecord
+        ? (await observeDirectory(record.from)).identity
+        : (await observeFile(record.from)).identity;
+    final targetStatus = record is FolderRelocationRecord
+        ? (await observeDirectory(record.to)).status
+        : (await observeFile(record.to)).status;
+    if (source != record.identity || targetStatus != 1) return;
     for (final (path, identity) in created.reversed) {
       try {
         if ((await observeDirectory(path)).identity != identity) return;
         final directory = Directory(path);
-        if (!await directoryEntries(directory, followLinks: false).isEmpty)
+        if (!await directoryEntries(directory, followLinks: false).isEmpty) {
           return;
+        }
         await directory.delete();
         await flushRecoveryDirectory(
           p.dirname(path),

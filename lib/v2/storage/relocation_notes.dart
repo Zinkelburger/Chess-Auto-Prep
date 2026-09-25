@@ -523,7 +523,10 @@ Future<({int status, String? identity})> _identityOf(
   String path,
   bool folder,
 ) async {
-  if (folder) return observeDirectory(path);
+  if (folder) {
+    final observed = await observeDirectory(path);
+    return (status: observed.status, identity: observed.identity);
+  }
   final observed = await observeFile(path);
   return (status: observed.status, identity: observed.identity);
 }
@@ -532,3 +535,6 @@ Future<({int status, String? identity})> _identityOf(
 /// asked for, and for a path with nothing at it.
 const _present = 0;
 const _missing = 1;
+
+/// Shared chapter quarantine spelling used by both supported app versions.
+const recoveryFolder = '.cap-pgn-history';

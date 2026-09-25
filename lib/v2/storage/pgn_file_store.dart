@@ -17,7 +17,6 @@ import 'compound_commit.dart';
 import 'compound_write.dart';
 import 'document_probe.dart';
 import 'document_ref.dart';
-import 'document_relocation.dart';
 import 'edit_scope.dart';
 import 'file_relocation.dart';
 import 'reference_change.dart';
@@ -55,7 +54,7 @@ import 'section_reference_check.dart';
 ///
 /// File moves use [FileRelocations] to commit location, training, selectors
 /// and backup ownership together, including quarantine delete and restore.
-/// [DocumentRelocation] still owns folder moves under the original protocol.
+/// Folder moves capture their complete native inventory in the same journal.
 final class PgnFileStore implements PgnDocumentStore {
   factory PgnFileStore({
     required Directory documents,
@@ -75,21 +74,10 @@ final class PgnFileStore implements PgnDocumentStore {
       backups,
       recovery,
       BookFile(support, recovery: recovery),
-      DocumentRelocation(
-        documents: documents,
-        backups: backups,
-        notes: recovery.notes,
-      ),
     );
   }
 
-  PgnFileStore._(
-    this.documents,
-    this._backups,
-    this.recovery,
-    this.books,
-    this._relocation,
-  );
+  PgnFileStore._(this.documents, this._backups, this.recovery, this.books);
 
   /// Shared with native listings and progress access for this profile.
   final RecoveryGate recovery;
@@ -101,7 +89,6 @@ final class PgnFileStore implements PgnDocumentStore {
   final Directory documents;
 
   final BackupArchive _backups;
-  final DocumentRelocation _relocation;
 
   @override
   Future<DocumentRead> open(DocumentRef ref) =>
@@ -475,8 +462,23 @@ final class PgnFileStore implements PgnDocumentStore {
   }
 
   @override
-  Future<FolderMoveResult> moveFolder(String from, String to) =>
-      _guard(() => _relocation.moveFolder(from, to), FolderMoveFailed.new);
+  Future<FolderMoveResult> moveFolder(
+    String from,
+    String to, {
+    String? operationId,
+  }) {
+    final id = operationId ?? newCompoundId();
+    return _guard(
+      () => lockedForRelocation(
+        documents,
+        DocumentRef(from),
+        [Directory(from), Directory(to), recovery.support],
+        () => recovery.relocations.moveFolder(from, to, operationId: id),
+        FolderMoveFailed.new,
+      ),
+      FolderMoveFailed.new,
+    );
+  }
 
   @override
   Future<DeleteResult> delete(

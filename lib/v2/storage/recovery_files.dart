@@ -11,6 +11,61 @@ import 'package:path/path.dart' as p;
 import 'atomic_write.dart';
 import 'relocation_notes.dart' show RecoveryRequired;
 
+/// A native rename cannot cross volumes. Refuse that known impossibility
+/// before recording intent. The caller separately validates managed ancestry
+/// and namespace ownership; no destination parents are created here.
+Future<void> requireSameFileSystem(
+  String from,
+  String to, {
+  required bool directory,
+}) async {
+  try {
+    for (final path in [from, to]) {
+      if (!p.isAbsolute(path) ||
+          p.normalize(path) != path ||
+          path.contains('\u0000')) {
+        throw const RecoveryRequired(
+          'Filesystem admission needs normalized absolute paths.',
+        );
+      }
+    }
+    final ({int status, int? volume}) source;
+    if (directory) {
+      final observed = await observeDirectory(from);
+      source = (status: observed.status, volume: observed.volume);
+    } else {
+      final observed = await observeFile(from);
+      source = (status: observed.status, volume: observed.volume);
+    }
+    if (source.status != 0 || source.volume == null) {
+      throw RecoveryRequired('Cannot verify the source filesystem: $from.');
+    }
+    var parent = p.dirname(to);
+    while (true) {
+      final observed = await observeDirectory(parent);
+      if (observed.status == 0 && observed.volume != null) {
+        if (observed.volume != source.volume) {
+          throw const RecoveryRequired(
+            'A relocation cannot cross filesystems.',
+          );
+        }
+        return;
+      }
+      final next = p.dirname(parent);
+      if (observed.status != 1 || next == parent) {
+        throw RecoveryRequired(
+          'Cannot verify the destination filesystem: $parent.',
+        );
+      }
+      parent = next;
+    }
+  } on RecoveryRequired {
+    rethrow;
+  } on Object catch (error) {
+    throw RecoveryRequired('Cannot verify relocation filesystems: $error');
+  }
+}
+
 Future<bool> recoveryDirectory(
   Directory directory, {
   bool create = false,

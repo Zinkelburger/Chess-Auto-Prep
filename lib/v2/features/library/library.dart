@@ -312,14 +312,19 @@ final class Library extends ChangeNotifier {
   ) => _run('rename the repertoire ${folder.name}', () async {
     // The folder is not in the way of its own new name: on a case-sensitive
     // filesystem `kid` to `KID` is a rename like any other.
-    if (_named(name, except: folder) != null) return const LibraryNameTaken();
+    final nameTaken = _named(name, except: folder) != null;
     if (folder.chapters.any((c) => c.path == folder.path)) {
+      if (nameTaken) return const LibraryNameTaken();
       return _relocate(
         folder.chapters.first.wholeFile,
         DocumentRef(p.join(_root, '$name.pgn')),
       );
     }
-    return _renameFolder(folder, p.join(_root, name));
+    return _fileChanges.moveFolder(
+      folder.path,
+      p.join(_root, name),
+      nameTaken: nameTaken,
+    );
   }, retiresTraining: true);
 
   /// The deleted chapters still in recovery, most recently deleted first.
@@ -520,42 +525,15 @@ final class Library extends ChangeNotifier {
       await _files.removeStaging(staging);
       return refused;
     }
-    return _placed(
-      staging,
-      folders,
+    return _fileChanges.placeImport(
+      staging: staging,
+      destinations: [for (final folder in folders) p.join(_root, folder)],
       file: '$fileName.pgn',
-      read: read,
       section: sectionsInText(file).first,
+      chapters: read.chapters.length,
+      lines: read.lines,
+      removeStaging: () => _files.removeStaging(staging),
     );
-  }
-
-  /// [staging], holding [file], renamed into place under the first of
-  /// [folders] that no folder on disk has taken.
-  Future<LibraryResult> _placed(
-    String staging,
-    List<String> folders, {
-    required String file,
-    required ImportedChapters read,
-    required String? section,
-  }) async {
-    for (final folder in folders) {
-      final destination = p.join(_root, folder);
-      switch (await _store.moveFolder(staging, destination)) {
-        case store.FolderMoved():
-          return LibraryAdded(
-            ChapterRef.at(p.join(destination, file), section: section),
-            chapters: read.chapters.length,
-            lines: read.lines,
-          );
-        case store.FolderNameTaken():
-          continue;
-        case store.FolderMoveFailed(:final detail):
-          await _files.removeStaging(staging);
-          return LibraryFailure(detail);
-      }
-    }
-    await _files.removeStaging(staging);
-    return const LibraryNameTaken();
   }
 
   String _stagingId() =>
@@ -581,21 +559,6 @@ final class Library extends ChangeNotifier {
   /// when it has it open.
   Future<LibraryResult> _remove(ChapterRef ref) => _fileChanges.delete(ref);
 
-  /// Moves the folder whole, including raw-game sidecars and generation bundles.
-  Future<LibraryResult> _renameFolder(
-    RepertoireFolder folder,
-    String to,
-  ) async {
-    final open = _session.source;
-    if (open == null || !p.isWithin(folder.path, open.path)) {
-      return _movedFolder(folder.path, to);
-    }
-    // The chapter in the workspace is inside the folder, so its autosave is
-    // held still for the length of the move, as its own rename holds it.
-    return await _saver.holdStill((_) => _movedFolder(folder.path, to)) ??
-        const LibraryBusy();
-  }
-
   /// Deletes each distinct file into recovery. A failure stops the batch;
   /// earlier files remain recoverable and unprocessed files stay in place.
   Future<LibraryResult> _deleteFolder(RepertoireFolder folder) =>
@@ -604,30 +567,6 @@ final class Library extends ChangeNotifier {
           await _files.removeIfEmpty(folder.path);
         }
       });
-
-  Future<LibraryResult> _movedFolder(String from, String to) async {
-    switch (await _store.moveFolder(from, to)) {
-      case store.FolderMoved(:final training):
-        _followedFolder(from, to);
-        _books?.movedFolder(from, to);
-        return LibraryDone(training: training);
-      case store.FolderNameTaken():
-        return const LibraryNameTaken();
-      case store.FolderMoveFailed(:final detail):
-        return LibraryFailure(detail);
-    }
-  }
-
-  /// The workspace follows a chapter whose whole folder moved under it. The
-  /// user may have opened another one while the move was in flight, which is
-  /// why the open file is read again rather than remembered.
-  void _followedFolder(String from, String to) {
-    final open = _session.source;
-    if (open == null || !p.isWithin(from, open.path)) return;
-    _session.relocated(
-      ChapterRef.at(p.join(to, p.relative(open.path, from: from))),
-    );
-  }
 
   /// Writes the destination first, then removes source lines. A refused
   /// second write leaves a visible duplicate instead of losing those lines.

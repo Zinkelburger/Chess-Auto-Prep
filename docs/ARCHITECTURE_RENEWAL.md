@@ -837,6 +837,24 @@ phase prove it belongs to the current valid receipt; it never replays the old
 copy. Backup-index recovery similarly checks retained replacement copies
 against the captured index. Unknown or conflicting artifacts still block access.
 
+Folder moves use a version-2 variant in the same journal and recovery loop.
+`DirectorySnapshot` captures every regular file and directory, including binary
+sidecars, empty folders, nested quarantines and uppercase PGNs. Each entry has
+its native identity; files also have their content hash. Relative paths retain
+the host's spelling. Recovery verifies the entire tree at its recorded endpoint
+and all training, book and backup participants before publishing anything else.
+Every captured PGN has an explicit backup-ownership plan. Links, unsupported
+nodes, metadata-root overlap and cross-filesystem moves are refused before
+intent. The original note decoder still recovers older moves; its writer is
+retired.
+
+Folder commands retain their accepted id and use prefix admission for both
+names, so a late child load cannot cross the move. The editor follows only a
+matching native revision from the committed inventory. Imports retain their
+staging folder, destination and command through uncertain placement and return
+the original import result after retry. A confirmed destination collision alone
+advances to another name.
+
 A quarantine delete keeps the current PGN version before preparation and moves
 its backup ownership with the file; restore brings that history back. Deletion
 ids follow the existing recovery filename grammar. Repertoire deletion retains
@@ -846,10 +864,9 @@ Pre-journal quarantines lack proof tying a former path's backup history to the
 restored file: occupied history is preserved separately rather than merged by
 guesswork. Those historical ownership links remain unverified.
 
-Folder moves still use their original notes and have not yet acquired this
-complete participant boundary. Existing unfinished notes
-continue through their original recovery protocol. Multi-file edits and durable
-rating journals also remain H3c work. Completed relocation snapshots are retained;
+Existing unfinished folder notes continue through their original recovery
+protocol. Multi-file edits and durable rating journals remain H3c work.
+Completed relocation snapshots are retained;
 pruning and scan costs remain explicit follow-up work. The tested native
 recovery platform is Linux; Windows/macOS durability is unverified.
 
@@ -1225,7 +1242,7 @@ per batch and use tests and commits as the implementation record.
 | H2 | H1 | Accepted ratings and writes outlive reload/dispose; `PendingWrites`, training progress/owner, exit guard | Two overlapping reloads cannot bypass the same pending rating; failed outcomes remain retryable; shutdown is honest | Done 2026-09-24: app-owned training obligations, ordered barriers and exact in-process retry survive reload/dispose; retained book/settings/account/recent-file/copy outcomes; shutdown covers existing dialogs and suspends puzzle timers. Failure-first regressions, independent reviews, 2,155 v2 tests and analyze/lint passed after merging current main. Headless Linux partial training publication survived scope replacement and retried with three history rows exactly once. Persistent crash recovery remains H3; Windows/macOS durability unverified. |
 | H3a | H2 | Existing relocation recovery before affected reads; document guards, training reads, startup; reconcile v1 domain locks/order | Kill during a move, reopen/train from either supported app; no missing or duplicate progress; incompatible access blocks safely | Done 2026-09-24 on Linux: canonical shared domain before affected Documents access; strict v2 notes recover before PGN/training reads and complete scans, foreign receipts refuse without mutation, and UI shows the recovery reason with Retry. Regression-first tests, independent reviews, 2,232 v2 tests, final focused storage/legacy checks and analyze/lint passed. Six real-process tests cover cross-app exclusion, SIGKILL and all four training files recovering once; headless refusal/retry verified. No new metadata format. Windows/macOS recovery guarantees remain unverified; v1 native recovery is still Linux-only. |
 | H3b | H3a | One compound operation for course rename/book references and its inverse; Library, storage, session history | Rename and undo agree across PGN/book state, including crash and external-conflict cases | Done 2026-09-24 on Linux: explicit section intent follows held/coalesced drafts; one guarded private receipt commits PGN and books, preserves unknown fields and validates the complete inverse. Exact retry, external conflicts, navigation admission and v1 refusal have regression tests; 2,381 v2 tests, focused legacy/process checks and analyze/lint pass. Real SIGKILL preparation/publication tests and headless partial book-write failure, Retry and undo verified both participants. Complete receipts remain retained with growing scan/storage cost; Windows/macOS durability unverified. |
-| H3c | H3b | Apply the proven operation boundary to supported file/folder moves, delete/restore and multi-file edits | Every existing command has an explicit required read/write set, recovery path and compatible undo behavior | In progress: source admission and file rename/move/quarantine-delete/restore verified 2026-09-25 on Linux. Retained commands journal all four training files, books and backup ownership, including restart recovery and exact retry after disposal. Merged current main portability work; independent reviews, failure-first regressions, 2,623 v2 tests (four Windows-only skips), 194 legacy tests, 30 native-adapter tests and analyze/lint passed. Headless interrupted rename blocked access after restart; Retry, delete, restore and reopen preserved two backup versions, one history row, one attempt and learned book status. Retained native replacement copies and bounded metadata ancestry have regression coverage; Windows scenarios were simulated on Linux. Folder moves, multi-file edits and persistent rating journals remain unfinished; Windows/macOS durability remains unverified. |
+| H3c | H3b | Apply the proven operation boundary to supported file/folder moves, delete/restore and multi-file edits | Every existing command has an explicit required read/write set, recovery path and compatible undo behavior | In progress: source admission, file rename/move/quarantine-delete/restore, folder relocation and retained import placement verified 2026-09-25 on Linux. One relocation owner journals all four training files, books, backup ownership and full folder inventories. Independent reviews, failure-first regressions, 2,722 v2 tests (four Windows-only skips), 264 legacy tests and analyze/lint passed; native filesystem admission and process-kill recovery are covered. Headless interrupted file and folder renames blocked access after restart; Retry preserved learned status, two backup versions, one history row, one attempt and nested binary/empty entries. File delete/restore and repeat reopen also passed. Native replacement copies and metadata ancestry have regression coverage. Multi-file edits and persistent accepted rating journals remain unfinished; Windows/macOS durability remains unverified. |
 | H4 | H2, H3c | Versioned input snapshots for catalog, shelf, gaps, book comparison and training; targeted invalidation | A late computation cannot replace a newer result; a fresh rebuild equals the displayed committed projection | Not started |
 | H5 | H2, H3c | Generation, mining, downloads, bughouse and engine lifetimes; job-specific checkpoints and truthful completion | Stop/retry/restart neither duplicates saved units nor loses promised results; resources return to baseline | Not started |
 | H6 | H4, H5 | All existing modes: focus/shortcuts/navigation/close, settings, credentials, diagnostics and integrity checks | The complete cross-mode sequence below passes with real disposable storage, offline/error cases and headless UI checks | Not started |

@@ -52,6 +52,10 @@ void _record(
   String support, {
   required bool terminal,
 }) {
+  if (raw is Map<String, Object?> && raw['version'] == 2) {
+    _folderRecord(raw, id, roots, support, terminal: terminal);
+    return;
+  }
   final value = _fields(raw, const {
     'version',
     'id',
@@ -112,6 +116,230 @@ void _record(
   _books(value['booksBefore']);
   _books(value['booksAfter']);
   _backup(value['backup'], id, from, to, roots, support);
+}
+
+/// Folder receipts have their own version; existing file envelopes remain
+/// unchanged. This validates captured evidence without rediscovering a tree
+/// or backup directory that may have moved again since the operation completed.
+void _folderRecord(
+  Object? raw,
+  String id,
+  Set<String> roots,
+  String support, {
+  required bool terminal,
+}) {
+  final value = _fields(raw, const {
+    'version',
+    'kind',
+    'id',
+    'state',
+    'from',
+    'to',
+    'identity',
+    'trainingRoot',
+    'entries',
+    'training',
+    'rowsChanged',
+    'booksBefore',
+    'booksAfter',
+    'backups',
+  });
+  if (value['version'] is! int ||
+      value['version'] != 2 ||
+      value['kind'] != 'folder' ||
+      value['id'] != id ||
+      !(terminal
+              ? const {'complete', 'cancelled'}
+              : const {'prepared', 'committing', 'complete', 'cancelled'})
+          .contains(value['state']) ||
+      !_identity(value['identity']) ||
+      value['trainingRoot'] is! String ||
+      !_absolute(value['trainingRoot']! as String) ||
+      value['rowsChanged'] is! int ||
+      (value['rowsChanged']! as int) < 0) {
+    throw const FormatException('Pending or unsupported folder operation.');
+  }
+  final from = _folder(value['from'], roots);
+  final to = _folder(value['to'], roots);
+  if (from == to || p.isWithin(from, to) || p.isWithin(to, from)) {
+    throw const FormatException('Folder endpoints overlap.');
+  }
+  _folderParticipants(from, to, roots, support);
+  final pgns = _folderEntries(value['entries']);
+  _folderTraining(value['training']);
+  for (final field in ['booksBefore', 'booksAfter']) {
+    if (!_safeNullableText(value[field])) {
+      throw const FormatException('Invalid folder book snapshot text.');
+    }
+    _books(value[field]);
+  }
+  _folderBackups(value['backups'], pgns, id, from, to, roots, support);
+}
+
+void _folderParticipants(
+  String from,
+  String to,
+  Set<String> roots,
+  String support,
+) {
+  bool overlaps(String a, String b) =>
+      p.equals(a, b) || p.isWithin(a, b) || p.isWithin(b, a);
+  final participants = [
+    for (final name in [
+      'relocation-writes',
+      'compound-writes',
+      'unfinished-moves',
+      'backups',
+      'books.json',
+      'repertoire-mutations',
+    ])
+      p.join(support, name),
+    for (final root in roots) ...[
+      p.join(root, '.cap-reference-history'),
+      p.join(root, 'repertoires', '.cap-repertoire-publications'),
+    ],
+  ];
+  for (final endpoint in [from, to]) {
+    if (p.equals(endpoint, support) ||
+        p.isWithin(endpoint, support) ||
+        participants.any((path) => overlaps(endpoint, path))) {
+      throw const FormatException(
+        'Folder operation overlaps recovery metadata.',
+      );
+    }
+  }
+}
+
+String _folder(Object? value, Set<String> roots) {
+  if (value is! String ||
+      !_absolute(value) ||
+      !roots.any((root) => p.isWithin(root, value))) {
+    throw const FormatException('Invalid relocation folder path.');
+  }
+  return value;
+}
+
+List<String> _folderEntries(Object? raw) {
+  if (raw is! List) throw const FormatException('Invalid folder inventory.');
+  final directories = <String>{};
+  final documents = <String>[];
+  String? previous;
+  for (final rawEntry in raw) {
+    if (rawEntry is! Map<String, Object?>) {
+      throw const FormatException('Invalid folder entry.');
+    }
+    final directory = rawEntry['kind'] == 'directory';
+    final entry = _fields(
+      rawEntry,
+      directory
+          ? const {'path', 'kind', 'identity'}
+          : const {'path', 'kind', 'identity', 'sha256'},
+    );
+    final path = entry['path'];
+    if (!_nativeRelative(path) ||
+        !_identity(entry['identity']) ||
+        (!directory &&
+            (entry['kind'] != 'file' || !_matches(_hash, entry['sha256']))) ||
+        (previous != null && previous.compareTo(path as String) >= 0)) {
+      throw const FormatException('Unsupported folder entry.');
+    }
+    final name = path as String;
+    final parent = p.dirname(name);
+    if (parent != '.' && !directories.contains(parent)) {
+      throw const FormatException('Folder inventory omits a parent directory.');
+    }
+    if (directory) {
+      directories.add(name);
+    } else if (p.extension(name).toLowerCase() == '.pgn') {
+      documents.add(name);
+    }
+    previous = name;
+  }
+  return documents;
+}
+
+void _folderTraining(Object? raw) {
+  if (raw is! List || raw.length != _trainingFiles.length) {
+    throw const FormatException('Incomplete folder training read set.');
+  }
+  for (var i = 0; i < raw.length; i++) {
+    final file = _fields(raw[i], const {'name', 'before', 'after'});
+    if (file['name'] != _trainingFiles[i] ||
+        !_safeNullableText(file['before']) ||
+        !_safeNullableText(file['after'])) {
+      throw const FormatException('Invalid folder training snapshot.');
+    }
+  }
+}
+
+void _folderBackups(
+  Object? raw,
+  List<String> documents,
+  String id,
+  String from,
+  String to,
+  Set<String> roots,
+  String support,
+) {
+  if (raw is! List || raw.length != documents.length) {
+    throw const FormatException('Incomplete folder backup ownership.');
+  }
+  final owners = <String>{};
+  final identities = <String>{};
+  final rootIdentities = <Object?>{};
+  for (var i = 0; i < raw.length; i++) {
+    final entry = _fields(raw[i], const {'path', 'plan'});
+    if (entry['path'] != documents[i]) {
+      throw const FormatException(
+        'Folder backups disagree with captured PGNs.',
+      );
+    }
+    _backup(
+      entry['plan'],
+      id,
+      p.join(from, documents[i]),
+      p.join(to, documents[i]),
+      roots,
+      support,
+    );
+    final plan = entry['plan']! as Map<String, Object?>;
+    rootIdentities.add(plan['rootIdentity']);
+    for (final field in ['fromId', 'toId']) {
+      if (!owners.add(plan[field]! as String)) {
+        throw const FormatException('Folder backup ownership overlaps.');
+      }
+    }
+    for (final field in ['source', 'destination']) {
+      final inventory = plan[field] as Map<String, Object?>?;
+      if (inventory != null &&
+          !identities.add(inventory['identity']! as String)) {
+        throw const FormatException(
+          'Folder backup directory identity repeats.',
+        );
+      }
+    }
+  }
+  if (rootIdentities.length > 1 || rootIdentities.any(identities.contains)) {
+    throw const FormatException('Folder backup roots disagree or overlap.');
+  }
+}
+
+bool _nativeRelative(Object? value) =>
+    value is String &&
+    value.isNotEmpty &&
+    !value.contains('\u0000') &&
+    !p.isAbsolute(value) &&
+    p.normalize(value) == value &&
+    !p.split(value).any((part) => part == '.' || part == '..');
+
+bool _identity(Object? value) =>
+    value is String && value.isNotEmpty && !value.contains('\u0000');
+
+bool _safeNullableText(Object? value) {
+  if (value == null) return true;
+  if (value is! String || value.contains('\u0000')) return false;
+  final decoded = utf8.decode(utf8.encode(value));
+  return (value.startsWith('\ufeff') ? '\ufeff$decoded' : decoded) == value;
 }
 
 String _document(Object? value, Set<String> roots) {

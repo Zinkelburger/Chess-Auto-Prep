@@ -43,6 +43,43 @@ final class AcceptedFileChanges {
     return command.run();
   }
 
+  final _folders = <(String, String), _AcceptedFolderChange>{};
+
+  Future<LibraryResult> moveFolder(
+    String from,
+    String to, {
+    required bool nameTaken,
+  }) {
+    final key = (from, to);
+    if (_folders[key] case final accepted?) return accepted.run();
+    if (nameTaken) return Future.value(const LibraryNameTaken());
+    return _folder(from, to).run();
+  }
+
+  _AcceptedFolderChange _folder(String from, String to) => _folders.putIfAbsent(
+    (from, to),
+    () => _AcceptedFolderChange(this, from, to),
+  );
+
+  Future<LibraryResult> placeImport({
+    required String staging,
+    required List<String> destinations,
+    required String file,
+    required String? section,
+    required int chapters,
+    required int lines,
+    required Future<void> Function() removeStaging,
+  }) => _PlacedImport(
+    this,
+    staging,
+    destinations,
+    file,
+    section,
+    chapters,
+    lines,
+    removeStaging,
+  ).run();
+
   _AcceptedFileChange _deletion(ChapterRef from) => _commands.putIfAbsent((
     from.path,
     null,
@@ -244,7 +281,7 @@ final class _AcceptedFileChange {
       // navigation may observe the interval spent draining accepted books.
       final result = await owner.session.access.changing(
         from.path,
-        () => from.path == to.path
+        () => p.equals(from.path, to.path)
             ? _attempt()
             : owner.session.access.changing(to.path, _attempt),
       );
@@ -302,5 +339,191 @@ final class _DeleteRepertoire {
     return _completed = LibraryDone(
       training: foldedRepoint([for (final result in _results) result.training]),
     );
+  }
+}
+
+/// A folder command owns prefix admission and the editor proof captured while
+/// its autosave is held. Retried receipts describe the original inventory;
+/// they cannot adopt a new occupant of any old child path.
+final class _AcceptedFolderChange {
+  _AcceptedFolderChange(this.owner, this.from, this.to) {
+    _obligation = owner.pendingWrites?.accept<LibraryResult>(
+      resource: owner.documents,
+      label: 'Rename ${p.basename(from)}',
+      work: _coordinated,
+      problem: (result) => result is LibraryFailure ? result.detail : null,
+      blocked: () =>
+          const LibraryFailure('An earlier document change needs recovery.'),
+    );
+  }
+
+  final AcceptedFileChanges owner;
+  final String from;
+  final String to;
+  final id = newCompoundId();
+  PendingObligation<LibraryResult>? _obligation;
+  bool _uncertain = false;
+
+  Future<LibraryResult> run() async {
+    final result = _obligation == null
+        ? await _coordinated()
+        : await _obligation!.run();
+    if (result is LibraryFailure) {
+      return LibraryFailure(result.detail, retry: () => owner.runRetry(run));
+    }
+    _resolved();
+    return result;
+  }
+
+  void _resolved() {
+    final key = (from, to);
+    if (identical(owner._folders[key], this)) owner._folders.remove(key);
+  }
+
+  Future<LibraryResult> _coordinated() async {
+    try {
+      final result = await owner.session.access.changingFolder(
+        from,
+        () => p.equals(from, to)
+            ? _attempt()
+            : owner.session.access.changingFolder(to, _attempt),
+      );
+      if (result is! LibraryFailure) _resolved();
+      return result;
+    } on Object catch (error) {
+      _uncertain = true;
+      return LibraryFailure('The folder change needs recovery: $error');
+    }
+  }
+
+  Future<LibraryResult> _attempt() async {
+    final guard = owner.saver.writeGuard?.call();
+    try {
+      final problem = await guard?.pauseForWrite();
+      if (problem != null) return LibraryFailure(problem);
+      final source = owner.session.source;
+      if (source == null || !p.isWithin(from, source.path)) {
+        return await _publish();
+      }
+      final result = await owner.saver.holdStill((revision) {
+        final current = owner.session.source;
+        final editor = current != null && p.isWithin(from, current.path)
+            ? (path: current.path, revision: revision)
+            : null;
+        return _publish(editor: editor);
+      });
+      if (result != null) return result;
+      if (!_uncertain && owner.saver.settled) return const LibraryBusy();
+      return const LibraryFailure(
+        'Save or recover the open draft before renaming its folder.',
+      );
+    } finally {
+      try {
+        await owner.synchronize();
+      } finally {
+        guard?.resumeAfterWrite();
+      }
+    }
+  }
+
+  Future<LibraryResult> _publish({
+    ({String path, Revision revision})? editor,
+  }) async {
+    Future<LibraryResult> write() async {
+      switch (await owner.documents.moveFolder(from, to, operationId: id)) {
+        case store.FolderMoved(:final training, :final files):
+          if (editor != null) _follow(editor, files);
+          return LibraryDone(training: training);
+        case store.FolderNameTaken():
+          return _uncertain
+              ? const LibraryFailure(
+                  'The pending folder change needs recovery.',
+                )
+              : const LibraryNameTaken();
+        case store.FolderMoveFailed(:final detail):
+          return LibraryFailure(detail);
+      }
+    }
+
+    final books = owner.books;
+    final result = books == null
+        ? await write()
+        : await books.changeReferences(write, failed: LibraryFailure.new);
+    if (result is LibraryFailure) _uncertain = true;
+    return result;
+  }
+
+  void _follow(
+    ({String path, Revision revision}) editor,
+    Map<String, Revision> files,
+  ) {
+    final relative = p.relative(editor.path, from: from);
+    final proof = files[relative];
+    final current = owner.session.persistedRevision;
+    if (proof == null ||
+        proof != editor.revision ||
+        proof.nativeIdentity != editor.revision.nativeIdentity ||
+        owner.session.source?.path != editor.path ||
+        current != editor.revision ||
+        current?.nativeIdentity != editor.revision.nativeIdentity)
+      return;
+    owner.session.relocated(ChapterRef.at(p.join(to, relative)));
+  }
+}
+
+/// A staged course is already accepted data. Only a confirmed name collision
+/// advances to another destination; any uncertain move retains its source,
+/// command and eventual LibraryAdded answer without parsing or creating again.
+final class _PlacedImport {
+  _PlacedImport(
+    this.owner,
+    this.staging,
+    List<String> destinations,
+    this.file,
+    this.section,
+    this.chapters,
+    this.lines,
+    this.removeStaging,
+  ) : destinations = List.unmodifiable(destinations);
+
+  final AcceptedFileChanges owner;
+  final String staging;
+  final List<String> destinations;
+  final String file;
+  final String? section;
+  final int chapters;
+  final int lines;
+  final Future<void> Function() removeStaging;
+  int _next = 0;
+  _AcceptedFolderChange? _active;
+  LibraryAdded? _completed;
+
+  Future<LibraryResult> run() async {
+    if (_completed case final result?) return result;
+    while (_next < destinations.length) {
+      final destination = destinations[_next];
+      final result = await (_active ??= owner._folder(
+        staging,
+        destination,
+      )).run();
+      switch (result) {
+        case LibraryDone():
+          return _completed = LibraryAdded(
+            ChapterRef.at(p.join(destination, file), section: section),
+            chapters: chapters,
+            lines: lines,
+          );
+        case LibraryNameTaken():
+          _active = null;
+          _next++;
+        case LibraryFailure(:final detail):
+          return LibraryFailure(detail, retry: () => owner.runRetry(run));
+        default:
+          return result;
+      }
+    }
+    // Every candidate was a clean refusal; no intent owns this staging data.
+    await removeStaging();
+    return const LibraryNameTaken();
   }
 }

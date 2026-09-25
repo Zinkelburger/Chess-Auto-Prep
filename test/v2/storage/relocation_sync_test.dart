@@ -4,9 +4,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chess_auto_prep/v2/storage/backups.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
-import 'package:chess_auto_prep/v2/storage/document_relocation.dart';
 import 'package:chess_auto_prep/v2/storage/file_relocation.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/relocation_notes.dart';
@@ -21,7 +19,6 @@ void main() {
   late StoreFixture fixture;
   late PendingRepoints pending;
   late RelocationNotes notes;
-  late DocumentRelocation relocation;
   late List<String> flushed;
   String? failAt;
   String canonical(String path) => p.normalize(
@@ -47,13 +44,6 @@ void main() {
         await syncDirectory(path);
       },
     );
-    relocation = DocumentRelocation(
-      documents: fixture.documents,
-      backups: BackupArchive(
-        Directory(p.join(fixture.support.path, 'backups')),
-      ),
-      notes: notes,
-    );
   });
   tearDown(() => fixture.dispose());
 
@@ -77,12 +67,21 @@ void main() {
         'destination' => destinationParent,
         _ => fixture.documents.path,
       });
-      expect(
-        await relocation.moveFolder(
-          p.dirname(from.path),
-          p.join(destinationParent, 'After'),
-        ),
-        isA<FolderMoveFailed>(),
+      // Replay a real original-format note without retaining its retired
+      // production writer. New folder commands use the complete journal.
+      final source = p.dirname(from.path);
+      final target = p.join(destinationParent, 'After');
+      await notes.record(
+        'old-folder',
+        from: source,
+        to: target,
+        identity: (await observeDirectory(source)).identity!,
+        folder: true,
+      );
+      await movePathNoReplace(source, target);
+      await expectLater(
+        notes.finishOwed(),
+        throwsA(isA<FileSystemException>()),
       );
       final owed = await pending.read();
       expect(owed, hasLength(1));

@@ -146,7 +146,11 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
   /// Every document under [from] takes the new folder's name at once, as one
   /// rename of the folder does; a name already taken moves nothing.
   @override
-  Future<FolderMoveResult> moveFolder(String from, String to) async {
+  Future<FolderMoveResult> moveFolder(
+    String from,
+    String to, {
+    String? operationId,
+  }) async {
     await _turn();
     final queued = _next(folderMoves);
     if (queued != null) return queued;
@@ -161,7 +165,14 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
     }
     inside.forEach(documents.remove);
     documents.addAll(moved);
-    return FolderMoved(training: repoint);
+    return FolderMoved(
+      training: repoint,
+      files: Map.unmodifiable({
+        for (final entry in moved.entries)
+          if (entry.value case Opened(:final revision))
+            p.relative(entry.key.path, from: to): revision,
+      }),
+    );
   }
 
   @override

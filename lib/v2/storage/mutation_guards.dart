@@ -4,7 +4,7 @@
 /// the record of the version about to be replaced.
 ///
 /// They live here rather than beside one of their callers because the store
-/// and [DocumentRelocation] must take exactly the same ones, in the same
+/// and relocation commands must take exactly the same ones, in the same
 /// order, or a save and a rename of one chapter would run side by side.
 library;
 

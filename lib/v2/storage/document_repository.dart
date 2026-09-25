@@ -118,8 +118,15 @@ final class DocumentRepository extends ChangeNotifier
   }
 
   @override
-  Future<FolderMoveResult> moveFolder(String from, String to) async {
-    final result = await _write(from, _store.moveFolder(from, to));
+  Future<FolderMoveResult> moveFolder(
+    String from,
+    String to, {
+    String? operationId,
+  }) async {
+    final result = await _write(
+      from,
+      _store.moveFolder(from, to, operationId: operationId),
+    );
     if (result is FolderMoved)
       _committed(
         DocumentChange(

@@ -11,7 +11,7 @@ import 'document_ref.dart';
 import 'recovery_gate.dart';
 import 'relocation_notes.dart';
 import 'pgn_document_store.dart' as store;
-import 'document_relocation.dart' show recoveryFolder;
+import 'relocation_notes.dart' show recoveryFolder;
 
 /// One chapter on disk: a file, or the games of a file that name one
 /// chapter by tag ([section]), plus what the lists show about it without
@@ -461,7 +461,7 @@ int _byFileName(File a, File b) => p
     .compareTo(p.basenameWithoutExtension(b.path).toLowerCase());
 
 // The chapters the user deleted, which are still on disk: a delete moves a
-// chapter into the recovery folder beside it (`document_relocation.dart`)
+// chapter into the recovery folder beside it (`relocation_notes.dart`)
 // under `<microseconds>-<token>-<file name>`, the name both apps give it.
 
 /// One deleted chapter file, and where it came from.

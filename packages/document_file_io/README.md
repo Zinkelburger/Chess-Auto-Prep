@@ -12,6 +12,8 @@ All blocking native calls run in an isolate. Files over 512 MiB, non-regular
 objects, final symlinks/reparse points and hardlinks are unsupported and fail
 closed. Parent aliases are resolved by the app's document store before locking.
 A missing path is distinct from unreadable/unsupported/changed observations.
+Successful file and directory observations also expose their native volume for
+pre-intent filesystem checks; the opaque identity encoding is unchanged.
 The observation is not a history of external deletion/recreation or filesystem
 compare-and-swap. An external editor can race the last check and publication.
 
