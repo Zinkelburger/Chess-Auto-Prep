@@ -9,6 +9,7 @@ import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
 import '../../storage/training_rows.dart' show asWritten;
 import '../../storage/training_store.dart';
+import '../../storage/document_ref.dart';
 import '../../storage/pending_writes.dart';
 
 /// The clock and the dice a trainer runs on, handed in so a test can fix both.
@@ -26,6 +27,7 @@ class TrainingProgress extends ChangeNotifier {
     PendingWrites? pendingWrites,
   }) : pendingWrites = pendingWrites ?? PendingWrites(),
        _files = files,
+       _sources = Map.of(loaded.sources),
        _time = time,
        _reviews = {...loaded.reviews},
        _streaks = {...loaded.streaks},
@@ -33,6 +35,7 @@ class TrainingProgress extends ChangeNotifier {
        _mistakes = [...loaded.mistakes];
 
   final ProgressFiles _files;
+  final Map<String, Revision> _sources;
   final PendingWrites pendingWrites;
   final TrainerTime _time;
   final Map<LineKey, Review> _reviews;
@@ -41,6 +44,24 @@ class TrainingProgress extends ChangeNotifier {
   final List<Attempt> _mistakes;
   bool _stale = false;
   bool _disposed = false;
+  bool _suspended = false;
+
+  void suspend() => _suspended = true;
+  void resume() => _suspended = false;
+
+  /// Acknowledged own edits can refresh future commands without ending a
+  /// lesson. Already accepted operations keep their original source snapshot.
+  /// An equal-text external replacement never satisfies the native before.
+  bool documentSaved(String path, Revision before, Revision after) {
+    final source = _sources[path];
+    if (source == null) return true; // A scripted adapter supplies no proof.
+    if (source != before ||
+        source.nativeIdentity != before.nativeIdentity ||
+        after.nativeIdentity == null)
+      return false;
+    _sources[path] = after;
+    return true;
+  }
 
   Map<LineKey, Review> get reviews => UnmodifiableMapView(_reviews);
   List<Attempt> get mistakes => _mistakes.reversed.toList();
@@ -56,9 +77,13 @@ class TrainingProgress extends ChangeNotifier {
   /// Answers change the in-memory streak immediately; its rating captures it.
   /// Logging uses a separate operation token so an unknown append is not replayed.
   Future<ProgressWrite> answered(TrainingLine line, DrillAnswer answer) {
-    if (_disposed)
+    if (_disposed || _suspended)
       return Future.value(
-        const ProgressFailed('This training scope is closed.'),
+        ProgressFailed(
+          _suspended
+              ? 'The training source is being saved.'
+              : 'This training scope is closed.',
+        ),
       );
     final attempt = Attempt(
       key: line.key,
@@ -79,7 +104,7 @@ class TrainingProgress extends ChangeNotifier {
         correct: answer.correct,
       );
     }
-    final operation = ProgressOperation();
+    final operation = ProgressOperation(sources: _sources);
     return _accept(() async {
       final result = await _files.logAttempt(attempt, operation: operation);
       if (result is ProgressWritten && !answer.correct) {
@@ -97,8 +122,12 @@ class TrainingProgress extends ChangeNotifier {
     Rating rating, {
     required bool clean,
   }) async {
-    if (_disposed)
-      return const ProgressFailed('This training scope is closed.');
+    if (_disposed || _suspended)
+      return ProgressFailed(
+        _suspended
+            ? 'The training source is being saved.'
+            : 'This training scope is closed.',
+      );
     final at = now;
     final spread = _time.jitter();
     final answers = Map<StreakKey, MoveStreak>.of(_streaks);
@@ -198,11 +227,15 @@ class TrainingProgress extends ChangeNotifier {
   }
 
   Future<ProgressWrite> _mutation(_Rows Function() prepare) {
-    if (_disposed)
+    if (_disposed || _suspended)
       return Future.value(
-        const ProgressFailed('This training scope is closed.'),
+        ProgressFailed(
+          _suspended
+              ? 'The training source is being saved.'
+              : 'This training scope is closed.',
+        ),
       );
-    final operation = ProgressOperation();
+    final operation = ProgressOperation(sources: _sources);
     _Rows? prepared;
     return _accept(() async {
       final rows = prepared ??= prepare();

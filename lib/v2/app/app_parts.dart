@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../features/settings/lichess_account.dart';
+import '../features/library/library_state.dart';
 import '../storage/my_games_files.dart';
 import '../storage/settings_store.dart';
 import '../workspace/books.dart';
@@ -52,6 +53,7 @@ final class AppParts {
     delay: env.saveDelay,
     pendingWrites: env.pendingWrites,
     books: books,
+    writeGuard: () => training.lines,
   );
   late final session = DocumentSession(env.store, saver);
   late final account = LichessAccountState(
@@ -87,7 +89,24 @@ final class AppParts {
     saver,
     books,
     catalog,
+    withTrainingRetired: _withTrainingRetired,
   );
+  Future<LibraryResult> _withTrainingRetired(
+    Future<LibraryResult> Function() operation,
+  ) async {
+    final trainer = training.lines;
+    try {
+      final problem = await trainer.retireForRelocation();
+      if (problem != null)
+        return LibraryFailure(
+          'Save training progress before changing this document: $problem',
+        );
+      return await operation();
+    } finally {
+      await trainer.resumeAfterRelocation();
+    }
+  }
+
   late final _workspace = WorkspaceWiring(
     env,
     session: session,

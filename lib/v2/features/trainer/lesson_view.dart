@@ -74,6 +74,7 @@ class _LessonViewState extends State<LessonView> {
   }
 
   KeyEventResult _key(FocusNode node, KeyEvent event) {
+    if (widget.trainer.documentWriting) return KeyEventResult.handled;
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final lesson = widget.lesson;
     final key = event.logicalKey;

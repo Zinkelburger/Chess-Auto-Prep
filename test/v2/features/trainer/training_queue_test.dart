@@ -43,6 +43,7 @@ void main() {
         if (failing) throw const FileSystemException('acknowledgement lost');
       },
     );
+    await file('Main.pgn').writeAsString(blackChapter);
     lines = trainingLines(
       parseChapter(name: 'Main', text: blackChapter),
       source: p.join(documents.path, 'Main.pgn'),

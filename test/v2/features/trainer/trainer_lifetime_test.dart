@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/v2/chess/training/schedule.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/features/trainer/trainer.dart';
 import 'package:chess_auto_prep/v2/storage/book_file.dart';
+import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/pending_writes.dart';
 import 'package:chess_auto_prep/v2/storage/training_store.dart';
 import 'package:chess_auto_prep/v2/workspace/books.dart';
@@ -180,6 +181,114 @@ void main() {
     },
   );
 
+  test(
+    'relocation retires the lesson and blocks scope reloads until resume',
+    () async {
+      final ready = trainer.state as TrainerReady;
+      trainer.trainLine(ready.lines.first);
+      final hold = files.logHold = Completer<void>();
+      final answer = ready.progress.answered(ready.lines.first, (
+        ply: 1,
+        fen: Fen.initial,
+        played: 'd5',
+        expected: 'e5',
+        correct: false,
+        phase: AttemptPhase.learning,
+      ));
+      var retired = false;
+      final retiring = trainer.retireForRelocation().then((result) {
+        retired = true;
+        return result;
+      });
+      expect(trainer.lesson, isNull);
+      expect(
+        await ready.progress.mark(ready.lines, known: true),
+        isA<ProgressFailed>(),
+      );
+      trainer.setScope(TrainScope.book);
+      await trainer.reload();
+      await trainer.retryPending();
+      trainer.trainLine(ready.lines.first);
+      await pumpEventQueue();
+      expect(retired, isFalse);
+      expect(trainer.state, isA<TrainerLoading>());
+      expect(files.delegate.reads, 1);
+      expect(
+        files.delegate.reviews,
+        isEmpty,
+        reason: 'This first learning answer has no review row.',
+      );
+      hold.complete();
+      expect(await answer, isA<ProgressWritten>());
+      expect(await retiring, isNull);
+      expect(files.delegate.attempts, hasLength(1));
+      expect(trainer.state, isA<TrainerLoading>());
+      await trainer.resumeAfterRelocation();
+      expect(
+        trainer.state,
+        isA<TrainerEmpty>(),
+        reason: 'The latest scope is a book and none is selected.',
+      );
+    },
+  );
+
+  test(
+    'relocation drains a rating accepted by a scope already replaced',
+    () async {
+      final ready = trainer.state as TrainerReady;
+      final hold = files.hold = Completer<void>();
+      final rating = ready.progress.finished(
+        ready.lines.first,
+        Rating.good,
+        clean: true,
+      );
+      final loading = trainer.reload();
+      final retiring = trainer.retireForRelocation();
+      await pumpEventQueue();
+      expect(files.delegate.history, isEmpty);
+      hold.complete();
+      expect(await rating, isA<ProgressWritten>());
+      await loading;
+      expect(await retiring, isNull);
+      expect(trainer.state, isA<TrainerLoading>());
+      expect(files.delegate.history, hasLength(1));
+      await trainer.resumeAfterRelocation();
+      expect(trainer.state, isA<TrainerReady>());
+      expect(files.delegate.history, hasLength(1));
+    },
+  );
+
+  test('an unopened trainer stays idle after relocation', () async {
+    trainer.dispose();
+    trainer = createTrainer();
+    final reads = files.delegate.reads;
+    expect(await trainer.retireForRelocation(), isNull);
+    await trainer.resumeAfterRelocation();
+    expect(trainer.state, isA<TrainerIdle>());
+    expect(files.delegate.reads, reads);
+  });
+
+  test('disposal while retirement drains cannot create a new scope', () async {
+    final ready = trainer.state as TrainerReady;
+    final hold = files.hold = Completer<void>();
+    final rating = ready.progress.finished(
+      ready.lines.first,
+      Rating.good,
+      clean: true,
+    );
+    final retiring = trainer.retireForRelocation();
+    final old = trainer;
+    old.dispose();
+    trainer = createTrainer();
+    hold.complete();
+    expect(await rating, isA<ProgressWritten>());
+    expect(await retiring, isNull);
+    final reads = files.delegate.reads;
+    await old.resumeAfterRelocation();
+    expect(files.delegate.reads, reads);
+    expect(files.delegate.history, hasLength(1));
+  });
+
   test('a bulk change waits behind the earlier failed mutation', () async {
     final ready = trainer.state as TrainerReady;
     files.delegate.nextWrite = const ProgressFailed('disk full');
@@ -210,7 +319,10 @@ final class _HeldProgress implements ProgressFiles {
       >[];
 
   @override
-  Future<ProgressRead> read(Set<String> sources) => delegate.read(sources);
+  Future<ProgressRead> read(
+    Set<String> sources, {
+    Map<String, Revision>? observed,
+  }) => delegate.read(sources, observed: observed);
 
   @override
   Future<ProgressWrite> logAttempt(

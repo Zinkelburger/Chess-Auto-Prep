@@ -48,14 +48,26 @@ Future<void> createFileExclusively(String path, List<int> bytes) async {
 
 /// Replaces [path] with [bytes]. The caller has already checked the revision
 /// of what is being replaced and recorded it.
-Future<void> replaceFile(String path, List<int> bytes) async {
+Future<void> replaceFile(
+  String path,
+  List<int> bytes, {
+  void Function(NativeFileObservation)? installed,
+}) async {
   final staged = await _stage(path, bytes);
+  NativeFileObservation? observed;
   try {
+    if (installed != null) {
+      observed = await observeFile(staged.path);
+      if (observed.status != 0) {
+        throw FileSystemException('Cannot identify the staged document', path);
+      }
+    }
     await staged.rename(path);
   } on Object {
     await _discard(staged);
     rethrow;
   }
+  if (observed != null) installed!(observed);
   await _syncDirectoryEntry(path);
 }
 

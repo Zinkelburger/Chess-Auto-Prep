@@ -17,6 +17,13 @@ import 'session_results.dart';
 typedef _Target = ({DocumentRef ref, Revision revision});
 typedef _UndoWrite = ({KeptSave entry, _Target target, RestoredVersion scope});
 
+/// A source publication must settle accepted training before replacing its
+/// input, and retain the hold until its receipt and shown text are adopted.
+abstract interface class DocumentWriteGuard {
+  Future<String?> pauseForWrite();
+  void resumeAfterWrite();
+}
+
 /// Keeps one document's file matching the draft the user is editing.
 ///
 /// Saves are settled, not instant: the [SaveClock] says when a draft goes
@@ -31,10 +38,12 @@ final class DocumentSaver extends ChangeNotifier {
     Duration delay = const Duration(seconds: 1),
     this.pendingWrites,
     this.books,
+    this.writeGuard,
   }) : _clock = SaveClock(delay: delay);
 
   final PendingWrites? pendingWrites;
   final Books? books;
+  final DocumentWriteGuard? Function()? writeGuard;
 
   // A compound publication cannot absorb another edit after an uncertain
   // acknowledgement. Its exact draft and command id must settle first.
@@ -72,6 +81,13 @@ final class DocumentSaver extends ChangeNotifier {
   _Hold _hold = _Hold.none;
 
   SaveState get state => _state;
+  Revision? get revision => _target?.revision;
+
+  /// The opened source, advanced only by our own proven publication chain.
+  Revision? get trainingSourceRevision => _trainingSourceRevision;
+  Revision? _trainingSourceRevision;
+  store.Receipt? get lastReceipt => _lastReceipt;
+  store.Receipt? _lastReceipt;
 
   bool get canUndo => !_undo.isEmpty;
 
@@ -101,6 +117,8 @@ final class DocumentSaver extends ChangeNotifier {
   void opened(DocumentRef ref, Revision revision, {String? readOnly}) {
     _opens++;
     _target = (ref: ref, revision: revision);
+    _lastReceipt = null;
+    _trainingSourceRevision = revision;
     _pending.clear();
     _clock.hurry();
     _undo.clear();
@@ -189,6 +207,8 @@ final class DocumentSaver extends ChangeNotifier {
   void closed() {
     _opens++;
     _target = null;
+    _trainingSourceRevision = null;
+    _lastReceipt = null;
     _pending.clear();
     _clock.hurry();
     _undo.clear();
@@ -219,31 +239,57 @@ final class DocumentSaver extends ChangeNotifier {
     _committingReferences = draft.scope.references != null;
     _set(const Saving());
     final ticket = _opens;
-    final result = await _put(
-      target.ref,
-      draft.text,
-      target.revision,
-      draft.scope,
-    );
-    _writing = false;
-    if (_disposed) return;
-    if (ticket != _opens) {
-      // The answer is about an open nobody is on any more; a newer one may
-      // have been waiting behind it.
-      _catchUp(result, target.ref);
+    final guard = writeGuard?.call();
+    try {
+      final result = await _guardedPut(
+        guard,
+        target.ref,
+        draft.text,
+        target.revision,
+        draft.scope,
+      );
+      _writing = false;
+      if (_disposed) return;
+      if (ticket != _opens) {
+        // The answer is about an open nobody is on any more; a newer one may
+        // have been waiting behind it.
+        _catchUp(result, target.ref);
+        await _write();
+        return;
+      }
+      if (result is store.Saved ||
+          (!wasUncertain && result is! store.IoFailure)) {
+        _committingReferences = false;
+      }
+      // Only a write the disk refused comes back to be tried with the next
+      // edit; see [SaveStopped] and [SaveConflict] for what happens to the
+      // others.
+      if (result is store.IoFailure) _pending.returned(draft);
+      _adopt(result, target.ref, draft.scope);
       await _write();
-      return;
+    } finally {
+      guard?.resumeAfterWrite();
     }
-    if (result is store.Saved ||
-        (!wasUncertain && result is! store.IoFailure)) {
-      _committingReferences = false;
+  }
+
+  Future<store.SaveResult> _guardedPut(
+    DocumentWriteGuard? guard,
+    DocumentRef ref,
+    String text,
+    Revision expected,
+    EditScope scope,
+  ) async {
+    try {
+      final problem = await guard?.pauseForWrite();
+      if (problem != null) {
+        return store.IoFailure(
+          'Save training progress before changing this document: $problem',
+        );
+      }
+      return await _put(ref, text, expected, scope);
+    } on Object catch (error) {
+      return store.IoFailure('$error');
     }
-    // Only a write the disk refused comes back to be tried with the next
-    // edit; see [SaveStopped] and [SaveConflict] for what happens to the
-    // others.
-    if (result is store.IoFailure) _pending.returned(draft);
-    _adopt(result, target.ref, draft.scope);
-    await _write();
   }
 
   /// Whether this saver is still writing this document at all.
@@ -284,7 +330,22 @@ final class DocumentSaver extends ChangeNotifier {
     // revision a write committed is that file's.
     if (target == null || target.ref.path != ref.path) return;
     if (result case store.Saved(:final receipt)) {
-      _target = (ref: ref, revision: receipt.committed);
+      _received(ref, receipt);
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  void _received(DocumentRef ref, store.Receipt receipt) {
+    _target = (ref: ref, revision: receipt.committed);
+    _lastReceipt = receipt;
+    final source = _trainingSourceRevision;
+    final before = receipt.beforeRevision;
+    if (source != null &&
+        source == before &&
+        source.nativeIdentity == before.nativeIdentity &&
+        (source.nativeIdentity == null ||
+            receipt.committed.nativeIdentity != null)) {
+      _trainingSourceRevision = receipt.committed;
     }
   }
 
@@ -292,7 +353,7 @@ final class DocumentSaver extends ChangeNotifier {
   void _adopt(store.SaveResult result, DocumentRef ref, EditScope scope) {
     switch (result) {
       case store.Saved(:final receipt):
-        _target = (ref: ref, revision: receipt.committed);
+        _received(ref, receipt);
         _undo.keep(receipt, scope);
         _set(const Saved());
       case store.Conflict():
@@ -364,47 +425,53 @@ final class DocumentSaver extends ChangeNotifier {
     final ticket = _opens;
     // A version this store itself recorded, going back to the file it came
     // from: there is no edit here whose games could be named.
-    final result = await _put(
-      target.ref,
-      entry.receipt.before,
-      entry.receipt.committed,
-      scope,
-    );
-    _writing = false;
-    if (_disposed) return const UndoRefused();
-    if (ticket != _opens) {
-      // The answer is about an open nobody is on any more, and a draft of
-      // the document open now may have been waiting behind it.
-      _catchUp(result, target.ref);
+    final guard = writeGuard?.call();
+    try {
+      final result = await _guardedPut(
+        guard,
+        target.ref,
+        entry.receipt.before,
+        entry.receipt.committed,
+        scope,
+      );
+      _writing = false;
+      if (_disposed) return const UndoRefused();
+      if (ticket != _opens) {
+        // The answer is about an open nobody is on any more, and a draft of
+        // the document open now may have been waiting behind it.
+        _catchUp(result, target.ref);
+        await _write();
+        return const UndoRefused();
+      }
+      if (result is store.IoFailure && _pending.isEmpty) _failedUndo = write;
+      if (result is store.Saved ||
+          (!wasUncertain && result is! store.IoFailure)) {
+        _committingReferences = false;
+        _failedUndo = null;
+      }
+      if (_outOfDate(result, target)) {
+        _set(resting);
+        await _write();
+        return const UndoRefused();
+      }
+      if (result is store.Saved && !_pending.isEmpty) {
+        // Typed over: the entry stays where it is, the draft goes out on top
+        // of the version just written, and the receipt the draft brings back
+        // makes that version the next step back. The draft was worked out on
+        // the version the undo took away, so against the file it also changes
+        // the games the undone edit changed, and says so.
+        final typed = _pending.take()!;
+        _pending.typed(typed.text, scopeOfBoth(entry.scope, typed.scope));
+        _catchUp(result, target.ref);
+        await _write();
+        return const UndoRefused();
+      }
+      final outcome = _undone(result, entry.receipt, target.ref, resting);
       await _write();
-      return const UndoRefused();
+      return outcome;
+    } finally {
+      guard?.resumeAfterWrite();
     }
-    if (result is store.IoFailure && _pending.isEmpty) _failedUndo = write;
-    if (result is store.Saved ||
-        (!wasUncertain && result is! store.IoFailure)) {
-      _committingReferences = false;
-      _failedUndo = null;
-    }
-    if (_outOfDate(result, target)) {
-      _set(resting);
-      await _write();
-      return const UndoRefused();
-    }
-    if (result is store.Saved && !_pending.isEmpty) {
-      // Typed over: the entry stays where it is, the draft goes out on top
-      // of the version just written, and the receipt the draft brings back
-      // makes that version the next step back. The draft was worked out on
-      // the version the undo took away, so against the file it also changes
-      // the games the undone edit changed, and says so.
-      final typed = _pending.take()!;
-      _pending.typed(typed.text, scopeOfBoth(entry.scope, typed.scope));
-      _catchUp(result, target.ref);
-      await _write();
-      return const UndoRefused();
-    }
-    final outcome = _undone(result, entry.receipt, target.ref, resting);
-    await _write();
-    return outcome;
   }
 
   /// Whether the store refused because the entry names a revision the
@@ -428,7 +495,7 @@ final class DocumentSaver extends ChangeNotifier {
     switch (result) {
       case store.Saved(:final receipt):
         _undo.tookBack(entry, receipt);
-        _target = (ref: ref, revision: receipt.committed);
+        _received(ref, receipt);
         _set(const Saved());
         return Restored(entry.before);
       case store.Conflict():

@@ -10,6 +10,7 @@ import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
+import '../../storage/document_ref.dart';
 import '../../storage/document_repository.dart';
 import '../../storage/pgn_document_store.dart';
 import '../../storage/training_store.dart';
@@ -18,6 +19,7 @@ import '../../workspace/board_claim.dart';
 import '../../workspace/books.dart';
 import '../../workspace/repertoire_catalog.dart';
 import '../../workspace/document_session.dart';
+import '../../workspace/document_saver.dart' show DocumentWriteGuard;
 import '../../workspace/engine_analysis.dart';
 import 'lesson.dart';
 import 'progress.dart';
@@ -112,7 +114,7 @@ const learnSitting = 10;
 ///
 /// While a sitting runs the trainer holds the board ([board]) and pauses the
 /// engine, whose lines would give the answers away.
-class Trainer extends ChangeNotifier {
+class Trainer extends ChangeNotifier implements DocumentWriteGuard {
   Trainer({
     required DocumentSession session,
     required ScopeReader chapters,
@@ -131,9 +133,53 @@ class Trainer extends ChangeNotifier {
        _analysis = analysis,
        _time = time {
     _session.addListener(_follow);
+    _savedRevision = _session.persistedRevision;
+    _session.persistedChanges.addListener(_saved);
     _books.addListener(_bookChanged);
     _catalog?.addListener(_catalogChanged);
   }
+
+  @override
+  Future<String?> pauseForWrite() async {
+    if (_documentWrites++ == 0) {
+      _pausedProgress = switch (_state) {
+        TrainerReady(:final progress) => progress,
+        _ => null,
+      };
+      _pausedLesson = _lesson;
+      _pausedProgress?.suspend();
+      _pausedLesson?.suspend();
+      if (_state is TrainerLoading) {
+        _loads++;
+        _reloadAfterWrite = true;
+      }
+      if (!_disposed) _lessonChanged();
+    }
+    await pendingWrites.settleFor(_files);
+    return pendingWrites.unfinished(_files).firstOrNull?.detail;
+  }
+
+  @override
+  void resumeAfterWrite() {
+    if (_documentWrites == 0 || --_documentWrites != 0) return;
+    _pausedProgress?.resume();
+    _pausedLesson?.resume();
+    _pausedProgress = null;
+    _pausedLesson = null;
+    if (_disposed) return;
+    if (_reloadAfterWrite) {
+      _reloadAfterWrite = false;
+      unawaited(_load(force: true));
+    } else {
+      _lessonChanged();
+    }
+  }
+
+  int _documentWrites = 0;
+  bool _reloadAfterWrite = false;
+  TrainingProgress? _pausedProgress;
+  Lesson? _pausedLesson;
+  bool get documentWriting => _documentWrites != 0;
 
   final RepertoireCatalog? _catalog;
   final PendingWrites pendingWrites;
@@ -169,6 +215,43 @@ class Trainer extends ChangeNotifier {
   Object? _bookSeen;
 
   final DocumentSession _session;
+  Revision? _savedRevision;
+
+  void _saved() {
+    final revision = _session.persistedRevision;
+    if (revision == _savedRevision &&
+        revision?.nativeIdentity == _savedRevision?.nativeIdentity)
+      return;
+    _savedRevision = revision;
+    final path = _session.source?.path;
+    if (_read?.ref?.path != path) return;
+    final state = _state;
+    final receipt = _session.persistedChange;
+    if (path != null &&
+        state is TrainerReady &&
+        receipt != null &&
+        state.progress.documentSaved(
+          path,
+          receipt.beforeRevision,
+          receipt.committed,
+        )) {
+      _state = TrainerReady(
+        chapters: [
+          for (final c in state.chapters)
+            (
+              ref: c.ref,
+              lines: c.lines,
+              revision: c.ref.path == path ? revision : c.revision,
+            ),
+        ],
+        progress: state.progress,
+      );
+      notifyListeners();
+      return;
+    }
+    if (_state is! TrainerIdle) unawaited(_load(force: true));
+  }
+
   final ScopeReader _chapters;
   final ProgressFiles _files;
   final EngineAnalysis _analysis;
@@ -185,6 +268,32 @@ class Trainer extends ChangeNotifier {
   /// Counts loads, so an older one that finishes late is not taken for the
   /// newest when both asked for the same thing.
   var _loads = 0;
+  bool _relocating = false;
+  bool _reloadAfterRelocation = false;
+  bool _disposed = false;
+
+  /// Stops every old-path producer before the caller takes storage locks.
+  /// Disposed scopes' accepted attempts and ratings share this same resource.
+  /// A failed obligation refuses relocation until its exact retry succeeds.
+  Future<String?> retireForRelocation() async {
+    if (_relocating) return 'Training is already waiting for a document move.';
+    _relocating = true;
+    _reloadAfterRelocation = _state is! TrainerIdle;
+    _loads++;
+    if (!_disposed) {
+      leave();
+      if (_reloadAfterRelocation) _become(const TrainerLoading());
+    }
+    await pendingWrites.settleFor(_files);
+    return pendingWrites.unfinished(_files).firstOrNull?.detail;
+  }
+
+  /// The caller has finished publishing and synchronizing its catalog.
+  Future<void> resumeAfterRelocation() async {
+    if (!_relocating) return;
+    _relocating = false;
+    if (!_disposed && _reloadAfterRelocation) await _load(force: true);
+  }
 
   /// The board while a sitting holds it; null otherwise.
   final board = ValueNotifier<BoardClaim?>(null);
@@ -243,6 +352,7 @@ class Trainer extends ChangeNotifier {
   /// Replays the original accepted mutations, including their store tokens;
   /// only after they land may a replacement scope read their result.
   Future<void> retryPending() async {
+    if (_disposed || _relocating || documentWriting) return;
     final load = ++_loads;
     leave();
     _become(const TrainerLoading());
@@ -294,7 +404,12 @@ class Trainer extends ChangeNotifier {
     List<TrainingLine> Function(List<TrainingLine>, TrainingProgress) pick,
   ) {
     final state = _state;
-    if (state is! TrainerReady || state.progress.stale) return;
+    if (_disposed ||
+        _relocating ||
+        documentWriting ||
+        state is! TrainerReady ||
+        state.progress.stale)
+      return;
     // A line with none of the user's moves in it has nothing to ask.
     final lines = [
       for (final line in pick(state.lines, state.progress))
@@ -339,7 +454,13 @@ class Trainer extends ChangeNotifier {
       if (_state is! TrainerIdle) unawaited(_load());
       return;
     }
-    if (!identical(chapter, read.chapter)) _relined();
+    if (!identical(chapter, read.chapter)) {
+      if (_state is TrainerReady) {
+        _relined();
+      } else if (_state is! TrainerIdle) {
+        unawaited(_load(force: true));
+      }
+    }
   }
 
   /// Another book is in use, or the one in use was edited: a book being
@@ -372,7 +493,13 @@ class Trainer extends ChangeNotifier {
     _state = TrainerReady(
       chapters: [
         for (final c in state.chapters)
-          c.ref == ref ? (ref: ref, lines: lines) : c,
+          c.ref == ref
+              ? (
+                  ref: ref,
+                  lines: lines,
+                  revision: _session.trainingSourceRevision,
+                )
+              : c,
       ],
       progress: state.progress,
     );
@@ -380,8 +507,18 @@ class Trainer extends ChangeNotifier {
   }
 
   Future<void> _load({bool force = false}) async {
+    if (_disposed) return;
+    if (documentWriting) {
+      _reloadAfterWrite = true;
+      return;
+    }
+    if (_relocating) {
+      _reloadAfterRelocation = true;
+      return;
+    }
     final chapter = _session.chapter;
     final ref = _session.source;
+    final revision = _session.trainingSourceRevision;
     final wanted = (ref: ref, scope: _scope, chapter: chapter);
     if (!force && _read == wanted && _state is! TrainerIdle) return;
     _read = wanted;
@@ -412,8 +549,8 @@ class Trainer extends ChangeNotifier {
     _become(const TrainerLoading());
     final open = trainingLines(chapter, source: ref.path);
     final chapters = _scope == TrainScope.chapter
-        ? [(ref: ref, lines: open)]
-        : await _chapters.repertoireOf(ref, open);
+        ? [(ref: ref, lines: open, revision: revision)]
+        : await _chapters.repertoireOf(ref, open, revision: revision);
     if (load != _loads) return;
     await _loaded(load, chapters);
   }
@@ -427,7 +564,11 @@ class Trainer extends ChangeNotifier {
     }
     _become(const TrainerLoading());
     final open = chapter != null && ref != null && chapter.game == null
-        ? (ref: ref, lines: trainingLines(chapter, source: ref.path))
+        ? (
+            ref: ref,
+            lines: trainingLines(chapter, source: ref.path),
+            revision: _session.trainingSourceRevision,
+          )
         : null;
     final chapters = await _chapters.chaptersWhere(_books.includes, open);
     if (load != _loads) return;
@@ -439,7 +580,25 @@ class Trainer extends ChangeNotifier {
 
   /// The progress of [chapters], read for the load counted as [load].
   Future<void> _loaded(int load, List<ChapterLines> chapters) async {
-    final read = await _files.read({for (final c in chapters) c.ref.path});
+    final versions = <String, Revision>{};
+    for (final chapter in chapters) {
+      final path = chapter.ref.path;
+      final revision = chapter.revision ?? const Revision('');
+      final previous = versions[path];
+      if (previous != null &&
+          (previous != revision ||
+              previous.nativeIdentity != revision.nativeIdentity)) {
+        return _become(
+          const TrainerFailed(
+            ProgressFailed(
+              'The course changed while its chapters were loading. Reload it.',
+            ),
+          ),
+        );
+      }
+      versions[path] = revision;
+    }
+    final read = await _files.read(versions.keys.toSet(), observed: versions);
     if (load != _loads) return;
     _become(switch (read) {
       ProgressLoaded() => TrainerReady(
@@ -466,10 +625,12 @@ class Trainer extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     // A load still reading is overtaken: it makes no progress to leak and
     // tells nobody.
     _loads++;
     _session.removeListener(_follow);
+    _session.persistedChanges.removeListener(_saved);
     _books.removeListener(_bookChanged);
     _catalog?.removeListener(_catalogChanged);
     leave();
@@ -481,7 +642,11 @@ class Trainer extends ChangeNotifier {
 }
 
 /// One chapter's lines, under the chapter they come from.
-typedef ChapterLines = ({ChapterRef ref, List<TrainingLine> lines});
+typedef ChapterLines = ({
+  ChapterRef ref,
+  List<TrainingLine> lines,
+  Revision? revision,
+});
 
 /// Reads the other chapters of a repertoire, for training it whole.
 final class ScopeReader {
@@ -504,27 +669,30 @@ final class ScopeReader {
   /// logged: one bad file does not stop the rest being trained.
   Future<List<ChapterLines>> repertoireOf(
     ChapterRef open,
-    List<TrainingLine> openLines,
-  ) async {
+    List<TrainingLine> openLines, {
+    Revision? revision,
+  }) async {
     final listing = _catalog?.listing ?? await _files.list();
     final folder = listing is Repertoires
         ? listing.folders
               .where((f) => f.chapters.any((c) => c.path == open.path))
               .firstOrNull
         : null;
-    if (folder == null) return [(ref: open, lines: openLines)];
+    if (folder == null)
+      return [(ref: open, lines: openLines, revision: revision)];
     // A file of several chapters is read once for all of them.
-    final files = <String, Future<Chapter?>>{};
+    final files = <String, Future<({Chapter chapter, Revision revision})?>>{};
     return [
       for (final ref in folder.chapters)
         if (ref == open)
-          (ref: open, lines: openLines)
+          (ref: open, lines: openLines, revision: revision)
         else if (!ref.heading.draft)
           if (await (files[ref.path] ??= _read(ref)) case final file?)
             (
               ref: ref,
+              revision: file.revision,
               lines: trainingLines(
-                sectionView(file, ref.section).chapter,
+                sectionView(file.chapter, ref.section).chapter,
                 source: ref.path,
               ),
             ),
@@ -540,7 +708,7 @@ final class ScopeReader {
   ) async {
     final listing = _catalog?.listing ?? await _files.list();
     if (listing is! Repertoires) return const [];
-    final files = <String, Future<Chapter?>>{};
+    final files = <String, Future<({Chapter chapter, Revision revision})?>>{};
     return [
       for (final folder in listing.folders)
         for (final ref in folder.chapters)
@@ -550,18 +718,22 @@ final class ScopeReader {
             else if (await (files[ref.path] ??= _read(ref)) case final file?)
               (
                 ref: ref,
+                revision: file.revision,
                 lines: trainingLines(
-                  sectionView(file, ref.section).chapter,
+                  sectionView(file.chapter, ref.section).chapter,
                   source: ref.path,
                 ),
               ),
     ];
   }
 
-  Future<Chapter?> _read(ChapterRef ref) async {
+  Future<({Chapter chapter, Revision revision})?> _read(ChapterRef ref) async {
     switch (await _documents.open(ref)) {
-      case Opened(:final text):
-        return readChapter(name: ref.fileName, text: text);
+      case Opened(:final text, :final revision):
+        return (
+          chapter: await readChapter(name: ref.fileName, text: text),
+          revision: revision,
+        );
       case Absent():
         return null;
       case Unreadable(:final detail):
