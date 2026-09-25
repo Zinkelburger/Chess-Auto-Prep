@@ -180,6 +180,11 @@ class _SearchPaneState extends State<SearchPane>
           children: [
             _form(context),
             _status(context),
+            if (widget.fill.canRetry)
+              TextButton(
+                onPressed: () => unawaited(widget.fill.retry()),
+                child: const Text('Retry saving search'),
+              ),
             const Divider(height: 1),
             Expanded(child: _table(context)),
             ?_linesRow(context),
@@ -290,6 +295,8 @@ class _SearchPaneState extends State<SearchPane>
             '${_findsWords()}',
         false,
       ),
+      FillSaving() => ('Saving search results…', false),
+      FillUnsaved(:final reason) => (reason, true),
       FillFailed(:final reason) => (reason, true),
     };
     return Padding(
@@ -308,6 +315,7 @@ class _SearchPaneState extends State<SearchPane>
   /// What the run pointed out, and where to see it.
   String _findsWords() => switch (widget.fill.finds?.recorded) {
     FindsReading() => ' · looking for positions…',
+    FindsUnsaved() => ' · search positions not saved',
     FindsKept(:final count) => ' · $count found, listed in Positions (Ctrl+P)',
     null => '',
   };

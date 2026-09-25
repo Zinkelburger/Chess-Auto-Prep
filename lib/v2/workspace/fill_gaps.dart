@@ -24,10 +24,14 @@ import '../diagnostics/log.dart';
 import '../engines/maia/move_policy.dart';
 import '../storage/chapter_files.dart';
 import '../storage/eval_cache.dart';
+import '../storage/generation_trees.dart';
+import '../storage/pending_writes.dart';
+import '../storage/reference_change.dart' show newCompoundId;
 import '../storage/pgn_document_store.dart' as store;
 import 'document_session.dart';
 import 'engine_analysis.dart';
 import 'finds.dart';
+import 'generated_draft.dart';
 
 /// What a search is asked for: the opponent's rating and how deep to go.
 ///
@@ -81,11 +85,6 @@ final class FillUnavailable extends FillToolsResult {
 }
 
 typedef FillToolsFactory = Future<FillToolsResult> Function(FillRequest);
-
-/// Keeps the tree a finished run built beside the chapter it was started
-/// from, for a later run to extend. Given the chapter file and the tree's
-/// text; never throws to the caller.
-typedef TreeKeeper = Future<void> Function(ChapterRef chapter, String tree);
 
 sealed class FillState {
   const FillState();
@@ -153,6 +152,16 @@ final class FillDone extends FillState {
   final bool complete;
 }
 
+/// Search computation finished; required artifacts are still being saved.
+final class FillSaving extends FillState {
+  const FillSaving();
+}
+
+final class FillUnsaved extends FillState {
+  const FillUnsaved(this.reason);
+  final String reason;
+}
+
 final class FillFailed extends FillState {
   const FillFailed(this.reason);
 
@@ -203,6 +212,7 @@ final class FillGaps extends ChangeNotifier {
     required store.PgnDocumentStore documents,
     required FillToolsFactory tools,
     TreeKeeper? keepTree,
+    PendingWrites? pendingWrites,
     this.finds,
     DateTime Function() clock = DateTime.now,
   }) : _session = session,
@@ -210,12 +220,8 @@ final class FillGaps extends ChangeNotifier {
        _store = documents,
        _tools = tools,
        _keepTree = keepTree,
+       _pending = pendingWrites ?? PendingWrites(),
        _clock = clock;
-
-  /// How many draft names are tried before giving up: `X (draft)`,
-  /// `X (draft 2)`, … A user with this many drafts of one chapter has
-  /// something other than a name clash to sort out.
-  static const _names = 20;
 
   final DocumentSession _session;
   final EngineAnalysis _analysis;
@@ -223,6 +229,13 @@ final class FillGaps extends ChangeNotifier {
   final FillToolsFactory _tools;
   final TreeKeeper? _keepTree;
   final DateTime Function() _clock;
+  final PendingWrites _pending;
+  Object get _resource => (_store, 'generation');
+  PendingObligation<String?>? _publication;
+  FillDone? _completed;
+  PendingObligation<DraftPublication>? _draft;
+  bool get canRetry => _pending.unfinished(_resource).isNotEmpty;
+  bool _retrying = false;
 
   /// Where what each stopped run points out is kept: the Positions list.
   final Finds? finds;
@@ -270,12 +283,18 @@ final class FillGaps extends ChangeNotifier {
   /// Whether a search can start now: a position is on the board and not
   /// hidden, and no search is running.
   bool get canStart =>
-      !running && _session.chapter != null && _session.shownTo == null;
+      !_disposed &&
+      !running &&
+      _state is! FillSaving &&
+      !canRetry &&
+      _session.chapter != null &&
+      _session.shownTo == null;
 
   /// Whether the last run can be written as lines: it was started on a
   /// repertoire chapter this app may write, for the chapter's side, and
   /// is over.
   bool get canMakeLines =>
+      !_disposed &&
       _state is FillDone &&
       _found?.chapter != null &&
       _lines is! LinesWriting &&
@@ -284,7 +303,10 @@ final class FillGaps extends ChangeNotifier {
   /// Starts a run, or answers why it did not: the one sentence the screen
   /// shows. Null when it started.
   Future<String?> start(FillRequest request) async {
-    if (running) return 'A search is already running.';
+    if (_disposed) return 'The search owner is closed.';
+    if (running || _state is FillSaving) return 'A search is already running.';
+    if (canRetry)
+      return 'Save the accepted search results before starting another search.';
     final chapter = _session.chapter;
     final tree = _session.tree;
     if (chapter == null || tree == null) return 'Nothing is on the board.';
@@ -308,6 +330,9 @@ final class FillGaps extends ChangeNotifier {
     );
     _found = null;
     _lines = null;
+    _publication = null;
+    _completed = null;
+    _draft = null;
     _set(FillRunning(nodes: 1, depth: 0, of: request.depthPlies));
     _analysis.pause(this, 'Paused while searching');
     try {
@@ -370,24 +395,91 @@ final class FillGaps extends ChangeNotifier {
     _show(target, request, tree);
     final reached = _state is FillRunning ? (_state as FillRunning).depth : 0;
     log.i('search ${target.label}: ${nodesIn(tree)} positions');
-    _set(
-      FillDone(
-        nodes: nodesIn(tree),
-        depth: result is SearchComplete
-            ? request.depthPlies ?? reached
-            : reached,
-        complete: result is SearchComplete,
-      ),
+    final done = FillDone(
+      nodes: nodesIn(tree),
+      depth: result is SearchComplete ? request.depthPlies ?? reached : reached,
+      complete: result is SearchComplete,
     );
-    await finds?.record(
+    await _publish(target, request, tree, config, result, done);
+  }
+
+  Future<void> _publish(
+    FillTarget target,
+    FillRequest request,
+    SearchNode tree,
+    SearchConfig config,
+    SearchResult result,
+    FillDone done,
+  ) async {
+    _completed = done;
+    final runId = newCompoundId();
+    final source = target.chapter?.$2;
+    final keep = _keepTree;
+    final text = source == null || keep == null
+        ? null
+        : encodeTreeV4(
+            tree,
+            config,
+            complete: result is SearchComplete,
+            evalDepth: fillEvalDepth,
+            opponentRating: request.elo,
+          );
+    final recording = finds?.record(
       tree,
       rootFen: target.rootFen,
       prefix: target.sans,
       side: target.side,
       elo: request.elo,
     );
-    if (target.chapter case (_, final source)) {
-      await _kept(source, tree, config, result, request);
+    var checkedFinds = false;
+    var findsKept = recording == null;
+    _publication = _pending.accept<String?>(
+      resource: _resource,
+      label: 'Search results',
+      work: () async {
+        try {
+          if (!checkedFinds) {
+            findsKept = recording == null || (await recording) is FindsKept;
+            checkedFinds = true;
+          } else if (!findsKept) {
+            findsKept = await finds!.retry();
+          }
+          if (!findsKept)
+            return 'Search positions have not been saved. Retry saving the search.';
+          if (source != null && text != null)
+            await keep!(source, text, runId: runId);
+          return null;
+        } on Object catch (error) {
+          log.w('save search results', error);
+          return 'The search tree could not be saved: $error';
+        }
+      },
+      problem: (result) => result,
+      blocked: () => 'An earlier generation result still needs saving.',
+    );
+    _set(const FillSaving());
+    final problem = await _publication!.run();
+    _set(problem == null ? done : FillUnsaved(problem));
+  }
+
+  /// Accepted publications survive owner disposal. A replacement search owner
+  /// can retry the same app resource without recomputing or renaming outputs.
+  Future<void> retry() async {
+    if (_disposed || _retrying) return;
+    _retrying = true;
+    try {
+      await _pending.retry(_resource);
+      if (_publication case final publication?) {
+        if (publication.committed) {
+          _set(_completed!);
+        } else {
+          _set(FillUnsaved(publication.detail));
+        }
+      }
+      if (_draft case final draft?) _showDraft(draft.result);
+      if (!_disposed) notifyListeners();
+    } finally {
+      _retrying = false;
     }
   }
 
@@ -421,12 +513,19 @@ final class FillGaps extends ChangeNotifier {
   /// chapter beside the one it was started on. The chapter is read as it
   /// was when the run started: what it already plays is left out.
   Future<void> makeLines() async {
+    if (_disposed) return;
+    if (_draft case final draft?) {
+      if (_lines is LinesWriting) return;
+      _lines = const LinesWriting();
+      notifyListeners();
+      await _pending.retry(_resource);
+      _showDraft(draft.result);
+      return;
+    }
     final found = _found;
     final drafting = found?.chapter;
     if (found == null || drafting == null || !canMakeLines) return;
     final (chapter, source) = drafting;
-    _lines = const LinesWriting();
-    notifyListeners();
     final known = chapterDecisions(chapter);
     final heading = readHeading(chapter.preamble);
     final prefix = chapter.tree.lineTo(found.target.cursor);
@@ -435,90 +534,56 @@ final class FillGaps extends ChangeNotifier {
         ? heading.rootMoves
         : const <String>[];
     final created = _clock();
-    final (plan, traps) = await foundIn(found.tree, known: known);
-    // Another search started meanwhile, and what it finds is the one on
-    // show: this run's lines are not written.
-    if (_disposed || !identical(_found, found)) return;
-    final draft = await _draftUnder(
-      p.dirname(source.path),
-      source.name,
-      plan,
-      (name) => draftChapterText(
-        name: name,
-        side: chapter.side,
-        rootFen: rootFen,
-        rootMoves: rootMoves,
-        prefix: prefix,
-        plan: withTraps(plan, traps),
-        created: created,
+    GeneratedDraft? publication;
+    _draft = _pending.accept<DraftPublication>(
+      resource: _resource,
+      label: 'Generated draft',
+      work: () async {
+        if (publication == null) {
+          final (plan, traps) = await foundIn(found.tree, known: known);
+          if (plan.lines == 0)
+            return const DraftNotWritten(
+              'The search found no line the chapter does not already have.',
+              retryable: false,
+            );
+          publication = GeneratedDraft(
+            documents: _store,
+            folder: p.dirname(source.path),
+            chapter: source.name,
+            textFor: (name) => draftChapterText(
+              name: name,
+              side: chapter.side,
+              rootFen: rootFen,
+              rootMoves: rootMoves,
+              prefix: prefix,
+              plan: withTraps(plan, traps),
+              created: created,
+            ),
+          );
+          _draftLines = plan.lines;
+        }
+        return publication!.write();
+      },
+      problem: (result) =>
+          result is DraftNotWritten && result.retryable ? result.reason : null,
+      blocked: () => const DraftNotWritten(
+        'An earlier generation result still needs saving.',
       ),
     );
-    if (_disposed) return;
-    if (!identical(_found, found)) {
-      log.i('lines from ${source.path}: written for a search since replaced');
-      return;
-    }
-    switch (draft) {
-      case _DraftWritten(:final ref):
-        log.i('lines from ${source.path}: ${plan.lines} in ${ref.path}');
-        _lines = LinesWritten(draft: ref, lines: plan.lines);
-      case _DraftRefused(:final reason):
-        log.w('lines from ${source.path}', reason);
-        _lines = LinesFailed(reason);
-    }
+    _lines = const LinesWriting();
     notifyListeners();
+    _showDraft(await _draft!.run());
   }
 
-  /// Writes the draft as the first free name beside [chapter]'s file.
-  Future<_DraftOutcome> _draftUnder(
-    String folder,
-    String chapter,
-    DraftPlan plan,
-    String Function(String name) draft,
-  ) async {
-    if (plan.lines == 0) {
-      return const _DraftRefused(
-        'The search found no line the chapter does not already have.',
-      );
-    }
-    for (var n = 1; n <= _names; n++) {
-      final name = n == 1 ? '$chapter (draft)' : '$chapter (draft $n)';
-      final ref = ChapterRef.at(p.join(folder, '$name.pgn'));
-      switch (await _store.create(ref, draft(name))) {
-        case store.Created():
-          return _DraftWritten(ref);
-        case store.Collision():
-          continue;
-        case store.IoFailure(:final detail):
-          return _DraftRefused('The draft could not be written: $detail');
-      }
-    }
-    return const _DraftRefused(
-      'Too many drafts of this chapter already; delete some first.',
-    );
-  }
+  int _draftLines = 0;
 
-  Future<void> _kept(
-    ChapterRef source,
-    SearchNode tree,
-    SearchConfig config,
-    SearchResult result,
-    FillRequest request,
-  ) async {
-    final keep = _keepTree;
-    if (keep == null) return;
-    try {
-      final text = encodeTreeV4(
-        tree,
-        config,
-        complete: result is SearchComplete,
-        evalDepth: fillEvalDepth,
-        opponentRating: request.elo,
-      );
-      await keep(source, text);
-    } on Object catch (error) {
-      log.w('keep the tree of ${source.path}', error);
-    }
+  void _showDraft(DraftPublication? result) {
+    if (_disposed || result == null) return;
+    _lines = switch (result) {
+      DraftWritten(:final ref) => LinesWritten(draft: ref, lines: _draftLines),
+      DraftNotWritten(:final reason) => LinesFailed(reason),
+    };
+    notifyListeners();
   }
 
   /// Stops the run where it is and forgets it. The engine is handed back at
@@ -581,22 +646,6 @@ final class FillGaps extends ChangeNotifier {
     unawaited(_released());
     super.dispose();
   }
-}
-
-sealed class _DraftOutcome {
-  const _DraftOutcome();
-}
-
-final class _DraftWritten extends _DraftOutcome {
-  const _DraftWritten(this.ref);
-
-  final ChapterRef ref;
-}
-
-final class _DraftRefused extends _DraftOutcome {
-  const _DraftRefused(this.reason);
-
-  final String reason;
 }
 
 /// A tree with more nodes than this is cut into lines on another isolate.

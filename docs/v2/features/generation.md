@@ -320,3 +320,34 @@ Supersedes the Search tab section where they differ.
 - Owner-facing open items: whether finds from a sharper, deeper search are the right ones;
   a score source faster than depth-14 Stockfish; whether the column should also list other
   result sets (My games mistakes, TWIC scan hits) through the same `FindsPanel` shape.
+
+
+## Search publication and retry (H5)
+
+A computed search says **Saving search results…** until its required Positions
+transaction and v4 tree publication have both been acknowledged. A failed save
+stays visible with **Retry saving search**. Positions also offers **Retry saving
+positions** when its SQLite transaction fails. Accepted batches keep their
+original move prefix, rating, timestamp and findings through navigation or owner
+disposal. Retrying uses the same ordered batch; another successful operation
+cannot clear its failure. SQLite uses full synchronous acknowledgement.
+
+`FillGaps` owns the accepted publication in the app's `PendingWrites` registry.
+`GenerationTrees` publishes one frozen run id and exact tree text below the
+existing `.cap-generation/<chapter>/v2-<run-id>/tree.json` layout, under the
+managed document recovery domain. It creates rather than overwrites; matching
+bytes acknowledge an uncertain earlier publication, and conflicting or linked
+files are preserved and refused. Existing artifact formats are unchanged.
+
+**Make lines** freezes the accepted timestamp and generated text. A confirmed
+initial name collision can choose the next numbered draft. Once creation has an
+uncertain outcome, **Make lines** retries the same path and bytes; an equal file
+acknowledges success, while differing contents remain untouched. A new search
+cannot abandon an accepted draft still being saved. Completion notifications
+follow acknowledgement of the corresponding obligation.
+
+These retained retry payloads live for the application lifetime. Committed
+SQLite findings and native tree/PGN artifacts survive reopening; unfinished
+search computation and uncommitted in-memory payloads are not a restartable job
+spool. Linux native publication is tested; Windows/macOS power-loss guarantees
+remain limited by their existing file adapters.

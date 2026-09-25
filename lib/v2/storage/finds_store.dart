@@ -52,14 +52,16 @@ final class FindsStore {
   /// Opens or creates the store under [support]. Never throws.
   factory FindsStore.open(Directory support) {
     final path = p.join(support.path, 'finds.db');
+    Database? opened;
     try {
       support.createSync(recursive: true);
-      final db = sqlite3.open(path);
+      final db = opened = sqlite3.open(path);
       db.execute('PRAGMA journal_mode = WAL');
-      db.execute('PRAGMA synchronous = NORMAL');
+      db.execute('PRAGMA synchronous = FULL');
       db.execute(_create);
       return FindsStore._(db);
     } on Object catch (error) {
+      opened?.close();
       log.w('open $path', error);
       return FindsStore._(null);
     }
@@ -142,8 +144,9 @@ final class FindsStore {
     required int elo,
     required DateTime at,
   }) {
+    if (finds.isEmpty) return true;
     final db = _db;
-    if (db == null || finds.isEmpty) return false;
+    if (db == null) return false;
     try {
       db.execute('BEGIN');
       final insert = db.prepare(_upsert);
@@ -235,7 +238,11 @@ final class FindsStoreOnDemand {
   final Directory support;
   FindsStore? _opened;
 
-  FindsStore get store => _opened ??= FindsStore.open(support);
+  FindsStore get store {
+    if (_opened?.available ?? false) return _opened!;
+    _opened?.close();
+    return _opened = FindsStore.open(support);
+  }
 
   void close() {
     _opened?.close();

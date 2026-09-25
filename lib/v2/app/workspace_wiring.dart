@@ -136,16 +136,17 @@ final class WorkspaceWiring {
     analysis: _analysis,
     documents: _env.store,
     tools: _fillTools,
-    keepTree: (chapter, tree) => _env.pendingWrites.track(
-      chapter.path,
-      _env.keepTree(chapter, tree),
-      label: 'Search tree',
-    ),
+    keepTree: _env.keepTree,
+    pendingWrites: _env.pendingWrites,
     finds: _finds,
     clock: _env.now,
   );
 
-  late final _finds = Finds(store: _env.finds, clock: _env.now);
+  late final _finds = Finds(
+    store: _env.finds,
+    clock: _env.now,
+    pendingWrites: _env.pendingWrites,
+  );
 
   /// A second Stockfish for the fill, with the pane's threads and table:
   /// the pane's own engine is paused for the run, so the machine is not

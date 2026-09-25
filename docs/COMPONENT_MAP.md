@@ -452,6 +452,15 @@ These rules were added after the generation/traps remediation
 (`docs/REFACTOR_PLAN.md`). Violating them reintroduces the "lines don't show"
 and "infinite traps" class of bugs.
 
+The v2 Search tab has separate owners: `workspace/fill_gaps.dart` retains the
+accepted result publication in `PendingWrites`; `workspace/finds.dart` owns
+ordered, frozen SQLite finding batches; `storage/generation_trees.dart` owns
+create-only native v4 artifacts with a fixed run id. `workspace/generated_draft.dart`
+retains exact new-draft placement through uncertain create acknowledgement.
+`FillDone` follows all required saves; explicit retry never recomputes a run or
+silently allocates another draft after an uncertain write. See the
+[v2 generation contract](v2/features/generation.md#search-publication-and-retry-h5).
+
 1. **One owner of the generated tree.** `GenerationSessionController` holds a
    single `GeneratedRepertoire` bundle (`lib/core/generated_repertoire.dart`)
    containing the tree, `FenMap`, and trap index. All of
