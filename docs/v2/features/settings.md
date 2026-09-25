@@ -148,6 +148,26 @@ display, and database preferences to factory defaults?` → those four sections 
 above → `Settings restored to defaults`, or `Some preferences could not be saved. Retry the failed
 section.`
 
+## Read-only saved-data check (v2)
+
+`App` → `Saved data` → `Check` opens a dated report. `Check saved data` is also
+available when startup cannot read settings. It diagnoses settings format and
+retained settings/book stages, unfinished or unsupported native recovery records,
+dangling book paths/sections, generated tree formats, and bughouse exports that
+differ from their authoritative match JSON. `Check again` rereads; closing the
+dialog ignores late delivery. Findings include a resource path and safe reason,
+never raw parser exceptions or document bodies.
+
+This action performs no recovery, repair or source writes. It holds the shared
+mutation domain and Documents/Support locks, inspecting existing concrete
+protocols. Pending or unknown recovery metadata skips dependent reference and
+artifact checks. Generated trees are scanned in visible Documents folders,
+including `.cap-generation`; hidden/quarantine ancestry is excluded. V4 files
+lack source revisions, so validation proves format only. Bughouse checkpoints
+are checked under individual match locks, not as an atomic whole-root inventory.
+Credentials and unrelated databases are outside the report. Native tests compare
+all profile bytes and directory membership before and after each inspection.
+
 ## Data
 - Everything is SharedPreferences, one key per field, written individually and confirmed by rereading:
   board coordinates / legal moves / piece notation; engine cores, hash MB, board depth,

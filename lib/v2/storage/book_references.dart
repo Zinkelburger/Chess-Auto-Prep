@@ -13,7 +13,7 @@ String? renameBookReferences(
   required String repertoireRoot,
   required List<SectionRename> changes,
 }) {
-  final value = _readBooks(original);
+  final value = readBookDocument(original);
   if (value == null) return null;
   final relative = [
     for (final change in changes)
@@ -55,7 +55,7 @@ String? relocateBookReferences(
   required String to,
   required bool directory,
 }) {
-  final value = _readBooks(original);
+  final value = readBookDocument(original);
   for (final path in [repertoireRoot, from, to]) {
     if (!p.isAbsolute(path) || p.normalize(path) != path) {
       throw const FormatException(
@@ -118,8 +118,9 @@ String? relocateBookReferences(
 String _bookPath(String root, String path) =>
     p.posix.joinAll(p.split(p.relative(path, from: root)));
 
-/// Both transforms validate the complete known schema before touching a value.
-Map<String, Object?>? _readBooks(String? original) {
+/// Validates the complete known books schema without changing any bytes.
+/// Reference transforms and read-only integrity checks share this decoder.
+Map<String, Object?>? readBookDocument(String? original) {
   if (original == null) return null;
   final value = jsonDecode(original);
   if (value is! Map<String, Object?> ||
