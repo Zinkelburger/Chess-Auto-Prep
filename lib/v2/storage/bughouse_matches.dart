@@ -65,9 +65,12 @@ final class MatchCheckpoint {
 }
 
 final class MatchFolder implements MatchStore {
-  MatchFolder(String root, {this.publish = replaceFile})
-    : _configuredRoot = Directory(p.normalize(p.absolute(root))),
-      root = canonicalRecoveryRoot(Directory(root)).path;
+  MatchFolder(
+    String root, {
+    this.publish = replaceFile,
+    this.synchronize = syncDirectory,
+  }) : _configuredRoot = Directory(p.normalize(p.absolute(root))),
+       root = canonicalRecoveryRoot(Directory(root)).path;
 
   final Directory _configuredRoot;
 
@@ -82,6 +85,9 @@ final class MatchFolder implements MatchStore {
   /// Native publication boundary, also used to exercise lost acknowledgments.
   final Future<void> Function(String, List<int>) publish;
 
+  /// Flushes newly created match/profile ancestry on supported native hosts.
+  final Future<void> Function(String) synchronize;
+
   /// `Documents/bughouse_matches`.
   final String root;
 
@@ -92,7 +98,14 @@ final class MatchFolder implements MatchStore {
   Future<List<StoredMatch>> list() async {
     _checkRoot();
     final folder = Directory(root);
-    if (!await folder.exists()) return const [];
+    final observed = await observeDirectory(root);
+    if (observed.status == 1) return const [];
+    if (observed.status != 0) {
+      throw FileSystemException(
+        'Matches directory is unreadable or unsupported',
+        root,
+      );
+    }
     final found = <StoredMatch>[];
     await for (final entry in directoryEntries(folder, followLinks: false)) {
       if (entry is! Directory || p.basename(entry.path).startsWith('.')) {
@@ -152,23 +165,38 @@ final class MatchFolder implements MatchStore {
   Future<MatchCreate> create(MatchConfig config, DateTime now) async {
     try {
       _checkRoot();
-      await Directory(root).create(recursive: true);
-      final id = await _freeName(config.name);
-      await Directory(p.join(root, id)).create();
-      final match = StoredMatch(
-        id: id,
-        config: config,
-        createdAt: now,
-        status: MatchStatus.pending,
-      );
-      await createFileExclusively(
-        p.join(root, id, _metadata),
-        utf8.encode(_encoded(match)),
-      );
-      return MatchCreated(match);
-    } on FileSystemException catch (error) {
+      final directory = Directory(root);
+      final boundary = recoveryMetadataBoundary(directory);
+      await directory.create(recursive: true);
+      return await withDirectoryLock(directory, () async {
+        _checkRoot();
+        await recoveryDirectory(directory);
+        final id = await _freeName(config.name);
+        final folder = Directory(p.join(root, id));
+        await folder.create();
+        final match = StoredMatch(
+          id: id,
+          config: config,
+          createdAt: now,
+          status: MatchStatus.pending,
+        );
+        final encoded = _encoded(match);
+        decodeMatchCheckpoint(encoded);
+        await createFileExclusively(
+          p.join(folder.path, _metadata),
+          utf8.encode(encoded),
+        );
+        // The JSON's own file flush does not persist new parent directories.
+        await flushRecoveryAncestry(
+          folder.path,
+          through: boundary,
+          synchronize: synchronize,
+        );
+        return MatchCreated(match);
+      });
+    } on Object catch (error) {
       log.e('create a bughouse match in $root', error);
-      return MatchCreateFailed(error.message);
+      return MatchCreateFailed('$error');
     }
   }
 
@@ -276,7 +304,15 @@ final class MatchFolder implements MatchStore {
         .replaceAll(RegExp(r'^-+|-+$'), '');
     final base = slug.isEmpty ? 'match' : slug;
     var candidate = base;
-    for (var n = 2; await Directory(p.join(root, candidate)).exists(); n++) {
+    for (
+      var n = 2;
+      await FileSystemEntity.type(
+            p.join(root, candidate),
+            followLinks: false,
+          ) !=
+          FileSystemEntityType.notFound;
+      n++
+    ) {
       candidate = '$base-$n';
     }
     return candidate;
@@ -293,7 +329,11 @@ Future<String?> _text(String path) async {
     throw FileSystemException('Match file is unreadable or unsupported', path);
   }
   final bytes = observed.bytes!;
-  return '${bytes.length >= 3 && bytes[0] == 0xef && bytes[1] == 0xbb && bytes[2] == 0xbf ? '\ufeff' : ''}${utf8.decode(bytes)}';
+  try {
+    return '${bytes.length >= 3 && bytes[0] == 0xef && bytes[1] == 0xbb && bytes[2] == 0xbf ? '\ufeff' : ''}${utf8.decode(bytes)}';
+  } on FormatException {
+    throw FileSystemException('Match file is not valid UTF-8.', path);
+  }
 }
 
 /// Strict read-only authority decoding. Inspection may compare [matchBpgn]

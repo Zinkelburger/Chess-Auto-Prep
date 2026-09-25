@@ -154,7 +154,9 @@ moves the match to
   compares the two files and does not repair them. V1 does not perform this repair, so an interrupted v2
   export can remain stale until v2 reopens it. V2 save, repair and delete share a per-match lock; the v1
   match writer does not take that lock, so this does not promise safe simultaneous cross-app editing.
-  Deleting moves the folder to `.trash`. Match JSON/BPGN formats are unchanged.
+  New v2 match names are allocated under the matches-root lock and new directory ancestry is flushed
+  through its captured existing parent before creation succeeds on supported native hosts. Deleting
+  moves the folder to `.trash`. Match JSON/BPGN formats are unchanged.
 - **Git backup** — consistent, checksummed snapshots of both books live in `data/bughouse-books/` as
   gzip chunks below the host’s file limit. The backup includes committed WAL data. Restore into an empty
   directory using `tools/bughouse_db/snapshot.py`; see [backup instructions](../../../data/bughouse-books/README.md).

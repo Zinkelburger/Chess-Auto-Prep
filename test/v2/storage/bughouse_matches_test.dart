@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:chess_auto_prep/v2/chess/bughouse/match.dart';
 import 'package:chess_auto_prep/v2/storage/bughouse_matches.dart';
 import 'package:chess_auto_prep/v2/storage/atomic_write.dart';
+import 'package:chess_auto_prep/features/bughouse/models/bughouse_tournament.dart';
+import 'package:chess_auto_prep/features/bughouse/services/bughouse_tournament_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -21,12 +23,41 @@ void main() {
 
   tearDown(() => documents.delete(recursive: true));
 
-  final config = MatchConfig(
+  const config = MatchConfig(
     name: 'e4 e5!',
     startDualFen:
         'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1|'
         'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1',
     seed: 7,
+  );
+
+  test(
+    'native v1 writer output remains readable and its JSON is unchanged',
+    () async {
+      final fixture =
+          jsonDecode(
+                await File(
+                  'test/fixtures/v2_bughouse/old_match.json',
+                ).readAsString(),
+              )
+              as Map<String, Object?>;
+      final old = StoredBughouseTournament.fromJson(
+        fixture,
+        directoryPath: p.join(root, 'e4-d5'),
+      );
+      await BughouseTournamentStore(Directory(root)).save(old);
+      final metadata = File(p.join(root, old.id, 'match.json'));
+      final original = await metadata.readAsString();
+      final decoded = decodeMatchCheckpoint(original);
+      expect(decoded.toJson(), old.toJson());
+      final reopened = (await store.list()).single;
+      expect(reopened.toJson(), old.toJson());
+      expect(await metadata.readAsString(), original);
+      expect(
+        await File(p.join(root, old.id, 'games.bpgn')).readAsString(),
+        matchBpgn(reopened),
+      );
+    },
   );
 
   test('a new match is a folder named after it, never over another', () async {
@@ -115,8 +146,9 @@ void main() {
           root,
           publish: (path, bytes) async {
             await replaceFile(path, bytes);
-            if (fail && p.basename(path) == file)
+            if (fail && p.basename(path) == file) {
               throw const FileSystemException('ack lost');
+            }
           },
         );
         final token = MatchCheckpoint();
@@ -243,10 +275,24 @@ void main() {
     },
   );
 
+  test(
+    'invalid checkpoint bytes fail without exposing their decode source',
+    () async {
+      final made = await store.create(config, DateTime(2026)) as MatchCreated;
+      final metadata = File(p.join(root, made.match.id, 'match.json'));
+      final bytes = [...utf8.encode('private preparation'), 255];
+      await metadata.writeAsBytes(bytes);
+      final problem = await store.save(made.match);
+      expect(problem, contains('Match file is not valid UTF-8.'));
+      expect(problem, isNot(contains('private preparation')));
+      expect(await metadata.readAsBytes(), bytes);
+    },
+  );
+
   test('an existing damaged match makes the listing unavailable', () async {
     await store.create(config, DateTime(2026));
     await Directory(p.join(root, 'broken')).create();
-    await File(p.join(root, 'broken', 'match.json')).writeAsString('{nope');
+    await File(p.join(root, 'broken', 'match.json')).writeAsString('not JSON');
     await expectLater(store.list(), throwsA(isA<FileSystemException>()));
   });
 
@@ -258,11 +304,72 @@ void main() {
     expect(await trash.list().length, 1);
   });
 
+  test(
+    'new checkpoint flushes ancestry through only the captured existing parent',
+    () async {
+      final flushed = <String>[];
+      final nested = p.join(documents.path, 'new', 'profile', 'matches');
+      final creating = MatchFolder(
+        nested,
+        synchronize: (path) async => flushed.add(path),
+      );
+      final made =
+          await creating.create(config, DateTime(2026)) as MatchCreated;
+      expect(flushed, [
+        p.join(nested, made.match.id),
+        nested,
+        p.dirname(nested),
+        p.dirname(p.dirname(nested)),
+        documents.path,
+      ]);
+    },
+    skip: Platform.isWindows ? 'Directory flush unsupported on Windows' : false,
+  );
+
+  test(
+    'failed ancestry flush cannot confirm creation; fresh reopen preserves JSON',
+    () async {
+      final creating = MatchFolder(
+        root,
+        synchronize: (_) async =>
+            throw const FileSystemException('directory flush failed'),
+      );
+      expect(
+        await creating.create(config, DateTime(2026)),
+        isA<MatchCreateFailed>(),
+      );
+      expect((await MatchFolder(root).list()).single.config.name, config.name);
+    },
+    skip: Platform.isWindows ? 'Directory flush unsupported on Windows' : false,
+  );
+
+  test('an occupied regular file gets a new match-name suffix', () async {
+    await Directory(root).create();
+    final existing = File(p.join(root, 'e4-e5'));
+    await existing.writeAsString('keep');
+    final made = await store.create(config, DateTime(2026)) as MatchCreated;
+    expect(made.match.id, 'e4-e5-2');
+    expect(await existing.readAsString(), 'keep');
+  });
+
+  test('concurrent new matches allocate different owned directories', () async {
+    final outcomes = await Future.wait([
+      MatchFolder(root).create(config, DateTime(2026)),
+      MatchFolder(root).create(config, DateTime(2026)),
+    ]);
+    expect(outcomes, everyElement(isA<MatchCreated>()));
+    expect(
+      outcomes.cast<MatchCreated>().map((value) => value.match.id).toSet(),
+      hasLength(2),
+    );
+    expect(await store.list(), hasLength(2));
+  });
+
   test('a folder that cannot be made is said, and nothing is kept', () async {
     // A file where the matches folder should be.
     await File(root).writeAsString('in the way');
     final made = await store.create(config, DateTime(2026));
     expect(made, isA<MatchCreateFailed>());
-    expect(await store.list(), isEmpty);
+    await expectLater(store.list(), throwsA(isA<FileSystemException>()));
   });
 }
