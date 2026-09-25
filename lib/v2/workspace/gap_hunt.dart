@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import '../chess/pgn/chapter.dart';
 import '../chess/pgn/chapter_sections.dart';
@@ -378,7 +379,7 @@ final class RepertoireAnswers {
     final snapshot = RepertoireAnswerSnapshot._(
       this,
       generation,
-      listing,
+      listing.within({folder?.path ?? p.dirname(chapter.path)}),
       revisions,
       positions,
     );
