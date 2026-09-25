@@ -1,144 +1,192 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import puppeteer from 'puppeteer-core';
 
 const [origin, output] = process.argv.slice(2);
-const browser = await puppeteer.launch({
-  executablePath: process.env.CHROME_BIN || '/usr/bin/google-chrome',
-  headless: true,
-  args: ['--disable-dev-shm-usage'],
-});
+const browser = await puppeteer.launch({ executablePath: process.env.CHROME_BIN || '/usr/bin/google-chrome', headless: true, args: ['--disable-dev-shm-usage'] });
 let page;
 try {
+  const context = browser.defaultBrowserContext();
+  const clipboardPermission = (state) => context.setPermission(origin, { permission: { name: 'clipboard-read' }, state }, { permission: { name: 'clipboard-write', allowWithoutSanitization: false }, state });
+  await clipboardPermission('granted');
   page = await browser.newPage();
-  page.on('framenavigated', (frame) => { if (frame === page.mainFrame()) console.log('Page:', frame.url()); });
-  await page.setViewport({ width: 1360, height: 1100, deviceScaleFactor: 1 });
-  const errors = [];
-  const apiRequests = [];
-  page.on('request', (request) => {
-    if (request.isNavigationRequest()) console.log('Navigation request:', request.url());
-    if (request.method() !== 'GET' || request.url().includes('/api/bughouse/')) apiRequests.push(request.url());
+  await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: 1 });
+  const errors = [], forbidden = [], assets = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('request', (r) => {
+    if (r.method() !== 'GET' || r.url().includes('/api/')) forbidden.push(r.url());
+    if (r.url().includes('/bughouse-engine/')) assets.push(r.url());
   });
-  page.on('pageerror', (error) => errors.push(error.message));
-  await page.goto(`${origin}/bughouse/`, { waitUntil: 'networkidle0' });
-  const ready = () => page.waitForFunction(() => !document.querySelector('#bh-analyse').disabled);
-  const analysisReady = async () => {
-    await page.waitForFunction(() => !location.pathname.startsWith('/bughouse') || document.querySelector('.bh-table') ||
-      (!document.querySelector('#bh-analyse').disabled && document.querySelector('#bh-status').dataset.error === 'true'), { timeout: 120_000 });
-    assert.ok(await page.$('.bh-table'), await page.$eval('#bh-status', (node) => node.textContent));
+  const ready = () => page.waitForFunction(() => !document.querySelector('#bh-copy').disabled && document.querySelector('#bh-fen-A').value);
+  const text = (selector) => page.$eval(selector, (e) => e.textContent);
+  const fen = (board) => page.$eval(`#bh-fen-${board}`, (e) => e.value);
+  const fill = (selector, value) => page.locator(selector).fill(value);
+  const topClick = async (selector) => {
+    await page.evaluate(() => { scrollTo(0, 0); });
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    await page.click(selector);
   };
-  await ready();
-  assert.equal(await page.$$eval('.bb-square', (squares) => squares.length), 128);
-  assert.equal(await page.$$eval('.bb-square img', (pieces) => pieces.length), 64);
-  const square = (board, sq) => `#bh-board-${board} [data-square="${sq}"]`;
-  async function move(board, from, to) {
-    await page.click(square(board, from));
-    await page.click(square(board, to));
+  const square = async (board, key) => page.$eval(`#bh-board-${board}`, (e, key) => {
+    const b = e.querySelector('cg-board').getBoundingClientRect(), white = e.classList.contains('orientation-white');
+    const file = key.charCodeAt(0) - 97, rank = Number(key[1]) - 1;
+    return { x: b.x + (white ? file + .5 : 7.5 - file) * b.width / 8, y: b.y + (white ? 7.5 - rank : rank + .5) * b.height / 8 };
+  }, key);
+  async function clickSquare(board, key) { await page.$eval(`#bh-board-${board}`, (e) => e.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' })); await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))); const p = await square(board, key); await page.mouse.click(p.x, p.y); }
+  async function move(board, from, to) { await clickSquare(board, from); await clickSquare(board, to); await ready(); }
+  async function enter(board, move) {
+    if (!await page.$eval('.bh-keyboard', e => e.open)) await page.click('.bh-keyboard summary');
+    await page.select('#bh-move-board', board); await fill('#bh-move', move); await page.click('#bh-move-form button'); await ready();
+  }
+  async function pawnOn(board, squareName, colour) {
+    const target = await square(board, squareName);
+    await page.waitForFunction((board, colour, target) => [...document.querySelectorAll(`#bh-board-${board} piece.${colour}.pawn`)].some((e) => {
+      const b = e.getBoundingClientRect(); return Math.abs(b.x + b.width / 2 - target.x) < 2 && Math.abs(b.y + b.height / 2 - target.y) < 2;
+    }), {}, board, colour, target);
+  }
+  async function setup(a, b = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1') {
+    if (await page.$eval('#bh-edit', (e) => e.getAttribute('aria-expanded')) !== 'true') await page.click('#bh-edit');
+    await fill('#bh-fen-A', a); await fill('#bh-fen-B', b);
+    for (const name of ['A', 'B']) for (const colour of ['white', 'black']) await fill(`#bh-reserve-${name}-${colour}`, '');
+    await page.click('.bb-set'); await ready();
+  }
+  const analyze = async () => {
+    await page.click('#bh-analyse');
+    await page.waitForFunction(() => !document.querySelector('#bh-stop').hidden || document.querySelector('.bh-table'));
     await ready();
-  }
-  const pawnC = '[aria-label="Player C: 1 pawn in reserve"]';
-  await move('A', 'e2', 'e4');
-  await move('A', 'd7', 'd5');
-  await move('A', 'e4', 'd5');
-  await move('B', 'e2', 'e4');
-  assert.equal(await page.$eval(pawnC, (button) => button.disabled), false);
-  await page.click(pawnC);
-  await page.click(square('B', 'e6'));
-  await ready();
-  assert.match(await page.$eval(square('B', 'e6'), (button) => button.getAttribute('aria-label')), /black pawn/);
-  assert.equal(await page.$(pawnC), null);
-  // Each board steps on its own: board 2 back one returns the pawn; board 1 keeps its moves.
-  await page.click('#bh-prev-B'); await ready();
-  assert.ok(await page.$(pawnC));
-  assert.equal(await page.$$eval('#bh-history-A button:not(.future)', (b) => b.length), 3);
-  // Board 1 cannot step back past the capture while board 2 still uses the pawn.
-  await page.click('#bh-next-B'); await ready();
-  await page.click('#bh-prev-A'); await ready();
-  assert.match(await page.$eval('#bh-fen-error-A', (n) => n.textContent), /Can’t step there/);
-  assert.equal(await page.$$eval('#bh-history-A button.future', (b) => b.length), 0);
-  await page.click('#bh-flip');
-  assert.equal(await page.$eval('#bh-board-A button', (b) => b.dataset.square), 'h1');
-  await page.click('#bh-flip');
-  await page.click('#bh-reset'); await ready();
-
-  // A failed initial model download is recoverable without refreshing.
-  await page.setRequestInterception(true);
-  let interrupted = false;
-  const interrupt = (request) => {
-    if (!interrupted && /\/model-.*\.bin$/.test(request.url())) {
-      interrupted = true;
-      void request.abort();
-    } else void request.continue();
+    assert.ok(await page.$('.bh-table'), await text('#bh-status'));
   };
-  page.on('request', interrupt);
-  await page.click('#bh-analyse');
-  await ready();
-  assert.ok(interrupted);
-  assert.equal(await page.$eval('#bh-status', (node) => node.dataset.error), 'true');
-  await page.setRequestInterception(false);
-  page.off('request', interrupt);
-
-  // Real engine, both calibrated searches, then actually play its joint move.
-  await page.click('#bh-analyse');
-  await analysisReady();
-  console.log('Static neural analysis and board controls passed.');
-  assert.match(await page.$eval('#bh-result', (node) => node.textContent), /A \+ C: [+−]?\d+\.\d\d|Mate/);
-  await page.hover('.bh-table tbody tr');
-  assert.ok(await page.$('.bb-arrow line, .bb-arrow circle'), 'hovering a suggestion draws it');
-  await page.screenshot({ path: path.join(output, 'bughouse-desktop.png') });
-  await page.click('.bh-table tbody tr'); await ready();
-  assert.ok(await page.$$eval('.bb-history button', (b) => b.length) > 0);
-
-  // A position that doesn't parse is refused before it reaches the boards.
-  await page.$eval('#bh-fen-B', (input) => { input.value = 'invalid fen'; });
-  await page.click('.bb-set');
-  assert.match(await page.$eval('#bh-fen-error-B', (n) => n.textContent), /ranks/);
-
-  const start = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-  await page.$eval('#bh-fen-A', (input) => { input.value = '7k/P7/8/8/8/8/8/7K w - - 0 1'; });
-  await page.$eval('#bh-fen-B', (input, value) => { input.value = value; }, start);
-  for (const id of ['#bh-reserve-A-white', '#bh-reserve-A-black', '#bh-reserve-B-white', '#bh-reserve-B-black']) await page.$eval(id, (input) => { input.value = ''; });
-  await page.click('.bb-set'); await ready();
-  await page.click(square('A', 'a7')); await page.click(square('A', 'a8'));
-  assert.equal(await page.$$eval('#bh-promotion-options button', (buttons) => buttons.length), 4);
-  await page.$$eval('#bh-promotion-options button', (buttons) => buttons.find((button) => button.textContent === 'knight').click());
-  await ready();
-  assert.match(await page.$eval(square('A', 'a8'), (button) => button.getAttribute('aria-label')), /white knight/);
-
-  // Stop interrupts a real long search and leaves the worker reusable.
-  await page.click('#bh-reset'); await ready();
-  await page.click('#bh-analyse-form input[value="30000"] + span');
-  await page.click('#bh-analyse');
-  await page.waitForFunction(() => document.querySelector('#bh-status').textContent.includes('searching for our team'));
-  await page.click('#bh-stop'); await ready();
-  assert.match(await page.$eval('#bh-status', (node) => node.textContent), /cancelled/);
-  await page.click('#bh-analyse-form input[value="3000"] + span');
-  console.log('Cancellation and recovery passed.');
-
-  // Once loaded, moves and actual neural searches work with ALL networking off.
-  await page.setOfflineMode(true);
-  await move('A', 'e2', 'e4');
-  await move('B', 'd2', 'd4');
-  console.log('Offline moves played:', page.url());
-  await page.click('#bh-analyse-form input[value="black"] + span');
-  await page.locator('#bh-analyse').click();
-  await analysisReady();
-  await page.screenshot({ path: path.join(output, 'bughouse-offline.png') });
-  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
-  await page.evaluate(() => scrollTo(0, 0));
-  await page.screenshot({ path: path.join(output, 'bughouse-mobile.png'), fullPage: true });
-  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Mobile page overflows horizontally');
-  assert.deepEqual(errors, []);
-  assert.deepEqual(apiRequests, [], 'Static Bughouse must never call an API or POST a position');
-  console.log('STATIC browser passed: 128 squares, captures, partner drops, per-board steps, flip, download retry, real WASM + ONNX analysis/play, invalid FEN, underpromotion, Stop/recovery, offline analysis, phone layout. No API requests.');
-  console.log(`Screenshots: ${output}`);
-} catch (error) {
-  if (page) {
-    console.error('Original failure:', error);
-    console.error('Browser status:', page.url(), await page.evaluate(() => document.querySelector('#bh-status')?.textContent ?? document.body?.textContent?.slice(0, 500)));
-    await page.screenshot({ path: path.join(output, 'bughouse-failure.png'), fullPage: true });
+  await page.goto(`${origin}/bughouse/`, { waitUntil: 'networkidle0' }); await ready();
+  assert.equal(await page.$$eval('cg-board', (e) => e.length), 2);
+  assert.equal(await page.$$eval('cg-board piece', (e) => e.length), 64);
+  assert.equal(assets.some((u) => /model-.*\.bin/.test(u)), false, 'moving does not load the network');
+  await move('A', 'e2', 'e4'); await move('A', 'd7', 'd5'); await move('A', 'e4', 'd5'); await enter('B', 'e4');
+  const pawn = '[aria-label="Player B: 1 pawn in reserve"]';
+  assert.equal(await page.$eval(pawn, (e) => e.disabled), false);
+  await page.click(pawn); await clickSquare('B', 'e6'); await ready();
+  await pawnOn('B', 'e6', 'black');
+  console.log('Moves, cross-board capture and drop passed.');
+  const captured = await fen('A');
+  for (let i = 0; i < 3; i++) {
+    await page.click('#bh-prev-A'); await ready();
+    assert.match(await text('#bh-status'), /Position unchanged/);
+    assert.equal(await fen('A'), captured);
+    assert.equal(await text('#bh-history-A [aria-current="true"]'), 'exd5');
   }
+  await page.click('#bh-prev-B'); await ready(); assert.ok(await page.$(pawn));
+  await page.click('#bh-next-B'); await ready();
+  await topClick('#bh-copy');
+  await page.waitForFunction(() => document.querySelector('#bh-copy-status').textContent === 'Moves copied');
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  assert.match(copied, /1A\. e4 1a\. d5 2A\. exd5 1B\. e4 1b\. P@e6/);
+  await clipboardPermission('denied');
+  await topClick('#bh-copy'); await page.waitForSelector('#bh-copy-dialog[open]');
+  assert.equal(await page.$eval('#bh-copy-text', (e) => e.value), copied);
+  await page.click('#bh-copy-close');
+  await clipboardPermission('granted');
+  await topClick('#bh-share'); await page.waitForFunction(() => document.querySelector('#bh-copy-status').textContent === 'Link copied'); const link = await page.evaluate(() => navigator.clipboard.readText());
+  assert.match(link, /#lab=/);
+  const otherContext = await browser.createBrowserContext();
+  const other = await otherContext.newPage(); await other.goto(link);
+  await other.waitForFunction(() => document.querySelector('#bh-history-B').textContent.includes('P@e6'));
+  assert.equal(await other.$eval('#bh-fen-A', (e) => e.value), captured);
+  await otherContext.close(); await page.bringToFront();
+  const cdp = await page.createCDPSession();
+  await cdp.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: output });
+  await topClick('#bh-download');
+  let downloaded;
+  for (let i = 0; i < 30; i++) {
+    try { downloaded = await fs.readFile(path.join(output, 'bughouse-analysis.bpgn'), 'utf8'); break; } catch { await new Promise((r) => setTimeout(r, 100)); }
+  }
+  assert.equal(downloaded, copied);
+  await page.reload({ waitUntil: 'networkidle0' }); await ready();
+  assert.equal(await fen('A'), captured);
+  assert.equal(await text('#bh-history-B [aria-current="true"]'), 'P@e6');
+  await page.click('#bh-reset'); await ready(); await page.click('#bh-undo-reset'); await ready(); assert.equal(await fen('A'), captured);
+
+  console.log('History rollback, copy/download, shared link and saved session passed.');
+
+  // Cancellation, Escape, all four white/black promotions, and promoted captures.
+  for (const cancel of ['button', 'escape']) {
+    await setup('7k/P7/8/8/8/8/8/7K w - - 0 1');
+    await clickSquare('A', 'a7'); await clickSquare('A', 'a8');
+    await page.waitForSelector('#bh-promotion[open]');
+    if (cancel === 'button') await page.click('#bh-promotion-cancel'); else await page.keyboard.press('Escape');
+    await pawnOn('A', 'a7', 'white');
+    assert.match(await fen('A'), /7k\/P7/); assert.equal(await page.$$eval('#bh-history-A button', (e) => e.length), 0);
+  }
+  const roles = [['queen', 'Q'], ['rook', 'R'], ['bishop', 'B'], ['knight', 'N']];
+  for (const colour of ['white', 'black']) for (const [, piece] of roles) {
+    await setup(colour === 'white' ? '7k/P7/8/8/8/8/8/7K w - - 0 1' : '7k/8/8/8/8/8/p7/7K b - - 0 1');
+    await clickSquare('A', colour === 'white' ? 'a7' : 'a2'); await clickSquare('A', colour === 'white' ? 'a8' : 'a1');
+    await page.waitForSelector('#bh-promotion[open]');
+    await page.click(`#bh-promotion-options button[data-promotion="${piece.toLowerCase()}"]`); await ready();
+    assert.ok((await fen('A')).includes((colour === 'white' ? piece : piece.toLowerCase()) + '~'));
+    assert.ok((await text('#bh-history-A')).includes('=' + piece));
+  }
+  await setup('1r5k/P7/8/8/8/8/8/7K w - - 0 1');
+  await enter('A', 'a8=N'); await enter('A', 'Rxa8');
+  assert.equal(await page.$eval('#bh-reserve-B-white', (e) => e.value), 'P');
+  await setup('7k/8/8/1B6/2p5/1P6/8/7K w - - 0 1');
+  await enter('A', 'Bxc4'); assert.match(await fen('A'), /2B5\/1P6/);
+  await setup('7k/8/8/1B6/2p5/1P6/8/7K w - - 0 1');
+  await enter('A', 'bxc4'); assert.match(await fen('A'), /1B6\/2P5/);
+  await fill('#bh-fen-B', 'invalid'); await page.click('.bb-set'); assert.match(await text('#bh-fen-error-B'), /ranks/);
+  await page.click('#bh-reset'); await ready();
+  if (await page.$eval('#bh-edit', (e) => e.getAttribute('aria-expanded')) === 'true') await page.click('#bh-edit');
+
+  console.log('Promotion and invalid setup passed.');
+
+  // Interrupt the first network transfer; retry must retain the worker.
+  await page.setRequestInterception(true);
+  let held;
+  const hold = (r) => { if (!held && /\/model-.*\.bin$/.test(r.url())) held = r; else void r.continue(); };
+  page.on('request', hold);
+  await page.click('#bh-analyse');
+  await page.waitForFunction(() => document.querySelector('#bh-status').textContent.includes('Downloading'));
+  await page.click('#bh-stop'); await ready(); assert.match(await text('#bh-status'), /cancelled/);
+  if (held && !held.isInterceptResolutionHandled()) await held.abort().catch(() => {});
+  page.off('request', hold); await page.setRequestInterception(false);
+  await analyze();
+  assert.match(await text('#bh-result'), /Waiting for opponent/);
+  assert.ok(!(await text('#bh-result')).includes('D sits'));
+  if (await page.$eval('.bh-keyboard', e => e.open)) await page.click('.bh-keyboard summary');
+  await page.evaluate(() => scrollTo(0, 0));
+  await page.screenshot({ path: path.join(output, 'bughouse-desktop.png'), fullPage: true });
+  console.log('Real neural analysis and download cancellation/retry passed.');
+  if (await page.$eval('.bh-keyboard', e => e.open)) await page.click('.bh-keyboard summary');
+  const loadedAssets = assets.length;
+  const again = Date.now(); await analyze();
+  assert.ok(Date.now() - again < 2000, 'completed analysis should be reused');
+  assert.match(await text('#bh-status'), /saved in this tab/);
+  assert.equal(assets.length, loadedAssets, 'repeat analysis must not fetch engine/model again');
+  await page.click('.bh-table tbody tr'); await ready();
+  assert.equal(await page.$eval('#bh-analyse', (e) => e.disabled), true, 'unavailable team cannot start a search');
+  await page.click('#bh-reset'); await ready();
+  // New positions and cancellation work after all networking is disabled.
+  await page.setOfflineMode(true);
+  await enter('A', 'e4'); await enter('B', 'd4');
+  await page.click('input[name="team"][value="black"] + span');
+  await page.click('input[name="budget"][value="30000"] + span');
+  await page.click('#bh-analyse'); await page.waitForFunction(() => document.querySelector('#bh-status').textContent.includes('searching for our team'));
+  await page.click('#bh-stop'); await ready(); assert.match(await text('#bh-status'), /cancelled/);
+  await page.click('input[name="budget"][value="3000"] + span'); await analyze();
+  assert.equal(assets.length, loadedAssets);
+  await page.evaluate(() => scrollTo(0, 0));
+  await page.screenshot({ path: path.join(output, 'bughouse-offline.png'), fullPage: true });
+  await page.setOfflineMode(false);
+  // Reopening the page reinitializes memory, but uses its persistent model chunks.
+  await page.reload({ waitUntil: 'networkidle0' }); await ready();
+  const beforeReloadSearch = assets.filter((u) => /model-.*\.bin$/.test(u)).length;
+  await analyze(); assert.equal(assets.filter((u) => /model-.*\.bin$/.test(u)).length, beforeReloadSearch);
+  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
+  await page.reload({ waitUntil: 'networkidle0' }); await ready();
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'phone width');
+  assert.ok(await page.$eval('#bh-analyse', (e) => e.getBoundingClientRect().bottom < innerHeight), 'Analyze must be above the fold');
+  await page.screenshot({ path: path.join(output, 'bughouse-mobile.png'), fullPage: true });
+  assert.deepEqual(errors, []); assert.deepEqual(forbidden, []);
+  console.log('PASS: real boards, captures/drops, repeated undo, promotion/cancel/Escape/all pieces/both colours, BPGN clipboard/download, shared links, refresh/undo reset, download cancellation, actual WASM+ONNX, cached repeat search, Stop/recovery, offline new-position search, cached model after reload and phone layout.');
+} catch (error) {
+  if (page) { console.error('URL:', page.url()); console.error('Boards:', await page.$$eval('.bb-board', es => es.map(e => ({ classes: e.className, rect: e.getBoundingClientRect().toJSON() })))); console.error('Status:', await page.$eval('#bh-status', (e) => e.textContent).catch(() => 'unavailable')); await page.screenshot({ path: path.join(output, 'bughouse-failure.png'), fullPage: true }); }
   throw error;
-} finally {
-  await browser.close();
-}
+} finally { await browser.close(); }

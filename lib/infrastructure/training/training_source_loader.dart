@@ -30,6 +30,9 @@ import 'package:flutter/foundation.dart' show debugPrint, listEquals;
 import 'package:path/path.dart' as p;
 
 import '../../models/repertoire_line.dart';
+import '../../features/documents/models/pgn_document.dart';
+import '../../features/documents/repositories/pgn_document_store.dart';
+import '../../features/training/models/training_source_context.dart';
 import '../../features/repertoires/models/repertoire_metadata.dart';
 import '../../models/repertoire_move_progress.dart';
 import '../../models/repertoire_review_entry.dart' show RepertoireReviewEntry;
@@ -47,12 +50,14 @@ import '../../services/storage/storage_service.dart';
 class TrainingSourceLoader implements TrainingSourceRepository {
   TrainingSourceLoader({
     required this.repertoireService,
+    required this.documents,
     required this.reviewService,
     required this.askedQuestions,
     required this.artifacts,
     StorageService Function()? storage,
   }) : _storage = storage ?? (() => StorageFactory.instance);
 
+  final PgnDocumentStore documents;
   final RepertoireService repertoireService;
   final RepertoireReviewService reviewService;
   final AskedQuestionsStore askedQuestions;
@@ -86,6 +91,7 @@ class TrainingSourceLoader implements TrainingSourceRepository {
       (progressBySource['${mp.repertoireId}::${mp.lineId}'] ??= []).add(mp);
     }
 
+    final contexts = <String, TrainingSourceContext>{};
     final lines = <RepertoireLine>[];
     final reviewByLine = <String, RepertoireReviewEntry>{};
     final moveProgress = <String, RepertoireMoveProgress>{};
@@ -99,8 +105,20 @@ class TrainingSourceLoader implements TrainingSourceRepository {
                 )
               : null);
       onStatus?.call('Preparing lines in ${chapter.name}…');
-      final parsed = await repertoireService.parseRepertoireFile(
+      final opened = await documents.open(chapter.filePath);
+      if (opened is! PgnOpened) {
+        throw StateError(
+          'Training document could not be opened: ${chapter.filePath}',
+        );
+      }
+      final context = TrainingSourceContext(
+        path: chapter.filePath,
+        snapshot: opened.snapshot,
+      );
+      contexts[chapter.filePath] = context;
+      final parsed = await repertoireService.parseTrainingSnapshot(
         chapter.filePath,
+        opened.snapshot.content,
         trainingColor: switch (chapterIsWhite) {
           null => null,
           true => 'white',
@@ -127,7 +145,11 @@ class TrainingSourceLoader implements TrainingSourceRepository {
         [for (final entry in existing) entry.toCsvRow()],
         [for (final entry in merged) entry.toCsvRow()],
       )) {
-        await reviewService.saveAll(merged, repertoireId: chapter.filePath);
+        await reviewService.saveAll(
+          merged,
+          repertoireId: chapter.filePath,
+          source: context,
+        );
         if (isStale()) return null;
       }
       final entriesById = {for (final entry in merged) entry.lineId: entry};
@@ -147,6 +169,7 @@ class TrainingSourceLoader implements TrainingSourceRepository {
     if (isStale()) return null;
 
     return LoadedTrainingSource(
+      sources: contexts,
       lines: lines,
       reviewByLine: reviewByLine,
       moveProgress: moveProgress,

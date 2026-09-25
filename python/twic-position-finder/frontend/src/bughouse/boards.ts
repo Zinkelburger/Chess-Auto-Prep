@@ -15,8 +15,11 @@ import '@lichess-org/chessground/assets/chessground.brown.css';
 import '@lichess-org/chessground/assets/chessground.cburnett.css';
 import { balance, checkFen, parseReserve, splitBoard } from './setup';
 
-export type BoardName = 'A' | 'B';
-export type Colour = 'white' | 'black';
+import { Lines } from './lines';
+import type { BoardName, Colour } from './types';
+export { Lines } from './lines';
+export type { LineMove } from './lines';
+export type { BoardName, Colour } from './types';
 export const BOARDS: BoardName[] = ['A', 'B'];
 const COLOURS: Colour[] = ['white', 'black'];
 // Partners hold opposite colours, so the teams read A + B and C + D.
@@ -84,6 +87,7 @@ export interface BoardView {
   /** A move to draw as an arrow (hover), or null. */
   arrow: string | null;
   disabled?: boolean;
+  check?: boolean;
 }
 
 export interface BoardsHooks {
@@ -109,7 +113,7 @@ export class Boards {
     return Chessground(this.el(`board-${name}`), {
       coordinates: true,
       autoCastle: true,
-      highlight: { lastMove: true, check: false },
+      highlight: { lastMove: true, check: true },
       animation: { enabled: true, duration: 150 },
       premovable: { enabled: false },
       predroppable: { enabled: false },
@@ -153,6 +157,7 @@ export class Boards {
       orientation: view.bottom,
       turnColor: view.turn ?? 'white',
       lastMove: view.last as Key[],
+      check: view.check ? view.turn ?? false : false,
       movable: { color: view.disabled || !view.turn ? undefined : view.turn, dests },
       // The picked-up reserve piece's squares, drawn as Lichess's move dots.
       highlight: { custom: new Map(drops.map((square) => [square as Key, 'move-dest'])) },
@@ -186,7 +191,7 @@ export class Boards {
     dot.title = `${colour === 'white' ? 'White' : 'Black'} to move`;
     const who = document.createElement('span');
     who.className = 'who';
-    who.textContent = `Player ${SEAT[name][colour]}`;
+    who.textContent = `Player ${SEAT[name][colour]}${view.turn === colour && view.check ? ' · Check' : ''}`;
     box.append(dot, who);
     const pocket = view.pockets[colour];
     for (const p of ['p', 'n', 'b', 'r', 'q']) {
@@ -338,62 +343,6 @@ export class SetupBoxes {
 
 // ── Each board's own move list ────────────────────────────────────
 
-export interface LineMove { board: BoardName; uci: string; san: string; colour: Colour; num: number }
-
-/**
- * Both boards' moves in the order they were played, with a cursor per
- * board. The position is the start plus each board's first `upto[board]`
- * moves, replayed in played order, so either board steps back and forth on
- * its own. (A capture crosses boards, so stepping one board back can make
- * the other's drop impossible; the page then refuses the step.)
- */
-export class Lines {
-  moves: LineMove[] = [];
-  upto: Record<BoardName, number> = { A: 0, B: 0 };
-  /** The board the step buttons and arrow keys act on. */
-  focus: BoardName = 'A';
-
-  constructor(public root: string) {}
-
-  reset(root: string) { this.root = root; this.moves = []; this.upto = { A: 0, B: 0 }; }
-
-  of(name: BoardName): LineMove[] { return this.moves.filter((m) => m.board === name); }
-
-  applied(): LineMove[] {
-    const seen = { A: 0, B: 0 };
-    return this.moves.filter((m) => seen[m.board]++ < this.upto[m.board]);
-  }
-
-  /** Board-tagged UCI of the moves on the boards, e.g. ["A:e2e4", "B:P@e6"]. */
-  tokens(): string[] { return this.applied().map((m) => `${m.board}:${m.uci}`); }
-
-  current(name: BoardName): LineMove | undefined { return this.of(name)[this.upto[name] - 1]; }
-
-  go(name: BoardName, count: number) {
-    this.focus = name;
-    this.upto[name] = Math.max(0, Math.min(this.of(name).length, count));
-  }
-
-  /** A move on `move.board`: the next one in its list, or a new one replacing what followed. */
-  play(move: LineMove) {
-    const name = move.board;
-    this.focus = name;
-    const own = this.of(name);
-    if (own[this.upto[name]]?.uci === move.uci) { this.upto[name] += 1; return; }
-    const dropped = new Set(own.slice(this.upto[name]));
-    this.moves = this.moves.filter((m) => !dropped.has(m));
-    const onBoards = new Set(this.applied());
-    let at = 0;
-    this.moves.forEach((m, i) => { if (onBoards.has(m)) at = i + 1; });
-    this.moves.splice(at, 0, move);
-    this.upto[name] += 1;
-  }
-
-  snapshot() { return { moves: [...this.moves], upto: { ...this.upto }, focus: this.focus, root: this.root }; }
-
-  restore(s: ReturnType<Lines['snapshot']>) { Object.assign(this, { moves: s.moves, upto: s.upto, focus: s.focus, root: s.root }); }
-}
-
 /**
  * Each board's move list and step buttons. Moving on a board, or clicking
  * anywhere in its half, makes it the one the arrow keys step through.
@@ -451,7 +400,14 @@ export class LineView {
         row.append(b);
         if (move.colour === 'black') row = null;
       });
-      list.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest' });
+      // Scroll only the move list, never the page (especially on phones).
+      const current = list.querySelector<HTMLElement>('[aria-current="true"]');
+      if (current) {
+        const delta = current.getBoundingClientRect().bottom - list.getBoundingClientRect().bottom;
+        if (delta > 0) list.scrollTop += delta;
+        const above = current.getBoundingClientRect().top - list.getBoundingClientRect().top;
+        if (above < 0) list.scrollTop += above;
+      }
       const set = (id: string, off: boolean) => { (document.getElementById(`${this.prefix}-${id}-${name}`) as HTMLButtonElement).disabled = off; };
       set('first', upto === 0); set('prev', upto === 0);
       set('next', upto === own.length); set('last', upto === own.length);

@@ -12,6 +12,7 @@ import '../../../models/repertoire_review_entry.dart'
     show RepertoireReviewEntry, ReviewRating;
 import '../../../models/completed_move.dart';
 import '../models/training_settings.dart';
+import '../models/training_source_context.dart';
 import '../models/training_configuration.dart';
 import '../../settings/models/settings_state.dart';
 import '../../../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
@@ -320,7 +321,14 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
 
   Future<void> retryFailure() async {
     if (completionBusy || progress.editBusy) return;
-    if (progressNeedsReload) {
+    if (progressNeedsReload || _retryFailure == null) {
+      try {
+        await progress.retryRetainedOutcomes();
+      } catch (failure) {
+        error = 'An earlier training result still needs recovery: $failure';
+        notifyListeners();
+        return;
+      }
       await loadRepertoire();
       return;
     }
@@ -486,7 +494,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
 
     try {
-      await progress.settleOutcomes();
+      await progress.prepareSourceLoad();
       if (stale()) return;
       final filePath = source.filePath;
       // A hand-set colour beats everything: it exists precisely because the
@@ -521,6 +529,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
       session.setPositionFromFen(loaded.lines.first.startPosition.fen);
       progress.onError = _progressErrorHandler();
       progress.adopt(
+        sources: loaded.sources,
         byLine: loaded.reviewByLine,
         moveProgress: loaded.moveProgress,
         otherRepertoires: loaded.otherRepertoires,
@@ -1023,6 +1032,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     waitingForUser = false;
     try {
       await reviewService.recordAttempt(
+        source: progress.sourceFor(attemptLine.sourcePath ?? repertoireId),
         repertoireId: attemptLine.sourcePath ?? repertoireId,
         lineId: attemptLine.persistedId,
         moveIndex: attemptIndex,
@@ -1034,6 +1044,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
       );
     } catch (e) {
       if (attemptGeneration != _lineGeneration) return;
+      if (e is TrainingSourceChanged) progress.requireSourceReload();
       error = 'Could not save this attempt: $e';
       waitingForUser = true;
       notifyListeners();

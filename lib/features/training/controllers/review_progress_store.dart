@@ -19,6 +19,8 @@ import '../../../models/repertoire_review_entry.dart'
     show RepertoireReviewEntry, ReviewRating;
 import '../../../models/repertoire_review_history_entry.dart';
 import '../models/training_settings.dart';
+import '../models/training_source_context.dart';
+import '../models/training_history_operation.dart';
 import '../repositories/training_review_repository.dart';
 
 class ReviewProgressStore {
@@ -46,6 +48,11 @@ class ReviewProgressStore {
 
   /// Review entries for the loaded repertoire, keyed by line id.
   Map<String, RepertoireReviewEntry> byLine = {};
+  Map<String, TrainingSourceContext> sources = {};
+
+  TrainingSourceContext sourceFor(String path) =>
+      sources[path] ??
+      (throw StateError('Reload the training source before saving: $path'));
 
   /// Per-move streaks, keyed `"<lineId>:<moveIndex>"`.
   Map<String, RepertoireMoveProgress> moveProgress = {};
@@ -70,7 +77,17 @@ class ReviewProgressStore {
 
   Timer? _headerFlushTimer;
   final _pendingHeaders =
-      <String, Map<String, ({RepertoireReviewEntry entry, Object owner})>>{};
+      <
+        String,
+        Map<
+          String,
+          ({
+            RepertoireReviewEntry entry,
+            Object owner,
+            TrainingSourceContext source,
+          })
+        >
+      >{};
   Future<void>? _headerFlush;
   bool _disposed = false;
 
@@ -79,8 +96,13 @@ class ReviewProgressStore {
     String lineId,
     RepertoireReviewEntry entry,
     Object owner,
+    TrainingSourceContext source,
   ) {
-    (_pendingHeaders[sourcePath] ??= {})[lineId] = (entry: entry, owner: owner);
+    (_pendingHeaders[sourcePath] ??= {})[lineId] = (
+      entry: entry,
+      owner: owner,
+      source: source,
+    );
     _headerFlushTimer?.cancel();
     if (_disposed) {
       unawaited(flushHeaders());
@@ -113,13 +135,15 @@ class ReviewProgressStore {
           .where((path) => sources == null || sources.contains(path))
           .firstOrNull;
       if (path == null) return;
-      final batch = Map.of(_pendingHeaders[path]!);
+      final source = _pendingHeaders[path]!.values.first.source;
+      final batch = Map.of(_pendingHeaders[path]!)
+        ..removeWhere((_, value) => !identical(value.source, source));
       final report = onError;
       try {
         if (path.isNotEmpty &&
             !await headers.updateManyLineReviewHeaders(path, {
               for (final entry in batch.entries) entry.key: entry.value.entry,
-            })) {
+            }, source: source)) {
           throw StateError('Training source could not be updated: $path');
         }
       } catch (e) {
@@ -147,12 +171,12 @@ class ReviewProgressStore {
 
   /// Install the state for a freshly loaded source.
   void adopt({
+    required Map<String, TrainingSourceContext> sources,
     required Map<String, RepertoireReviewEntry> byLine,
     required Map<String, RepertoireMoveProgress> moveProgress,
     required List<RepertoireReviewEntry> otherRepertoires,
   }) {
-    // Whatever the previous source owed its own file, it owes now.
-    unawaited(flushHeaders());
+    this.sources = sources;
     this.byLine = byLine;
     _requiresReload = false;
     this.moveProgress = moveProgress;
@@ -173,13 +197,13 @@ class ReviewProgressStore {
     required bool hadMistake,
     String sessionType = 'trainer',
   }) async {
-    _checkWritable();
     final sourcePath = line.sourcePath ?? repertoireId;
     final pending = _outcomes[(sourcePath, line.persistedId, attempt)];
     if (pending != null) {
       await _resumeOutcome(pending);
       return pending.updated;
     }
+    _checkWritable();
     final existing = byLine[line.id] ?? _freshEntry(line);
     final updated = reviewService
         .applyRating(existing, rating)
@@ -212,13 +236,13 @@ class ReviewProgressStore {
     required bool hadMistake,
     String sessionType = 'linear',
   }) async {
-    _checkWritable();
     final sourcePath = line.sourcePath ?? repertoireId;
     final pending = _outcomes[(sourcePath, line.persistedId, attempt)];
     if (pending != null) {
       await _resumeOutcome(pending);
       return;
     }
+    _checkWritable();
     final existing = byLine[line.id] ?? _freshEntry(line);
     byLine[line.id] = existing.copyWith(
       passCount: hadMistake ? existing.passCount : existing.passCount + 1,
@@ -246,6 +270,7 @@ class ReviewProgressStore {
     required String sessionType,
   }) async {
     final outcome = _TrainingOutcome(
+      source: sourceFor(sourcePath),
       key: (sourcePath, line.persistedId, attempt),
       sourcePath: sourcePath,
       updated: byLine[line.id]!,
@@ -320,28 +345,68 @@ class ReviewProgressStore {
 
   // Capture before joining this queue: another session may already have
   // rebound the store by the time the preceding write finishes.
-  /// End retry admission when the owning session is cancelled. Queued writes
-  /// still hold their captured outcomes and finish independently of this map.
+  /// Cancel only results proven not to have published. Pending or uncertain
+  /// results retain their captured payload through a source replacement.
   void abandonOutcomeRetries() {
-    if (_outcomes.values.any(
-      (outcome) => outcome.inFlight == null && identical(outcome.owner, byLine),
-    )) {
-      _requiresReload = true;
+    for (final outcome in _outcomes.values) {
+      outcome.detached = true;
+      if (outcome.inFlight == null &&
+          outcome.needsRecovery &&
+          identical(outcome.owner, byLine)) {
+        _requiresReload = true;
+      }
     }
-    _outcomes.clear();
+    _outcomes.removeWhere(
+      (_, outcome) => outcome.inFlight == null && !outcome.needsRecovery,
+    );
+  }
+
+  void requireSourceReload() => _requiresReload = true;
+
+  /// Retry retained accepted results before a replacement load. Their original
+  /// source context, decision and completed-stage markers remain unchanged.
+  Future<void> retryRetainedOutcomes() async {
+    for (final outcome in List.of(_outcomes.values)) {
+      if (outcome.inFlight != null || outcome.needsRecovery) {
+        await _resumeOutcome(outcome);
+      }
+    }
   }
 
   /// Wait for admitted writes to settle before reading a source again.
   /// Settlement neither certifies success nor retries a failed write.
   Future<void> settleOutcomes() => _outcomeWrites;
 
+  /// Finish mirrors before observing a replacement session's document revision.
+  /// Failed mirrors remain retained; a later explicit retry may settle them.
+  Future<void> prepareSourceLoad() async {
+    await settleOutcomes();
+    if (_outcomes.values.any((outcome) => outcome.needsRecovery)) {
+      throw StateError(
+        'An earlier training result may be partly saved. Retry it before reloading.',
+      );
+    }
+    _outcomes.removeWhere((_, outcome) => outcome.inFlight == null);
+    await flushHeaders();
+    if (_pendingHeaders.isNotEmpty) {
+      throw StateError(
+        'Training headers remain unconfirmed. Retry before reloading.',
+      );
+    }
+  }
+
   Future<void> _resumeOutcome(_TrainingOutcome outcome) {
     if (outcome.inFlight case final pending?) return pending;
     final write = _queueWrite(() async {
       try {
         await _writeOutcome(outcome);
-      } catch (_) {
-        if (!identical(_outcomes[outcome.key], outcome) &&
+      } catch (error) {
+        if (error is! TrainingSourceChanged) {
+          outcome.publicationUncertain = true;
+        }
+        final sourceRejectedBeforeWrites =
+            error is TrainingSourceChanged && !outcome.needsRecovery;
+        if ((outcome.detached || sourceRejectedBeforeWrites) &&
             identical(byLine, outcome.owner)) {
           _requiresReload = true;
         }
@@ -358,6 +423,7 @@ class ReviewProgressStore {
       await reviewService.saveAll(
         outcome.reviews,
         repertoireId: outcome.sourcePath,
+        source: outcome.source,
       );
       outcome.reviewsSaved = true;
     }
@@ -365,16 +431,22 @@ class ReviewProgressStore {
       await reviewService.saveMoveProgress(
         outcome.moves,
         repertoireId: outcome.sourcePath,
+        source: outcome.source,
       );
       outcome.movesSaved = true;
     }
-    await reviewService.appendHistory([outcome.history]);
+    await reviewService.appendHistory(
+      [outcome.history],
+      source: outcome.source,
+      operation: outcome.historyOperation,
+    );
     if (outcome.history.rating.isNotEmpty) {
       _queueHeaderWrite(
         outcome.sourcePath,
         outcome.key.$2,
         outcome.updated,
         outcome.owner,
+        outcome.source,
       );
     }
     if (identical(_outcomes[outcome.key], outcome)) {
@@ -389,11 +461,13 @@ class ReviewProgressStore {
     final updated = (owner[line.id] ?? _freshEntry(line)).copyWith(
       excluded: excluded,
     );
+    final source = sourceFor(sourcePath);
     final proposed = {...owner, line.id: updated};
     await _edit(owner, () async {
       await reviewService.saveAll(
         proposed.values.toList(),
         repertoireId: sourcePath,
+        source: source,
       );
       if (!_disposed && identical(byLine, owner)) owner[line.id] = updated;
     });
@@ -418,6 +492,8 @@ class ReviewProgressStore {
         <
           ({
             String path,
+            TrainingSourceContext source,
+            TrainingHistoryOperation historyOperation,
             List<RepertoireReviewEntry> reviews,
             Map<String, RepertoireReviewEntry> headers,
             List<RepertoireReviewHistoryEntry> history,
@@ -474,6 +550,8 @@ class ReviewProgressStore {
       if (updates.isNotEmpty) {
         batches.add((
           path: source,
+          source: sourceFor(source),
+          historyOperation: TrainingHistoryOperation(),
           reviews: List.unmodifiable(
             proposed.values.where((entry) => entry.repertoireId == source),
           ),
@@ -491,11 +569,20 @@ class ReviewProgressStore {
         throw StateError('Earlier PGN mirrors remain unconfirmed');
       }
       for (final batch in batches) {
-        await reviewService.saveAll(batch.reviews, repertoireId: batch.path);
-        await reviewService.appendHistory(batch.history);
+        await reviewService.saveAll(
+          batch.reviews,
+          repertoireId: batch.path,
+          source: batch.source,
+        );
+        await reviewService.appendHistory(
+          batch.history,
+          source: batch.source,
+          operation: batch.historyOperation,
+        );
         if (!await headers.updateManyLineReviewHeaders(
           batch.path,
           batch.headers,
+          source: batch.source,
         )) {
           throw StateError(
             'Training source could not be updated: ${batch.path}',
@@ -572,6 +659,7 @@ class ReviewProgressStore {
 /// A retry resumes only failed persistence stages, without applying SM-2 twice.
 class _TrainingOutcome {
   _TrainingOutcome({
+    required this.source,
     required this.key,
     required this.sourcePath,
     required this.updated,
@@ -580,6 +668,8 @@ class _TrainingOutcome {
     required this.moves,
     required this.history,
   });
+  final TrainingSourceContext source;
+  final historyOperation = TrainingHistoryOperation();
   final (String, String, Object) key;
   final String sourcePath;
   final Object owner;
@@ -590,4 +680,7 @@ class _TrainingOutcome {
   Future<void>? inFlight;
   bool reviewsSaved = false;
   bool movesSaved = false;
+  bool publicationUncertain = false;
+  bool detached = false;
+  bool get needsRecovery => reviewsSaved || movesSaved || publicationUncertain;
 }

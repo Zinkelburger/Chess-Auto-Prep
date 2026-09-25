@@ -1,3 +1,5 @@
+import '../models/training_history_operation.dart';
+import '../models/training_source_context.dart';
 import '../../../models/repertoire_line.dart';
 import '../../../models/repertoire_move_progress.dart';
 import '../../../models/repertoire_review_entry.dart';
@@ -10,17 +12,24 @@ abstract interface class TrainingReviewRepository {
   Future<void> saveAll(
     List<RepertoireReviewEntry> entries, {
     String? repertoireId,
+    required TrainingSourceContext source,
   });
   Future<List<RepertoireMoveProgress>> loadMoveProgress();
   Future<void> saveMoveProgress(
     List<RepertoireMoveProgress> entries, {
     String? repertoireId,
+    required TrainingSourceContext source,
   });
   Future<List<RepertoireReviewHistoryEntry>> loadHistory();
-  Future<void> appendHistory(List<RepertoireReviewHistoryEntry> entries);
+  Future<void> appendHistory(
+    List<RepertoireReviewHistoryEntry> entries, {
+    required TrainingSourceContext source,
+    required TrainingHistoryOperation operation,
+  });
   Future<List<Map<String, dynamic>>> loadAttempts({String? repertoireId});
   Future<void> recordAttempt({
     required String repertoireId,
+    required TrainingSourceContext source,
     required String lineId,
     required int moveIndex,
     required String fen,
@@ -46,6 +55,7 @@ abstract interface class TrainingReviewRepository {
 abstract interface class TrainingHeaderRepository {
   Future<bool> updateManyLineReviewHeaders(
     String sourcePath,
-    Map<String, RepertoireReviewEntry> entries,
-  );
+    Map<String, RepertoireReviewEntry> entries, {
+    required TrainingSourceContext source,
+  });
 }

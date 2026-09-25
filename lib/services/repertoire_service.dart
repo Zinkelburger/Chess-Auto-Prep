@@ -7,6 +7,8 @@
 /// `course_chapter_headers.dart`.
 library;
 
+import '../features/documents/repositories/pgn_document_store.dart';
+
 import 'package:chess_auto_prep/chess_core/pgn/repertoire_document_mutation.dart';
 
 import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
@@ -96,14 +98,17 @@ class _ChapterLayout {
 }
 
 class RepertoireService {
-  RepertoireService({this._storage});
+  RepertoireService({this._storage, PgnDocumentStore? documents})
+    : _documents = documents;
+
+  final PgnDocumentStore? _documents;
 
   // Pure text parsing never resolves the legacy default. File callers can
   // supply the same storage owner as their outline/split workflow.
   final StorageService? _storage;
 
   /// The editor for the files these lines come from.
-  RepertoireFileEditor get files => const RepertoireFileEditor();
+  RepertoireFileEditor get files => RepertoireFileEditor(documents: _documents);
 
   // One source per service: revisiting unchanged material avoids rebuilding
   // every move tree. Compare contents, not only mtime, so builder edits and
@@ -138,6 +143,23 @@ class RepertoireService {
       throw Exception('Repertoire file not found: $filePath');
     }
 
+    return parseTrainingSnapshot(
+      filePath,
+      content,
+      trainingColor: trainingColor,
+      colorFromStartingSide: colorFromStartingSide,
+      inferColorWhenUnknown: inferColorWhenUnknown,
+    );
+  }
+
+  /// Parse precisely the bytes whose native revision the training owner holds.
+  Future<List<RepertoireLine>> parseTrainingSnapshot(
+    String filePath,
+    String content, {
+    String? trainingColor,
+    bool colorFromStartingSide = false,
+    bool inferColorWhenUnknown = false,
+  }) async {
     final cached = _lastParse;
     if (cached != null &&
         cached.content == content &&

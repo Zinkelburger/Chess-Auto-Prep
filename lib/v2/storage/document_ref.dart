@@ -33,7 +33,12 @@ base class DocumentRef {
 /// bytes are the same document, whichever file they arrived in: replacing
 /// them with the user's draft loses nothing.
 final class Revision {
-  const Revision(this.contentHash);
+  const Revision(this.contentHash, {this.nativeIdentity});
+
+  /// Native object observed with these bytes, when supplied by disk. Content
+  /// equality remains the save contract; training also checks this identity
+  /// so a reused path with equal PGN bytes cannot inherit an old answer.
+  final String? nativeIdentity;
 
   /// Lowercase hex SHA-256 of the file's bytes.
   final String contentHash;

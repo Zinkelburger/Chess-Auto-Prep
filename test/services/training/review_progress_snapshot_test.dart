@@ -1,3 +1,5 @@
+import '../../support/training_source_fixture.dart';
+import 'package:chess_auto_prep/features/training/models/training_source_context.dart';
 import 'dart:async';
 
 import 'package:chess_auto_prep/models/repertoire_review_entry.dart';
@@ -12,25 +14,33 @@ class _PausedReviewService extends FakeReviewService {
   final saving = Completer<void>();
   final resume = Completer<void>();
   final saved = <(String?, List<RepertoireReviewEntry>)>[];
+  final savedSources = <TrainingSourceContext>[];
   final savedMoves = <(String?, List<RepertoireMoveProgress>)>[];
   @override
   Future<void> saveMoveProgress(
     List<RepertoireMoveProgress> entries, {
+    required TrainingSourceContext source,
     String? repertoireId,
   }) async {
     savedMoves.add((repertoireId, List.of(entries)));
-    await super.saveMoveProgress(entries, repertoireId: repertoireId);
+    await super.saveMoveProgress(
+      entries,
+      repertoireId: repertoireId,
+      source: source,
+    );
   }
 
   @override
   Future<void> saveAll(
     List<RepertoireReviewEntry> entries, {
+    required TrainingSourceContext source,
     String? repertoireId,
   }) async {
     if (!saving.isCompleted) saving.complete();
     await resume.future;
     saved.add((repertoireId, List.of(entries)));
-    await super.saveAll(entries, repertoireId: repertoireId);
+    savedSources.add(source);
+    await super.saveAll(entries, repertoireId: repertoireId, source: source);
   }
 }
 
@@ -45,8 +55,9 @@ void main() {
         headers: FakeRepertoireService().files,
         settings: () => TrainingSettings(),
         repertoireId: () => source,
-      );
+      )..sources = scriptedTrainingSources([source]);
       addTearDown(store.dispose);
+      final firstSource = store.sourceFor(source);
       final first = fakeLine('first', ['e4']);
       final saving = store.recordRating(
         first,
@@ -56,7 +67,13 @@ void main() {
       );
       await reviews.saving.future;
       source = '/queued.pgn';
-      store.adopt(byLine: {}, moveProgress: {}, otherRepertoires: []);
+      store.adopt(
+        sources: scriptedTrainingSources([source]),
+        byLine: {},
+        moveProgress: {},
+        otherRepertoires: [],
+      );
+      final queuedSource = store.sourceFor(source);
       final queued = fakeLine('queued', ['d4']);
       store.recordMove(queued, 0, wasCorrect: false);
       final capturedMove = store.moveProgress.values.single;
@@ -75,7 +92,12 @@ void main() {
         hadMistake: false,
       );
       source = '/replacement.pgn';
-      store.adopt(byLine: {}, moveProgress: {}, otherRepertoires: []);
+      store.adopt(
+        sources: scriptedTrainingSources([source]),
+        byLine: {},
+        moveProgress: {},
+        otherRepertoires: [],
+      );
       store.recordMove(fakeLine('replacement', ['c4']), 0, wasCorrect: true);
       reviews.resume.complete();
       await Future.wait([saving, queuedSave, joined]);
@@ -84,6 +106,7 @@ void main() {
         '/first.pgn',
         '/queued.pgn',
       ]);
+      expect(reviews.savedSources, [same(firstSource), same(queuedSource)]);
       expect(reviews.saved.last.$2.single.lineId, 'queued');
       expect(reviews.saved.last.$2.single.lastRating, 'again');
       expect(reviews.savedMoves.last.$1, '/queued.pgn');
@@ -109,7 +132,7 @@ void main() {
           headers: FakeRepertoireService().files,
           settings: () => TrainingSettings(),
           repertoireId: () => source,
-        );
+        )..sources = scriptedTrainingSources([source]);
         addTearDown(store.dispose);
         final first = fakeLine('first', ['e4', 'e5']);
         store.recordMove(first, 0, wasCorrect: true);
@@ -129,7 +152,12 @@ void main() {
               );
         await reviews.saving.future;
         source = '/second.pgn';
-        store.adopt(byLine: {}, moveProgress: {}, otherRepertoires: []);
+        store.adopt(
+          sources: scriptedTrainingSources([source]),
+          byLine: {},
+          moveProgress: {},
+          otherRepertoires: [],
+        );
         store.recordMove(
           fakeLine('second', ['d4', 'd5']),
           0,

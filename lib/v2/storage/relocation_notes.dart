@@ -44,11 +44,14 @@ final class RelocationNotes {
   const RelocationNotes({
     required PendingRepoints notes,
     required TrainingRecords records,
+    Future<void> Function(String) synchronize = syncDirectory,
   }) : _notes = notes,
-       _records = records;
+       _records = records,
+       _synchronize = synchronize;
 
   final PendingRepoints _notes;
   final TrainingRecords _records;
+  final Future<void> Function(String) _synchronize;
 
   /// Writes down that [from] is about to become [to], under the name [note].
   Future<void> record(
@@ -77,6 +80,7 @@ final class RelocationNotes {
     DocumentRef from,
     DocumentRef to,
   ) async {
+    await _syncMove(from.path, to.path);
     final result = await _records.repoint(from, to);
     if (_settled(result)) await _notes.discard(note);
     return result;
@@ -108,11 +112,21 @@ final class RelocationNotes {
           );
         }
       case MoveNeverHappened():
+        await _syncMove(move.from, move.to);
         await _notes.discard(move.id);
       case MoveUnclear(:final detail):
         throw RecoveryRequired(detail);
     }
   }
+
+  /// A visible rename is not yet a confirmed namespace change. Keep its note
+  /// until both parent entries and any new destination ancestry are flushed.
+  /// Recovery uses the same barrier before changing training references.
+  Future<void> _syncMove(String from, String to) => _syncAncestors(
+    [p.dirname(from), p.dirname(to)],
+    root: p.normalize(p.absolute(_notes.documents.path)),
+    synchronize: _synchronize,
+  );
 }
 
 /// Whether the training rows still owe this move anything.
@@ -165,11 +179,16 @@ String newMoveNote() =>
     '${Random.secure().nextInt(1 << 32).toRadixString(16)}';
 
 final class PendingRepoints {
-  PendingRepoints(Directory support, {required this.documents})
-    : _configuredSupport = support,
-      support = _supportRoot(support);
+  PendingRepoints(
+    Directory support, {
+    required this.documents,
+    Future<void> Function(String) synchronize = syncDirectory,
+  }) : _configuredSupport = support,
+       _synchronize = synchronize,
+       support = _supportRoot(support);
 
   final Directory _configuredSupport;
+  final Future<void> Function(String) _synchronize;
 
   /// The Support folder itself; the notes are one folder inside it.
   final Directory support;
@@ -201,6 +220,14 @@ final class PendingRepoints {
         await _type(temporaryPathFor(path)) != FileSystemEntityType.notFound) {
       throw RecoveryRequired('Relocation metadata already exists for $id.');
     }
+    // Support may itself have been created recursively, including by an
+    // earlier failed preparation. Persist that ancestry before the note can
+    // authorize a move; this remains necessary when those folders now exist.
+    await _syncAncestors(
+      [_folder.path],
+      root: p.rootPrefix(support.path),
+      synchronize: _synchronize,
+    );
     await createFileExclusively(path, utf8.encode(jsonEncode(move.toJson())));
   });
 
@@ -375,6 +402,47 @@ Future<FileSystemEntityType> _type(String path) =>
     FileSystemEntity.type(path, followLinks: false);
 
 const _folderName = 'unfinished-moves';
+
+/// Flush children before their containing entries, once per directory. A
+/// cancelled move can name absent destination folders; only proven absence
+/// permits skipping one. Errors and unsupported entries preserve the note.
+Future<void> _syncAncestors(
+  List<String> leaves, {
+  required String root,
+  required Future<void> Function(String) synchronize,
+}) async {
+  // The native Windows adapter has no directory durability guarantee. Keep
+  // that existing platform limitation explicit; POSIX errors must propagate.
+  if (Platform.isWindows) return;
+  // Configured root aliases are supported. Resolve that boundary, while the
+  // descendants below it still receive the strict no-follow observations.
+  final resolvedRoot = await Directory(root).resolveSymbolicLinks();
+  final paths = <String>{};
+  for (final leaf in leaves) {
+    if (leaf != root && !p.isWithin(root, leaf)) {
+      throw FileSystemException(
+        'Relocation directory is outside its root',
+        leaf,
+      );
+    }
+    var path = p.normalize(p.join(resolvedRoot, p.relative(leaf, from: root)));
+    while (true) {
+      paths.add(path);
+      if (path == resolvedRoot) break;
+      path = p.dirname(path);
+    }
+  }
+  final ordered = paths.toList()
+    ..sort((a, b) => p.split(b).length.compareTo(p.split(a).length));
+  for (final path in ordered) {
+    final observed = await observeDirectory(path);
+    if (observed.status == _missing && path != resolvedRoot) continue;
+    if (observed.status != _present) {
+      throw FileSystemException('Relocation directory cannot be flushed', path);
+    }
+    await synchronize(path);
+  }
+}
 
 /// What the disk says happened to [move], which decides what its training
 /// rows should name.

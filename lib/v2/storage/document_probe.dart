@@ -53,7 +53,11 @@ Probe _interpret(NativeFileObservation observation) {
   if (bytes == null || hash == null || identity == null) {
     return FileUnreadable(_reason(observation));
   }
-  return FileFound(bytes, Revision(hash), identity: identity);
+  return FileFound(
+    bytes,
+    Revision(hash, nativeIdentity: identity),
+    identity: identity,
+  );
 }
 
 const _missing = 1;

@@ -2,6 +2,9 @@
 /// by the trainer's unit tests.
 library;
 
+import 'package:chess_auto_prep/features/training/models/training_history_operation.dart';
+
+import 'package:chess_auto_prep/features/training/models/training_source_context.dart';
 import 'package:chess_auto_prep/models/completed_move.dart';
 import 'package:chess_auto_prep/models/repertoire_line.dart';
 import 'package:chess_auto_prep/models/repertoire_move_progress.dart';
@@ -54,6 +57,20 @@ class FakeRepertoireService extends RepertoireService {
   }
 
   @override
+  Future<List<RepertoireLine>> parseTrainingSnapshot(
+    String filePath,
+    String content, {
+    String? trainingColor,
+    bool colorFromStartingSide = false,
+    bool inferColorWhenUnknown = false,
+  }) => parseRepertoireFile(
+    filePath,
+    trainingColor: trainingColor,
+    colorFromStartingSide: colorFromStartingSide,
+    inferColorWhenUnknown: inferColorWhenUnknown,
+  );
+
+  @override
   RepertoireFileEditor get files => RecordingFileEditor(headerUpdates);
 }
 
@@ -84,8 +101,9 @@ class RecordingFileEditor extends RepertoireFileEditor {
   @override
   Future<bool> updateManyLineReviewHeaders(
     String filePath,
-    Map<String, RepertoireReviewEntry> entriesByLineId,
-  ) async {
+    Map<String, RepertoireReviewEntry> entriesByLineId, {
+    required TrainingSourceContext source,
+  }) async {
     headerUpdates.addAll(entriesByLineId.keys);
     headerPaths?.add(filePath);
     return true;
@@ -100,6 +118,24 @@ class FakeReviewService extends RepertoireReviewService {
   List<RepertoireMoveProgress> progress = [];
   final history = <RepertoireReviewHistoryEntry>[];
   int saveAllCalls = 0;
+  final attemptedSources = <TrainingSourceContext>[];
+
+  @override
+  Future<void> recordAttempt({
+    required String repertoireId,
+    required TrainingSourceContext source,
+    required String lineId,
+    required int moveIndex,
+    required String fen,
+    required String playedSan,
+    required String expectedSan,
+    required bool correct,
+    required String phase,
+  }) async {
+    expect(source.path, repertoireId);
+    attemptedSources.add(source);
+  }
+
   Duration loadDelay = Duration.zero;
 
   @override
@@ -111,6 +147,7 @@ class FakeReviewService extends RepertoireReviewService {
   @override
   Future<void> saveAll(
     List<RepertoireReviewEntry> entries, {
+    required TrainingSourceContext source,
     String? repertoireId,
   }) async {
     saveAllCalls++;
@@ -129,13 +166,18 @@ class FakeReviewService extends RepertoireReviewService {
   @override
   Future<void> saveMoveProgress(
     List<RepertoireMoveProgress> entries, {
+    required TrainingSourceContext source,
     String? repertoireId,
   }) async {
     progress = List.of(entries);
   }
 
   @override
-  Future<void> appendHistory(List<RepertoireReviewHistoryEntry> entries) async {
+  Future<void> appendHistory(
+    List<RepertoireReviewHistoryEntry> entries, {
+    required TrainingSourceContext source,
+    required TrainingHistoryOperation operation,
+  }) async {
     history.addAll(entries);
   }
 }

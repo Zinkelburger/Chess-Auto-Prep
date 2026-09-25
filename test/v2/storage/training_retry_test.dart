@@ -10,41 +10,61 @@ import 'package:chess_auto_prep/v2/storage/training_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
-const _key = (source: '/repertoires/course.pgn', id: 'line');
-const _review = Review(key: _key, lineName: 'Line', lastRating: 'good');
-const _streak = MoveStreak(key: _key, ply: 0, streak: 1, learned: false);
-final _history = HistoryRow(
-  key: _key,
-  at: DateTime.utc(2026, 9, 24),
-  rating: 'good',
-  mistake: false,
-  kind: HistoryKind.trainer,
-);
-final _attempt = Attempt(
-  key: _key,
-  ply: 0,
-  fen: Fen.initial,
-  played: 'd4',
-  expected: 'e4',
-  correct: false,
-  phase: AttemptPhase.drilling,
-  at: DateTime.utc(2026, 9, 24),
-);
-
-Future<ProgressWrite> _rate(TrainingStore store, ProgressOperation operation) =>
-    store.write(
-      reviews: [(before: null, after: _review)],
-      streaks: [(before: null, after: _streak)],
-      history: [_history],
-      operation: operation,
-    );
-
 void main() {
   late Directory documents;
+  late LineKey key;
+  late Review review;
+  late MoveStreak streak;
+  late HistoryRow history;
+  late Attempt answer;
+  late ProgressLoaded admission;
+
+  ProgressOperation accepted() => ProgressOperation(sources: admission.sources);
+
+  Future<ProgressWrite> rate(
+    TrainingStore store,
+    ProgressOperation operation,
+  ) => store.write(
+    reviews: [(before: null, after: review)],
+    streaks: [(before: null, after: streak)],
+    history: [history],
+    operation: operation,
+  );
   File file(String name) => File(p.join(documents.path, name));
 
   setUp(() async {
     documents = await Directory.systemTemp.createTemp('training-retry-');
+    final source = p.join(documents.path, 'repertoires', 'course.pgn');
+    await File(source).parent.create(recursive: true);
+    await File(source).writeAsString('[Event "Line"]\n\n1. e4 *\n');
+    key = (source: source, id: 'line');
+    review = Review(key: key, lineName: 'Line', lastRating: 'good');
+    streak = MoveStreak(key: key, ply: 0, streak: 1, learned: false);
+    history = HistoryRow(
+      key: key,
+      at: DateTime.utc(2026, 9, 24),
+      rating: 'good',
+      mistake: false,
+      kind: HistoryKind.trainer,
+    );
+    answer = Attempt(
+      key: key,
+      ply: 0,
+      fen: Fen.initial,
+      played: 'd4',
+      expected: 'e4',
+      correct: false,
+      phase: AttemptPhase.drilling,
+      at: DateTime.utc(2026, 9, 24),
+    );
+    // Read the real source before installing publication/acknowledgement
+    // faults. Every retry below keeps this admission and its operation token.
+    admission =
+        await TrainingStore(
+              documents,
+              support: Directory(p.join(documents.path, 'Support')),
+            ).read({source})
+            as ProgressLoaded;
   });
   tearDown(() => documents.delete(recursive: true));
 
@@ -63,15 +83,15 @@ void main() {
             }
           },
         );
-        final operation = ProgressOperation();
-        expect(await _rate(store, operation), isA<ProgressFailed>());
-        expect(await _rate(store, operation), isA<ProgressWritten>());
-        expect(await _rate(store, operation), isA<ProgressWritten>());
+        final operation = accepted();
+        expect(await rate(store, operation), isA<ProgressFailed>());
+        expect(await rate(store, operation), isA<ProgressWritten>());
+        expect(await rate(store, operation), isA<ProgressWritten>());
         expect(await file(historyFile).readAsLines(), hasLength(2));
         expect(publications, 3);
-        final loaded = await store.read({_key.source}) as ProgressLoaded;
-        expect(loaded.reviews.keys, [_key]);
-        expect(loaded.streaks.values.single, _streak);
+        final loaded = await store.read({key.source}) as ProgressLoaded;
+        expect(loaded.reviews.keys, [key]);
+        expect(loaded.streaks.values.single, streak);
       },
     );
   }
@@ -95,10 +115,10 @@ void main() {
             return result;
           },
         );
-        final operation = ProgressOperation();
+        final operation = accepted();
         Future<ProgressWrite> write() => attempt
-            ? store.logAttempt(_attempt, operation: operation)
-            : _rate(store, operation);
+            ? store.logAttempt(answer, operation: operation)
+            : rate(store, operation);
         expect(await write(), isA<ProgressFailed>());
         expect(await write(), isA<ProgressWritten>());
         expect(await write(), isA<ProgressWritten>());
@@ -123,23 +143,23 @@ void main() {
             throw const FileSystemException('disk sync failed');
         },
       );
-      final operation = ProgressOperation();
+      final operation = accepted();
       expect(
-        await store.logAttempt(_attempt, operation: operation),
+        await store.logAttempt(answer, operation: operation),
         isA<ProgressFailed>(),
       );
       expect(
-        await store.logAttempt(_attempt, operation: operation),
+        await store.logAttempt(answer, operation: operation),
         isA<ProgressWritten>(),
       );
       expect(
-        await store.logAttempt(_attempt, operation: operation),
+        await store.logAttempt(answer, operation: operation),
         isA<ProgressWritten>(),
       );
       expect(await file(attemptsFile).readAsLines(), hasLength(1));
       expect(publications, 1);
       expect(
-        (await store.read({_key.source}) as ProgressLoaded).mistakes,
+        (await store.read({key.source}) as ProgressLoaded).mistakes,
         hasLength(1),
       );
     },
@@ -158,10 +178,10 @@ void main() {
             throw const FileSystemException('acknowledgement lost');
         },
       );
-      final operation = ProgressOperation();
-      expect(await _rate(store, operation), isA<ProgressFailed>());
+      final operation = accepted();
+      expect(await rate(store, operation), isA<ProgressFailed>());
       await file(historyFile).writeAsString('another writer\n');
-      expect(await _rate(store, operation), isA<ProgressConflict>());
+      expect(await rate(store, operation), isA<ProgressConflict>());
       expect(await file(historyFile).readAsString(), 'another writer\n');
       expect(await file(streaksFile).exists(), isFalse);
       expect(publications, 1);
@@ -179,22 +199,22 @@ void main() {
           throw const FileSystemException('acknowledgement lost');
       },
     );
-    final operation = ProgressOperation();
-    expect(await _rate(store, operation), isA<ProgressFailed>());
+    final operation = accepted();
+    expect(await rate(store, operation), isA<ProgressFailed>());
     expect(
-      await store.write(history: [_history], operation: operation),
+      await store.write(history: [history], operation: operation),
       isA<ProgressConflict>(),
     );
     final other = await Directory(p.join(documents.path, 'other')).create();
     expect(
-      await _rate(
+      await rate(
         TrainingStore(other, support: Directory(p.join(other.path, 'Support'))),
         operation,
       ),
       isA<ProgressConflict>(),
     );
     expect(await other.list().isEmpty, isTrue);
-    expect(await _rate(store, operation), isA<ProgressWritten>());
+    expect(await rate(store, operation), isA<ProgressWritten>());
   });
 
   test(
@@ -205,9 +225,9 @@ void main() {
         support: Directory(p.join(documents.path, 'Support')),
       );
       for (var i = 0; i < 2; i++) {
-        expect(await _rate(store, ProgressOperation()), isA<ProgressWritten>());
+        expect(await rate(store, accepted()), isA<ProgressWritten>());
         expect(
-          await store.logAttempt(_attempt, operation: ProgressOperation()),
+          await store.logAttempt(answer, operation: accepted()),
           isA<ProgressWritten>(),
         );
       }
@@ -221,10 +241,10 @@ void main() {
       documents,
       support: Directory(p.join(documents.path, 'Support')),
     );
-    final operation = ProgressOperation();
-    expect(await _rate(store, operation), isA<ProgressWritten>());
+    final operation = accepted();
+    expect(await rate(store, operation), isA<ProgressWritten>());
     await file(historyFile).writeAsString('a later edit\n');
-    expect(await _rate(store, operation), isA<ProgressWritten>());
+    expect(await rate(store, operation), isA<ProgressWritten>());
     expect(await file(historyFile).readAsString(), 'a later edit\n');
   });
 }

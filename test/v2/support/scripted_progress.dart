@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/chess/training/records.dart';
 import 'package:chess_auto_prep/v2/chess/training/schedule.dart';
 import 'package:chess_auto_prep/v2/storage/training_store.dart';
@@ -29,7 +30,10 @@ final class ScriptedProgress implements ProgressFiles {
   var reads = 0;
 
   @override
-  Future<ProgressRead> read(Set<String> sources) async {
+  Future<ProgressRead> read(
+    Set<String> sources, {
+    Map<String, Revision>? observed,
+  }) async {
     reads++;
     return readAs ??
         ProgressLoaded(

@@ -10,6 +10,9 @@
 library;
 
 import '../features/training/repositories/training_review_repository.dart';
+import '../features/training/models/training_source_context.dart';
+import '../features/documents/models/pgn_document.dart';
+import '../features/documents/repositories/pgn_document_store.dart';
 
 import 'dart:io' as io;
 import '../chess_core/pgn/repertoire_document_mutation.dart';
@@ -50,7 +53,9 @@ class _CachedLineIds {
 /// Reads and rewrites the games of repertoire chapter files. Stateless
 /// apart from the process-wide line-id memo; construct freely.
 class RepertoireFileEditor implements TrainingHeaderRepository {
-  const RepertoireFileEditor();
+  const RepertoireFileEditor({this.documents});
+
+  final PgnDocumentStore? documents;
 
   /// One entry per edited file; bounded by the handful of chapters a
   /// session touches, and never larger than the on-disk repertoire.
@@ -260,21 +265,25 @@ class RepertoireFileEditor implements TrainingHeaderRepository {
   @override
   Future<bool> updateManyLineReviewHeaders(
     String filePath,
-    Map<String, RepertoireReviewEntry> entriesByLineId,
-  ) async {
+    Map<String, RepertoireReviewEntry> entriesByLineId, {
+    required TrainingSourceContext source,
+  }) => source.run(() async {
     if (entriesByLineId.isEmpty) return true;
-    final file = io.File(filePath);
-    if (!await file.exists()) return false;
-
-    final stat = await file.stat();
-    final content = await readTextFile(file);
+    final store = documents;
+    if (store == null || source.path != filePath) {
+      throw StateError(
+        'Training headers require their loaded document context.',
+      );
+    }
+    final baseline = source.snapshot;
+    final content = baseline.content;
     final document = splitRepertoireDocument(content);
     final games = List<String>.from(document.games);
 
     // Resolve every id in one pass; looking each entry up separately would
     // make the bulk write quadratic in exactly the case it exists to make
     // cheap.
-    final idsByIndex = _lineIdsForFile(filePath, stat, games);
+    final idsByIndex = lineIdsForGames(games);
     final indexById = <String, int>{};
     for (var i = 0; i < idsByIndex.length; i++) {
       final id = idsByIndex[i];
@@ -299,13 +308,19 @@ class RepertoireFileEditor implements TrainingHeaderRepository {
     }
     if (!anyMatched) return false;
 
-    await writeTextFileAtomically(
-      file,
+    final result = await store.save(
+      baseline,
       reassemblePgnDocument(document.preamble, games),
-      expectedContent: content,
     );
+    if (result is PgnConflict) throw TrainingSourceChanged();
+    if (result is! PgnSaved) {
+      throw StateError(
+        'Training headers were not confirmed. Reload the source.',
+      );
+    }
+    source.acknowledge(result);
     return true;
-  }
+  });
 
   // ── Edits by game index ─────────────────────────────────────────────────
 

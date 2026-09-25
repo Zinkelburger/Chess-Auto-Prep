@@ -3,6 +3,7 @@ import 'package:chess_auto_prep/v2/chess/training/line_order.dart';
 import 'package:chess_auto_prep/v2/chess/training/records.dart';
 import 'package:chess_auto_prep/v2/chess/training/schedule.dart';
 import 'package:chess_auto_prep/v2/features/trainer/trainer.dart';
+import 'package:chess_auto_prep/v2/features/trainer/lesson_view.dart';
 import 'package:chess_auto_prep/v2/features/trainer/train_pane.dart';
 import 'package:chess_auto_prep/v2/storage/training_store.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
@@ -116,6 +117,31 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
   }
+
+  testWidgets('saving preserves the lesson subtree and its focus', (
+    tester,
+  ) async {
+    await pump(tester);
+    trainer.learn();
+    await tester.pumpAndSettle();
+    final lessonState = tester.state(find.byType(LessonView));
+    final focus = FocusManager.instance.primaryFocus;
+    final lesson = trainer.lesson;
+    await trainer.pauseForWrite();
+    await tester.pump();
+    expect(find.text('Saving the training source…'), findsOneWidget);
+    expect(find.byType(LessonView), findsOneWidget);
+    if (find.byType(LessonView).evaluate().isNotEmpty) {
+      expect(tester.state(find.byType(LessonView)), same(lessonState));
+    }
+    expect(FocusManager.instance.primaryFocus, same(focus));
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    expect(trainer.lesson, same(lesson));
+    trainer.resumeAfterWrite();
+    await tester.pumpAndSettle();
+    expect(tester.state(find.byType(LessonView)), same(lessonState));
+    expect(FocusManager.instance.primaryFocus, same(focus));
+  });
 
   testWidgets('the lines, where they stand, and the ways in', (tester) async {
     await pump(tester);

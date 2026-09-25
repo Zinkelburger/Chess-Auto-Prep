@@ -25,6 +25,8 @@ import '../chess/training/schedule.dart';
 import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 import 'csv_records.dart';
+import 'document_probe.dart';
+import 'document_ref.dart';
 import 'file_lock.dart';
 import 'recovery_gate.dart';
 import 'relocation_notes.dart';
@@ -42,7 +44,11 @@ typedef StreakKey = ({LineKey line, int ply});
 /// It retains the exact file versions prepared under the Documents lock;
 /// it is not a persistent journal and does not recover after a restart.
 final class ProgressOperation {
-  ProgressOperation();
+  ProgressOperation({Map<String, Revision> sources = const {}})
+    : sources = Map.unmodifiable(sources);
+
+  /// The PGNs that supplied this command, captured before it was queued.
+  final Map<String, Revision> sources;
 
   (String, String)? _identity;
   List<_Planned>? _planned;
@@ -52,8 +58,13 @@ final class ProgressOperation {
 /// The training files. The filesystem is a real boundary, so this is an
 /// interface: [TrainingStore] in the app, a scripted one in tests.
 abstract interface class ProgressFiles {
-  /// Everything recorded for the chapters at [sources].
-  Future<ProgressRead> read(Set<String> sources);
+  /// Everything recorded for these sources. When PGN input was already read,
+  /// [observed] binds the rows to those exact persisted observations. Without
+  /// it this read captures a fresh source observation for a storage caller.
+  Future<ProgressRead> read(
+    Set<String> sources, {
+    Map<String, Revision>? observed,
+  });
 
   /// Writes a line's outcome, or a change to the schedule by hand: the
   /// [reviews] and [streaks] rows it changes and the [history] it adds.
@@ -104,10 +115,24 @@ final class TrainingStore implements ProgressFiles {
   ({int size, DateTime modified, List<Attempt> wrong})? _log;
 
   @override
-  Future<ProgressRead> read(Set<String> sources) async {
+  Future<ProgressRead> read(
+    Set<String> sources, {
+    Map<String, Revision>? observed,
+  }) async {
+    final wanted = Set<String>.of(sources);
+    final baseline = observed == null
+        ? null
+        : Map<String, Revision>.of(observed);
     try {
       return await _recovery.run(
-        () => withDirectoryLock(documents, () => _read(sources)),
+        () => withDirectoryLock(documents, () async {
+          final versions = await _sources(wanted, baseline);
+          return _read(wanted, versions);
+        }),
+      );
+    } on _Changed catch (error) {
+      return ProgressFailed(
+        'The training source changed: ${error.row}. Reload it.',
       );
     } on RecoveryRequired catch (error) {
       return ProgressFailed(error.detail);
@@ -119,7 +144,10 @@ final class TrainingStore implements ProgressFiles {
     }
   }
 
-  Future<ProgressLoaded> _read(Set<String> sources) async {
+  Future<ProgressLoaded> _read(
+    Set<String> sources,
+    Map<String, Revision> versions,
+  ) async {
     final reviews = await _rows(_reviewCodec);
     final streaks = await _rows(_streakCodec);
     // A key written twice is read as its first row, the one a write
@@ -136,6 +164,7 @@ final class TrainingStore implements ProgressFiles {
       byMove.putIfAbsent((line: s.key, ply: s.ply), () => s);
     }
     return ProgressLoaded(
+      sources: Map.unmodifiable(versions),
       reviews: byLine,
       streaks: byMove,
       mistakes: await _mistakes(sources),
@@ -180,6 +209,11 @@ final class TrainingStore implements ProgressFiles {
     return _perform(
       'write the training progress',
       operation,
+      {
+        for (final row in reviewChanges) row.after.key.source,
+        for (final row in streakChanges) row.after.key.source,
+        for (final row in historyRows) row.key.source,
+      },
       payload,
       () async => [
         if (reviewChanges.isNotEmpty)
@@ -206,6 +240,7 @@ final class TrainingStore implements ProgressFiles {
     return _perform(
       'log an answer',
       operation,
+      {attempt.key.source},
       jsonEncode(['attempt', line]),
       () async {
         final original = await _bytes(attemptsFile);
@@ -229,6 +264,7 @@ final class TrainingStore implements ProgressFiles {
   Future<ProgressWrite> _perform(
     String action,
     ProgressOperation? operation,
+    Set<String> sources,
     String payload,
     Future<List<_Planned>> Function() prepare,
   ) async {
@@ -252,6 +288,7 @@ final class TrainingStore implements ProgressFiles {
         throw const _Changed('operation destination');
       }
       if (token._complete) return const ProgressWritten();
+      await _sources(sources, token.sources);
       final planned = token._planned ??= await prepare();
       final remaining = <_Planned>[];
       // Preflight every participant before publishing any remaining file.
@@ -283,6 +320,27 @@ final class TrainingStore implements ProgressFiles {
       token._planned = null;
     }
     return result;
+  }
+
+  Future<Map<String, Revision>> _sources(
+    Set<String> paths,
+    Map<String, Revision>? expected,
+  ) async {
+    final versions = <String, Revision>{};
+    for (final path in paths) {
+      final observed = await probeDocument(path);
+      if (observed is! FileFound) throw _Changed('training source $path');
+      final before = expected?[path];
+      if (expected != null &&
+          (before == null ||
+              before.nativeIdentity == null ||
+              before.nativeIdentity != observed.identity ||
+              before != observed.revision)) {
+        throw _Changed('training source $path');
+      }
+      versions[path] = observed.revision;
+    }
+    return versions;
   }
 
   /// Keeps the wrong answers read before current once [line] is added, when
@@ -560,8 +618,10 @@ final class ProgressLoaded extends ProgressRead {
     required this.reviews,
     required this.streaks,
     required this.mistakes,
+    this.sources = const {},
   });
 
+  final Map<String, Revision> sources;
   final Map<LineKey, Review> reviews;
   final Map<StreakKey, MoveStreak> streaks;
 
@@ -577,7 +637,8 @@ final class ProgressWritten extends ProgressWrite {
   const ProgressWritten();
 }
 
-/// Another session changed a row this write would have replaced.
+/// The source document changed identity/version, or another session changed
+/// a row this write would have replaced. Nothing new is published.
 final class ProgressConflict extends ProgressWrite {
   const ProgressConflict();
 }

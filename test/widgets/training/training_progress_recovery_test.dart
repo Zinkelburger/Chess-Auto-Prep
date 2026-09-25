@@ -1,3 +1,5 @@
+import '../../support/training_source_fixture.dart';
+import 'package:chess_auto_prep/features/training/models/training_source_context.dart';
 import 'dart:async';
 
 import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_board_controller.dart';
@@ -26,12 +28,13 @@ class _Reviews extends FakeReviewService {
   @override
   Future<void> saveAll(
     List<RepertoireReviewEntry> entries, {
+    required TrainingSourceContext source,
     String? repertoireId,
   }) async {
     attempted++;
     await gate?.future;
     if (fail) throw StateError('disk unavailable');
-    await super.saveAll(entries, repertoireId: repertoireId);
+    await super.saveAll(entries, repertoireId: repertoireId, source: source);
   }
 }
 
@@ -41,8 +44,9 @@ class _Headers implements TrainingHeaderRepository {
   @override
   Future<bool> updateManyLineReviewHeaders(
     String path,
-    Map<String, RepertoireReviewEntry> entries,
-  ) async {
+    Map<String, RepertoireReviewEntry> entries, {
+    required TrainingSourceContext source,
+  }) async {
     await gate?.future;
     if (fail) throw StateError('header unavailable');
     return true;
@@ -65,6 +69,7 @@ class _Source implements TrainingSourceRepository {
     reads.add(source.filePath);
     if (fail) throw StateError('source unreadable');
     return LoadedTrainingSource(
+      sources: scriptedTrainingSources([source.filePath]),
       lines: [
         fakeLine('A', ['e4']),
       ],
@@ -286,9 +291,10 @@ void main() {
           expect(reviews.attempted, 1);
           reviews.fail = false;
           await session.retryFailure();
-          expect(session.reviewMap, isEmpty);
+          expect(session.reviewMap.values.single.passCount, 1);
+          expect(reviews.history, hasLength(1));
           expect(session.progressNeedsReload, isFalse);
-          expect(reviews.attempted, 1);
+          expect(reviews.attempted, 2);
         },
       );
     }
@@ -326,11 +332,15 @@ void main() {
       session.setStudySource(_meta('/b.pgn'));
       session.setStudySource(_meta('/a.pgn'));
       source.fail = true;
-      await session.loadRepertoire();
-      final error = session.error;
+      final loading = session.loadRepertoire();
+      await Future<void>.delayed(Duration.zero);
+      expect(session.isLoading, isTrue);
       headers.gate!.complete();
       await flush;
-      expect(session.error, error);
+      await loading;
+      expect(session.error, contains('headers remain unconfirmed'));
+      headers.fail = false;
+      await session.retryFailure();
       expect(session.error, contains('source unreadable'));
     },
   );

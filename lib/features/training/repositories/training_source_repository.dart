@@ -1,3 +1,4 @@
+import '../models/training_source_context.dart';
 import '../../../models/repertoire_line.dart';
 import '../../../models/repertoire_move_progress.dart';
 import '../../../models/repertoire_review_entry.dart';
@@ -7,11 +8,14 @@ import '../../repertoires/models/repertoire_metadata.dart';
 class LoadedTrainingSource {
   const LoadedTrainingSource({
     required this.lines,
+    required this.sources,
     required this.reviewByLine,
     required this.moveProgress,
     required this.otherRepertoires,
     required this.isFolder,
   });
+
+  final Map<String, TrainingSourceContext> sources;
 
   /// Parsed lines in file order. Empty when the source holds nothing to train.
   final List<RepertoireLine> lines;

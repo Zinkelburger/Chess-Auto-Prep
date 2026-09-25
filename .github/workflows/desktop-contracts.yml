@@ -47,6 +47,10 @@ jobs:
             test/v2/storage/document_file_io_test.dart \
             test/v2/storage/platform_documents_test.dart \
             test/v2/storage/pgn_file_store_test.dart \
+            test/v2/storage/compound_completed_retry_test.dart \
+            test/v2/storage/snapshot_lifetime_test.dart \
+            test/v2/storage/training_source_test.dart \
+            test/v2/storage/training_retry_test.dart \
             test/v2/storage/file_lock_test.dart \
             test/v2/ui/name_dialog_test.dart \
             test/v2/app/native_file_requests_test.dart \

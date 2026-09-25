@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/services/storage/storage_factory.dart';
+import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
 import '../../support/generation_artifacts_fixture.dart';
 import 'package:chess_auto_prep/features/training/repositories/training_source_repository.dart';
 import 'package:chess_auto_prep/features/training/repositories/training_answers.dart';
@@ -24,11 +26,13 @@ void main() {
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('training_loader_test');
+    StorageFactory.instanceForTest = null;
     PathProviderPlatform.instance = FakePathProvider(tempDir.path);
     repService = FakeRepertoireService();
     reviewService = FakeReviewService();
     askedQuestions = AskedQuestionsStore();
     loader = TrainingSourceLoader(
+      documents: NativePgnDocumentStore(),
       artifacts: generationArtifactsFixture().repository,
       repertoireService: repService,
       reviewService: reviewService,
@@ -37,14 +41,19 @@ void main() {
   });
 
   tearDown(() async {
+    StorageFactory.instanceForTest = null;
     await tempDir.delete(recursive: true);
   });
 
-  RepertoireMetadata file(String name) => RepertoireMetadata(
-    filePath: p.join(tempDir.path, '$name.pgn'),
-    name: name,
-    lastModified: DateTime.now(),
-  );
+  RepertoireMetadata file(String name) {
+    final path = p.join(tempDir.path, '$name.pgn');
+    if (!File(path).existsSync()) File(path).writeAsStringSync('1. e4 *');
+    return RepertoireMetadata(
+      filePath: path,
+      name: name,
+      lastModified: DateTime.now(),
+    );
+  }
 
   test('a single file: lines, synced entries, keyed move progress', () async {
     final source = file('rep');

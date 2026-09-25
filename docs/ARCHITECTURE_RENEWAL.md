@@ -379,6 +379,32 @@ path being recreated after a move. A reused path is not permission to attach an
 old session to a new document. Supported v1 writers must satisfy the same
 ordering contract before coexistence is certified.
 
+A training command carries the persisted source observation captured with its
+input, including native file identity as well as content hash. Under the shared
+recovery domain, validate that observation before publishing any training file;
+a first attempt or history-only write needs the same protection as a rating.
+Course sections loaded from the same file must agree on that observation. The
+open draft can still supply training lines, anchored to its persisted source;
+an acknowledged own save may refresh future commands only from its proven
+before/after receipt. Already accepted commands retain their original input.
+PGN save and undo pause training input and settle those accepted commands before
+replacing the source; the hold lasts through receipt and displayed-text adoption.
+A failed training write blocks publication while preserving the PGN draft and
+the current lesson. Closed-source Library writes and exact retries use the same
+barrier. An ordinary optimistic save cannot renew stale training authority by
+adopting an unrelated equal-content file.
+
+Relocation completion and recovery flush both endpoint directories and their
+containing entries before rewriting references or retiring the recovery note.
+A flush failure leaves the note and reports an unresolved operation. Directory
+flushes are verified on Linux; the existing Windows adapter skips unsupported
+directory flushes, and macOS durability remains unverified.
+The legacy v1 Windows/macOS training adapter still uses an explicitly selected
+content-only check; it does not detect equal-content path reuse. Native object
+IDs also do not establish a history of arbitrary external unlink/recreation
+when the filesystem reuses an ID. Supported moves and recoverable deletes keep
+the original object, which is the identity boundary exercised here.
+
 Draft undo changes only the draft. Committed undo is a new guarded inverse
 operation covering all required participants. If any expected participant has
 changed, reject before applying the inverse and keep the receipt. Redo, where
@@ -1155,7 +1181,7 @@ per batch and use tests and commits as the implementation record.
 | H2 | H1 | Accepted ratings and writes outlive reload/dispose; `PendingWrites`, training progress/owner, exit guard | Two overlapping reloads cannot bypass the same pending rating; failed outcomes remain retryable; shutdown is honest | Done 2026-09-24: app-owned training obligations, ordered barriers and exact in-process retry survive reload/dispose; retained book/settings/account/recent-file/copy outcomes; shutdown covers existing dialogs and suspends puzzle timers. Failure-first regressions, independent reviews, 2,155 v2 tests and analyze/lint passed after merging current main. Headless Linux partial training publication survived scope replacement and retried with three history rows exactly once. Persistent crash recovery remains H3; Windows/macOS durability unverified. |
 | H3a | H2 | Existing relocation recovery before affected reads; document guards, training reads, startup; reconcile v1 domain locks/order | Kill during a move, reopen/train from either supported app; no missing or duplicate progress; incompatible access blocks safely | Done 2026-09-24 on Linux: canonical shared domain before affected Documents access; strict v2 notes recover before PGN/training reads and complete scans, foreign receipts refuse without mutation, and UI shows the recovery reason with Retry. Regression-first tests, independent reviews, 2,232 v2 tests, final focused storage/legacy checks and analyze/lint passed. Six real-process tests cover cross-app exclusion, SIGKILL and all four training files recovering once; headless refusal/retry verified. No new metadata format. Windows/macOS recovery guarantees remain unverified; v1 native recovery is still Linux-only. |
 | H3b | H3a | One compound operation for course rename/book references and its inverse; Library, storage, session history | Rename and undo agree across PGN/book state, including crash and external-conflict cases | Done 2026-09-24 on Linux: explicit section intent follows held/coalesced drafts; one guarded private receipt commits PGN and books, preserves unknown fields and validates the complete inverse. Exact retry, external conflicts, navigation admission and v1 refusal have regression tests; 2,381 v2 tests, focused legacy/process checks and analyze/lint pass. Real SIGKILL preparation/publication tests and headless partial book-write failure, Retry and undo verified both participants. Complete receipts remain retained with growing scan/storage cost; Windows/macOS durability unverified. |
-| H3c | H3b | Apply the proven operation boundary to supported file/folder moves, delete/restore and multi-file edits | Every existing command has an explicit required read/write set, recovery path and compatible undo behavior | Not started |
+| H3c | H3b | Apply the proven operation boundary to supported file/folder moves, delete/restore and multi-file edits | Every existing command has an explicit required read/write set, recovery path and compatible undo behavior | In progress: source-admission increment verified 2026-09-25 on Linux. V1/v2 validate captured training sources; save/undo and Library operations settle accepted training, preserve exact retries and reject stale row actions; relocation namespace flush failures retain recovery. Independent reviews, 2,456 v2 tests (serial), 354 legacy tests and analyze/lint passed. Headless partial-rating failure blocked PGN autosave; both retries and reopen preserved one outcome and the draft. No new durable format. Compound relocation participants, multi-file edits and persistent rating journals remain unfinished; Windows/macOS durability remains unverified. |
 | H4 | H2, H3c | Versioned input snapshots for catalog, shelf, gaps, book comparison and training; targeted invalidation | A late computation cannot replace a newer result; a fresh rebuild equals the displayed committed projection | Not started |
 | H5 | H2, H3c | Generation, mining, downloads, bughouse and engine lifetimes; job-specific checkpoints and truthful completion | Stop/retry/restart neither duplicates saved units nor loses promised results; resources return to baseline | Not started |
 | H6 | H4, H5 | All existing modes: focus/shortcuts/navigation/close, settings, credentials, diagnostics and integrity checks | The complete cross-mode sequence below passes with real disposable storage, offline/error cases and headless UI checks | Not started |

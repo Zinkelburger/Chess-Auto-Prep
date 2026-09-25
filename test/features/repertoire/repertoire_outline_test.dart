@@ -1,3 +1,4 @@
+import '../../support/training_source_fixture.dart';
 import 'package:chess_auto_prep/infrastructure/repertoires/legacy_repertoire_catalog_repository.dart';
 import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
 import 'dart:async';
@@ -311,14 +312,17 @@ void main() {
       final before = await service.build(root, trainingColor: 'black');
       final line = before.findChapter(advance)!.lines!.last;
       final review = RepertoireReviewService(storage: csv);
-      await review.saveAll([
-        RepertoireReviewEntry(
-          repertoireId: advance,
-          lineId: line.id,
-          lineName: line.name,
-          intervalDays: 6,
-        ),
-      ]);
+      await review.saveAll(
+        [
+          RepertoireReviewEntry(
+            repertoireId: advance,
+            lineId: line.id,
+            lineName: line.name,
+            intervalDays: 6,
+          ),
+        ],
+        source: await captureTrainingSource(NativePgnDocumentStore(), advance),
+      );
 
       final landed = await service.moveLines(
         fromChapterPath: advance,

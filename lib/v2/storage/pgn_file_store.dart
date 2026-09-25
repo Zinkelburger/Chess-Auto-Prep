@@ -253,7 +253,7 @@ final class PgnFileStore implements PgnDocumentStore {
       case _Unchanged(:final before):
         // Nothing to replace, so nothing to keep and nothing to write.
         if (_compoundId(scope) != null) {
-          return _compound(ref, before, text, scope, expectedBooks);
+          return _compound(ref, before, text, revision, scope, expectedBooks);
         }
         return Saved(_receipt(before, revision, revision));
       case _Ready(:final before, :final bytes, :final hash, :final undeclared):
@@ -271,16 +271,23 @@ final class PgnFileStore implements PgnDocumentStore {
         );
         if (unkept != null) return unkept;
         if (_compoundId(scope) != null) {
-          return _compound(ref, before, text, scope, expectedBooks);
+          return _compound(ref, before, text, revision, scope, expectedBooks);
         }
+        Revision? installed;
         try {
           await removeStaleTemporaries(folderOf(ref));
-          await replaceFile(ref.path, bytes);
+          await replaceFile(
+            ref.path,
+            bytes,
+            installed: (file) {
+              installed = Revision(hash, nativeIdentity: file.identity);
+            },
+          );
         } on Object catch (error) {
           log.e('save ${ref.path}', error);
           return IoFailure(failureDetail(error));
         }
-        return Saved(_receipt(before, revision, Revision(hash)));
+        return Saved(_receipt(before, revision, installed!));
     }
   }
 
@@ -345,6 +352,7 @@ final class PgnFileStore implements PgnDocumentStore {
     DocumentRef ref,
     String before,
     String after,
+    Revision beforeRevision,
     EditScope scope,
     String? expectedBooks,
   ) async {
@@ -387,13 +395,18 @@ final class PgnFileStore implements PgnDocumentStore {
       booksAfter: afterBooks,
     );
     final committed = await recovery.compounds.commit(command);
-    return Saved(_compoundReceipt(committed));
+    return Saved(_compoundReceipt(committed, beforeRevision: beforeRevision));
   }
 
-  Receipt _compoundReceipt(CompoundCommit command) => Receipt(
-    committed: _textRevision(command.documentAfter),
+  Receipt _compoundReceipt(
+    CompoundCommit command, {
+    Revision? beforeRevision,
+  }) => Receipt(
+    committed:
+        recovery.compounds.publishedRevision(command.id) ??
+        _textRevision(command.documentAfter),
     before: command.documentBefore,
-    beforeRevision: _textRevision(command.documentBefore),
+    beforeRevision: beforeRevision ?? _textRevision(command.documentBefore),
     compound: command,
   );
 

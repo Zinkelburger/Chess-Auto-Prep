@@ -54,74 +54,86 @@ class _TrainPaneState extends State<TrainPane> {
     return ListenableBuilder(
       listenable: widget.trainer,
       builder: (context, _) {
-        final trainer = widget.trainer;
-        if (trainer.lesson case final lesson?) {
-          return LessonView(
-            lesson: lesson,
-            trainer: trainer,
-            moves: widget.moves,
-          );
-        }
-        if (trainer.state is TrainerReady && trainer.unsavedProgress != null) {
-          return _Failed(
-            sentence: unsavedProgressProblem(trainer.unsavedProgress!),
-            onRetry: trainer.retryPending,
-          );
-        }
-        return switch (trainer.state) {
-          TrainerIdle() ||
-          TrainerLoading() => const _Sentence('Reading training progress…'),
-          // The scope stays in reach: a book trains with nothing open.
-          TrainerEmpty(:final why) => Padding(
-            padding: const EdgeInsets.all(Space.m),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TrainScopeButtons(trainer: trainer),
-                if (widget.onImport != null) ...[
-                  const SizedBox(height: Space.m),
-                  FilledButton.icon(
-                    onPressed: widget.onImport,
-                    icon: const Icon(Icons.file_open_outlined),
-                    label: const Text('Import course PGN…'),
-                  ),
-                  const SizedBox(height: Space.s),
-                  const Text(
-                    'Choose a downloaded Chessable course or repertoire PGN.',
-                  ),
-                ],
-                if (trainer.scope == TrainScope.book) ?widget.bookChip,
-                const SizedBox(height: Space.s),
-                Text(
-                  emptyReason(why),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            AbsorbPointer(
+              absorbing: widget.trainer.documentWriting,
+              child: _content(context),
             ),
-          ),
-          TrainerFailed(:final failure) => _Failed(
-            sentence: progressProblem(
-              failure,
-              doing: 'read the training progress',
-            ),
-            onRetry: trainer.reload,
-          ),
-          TrainerUnsaved(:final failure) => _Failed(
-            sentence: unsavedProgressProblem(failure),
-            onRetry: trainer.retryPending,
-          ),
-          final TrainerReady ready => LineList(
-            trainer: trainer,
-            ready: ready,
-            onRead: widget.onRead,
-            offerBuilder: widget.offerBuilder,
-            bookChip: widget.bookChip,
-            onImport: widget.onImport,
-            onSettings: widget.onSettings,
-          ),
-        };
+            if (widget.trainer.documentWriting)
+              ColoredBox(
+                color: Theme.of(
+                  context,
+                ).colorScheme.surface.withValues(alpha: 0.9),
+                child: const _Sentence('Saving the training source…'),
+              ),
+          ],
+        );
       },
     );
+  }
+
+  Widget _content(BuildContext context) {
+    final trainer = widget.trainer;
+    if (trainer.lesson case final lesson?) {
+      return LessonView(lesson: lesson, trainer: trainer, moves: widget.moves);
+    }
+    if (trainer.state is TrainerReady && trainer.unsavedProgress != null) {
+      return _Failed(
+        sentence: unsavedProgressProblem(trainer.unsavedProgress!),
+        onRetry: trainer.retryPending,
+      );
+    }
+    return switch (trainer.state) {
+      TrainerIdle() ||
+      TrainerLoading() => const _Sentence('Reading training progress…'),
+      // The scope stays in reach: a book trains with nothing open.
+      TrainerEmpty(:final why) => Padding(
+        padding: const EdgeInsets.all(Space.m),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TrainScopeButtons(trainer: trainer),
+            if (widget.onImport != null) ...[
+              const SizedBox(height: Space.m),
+              FilledButton.icon(
+                onPressed: widget.onImport,
+                icon: const Icon(Icons.file_open_outlined),
+                label: const Text('Import course PGN…'),
+              ),
+              const SizedBox(height: Space.s),
+              const Text(
+                'Choose a downloaded Chessable course or repertoire PGN.',
+              ),
+            ],
+            if (trainer.scope == TrainScope.book) ?widget.bookChip,
+            const SizedBox(height: Space.s),
+            Text(
+              emptyReason(why),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+      TrainerFailed(:final failure) => _Failed(
+        sentence: progressProblem(failure, doing: 'read the training progress'),
+        onRetry: trainer.reload,
+      ),
+      TrainerUnsaved(:final failure) => _Failed(
+        sentence: unsavedProgressProblem(failure),
+        onRetry: trainer.retryPending,
+      ),
+      final TrainerReady ready => LineList(
+        trainer: trainer,
+        ready: ready,
+        onRead: widget.onRead,
+        offerBuilder: widget.offerBuilder,
+        bookChip: widget.bookChip,
+        onImport: widget.onImport,
+        onSettings: widget.onSettings,
+      ),
+    };
   }
 }
 

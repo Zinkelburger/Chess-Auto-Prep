@@ -30,6 +30,9 @@ import '../../workspace/document_session.dart';
 import '../../workspace/session_results.dart';
 import 'library_state.dart';
 
+typedef LibraryTrainingGuard =
+    Future<LibraryResult> Function(Future<LibraryResult> Function() operation);
+
 /// The repertoire catalog and one user command at a time. Storage owns
 /// durable references; the session owns open-file drafts and history.
 /// Closed commands retain exact retry inputs and gate competing navigation.
@@ -40,6 +43,7 @@ final class Library extends ChangeNotifier {
     required DocumentSaver saver,
     required DocumentSession session,
     this.pendingWrites,
+    this.withTrainingRetired,
     required PgnFilePicker picker,
     required String root,
     Books? books,
@@ -189,13 +193,7 @@ final class Library extends ChangeNotifier {
   /// How many names an import tries before it says the name is taken.
   static const _namesTried = 100;
 
-  /// [name], then `name (2)`, `name (3)`…, leaving out every name a
-  /// repertoire in the list has, compared without case as [_named] compares.
-  ///
-  /// The disk can still have one of them: a repertoire whose chapters were
-  /// all deleted keeps its folder, because their recovery copies are in it,
-  /// and the list does not show a folder with no chapter in it. The move into
-  /// place is what finds that out, so an import tries these in turn.
+  /// Unused catalog names in order; publication checks physical collisions.
   List<String> _freeNames(String name) {
     final names = <String>[];
     for (var n = 1; names.length < _namesTried; n++) {
@@ -240,23 +238,26 @@ final class Library extends ChangeNotifier {
   });
 
   /// Renames a file, or a course section's ChapterName and book references.
-  Future<LibraryResult> renameChapter(ChapterRef ref, String name) =>
-      _run('rename ${ref.path}', () async {
-        if (ref.section case final section?) {
-          final retry = _referenceRetries[(ref.path, section, name.trim())];
-          if (retry != null) return retry();
-          return _editFile(
-            ref,
-            (file) => sectionRenamed(file, section, name),
-            renamedTo: name.trim(),
-            references: ReferenceChanges([
-              SectionRename(path: ref.path, from: section, to: name.trim()),
-            ]),
-          );
-        }
-        final to = p.join(p.dirname(ref.path), '$name.pgn');
-        return _relocate(ref, DocumentRef(to));
-      });
+  Future<LibraryResult> renameChapter(ChapterRef ref, String name) => _run(
+    'rename ${ref.path}',
+    () async {
+      if (ref.section case final section?) {
+        final retry = _referenceRetries[(ref.path, section, name.trim())];
+        if (retry != null) return retry();
+        return _editFile(
+          ref,
+          (file) => sectionRenamed(file, section, name),
+          renamedTo: name.trim(),
+          references: ReferenceChanges([
+            SectionRename(path: ref.path, from: section, to: name.trim()),
+          ]),
+        );
+      }
+      final to = p.join(p.dirname(ref.path), '$name.pgn');
+      return _relocate(ref, DocumentRef(to));
+    },
+    retiresTraining: ref.section == null || _session.source?.path != ref.path,
+  );
 
   /// A chapter file moves to the other repertoire. A chapter of a course
   /// file is part of that file and goes where the file goes.
@@ -269,18 +270,19 @@ final class Library extends ChangeNotifier {
         }
         final target = p.join(to.path, p.basename(ref.path));
         return _relocate(ref, DocumentRef(target));
-      });
+      }, retiresTraining: true);
 
-  /// A chapter file goes to the recovery folder; a chapter of a course file
-  /// is its games, which are taken out of the file — undo puts them back —
-  /// and the file's other chapters stay.
-  Future<LibraryResult> deleteChapter(ChapterRef ref) =>
-      _run('delete ${ref.path}', () {
-        if (sharesFile(ref)) {
-          return _editFile(ref, (file) => sectionRemoved(file, ref.section));
-        }
-        return _remove(ref);
-      });
+  /// Removes a section's games, or moves its whole file into recovery.
+  Future<LibraryResult> deleteChapter(ChapterRef ref) => _run(
+    'delete ${ref.path}',
+    () {
+      if (sharesFile(ref)) {
+        return _editFile(ref, (file) => sectionRemoved(file, ref.section));
+      }
+      return _remove(ref);
+    },
+    retiresTraining: !sharesFile(ref) || _session.source?.path != ref.path,
+  );
 
   /// Whether [ref] is one of several chapters its file holds by tag, so
   /// deleting it rewrites that file rather than moving one into recovery.
@@ -292,11 +294,7 @@ final class Library extends ChangeNotifier {
               .length >
           1;
 
-  /// Moves the lines at [games] of the open chapter into [to], or into the
-  /// line at [asSidelineOf] there. This is what dropping lines on a chapter,
-  /// or on a line, does — and how proposed lines are accepted into a real
-  /// chapter. [_moveLines] says in which order the two files
-  /// are written.
+  /// Moves selected open-chapter lines to [to], optionally as sidelines.
   Future<LibraryResult> moveLines({
     required Set<int> games,
     required ChapterRef to,
@@ -304,6 +302,7 @@ final class Library extends ChangeNotifier {
   }) => _run(
     'move ${games.length} lines to ${to.path}',
     () => _moveLines(games: games, to: to, asSidelineOf: asSidelineOf),
+    retiresTraining: _session.source?.path != to.path,
   );
 
   /// The whole folder, in one rename.
@@ -321,64 +320,74 @@ final class Library extends ChangeNotifier {
       );
     }
     return _renameFolder(folder, p.join(_root, name));
-  });
+  }, retiresTraining: true);
 
   /// The deleted chapters still in recovery, most recently deleted first.
   /// Read on demand: nothing but the recovery view asks, and it asks again
   /// after each restore.
   Future<DeletedListing> deleted() => _files.deleted();
 
-  /// Puts [chapter] back in the folder it was deleted from, under [name]
-  /// (its old name when null). The store moves it, so its training rows
-  /// come back with it; a chapter of that name already there is
-  /// [LibraryNameTaken], and nothing is replaced.
+  /// Restores [chapter] and its training rows under [name], replacing nothing.
   Future<LibraryResult> restoreChapter(
     DeletedChapter chapter, {
     String? name,
   }) => _run('restore ${chapter.path}', () {
     final to = DocumentRef(chapter.restoredAs(name));
     return _relocate(ChapterRef.at(chapter.path), to);
-  });
+  }, retiresTraining: true);
 
   /// Every chapter to the recovery folder, then the folder when it is empty.
-  Future<LibraryResult> deleteRepertoire(RepertoireFolder folder) =>
-      _run('delete the repertoire ${folder.name}', () => _deleteFolder(folder));
+  Future<LibraryResult> deleteRepertoire(RepertoireFolder folder) => _run(
+    'delete the repertoire ${folder.name}',
+    () => _deleteFolder(folder),
+    retiresTraining: true,
+  );
 
-  /// Reads the open chapter from disk again, throwing the draft away. This is
-  /// the way out of [LibraryConflicted]: the workspace takes the version that
-  /// is on disk, and the change the user asked for can be made against it.
-  /// The file may be gone by now, which the answer says.
+  /// Discards the draft and reopens the disk version after [LibraryConflicted].
   Future<OpenResult> reloadOpenChapter() => _session.reloadFromDisk();
 
   /// One change at a time, then the list is read again: a half-applied change
   /// must be visible, and the store is the only thing that knows what landed.
   final PendingWrites? pendingWrites;
+  final LibraryTrainingGuard? withTrainingRetired;
 
   Future<LibraryResult> _run(
     String action,
-    Future<LibraryResult> Function() body,
-  ) =>
-      pendingWrites?.track(this, _perform(action, body), label: 'Library') ??
-      _perform(action, body);
+    Future<LibraryResult> Function() body, {
+    bool retiresTraining = false,
+  }) =>
+      pendingWrites?.track(
+        this,
+        _perform(action, body, retiresTraining),
+        label: 'Library',
+      ) ??
+      _perform(action, body, retiresTraining);
 
   Future<LibraryResult> _perform(
     String action,
     Future<LibraryResult> Function() body,
+    bool retiresTraining,
   ) async {
     if (_busy) return const LibraryBusy();
     _busy = true;
     if (!_disposed) notifyListeners();
-    final LibraryResult result;
+    Future<LibraryResult> operation() async {
+      final result = await body();
+      if (!_disposed) await catalog.synchronize();
+      return result;
+    }
+
     try {
-      result = await body();
+      final guard = withTrainingRetired;
+      final result = retiresTraining && guard != null
+          ? await guard(operation)
+          : await operation();
+      if (!_disposed) reportLibraryResult(action, result);
+      return result;
     } finally {
       _busy = false;
       if (!_disposed) notifyListeners();
     }
-    if (_disposed) return result;
-    reportLibraryResult(action, result);
-    await catalog.synchronize();
-    return result;
   }
 
   /// The repertoire called [name], compared without case because a user who
@@ -587,11 +596,7 @@ final class Library extends ChangeNotifier {
         }
       });
 
-  /// The folder moves whole, in one rename: its chapters, the raw-game
-  /// sidecars written beside them and the generation bundles under it. A
-  /// chapter-at-a-time rename that stopped half way would split one
-  /// repertoire across two folders and strand the rest of its files in the
-  /// one that then vanishes from the list.
+  /// Moves the folder whole, including raw-game sidecars and generation bundles.
   Future<LibraryResult> _renameFolder(
     RepertoireFolder folder,
     String to,
@@ -606,13 +611,8 @@ final class Library extends ChangeNotifier {
         const LibraryBusy();
   }
 
-  /// Recoverable: each chapter goes to the recovery folder through the store,
-  /// so its training rows follow it there and come back with it. A chapter
-  /// that refuses stops the delete where it is — the ones already gone are in
-  /// recovery — and the folder stays, because the rest is still in it.
-  ///
-  /// A course file is listed once for each chapter it holds and goes to
-  /// recovery once, whole.
+  /// Deletes each distinct file into recovery. A failure stops the batch;
+  /// earlier files remain recoverable and unprocessed files stay in place.
   Future<LibraryResult> _deleteFolder(RepertoireFolder folder) async {
     final repointed = <records.RepointResult>[];
     final removed = <String>{};
@@ -656,17 +656,8 @@ final class Library extends ChangeNotifier {
     );
   }
 
-  /// Moves the lines at [games] of the open chapter into [to]: as lines of
-  /// their own, or folded into the line at [asSidelineOf] there as
-  /// variations.
-  ///
-  /// Two files, two saves, in the safe order: the lines are written into
-  /// [to] first, against the revision it was read at, and only then taken
-  /// out of the open chapter. A refusal on the way in changes nothing; a
-  /// refusal on the way out leaves the lines in both files and says so,
-  /// which is a duplicate the user can see rather than a loss they cannot.
-  /// Within one chapter — a line dropped on another line of the same file —
-  /// it is one document folded and then trimmed, through the session.
+  /// Writes the destination first, then removes source lines. A refused
+  /// second write leaves a visible duplicate instead of losing those lines.
   Future<LibraryResult> _moveLines({
     required Set<int> games,
     required ChapterRef to,
@@ -700,7 +691,7 @@ final class Library extends ChangeNotifier {
       return _saved();
     }
     final written = await _writtenInto(to, lines, asSidelineOf);
-    if (written != null) return written;
+    if (written is! LibraryDone) return written;
     // [moving] names games of the chapter as it was when the move began. The
     // user may have opened another chapter or edited this one while [to] was
     // being written, and those games of it are somebody else's lines.
@@ -741,7 +732,7 @@ final class Library extends ChangeNotifier {
   }
 
   /// Puts [lines] into [to] on disk, or answers why it could not.
-  Future<LibraryResult?> _writtenInto(
+  Future<LibraryResult> _writtenInto(
     ChapterRef to,
     List<ChapterLine> lines,
     int? host,
@@ -789,16 +780,14 @@ final class Library extends ChangeNotifier {
       text = writeChapter(back.file);
       arranged = back.games;
     }
-    return switch (await _store.save(
-      to,
-      text,
-      expected: read.revision,
-      scope: GamesRearranged(arranged),
-    )) {
-      store.Saved() => null,
-      store.Conflict() => const LibraryStale(),
-      store.SaveDidNotLand(:final detail) => LibraryFailure(detail),
-    };
+    return _savedResult(
+      await _store.save(
+        to,
+        text,
+        expected: read.revision,
+        scope: GamesRearranged(arranged),
+      ),
+    );
   }
 
   /// Edits through the workspace for an open file, otherwise against a fresh
@@ -836,20 +825,28 @@ final class Library extends ChangeNotifier {
         final text = writeChapter(pinned.chapter);
         Future<store.SaveResult> save() =>
             _store.save(ref, text, expected: read.revision, scope: scope);
-        Future<store.SaveResult> coordinated() {
-          if (_session.source?.path == ref.path) {
-            return Future.value(
-              const store.IoFailure(
+        Future<store.SaveResult> coordinated() async {
+          // Registry retries also enter here, outside the Library command.
+          final guard = _saver.writeGuard?.call();
+          try {
+            final problem = await guard?.pauseForWrite();
+            if (problem != null) return store.IoFailure(problem);
+            if (_session.source?.path == ref.path) {
+              return const store.IoFailure(
                 'Close this file before retrying its pending rename.',
-              ),
+              );
+            }
+            final result = await _session.access.changing(
+              ref.path,
+              () => references == null || _books == null
+                  ? save()
+                  : _books.saveReferences(save),
             );
+            if (!_disposed) await catalog.synchronize();
+            return result;
+          } finally {
+            guard?.resumeAfterWrite();
           }
-          return _session.access.changing(
-            ref.path,
-            () => references == null || _books == null
-                ? save()
-                : _books.saveReferences(save),
-          );
         }
         if (references == null) return _savedResult(await coordinated());
         // Exact retries retain the accepted bytes, revision and operation id.
@@ -867,7 +864,8 @@ final class Library extends ChangeNotifier {
           if (result is! store.IoFailure) _referenceRetries.remove(key);
           return _savedResult(
             result,
-            retry: () => _run('retry rename ${ref.path}', retry),
+            retry: () =>
+                _run('retry rename ${ref.path}', retry, retiresTraining: true),
           );
         }
         _referenceRetries[key] = retry;

@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/features/training/models/training_history_operation.dart';
+import '../../support/training_source_fixture.dart';
+import 'package:chess_auto_prep/features/training/models/training_source_context.dart';
 import 'package:chess_auto_prep/features/training/models/training_phase.dart';
 import 'package:chess_auto_prep/features/training/models/training_configuration.dart';
 import 'package:chess_auto_prep/features/training/controllers/training_settings_controller.dart';
@@ -41,6 +44,7 @@ class _Reviews implements TrainingReviewRepository {
   @override
   Future<void> saveAll(
     List<RepertoireReviewEntry> entries, {
+    required TrainingSourceContext source,
     String? repertoireId,
   }) async {
     saveCalls++;
@@ -51,6 +55,7 @@ class _Reviews implements TrainingReviewRepository {
   @override
   Future<void> saveMoveProgress(
     List<RepertoireMoveProgress> entries, {
+    required TrainingSourceContext source,
     String? repertoireId,
   }) async {
     if (failMoves) throw StateError('move write unavailable');
@@ -58,8 +63,10 @@ class _Reviews implements TrainingReviewRepository {
 
   @override
   Future<void> appendHistory(
-    List<RepertoireReviewHistoryEntry> entries,
-  ) async => history.addAll(entries);
+    List<RepertoireReviewHistoryEntry> entries, {
+    required TrainingSourceContext source,
+    required TrainingHistoryOperation operation,
+  }) async => history.addAll(entries);
 
   @override
   List<RepertoireLine> orderLinesForReview(
@@ -80,8 +87,9 @@ class _Headers implements TrainingHeaderRepository {
   @override
   Future<bool> updateManyLineReviewHeaders(
     String sourcePath,
-    Map<String, RepertoireReviewEntry> entries,
-  ) async {
+    Map<String, RepertoireReviewEntry> entries, {
+    required TrainingSourceContext source,
+  }) async {
     if (fail) throw StateError('source unavailable');
     paths.add(sourcePath);
     return true;
@@ -131,6 +139,7 @@ RepertoireMetadata _meta(String path) => RepertoireMetadata(
   lastModified: DateTime.utc(2026),
 );
 LoadedTrainingSource _loaded(String id) => LoadedTrainingSource(
+  sources: scriptedTrainingSources(['/$id.pgn']),
   lines: [
     fakeLine(id, ['e4']),
   ],
@@ -164,6 +173,11 @@ void main() {
       reviewService: reviews,
       askedQuestions: _Answers(),
     )..isLoading = false;
+    controller.progress.sources = scriptedTrainingSources([
+      '/line.pgn',
+      '/new.pgn',
+      '/old.pgn',
+    ]);
   });
   tearDown(() {
     if (!disposed) controller.dispose();
@@ -370,6 +384,7 @@ void main() {
       expect(source.pending.keys, ['/line.pgn']);
       source.pending['/line.pgn']!.complete(
         LoadedTrainingSource(
+          sources: scriptedTrainingSources(['/line.pgn']),
           lines: [line],
           reviewByLine: {line.id: reviews.saved.single},
           moveProgress: {},
@@ -460,7 +475,7 @@ void main() {
   );
 
   test(
-    'cancelled failed outcome cannot poison or replay into the next completion',
+    'cancelled partial outcome settles before the next source can complete',
     () async {
       controller.setRepertoire(_meta('/old.pgn'));
       controller.isLoading = false;
@@ -475,7 +490,10 @@ void main() {
       expect(controller.error, isNull);
       expect(reviews.history, isEmpty);
       reviews.failMoves = false;
-      final loading = controller.loadRepertoire();
+      await controller.loadRepertoire();
+      expect(controller.error, contains('partly saved'));
+      expect(source.pending.containsKey('/new.pgn'), isFalse);
+      final loading = controller.retryFailure();
       await Future<void>.delayed(Duration.zero);
       source.pending['/new.pgn']!.complete(_loaded('new'));
       await loading;
@@ -485,8 +503,11 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(controller.completionCommitted, isTrue);
       expect(controller.sessionCorrect, 1);
-      expect(reviews.history.single.repertoireId, '/new.pgn');
-      expect(reviews.history.single.rating, '');
+      expect(reviews.history.map((entry) => entry.repertoireId), [
+        '/old.pgn',
+        '/new.pgn',
+      ]);
+      expect(reviews.history.map((entry) => entry.rating), ['good', '']);
       expect(reviews.scheduleCalls, 1);
       expect(controller.error, isNull);
     },
@@ -593,6 +614,7 @@ void main() {
         repertoireId: () => path,
         onError: failures.add,
       );
+      progress.sources = scriptedTrainingSources(['/old.pgn']);
       addTearDown(progress.dispose);
       await progress.recordRating(
         fakeLine('old', ['e4']),

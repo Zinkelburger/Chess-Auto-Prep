@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -267,7 +268,10 @@ final class _HeldProgress implements ProgressFiles {
   final release = Completer<void>();
   final delegate = ScriptedProgress();
   @override
-  Future<ProgressRead> read(Set<String> sources) => delegate.read(sources);
+  Future<ProgressRead> read(
+    Set<String> sources, {
+    Map<String, Revision>? observed,
+  }) => delegate.read(sources, observed: observed);
   @override
   Future<ProgressWrite> logAttempt(
     Attempt attempt, {

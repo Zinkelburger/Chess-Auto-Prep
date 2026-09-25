@@ -10,8 +10,6 @@
 /// header gets the position-based fallback id, which a move would change.
 library;
 
-import '../../../models/repertoire_move_progress.dart';
-import '../../../models/repertoire_review_entry.dart';
 import '../../../chess_core/pgn/repertoire_line_ids.dart';
 import '../../../services/repertoire_review_service.dart';
 import 'pgn_game_headers.dart';
@@ -49,63 +47,6 @@ class ReviewProgressRepointer {
     };
     if (newPathById.isEmpty) return;
 
-    /// The chapter a record keyed by [repertoireId] and [lineId] moves to,
-    /// or null when it is not one of the moved lines.
-    String? destinationOf(String repertoireId, String lineId) =>
-        repertoireId == from ? newPathById[lineId] : null;
-
-    // TODO(audit): RepertoireReviewEntry.copyWith and
-    // RepertoireMoveProgress.copyWith (shared models) cannot change
-    // repertoireId, hence the field-by-field copies below.
-    final entries = await _review.loadAll();
-    var changed = false;
-    final rewritten = <RepertoireReviewEntry>[];
-    for (final e in entries) {
-      final to = destinationOf(e.repertoireId, e.lineId);
-      if (to == null) {
-        rewritten.add(e);
-        continue;
-      }
-      changed = true;
-      rewritten.add(
-        RepertoireReviewEntry(
-          repertoireId: to,
-          lineId: e.lineId,
-          lineName: e.lineName,
-          difficulty: e.difficulty,
-          intervalDays: e.intervalDays,
-          dueDateUtc: e.dueDateUtc,
-          lastRating: e.lastRating,
-          lastReviewedUtc: e.lastReviewedUtc,
-          passCount: e.passCount,
-          failCount: e.failCount,
-          excluded: e.excluded,
-        ),
-      );
-    }
-    if (changed) await _review.saveAll(rewritten);
-
-    final progress = await _review.loadMoveProgress();
-    var progressChanged = false;
-    final movedProgress = <RepertoireMoveProgress>[];
-    for (final mp in progress) {
-      final to = destinationOf(mp.repertoireId, mp.lineId);
-      if (to == null) {
-        movedProgress.add(mp);
-        continue;
-      }
-      progressChanged = true;
-      movedProgress.add(
-        RepertoireMoveProgress(
-          repertoireId: to,
-          lineId: mp.lineId,
-          moveIndex: mp.moveIndex,
-          correctStreak: mp.correctStreak,
-          learned: mp.learned,
-        ),
-      );
-    }
-    if (progressChanged) await _review.saveMoveProgress(movedProgress);
-    await _review.repointAttempts(from: from, movedLinePaths: newPathById);
+    await _review.repointLines(from: from, movedLinePaths: newPathById);
   }
 }

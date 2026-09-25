@@ -141,8 +141,8 @@ final class DocumentRelocation {
       return IoFailure(failureDetail(error));
     }
     await _backups.adopt(from: from, to: to, documentPath: destination.path);
-    await _sync(folderOf(ref));
-    await _sync(target);
+    // RelocationNotes flushes both namespace changes before repointing rows
+    // or retiring the note, for live completion and restart recovery alike.
     // Same bytes in the same file: the caller's revision still describes it.
     return Moved(revision);
   }
@@ -215,8 +215,6 @@ final class DocumentRelocation {
       return FolderMoveFailed(failureDetail(error));
     }
     await _adoptAll(documentNames, from, to);
-    await _sync(Directory(p.dirname(from)));
-    await _sync(Directory(p.dirname(to)));
     return const FolderMoved();
   }
 
@@ -331,7 +329,6 @@ final class DocumentRelocation {
       await _notes.discard(note);
       return IoFailure(failureDetail(error));
     }
-    await _sync(folderOf(ref));
     return Deleted(target);
   }
 
@@ -350,15 +347,6 @@ final class DocumentRelocation {
       if (await directoryEntries(target).isEmpty) await target.delete();
     } on FileSystemException catch (error) {
       log.w('remove the empty folder ${target.path}', error);
-    }
-  }
-
-  Future<void> _sync(Directory directory) async {
-    if (Platform.isWindows) return;
-    try {
-      await syncDirectory(directory.path);
-    } on FileSystemException catch (error) {
-      log.w('flush ${directory.path}', error);
     }
   }
 }

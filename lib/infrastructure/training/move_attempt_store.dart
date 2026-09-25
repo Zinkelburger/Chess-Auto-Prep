@@ -1,3 +1,5 @@
+import '../../features/training/models/training_source_context.dart';
+import 'training_source_admission.dart';
 import 'dart:convert';
 
 import 'package:path/path.dart' as p;
@@ -8,12 +10,17 @@ import '../../services/storage/storage_service.dart';
 /// Storage is injected so owned file moves can repoint history without a
 /// dependency on the review scheduler or the global storage factory.
 class MoveAttemptStore {
-  MoveAttemptStore(this.storage);
+  MoveAttemptStore(
+    this.storage, {
+    this.validateSource = validateTrainingSource,
+  });
+  final Future<void> Function(TrainingSourceContext, String) validateSource;
   final StorageService storage;
   static const fileName = 'repertoire_move_attempts.jsonl';
 
   Future<void> record({
     required String repertoireId,
+    required TrainingSourceContext source,
     required String lineId,
     required int moveIndex,
     required String fen,
@@ -33,7 +40,12 @@ class MoveAttemptStore {
       'phase': phase,
       'timestampUtc': DateTime.now().toUtc().toIso8601String(),
     });
-    await storage.updateFile(fileName, (raw) => '${raw ?? ''}$row\n');
+    await source.run(
+      () => storage.updateFile(fileName, (raw) async {
+        await validateSource(source, repertoireId);
+        return '${raw ?? ''}$row\n';
+      }),
+    );
   }
 
   static List<Map<String, dynamic>> _decode(String? raw) => [

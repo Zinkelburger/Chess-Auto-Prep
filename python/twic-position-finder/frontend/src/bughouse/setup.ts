@@ -22,9 +22,12 @@ export function parseReserve(text: string): { pieces: string } | { error: string
     const p = letter.toUpperCase();
     if (p === 'K') { pieces += '!K'; return ''; }
     if (!ORDER.includes(p)) { pieces += `!${letter}`; return ''; }
-    pieces += p.repeat(count ? Number(count) : 1);
+    const n = count ? Number(count) : 1;
+    if (!Number.isSafeInteger(n) || n > 30 || pieces.length + n > 30) { pieces += '!overflow'; return ''; }
+    pieces += p.repeat(n);
     return '';
   });
+  if (pieces.includes('!overflow')) return { error: 'That is more pieces than a reserve can hold.' };
   if (pieces.includes('!K')) return { error: 'A king can’t be in reserve (N is the knight).' };
   const bad = pieces.match(/!(.)/);
   if (bad) return { error: `“${bad[1]}” isn’t a piece: use P, N, B, R or Q.` };

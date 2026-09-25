@@ -231,6 +231,7 @@ void main() {
         isFalse,
       );
       final loader = TrainingSourceLoader(
+        documents: documents,
         repertoireService: FakeRepertoireService(),
         reviewService: FakeReviewService(),
         askedQuestions: AskedQuestionsStore(),

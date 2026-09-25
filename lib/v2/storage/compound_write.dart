@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'directory_entries.dart';
 import 'atomic_write.dart';
 import 'compound_commit.dart';
+import 'document_ref.dart';
 import 'relocation_notes.dart' show RecoveryRequired;
 
 enum CompoundWriteStep { prepared, intent, document, books, completed }
@@ -29,6 +30,12 @@ final class CompoundWrites {
   final Directory documents;
   final Directory support;
   final Future<void> Function(CompoundWriteStep)? testHook;
+
+  // Native receipts exist only for publications observed by this process.
+  // A replayed completion never authorizes training against an arbitrary
+  // replacement now occupying the path; reopening supplies a new observation.
+  final _published = <String, Revision>{};
+  Revision? publishedRevision(String id) => _published[id];
 
   Directory get _folder => Directory(p.join(support.path, 'compound-writes'));
   String get _books => p.join(support.path, 'books.json');
@@ -134,6 +141,7 @@ final class CompoundWrites {
       command.documentPath,
       command.documentBefore,
       command.documentAfter,
+      documentId: command.id,
     );
     await testHook?.call(CompoundWriteStep.document);
     await _publish(_books, command.booksBefore, command.booksAfter);
@@ -177,7 +185,12 @@ final class CompoundWrites {
     );
   }
 
-  Future<void> _publish(String path, String? before, String? after) async {
+  Future<void> _publish(
+    String path,
+    String? before,
+    String? after, {
+    String? documentId,
+  }) async {
     final current = await _text(path);
     _expect(path, current, before, after);
     if (current == after) {
@@ -192,7 +205,16 @@ final class CompoundWrites {
       return;
     }
     await _unusedStage(path);
-    await replaceFile(path, utf8.encode(after));
+    await replaceFile(
+      path,
+      utf8.encode(after),
+      installed: documentId == null
+          ? null
+          : (file) => _published[documentId] = Revision(
+              file.sha256Hex!,
+              nativeIdentity: file.identity,
+            ),
+    );
   }
 
   Future<void> _record(_Note note, _State state, {bool fresh = false}) async {

@@ -2,7 +2,7 @@
 /// draft, retries against the newer chapter, and survives closing/reopening.
 library;
 
-import 'package:chess_auto_prep/app/app_dependencies.dart';
+import 'package:chess_auto_prep/app/document_dependencies.dart';
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 import 'package:chess_auto_prep/features/documents/repositories/pgn_document_store.dart';
 import 'package:chess_auto_prep/infrastructure/repertoires/document_repertoire_repository.dart';

@@ -328,6 +328,15 @@ choose whether to move at all, which the team up on the diagonal clock has —
 replaces the older "clock advantage" wording throughout the Lab, the book and
 BughouseDB: `AB may sit`, `Equal` (the default) or `CD may sit`.
 
+The website's `/bughouse` is a separate static Lab. Its shared Chessground
+view is in `frontend/src/bughouse/boards.ts`; `lines.ts` owns independent
+history snapshots and `session.ts` owns validated saved sessions and BPGN
+exports. Copy moves/download preserve cross-board chronology; Copy link also
+preserves forward history and settings. One worker retains WASM and ONNX
+between moves/searches/Stop, with a bounded result cache and persistent model
+chunks. The [static Lab guide](../tools/bughouse_web/README.md) documents
+promotion, keyboard entry, cache boundaries and the required browser checks.
+
 `tools/bughouse_db/hivemind_book.py` builds a precomputed Hivemind book beside
 the FICS book (`~/.local/share/chess-prep/bughouse-db/hivemind_book.db`, same
 position key): every legal move on both boards, scored for the priority cases
@@ -1657,8 +1666,11 @@ Training session, phases, chapter scope and review progress have canonical
 owners under `features/training/`; the old `services/training/` libraries and
 `models/training_settings.dart` are removed. Models no longer persist themselves.
 Epoch guards reject stale source, layout, settings and rating completions.
-Line-completion persistence resumes failed stages without repeating confirmed history
-appends or tallying twice. The existing error panel retries the pending action;
+Line-completion persistence resumes failed stages without tallying twice.
+`TrainingHistoryOperation` retains exact before/after CSV contents in the adapter:
+a retry recognizes a previously installed append, writes only the expected
+before-state, and refuses intervening history changes. Identical newly accepted
+ratings have distinct operation identities. The existing error panel retries the pending action;
 failed header mirrors remain queued. This retry state is in memory; crash-resume
 remains a separate requirement.
 
@@ -1670,9 +1682,11 @@ and repeat completion cannot bypass a pending/failed completion. Existing Retry
 resumes the captured result; a different run receives a distinct attempt identity.
 `ReviewProgressStore` captures source/reviews/moves before queuing disk stages,
 serializes distinct attempts and joins retries of the same attempt. Source reload
-waits for admitted writes to settle before reading progress. Cancelling a line
-ends its retry admission and releases retry snapshots; admitted writes finish,
-while generation checks suppress old tally/error/advancement. The redundant
+waits for admitted writes and deferred header mirrors before capturing a new
+source. Cancelling a line retains in-flight, partly published and uncertain
+outcomes; these keep their original source context and block a new load until
+settled. Generation checks suppress old tally/error/advancement. A definitive
+source rejection before any participant writes can require a fresh load. The redundant
 rating-button wrapper and all-caught-up panel are retired.
 
 `TrainerBrowser` receives the existing session directly for chapter scope,
@@ -1688,10 +1702,21 @@ never a blind retry: committed schedules may survive while history/PGN mirrors
 remain incomplete. A successful durable review read clears the block (optional
 presentation work may still fail); a failed read does not. Reload does not replay
 the edit. Abandoned failed completion/rating outcomes also require reconciliation.
-Source changes invalidate retained row commands and visible errors remain with
-their captured source generation. Checkbox drafts also retain their original
+Source changes reject stale commands before publication; unresolved partial
+outcomes retain their retry material and visible errors stay with their captured
+source generation. Checkbox drafts also retain their original
 line-list identity and cannot save after source replacement or reload. Read opens
 explicit unsaved Viewer content; it cannot overwrite the training source.
+
+Each loaded source carries a `TrainingSourceContext` captured from the PGN
+read. Reviews, move progress, history and attempts validate it under the shared
+recovery domain before publication, including their first row. A source turn
+serializes these writes with publication and acknowledgement of its own header
+mirror. The canonical platform selection lives in
+`app/document_dependencies.dart`: Linux validates native identity and bytes;
+the explicitly selected legacy adapter on Windows/macOS checks content only
+and cannot distinguish replacement with identical bytes. Arbitrary external
+writers do not share the app's locks.
 
 `AppDependencies` provides and initially loads one `TrainingSettingsController`,
 using the existing `SectionSettingsOwner`; an injected override remains owned by
