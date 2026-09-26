@@ -10,6 +10,9 @@ click through anything else here.
                                       └── match.json    ← config + every game
 ```
 
+The engine itself — what the network sees, what the search does with it, and why
+its scores read the way they do — is [Hivemind, end to end](HIVEMIND.md).
+
 This is the engine tournament's question asked about two boards, and it is
 **not** the same question. There is one bughouse engine, so a match is not
 "which binary is stronger" — it is *what happens after this line*.

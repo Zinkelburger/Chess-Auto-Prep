@@ -86,8 +86,26 @@ level), `advantage_score` (the same put back on the engine's scale) and
 `win_percent` are. **This makes `analyse` cost two searches**; pass
 `calibrate=false` for one, and then read only the ordering.
 
-A rough sense of scale in `advantage`: a queen is about **0.14**, and anything
-under **0.02** at a few thousand nodes is noise.
+A sense of scale in `advantage`, measured on a symmetric middlegame — and the
+distinction is the one most reports of "the eval ignores material" turn on:
+
+| our team is up a… | piece simply gone from the board | piece in our partner's hand |
+|---|---:|---:|
+| pawn | 0.079 | **0.104** |
+| knight | 0.105 | **0.177** |
+| rook | 0.051 | **0.155** |
+| queen | 0.147 | **0.426** |
+
+A piece that merely left the board is worth about a third of a piece that
+reached your partner's reserve, and the engine is right about that. So when you
+write a material-up position by hand, **transfer** the piece — remove it from
+one board *and* add it to the partner's pocket on the other — or you are
+measuring a piece in limbo. Anything under **0.02** at a few thousand nodes is
+noise. One pawn-in-hand ≈ 0.10, so `advantage / 0.10` reads as pawns-in-hand.
+
+See [Hivemind, end to end](../../../docs/HIVEMIND.md) for the network, the
+search, and why the printed `score` is about 2.8× `advantage` and therefore
+makes a whole extra knight look like `+0.51`.
 
 Two things follow:
 

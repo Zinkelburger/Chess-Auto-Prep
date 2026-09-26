@@ -53,6 +53,10 @@ Last reviewed against `lib/` and `tree_builder/` (June 2026, post 7-phase remedi
 
 ### Bughouse analysis and editing
 
+The engine behind all of this — the 74-plane input, the five heads, the joint
+action search, the score calibration and the web payload — is
+[Hivemind, end to end](HIVEMIND.md).
+
 `features/bughouse/widgets/bughouse_screen.dart` keeps Board 1 and Board 2
 beside one analysis/reference panel. Underlined Engine / Board / Engine settings
 tabs provide navigation, distinct from the segmented database selectors.
