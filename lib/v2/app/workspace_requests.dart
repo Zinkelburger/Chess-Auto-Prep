@@ -539,11 +539,19 @@ final class WorkspaceRequests extends ChangeNotifier {
     return sentence == null ? const RequestDropped() : _refused(sentence);
   }
 
-  /// The analysis board as a new chapter [name] at the end of [study], then
-  /// that chapter open in Study.
+  /// The analysis board, or the game on the board with its unsaved moves,
+  /// as a new chapter [name] at the end of [study], then that chapter open
+  /// in Study.
   Future<RequestResult> saveBoardToStudy(ChapterRef study, String name) async {
-    final board = _session.chapter;
-    if (!_session.isScratch || board == null) return const RequestDropped();
+    final chapter = _session.chapter;
+    if (chapter == null) return const RequestDropped();
+    final board = _session.isScratch
+        ? chapter
+        : withSide(
+            await readChapter(name: name, text: gameText(_session)),
+            _session.orientation,
+          );
+    if (_disposed) return const RequestDropped();
     switchTo(Mode.study);
     final opened = await open(study, game: 0);
     if (_disposed || opened is! RequestDone) return opened;

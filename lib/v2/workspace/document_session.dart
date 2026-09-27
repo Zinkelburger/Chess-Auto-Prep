@@ -104,7 +104,8 @@ final class DocumentSession extends ChangeNotifier {
   HeldEdits? _held;
 
   /// Viewer edits stay in memory; builder edits autosave. Once held, all
-  /// further edits join the draft until keepHeld or discardHeld, in any mode.
+  /// further edits join the draft until keepHeld or discardHeld, in any mode;
+  /// a file this app may not write holds them too, to be kept as a copy.
   bool get holdsEdits => _holdsEdits;
   bool _holdsEdits = false;
   set holdsEdits(bool on) {
@@ -612,11 +613,10 @@ final class DocumentSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Why an edit may not happen now, or null when it may: the document
-  /// opened to read, or an undo is still reading the version it put back.
-  /// The screen says why again either way.
+  /// Why an edit may not happen now, or null when it may: a read-only
+  /// document not holding edits, or an undo still reading what it restored.
   String? _editBlocked() {
-    if (_readOnly case final reason?) {
+    if (_readOnly case final reason? when !_holdsEdits) {
       _refused = NotEditable(reason);
       notifyListeners();
       return reason;
@@ -722,11 +722,11 @@ final class DocumentSession extends ChangeNotifier {
     return Restored(writeChapter(restored.chapter));
   }
 
-  /// Writes the held edits to the file, as one save.
+  /// Writes the held edits to the file, as one save; read-only ones stay.
   void keepHeld() {
     _editors.commit();
     final held = _held;
-    if (held == null) return;
+    if (held == null || _readOnly != null) return;
     _held = null;
     // An edit that gave the file a chapter took the board to it, and the
     // saver waited for the edits to be kept before going there too.
@@ -956,17 +956,18 @@ final class DocumentSession extends ChangeNotifier {
   /// copy is the only place those words can go on being edited. A conflicted
   /// document keeps it: it can still be reloaded. So does a document the user
   /// has left, or opened another in place of, while the copy was written:
-  /// the copy is of the one that was up, not of the one up now.
-  Future<CopyResult> saveCopy(String name) async {
+  /// the copy is of the one that was up, not of the one up now. [into] is
+  /// the folder to write it in instead, for a file outside Documents.
+  Future<CopyResult> saveCopy(String name, {String? into}) async {
     final ticket = _opens;
     final ref = _source;
     final atGame = game;
-    final written = await copyAside(name);
+    final written = await copyAside(name, into: into);
     if (written is! CopySaved || ref == null) return written;
     if (_disposed || ticket != _opens || _source != ref) return written;
     final frozen = _saver.state is SaveStopped || _readOnly != null;
     if (!frozen) return written;
-    final path = p.join(p.dirname(ref.path), written.name);
+    final path = p.join(into ?? p.dirname(ref.path), written.name);
     final opened = await open(ChapterRef.at(path), game: atGame);
     return CopySaved(written.name, nowEditing: opened is DocumentOpened);
   }
@@ -974,13 +975,13 @@ final class DocumentSession extends ChangeNotifier {
   /// Writes the words on screen beside their file and leaves the session
   /// where it is, which is what the question on the way out asks for: the
   /// user is going somewhere else, so the copy is not what they want open.
-  Future<CopyResult> copyAside(String name) async {
+  Future<CopyResult> copyAside(String name, {String? into}) async {
     final ref = _source;
     final chapter = _chapter;
     if (ref == null || chapter == null) {
       return const CopyFailed('there is nothing open to copy');
     }
-    return _saver.copyAside(chapter, beside: ref, name: name);
+    return _saver.copyAside(chapter, beside: ref, name: name, into: into);
   }
 
   @override

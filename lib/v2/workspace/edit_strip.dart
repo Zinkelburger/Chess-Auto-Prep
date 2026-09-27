@@ -21,18 +21,25 @@ import 'session_results.dart';
 /// file that changed on disk, a file this app may not write, an edit that
 /// was refused — because reading a file is not editing it and needs none of
 /// this on screen. Trouble shows the state line, the ways out and the
-/// reason; the glyphs and the field wait for editing.
+/// reason; the glyphs and the field wait for editing. A file this app may
+/// not write is no trouble while edits are held: they stay unsaved either
+/// way, and Save offers the places they can go.
 class EditStrip extends StatefulWidget {
   const EditStrip({
     super.key,
     required this.session,
     required this.saver,
     required this.editing,
+    this.onSave,
   });
 
   final DocumentSession session;
   final DocumentSaver saver;
   final ValueNotifier<bool> editing;
+
+  /// What Save does with held edits, when not simply writing them to their
+  /// file.
+  final VoidCallback? onSave;
 
   @override
   State<EditStrip> createState() => _EditStripState();
@@ -111,9 +118,17 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
             widget.editing.value &&
             widget.session.chapter != null &&
             widget.session.shownTo == null;
+        // Held edits on a file this app may not write are the plan, not a
+        // refusal: Save offers a copy or a study instead.
+        final holding =
+            widget.session.holdsEdits && widget.session.readOnly != null;
         final state = widget.saver.state;
-        final refusal = widget.session.refusedEdit;
-        final trouble = _trouble(state) || refusal != null || _notice != null;
+        final refusal = switch (widget.session.refusedEdit) {
+          NotEditable() when holding => null,
+          final refused => refused,
+        };
+        final trouble =
+            (_trouble(state) && !holding) || refusal != null || _notice != null;
         final held = widget.session.hasHeldEdits;
         if (!editing && !trouble && !held) return const SizedBox.shrink();
         return Container(
@@ -132,7 +147,7 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _stateRow(editing, state),
-              if (_waysOut(state) case final reload?)
+              if (_waysOut(state) case final reload? when !holding)
                 _WaysOut(
                   reload: reload,
                   onReload: _reload,
@@ -176,6 +191,9 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
       Expanded(
         child: switch (widget.session) {
           DocumentSession(isScratch: true) => const _Notice('Not saved'),
+          DocumentSession(hasHeldEdits: true, readOnly: _?) => const _Notice(
+            'Unsaved changes · this file is read-only',
+          ),
           DocumentSession(hasHeldEdits: true) => const _Notice(
             'Unsaved changes',
           ),
@@ -199,9 +217,14 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
         ),
         const SizedBox(width: Space.s),
         Tooltip(
-          message: withKey('Save to the file', 'Ctrl+S'),
+          message: withKey(
+            widget.session.readOnly == null
+                ? 'Save to the file'
+                : 'Save as a copy or to a study',
+            'Ctrl+S',
+          ),
           child: FilledButton(
-            onPressed: widget.session.keepHeld,
+            onPressed: widget.onSave ?? widget.session.keepHeld,
             style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
             child: const Text('Save'),
           ),

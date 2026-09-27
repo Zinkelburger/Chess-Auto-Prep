@@ -291,6 +291,48 @@ void main() {
     );
     expect(fixture.onDisk, partlyReadChapter);
   });
+
+  testWidgets(
+    'a read-only file in the viewer holds moves quietly and Save asks where',
+    (tester) async {
+      fixture.dispose();
+      fixture = await openSession(
+        blackChapter,
+        readOnly: 'it is outside your Documents folder',
+      );
+      fixture.session.holdsEdits = true;
+      editing.value = false;
+      var asked = 0;
+      await tester.binding.setSurfaceSize(const Size(500, 600));
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: darkTheme(),
+          home: Scaffold(
+            body: EditStrip(
+              session: fixture.session,
+              saver: fixture.saver,
+              editing: editing,
+              onSave: () => asked++,
+            ),
+          ),
+        ),
+      );
+      expect(find.textContaining('outside your Documents'), findsNothing);
+      expect(find.text('Read only'), findsNothing);
+      fixture.session.playMove('e7e6');
+      await tester.pump();
+      expect(
+        find.text('Unsaved changes · this file is read-only'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Save'));
+      expect(asked, 1);
+      await tester.tap(find.text('Discard'));
+      await tester.pump();
+      expect(fixture.session.hasHeldEdits, isFalse);
+      expect(find.text('Save'), findsNothing);
+    },
+  );
 }
 
 /// Two games from 1. d4, the second stopped by `--`, a null move this reader

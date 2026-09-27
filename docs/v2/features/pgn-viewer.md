@@ -254,6 +254,13 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
   restores them against the original save revision. Reloading or closing its tab
   discards the held edits. Once an edit is held, later edits join it in every
   mode until it is saved or discarded. The builder and Study keep autosaving.
+- **A read-only file holds moves too** (owner, 2026-09-27). A file outside
+  Documents that was not copied on open takes moves, notes and glyphs in the
+  viewer like any other; the strip says `Unsaved changes · this file is
+  read-only`, and Save (Ctrl+S, or Save changes in Actions) asks where they
+  go: `Copy into Documents…` writes the game with them into `pgn_collections`
+  and opens that copy, `Add to a study…` makes them a new study chapter. The
+  standing read-only notice stays hidden while the viewer holds edits.
 - **No colour for the unsaved state**, and **no snackbars anywhere in v2**: deletions say nothing
   (Ctrl+Z undoes them), and a failure goes to the status bar under the top bar, which has a Close
   button and, when there is a way out, one action such as Reload.
@@ -262,13 +269,17 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
 
 - Compact document and pane tabs have left-aligned labels, close buttons, drag
   ordering and no click splash. The pane's plus menu reopens closed tools.
-- Analyze opens a separate temporary tab containing the entire current game,
-  variations and comments at the current move, and starts the engine. The source
-  stays in its own tab; analysis moves never write it. File tabs restore their
-  selected game and cursor; temporary analyses also retain their undo history.
-- Flip board is visible in the top toolbar. The viewer opens with Moves and
-  Explorer, omits repertoire actions and the chapter-editing sidebar, and only
-  offers Save/Discard after edits exist.
+- Analyze in new tab (Actions, Ctrl+N or the tab strip's plus) opens a separate
+  temporary tab containing the entire current game, variations and comments at
+  the current move, and starts the engine. The source stays in its own tab;
+  analysis moves never write it. File tabs restore their selected game and
+  cursor; temporary analyses also retain their undo history. The viewer's
+  Actions menu leaves it out (owner, 2026-09-27): moves played there are
+  already held unsaved.
+- Flip board and Analyze are Actions entries, not top-bar buttons (owner,
+  2026-09-27). The viewer opens with Moves and Explorer, omits repertoire
+  actions and the chapter-editing sidebar, and only offers Save/Discard after
+  edits exist.
 
 - File-order, date and rating sorting preserve original game indices. The list,
   grouped chapters, counter, number entry and arrow keys use the same visible

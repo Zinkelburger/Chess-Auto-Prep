@@ -380,10 +380,24 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       _ws.session.chapter?.name ?? 'Chapter',
     );
     if (name == null || !mounted) return;
-    final result = await _ws.session.saveCopy(name);
+    // A file this app may not write cannot have a copy beside it either.
+    final result = await _ws.session.saveCopy(
+      name,
+      into: _ws.session.readOnly == null ? null : _docs.viewer.collections,
+    );
     if (!mounted) return;
     _requests.say(copySaid(result));
   }
+
+  void _saveHeld() => unawaited(
+    saveHeld(
+      context,
+      session: _ws.session,
+      requests: _requests,
+      studies: _docs.studies,
+      collections: _docs.viewer.collections,
+    ),
+  );
 
   /// Everything the Actions menu offers now, in the mode on screen.
   List<AppAction> _actions() => [
@@ -410,10 +424,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       requests: _requests,
       library: _docs.library,
       studies: _docs.studies,
-      onAnalyze: () => unawaited(_analyze()),
+      onAnalyze: _view.offersNewAnalysis ? () => unawaited(_analyze()) : null,
     ),
     dialogs: (
       saveCopy: () => unawaited(_saveCopy()),
+      saveHeld: _saveHeld,
       exportPgn: () =>
           unawaited(exportViewerPgn(context, _docs.viewer, _requests.say)),
       search: () => unawaited(_search.search(_tabs)),
@@ -552,30 +567,6 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         // A mode with a screen of its own has no list to show or hide.
         listShown: _listShown || screen != null,
         onToggleList: _toggleList,
-        quickActions: screen == null
-            ? Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    tooltip: withKey('Flip board', 'F'),
-                    onPressed: _ws.session.flip,
-                    icon: const Icon(
-                      Icons.flip_camera_android_outlined,
-                      size: IconSize.action,
-                    ),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  TextButton.icon(
-                    onPressed: () => unawaited(_analyze()),
-                    icon: const Icon(Icons.add, size: IconSize.menu),
-                    label: Tooltip(
-                      message: withKey('Analyze in new tab', 'Ctrl+N'),
-                      child: const Text('Analyze'),
-                    ),
-                  ),
-                ],
-              )
-            : null,
         actions: _actions,
         // What the entries' enabled states read, heard only while the
         // menu is open: the bar itself shows none of it.
@@ -599,6 +590,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
               moves: _moves,
               extra: _windowKeys,
               leave: _leave,
+              save: _saveHeld,
               child: Column(
                 children: [
                   PaneTabStrip(
@@ -657,6 +649,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         lesson: _train.lines.board,
         onBoardMove: _boardMove,
         onEngineMove: _engineMove,
+        onSaveHeld: _saveHeld,
         onExplorerLogin: widget.onExplorerLogin,
         onDownloadTwic: widget.onDownloadTwic,
         onExplorerGame: (game) => unawaited(

@@ -568,7 +568,8 @@ final class DocumentSaver extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Writes [chapter] into a new file next to [beside], under [name].
+  /// Writes [chapter] into a new file next to [beside], or in the folder
+  /// [into] when given, under [name].
   ///
   /// This is the one way out of a document that can take no more words — a
   /// save the store stopped, a file this app may not write, a conflict the
@@ -577,17 +578,18 @@ final class DocumentSaver extends ChangeNotifier {
   ///
   /// [name] is what the user typed, and a chapter's own name suggests it, so
   /// it can hold anything: what a file cannot be called is replaced
-  /// ([importedName]), and the copy is always one file beside the original,
-  /// never a folder of its own. The answer names the file written.
+  /// ([importedName]), and the copy is always one file, never a folder of
+  /// its own. The answer names the file written.
   Future<CopyResult> copyAside(
     Chapter chapter, {
     required DocumentRef beside,
     required String name,
+    String? into,
   }) async {
     final base = p.extension(name) == '.pgn' ? p.withoutExtension(name) : name;
     final original = p.basenameWithoutExtension(beside.path);
     final file = '${importedName(base, fallback: '$original copy')}.pgn';
-    final target = DocumentRef(p.join(p.dirname(beside.path), file));
+    final target = DocumentRef(p.join(into ?? p.dirname(beside.path), file));
     final text = writeChapter(chapter);
     final pending = pendingWrites;
     final store.CreateResult result;

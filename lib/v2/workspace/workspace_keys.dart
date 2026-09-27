@@ -30,6 +30,7 @@ class WorkspaceKeys extends StatefulWidget {
     required this.moves,
     this.extra = const {},
     this.leave = _nothingToLeave,
+    this.save,
     required this.child,
   });
 
@@ -48,6 +49,10 @@ class WorkspaceKeys extends StatefulWidget {
   /// What Esc leaves once the workspace has nothing left to leave: the
   /// mode's sitting, full screen. Whether it left anything.
   final bool Function() leave;
+
+  /// What Ctrl+S does with held edits, when not simply writing them to
+  /// their file: a file this app may not write asks where they go.
+  final VoidCallback? save;
 
   final Widget child;
 
@@ -175,7 +180,7 @@ class _WorkspaceKeysState extends State<WorkspaceKeys> {
           LogicalKeyboardKey.keyS,
           meta: true,
         ).accepts(event, keys)) {
-      _session.keepHeld();
+      (widget.save ?? _session.keepHeld)();
       return KeyEventResult.handled;
     }
     if (_typing) return KeyEventResult.ignored;

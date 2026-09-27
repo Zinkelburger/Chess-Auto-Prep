@@ -16,6 +16,7 @@ List<AppAction> documentActions({
   required EngineAnalysis analysis,
   required ValueNotifier<bool> editing,
   required VoidCallback onSaveCopy,
+  VoidCallback? onSaveHeld,
 }) {
   final open = session.chapter != null;
   VoidCallback? when(bool on, VoidCallback run) => on ? run : null;
@@ -36,7 +37,7 @@ List<AppAction> documentActions({
     if (session.hasHeldEdits) ...[
       AppAction(
         'Save changes',
-        session.keepHeld,
+        onSaveHeld ?? session.keepHeld,
         shortcut: 'Ctrl+S',
         group: 'Document',
       ),
