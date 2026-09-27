@@ -170,14 +170,8 @@ final class BoardTheme extends ThemeExtension<BoardTheme> {
   /// than [lastMove], which it wins over.
   final Color selected;
 
-  /// The dot on a square the picked-up piece can go to. Shown only when
-  /// [showValidMoves] is on.
+  /// Full-square tint behind a selected piece's legal destinations.
   final Color validMove;
-
-  /// Whether picking a piece up marks the squares it can go to, as Lichess
-  /// does. Off: the old app never did, and the marks are noise on a board
-  /// that is mostly read rather than played on.
-  static const showValidMoves = false;
 
   /// How long a piece takes to slide to its square when the position
   /// changes. The route and menu motion is 150 ms and 100 ms; a piece is a
@@ -193,7 +187,9 @@ final class BoardTheme extends ThemeExtension<BoardTheme> {
         colorScheme: _colors,
         pieceAssets: PieceSet.cburnettAssets,
         animationDuration: animation,
-        showValidMoves: showValidMoves,
+        // BoardView paints full-square hints behind the pieces.
+        showValidMoves: false,
+        dragTargetKind: DragTargetKind.none,
         enableCoordinates: coordinates,
         enablePremoves: false,
         dragFeedbackScale: 1,

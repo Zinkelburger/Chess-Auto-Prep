@@ -420,6 +420,10 @@ class _BookEditorState extends State<_BookEditor> {
                 onPressed: books.changingReferences
                     ? null
                     : () => unawaited(_rename(context, books, book)),
+                leadingIcon: const Icon(
+                  Icons.edit_outlined,
+                  size: IconSize.menu,
+                ),
                 child: const Text('Rename…'),
               ),
               if (inUse)
@@ -433,6 +437,10 @@ class _BookEditorState extends State<_BookEditor> {
                 onPressed: books.changingReferences
                     ? null
                     : () => unawaited(_delete(context, books, book)),
+                leadingIcon: const Icon(
+                  Icons.delete_outline,
+                  size: IconSize.menu,
+                ),
                 child: const Text('Delete…'),
               ),
             ],

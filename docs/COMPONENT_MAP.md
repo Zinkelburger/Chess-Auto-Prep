@@ -35,6 +35,13 @@ and native-platform gates pass. The [renewal checklist](ARCHITECTURE_RENEWAL.md#
 is the authoritative inventory of its implemented and remaining workflows;
 sections below describing old paths are not claims of v2 parity.
 
+- `v2/workspace/board_view.dart`: tap/drag legal destinations use full-square
+  theme tints beneath pieces, with no drag-hover target or destination dots/rings.
+  A read-only bridge to chessground's selection notifier keeps cancellations,
+  promotion and position changes in sync; board interaction remains package-owned.
+  `v2/ui/row_actions.dart` and `app_action.dart` accept optional icons. Common
+  create/import/save/copy/rename/delete actions use small familiar symbols with
+  their text labels; specialized commands remain text-only.
 - `v2/features/tactics/puzzle_trainer.dart`: optional alternative-answer checks
   hold a temporary shared-board claim while `engines/alternative_answer.dart`
   compares both post-move positions at depth 14, with one supervised worker and

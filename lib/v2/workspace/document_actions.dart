@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../chess/pgn/chapter.dart';
@@ -24,6 +24,7 @@ List<AppAction> documentActions({
     AppAction(
       editing.value ? 'Done editing' : 'Edit',
       when(open, () => editing.value = !editing.value),
+      icon: editing.value ? Icons.check : Icons.edit_outlined,
       shortcut: 'Ctrl+E',
       group: 'Document',
     ),
@@ -33,6 +34,7 @@ List<AppAction> documentActions({
         when(session.canUndo, () => unawaited(session.undo())),
         shortcut: 'Ctrl+Z',
         group: 'Document',
+        icon: Icons.undo,
       ),
     if (session.hasHeldEdits) ...[
       AppAction(
@@ -40,6 +42,7 @@ List<AppAction> documentActions({
         onSaveHeld ?? session.keepHeld,
         shortcut: 'Ctrl+S',
         group: 'Document',
+        icon: Icons.save_outlined,
       ),
       AppAction('Discard changes', session.discardHeld, group: 'Document'),
     ],
@@ -47,6 +50,7 @@ List<AppAction> documentActions({
       'Save a copy…',
       when(session.source != null, onSaveCopy),
       group: 'Document',
+      icon: Icons.save_outlined,
     ),
     AppAction(
       'Flip board',
@@ -71,11 +75,13 @@ List<AppAction> documentActions({
       'Copy game PGN',
       when(open, () => _copy(gameText(session))),
       group: 'Copy',
+      icon: Icons.content_copy,
     ),
     AppAction(
       'Copy FEN',
       when(open, () => _copy(session.fen.value)),
       group: 'Copy',
+      icon: Icons.content_copy,
     ),
   ];
 }

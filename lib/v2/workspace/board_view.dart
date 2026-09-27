@@ -60,6 +60,12 @@ class _BoardViewState extends State<BoardView> {
   @override
   void didUpdateWidget(BoardView old) {
     super.didUpdateWidget(old);
+    if (old.fen != widget.fen) {
+      // Clear package-owned selection/drag state before replacing a position,
+      // even when the new position has the same side to move. Keeping the old
+      // FEN here preserves the animation into the new position below.
+      _controller.updatePosition(gameOf(old.fen, old.lastMove, movable: false));
+    }
     if (old.fen != widget.fen ||
         old.lastMove != widget.lastMove ||
         old.movable != widget.movable) {
@@ -77,9 +83,28 @@ class _BoardViewState extends State<BoardView> {
 
   @override
   Widget build(BuildContext context) {
-    final settings = BoardTheme.of(
-      context,
-    ).settings(coordinates: widget.coordinates);
+    final theme = BoardTheme.of(context);
+    final base = theme.settings(coordinates: widget.coordinates);
+    // chessground has no public selection callback. Keep this read-only
+    // painter bridge here so hints follow its actual tap/drag/cancel state.
+    // ignore: invalid_use_of_internal_member
+    final selection = _controller.highlightNotifier;
+    ChessboardBackground hints(ChessboardBackground background) =>
+        _LegalMoveBackground(
+          background: background,
+          controller: _controller,
+          selection: selection,
+          side: widget.orientation,
+          color: theme.validMove,
+        );
+    final colors = base.colorScheme;
+    final settings = base.copyWith(
+      colorScheme: colors.copyWith(
+        background: hints(colors.background),
+        whiteCoordBackground: hints(colors.whiteCoordBackground),
+        blackCoordBackground: hints(colors.blackCoordBackground),
+      ),
+    );
     return AspectRatio(
       aspectRatio: 1,
       child: LayoutBuilder(
@@ -88,7 +113,10 @@ class _BoardViewState extends State<BoardView> {
           controller: _controller,
           orientation: widget.orientation,
           settings: settings,
-          onMove: (move, {viaDragAndDrop}) => widget.onMove(move.uci),
+          onMove: (move, {viaDragAndDrop}) {
+            if (!mounted) return;
+            widget.onMove(move.uci);
+          },
         ),
       ),
     );
@@ -124,4 +152,79 @@ GameData gameOf(Fen fen, String? lastMove, {bool movable = true}) {
         ? position.board.kingOf(position.turn)
         : null,
   );
+}
+
+/// A repaint-only layer under chessground's pieces and interaction highlights.
+class _LegalMoveBackground extends ChessboardBackground {
+  _LegalMoveBackground({
+    required this.background,
+    required this.controller,
+    required this.selection,
+    required Side side,
+    required this.color,
+  }) : super(
+         lightSquare: background.lightSquare,
+         darkSquare: background.darkSquare,
+         coordinates: background.coordinates,
+         orientation: side,
+       );
+
+  final ChessboardBackground background;
+  final ChessboardController controller;
+  final BoardHighlightNotifier selection;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    key: const ValueKey('legal-move-highlights'),
+    foregroundPainter: _LegalMovePainter(
+      controller: controller,
+      selection: selection,
+      orientation: orientation,
+      color: color,
+    ),
+    child: background,
+  );
+}
+
+class _LegalMovePainter extends CustomPainter {
+  _LegalMovePainter({
+    required this.controller,
+    required this.selection,
+    required this.orientation,
+    required this.color,
+  }) : super(repaint: selection);
+
+  final ChessboardController controller;
+  final BoardHighlightNotifier selection;
+  final Side orientation;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (!controller.interactive || controller.pendingPromotion != null) return;
+    final destinations = controller.game.validMoves[selection.selected];
+    if (destinations == null) return;
+    final squareSize = size.width / 8;
+    final paint = Paint()
+      ..color = color
+      ..isAntiAlias = false;
+    for (final square in destinations) {
+      final file = square.file;
+      final rank = square.rank;
+      final x = orientation == Side.white ? file : 7 - file;
+      final y = orientation == Side.white ? 7 - rank : rank;
+      canvas.drawRect(
+        Rect.fromLTWH(x * squareSize, y * squareSize, squareSize, squareSize),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_LegalMovePainter old) =>
+      old.controller != controller ||
+      old.selection != selection ||
+      old.orientation != orientation ||
+      old.color != color;
 }

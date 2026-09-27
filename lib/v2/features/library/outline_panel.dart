@@ -353,10 +353,12 @@ class _OutlinePanelState extends State<OutlinePanel> {
       ),
       MenuItemButton(
         onPressed: () => _rename(line),
+        leadingIcon: const Icon(Icons.edit_outlined, size: IconSize.menu),
         child: const Text('Rename line…'),
       ),
       MenuItemButton(
         onPressed: () => _delete(line),
+        leadingIcon: const Icon(Icons.delete_outline, size: IconSize.menu),
         child: const Text('Delete line'),
       ),
       MenuItemButton(onPressed: _newChapter, child: const Text('New chapter…')),
