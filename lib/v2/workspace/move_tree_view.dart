@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../chess/fen.dart';
 import '../chess/pgn/comment_text.dart';
 import '../chess/pgn/game_tree.dart';
 import '../chess/pgn/move_label.dart';
+import '../chess/pgn/move_text.dart';
 import '../chess/pgn/study.dart';
 import '../ui/listening_state.dart';
 import '../ui/selection.dart';
@@ -301,11 +305,23 @@ final class _LineBuilder {
           onPressed: () => onDeleteFrom(path),
           child: const Text('Delete from here'),
         ),
+        const Divider(),
+        MenuItemButton(
+          onPressed: () => _copy(writeLineTo(session.tree!, path)),
+          child: const Text('Copy line PGN'),
+        ),
+        MenuItemButton(
+          onPressed: () => _copy(node.fen.value),
+          child: const Text('Copy FEN'),
+        ),
         ...moveMenu(path),
       ],
     );
   }
 }
+
+void _copy(String text) =>
+    unawaited(Clipboard.setData(ClipboardData(text: text)));
 
 extension on NodePath {
   /// The position at this path in the session's tree.
