@@ -34,6 +34,7 @@ class TwicDownload extends ChangeNotifier {
   }
 
   void stop() {
+    if (!running) return;
     _stopping = true;
     status = 'Stopping after the current issue…';
     _notify();

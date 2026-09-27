@@ -1,9 +1,32 @@
 # Databases
 
-Status: draft from the old app
+Status: partially implemented in v2 (2026-09-27); remaining legacy scope below
 Old code (oracle only): `lib/features/databases/`, `lib/services/{master_games,eval,scid}/`,
 `lib/widgets/{master_games_settings_panel,lichess_eval_*,eval_database_*}.dart`, `tools/*broadcast*`
 Plan step: 11
+
+## Built in v2
+
+Databases is a mode with two separately selected sources: the existing master
+corpus (read-only) and the v2 TWIC/PGN cache. It shows measured game counts and
+file sizes, literal player/event/ECO filters, a minimum rating for both players,
+a starting date, newest/strongest sorting and 100-game pages. Selecting a game
+keeps a named PGN copy and opens it in the shared viewer. Switching source or
+mode discards a late open; queries coalesce instead of accumulating workers.
+
+Import PGN writes only to the separate cache. The file fingerprint, accepted
+games and opening counts commit in one SQLite transaction; retrying identical
+bytes, even under another filename, imports nothing twice. Unsupported,
+unfinished and nonstandard-start games are counted as skipped, never silently
+changed to standard-start games. The original PGN remains untouched. TWIC's
+resumable download uses the same app-owned job from the explorer and this page;
+closing the app stops it after its current issue and waits for accepted work.
+
+Still remaining: broader storage inventory and offline evaluation/dump controls,
+auto-sync/settings, legacy classical-index rebuild, additional corpus filters
+and book scans, broadcast collection UI, Scid export and cache-recovery controls.
+The reference behavior below describes these remaining workflows as well as
+older UI arrangements; it is not a claim that every card already exists in v2.
 
 ## Purpose
 Someone wants the app to answer from disk instead of the network — master practice for builds, stored

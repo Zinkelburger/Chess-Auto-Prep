@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import '../features/settings/lichess_account.dart';
+import '../features/databases/database_library.dart';
+import '../features/databases/twic_download.dart';
 import '../storage/my_games_files.dart';
 import '../storage/settings_store.dart';
 import '../workspace/books.dart';
@@ -151,6 +153,18 @@ final class AppParts {
     gamesCache,
   );
 
+  late final databases = DatabaseLibrary(
+    sources: env.masterDatabases,
+    corpus: env.masterCorpus,
+    picker: env.viewerPicker,
+    documents: env.store,
+    collections: env.folders.collections,
+    pending: env.pendingWrites,
+    download: env.twicDownloadPath == null
+        ? null
+        : TwicDownload(env.twicDownloadPath!, pendingWrites: env.pendingWrites),
+  );
+
   bool _disposed = false;
   bool _started = false;
   Future<void>? _starting;
@@ -180,6 +194,7 @@ final class AppParts {
   void prepareToClose() {
     requests.cancelPending();
     players.stop();
+    databases.download?.stop();
     workspace.fill.cancel();
     training.myGames.pause();
     training.lines.leave();
@@ -200,6 +215,7 @@ final class AppParts {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    databases.dispose();
     players.dispose();
     labs.dispose();
     _training.dispose();

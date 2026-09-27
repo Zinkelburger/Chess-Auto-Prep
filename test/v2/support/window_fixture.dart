@@ -242,6 +242,7 @@ final class WindowFixture {
           training: parts.training,
           labs: parts.labs,
           players: parts.players,
+          databases: parts.databases,
           fullScreen: parts.fullScreen,
           settingRows: () => const [],
           settingsAlso: settings,

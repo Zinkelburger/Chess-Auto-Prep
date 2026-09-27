@@ -1,3 +1,4 @@
+import '../features/databases/database_library.dart';
 import 'dart:async';
 
 import 'package:flutter/gestures.dart'
@@ -55,6 +56,7 @@ class Shell extends StatefulWidget {
     required this.training,
     required this.labs,
     required this.players,
+    required this.databases,
     required this.fullScreen,
     required this.settingRows,
     required this.settingsAlso,
@@ -68,6 +70,7 @@ class Shell extends StatefulWidget {
   final TrainingModes training;
   final LabModes labs;
   final PlayerModes players;
+  final DatabaseLibrary databases;
 
   /// Whether the window fills the screen: F11, Esc and the Actions menu.
   final FullScreen fullScreen;
@@ -104,6 +107,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     training: _train,
     labs: widget.labs,
     players: widget.players,
+    databases: widget.databases,
   );
 
   ModeView get _view => _views[_requests.mode]!;

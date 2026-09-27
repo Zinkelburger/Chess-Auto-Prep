@@ -38,6 +38,7 @@ import '../storage/backup_history.dart';
 import '../storage/game_store.dart';
 import '../storage/lichess_token.dart';
 import '../storage/master_book.dart';
+import '../storage/master_corpus.dart';
 import '../storage/my_accounts.dart';
 import '../storage/my_games_files.dart';
 import '../storage/pgn_document_store.dart';
@@ -100,6 +101,8 @@ final class AppEnvironment {
     required this.lichessExplorer,
     required this.masterBook,
     this.twicDownloadPath,
+    this.masterCorpus = const SqliteMasterCorpus(),
+    this.masterDatabases = const {},
     required this.gameStore,
     required this.gameSites,
     required this.accounts,
@@ -203,6 +206,10 @@ final class AppEnvironment {
       lichessExplorer: LichessExplorerApi(client, token: readLichessToken),
       masterBook: book,
       twicDownloadPath: twicPath,
+      masterDatabases: {
+        'Master games': p.join(support.path, 'master_games.db'),
+        'TWIC and PGN imports': twicPath,
+      },
       gameStore: SqliteGameStore(p.join(support.path, 'app_games.db')),
       gameSites: [
         LichessGamesApi(client, token: readLichessToken),
@@ -285,6 +292,8 @@ final class AppEnvironment {
   /// The old app's master database: TWIC, when the file is there.
   final MasterBook masterBook;
   final String? twicDownloadPath;
+  final MasterCorpus masterCorpus;
+  final Map<String, String> masterDatabases;
 
   /// The old app's database of the user's games, `app_games.db`.
   final GameStore gameStore;

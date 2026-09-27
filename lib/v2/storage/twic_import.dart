@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:crypto/crypto.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import '../chess/fen.dart';
@@ -22,6 +23,51 @@ Set<int> downloadedTwicIssues(String path) {
     };
   } finally {
     db.close();
+  }
+}
+
+/// An imported file is a durable unit in the derived cache. Its fingerprint
+/// commits with its games and book counts, so retry after a lost acknowledgement
+/// is harmless. The original PGN and the old master database are never changed.
+(int, int) importMasterPgn(String path, String source) {
+  final bytes = File(source).readAsBytesSync();
+  final key = sha256.convert(bytes).toString();
+  String text;
+  try {
+    text = utf8.decode(bytes);
+  } on FormatException {
+    text = latin1.decode(bytes);
+  }
+  File(path).parent.createSync(recursive: true);
+  final db = sqlite3.open(path);
+  try {
+    db.execute('PRAGMA busy_timeout = 5000');
+    db.execute(_schema);
+    return _importFile(db, key, text);
+  } finally {
+    db.close();
+  }
+}
+
+(int, int) _importFile(Database db, String key, String text) {
+  db.execute('BEGIN IMMEDIATE');
+  try {
+    final prior = db.select('SELECT 1 FROM imports WHERE fingerprint = ?', [
+      key,
+    ]);
+    if (prior.isNotEmpty) {
+      db.execute('ROLLBACK');
+      return (0, 0);
+    }
+    final result = _games(db, [text]);
+    if (result.$1 == 0)
+      throw const FormatException('No supported finished games.');
+    db.execute('INSERT INTO imports VALUES (?, ?)', [key, result.$1]);
+    db.execute('COMMIT');
+    return result;
+  } on Object {
+    db.execute('ROLLBACK');
+    rethrow;
   }
 }
 
@@ -114,6 +160,7 @@ bool _game(
 ) {
   final tree = game.tree;
   if (tree == null || tree.children.isEmpty || !game.rewritable) return false;
+  if (tree.rootFen != Fen.initial) return false;
   final tags = {
     for (final tag in game.tags.whereType<PgnTag>()) tag.key: tag.value,
   };
@@ -179,6 +226,7 @@ bool _game(
 
 const _schema = '''
 CREATE TABLE IF NOT EXISTS issues (issue INTEGER PRIMARY KEY, games INTEGER, skipped INTEGER);
+CREATE TABLE IF NOT EXISTS imports (fingerprint TEXT PRIMARY KEY, games INTEGER);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value BLOB);
 CREATE TABLE IF NOT EXISTS games (
  id INTEGER PRIMARY KEY, event TEXT, site TEXT, date TEXT, round TEXT,

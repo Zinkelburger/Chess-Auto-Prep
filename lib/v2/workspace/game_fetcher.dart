@@ -95,12 +95,17 @@ final _unsafeInAName = RegExp(r'[<>:"/\\|?*\x00-\x1F]');
 /// `Carlsen, M - Nakamura, H 2024 (masters abcd1234)`: a file name for a
 /// fetched game that says who played and where it came from, and that two
 /// different games cannot share.
-String gameFileName(ExplorerGame game, ExplorerSource source) {
+String gameFileName(
+  ExplorerGame game,
+  ExplorerSource source, {
+  String? sourceName,
+}) {
+  final origin = sourceName ?? source.name;
   final year = game.year == null ? '' : ' ${game.year}';
-  final raw = '${game.white} - ${game.black}$year (${source.name} ${game.id})';
+  final raw = '${game.white} - ${game.black}$year ($origin ${game.id})';
   final safe = raw.replaceAll(_unsafeInAName, '_').trim();
   if (safe.length <= 100) return safe;
   // Hash the unmodified identity: sanitising or truncating an id can collide.
-  final identity = sha256.convert(utf8.encode('${source.name}:${game.id}'));
+  final identity = sha256.convert(utf8.encode('$origin:${game.id}'));
   return '${safe.substring(0, 33).trim()} ($identity)';
 }

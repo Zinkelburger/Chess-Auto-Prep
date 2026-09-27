@@ -34,6 +34,8 @@ import '../workspace/move_tree_view.dart' show MoveMenu;
 import '../workspace/workspace.dart';
 import '../workspace/workspace_tabs.dart';
 import 'mode.dart';
+import 'database_view.dart';
+import '../features/databases/database_library.dart';
 import 'player_wiring.dart';
 import 'player_views.dart';
 import 'workspace_requests.dart';
@@ -626,6 +628,7 @@ Map<Mode, ModeView> modeViews({
   required TrainingModes training,
   required LabModes labs,
   required PlayerModes players,
+  required DatabaseLibrary databases,
 }) => {
   for (final mode in Mode.values)
     mode: switch (mode) {
@@ -639,6 +642,7 @@ Map<Mode, ModeView> modeViews({
       Mode.bughouse => BughouseView(workspace, labs),
       Mode.playerAnalysis => PlayerAnalysisView(workspace, requests, players),
       Mode.players => PlayersView(workspace, players),
+      Mode.databases => DatabasesView(workspace, databases, requests),
     },
 };
 
