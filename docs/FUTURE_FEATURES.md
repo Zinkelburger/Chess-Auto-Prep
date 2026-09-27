@@ -24,8 +24,8 @@ and acceptance gates are maintained in the
 
 The shared workspace/store/engine, library, training, viewer/explorer,
 generation, Study, tactics, My games/Books, Bughouse and Players & prep have
-working v2 implementations. Remaining work includes full Databases and Engine
-tournament workflows, the named feature gaps in partial rows, services, native
+working v2 implementations. Remaining work includes the remaining Databases and Engine
+tournament controls (both basic workflows are now built), the named feature gaps in partial rows, services, native
 platform/scale/compatibility acceptance and the final data migration/switch-over.
 The old app is frozen except for data-loss, crash and release-blocking fixes.
 

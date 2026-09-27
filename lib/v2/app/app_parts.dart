@@ -1,3 +1,4 @@
+import '../features/tournaments/tournament_run.dart';
 import 'dart:async';
 
 import '../features/settings/lichess_account.dart';
@@ -165,6 +166,22 @@ final class AppParts {
         : TwicDownload(env.twicDownloadPath!, pendingWrites: env.pendingWrites),
   );
 
+  late final tournaments =
+      env.tournaments == null || env.launchTournament == null
+      ? null
+      : TournamentRun(
+          store: env.tournaments!,
+          launch: env.launchTournament!,
+          pending: env.pendingWrites,
+          activityChanged: (running) {
+            if (running) {
+              workspace.analysis.pause(env.tournaments!, 'Engine tournament');
+            } else {
+              workspace.analysis.resume(env.tournaments!);
+            }
+          },
+        );
+
   bool _disposed = false;
   bool _started = false;
   Future<void>? _starting;
@@ -195,6 +212,7 @@ final class AppParts {
     requests.cancelPending();
     players.stop();
     databases.download?.stop();
+    tournaments?.stop();
     workspace.fill.cancel();
     training.myGames.pause();
     training.lines.leave();
@@ -215,6 +233,7 @@ final class AppParts {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    tournaments?.dispose();
     databases.dispose();
     players.dispose();
     labs.dispose();

@@ -1,3 +1,4 @@
+import '../features/tournaments/tournament_run.dart';
 import '../features/databases/database_library.dart';
 import 'dart:async';
 
@@ -57,6 +58,7 @@ class Shell extends StatefulWidget {
     required this.labs,
     required this.players,
     required this.databases,
+    this.tournaments,
     required this.fullScreen,
     required this.settingRows,
     required this.settingsAlso,
@@ -71,6 +73,7 @@ class Shell extends StatefulWidget {
   final LabModes labs;
   final PlayerModes players;
   final DatabaseLibrary databases;
+  final TournamentRun? tournaments;
 
   /// Whether the window fills the screen: F11, Esc and the Actions menu.
   final FullScreen fullScreen;
@@ -108,6 +111,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     labs: widget.labs,
     players: widget.players,
     databases: widget.databases,
+    tournaments: widget.tournaments,
   );
 
   ModeView get _view => _views[_requests.mode]!;

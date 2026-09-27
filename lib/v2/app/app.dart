@@ -163,6 +163,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
                 labs: _parts.labs,
                 players: _parts.players,
                 databases: _parts.databases,
+                tournaments: _parts.tournaments,
                 fullScreen: _parts.fullScreen,
                 settingRows: _settingRows,
                 settingsAlso: _parts.account,

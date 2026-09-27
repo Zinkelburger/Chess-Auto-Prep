@@ -28,6 +28,29 @@ Last reviewed against `lib/` and `tree_builder/` (June 2026, post 7-phase remedi
 
 ---
 
+## Renewal app additions
+
+`lib/main_v2.dart` remains a separate entry point until the renewal acceptance
+and native-platform gates pass. The [renewal checklist](ARCHITECTURE_RENEWAL.md#order-of-work)
+is the authoritative inventory of its implemented and remaining workflows;
+sections below describing old paths are not claims of v2 parity.
+
+- `v2/features/databases/`: the app-owned corpus browser and TWIC job; read-only
+  existing master games plus fingerprinted PGN imports into the separate cache.
+- `v2/features/tournaments/`: app-owned finite engine games, setup, verified
+  engine registry, live board, results/history and PGN Viewer handoff. Clock,
+  rules and legal-move decisions belong to the runner; widgets make no writes.
+- `v2/engines/playing_engine.dart`: finite UCI limits and the actual `bestmove`,
+  separate from PV analysis. Every seat runs under the shared supervisor.
+- `v2/storage/tournaments.dart`: compatible `engine_tournaments` JSON/PGN and
+  registry files. A private recovery record carries both PGN and metadata
+  preimages/targets, supports lost acknowledgments, and refuses external edits.
+  Unfinishable recovery is quarantined whole; unreadable source metadata is a
+  visible failure. Delete uses native no-replace relocation to `.trash`.
+- Tournament checks cover legal play, repetition, move caps, startup failure,
+  finite UCI protocol, partial-save recovery, conflicting edits, accepted-write
+  retry, closing during creation, and the shared app mode/setup navigation.
+
 ## Architecture overview
 
 | Layer | Role | Key packages |

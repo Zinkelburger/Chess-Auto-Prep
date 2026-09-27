@@ -1,3 +1,6 @@
+import '../chess/tournament/config.dart';
+import '../features/tournaments/game_runner.dart';
+import '../storage/tournaments.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
@@ -103,6 +106,8 @@ final class AppEnvironment {
     this.twicDownloadPath,
     this.masterCorpus = const SqliteMasterCorpus(),
     this.masterDatabases = const {},
+    this.tournaments,
+    this.launchTournament,
     required this.gameStore,
     required this.gameSites,
     required this.accounts,
@@ -225,6 +230,13 @@ final class AppEnvironment {
         cores: cores,
         memoryMb: memoryMb,
       ),
+      tournaments: FileTournaments(
+        root: Directory(p.join(documents.path, 'engine_tournaments')),
+        support: support,
+        documents: documentsStore,
+      ),
+      launchTournament: (spec) =>
+          launchTournamentEngine(spec, support: support, engines: engines),
       stopEngines: engines.dispose,
       evalCache: () => evalCache.cache,
       keepTree: GenerationTrees(documentsStore.recovery).keep,
@@ -312,6 +324,8 @@ final class AppEnvironment {
   /// The human-move model: the Replies tab, the gaps and the fill.
   final MovePolicy maia;
   final EngineLauncher launchEngine;
+  final TournamentStore? tournaments;
+  final TournamentLauncher? launchTournament;
 
   /// Quits every engine; the way out waits for it.
   final Future<void> Function() stopEngines;
@@ -531,3 +545,21 @@ Future<bool> _bughouseBundled() async {
 }
 
 Future<List<Player>> _noSavedPlayers() async => const [];
+
+Future<EngineStart> launchTournamentEngine(
+  TournamentEngine spec, {
+  required Directory support,
+  required EngineSupervisor engines,
+}) async {
+  var path = spec.executable;
+  if (path == null || path.isEmpty) {
+    final location = await StockfishInstall(
+      supportDirectory: support,
+      readAsset: _readAsset,
+    ).locate();
+    if (location case StockfishMissing(:final reason))
+      return StartFailed(reason);
+    path = (location as StockfishReady).path;
+  }
+  return engines.start(path, options: spec.options, arguments: spec.arguments);
+}

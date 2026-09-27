@@ -1,3 +1,5 @@
+import '../features/tournaments/tournament_run.dart';
+import 'tournament_view.dart';
 import 'dart:async';
 
 import 'package:dartchess/dartchess.dart' show Side;
@@ -629,6 +631,7 @@ Map<Mode, ModeView> modeViews({
   required LabModes labs,
   required PlayerModes players,
   required DatabaseLibrary databases,
+  TournamentRun? tournaments,
 }) => {
   for (final mode in Mode.values)
     mode: switch (mode) {
@@ -643,6 +646,7 @@ Map<Mode, ModeView> modeViews({
       Mode.playerAnalysis => PlayerAnalysisView(workspace, requests, players),
       Mode.players => PlayersView(workspace, players),
       Mode.databases => DatabasesView(workspace, databases, requests),
+      Mode.engineTournament => TournamentView(workspace, tournaments, requests),
     },
 };
 

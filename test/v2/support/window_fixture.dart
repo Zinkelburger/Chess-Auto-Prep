@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/v2/storage/tournaments.dart';
+import 'package:chess_auto_prep/v2/features/tournaments/game_runner.dart';
 import 'dart:async';
 
 import 'package:chess_auto_prep/v2/app/environment.dart';
@@ -75,12 +77,16 @@ final class WindowFixture {
     WindowInput? input,
     SettingsStore? settings,
     EngineLauncher? launchEngine,
+    this.tournaments,
+    this.launchTournament,
     MovePolicy maia = const NoOpinion(),
   }) : _input = input,
        _settings = settings,
        _launchEngine = launchEngine,
        _maia = maia;
 
+  final TournamentStore? tournaments;
+  final TournamentLauncher? launchTournament;
   final WindowInput? _input;
   final SettingsStore? _settings;
   final EngineLauncher? _launchEngine;
@@ -119,6 +125,8 @@ final class WindowFixture {
   AppEnvironment _environment(ScriptedBughouse bughouse) {
     final lichess = ScriptedExplorerApi();
     return AppEnvironment(
+      tournaments: tournaments,
+      launchTournament: launchTournament,
       folders: (
         repertoires: '/repertoires',
         studies: studiesRoot,
@@ -243,6 +251,7 @@ final class WindowFixture {
           labs: parts.labs,
           players: parts.players,
           databases: parts.databases,
+          tournaments: parts.tournaments,
           fullScreen: parts.fullScreen,
           settingRows: () => const [],
           settingsAlso: settings,

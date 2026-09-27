@@ -5,6 +5,7 @@ import '../diagnostics/log.dart';
 import 'engine.dart';
 import 'engine_line.dart';
 import 'uci_process.dart';
+import 'playing_engine.dart';
 
 /// The UCI conversation with one engine process.
 ///
@@ -13,7 +14,7 @@ import 'uci_process.dart';
 /// is on. That is what keeps a stale evaluation off the board. The wait is
 /// bounded: an engine that answers neither `bestmove` nor anything else is
 /// killed rather than waited on.
-final class UciEngine implements Engine, EngineProcess {
+final class UciEngine implements PlayingEngine, EngineProcess {
   UciEngine._(this._process, this._finitePatience) {
     _process.lines.listen(_onLine, onDone: _onExit);
   }
@@ -79,32 +80,53 @@ final class UciEngine implements Engine, EngineProcess {
   Future<EngineExit> get exited => _exited.future;
 
   @override
-  Search analyse(Fen fen, {required int multiPv, int? depth}) {
-    final search = _UciSearch(
-      _send,
-      _expired,
-      finitePatience: depth == null ? null : _finitePatience,
-    );
+  Search analyse(Fen fen, {required int multiPv, int? depth}) => _queue(
+    'position fen ${fen.value}',
+    depth == null ? 'go infinite' : 'go depth $depth',
+    multiPv,
+    depth == null ? null : _finitePatience,
+  ).public;
+
+  @override
+  PlayingSearch play(Fen root, List<String> moves, MoveBudget budget) {
+    final position =
+        'position fen ${root.value}'
+        '${moves.isEmpty ? '' : ' moves ${moves.join(' ')}'}';
+    final search = _queue(position, budget.command, 1, budget.deadline);
+    return PlayingSearch(search.public, search.move.future);
+  }
+
+  _UciSearch _queue(
+    String position,
+    String go,
+    int multiPv,
+    Duration? patience,
+  ) {
+    final search = _UciSearch(_send, _expired, finitePatience: patience);
     final previous = _latest;
     _latest = search;
     // One search that fails must not break the queue: without this, a
     // single error would leave every later `analyse` waiting on a rejected
     // future and no `go` would ever be sent again.
     _turn = _turn
-        .then((_) => _begin(search, previous, fen, multiPv, depth))
+        .then(
+          (_) => _begin(search, previous, (
+            position: position,
+            go: go,
+            multiPv: multiPv,
+          )),
+        )
         .catchError((Object error) {
           log.w('start a search on $_name', error);
           search.finish();
         });
-    return search.public;
+    return search;
   }
 
   Future<void> _begin(
     _UciSearch search,
     _UciSearch? previous,
-    Fen fen,
-    int multiPv,
-    int? depth,
+    ({String position, String go, int multiPv}) request,
   ) async {
     if (previous != null && !await _stopped(previous)) return search.finish();
     // A killed engine can take a while to be seen exiting, and what it
@@ -115,9 +137,9 @@ final class UciEngine implements Engine, EngineProcess {
     }
     if (search.isDone) return; // stopped before it began
     _current = search;
-    _send('setoption name MultiPV value $multiPv');
-    _send('position fen ${fen.value}');
-    _send(depth == null ? 'go infinite' : 'go depth $depth');
+    _send('setoption name MultiPV value ${request.multiPv}');
+    _send(request.position);
+    _send(request.go);
     search.markRunning();
   }
 
@@ -196,7 +218,8 @@ final class UciEngine implements Engine, EngineProcess {
     } else if (line.startsWith('id name ')) {
       _name = line.substring('id name '.length);
     } else if (line.startsWith('bestmove')) {
-      _current?.finish();
+      final words = line.trim().split(RegExp(r'\s+'));
+      _current?.finish(bestMove: words.length > 1 ? words[1] : null);
       _current = null;
     } else if (parseInfoLine(line) case final info?) {
       _current?.add(info);
@@ -233,6 +256,7 @@ final class _UciSearch {
   bool get finite => finitePatience != null;
   final _lines = StreamController<EngineLine>();
   final _done = Completer<void>();
+  final move = Completer<String?>();
   bool _running = false;
   bool _stopSent = false;
   late final public = Search(lines: _lines.stream, stop: stop);
@@ -276,10 +300,11 @@ final class _UciSearch {
     return _done.future;
   }
 
-  void finish() {
+  void finish({String? bestMove}) {
     if (isDone) return;
     disarm();
     _done.complete();
+    move.complete(bestMove);
     unawaited(_lines.close());
   }
 }

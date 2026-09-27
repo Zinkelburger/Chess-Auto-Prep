@@ -58,6 +58,11 @@ APPROVED: dict[str, tuple[int, str]] = {
         "rename into place, removal of its own leftover .part and of an "
         "hour-old one a killed install left",
     ),
+    "lib/v2/storage/tournaments.dart": (
+        1,
+        "v2 tournament commit: remove only its own completed PGN/metadata "
+        "recovery journal; trash uses native no-replace relocation",
+    ),
     "lib/v2/storage/bughouse_matches.dart": (
         1,
         "v2 bughouse matches: a deleted match's folder is renamed into "

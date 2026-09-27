@@ -1,6 +1,7 @@
 # Engine tournament
 
-Status: draft from the old app
+Status: implementation authorized by the owner on 2026-09-27; core workflow built,
+remaining presentation and external-request controls tracked in renewal row 12
 Old code (oracle only): `lib/features/engine_tournament/`, `lib/widgets/crosstable_view.dart`,
 `lib/widgets/match_games_table.dart`
 Plan step: 12

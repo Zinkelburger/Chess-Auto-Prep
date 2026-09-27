@@ -30,6 +30,7 @@ enum Mode {
   playerAnalysis('Player analysis'),
   players('Players & prep'),
   databases('Databases'),
+  engineTournament('Engine tournament'),
   bughouse('Bughouse lab');
 
   const Mode(this.label);

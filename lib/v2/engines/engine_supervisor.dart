@@ -53,6 +53,7 @@ final class EngineSupervisor {
   Future<EngineStart> start(
     String executable, {
     Map<String, String> options = const {},
+    List<String> arguments = const [],
     Duration patience = const Duration(seconds: 10),
     Duration finitePatience = UciEngine.defaultFinitePatience,
   }) {
@@ -65,20 +66,27 @@ final class EngineSupervisor {
       );
     }
     return _own(
-      _start(executable, Map.unmodifiable(options), patience, finitePatience),
+      _start(
+        executable,
+        Map.unmodifiable(options),
+        List.unmodifiable(arguments),
+        patience,
+        finitePatience,
+      ),
     );
   }
 
   Future<EngineStart> _start(
     String executable,
     Map<String, String> options,
+    List<String> arguments,
     Duration patience,
     Duration finitePatience,
   ) async {
     final name = p.basename(executable);
     final SpawnedProcess process;
     try {
-      process = await SpawnedProcess.start(executable);
+      process = await SpawnedProcess.start(executable, arguments: arguments);
     } on ProcessException catch (e) {
       log.e('start $name', e.message);
       return StartFailed('Could not start $name: ${e.message}');

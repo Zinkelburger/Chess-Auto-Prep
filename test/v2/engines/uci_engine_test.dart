@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/engines/engine.dart';
+import 'package:chess_auto_prep/v2/engines/playing_engine.dart';
 import 'package:chess_auto_prep/v2/engines/engine_line.dart';
 import 'package:chess_auto_prep/v2/engines/uci_engine.dart';
 import 'package:chess_auto_prep/v2/engines/uci_process.dart';
@@ -63,6 +64,45 @@ void main() {
     process.answerHandshake();
     return (await starting, process);
   }
+
+  test(
+    'finite play sends history and returns bestmove rather than the PV',
+    () async {
+      final (engine, process) = await started();
+      final search = engine.play(Fen.initial, [
+        'e2e4',
+        'e7e5',
+      ], const MoveBudget(milliseconds: 25));
+      final lines = search.analysis.lines.toList();
+      await pumpEventQueue();
+      expect(
+        process.sent,
+        contains('position fen ${Fen.initial.value} moves e2e4 e7e5'),
+      );
+      expect(process.sent, contains('go movetime 25'));
+      process.say('info depth 4 score cp 10 pv g1f3');
+      process.say('bestmove f1c4 ponder g8f6');
+      expect(await search.bestMove, 'f1c4');
+      expect((await lines).single.pv, ['g1f3']);
+      process.exit(0);
+    },
+  );
+
+  test('play that exits without bestmove does not substitute a PV', () async {
+    final (engine, process) = await started();
+    final search = engine.play(
+      Fen.initial,
+      const [],
+      const MoveBudget(depth: 2),
+    );
+    final lines = search.analysis.lines.toList();
+
+    await pumpEventQueue();
+    process.say('info depth 1 score cp 20 pv e2e4');
+    process.exit(1);
+    expect(await search.bestMove, isNull);
+    expect((await lines).single.pv, ['e2e4']);
+  });
 
   test('handshakes, applies options and takes the name', () async {
     final (engine, process) = await started();
