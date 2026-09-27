@@ -420,6 +420,7 @@ final class TacticsView extends ModeView {
   /// The solved puzzle's game with the engine on: the Game tab, not
   /// another mode.
   void _analyze() {
+    _training.puzzles.inspectAlternative();
     tabs.show(WorkspaceTab.moves);
     unawaited(workspace.analysis.enable());
   }

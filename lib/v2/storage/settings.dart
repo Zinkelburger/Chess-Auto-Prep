@@ -23,6 +23,7 @@ final class Settings {
     this.explorer = ExplorerChoice.defaults,
     this.puzzles = PuzzleFilter.defaults,
     this.autoAdvance = true,
+    this.acceptAlternativeAnswers = false,
     this.training = TrainingOptions.defaults,
   });
 
@@ -64,6 +65,9 @@ final class Settings {
   /// Whether a solved puzzle gives way to the next one by itself.
   final bool autoAdvance;
 
+  /// Ask Stockfish before rejecting a legal, non-stored puzzle move.
+  final bool acceptAlternativeAnswers;
+
   final TrainingOptions training;
 
   static const defaults = Settings();
@@ -93,6 +97,7 @@ final class Settings {
     ExplorerChoice? explorer,
     PuzzleFilter? puzzles,
     bool? autoAdvance,
+    bool? acceptAlternativeAnswers,
     TrainingOptions? training,
   }) => Settings(
     boardCoordinates: boardCoordinates ?? this.boardCoordinates,
@@ -108,6 +113,8 @@ final class Settings {
     explorer: explorer ?? this.explorer,
     puzzles: puzzles ?? this.puzzles,
     autoAdvance: autoAdvance ?? this.autoAdvance,
+    acceptAlternativeAnswers:
+        acceptAlternativeAnswers ?? this.acceptAlternativeAnswers,
     training: training ?? this.training,
   );
 
@@ -125,6 +132,7 @@ final class Settings {
     'explorer': explorer.toJson(),
     'puzzles': puzzles.toJson(),
     'autoAdvance': autoAdvance,
+    'acceptAlternativeAnswers': acceptAlternativeAnswers,
     'training': training.toJson(),
   });
 
@@ -159,6 +167,10 @@ final class Settings {
       explorer: ExplorerChoice.fromJson(decoded['explorer']),
       puzzles: PuzzleFilter.fromJson(decoded['puzzles']),
       autoAdvance: pick('autoAdvance', defaults.autoAdvance),
+      acceptAlternativeAnswers: pick(
+        'acceptAlternativeAnswers',
+        defaults.acceptAlternativeAnswers,
+      ),
       training: TrainingOptions.fromJson(decoded['training']),
     );
   }
@@ -177,6 +189,7 @@ final class Settings {
       other.explorer == explorer &&
       other.puzzles == puzzles &&
       other.autoAdvance == autoAdvance &&
+      other.acceptAlternativeAnswers == acceptAlternativeAnswers &&
       other.training == training;
 
   @override
@@ -192,6 +205,7 @@ final class Settings {
     explorer,
     puzzles,
     autoAdvance,
+    acceptAlternativeAnswers,
     training,
   );
 }

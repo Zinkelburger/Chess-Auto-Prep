@@ -201,6 +201,17 @@ List<SettingGroup> settingGroups({
         hint: 'Off: graded from your mistakes. On: 1–4 after each line.',
       ),
     ]),
+    SettingGroup('Tactics', [
+      SettingRow(
+        'Accept other winning moves',
+        ToggleSetting(
+          value: s.acceptAlternativeAnswers,
+          onChanged: (on) =>
+              change((now) => now.copyWith(acceptAlternativeAnswers: on)),
+        ),
+        hint: 'Stockfish checks alternative answers at depth 14',
+      ),
+    ]),
     SettingGroup('Engine', [
       SettingRow(
         'CPU cores',

@@ -181,6 +181,15 @@ class _FeedbackLine extends StatelessWidget {
         scheme.primary,
       ),
       Incorrect(:final san) => ('Incorrect — $san is not it.', scheme.error),
+      CheckingAnswer() => ('Checking…', scheme.onSurface),
+      AlternativeSolved(:final san) => (
+        'Correct! $san is just as good.',
+        scheme.primary,
+      ),
+      AnswerNotChecked(:final reason) => (
+        'Not checked — $reason',
+        scheme.error,
+      ),
       Solved() => (
         up.decided == Outcome.failed
             ? 'Solved, after a wrong try.'

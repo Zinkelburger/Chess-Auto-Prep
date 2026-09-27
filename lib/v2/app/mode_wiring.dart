@@ -106,6 +106,7 @@ final class TrainingWiring {
     modes = TrainingModes(
       tactics: tactics,
       puzzles: PuzzleTrainer(
+        alternativeEngine: () => env.launchEngine(cores: 1, memoryMb: 64),
         set: tactics,
         session: session,
         analysis: workspace.analysis,

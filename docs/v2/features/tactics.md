@@ -78,11 +78,19 @@ the opponent's reply plays on. With auto-advance the next puzzle loads 3 s later
 records the attempt, the time taken and the success against that puzzle.
 **Wrong move** — `Incorrect`, the board snaps back to the puzzle position and the message stays up until
 the next attempt; the attempt counts against the puzzle's success rate.
-**Accept other winning moves** — off by default. On, a move that is not the stored answer stays on the
-board and the panel reads `Checking…` with input locked while Stockfish scores the position at depth 14 on
-one worker; within 50cp of the stored answer from the mover's side it passes with `Correct! {move} is just
-as good` and finishes the puzzle on the played move. It answers no whenever it cannot ask (no engine, a build
-holding the pool, an unparseable move) and drops a verdict arriving after a reset.
+**Accept other winning moves** (v2, 2026-09-27) — off by default, in Settings → Tactics.
+On, a legal non-stored move stays on the shared board with `Checking…` and input
+locked. One private supervised Stockfish (one core, 64 MiB) scores the positions
+after the stored and played moves at depth 14; a loss of at most 50 cp from the
+solver's viewpoint passes with `Correct! {move} is just as good.` and finishes on
+the played move. The stored solution is unchanged; Analyze examines the accepted
+move without inserting it. Both colours use the same score conversion. A 30-second
+deadline, unavailable/shallow verdict or startup failure gives `Not checked` and
+leaves the attempt ungraded, rather than inventing an incorrect answer. Reset,
+reveal, navigation, mode changes, disposal and close preparation cancel the check;
+a late launch is quit and a stale verdict cannot grade another puzzle. An earlier
+wrong attempt stays failed even if a later alternative passes. This uses its own
+supervised worker, not the old engine pool or the board's analysis process.
 **Show solution (the hint)** — the button or Space → the numbered SAN line and a highlight; part-way
 through a multi-move puzzle it navigates to the current position, not the end. The reveal is stored as a
 hint on the puzzle and counted in the session. `No solution available` when the line is missing.

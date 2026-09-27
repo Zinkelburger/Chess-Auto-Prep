@@ -63,13 +63,28 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> selectPlace(WidgetTester tester, String name) async {
+    await tester.scrollUntilVisible(
+      find.text(name),
+      80,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView).first,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(name));
+  }
+
   testWidgets('an account that cannot be read is signed out, not locked', (
     tester,
   ) async {
     readFails = true;
     await account.load();
     await pump(tester);
-    await tester.tap(find.text('Accounts'));
+    await selectPlace(tester, 'Accounts');
     await tester.pumpAndSettle();
     expect(find.text('Log in'), findsOneWidget);
     expect(find.text('Personal access token'), findsOneWidget);
@@ -82,15 +97,16 @@ void main() {
     for (final place in [
       'Look',
       'Training',
+      'Tactics',
       'Engine',
       'Repertoire',
       'Files',
       'Accounts',
       'App',
     ]) {
-      if (place == 'App') {
+      if (place == 'Accounts' || place == 'App') {
         await tester.scrollUntilVisible(
-          find.text('App'),
+          find.text(place),
           100,
           scrollable: find
               .descendant(
@@ -106,11 +122,23 @@ void main() {
     expect(find.text('CPU cores'), findsNothing);
   });
 
+  testWidgets('alternative answers can be enabled from their settings row', (
+    tester,
+  ) async {
+    await pump(tester);
+    await selectPlace(tester, 'Tactics');
+    await tester.pumpAndSettle();
+    expect(find.text('Accept other winning moves'), findsOneWidget);
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(store.value.acceptAlternativeAnswers, isTrue);
+  });
+
   testWidgets('a place shows its rows; a number is stepped and typed', (
     tester,
   ) async {
     await pump(tester);
-    await tester.tap(find.text('Engine'));
+    await selectPlace(tester, 'Engine');
     await tester.pumpAndSettle();
     expect(find.text('CPU cores'), findsOneWidget);
     expect(find.text('of 8 on this computer'), findsOneWidget);
@@ -185,7 +213,7 @@ void main() {
     'changing categories replaces number fields with their own values',
     (tester) async {
       await pump(tester);
-      await tester.tap(find.text('Engine'));
+      await selectPlace(tester, 'Engine');
       await tester.pumpAndSettle();
       await tester.tap(find.text('Repertoire'));
       await tester.pumpAndSettle();
@@ -212,7 +240,7 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.text('Engine'));
+    await selectPlace(tester, 'Engine');
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await tester.tap(find.byTooltip('Increase CPU cores'));
@@ -223,7 +251,7 @@ void main() {
 
   Future<void> accounts(WidgetTester tester) async {
     await pump(tester);
-    await tester.tap(find.text('Accounts'));
+    await selectPlace(tester, 'Accounts');
     await tester.pumpAndSettle();
   }
 

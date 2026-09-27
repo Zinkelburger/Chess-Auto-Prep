@@ -4,6 +4,11 @@ import 'package:dartchess/dartchess.dart' show Move;
 import 'package:flutter/foundation.dart';
 
 import '../../chess/fen.dart';
+import '../../chess/pgn/chapter.dart';
+import '../../chess/pv_text.dart';
+import '../../engines/alternative_answer.dart';
+import '../../engines/engine_supervisor.dart';
+import '../../workspace/board_claim.dart';
 import '../../chess/pgn/chapter_edits.dart' show playedAlready;
 import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/tree_edit.dart' show moveNode;
@@ -50,6 +55,7 @@ final class PuzzleTrainer extends ChangeNotifier {
     required EngineAnalysis analysis,
     required SettingsStore settings,
     required OpenPuzzle open,
+    this.alternativeEngine,
     DateTime Function() now = DateTime.now,
   }) : _set = set,
        _session = session,
@@ -59,6 +65,8 @@ final class PuzzleTrainer extends ChangeNotifier {
        _now = now,
        _showing = (source: session.source, game: session.game) {
     _session.addListener(_documentChanged);
+    _session.anyChange.addListener(_positionChanged);
+    _analysis.addListener(_analysisChanged);
   }
 
   final TacticsSet _set;
@@ -67,6 +75,11 @@ final class PuzzleTrainer extends ChangeNotifier {
   final SettingsStore _settings;
   final OpenPuzzle _open;
   final DateTime Function() _now;
+  final Future<EngineStart> Function()? alternativeEngine;
+  final board = ValueNotifier<BoardClaim?>(null);
+  AlternativeAnswer? _alternative;
+  Chapter? _checkingChapter;
+  PvMove? _alternativeMove;
 
   PuzzleRun? _run;
   PuzzleUp? _up;
@@ -116,6 +129,8 @@ final class PuzzleTrainer extends ChangeNotifier {
     if (_disposed || _suspended) return;
     _suspended = true;
     _stopTimers();
+    _cancelAlternative();
+    notifyListeners();
   }
 
   /// Restarts a pending delay only for the exact puzzle state it belonged to.
@@ -206,7 +221,112 @@ final class PuzzleTrainer extends ChangeNotifier {
     }
     if (_session.cursor != up.frontier) return;
     if (reached == up.frontier.mainChild) return _found(up);
+    final candidate = pvMoves(_session.fen, [uci]).firstOrNull;
+    if (candidate == null) return;
+    if (_settings.value.acceptAlternativeAnswers) {
+      unawaited(_checkAlternative(up, candidate));
+      return;
+    }
     _missed(up, uci);
+  }
+
+  Future<void> _checkAlternative(PuzzleUp up, PvMove move) async {
+    final expected = _session.tree?.nodeAt(up.frontier.mainChild);
+    final launch = alternativeEngine;
+    if (expected == null || launch == null) {
+      _up = up.copyWith(
+        feedback: const AnswerNotChecked('No engine available.'),
+      );
+      notifyListeners();
+      return;
+    }
+    final check = AlternativeAnswer(launch);
+    _alternative = check;
+    _checkingChapter = _session.chapter;
+    _alternativeMove = move;
+    _showAlternative(move);
+    final checking = up.copyWith(
+      feedback: const CheckingAnswer(),
+      waiting: true,
+    );
+    _up = checking;
+    notifyListeners();
+    final verdict = await check.compare(
+      expected: expected.fen,
+      played: move.after,
+    );
+    if (_disposed ||
+        _suspended ||
+        !identical(_alternative, check) ||
+        !identical(_up, checking))
+      return;
+    _alternative = null;
+    _checkingChapter = null;
+    board.value = null;
+    switch (verdict) {
+      case AlternativeScored(accepted: true):
+        _solved(up, feedback: AlternativeSolved(move.san));
+        _showAlternative(move);
+      case AlternativeScored(accepted: false):
+        _alternativeMove = null;
+        _missed(up.copyWith(waiting: false), move.uci);
+      case AlternativeUnavailable(:final reason):
+        _alternativeMove = null;
+        _up = up.copyWith(feedback: AnswerNotChecked(reason), waiting: false);
+        notifyListeners();
+    }
+  }
+
+  void _showAlternative(PvMove move) {
+    board.value = BoardClaim(
+      fen: move.after,
+      orientation: _session.orientation,
+      onMove: null,
+      lastMove: move.uci,
+    );
+  }
+
+  /// Analyze the accepted move without adding it to the stored answer.
+  void inspectAlternative() {
+    final move = _alternativeMove;
+    final up = _up;
+    if (move == null || up == null || !up.finished) return;
+    _alternativeMove = null;
+    board.value = null;
+    _session.showCommentLine(up.frontier, [move], 0);
+  }
+
+  // The E shortcut and Actions menu must inspect the same position as Analyze.
+  void _analysisChanged() {
+    if (!_disposed && _analysis.enabled) inspectAlternative();
+  }
+
+  void _positionChanged() {
+    if (_disposed || board.value == null) return;
+    final up = _up;
+    if (up == null ||
+        _session.cursor != up.frontier ||
+        (_alternative != null &&
+            !identical(_checkingChapter, _session.chapter))) {
+      _cancelAlternative();
+      notifyListeners();
+    }
+  }
+
+  void _cancelAlternative() {
+    final check = _alternative;
+    _alternative = null;
+    _checkingChapter = null;
+    _alternativeMove = null;
+    board.value = null;
+    if (check == null) return;
+    unawaited(check.cancel());
+    if (_up?.feedback is CheckingAnswer) {
+      _up = _up!.copyWith(
+        waiting: false,
+        feedback: const AnswerNotChecked('Check cancelled. Try again.'),
+      );
+    }
   }
 
   void _found(PuzzleUp up) {
@@ -238,8 +358,8 @@ final class PuzzleTrainer extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _solved(PuzzleUp up) {
-    _up = up.copyWith(feedback: const Solved(), waiting: false, finished: true);
+  void _solved(PuzzleUp up, {Feedback feedback = const Solved()}) {
+    _up = up.copyWith(feedback: feedback, waiting: false, finished: true);
     _record(up, Outcome.solved);
     _session.showOnlyTo(null);
     if (autoAdvance) {
@@ -332,7 +452,7 @@ final class PuzzleTrainer extends ChangeNotifier {
     if (_disposed || _suspended) return;
     final up = _up;
     if (up == null) return;
-    _cancelTimers();
+    _cancelTimers(keepAccepted: true);
     final refusal = _session.apply(
       (set) => ratePuzzle(set, index: up.puzzle.index, stars: stars),
     );
@@ -442,7 +562,8 @@ final class PuzzleTrainer extends ChangeNotifier {
     });
   }
 
-  void _cancelTimers() {
+  void _cancelTimers({bool keepAccepted = false}) {
+    if (!keepAccepted || _alternative != null) _cancelAlternative();
     _stopTimers();
     _replyDue = null;
     _advanceDue = null;
@@ -460,6 +581,9 @@ final class PuzzleTrainer extends ChangeNotifier {
     _disposed = true;
     _cancelTimers();
     _session.removeListener(_documentChanged);
+    _session.anyChange.removeListener(_positionChanged);
+    _analysis.removeListener(_analysisChanged);
+    board.dispose();
     super.dispose();
   }
 }
@@ -482,6 +606,20 @@ final class Incorrect extends Feedback {
   const Incorrect(this.san);
 
   final String san;
+}
+
+final class CheckingAnswer extends Feedback {
+  const CheckingAnswer();
+}
+
+final class AlternativeSolved extends Feedback {
+  const AlternativeSolved(this.san);
+  final String san;
+}
+
+final class AnswerNotChecked extends Feedback {
+  const AnswerNotChecked(this.reason);
+  final String reason;
 }
 
 final class Solved extends Feedback {

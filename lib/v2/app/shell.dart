@@ -100,7 +100,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
 
   /// Who holds the board: a lesson first, then the explorer Book's free
   /// board.
-  late final _claim = FirstClaim([_train.lines.board, _ws.tree.board]);
+  late final _claim = FirstClaim([
+    _train.lines.board,
+    _train.puzzles.board,
+    _ws.tree.board,
+  ]);
 
   /// Each mode's list, tabs, Actions menu and what it adds to the
   /// workspace; the window asks the one on screen.

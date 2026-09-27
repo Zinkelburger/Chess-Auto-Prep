@@ -72,6 +72,9 @@ The title bar reads `Settings` with a close button (`Close settings`, Escape). N
   diagnostics include only the action and error type, never response text or credentials. The v1
   preference keys remain unchanged and are not an OS keychain. Game-download usernames
   are separate, in Tactics' My accounts dialog.
+- **`Tactics`** (v2, 2026-09-27) — `Accept other winning moves`, off by default.
+  Stockfish checks legal non-stored puzzle answers at depth 14. Failure to obtain
+  a complete verdict does not grade the attempt; see [tactics](tactics.md).
 - **`Repertoire`** (v2, 2026-09-21) — `Opponent rating` (1100–2900, default 2200, step 100; what
   the Replies table, gaps and coverage are predicted for) and `Cover replies met once in` (5–1000
   games, default 50). The v2 dialog is 760×440 (2026-09-24): a full-width Search settings field,

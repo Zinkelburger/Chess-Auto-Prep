@@ -35,6 +35,12 @@ and native-platform gates pass. The [renewal checklist](ARCHITECTURE_RENEWAL.md#
 is the authoritative inventory of its implemented and remaining workflows;
 sections below describing old paths are not claims of v2 parity.
 
+- `v2/features/tactics/puzzle_trainer.dart`: optional alternative-answer checks
+  hold a temporary shared-board claim while `engines/alternative_answer.dart`
+  compares both post-move positions at depth 14, with one supervised worker and
+  a 30-second deadline. Cancellation also quits delayed launches; unavailable
+  verdicts never grade a puzzle. Accepted moves leave the stored PGN answer
+  unchanged and can be inspected through the existing read-only line preview.
 - `v2/storage/diagnostic_report.dart`: on-demand version/platform plus the last
   32 KiB / 160 lines of `app.log`; leading partial lines and recognizable
   credential-bearing lines are omitted. Settings owns the Copy diagnostics
