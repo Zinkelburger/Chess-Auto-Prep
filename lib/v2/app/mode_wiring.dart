@@ -56,6 +56,10 @@ DocumentModes wireDocumentModes(
     studies: Studies(
       pendingWrites: env.pendingWrites,
       files: env.studyFiles,
+      picker: env.viewerPicker,
+      importer: env.fileImport,
+      exporter: env.exportPgn,
+      linkedPlayers: env.players,
       documents: env.store,
       session: session,
       saver: saver,

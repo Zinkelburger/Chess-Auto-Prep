@@ -1,3 +1,4 @@
+import '../../chess/pgn/study_cleanup.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 
 import '../../chess/fen.dart';
@@ -93,3 +94,19 @@ String? _apply(DocumentSession session, ChapterEdit Function(Chapter) edit) {
   session.apply(edit);
   return null;
 }
+
+String? setStudyTags(
+  DocumentSession session,
+  int index,
+  Map<String, String> tags,
+) => _apply(session, (chapter) => editStudyTags(chapter, index, tags));
+String? setStudyRoot(DocumentSession session, int index, Fen root) =>
+    _apply(session, (chapter) => resetStudyChapter(chapter, index, root));
+String? clearStudyContent(
+  DocumentSession session,
+  int index, {
+  required bool annotations,
+}) => _apply(
+  session,
+  (chapter) => cleanStudyChapter(chapter, index, annotations: annotations),
+);

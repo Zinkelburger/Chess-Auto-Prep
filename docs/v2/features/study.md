@@ -1,6 +1,7 @@
 # Study
 
-Status: draft from the old app
+Status: implementation authorized by the owner on 2026-09-27; core document
+operations built, remaining controls tracked in renewal row 4b
 Old code (oracle only): `lib/screens/study_screen.dart`, `lib/features/studies/`, `lib/widgets/study/`
 Plan step: 4
 
@@ -97,6 +98,11 @@ attempts…`, `A collection download is already running.`, `Review the previous 
 suspends autosave until an explicit retry, copy or reload through `Save and recovery…`, and tries to
 leave a `Recovered …` study beside it. Closing the app unsaved: `This study has unsaved changes or
 retained drafts. Save the work you want to keep before closing.`
+**Current rename behavior** — changing a study file name preserves its PGN bytes
+and embedded names. Linked player/group prep studies refuse rename while their
+links still name that file. A save or rename with an uncertain result offers an
+exact retry and blocks close until resolved.
+
 **Export** — `Copy study PGN` (all chapters, after flushing the save) → `Study PGN copied to
 clipboard.`; `Copy chapter PGN` from a row; `Save study PGN as…` asks for a folder and a file name
 (`Enter a file name without path separators or reserved characters.`) and writes a snapshot, leaving the

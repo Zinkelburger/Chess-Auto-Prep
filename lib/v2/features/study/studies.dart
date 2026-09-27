@@ -1,3 +1,8 @@
+import '../../storage/player_files.dart';
+import '../../storage/pgn_file_picker.dart';
+import '../../storage/pgn_file_import.dart';
+import '../../storage/pgn_export.dart';
+import '../../storage/reference_change.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
@@ -31,6 +36,10 @@ final class Studies extends ChangeNotifier {
     required store.PgnDocumentStore documents,
     required DocumentSession session,
     this.pendingWrites,
+    this.picker,
+    this.importer,
+    this.exporter,
+    this.linkedPlayers,
     required DocumentSaver saver,
     required LichessStudies lichess,
     required String root,
@@ -44,6 +53,10 @@ final class Studies extends ChangeNotifier {
   /// What a study's first chapter is called before anyone renames it.
   static const firstChapter = 'Chapter 1';
 
+  final PgnFilePicker? picker;
+  final PgnFileImport? importer;
+  final PgnExport? exporter;
+  final PlayerStore? linkedPlayers;
   final StudyFiles _files;
   final store.PgnDocumentStore _store;
   final DocumentSession _session;
@@ -158,6 +171,166 @@ final class Studies extends ChangeNotifier {
     });
   }
 
+  Future<StudyResult> importPgn() async {
+    if (picker == null || importer == null)
+      return const StudyProblem('File import is unavailable.');
+    if (_busy || _disposed) return const StudyDone();
+    final path = await picker!.pickPgn();
+    if (path == null || _disposed) return const StudyDone();
+    return _run('import study PGN', () async {
+      final imported = await importer!.insideDocuments(path);
+      if (imported case ImportFailed(:final detail))
+        return StudyProblem(detail);
+      final copied = (imported as FileToOpen).path;
+      final read = await _store.open(DocumentRef(copied));
+      if (read is! store.Opened)
+        return const StudyProblem('That PGN could not be read.');
+      if (read.readOnly != null) return StudyProblem(read.readOnly!);
+      final chapter = await readChapter(
+        name: p.basenameWithoutExtension(path),
+        text: read.text,
+      );
+      if (chapter.lines.isEmpty || chapter.lines.every((line) => !line.isWhole))
+        return const StudyProblem('That PGN contains no readable games.');
+      return _createdUnderAFreeName(
+        p.basenameWithoutExtension(path),
+        read.text,
+      );
+    });
+  }
+
+  Future<StudyResult> exportPgn(String name) async {
+    if (nameProblem(name) case final wrong?) return StudyProblem(wrong);
+    final chapter = open == null ? null : _session.snapshot();
+    if (chapter == null || exporter == null)
+      return const StudyProblem('Open a study first.');
+    final text = writeChapter(chapter);
+    return _run('export study PGN', () async {
+      await _saver.flush();
+      final nameWithExtension = p.extension(name).toLowerCase() == '.pgn'
+          ? name
+          : '$name.pgn';
+      final result = await exporter!.save(nameWithExtension, text);
+      return switch (result) {
+        PgnExportFailed(:final message) => StudyProblem(message),
+        _ => const StudyDone(),
+      };
+    });
+  }
+
+  /// A rename changes the file's name, preserving all PGN bytes and tags.
+  /// The original revision and operation id survive an uncertain result.
+  _StudyRename? _rename;
+  bool get canRetryRename => _rename != null;
+  Future<StudyResult> rename(ChapterRef study, String name) {
+    if (nameProblem(name) case final wrong?)
+      return Future.value(StudyProblem(wrong));
+    if (!p.equals(p.dirname(study.path), _root))
+      return Future.value(
+        const StudyProblem('Only saved studies can be renamed.'),
+      );
+    if (_rename != null) return retryRename();
+    final to = ChapterRef.at(p.join(_root, '$name.pgn'));
+    if (to == study) return Future.value(const StudyDone());
+    return _run('rename study', () async {
+      final linkProblem = await _linked(study);
+      if (linkProblem != null) return StudyProblem(linkProblem);
+      return _session.access.changing(
+        study.path,
+        () => _session.access.changing(
+          to.path,
+          () => _withRevision(study, (revision) async {
+            final id = newCompoundId();
+            final token = Object();
+            if (_session.source == study &&
+                !_saver.beginExternal(token, revision))
+              return _changedOnDisk;
+            final pending = pendingWrites ?? PendingWrites();
+            final obligation = pending.accept<store.MoveResult>(
+              resource: this,
+              label: 'Rename study',
+              work: () =>
+                  _store.move(study, to, expected: revision, operationId: id),
+              problem: (result) =>
+                  result is store.IoFailure ? result.detail : null,
+            );
+            _rename = _StudyRename(study, to, token, obligation);
+            return _finishRename();
+          }),
+        ),
+      );
+    });
+  }
+
+  Future<String?> _linked(ChapterRef study) async {
+    final source = linkedPlayers;
+    if (source == null) return null;
+    try {
+      final data = await source.read();
+      if (data.warnings.isNotEmpty)
+        return 'The player directory needs attention before linked studies can be renamed.';
+      final names = [
+        for (final player in data.players)
+          if (p.equals(player.text('prep_file'), study.path)) player.name,
+        for (final group in data.groups)
+          if (group.fields['study'] == study.path) group.name,
+      ];
+      return names.isEmpty
+          ? null
+          : 'This study is linked to ${names.join(', ')} in Players & prep. Update its links before renaming.';
+    } on Object catch (error) {
+      log.w('check study links', error);
+      return 'Could not check study links. Retry when the player directory is readable.';
+    }
+  }
+
+  Future<StudyResult> retryRename() => _run('retry study rename', () async {
+    final move = _rename;
+    if (move == null) return const StudyDone();
+    return _session.access.changing(
+      move.from.path,
+      () => _session.access.changing(
+        move.to.path,
+        () async => _session.source == move.from
+            ? await _saver.holdStill(
+                    (_) => _finishRename(),
+                    continuing: move.token,
+                  ) ??
+                  _changedOnDisk
+            : _finishRename(),
+      ),
+    );
+  });
+  Future<StudyResult> _finishRename() async {
+    final move = _rename!;
+    final result = await move.pending.run();
+    if (result is! store.IoFailure) _rename = null;
+    switch (result) {
+      case store.Moved():
+        if (_session.source == move.from) _session.relocated(move.to);
+        _saver.resolveExternalMove(move.token);
+        return const StudyDone();
+      case store.Collision():
+        _saver.resolveExternalMove(move.token);
+        return const StudyProblem('A study with that name already exists.');
+      case store.Conflict():
+        _saver.resolveExternalMove(
+          move.token,
+          failure: _changedOnDisk.sentence,
+        );
+        return _changedOnDisk;
+      case store.IoFailure(:final detail):
+        _saver.resolveExternalMove(
+          move.token,
+          failure: detail,
+          uncertain: true,
+        );
+        return StudyProblem(
+          'Rename was not confirmed: $detail. Retry rename to finish.',
+        );
+    }
+  }
+
   /// Recoverable: the file goes to the recovery folder through the store,
   /// which is where a deleted chapter goes too.
   Future<StudyResult> delete(ChapterRef study) => _run(
@@ -181,16 +354,16 @@ final class Studies extends ChangeNotifier {
   /// The whole open study as PGN, once the draft on screen has reached the
   /// file: copying a study that is a second behind is copying the wrong one.
   Future<String?> pgnOfOpenStudy() async {
+    final chapter = _session.snapshot();
     await _saver.flush();
-    final chapter = _session.chapter;
     return chapter == null ? null : writeChapter(chapter);
   }
 
   /// One chapter of the open study as PGN: the game exactly as the file
   /// holds it.
   Future<String?> pgnOfChapter(int index) async {
+    final Chapter? chapter = _session.snapshot();
     await _saver.flush();
-    final Chapter? chapter = _session.chapter;
     if (chapter == null || index < 0 || index >= chapter.lines.length) {
       return null;
     }
@@ -204,15 +377,10 @@ final class Studies extends ChangeNotifier {
     for (var attempt = 1; attempt <= 100; attempt++) {
       final wanted = attempt == 1 ? name : '$name $attempt';
       final created = await _created(_asFileName(wanted), text);
-      if (created is! StudyProblem) return created;
-      if (!await _isTaken(wanted)) return created;
+      if (created is! _StudyNameTaken) return created;
     }
     return StudyProblem('No free name was found for "$name".');
   }
-
-  Future<bool> _isTaken(String name) async =>
-      await _store.open(DocumentRef(p.join(_root, '${_asFileName(name)}.pgn')))
-          is store.Opened;
 
   /// A study is its file name, so a name a file cannot take is trimmed down
   /// to one that can rather than refused: the name came from a download, not
@@ -226,16 +394,52 @@ final class Studies extends ChangeNotifier {
   /// name reaches this from a dialog, from a download's own tags and from
   /// another mode, and one holding a separator or a dot segment would make
   /// a path out of what is supposed to be a file name.
+  _StudyCreate? _creation;
+  bool get canRetrySave => _creation != null;
+  Future<StudyResult> retrySave() => _run('retry study save', _finishCreated);
+
   Future<StudyResult> _created(String name, String text) async {
     if (nameProblem(name) case final wrong?) return StudyProblem(wrong);
-    final ref = DocumentRef(p.join(_root, '$name.pgn'));
-    return switch (await _store.create(ref, text)) {
-      store.Created() => StudyDone(opened: ChapterRef.at(ref.path)),
-      store.Collision() => StudyProblem(
-        'A study named "$name" already exists.',
+    if (_creation != null)
+      return const StudyProblem('Retry the pending study save first.');
+    final ref = ChapterRef.at(p.join(_root, '$name.pgn'));
+    final pending = pendingWrites ?? PendingWrites();
+    var uncertain = false;
+    Future<store.CreateResult> write() async {
+      if (uncertain) {
+        final read = await _store.open(ref);
+        if (read is store.Opened && read.readOnly == null && read.text == text)
+          return store.Created(read.revision);
+      }
+      final result = await _store.create(ref, text);
+      uncertain = result is store.IoFailure;
+      return result;
+    }
+
+    _creation = _StudyCreate(
+      ref,
+      pending.accept<store.CreateResult>(
+        resource: this,
+        label: 'Save study',
+        work: write,
+        problem: (result) => result is store.IoFailure ? result.detail : null,
+      ),
+    );
+    return _finishCreated();
+  }
+
+  Future<StudyResult> _finishCreated() async {
+    final creation = _creation;
+    if (creation == null) return const StudyDone();
+    final result = await creation.pending.run();
+    if (result is! store.IoFailure) _creation = null;
+    return switch (result) {
+      store.Created() => StudyDone(opened: creation.ref),
+      store.Collision() => _StudyNameTaken(
+        'A study named "${creation.ref.name}" already exists.',
       ),
       store.IoFailure(:final detail) => StudyProblem(
-        'Could not create the study: $detail',
+        'Could not save the study: $detail. Retry study save to finish.',
       ),
     };
   }
@@ -293,6 +497,7 @@ final class Studies extends ChangeNotifier {
     String action,
     Future<StudyResult> Function() body,
   ) async {
+    if (_disposed) return const StudyProblem('The study workspace is closed.');
     if (_busy) return const StudyProblem('Another change is still running.');
     _busy = true;
     notifyListeners();
@@ -374,4 +579,21 @@ final class StudyProblem extends StudyResult {
   const StudyProblem(this.sentence);
 
   final String sentence;
+}
+
+final class _StudyRename {
+  const _StudyRename(this.from, this.to, this.token, this.pending);
+  final Object token;
+  final ChapterRef from, to;
+  final PendingObligation<store.MoveResult> pending;
+}
+
+final class _StudyCreate {
+  const _StudyCreate(this.ref, this.pending);
+  final ChapterRef ref;
+  final PendingObligation<store.CreateResult> pending;
+}
+
+final class _StudyNameTaken extends StudyProblem {
+  const _StudyNameTaken(super.sentence);
 }

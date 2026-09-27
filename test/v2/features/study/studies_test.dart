@@ -1,3 +1,12 @@
+import 'dart:async';
+import 'dart:io';
+import 'package:chess_auto_prep/v2/chess/pgn/study.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_export.dart';
+import 'package:chess_auto_prep/v2/storage/pending_writes.dart';
+import 'package:chess_auto_prep/v2/storage/player_files.dart';
+import 'package:chess_auto_prep/v2/chess/players/player.dart';
+import '../../support/viewer_fixture.dart';
+import '../../support/scripted_store.dart';
 import 'package:chess_auto_prep/v2/features/study/studies.dart';
 import 'package:chess_auto_prep/v2/net/lichess_studies.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
@@ -9,6 +18,156 @@ import '../../support/study_fixture.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
+  test(
+    'export holds the clicked snapshot across navigation during its picker',
+    () async {
+      final folder = await Directory.systemTemp.createTemp('study-export-');
+      addTearDown(() => folder.delete(recursive: true));
+      final choice = Completer<String?>();
+      final study = await openStudy(
+        twoChapterStudy,
+        exporter: PgnExport(pickDirectory: () => choice.future),
+      );
+      addTearDown(study.dispose);
+      final work = study.studies.exportPgn('Snapshot');
+      await pumpEventQueue();
+      final other = studyRef('Other');
+      study.store.documents[other] = Opened(
+        '[Event "Other"]\n\n1. c4 *\n',
+        scriptedRevision('[Event "Other"]\n\n1. c4 *\n'),
+      );
+      await study.session.open(other, game: 0);
+      choice.complete(folder.path);
+      expect(await work, isA<StudyDone>());
+      expect(
+        await File(p.join(folder.path, 'Snapshot.pgn')).readAsString(),
+        twoChapterStudy,
+      );
+      expect(study.session.source, other);
+    },
+  );
+
+  test(
+    'PGN import preserves original bytes and chooses a free study name',
+    () async {
+      final picker = ScriptedPicker('/Downloads/Imported.pgn');
+      final importer = ScriptedImport()
+        ..copyTo = '/Documents/pgn_collections/Imported.pgn';
+      final study = await openStudy(
+        twoChapterStudy,
+        picker: picker,
+        importer: importer,
+      );
+      addTearDown(study.dispose);
+      final source = DocumentRef(importer.copyTo!);
+      study.store.documents[source] = Opened(
+        twoChapterStudy,
+        scriptedRevision(twoChapterStudy),
+      );
+      study.store.documents[studyRef('Imported')] = Opened(
+        'original',
+        scriptedRevision('original'),
+      );
+      final imported = await study.studies.importPgn() as StudyDone;
+      expect(imported.opened, studyRef('Imported 2'));
+      expect(
+        (study.store.documents[imported.opened] as Opened).text,
+        twoChapterStudy,
+      );
+      expect(
+        (study.store.documents[studyRef('Imported')] as Opened).text,
+        'original',
+      );
+      expect(study.session.source, study.ref);
+    },
+  );
+  test(
+    'a save with uncertain acknowledgment retries the same snapshot',
+    () async {
+      final pending = PendingWrites();
+      final study = await openStudy(twoChapterStudy, pending: pending);
+      addTearDown(study.dispose);
+      study.store.creates.add(const IoFailure('lost acknowledgment'));
+      expect(await study.studies.create('New'), isA<StudyProblem>());
+      expect(study.studies.canRetrySave, isTrue);
+      expect(await pending.settle(), contains('lost acknowledgment'));
+      final landed = newStudyText(study: 'New', chapter: 'Chapter 1');
+      study.store.documents[studyRef('New')] = Opened(
+        landed,
+        scriptedRevision(landed),
+      );
+      final retried = await study.studies.retrySave() as StudyDone;
+      expect(retried.opened, studyRef('New'));
+      expect(study.studies.canRetrySave, isFalse);
+      expect(await pending.settle(), isNull);
+      expect(
+        study.store.documents.keys.where((r) => r.path.contains('/New')).length,
+        1,
+      );
+    },
+  );
+  test(
+    'linked prep study rename is refused before changing its file',
+    () async {
+      final people = MemoryPlayers();
+      await people.savePlayer(
+        Player({
+          'id': 'one',
+          'name': 'Opponent',
+          'prep_file': studyRef('Endgames').path,
+        }),
+      );
+      final study = await openStudy(twoChapterStudy, linkedPlayers: people);
+      addTearDown(study.dispose);
+      final result =
+          await study.studies.rename(study.ref, 'Moved') as StudyProblem;
+      expect(result.sentence, contains('linked'));
+      expect(study.session.source, study.ref);
+      expect(study.onDisk, twoChapterStudy);
+    },
+  );
+
+  test('rename keeps the selected chapter and PGN bytes', () async {
+    final study = await openStudy(twoChapterStudy, chapter: 1);
+    addTearDown(study.dispose);
+    final result = await study.studies.rename(study.ref, 'Renamed');
+    expect(result, isA<StudyDone>());
+    expect(study.session.source, studyRef('Renamed'));
+    expect(study.session.game, 1);
+    expect(
+      (study.store.documents[studyRef('Renamed')] as Opened).text,
+      twoChapterStudy,
+    );
+    expect(study.saver.referencesPending, isFalse);
+  });
+  test(
+    'uncertain rename holds edits and exact retry releases the barrier',
+    () async {
+      final study = await openStudy(twoChapterStudy);
+      addTearDown(study.dispose);
+      study.store.moves.add(const IoFailure('interrupted'));
+      expect(
+        await study.studies.rename(study.ref, 'Renamed'),
+        isA<StudyProblem>(),
+      );
+      expect(study.studies.canRetryRename, isTrue);
+      expect(study.saver.takesWords, isFalse);
+      expect(await study.studies.retryRename(), isA<StudyDone>());
+      expect(study.session.source, studyRef('Renamed'));
+      expect(study.studies.canRetryRename, isFalse);
+      expect(study.saver.takesWords, isTrue);
+    },
+  );
+  test('name collision does not leave a pending rename barrier', () async {
+    final study = await openStudy(twoChapterStudy);
+    addTearDown(study.dispose);
+    study.store.moves.add(const Collision());
+    expect(await study.studies.rename(study.ref, 'Taken'), isA<StudyProblem>());
+    expect(study.studies.canRetryRename, isFalse);
+    expect(study.saver.referencesPending, isFalse);
+    expect(study.session.source, study.ref);
+  });
+
   late StudyFixture study;
 
   setUp(() async {

@@ -20,6 +20,25 @@ void main() {
 
   tearDown(() => study.dispose());
 
+  test('cleanup is an undoable edit confined to the chosen game', () async {
+    await open(
+      text: twoChapterStudy.replaceFirst(
+        '1. e4 e5',
+        '1. e4 {keep} (1. d4 d5) e5',
+      ),
+    );
+    final before = study.onDisk;
+    expect(clearStudyContent(study.session, 0, annotations: false), isNull);
+    await study.saver.flush();
+    expect(study.onDisk, contains('{keep}'));
+    expect(study.onDisk, contains('[ChapterName "Pawn endings"]'));
+    expect(study.session.tree!.children.length, 1);
+    await study.session.undo();
+    await pumpEventQueue();
+    expect(study.onDisk, before);
+    expect(study.session.tree!.children.length, 2);
+  });
+
   test(
     'opening a chapter: puts one game on the board, facing its own way',
     () async {

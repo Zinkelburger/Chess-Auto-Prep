@@ -244,6 +244,18 @@ final class DocumentSaver extends ChangeNotifier {
     _adopt(result, _target!.ref, scope);
   }
 
+  /// A namespace-only command keeps the revision and PGN bytes. Until an
+  /// uncertain move is acknowledged, keep its editor barrier across retries.
+  void resolveExternalMove(
+    Object command, {
+    String? failure,
+    bool uncertain = false,
+  }) {
+    if (!identical(_externalOwner, command) || _disposed) return;
+    if (!uncertain) _externalOwner = null;
+    _set(failure == null ? const Saved() : SaveFailed(failure));
+  }
+
   /// The open document is now at [ref]: the same file with the same bytes
   /// under another name, so the revision and the undo receipts still stand.
   void relocated(DocumentRef ref) {

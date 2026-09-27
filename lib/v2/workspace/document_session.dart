@@ -158,6 +158,13 @@ final class DocumentSession extends ChangeNotifier {
 
   /// Asks editors to commit their text before saving or leaving the document,
   /// while their paths still name the moves the text was typed for.
+  /// Captures the document after inline editors submit their current text.
+  /// Exporters retain this immutable value across file dialogs and navigation.
+  Chapter? snapshot() {
+    _editors.commit();
+    return _chapter;
+  }
+
   Listenable get committingEditors => _editors;
   final _editors = _Editors();
 

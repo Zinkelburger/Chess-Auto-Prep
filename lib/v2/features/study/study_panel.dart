@@ -1,3 +1,6 @@
+import '../../chess/pgn/chapter_line.dart';
+import '../../chess/pgn/study_cleanup.dart';
+import 'chapter_dialogs.dart';
 import 'dart:async';
 
 import 'package:dartchess/dartchess.dart' show Side;
@@ -101,6 +104,93 @@ class _StudyPanelState extends State<StudyPanel> {
     _became(await _studies.importFromUrl(url));
   }
 
+  Future<void> _renameStudy() async {
+    final study = _studies.open;
+    if (study == null) return;
+    final name = await showNameDialog(
+      context,
+      title: 'Rename study',
+      label: 'Study name',
+      confirm: 'Rename',
+      initial: study.name,
+    );
+    if (name == null || !mounted) return;
+    _became(await _studies.rename(study, name));
+  }
+
+  Future<void> _exportStudy() async {
+    final study = _studies.open;
+    if (study == null) return;
+    final name = await showNameDialog(
+      context,
+      title: 'Save study PGN as',
+      label: 'File name',
+      confirm: 'Choose folder',
+      initial: study.name,
+    );
+    if (name == null || !mounted) return;
+    if (_studies.open != study) {
+      _say('The open study changed. Export it again.');
+      return;
+    }
+    _became(await _studies.exportPgn(name));
+  }
+
+  ChapterLine? _line(StudyChapter chapter) =>
+      widget.session.chapter?.lines.elementAtOrNull(chapter.index);
+  bool _same(StudyChapter chapter, ChapterLine line) =>
+      mounted && identical(_line(chapter), line);
+  Future<void> _tags(StudyChapter chapter) async {
+    final line = _line(chapter);
+    if (line == null) return;
+    final values = await showStudyTags(context, line.tags);
+    if (values == null || !_same(chapter, line)) return;
+    _edited(setStudyTags(widget.session, chapter.index, values));
+  }
+
+  Future<void> _root(StudyChapter chapter) async {
+    final line = _line(chapter);
+    final tree = line?.tree;
+    if (tree == null) return;
+    final root = await showStudyRoot(context, tree.rootFen);
+    if (root == null || !_same(chapter, line!)) return;
+    final count = studyContentCount(tree);
+    if (count.moves > 0) {
+      final yes = await confirmAction(
+        context,
+        title: 'Replace starting position?',
+        message:
+            'Replace the starting position of "${chapter.name}" and remove its ${count.moves} moves? This edit can be undone.',
+        confirm: 'Replace position',
+      );
+      if (!yes || !_same(chapter, line)) return;
+    }
+    _edited(setStudyRoot(widget.session, chapter.index, root));
+  }
+
+  Future<void> _clean(StudyChapter chapter, {required bool annotations}) async {
+    final line = _line(chapter);
+    final tree = line?.tree;
+    if (tree == null) return;
+    final count = studyContentCount(tree);
+    final yes = await confirmAction(
+      context,
+      title: annotations ? 'Clear annotations' : 'Clear variations',
+      message: annotations
+          ? 'Remove ${count.comments} comments and all glyphs and shapes from "${chapter.name}"? The moves stay.'
+          : 'Remove ${count.sidelines} sideline moves and their annotations from "${chapter.name}"? The main line and its notes stay.',
+      confirm: 'Clear',
+    );
+    if (!yes || !_same(chapter, line!)) return;
+    _edited(
+      clearStudyContent(
+        widget.session,
+        chapter.index,
+        annotations: annotations,
+      ),
+    );
+  }
+
   Future<void> _deleteStudy(ChapterRef study) async {
     final yes = await confirmAction(
       context,
@@ -181,6 +271,10 @@ class _StudyPanelState extends State<StudyPanel> {
 
   ChapterActions _actionsFor(StudyChapter chapter) => (
     rename: () => _renameChapter(chapter),
+    tags: () => unawaited(_tags(chapter)),
+    root: () => unawaited(_root(chapter)),
+    clearAnnotations: () => unawaited(_clean(chapter, annotations: true)),
+    clearVariations: () => unawaited(_clean(chapter, annotations: false)),
     face: (side) => _edited(
       setStudyChapterOrientation(
         widget.session,
@@ -208,6 +302,15 @@ class _StudyPanelState extends State<StudyPanel> {
             onSearch: _studies.search,
             onNewStudy: _newStudy,
             onImport: _import,
+            onImportPgn: () => unawaited(_studies.importPgn().then(_became)),
+            onRenameStudy: () => unawaited(_renameStudy()),
+            onExportStudy: () => unawaited(_exportStudy()),
+            onRetrySave: _studies.canRetrySave
+                ? () => unawaited(_studies.retrySave().then(_became))
+                : null,
+            onRetryRename: _studies.canRetryRename
+                ? () => unawaited(_studies.retryRename().then(_became))
+                : null,
             onCopyStudy: () => _copy(_studies.pgnOfOpenStudy()),
             onDeleteStudy: () {
               final open = _studies.open;
@@ -280,6 +383,11 @@ class _Toolbar extends StatelessWidget {
     required this.onSearch,
     required this.onNewStudy,
     required this.onImport,
+    required this.onImportPgn,
+    required this.onRenameStudy,
+    required this.onExportStudy,
+    this.onRetryRename,
+    this.onRetrySave,
     required this.onCopyStudy,
     required this.onDeleteStudy,
     required this.onNewChapter,
@@ -292,6 +400,8 @@ class _Toolbar extends StatelessWidget {
   final ValueChanged<String> onSearch;
   final VoidCallback onNewStudy;
   final VoidCallback onImport;
+  final VoidCallback onImportPgn, onRenameStudy, onExportStudy;
+  final VoidCallback? onRetryRename, onRetrySave;
   final VoidCallback onCopyStudy;
   final VoidCallback onDeleteStudy;
   final VoidCallback onNewChapter;
@@ -302,6 +412,13 @@ class _Toolbar extends StatelessWidget {
   List<Widget> get _actions => [
     rowAction('New study…', onNewStudy, busy: busy),
     rowAction('Import from URL…', onImport, busy: busy),
+    rowAction('Import PGN file…', onImportPgn, busy: busy),
+    rowAction('Rename study…', onRenameStudy, busy: busy || !hasOpenStudy),
+    rowAction('Save study PGN as…', onExportStudy, busy: busy || !hasOpenStudy),
+    if (onRetrySave != null)
+      rowAction('Retry study save', onRetrySave!, busy: busy),
+    if (onRetryRename != null)
+      rowAction('Retry rename', onRetryRename!, busy: busy),
     rowAction('Copy study PGN', onCopyStudy, busy: busy || !hasOpenStudy),
     rowAction('Delete study…', onDeleteStudy, busy: busy || !hasOpenStudy),
   ];
@@ -448,6 +565,10 @@ class StudyRow extends StatelessWidget {
 /// What a chapter row's menu can ask for.
 typedef ChapterActions = ({
   VoidCallback rename,
+  VoidCallback tags,
+  VoidCallback root,
+  VoidCallback clearAnnotations,
+  VoidCallback clearVariations,
   void Function(Side orientation) face,
   void Function(int by) move,
   VoidCallback copyPgn,
@@ -502,6 +623,12 @@ class ChapterRow extends StatelessWidget {
                   tooltip: 'Chapter actions',
                   children: [
                     rowAction('Rename…', actions.rename, busy: busy),
+                    rowAction('PGN tags…', actions.tags, busy: busy),
+                    rowAction(
+                      'Set starting position…',
+                      actions.root,
+                      busy: busy,
+                    ),
                     rowAction(
                       'Face White',
                       () => actions.face(Side.white),
@@ -515,6 +642,16 @@ class ChapterRow extends StatelessWidget {
                     rowAction('Move up', () => actions.move(-1), busy: busy),
                     rowAction('Move down', () => actions.move(1), busy: busy),
                     rowAction('Copy chapter PGN', actions.copyPgn, busy: busy),
+                    rowAction(
+                      'Clear comments, glyphs and shapes…',
+                      actions.clearAnnotations,
+                      busy: busy,
+                    ),
+                    rowAction(
+                      'Clear variations…',
+                      actions.clearVariations,
+                      busy: busy,
+                    ),
                     rowAction('Delete chapter…', actions.remove, busy: busy),
                   ],
                 ),

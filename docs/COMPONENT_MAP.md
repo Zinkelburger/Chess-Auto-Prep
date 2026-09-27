@@ -40,6 +40,14 @@ sections below describing old paths are not claims of v2 parity.
 - `v2/features/tournaments/`: app-owned finite engine games, setup, verified
   engine registry, live board, results/history and PGN Viewer handoff. Clock,
   rules and legal-move decisions belong to the runner; widgets make no writes.
+- `v2/features/study/`: PGN-file import through the shared import/document
+  boundary; exclusive snapshot export; guarded file rename with retained retry;
+  chapter tags, legal starting FEN and undoable annotation/variation cleanup.
+  `chess/pgn/study_cleanup.dart` refuses partially parsed games and declares
+  exactly which game changed. `storage/pgn_export.dart` picks a directory and
+  uses exclusive native publication, so an existing export is never replaced.
+  Exports capture the inline-editor snapshot before any async dialog. Linked
+  prep/group studies currently refuse rename pending transactional link moves.
 - `v2/engines/playing_engine.dart`: finite UCI limits and the actual `bestmove`,
   separate from PV analysis. Every seat runs under the shared supervisor.
 - `v2/storage/tournaments.dart`: compatible `engine_tournaments` JSON/PGN and

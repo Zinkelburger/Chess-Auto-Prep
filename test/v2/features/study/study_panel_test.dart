@@ -86,6 +86,35 @@ void main() {
     expect(find.text('Retry'), findsOneWidget);
   });
 
+  testWidgets('chapter tag editor validates and saves a result', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(find.byTooltip('Chapter actions').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('PGN tags…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Value').first,
+      'invalid',
+    );
+    await tester.tap(find.text('Save tags'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Use a PGN result: *, 1-0, 0-1 or 1/2-1/2.'),
+      findsOneWidget,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Value').first,
+      '1-0',
+    );
+    await tester.tap(find.text('Save tags'));
+    await tester.pumpAndSettle();
+    expect(study.onDisk, contains('[Result "1-0"]'));
+    expect(study.onDisk, contains('Nf3 1-0'));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('the row menu renames a chapter', (tester) async {
     await pump(tester);
     await tester.tap(find.byTooltip('Chapter actions').first);

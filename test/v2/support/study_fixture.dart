@@ -1,3 +1,8 @@
+import 'package:chess_auto_prep/v2/storage/pgn_file_picker.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_file_import.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_export.dart';
+import 'package:chess_auto_prep/v2/storage/player_files.dart';
+import 'package:chess_auto_prep/v2/storage/pending_writes.dart';
 import 'package:chess_auto_prep/v2/features/study/studies.dart';
 import 'package:chess_auto_prep/v2/net/lichess_studies.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
@@ -127,6 +132,11 @@ Future<StudyFixture> openStudy(
   String text, {
   String name = 'Endgames',
   int chapter = 0,
+  PgnFilePicker? picker,
+  PgnFileImport? importer,
+  PgnExport? exporter,
+  PlayerStore? linkedPlayers,
+  PendingWrites? pending,
   StudyFetch fetch = const StudyNotFetched(StudyFetchProblem.unreachable),
 }) async {
   final ref = studyRef(name);
@@ -137,6 +147,11 @@ Future<StudyFixture> openStudy(
   final files = ScriptedStudyFiles(StudiesListed([ref]));
   final lichess = ScriptedLichess(fetch);
   final studies = Studies(
+    picker: picker,
+    importer: importer,
+    exporter: exporter,
+    linkedPlayers: linkedPlayers,
+    pendingWrites: pending,
     files: files,
     documents: store,
     session: session,
