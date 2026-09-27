@@ -1,12 +1,16 @@
 # Architecture renewal: a fresh app in `lib/v2/`
 
-**Status: Partially implemented; checklist reconciled and implementation advanced 2026-09-27.** The
+**Status: Partially implemented; completion priorities reconciled 2026-09-27.** The
 [data correctness contracts](#data-correctness-contracts) describe how v2 keeps
 data safe without locking the app; the [hardening batches](#correctness-hardening-order)
 record what is done. Start at [Order of work](#order-of-work) for the current
 implementation, remaining scope and next-agent queue. The checklist is grounded in
 code, tests and commits. Runtime checks for subsequent implementation batches
-are recorded in their status rows; owner acceptance remains separate.
+are recorded in their status rows; owner acceptance remains separate. The
+[next-agent queue](#next-agent-queue) prioritizes the remaining work;
+[completion gates](#completion-gates) define release readiness, usability,
+maintainability and migration acceptance. This planning update does not certify
+new runtime results.
 
 This is the third version of the rewrite plan, with its correctness design
 revised on 2026-09-24. The first (Sept 16, commit `6d980630`) migrated the app in place; its
@@ -18,9 +22,19 @@ file, not the earlier ones.
 ## Decision
 
 Write the application again from an empty directory, `lib/v2/`, with its own
-entry point, `lib/main_v2.dart`. The old app keeps working and shipping until
-the new one replaces it; then the old code is deleted and `lib/v2/` moves up
-to `lib/`.
+entry point, `lib/main_v2.dart`. The old app remains available for compatibility
+and parity checks until replacement is accepted; then the old code is deleted
+and `lib/v2/` moves up to `lib/`. Source retirement and release targeting have
+not happened together, as the current configuration below shows.
+
+**Release configuration already targets v2.** The [Linux/macOS release
+workflow](../.github/workflows/release.yml) and [Windows build
+workflow](../.github/workflows/windows-build.yml) build `lib/main_v2.dart`.
+The separate source entry point therefore does not protect a release from
+shipping incomplete v2 behavior. This describes configuration, not which
+artifacts have been published. Establish release readiness before the next
+publication; changing the default entry point and removing legacy code are
+separate, later step-14 work.
 
 The rewrite keeps what is not the problem:
 
@@ -987,7 +1001,7 @@ tests and commits as the implementation record.
 | H5 | H2, H3c | Generation, mining, downloads, bughouse and engine lifetimes; job-specific checkpoints and truthful completion | Stop/retry/restart neither duplicates saved units nor loses promised results; resources return to baseline | Done 2026-09-25 (Linux): generation, mining, downloads, bughouse and engines report truthfully; derived writes never block. |
 | H6 | H4, H5 | All existing modes: focus/shortcuts/navigation/close, settings, credentials, diagnostics | The complete cross-mode sequence below passes with real disposable storage, offline/error cases and headless UI checks | Done 2026-09-25 (Linux): modes, settings, credentials and close pass the cross-mode sequence; nothing blocks startup. |
 | H7 | H6 | Remaining approved player/prep, database and tournament features, following their product rows | Each adds its own source/derived classification, durable unit and failure/restart tests while meeting the shared contracts | Partial 2026-09-27: Players & prep built in `43d59228`; TWIC cache downloading built in `307990e1`. Database browsing/import and the Engine tournament setup/run/results/history are now built under the owner’s September 27 implementation instruction; remaining workflow and presentation gaps are listed in rows 11–12. |
-| H8 | H7 | Platform/scale/compatibility gates, data migration rehearsal and switch-over readiness | No untested supported-platform durability claim; recovery and parity gates pass before old code is retired | Not started as a complete acceptance gate. Linux H1–H6 evidence exists and Windows replacement/retry code is built; Windows/macOS native durability and killed-parent cleanup, final scale/parity checks and migration rehearsal remain. |
+| H8 | H7 | Platform/scale/compatibility gates, data migration rehearsal and switch-over readiness | No untested supported-platform durability claim; recovery and parity gates pass before old code is retired | Not started as a complete acceptance gate. Linux H1–H6 evidence exists and Windows replacement/retry code is built; native Windows/macOS acceptance, killed-parent cleanup, final scale/parity and maintainability review, release readiness and migration rehearsal remain. Use the completion gates below; configured CI is not a passing result for the candidate. |
 
 Compatibility and scale checks start in the batch that changes their boundary,
 not only at H8. Do not put a failing test on main to reserve a later batch;
@@ -1017,7 +1031,7 @@ choices follow the contracts here.
 ## Order of work
 
 The table is the current checklist, reconciled against local main at
-`fd5e8a7d` on 2026-09-27. Earlier delivery details live in Git history;
+`613cab04` on 2026-09-27. Earlier delivery details live in Git history;
 [the evidence record](ARCHITECTURE_RENEWAL_EVIDENCE.md) describes the abandoned
 in-place migration, not unfinished v2 work.
 
@@ -1038,10 +1052,10 @@ automatically required parity. Do not revive dropped work.
 |---|---|---|---|
 | 0 | **Board and workspace** ([workspace](v2/features/workspace.md)) | Built: shared board, move tree, navigation and independent v2 entry point. | Preserve the single workspace; final owner/platform/scale acceptance belongs to H8. |
 | 1 | **Engine** ([workspace](v2/features/workspace.md)) | Built: shared supervisor, Stockfish/MultiPV, coalesced output, log, persistent engine switch and retry. Killed-parent cleanup is tested on Linux. | Prove native cleanup on Windows/macOS in H8; do not rebuild the supervisor. |
-| 2 | **Document store and editing** ([workspace](v2/features/workspace.md), [backups](#backups)) | Built: revisions, conflicts, debounced autosave, compound edits and undo, recovery, version history/restore-as-new and explicit retention (`36fe1c22`). Windows replacement/sharing retries are implemented. | Native platform proof and migration rehearsal remain H8. Shared move-edit controls must follow the workspace spec; a store implementation alone is not UI parity. |
+| 2 | **Document store and editing** ([workspace](v2/features/workspace.md), [backups](#backups)) | Built: revisions, conflicts, debounced autosave, compound edits and undo, recovery, version history/restore-as-new and explicit retention (`36fe1c22`). Windows replacement/sharing retries are implemented. | Native platform proof, PGN semantic round trips and migration rehearsal remain H8. Extend the existing compound-operation contract to linked Study/Players lifecycle gaps in 4b/10; existing repertoire recovery does not certify those links. Shared move-edit controls must follow the workspace spec; a store implementation alone is not UI parity. |
 | 3 | **Library** ([repertoires](v2/features/repertoires.md)) | Partial: list/search/create/rename/move/delete, chapter recovery, course sections, Open/Paste/native-drop import, training-reference recovery and protection from late ratings are built. | Legacy whole-repertoire `.chess_auto_prep_trash/` receipt adoption; decide folder-to-course conversion and per-section Root/Draft representation before changing shared formats. Folder Organize UI is dropped. Studies and cross-mode navigation already have their own owners. |
 | 4a | **Chapter outline** ([repertoires](v2/features/repertoires.md)) | Partial: roots/drafts, course sections, global chapter/line search, multi-select, drag/drop and Move to chapter, resize/collapse, move editing and transactional line transfers with training and guarded undo (`36fe1c22`). | Resolve remaining legacy split/check-disk/publish and unopened-chapter count expectations against the current spec; do not restore folder creation/moving or the old Organize screen. Cross-file training preservation is built, not an open design decision. |
-| 4b | **Study** ([study](v2/features/study.md)) | Partial: shared workspace; create/delete/rename study; add/rename/reorder/delete/orient chapters; Lichess URL and PGN-file import; snapshot file/clipboard export; chapter tags, starting FEN, undoable annotation/variation cleanup and quiz markers. Study save/rename failures retain exact retry commands (`f361db78`). Players also create linked prep/group studies. Analyze/lint, 70 focused tests and headless tags/cleanup/FEN/rename checks pass. | Linked prep/group studies deliberately refuse rename until their references can move transactionally. Remaining: drag reorder, chapter manager, collection/user imports, compact layout, visual position editor and Train/Browse handoffs; apply the latest owner decisions before reproducing old layouts. |
+| 4b | **Study** ([study](v2/features/study.md)) | Partial: shared workspace; create/delete/rename study; add/rename/reorder/delete/orient chapters; Lichess URL and PGN-file import; snapshot file/clipboard export; chapter tags, starting FEN, undoable annotation/variation cleanup and quiz markers. Study save/rename failures retain exact retry commands (`f361db78`). Players also create linked prep/group studies. Analyze/lint, 70 focused tests and headless tags/cleanup/FEN/rename checks pass. | First close linked-study lifecycle gaps: reproduce delete with player/group links, then preserve or explicitly resolve references through create/link, rename, delete/restore and chapter changes, with exact retry and restart tests. Linked studies currently refuse rename; that guard alone is insufficient. Remaining: drag reorder, chapter manager, collection/user imports, compact layout, visual position editor and Train/Browse handoffs; apply the latest owner decisions before reproducing old layouts. |
 | 5 | **Trainer** ([trainer](v2/features/trainer.md)) | Partial: Repertoire trainer mode **and** shared Train tab; Chapter/Repertoire/Book scope, course import, Learn/Review, typed moves, automatic mistake-based grading or optional manual ratings, scheduling/history, bulk actions and persistent settings. Accepted writes survive reload/disposal. | Lesson PGN peek/Builder handoff; decide legacy partial-depth, automatic walkthrough, per-move streak and custom grouping options. Separate Drill, PGN-header schedule mirroring and studies-as-repertoire-training are outside the current design. |
 | 6a | **PGN Viewer** ([viewer](v2/features/pgn-viewer.md)) | Partial: open/recent/paste, game/chapter search and navigation, notes/glyphs, explicit Save/Discard with bounded undo, autoplay, fullscreen clipboard PGN copy, exclusive visible-game file export, stable sorting shared by list/counter/keys, and per-file game/cursor/sort restoration; filtering and explorer sources are in 6c. `5aaf611d` fixes save/filter/search behavior. `1f55c3b9` delivery: analyze/lint, 250 app/focused tests plus 55 final focused checks; headless sorting, export dialog and restart restoration inspected. | Engine review, solitaire and remaining handoffs need disposition against the viewer spec. Verify right-click Comment and My books expectations there; existing comment editing and the separate Books mode are not missing. |
 | 6b | **Explorer tab** ([workspace](v2/features/workspace.md)) | Built: Masters/Lichess/TWIC, source controls, games opened on the shared board, authentication retry and resumable weekly TWIC cache download (`307990e1`); This file/My games are also built in 6c. | Verify the remaining games-list hover-board expectation against the spec. Full database management is step 11, not a reason to rebuild the explorer. |
@@ -1051,49 +1065,169 @@ automatically required parity. Do not revive dropped work.
 | 9a | **Tactics: puzzles** ([tactics](v2/features/tactics.md)) | Partial: filtered queue, shared-board puzzle session, hidden answers, feedback, stars, review fields, recap/retry and analysis handoff. Optional alternative-answer checking (`b494cc29`) compares both child positions at depth 14 on a bounded private engine, preserves the stored answer, cancels stale results and leaves unavailable checks ungraded. Analyze/lint, 317 app/tactics/settings checks plus 36 final focused checks and a real-Stockfish headless acceptance pass. | Tactic editor/row menu/delete/multi-select; source-game display; disposition of legacy CSV sets and study-as-set review. Existing PGN puzzle data and review fields must survive. |
 | 9b | **Tactics: my games** ([tactics](v2/features/tactics.md)) | Partial: Lichess/Chess.com usernames, download/pause/resume/offline cache, Stockfish mining and atomic puzzle-plus-analyzed-marker writes. | Game cards/moments, tactics-specific time-control filters, flaw tags, Maia-shaped answer line and startup check. Player-download filters in step 10 do not complete the tactics UI. |
 | 9c | **My games and Books** ([my games](v2/features/my-games.md), [books](v2/features/books.md)) | Partial: separate My games mode, Games/Openings views, active-book comparison, Book tab and Open in builder; Books mode and shared repertoire membership/index are built. | Mistake counts/moments and commentary-line recommendation semantics. Reconcile the old per-colour book-choice gap with the current Books spec before adding another selector. |
-| 10 | **Players & prep / Player analysis** ([players](v2/features/players.md)) | Built 2026-09-27 (`155b6d31`, `43d59228`): identities/groups/rosters, downloads/filters, deduplicated corpus, openings/findings/practical estimates, active-book checks, prep/linked studies, prepared flags, event metadata, US Chess updates and Markdown exports. Recorded delivery checks: analyze/lint, 223 focused/app tests and headless real-Stockfish walkthrough. | Final acceptance/H8; do not restart step 10 from its old Not started status. The players spec defines the bounded practical-search scope. |
-| 11 | **Databases** ([databases](v2/features/databases.md)) | Partial 2026-09-27 (`42ebadea`): Databases mode browses the existing read-only master corpus and v2 cache, measures counts/size, filters/sorts/pages games, imports PGN idempotently and opens games in the viewer; TWIC download is shared with the explorer. Analyze/lint, 207 focused/app test executions and a headless browse/filter/open walkthrough pass. | Complete storage/evaluation-dump controls, auto-sync/settings, legacy classical-index rebuild, remaining corpus filters/book scans, broadcasts and Scid export. Preserve existing master databases; the basic mode/browser/import are now built. |
+| 10 | **Players & prep / Player analysis** ([players](v2/features/players.md)) | Built 2026-09-27 (`155b6d31`, `43d59228`): identities/groups/rosters, downloads/filters, deduplicated corpus, openings/findings/practical estimates, active-book checks, prep/linked studies, prepared flags, event metadata, US Chess updates and Markdown exports. Recorded delivery checks: analyze/lint, 223 focused/app tests and headless real-Stockfish walkthrough. | Linked prep/group study lifecycle correctness with 4b, including failed creation/linking and reopening/export after deletion or chapter changes; then final acceptance/H8. Do not restart step 10 from its old Not started status. The players spec defines the bounded practical-search scope. |
+| 11 | **Databases** ([databases](v2/features/databases.md)) | Partial 2026-09-27 (`42ebadea`): Databases mode browses the existing read-only master corpus and v2 cache, measures counts/size, filters/sorts/pages games, imports PGN idempotently and opens games in the viewer; TWIC download is shared with the explorer. Analyze/lint, 207 focused/app test executions and a headless browse/filter/open walkthrough pass. | Complete storage inventory and evaluation-store/dump setup, measured usage, safe removal and cache recovery; verify local evaluation sources actually feed their consumers. Add restartable pause/resume and disk-space failure handling, auto-sync/settings and legacy classical-index rebuild. Settle remaining corpus filters/book scans, broadcast app-vs-tool scope and retained offline-dump scope; implement retained workflows and Scid export. Preserve existing master databases; the basic mode/browser/import are now built. |
 | 12 | **Engine tournament / Bughouse** ([tournament](v2/features/engine-tournament.md), [bughouse](v2/features/bughouse-lab.md)) | Partial (`e22b4e62`, `b819ec31`): Engine tournament now has verified custom-engine registration, setup/FEN, four time controls, round-robin/gauntlet/concurrency, adjudication, live board, scores, searchable history, retryable PGN/metadata checkpoints, trash and viewer handoff on the shared supervisor. Outside-run history watching, atomic open-request claims, ranked opponent crosstables/rating statistics, persisted final-position previews, date groups and opening search are built; 228 focused/app tests plus four native inbox tests and a headless outside-request/watch/preview walkthrough pass. Focused checks and a real-Stockfish headless setup/run/results/viewer/registration walkthrough pass. Bughouse table, book/archive, Hivemind analysis, saved matches and provenance remain built. | Remaining tournament parity: file-picker/visual-board-editor conveniences, fuller setup/time-preset and detail presentation, and disposition of the duplicate Engine controls tab. Keep durable checkpoint/illegal-move/shutdown tests; do not rebuild the runner. Bughouse editable clocks, palette and Compare clock scenarios were dropped, not deferred work. |
-| 13 | **Services** ([settings](v2/features/settings.md)) | Partial: searchable settings, training/repertoire/engine controls, Lichess PKCE/token login, usernames for Lichess/Chess.com downloads, Open log folder, bounded Copy diagnostics (`85023871`: version/platform/log tail with recognizable credential lines omitted; 49 focused checks and headless clipboard success), and failure-tolerant settings. | Updates, v2 Widgetbook and approved display/account settings. Chess.com downloading is already built; any additional account UI needs a defined purpose. Vault migration is explicitly a separate later step, not an H6 blocker. |
-| 14 | **Switch-over** | Not started: old and new apps still coexist. | After H8 and accepted feature dispositions: switch main.dart to v2; delete old code/tests/ledgers/checks; move lib/v2 to lib; consolidate the named Documents folders with backups and rewritten settings/training references; update COMPONENT_MAP and agent guides. Keep release/version publication separate. |
+| 13 | **Services** ([settings](v2/features/settings.md)) | Partial: searchable settings, training/repertoire/engine controls, Lichess PKCE/token login, usernames for Lichess/Chess.com downloads, Open log folder, bounded Copy diagnostics (`85023871`: version/platform/log tail with recognizable credential lines omitted; 49 focused checks and headless clipboard success), and failure-tolerant settings. | Updates with verified downloads, recoverable failure and platform installation acceptance; v2 Widgetbook on production widgets and approved display/account settings. Keep diagnostics bounded and credentials out of logs. Chess.com downloading is already built; any additional account UI needs a defined purpose. Vault migration is explicitly a separate later step, not an H6 blocker. |
+| 14 | **Switch-over** | Not started as source retirement and data migration: old and new source trees coexist, but release builds already target main_v2.dart. | After the completion gates, H8 and accepted feature dispositions: switch main.dart to v2; delete old code/tests/ledgers/checks; move lib/v2 to lib; perform the rehearsed migration with backups and all path-bearing references rewritten; update COMPONENT_MAP and agent guides. Keep release/version publication separate. |
 
 ### Next-agent queue
 
-1. **Choose one bounded remainder, not an entire feature family.** H1–H6 are
-   implemented on Linux, including H3c's September 27 transfer work. Preserve
-   their tests; new regressions go back to their owning batch.
-2. **Advance H7 remainders:** database evaluation/storage controls and remaining
-   corpus workflows; tournament setup conveniences and remaining presentation.
-   The owner explicitly authorized implementing the remaining plan on September
-   27. Basic Databases and Engine tournament modes are built; stale draft
-   headers do not require renewed approval. Preserve explicit Drop decisions.
-3. **Finish approved partial rows:** Study, viewer/collections, repertoire
-   checks, tactics/My games, library/trainer and services. Each task names the
-   exact remaining item and its user-visible exit condition. Resolve the
-   “decide/settle/verify” items before treating them as required implementations.
-   A missing legacy control is not permission to redesign the product.
-4. **Close acceptance gaps:** inspect the relevant recorded tests/screenshots
-   and obtain owner acceptance where it is not recorded. Do not infer approval
-   from a Built label or mark runtime checks passed from this reconciliation.
-5. **Run H8, then step 14:** native Windows/macOS checks, representative large
-   documents/collections, old/new compatibility and restart/recovery sequences,
-   followed by a disposable-profile rehearsal of the complete folder migration.
-   The latest implementation lint reports over 85,700 lines in 361 lib/v2 files, above the
-   60k sanity target: review feature-equivalent size before declaring renewal
-   complete; do not hide it by moving code or loosening the target.
-   Step 14 must preserve every folder named in the switch-over contract below.
+Work one bounded remainder within its existing row. Keep the table above as
+its only implementation status; the gates below are acceptance criteria, not
+another progress ledger. Existing H1–H6 Linux results remain valid within their
+recorded scope; new failures return to the owning batch.
 
-The switch-over migration includes `repertoires/`, `studies/`,
-`pgn_collections/`, `games_library/`, `analysis_games/`, `tactics_sets/`,
-`opponents/`, `engine_tournaments/`, `exports/`, `repertoire_debug_runs/`,
-and the tools' `expectimax_runs/` and `lichess_broadcasts/`, under one
-`Documents/Chess Auto Prep/`. Back up every moved file and rewrite all settings
-keys and training references that name old paths. Do not move these folders
-while the old and new apps still need to share their existing paths.
+1. **Close correctness and release-policy gaps first (4b/10, H8/14).** Reproduce
+   the linked-study delete/reference sequence and fix it with its regression
+   tests. Cover create/link, rename, delete/restore and chapter references as
+   one lifecycle, using the existing storage contracts. Reconcile release
+   configuration with incomplete acceptance before any publication.
+2. **Complete daily workflows (3–6, 9).** Prioritize Study Train/Browse handoffs
+   and compact chapter management, viewer position/sequence filters, tactics
+   editing/source-game navigation, and trainer lesson navigation. Retain the
+   specific remaining controls in each row; settle their decision items before
+   implementing them. Test complete user journeys, including failure/restart.
+3. **Complete data management and repertoire checks (8, 11).** Finish storage
+   and evaluation-source management before expanding corpus conveniences.
+   Define the repertoire audit's findings and user actions, then build the
+   retained report workflow using existing Replies/gaps and analysis results.
+   Player findings and generation trap computation are already built.
+4. **Finish approved service and presentation work (12–13).** Updates,
+   production-widget catalog, accepted settings and tournament setup/detail
+   conveniences. Do not rebuild the tournament runner or add another dependency
+   framework. Chess.com downloads and diagnostics copying already exist.
+5. **Resolve acceptance and design debt as each row closes.** Reconcile stale
+   spec paragraphs, inspect the relevant recorded tests/screenshots, obtain
+   missing owner acceptance and review equivalent-feature size and ownership.
+   The owner's September 27 implementation authorization remains in force;
+   stale draft headers do not require renewed approval. Only unresolved scope
+   choices need disposition, and explicit Drop decisions remain dropped.
+6. **Close H8, then step 14.** Run the platform, compatibility, scale and
+   migration gates on the candidate; then change the default source entry point
+   and retire the old code. Release/version publication remains a separate
+   explicit request, not a consequence of integrating a task into local main.
 
-Split a large remainder into bounded tasks within its existing row. Keep its
-status and next action current, with a commit reference; do not append another
-historical checklist or evidence log.
+### Completion gates
+
+**Correctness across features.** Existing stores and Linux hardening are the
+foundation, not proof that every new cross-mode command is safe. For linked
+studies, [rename currently checks player/group links but delete does
+not](../lib/v2/features/study/studies.dart); [Players reuses stored prep
+paths](../lib/v2/app/player_wiring.dart). This is a source-review finding to
+reproduce, not a newly passed runtime test. Acceptance must cover a linked
+study's creation, failed link write, rename, deletion, restore and referenced
+chapter rename/removal. No successful command may silently leave a dangling
+required reference. Either complete the reference change recoverably or refuse
+before mutation; retained links need an explicit, usable recovery path.
+Exercise uncertain acknowledgements with the same operation identity, external
+changes, close during a write and two subsequent reopens. Keep unrelated files
+usable throughout. Include semantic PGN round trips for custom starts, comments,
+variations, shapes, quiz markers and unknown tags; untouched content must follow
+the document-store preservation contract.
+
+**Usable end-to-end workflows.** A control being present is not completion.
+Each retained row must pass its journey with production wiring and disposable
+data, including keyboard/focus behavior, narrow-window layout, empty/loading
+states, offline or failed operations and reopening the result:
+
+- Study: create/import → annotate/reorder → save/reopen → export → Browse or
+  train as puzzles. Settle the Study-to-puzzle handoff; do not silently turn
+  studies into repertoire training or discard existing puzzle review fields.
+- Viewer: open a collection → filter/search/sort → navigate/analyze → save or
+  discard → export the visible selection → reopen. List, counter, navigation,
+  explorer and export must agree on game identity and selection; stale workers
+  must not publish into another file.
+- Library/trainer: import a course → organize chapters/lines → learn/review →
+  inspect the lesson in Builder → move/delete/restore → retain the schedule and
+  history. Include legacy whole-repertoire recovery receipts.
+- Tactics/My games: download → mine a moment → solve → inspect its source game
+  → edit/manage the puzzle → review again. Failed or cancelled checks do not
+  invent grades; puzzle changes and review history stay consistent.
+- Databases: inspect usage → configure/download/import → pause/restart/resume →
+  use the source in explorer/generation → recover or remove derived data.
+  Distinguish removing an archive, quarantining files and actually freeing
+  space; preserve user PGNs and account/progress data. A working setup screen
+  without a working evaluation consumer is incomplete.
+- Repertoire audit: run the agreed check → inspect a finding at its position →
+  edit the chapter → rerun and see current results. Define scope, score
+  perspective, cancellation and stale-result handling before building reports.
+- Tournament/services: configure/run → inspect/reopen/export results, and check
+  for/download/verify/install an update on each supported platform. Failures
+  retain saved matches and the existing installation; no silent partial success.
+
+**Scope and spec reconciliation.** Complete the retained scope or record an
+explicit owner Drop/Defer in the existing spec and row. In particular resolve
+viewer engine review/solitaire/handoffs, Study collection/user imports and
+chapter manager, trainer legacy options, folder/course representation, tactics
+CSV/study-as-set compatibility, My games commentary recommendations, chapter
+audit/report scope, database broadcasts/offline dumps and tournament duplicate
+controls. Existing data must remain readable or have a verified preservation
+path even when its former UI is dropped. Reconcile historical Study autosave,
+recovery and training text with the central contracts and latest decisions;
+remove obsolete viewer claims that saved header slices are absent. No Light or
+System theme, old Organize screen, superseded generation controls, dropped
+bughouse clock tools or credential-vault migration is added by this update.
+
+**Maintainability.** At `613cab04`, `scripts/check_v2.py` passes and reports
+85,760 production lines in 361 files, about 43% above the 60k sanity target.
+That is a design-review trigger, not evidence that the architecture is broken
+or permission to raise the target. Review equivalent feature scope against the
+old implementation, keeping tests separate. Start with the shared document
+session/save lifecycle, composition/navigation and generation ownership; the
+999-line `document_session.dart` and 956-line `document_saver.dart` are useful
+review starting points, not automatic split instructions. Trace each mutable
+fact, required write and invalidation to its owner; remove duplicated rules,
+unused paths and forwarding-only layers, and test behavior across boundaries.
+Split only when responsibilities differ. Do not hide growth by moving files
+outside `v2`, fragmenting one job or loosening checker limits. Keep the
+production-widget catalog tied to real controls. Resolve the size review and
+any must-fix findings before declaring renewal complete.
+
+**Platform, compatibility and scale (H8).** Run the existing [desktop
+contracts](../.github/workflows/desktop-contracts.yml) and required release
+gates on the candidate commit; a workflow definition or previous green commit
+is not acceptance. Native Windows/macOS evidence must cover file replacement
+and sharing contention, permissions and long/Unicode paths, recovery after
+interruption, file-open integration, packaged engines/login sockets and engine
+cleanup after parent termination. Verify installed/release behavior, including macOS
+sandbox/signing, rather than relying only on debug tests. Record platform
+skips honestly; Linux process-kill tests do not prove power-loss durability.
+Use disposable profile copies to alternate old-app, v2 and supported external
+writer operations, then verify locks, formats, progress, references and undo.
+Compare deterministic rewritten algorithms with the old oracle on fixed
+inputs. Before scale acceptance, define representative corpus/course sizes and
+measurable latency, frame, memory and shutdown budgets; exercise large annotated
+PGNs, collections, filters, save/undo and repeated mode/job transitions. Verify
+processes, subscriptions and queues return to baseline. Keep results with their
+tests/commits and existing status cells, not a new evidence log.
+
+**Migration and source retirement (14).** Inventory and rehearse the complete
+migration before changing live locations. It includes `repertoires/`,
+`studies/`, `pgn_collections/`, `games_library/`, `analysis_games/`,
+`tactics_sets/`, `opponents/`, `engine_tournaments/`, `exports/`,
+`repertoire_debug_runs/`, and the tools' `expectimax_runs/` and
+`lichess_broadcasts/`, under one `Documents/Chess Auto Prep/`. The inventory
+must also account for the four root-level training files
+(`repertoire_reviews.csv`, `repertoire_review_history.csv`,
+`repertoire_move_progress.csv`, `repertoire_move_attempts.jsonl`), book
+membership, player/group study links, settings/bookmarks and hidden
+history/trash/recovery records. Identify which Support files stay in place and
+which contain references requiring updates; do not relocate Support blindly.
+
+Back up every moved authoritative file and rewrite every affected reference,
+including paths embedded in recovery records. Use consistent database snapshots
+rather than copying a live SQLite main file without its WAL state. Preflight
+collisions, unavailable destinations, space and permissions; do not overwrite an
+unrelated file. On disposable copies, interrupt migration at each durable
+boundary, resume and reopen twice, verify contents and links, and prove the
+backup can restore the pre-migration profile. The rehearsal must demonstrate
+idempotence and a usable recovery path, not merely a successful first run.
+Do not move shared folders while the old and new apps still need their existing
+paths. Only after acceptance switch `main.dart`, move `lib/v2` to `lib`, retire
+old code/tests/ledgers/checks, and update build/test entry points, COMPONENT_MAP
+and agent guides. Preserve the compatibility and recovery regression tests when
+retiring legacy tests. Verify the final cleaned build; keep publication separate.
 
 ### A step is done when
 
