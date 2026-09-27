@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/v2/storage/viewer_places.dart';
 import 'package:chess_auto_prep/v2/storage/tournaments.dart';
 import 'package:chess_auto_prep/v2/features/tournaments/game_runner.dart';
 import 'dart:async';
@@ -78,6 +79,7 @@ final class WindowFixture {
     SettingsStore? settings,
     EngineLauncher? launchEngine,
     this.tournaments,
+    this.viewerPlaces,
     this.launchTournament,
     MovePolicy maia = const NoOpinion(),
   }) : _input = input,
@@ -86,6 +88,7 @@ final class WindowFixture {
        _maia = maia;
 
   final TournamentStore? tournaments;
+  final ViewerPlaces? viewerPlaces;
   final TournamentLauncher? launchTournament;
   final WindowInput? _input;
   final SettingsStore? _settings;
@@ -148,6 +151,7 @@ final class WindowFixture {
       libraryPicker: ScriptedPicker(),
       viewerPicker: ScriptedPicker(),
       recentFiles: ScriptedRecentFiles(),
+      viewerPlaces: viewerPlaces,
       fileImport: ScriptedImport(),
       lichessLogin: ScriptedLogin(),
       readAccount: () async => null,

@@ -32,6 +32,7 @@ import '../workspace/book_chip.dart';
 import '../workspace/chapter_commands.dart';
 import '../workspace/document_actions.dart';
 import '../workspace/document_session.dart';
+import '../workspace/game_ordering.dart';
 import '../workspace/move_tree_view.dart' show MoveMenu;
 import '../workspace/workspace.dart';
 import '../workspace/workspace_tabs.dart';
@@ -46,6 +47,7 @@ import 'workspace_requests.dart';
 /// context. The Actions menu only points at them.
 typedef ShellDialogs = ({
   VoidCallback saveCopy,
+  VoidCallback exportPgn,
   VoidCallback search,
   VoidCallback accounts,
   VoidCallback newBook,
@@ -91,6 +93,7 @@ abstract base class ModeView {
 
   /// Whether the board has the file's game counter under it.
   bool get gameCounter => true;
+  GameOrdering? get gameOrdering => null;
 
   /// Whether the Train tab offers to read a line in the builder: from
   /// anywhere but the builder itself.
@@ -272,6 +275,15 @@ final class ViewerView extends _DocumentModeView {
   @override
   void space() => _modes.autoplay.toggle();
 
+  @override
+  GameOrdering? get gameOrdering => _modes.viewer;
+  @override
+  bool walk(int by) {
+    if (_modes.viewer.file == null) return false;
+    _modes.viewer.walk(by);
+    return true;
+  }
+
   /// Moves played here are for looking: they stay off the file until the
   /// user saves them.
   @override
@@ -294,6 +306,13 @@ final class ViewerView extends _DocumentModeView {
         workspace.session.chapter == null ? null : autoplay.toggle,
         shortcut: 'Space',
         group: 'Board',
+      ),
+      AppAction(
+        'Export visible games as PGN…',
+        _modes.viewer.file == null || _modes.filter.busy
+            ? null
+            : menu.dialogs.exportPgn,
+        group: 'File',
       ),
     ];
   }

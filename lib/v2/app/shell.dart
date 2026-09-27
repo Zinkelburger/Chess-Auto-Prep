@@ -1,3 +1,4 @@
+import '../features/pgn_viewer/export_dialog.dart';
 import '../features/tournaments/tournament_run.dart';
 import '../features/databases/database_library.dart';
 import 'dart:async';
@@ -397,6 +398,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     ),
     dialogs: (
       saveCopy: () => unawaited(_saveCopy()),
+      exportPgn: () =>
+          unawaited(exportViewerPgn(context, _docs.viewer, _requests.say)),
       search: () => unawaited(_search.search(_tabs)),
       accounts: () => unawaited(editAccounts(context, _train.myGames)),
       newBook: () => unawaited(newBook(context, _ws.books, say: _requests.say)),
@@ -600,6 +603,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       hooks: WorkspaceHooks(
         header: _view.header,
         gameCounter: _view.gameCounter,
+        gameOrdering: _view.gameOrdering,
         moveMenu: _view.moveMenu,
         tabBody: _tabBody,
         boardClaim: _claim,

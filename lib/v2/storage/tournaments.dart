@@ -123,18 +123,8 @@ final class FileTournaments
           if (entry is! Directory || p.basename(entry.path).startsWith('.'))
             continue;
           final id = p.basename(entry.path);
-          try {
-            await _recover(id);
-            final text = await recoveryText(_metadata(id));
-            if (text == null) continue;
-            final tournament = Tournament(tournamentObject(jsonDecode(text)));
-            if (tournament.id != id)
-              throw const FormatException('Mismatched tournament identity.');
-            found.add(tournament);
-          } on Object catch (error) {
-            log.w('read tournament $id', _reason(error));
-            warnings.add('Cannot read tournament $id: ${_reason(error)}');
-          }
+          final tournament = await _readTournament(id, warnings);
+          if (tournament != null) found.add(tournament);
         }
         found.sort(
           (a, b) =>
@@ -150,6 +140,22 @@ final class FileTournaments
       ),
       TournamentFailed(:final message) => TournamentFailed(message),
     };
+  }
+
+  Future<Tournament?> _readTournament(String id, List<String> warnings) async {
+    try {
+      await _recover(id);
+      final text = await recoveryText(_metadata(id));
+      if (text == null) return null;
+      final tournament = Tournament(tournamentObject(jsonDecode(text)));
+      if (tournament.id != id)
+        throw const FormatException('Mismatched tournament identity.');
+      return tournament;
+    } on Object catch (error) {
+      log.w('read tournament $id', _reason(error));
+      warnings.add('Cannot read tournament $id: ${_reason(error)}');
+      return null;
+    }
   }
 
   @override

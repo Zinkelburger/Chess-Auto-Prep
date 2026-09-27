@@ -5,12 +5,14 @@ import '../ui/app_action.dart';
 import '../ui/listening_state.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
+import 'game_ordering.dart';
 
 /// `‹ [n] of N ›` under the board: which game of the open file is showing,
 /// with the number typeable to jump. Nothing when the document is not one
 /// game of a file, so a merged repertoire chapter leaves the row out.
 class GameCounter extends StatefulWidget {
-  const GameCounter({super.key, required this.session});
+  const GameCounter({super.key, required this.session, this.ordering});
+  final GameOrdering? ordering;
 
   final DocumentSession session;
 
@@ -24,7 +26,8 @@ class _GameCounterState extends State<GameCounter>
   final _focus = FocusNode();
 
   @override
-  Listenable listenableOf(GameCounter widget) => widget.session;
+  Listenable listenableOf(GameCounter widget) =>
+      Listenable.merge([widget.session, widget.ordering]);
 
   @override
   void initState() {
@@ -45,8 +48,17 @@ class _GameCounterState extends State<GameCounter>
     if (!_focus.hasFocus) _show();
   }
 
+  List<int> get _order =>
+      widget.ordering?.gameOrder ??
+      List.generate(widget.session.gameCount ?? 0, (i) => i);
+  int? get _at {
+    if (widget.session.game == null) return null;
+    final index = _order.indexOf(widget.session.game!);
+    return index < 0 ? null : index;
+  }
+
   void _show() {
-    final at = widget.session.game;
+    final at = _at;
     final text = at == null ? '' : '${at + 1}';
     if (_number.text != text) _number.text = text;
   }
@@ -56,7 +68,8 @@ class _GameCounterState extends State<GameCounter>
   /// turn later, so the box is put right here rather than left to it.
   void _jump(String text) {
     final number = int.tryParse(text.trim());
-    if (number != null) widget.session.showGame(number - 1);
+    if (number != null && number > 0 && number <= _order.length)
+      widget.session.showGame(_order[number - 1]);
     _focus.unfocus();
     _show();
   }
@@ -64,11 +77,11 @@ class _GameCounterState extends State<GameCounter>
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: widget.session,
+      listenable: Listenable.merge([widget.session, widget.ordering]),
       builder: (context, _) {
-        final at = widget.session.game;
-        final total = widget.session.gameCount;
-        if (at == null || total == null) return const SizedBox.shrink();
+        final at = _at;
+        final total = _order.length;
+        if (widget.session.game == null) return const SizedBox.shrink();
         final text = Theme.of(context).textTheme;
         return Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -76,7 +89,11 @@ class _GameCounterState extends State<GameCounter>
             IconButton(
               icon: const Icon(Icons.chevron_left, size: IconSize.action),
               tooltip: withKey('Previous game', '↑'),
-              onPressed: at > 0 ? widget.session.previousGame : null,
+              onPressed: total == 0 || at == 0
+                  ? null
+                  : () => widget.session.showGame(
+                      _order[at == null ? total - 1 : at - 1],
+                    ),
               visualDensity: VisualDensity.compact,
             ),
             SizedBox(width: gameNumberWidth, child: _numberBox(text)),
@@ -85,7 +102,11 @@ class _GameCounterState extends State<GameCounter>
             IconButton(
               icon: const Icon(Icons.chevron_right, size: IconSize.action),
               tooltip: withKey('Next game', '↓'),
-              onPressed: at + 1 < total ? widget.session.nextGame : null,
+              onPressed: total == 0 || at == total - 1
+                  ? null
+                  : () => widget.session.showGame(
+                      _order[at == null ? 0 : at + 1],
+                    ),
               visualDensity: VisualDensity.compact,
             ),
           ],

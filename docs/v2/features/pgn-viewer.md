@@ -255,3 +255,19 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
 - **No colour for the unsaved state**, and **no snackbars anywhere in v2**: deletions say nothing
   (Ctrl+Z undoes them), and a failure goes to the status bar under the top bar, which has a Close
   button and, when there is a way out, one action such as Reload.
+
+## Built 2026-09-27
+
+- File-order, date and rating sorting preserve original game indices. The list,
+  grouped chapters, counter, number entry and arrow keys use the same visible
+  selection. Unknown ratings sort last; equal keys retain file order.
+- `Export visible games as PGN…` captures the selected draft and ordering before
+  its name/directory dialogs. Exclusive publication refuses existing files;
+  original PGNs are unchanged. Inline comment editors commit into the snapshot.
+- The existing `pgn_viewer.session:<path>` preference now restores game identity,
+  cursor and sort. v2 additionally keeps variation path/FEN and header-filter
+  rules. Reordered games are found by canonical identity; a missing game does
+  not redirect the bookmark to an unrelated index. An explicit game handoff
+  overrides the saved place. A restored header slice matching nothing clears.
+  Checkpoints coalesce per path and survive owner disposal; failed writes remain
+  retryable and visible. No PGN is written by reading-state changes.

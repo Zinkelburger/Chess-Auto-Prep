@@ -296,11 +296,11 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// A file from the viewer's recent list: brought inside Documents if it
   /// is not, then opened in the viewer. When no copy could be made the
   /// viewer's list says why.
-  Future<RequestResult> openFile(ChapterRef ref) async {
+  Future<RequestResult> openFile(ChapterRef ref, {int? game}) async {
     final ticket = _nextRequest();
     final inside = await _viewer.fileFor(ref.path);
     if (_overtaken(ticket) || inside == null) return const RequestDropped();
-    return _inViewer(ticket, inside);
+    return _inViewer(ticket, inside, game: game);
   }
 
   /// Ctrl+O and `Open PGN file…` are one door whose other side depends on
@@ -336,7 +336,7 @@ final class WorkspaceRequests extends ChangeNotifier {
       case GameNotKept(:final sentence):
         return _refused(sentence);
       case GameKept(:final ref, ply: final at):
-        final result = await _inViewer(ticket, ref);
+        final result = await _inViewer(ticket, ref, game: 0);
         if (_disposed || result is! RequestDone) return result;
         _session.goTo(NodePath.of(List.filled(at, 0)));
         return result;
@@ -543,11 +543,22 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// The viewer is the mode that shows files, so it comes to the front
   /// whichever mode asked, and the file is remembered once it is on the
   /// board.
-  Future<RequestResult> _inViewer(int ticket, ChapterRef ref) async {
+  Future<RequestResult> _inViewer(
+    int ticket,
+    ChapterRef ref, {
+    int? game,
+  }) async {
+    final place = game == null ? await _viewer.savedPlace(ref) : null;
+    if (_overtaken(ticket)) return const RequestDropped();
     switchTo(Mode.pgnViewer);
-    final result = await _open(ticket, ref, game: 0);
-    if (!_disposed && result is RequestDone) unawaited(_viewer.opened(ref));
-    return result;
+    final result = await _open(ticket, ref, game: game ?? 0);
+    if (!_overtaken(ticket) && result is RequestDone)
+      await _viewer.opened(
+        ref,
+        place: place,
+        currentRequest: () => !_overtaken(ticket),
+      );
+    return _overtaken(ticket) ? const RequestDropped() : result;
   }
 
   Future<RequestResult> _imported(

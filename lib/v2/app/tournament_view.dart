@@ -8,7 +8,6 @@ import '../storage/chapter_files.dart';
 import '../ui/app_action.dart';
 import '../workspace/workspace.dart';
 import '../workspace/workspace_tabs.dart';
-import 'mode.dart';
 import 'mode_view.dart';
 import 'workspace_requests.dart';
 
@@ -46,10 +45,6 @@ final class TournamentView extends ModeView {
       );
   Future<void> _open(Tournament tournament, int game) async {
     final ref = ChapterRef.at(run!.store.games(tournament.id).path);
-    final result = await requests.openFile(ref);
-    if (result is RequestDone &&
-        requests.mode == Mode.pgnViewer &&
-        workspace.session.source?.path == ref.path)
-      await requests.open(ref, game: game);
+    await requests.openFile(ref, game: game);
   }
 }
