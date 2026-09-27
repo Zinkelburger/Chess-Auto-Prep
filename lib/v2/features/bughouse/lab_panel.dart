@@ -4,6 +4,7 @@ import '../../chess/bughouse/hivemind.dart';
 import '../../chess/bughouse/table.dart';
 import '../../ui/app_action.dart';
 import '../../ui/confirm_dialog.dart';
+import '../../ui/engine_switch.dart';
 import '../../ui/theme.dart';
 import 'archive_moves.dart';
 import 'bughouse_lab.dart';
@@ -145,10 +146,10 @@ class _EngineBar extends StatelessWidget {
       children: [
         SizedBox(
           height: engineBarHeight,
-          child: FittedBox(
+          child: Center(
             child: Tooltip(
               message: withKey('Toggle engine', 'E'),
-              child: Switch(
+              child: EngineSwitch(
                 value: search.engineOn,
                 onChanged: (_) => search.toggleEngine(),
               ),

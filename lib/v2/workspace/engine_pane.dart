@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../chess/fen.dart';
 import '../chess/pv_text.dart';
 import '../ui/app_action.dart';
+import '../ui/engine_switch.dart';
 import '../ui/listening_state.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
@@ -185,14 +186,14 @@ class _Header extends StatelessWidget {
             ),
             child: Semantics(
               label: 'Engine',
-              child: Switch(
+              child: EngineSwitch(
                 value: analysis.enabled,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 onChanged: (enabled) =>
                     unawaited(enabled ? analysis.enable() : analysis.disable()),
               ),
             ),
           ),
+          const SizedBox(width: Space.xs),
           Text('Engine', style: text.labelSmall),
           const SizedBox(width: Space.s),
           const SizedBox(width: Space.xs),

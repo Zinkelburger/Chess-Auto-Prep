@@ -100,11 +100,12 @@ const variationIndent = 14.0;
 /// The row of first / back / forward / end buttons under the moves.
 const navRowHeight = 36.0;
 
-/// The compact engine header: a power icon and status, then one row per
+/// The compact engine header: a small switch and status, then one row per
 /// line, each with a gutter this
 /// wide for the score and the moves after it. The score is read there and
 /// nowhere larger.
 const engineBarHeight = 40.0;
+const engineSwitchHeight = 18.0;
 const engineRowHeight = 28.0;
 const engineScoreWidth = 54.0;
 
