@@ -156,7 +156,7 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// here again.
   void switchTo(Mode mode) {
     if (_disposed || mode == _mode) return;
-    _remember();
+    _remember(_here);
     _mode = mode;
     notifyListeners();
   }
@@ -189,8 +189,7 @@ final class WorkspaceRequests extends ChangeNotifier {
 
   /// Keeps where the user is before a jump takes them elsewhere. Going
   /// somewhere new forgets the places Forward had.
-  void _remember() {
-    final here = _here;
+  void _remember(Place here) {
     if (_back.lastOrNull case final last? when last.sameAs(here)) {
       _back.removeLast();
     }
@@ -276,14 +275,19 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// [ref] in the Repertoire builder at the position [sans] reach: a file
   /// another mode found a move in.
   /// Back returns to where the user was, in the builder too.
-  Future<RequestResult> readInBuilder(ChapterRef ref, List<String> sans) {
-    if (_mode == Mode.repertoires) {
-      _remember();
-      notifyListeners();
-    } else {
-      switchTo(Mode.repertoires);
-    }
-    return openAt(ref, sans);
+  Future<RequestResult> readInBuilder(ChapterRef ref, List<String> sans) async {
+    final from = _here;
+    final opening = openAt(ref, sans);
+    final ticket = _asked;
+    final result = await opening;
+    if (_overtaken(ticket)) return const RequestDropped();
+    if (result is! RequestDone) return result;
+    // Commit navigation only after the document was accepted, but keep the
+    // departure captured before the read so Back returns to the original file.
+    _remember(from);
+    _mode = Mode.repertoires;
+    notifyListeners();
+    return result;
   }
 
   /// Game [game] of [ref] on the board, [ply] moves into it and seen from

@@ -281,6 +281,18 @@ class Trainer extends ChangeNotifier {
   TrainScope get scope => _scope;
   Lesson? get lesson => _lesson;
 
+  /// The shown lesson position in its source chapter. Resolve membership by
+  /// line identity, not game index: a course file can contain several sections,
+  /// and an edit can remove a line while its fixed sitting is still running.
+  LineToRead? get lessonToRead {
+    final lesson = _lesson;
+    final state = _state;
+    if (lesson == null || state is! TrainerReady) return null;
+    final line = state.lineOf(lesson.line.key);
+    if (line == null) return null;
+    return state.toRead(lesson.line, ReadIn.builder, ply: lesson.drill.shown);
+  }
+
   /// How the tab lists the lines. Kept here, not in the list, so a sitting
   /// comes back to the order it left.
   LineOrder get order => _order;

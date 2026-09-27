@@ -255,11 +255,12 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   );
 
   /// A line the Train tab sent to be read: its chapter on the board at the
-  /// position, the builder first when it asked for it, and the Moves tab up
+  /// position, in the builder when it asked for it, and the Moves tab up
   /// unless only the board was to move.
   Future<void> _readLine(LineToRead line) async {
-    if (line.place == ReadIn.builder) _requests.switchTo(Mode.repertoires);
-    final result = await _requests.openAt(line.ref, line.sans);
+    final result = line.place == ReadIn.builder
+        ? await _requests.readInBuilder(line.ref, line.sans)
+        : await _requests.openAt(line.ref, line.sans);
     if (!mounted || result is! RequestDone) return;
     if (line.place != ReadIn.board) _tabs.show(WorkspaceTab.moves);
   }

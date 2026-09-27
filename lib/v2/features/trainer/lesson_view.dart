@@ -24,10 +24,12 @@ class LessonView extends StatefulWidget {
     required this.lesson,
     required this.trainer,
     required this.moves,
+    required this.onRead,
   });
 
   final Lesson lesson;
   final Trainer trainer;
+  final ValueChanged<LineToRead> onRead;
 
   /// The move field under the board.
   final MoveEntry moves;
@@ -139,7 +141,11 @@ class _LessonViewState extends State<LessonView> {
             ),
             child: widget.lesson.state is SittingOver
                 ? _Over(lesson: widget.lesson, trainer: widget.trainer)
-                : _OnLine(lesson: widget.lesson, trainer: widget.trainer),
+                : _OnLine(
+                    lesson: widget.lesson,
+                    trainer: widget.trainer,
+                    onRead: widget.onRead,
+                  ),
           ),
         ),
       ),
@@ -148,10 +154,15 @@ class _LessonViewState extends State<LessonView> {
 }
 
 class _OnLine extends StatelessWidget {
-  const _OnLine({required this.lesson, required this.trainer});
+  const _OnLine({
+    required this.lesson,
+    required this.trainer,
+    required this.onRead,
+  });
 
   final Lesson lesson;
   final Trainer trainer;
+  final ValueChanged<LineToRead> onRead;
 
   @override
   Widget build(BuildContext context) {
@@ -161,7 +172,18 @@ class _OnLine extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _Heading(lesson: lesson),
+        Row(
+          children: [
+            Expanded(child: _Heading(lesson: lesson)),
+            Tooltip(
+              message: 'End this sitting and inspect the shown position',
+              child: TextButton(
+                onPressed: trainer.lessonToRead == null ? null : _read,
+                child: const Text('Open in Builder'),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: Space.l),
         Text(
           prompt(lesson),
@@ -184,6 +206,14 @@ class _OnLine extends StatelessWidget {
         _Footer(lesson: lesson, trainer: trainer),
       ],
     );
+  }
+
+  void _read() {
+    if (trainer.lesson != lesson) return;
+    final target = trainer.lessonToRead;
+    if (target == null) return;
+    trainer.leave();
+    onRead(target);
   }
 }
 

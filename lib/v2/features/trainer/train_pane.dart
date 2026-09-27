@@ -60,7 +60,12 @@ class _TrainPaneState extends State<TrainPane> {
   Widget _content(BuildContext context) {
     final trainer = widget.trainer;
     if (trainer.lesson case final lesson?) {
-      return LessonView(lesson: lesson, trainer: trainer, moves: widget.moves);
+      return LessonView(
+        lesson: lesson,
+        trainer: trainer,
+        moves: widget.moves,
+        onRead: widget.onRead,
+      );
     }
     return switch (trainer.state) {
       TrainerIdle() ||

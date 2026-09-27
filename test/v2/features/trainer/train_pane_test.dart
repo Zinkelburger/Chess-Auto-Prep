@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/v2/features/trainer/trainer.dart';
 import 'package:chess_auto_prep/v2/features/trainer/training_scope.dart';
 import 'package:chess_auto_prep/v2/features/trainer/lesson_view.dart';
 import 'package:chess_auto_prep/v2/features/trainer/train_pane.dart';
+import 'package:chess_auto_prep/v2/workspace/chapter_commands.dart';
 import 'package:chess_auto_prep/v2/chess/training/training_options.dart';
 import 'package:chess_auto_prep/v2/storage/settings.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
@@ -167,6 +168,45 @@ void main() {
     await key(tester, LogicalKeyboardKey.escape);
     expect(trainer.lesson, isNull);
     expect(find.text('Learn 2'), findsOneWidget);
+  });
+
+  testWidgets('inspect a lesson ends it at the shown move without grading', (
+    tester,
+  ) async {
+    await pump(tester);
+    trainer.learn();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open in Builder'));
+    await tester.pumpAndSettle();
+    expect(reads.single.ref, fixture.ref);
+    expect(reads.single.sans, ['e4']);
+    expect(reads.single.place, ReadIn.builder);
+    expect(trainer.lesson, isNull);
+    expect(trainer.board.value, isNull);
+    await tester.pump(const Duration(seconds: 10));
+    expect(files.reviews, isEmpty);
+    expect(files.history, isEmpty);
+  });
+
+  testWidgets('a removed lesson line cannot open a different line', (
+    tester,
+  ) async {
+    await pump(tester);
+    trainer.learn();
+    final sitting = trainer.lesson;
+    deleteLine(fixture.session, 0);
+    await tester.pumpAndSettle();
+    expect(trainer.lesson, same(sitting));
+    expect(trainer.lessonToRead, isNull);
+    expect(
+      tester
+          .widget<TextButton>(
+            find.widgetWithText(TextButton, 'Open in Builder'),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(reads, isEmpty);
   });
 
   testWidgets('a sitting started over the one on screen takes the keys, '
