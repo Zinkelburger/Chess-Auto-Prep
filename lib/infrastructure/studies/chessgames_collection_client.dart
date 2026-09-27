@@ -11,9 +11,11 @@
 ///     source).
 ///   * **`/njs/api/game/viewPGN/<gid>`** answers plain PGN and generally does
 ///     not need a browser session — but it bans fast callers. ~2–3 s apart
-///     gets a 429 after 15–20 games; ~22 s apart sustains 60. Pacing is the
-///     caller's job ([StudyImportController] owns the loop); this file only
-///     classifies each response.
+///     gets a 429 after 15–20 games; ~22 s apart sustained 60 once, but
+///     repeated runs still earned a "You have had too many requests" ban.
+///     Admission across runs is [ChessgamesRequestLedger]'s job, pacing
+///     within a run is [StudyImportController]'s; this file only classifies
+///     each response.
 library;
 
 import 'dart:convert';
@@ -39,9 +41,13 @@ enum ChessgamesFetchStatus {
   /// Body was PGN — [ChessgamesFetch.pgn] is set.
   ok,
 
-  /// 429/403, or an HTML "too many requests"/"maintenance" body. Back off and
-  /// retry the same game.
+  /// 503, or an HTML "maintenance"/"temporarily unavailable" body. Back off
+  /// and retry the same game.
   throttled,
+
+  /// 429/403, or an HTML "too many requests"/"rate limit" body: the IP is
+  /// banned. Stop — every further request risks extending the ban.
+  banned,
 
   /// Anything else: a 404, a malformed body, a socket error. Skip the game.
   failed,
@@ -129,7 +135,10 @@ Future<ChessgamesFetch> fetchGamePgn(String gid, {http.Client? client}) async {
 /// testing: chessgames.com answers a rate-limit with a *200 and an HTML page*
 /// as often as with a 429.
 ChessgamesFetch classifyPgnResponse(int statusCode, String body) {
-  if (statusCode == 429 || statusCode == 403 || statusCode == 503) {
+  if (statusCode == 429 || statusCode == 403) {
+    return (status: ChessgamesFetchStatus.banned, pgn: null);
+  }
+  if (statusCode == 503) {
     return (status: ChessgamesFetchStatus.throttled, pgn: null);
   }
 
@@ -137,19 +146,27 @@ ChessgamesFetch classifyPgnResponse(int statusCode, String body) {
   if (statusCode == 200 && trimmed.startsWith('[Event ')) {
     return (status: ChessgamesFetchStatus.ok, pgn: trimmed);
   }
+  if (isChessgamesBanPage(trimmed)) {
+    return (status: ChessgamesFetchStatus.banned, pgn: null);
+  }
 
   final lower = trimmed.toLowerCase();
-  final softBan =
-      lower.contains('too many requests') ||
+  final unavailable =
       lower.contains('under maintenance') ||
-      lower.contains('temporarily unavailable') ||
-      lower.contains('rate limit');
+      lower.contains('temporarily unavailable');
   return (
-    status: softBan
+    status: unavailable
         ? ChessgamesFetchStatus.throttled
         : ChessgamesFetchStatus.failed,
     pgn: null,
   );
+}
+
+/// Whether [body] is chessgames.com's rate-limit ban page, e.g. "You have had
+/// too many requests. Please email us at chess@chessgames.com …".
+bool isChessgamesBanPage(String body) {
+  final lower = body.toLowerCase();
+  return lower.contains('too many requests') || lower.contains('rate limit');
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────

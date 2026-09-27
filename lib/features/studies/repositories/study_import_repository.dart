@@ -1,7 +1,9 @@
 import '../models/study_import_state.dart';
 import '../models/import_source.dart';
 
-enum StudyGameFetchStatus { ok, throttled, failed }
+/// `banned` covers both a ban page from the server and a request the app's
+/// own budget refused; either way the run must stop, not retry.
+enum StudyGameFetchStatus { ok, throttled, banned, failed }
 
 typedef StudyGameFetch = ({StudyGameFetchStatus status, String? pgn});
 typedef FetchedStudy = ({String pgn, String name});

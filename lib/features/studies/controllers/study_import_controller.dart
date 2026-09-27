@@ -1,18 +1,20 @@
 /// Downloads a chessgames.com collection into a new study, in the background.
 ///
 /// The collection endpoint bans fast callers, so a 60-game collection is a
-/// ~22-minute job, not a dialog you can hold open. This owns that run:
+/// ~35-minute job, not a dialog you can hold open. This owns that run:
 ///
-///   * one request at a time, [_defaultDelay] apart plus jitter — never
-///     parallel;
+///   * one request at a time, [defaultDelay] apart plus up to 30% jitter —
+///     never parallel. The repository's source separately enforces an
+///     app-wide gap, daily limit and post-ban cooldown across runs;
 ///   * every fetched game is cached to disk before the next request, so a
 ///     cancel, a crash, or a ban part-way through resumes instead of
 ///     restarting;
-///   * a throttle (429/403, or a soft-ban HTML body) backs off 60 s, 120 s …
-///     up to 10 minutes and permanently slows the pace for the rest of the
-///     run;
-///   * three games throttled in a row is a real ban — the run stops and keeps
-///     the cache, so restarting it later picks up where it left off.
+///   * a transient throttle (503, maintenance page) backs off 60 s, 120 s …
+///     and permanently slows the pace for the rest of the run;
+///   * a ban (429/403, "too many requests", or the source refusing because
+///     of the app's budget) stops the run at once with no retry — retrying a
+///     banned IP extends the ban. Two games throttled in a row stop it too.
+///     The cache is kept, so restarting later picks up where it left off.
 ///
 /// Progress is mirrored into a [RepertoireJob] so the run shows up in the jobs
 /// panel alongside generation and audit, and survives leaving Study mode.
@@ -117,15 +119,15 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
 
   // ── Pacing ─────────────────────────────────────────────────────────────
 
-  /// Measured safe pace: ~2–3 s apart earns a 429 inside 20 games, ~22 s apart
-  /// sustains 60.
-  static const Duration defaultDelay = Duration(seconds: 22);
+  /// ~2–3 s apart earns a 429 inside 20 games; 22 s apart sustained 60 once
+  /// but repeated runs were still banned, so leave a wider margin.
+  static const Duration defaultDelay = Duration(seconds: 30);
 
-  static const Duration _minDelay = Duration(seconds: 5);
-  static const Duration _maxDelay = Duration(seconds: 60);
+  static const Duration minDelay = Duration(seconds: 20);
+  static const Duration _maxDelay = Duration(seconds: 120);
   static const Duration _maxBackoff = Duration(minutes: 10);
-  static const int _maxAttemptsPerGame = 5;
-  static const int _throttledGamesBeforeGivingUp = 3;
+  static const int _maxAttemptsPerGame = 3;
+  static const int _throttledGamesBeforeGivingUp = 2;
 
   // ── State ──────────────────────────────────────────────────────────────
 
@@ -261,7 +263,7 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
         studyName: studyName,
         delay: Duration(
           milliseconds: delay.inMilliseconds.clamp(
-            _minDelay.inMilliseconds,
+            minDelay.inMilliseconds,
             _maxDelay.inMilliseconds,
           ),
         ),
@@ -342,6 +344,11 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
             throttledInARow = 0;
           }
 
+          if (fetched.banned) {
+            failure = StudyImportFailure.throttled;
+            break;
+          }
+
           pgn = fetched.pgn;
           if (pgn != null) {
             await _repository.cacheGame(gid, pgn);
@@ -383,7 +390,7 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   /// Fetch one game, retrying through the backoff ladder while it is throttled.
-  Future<({String? pgn, bool throttled})> _fetchWithBackoff({
+  Future<({String? pgn, bool throttled, bool banned})> _fetchWithBackoff({
     required StudyImportSource client,
     required String gid,
     required int index,
@@ -399,7 +406,7 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
           : _backoff(attempt);
 
       if (!await _sleep(wait, game: index + 1, retrying: attempt > 0)) {
-        return (pgn: null, throttled: sawThrottle);
+        return (pgn: null, throttled: sawThrottle, banned: false);
       }
       _publishProgress(
         _done,
@@ -410,14 +417,16 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
 
       switch (result.status) {
         case StudyGameFetchStatus.ok:
-          return (pgn: result.pgn, throttled: sawThrottle);
+          return (pgn: result.pgn, throttled: sawThrottle, banned: false);
         case StudyGameFetchStatus.failed:
-          return (pgn: null, throttled: sawThrottle);
+          return (pgn: null, throttled: sawThrottle, banned: false);
+        case StudyGameFetchStatus.banned:
+          return (pgn: null, throttled: true, banned: true);
         case StudyGameFetchStatus.throttled:
           sawThrottle = true;
       }
     }
-    return (pgn: null, throttled: true);
+    return (pgn: null, throttled: true, banned: false);
   }
 
   /// Write the collected games out as a study file.
@@ -509,9 +518,12 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
 
   // ── Pacing helpers ─────────────────────────────────────────────────────
 
-  /// [pace] plus 0–3 s of jitter, so repeated runs don't hit a fixed rhythm.
+  /// [pace] plus 0–30% jitter, so requests don't hit a fixed rhythm.
   Duration _paced(Duration pace) =>
-      pace + Duration(milliseconds: _jitter.nextInt(3000));
+      pace +
+      Duration(
+        milliseconds: _jitter.nextInt(pace.inMilliseconds * 3 ~/ 10 + 1),
+      );
 
   Duration _backoff(int attempt) {
     final seconds = 60 * (1 << (attempt - 1));

@@ -2,7 +2,7 @@
 /// temp directory: what a run writes, what it caches, how it resumes, and
 /// how a cancel or a refusal lands on the result and the job.
 ///
-/// Pacing is real time. The request gap clamps to at least 5 s, so every
+/// Pacing is real time. The request gap clamps to at least 20 s, so every
 /// test either fetches one game (the first request is never delayed) or is
 /// served from the cache; the two pacing tests cancel out of the wait after
 /// its first one-second tick.
@@ -487,9 +487,9 @@ void main() {
     );
 
     test(
-      'during a rate-limit backoff writes nothing and is not a failure',
+      'during a transient-throttle backoff writes nothing and is not a failure',
       () async {
-        stub.routes[_pgnUrl('9')] = (status: 429, body: '');
+        stub.routes[_pgnUrl('9')] = (status: 503, body: '');
         final c = createController();
         var cancelled = false;
         c.addListener(() {
@@ -513,27 +513,46 @@ void main() {
         expect(stub.requests, hasLength(1), reason: 'no retry after cancel');
       },
     );
+  });
 
-    test('a soft-ban HTML 200 is treated as a throttle', () async {
-      stub.routes[_pgnUrl('9')] = (
-        status: 200,
-        body: '<html><body>Too many requests</body></html>',
-      );
-      final c = createController();
-      var cancelled = false;
-      c.addListener(() {
-        if (!cancelled && c.progress.stage == StudyImportStage.retrying) {
-          cancelled = true;
-          c.cancel();
-        }
+  group('ban', () {
+    for (final (label, reply) in [
+      ('a 429', (status: 429, body: '')),
+      (
+        'a ban page served as a 200',
+        (
+          status: 200,
+          body:
+              '<html><body>You have had too many requests. Please email '
+              'us at chess@chessgames.com</body></html>',
+        ),
+      ),
+    ]) {
+      test('$label stops the run at once and blocks the next run', () async {
+        stub.routes[_pgnUrl('9')] = reply;
+        stub.routes[_pgnUrl('10')] = (status: 200, body: _game());
+        final c = createController();
+
+        final first = await run(c, const [
+          '9',
+          '10',
+        ]).timeout(const Duration(seconds: 10));
+        expect(first.failure, StudyImportFailure.throttled);
+        expect(first.chapters, 0);
+        expect(stub.requests, hasLength(1), reason: 'no retry, no next game');
+        expect(await (await cacheFile('9')).exists(), isFalse);
+
+        final second = await run(c, const [
+          '10',
+        ]).timeout(const Duration(seconds: 10));
+        expect(second.failure, StudyImportFailure.throttled);
+        expect(
+          stub.requests,
+          hasLength(1),
+          reason: 'the cooldown is enforced before any request',
+        );
       });
-      final result = await run(c, const [
-        '9',
-      ]).timeout(const Duration(seconds: 10));
-      expect(cancelled, isTrue);
-      expect(result.chapters, 0);
-      expect(await (await cacheFile('9')).exists(), isFalse);
-    });
+    }
   });
 
   group('runs in sequence', () {

@@ -9,8 +9,13 @@ A collection is two kinds of request:
   pass the file (`html_file`), or pass the game ids directly.
 * **One PGN per game** from `/njs/api/game/viewPGN/<gid>`. It needs no
   session but bans fast callers: ~2–3 s apart gets a 429 after 15–20 games,
-  ~22 s apart sustained 60 in September 2026. So a 60-game collection takes
-  over 20 minutes, and the download runs as a background process
+  ~22 s apart sustained 60 once in September 2026, but repeated runs later
+  earned a "You have had too many requests" ban. So games go 30 s apart, a
+  persistent request ledger (`request_ledger.json`) keeps every request at
+  least 20 s apart across runs, allows at most 150 a rolling day and blocks
+  all requests for 24 hours after a ban page, and a ban stops the job at once
+  instead of retrying. A 60-game collection takes about half an hour, and the
+  download runs as a background process
   (`python3 -m chess_prep.chessgames --job DIR`) that `chessgames_status`
   polls.
 
@@ -47,11 +52,19 @@ USER_AGENT = (
     "Chrome/126.0.0.0 Safari/537.36"
 )
 
-#: Seconds between PGN requests. ~22 s sustained 60 games without a ban.
-DEFAULT_DELAY = 22.0
-MIN_DELAY = 10.0
-#: Back-off after a throttled answer: 1, 2, 4, 8, 16 minutes, then skip.
-THROTTLE_BACKOFF = (60, 120, 240, 480, 960)
+#: Seconds between PGN requests. 22 s sustained 60 games once, but repeated
+#: runs were still banned, so leave a margin.
+DEFAULT_DELAY = 30.0
+MIN_DELAY = 20.0
+#: Back-off after a transient throttle (503, maintenance): 1, 2, 4 minutes,
+#: then skip. A ban is never retried.
+THROTTLE_BACKOFF = (60, 120, 240)
+
+#: The persistent request budget, shared by every run (see the module doc).
+MIN_GAP = 20.0
+DAILY_LIMIT = 150
+WINDOW = 24 * 3600.0
+BAN_COOLDOWN = 24 * 3600.0
 
 JOB_FILE = "job.json"
 STATUS_FILE = "status.json"
@@ -69,6 +82,10 @@ class Stopped(Exception):
     """Raised inside the job when it receives SIGTERM."""
 
 
+class Banned(Exception):
+    """The site banned the IP, or the request ledger is closed: stop the job."""
+
+
 # ── Paths ────────────────────────────────────────────────────────────────────
 
 
@@ -82,6 +99,10 @@ def games_dir() -> Path:
 
 def jobs_dir() -> Path:
     return chessgames_dir() / "jobs"
+
+
+def ledger_path() -> Path:
+    return chessgames_dir() / "request_ledger.json"
 
 
 def default_out_dir() -> Path:
@@ -156,22 +177,104 @@ def extract_title(page: str) -> str | None:
     return title or None
 
 
+def is_ban_page(body: str) -> bool:
+    """The site's rate-limit ban page, e.g. "You have had too many requests"."""
+    lower = body.lower()
+    return "too many requests" in lower or "rate limit" in lower
+
+
 def classify_pgn_response(status: int, body: str) -> tuple[str, str | None]:
-    """`ok` with the PGN, `throttled` (back off, retry) or `failed` (skip).
+    """`ok` with the PGN, `banned` (stop everything), `throttled` (transient:
+    back off, retry) or `failed` (skip).
 
     The site answers a rate limit with a 200 HTML page as often as a 429."""
-    if status in (429, 403, 503):
+    if status in (429, 403):
+        return "banned", None
+    if status == 503:
         return "throttled", None
     text = body.strip()
     if status == 200 and text.startswith("[Event "):
         return "ok", text
+    if is_ban_page(text):
+        return "banned", None
     lower = text.lower()
-    if any(
-        phrase in lower
-        for phrase in ("too many requests", "under maintenance", "temporarily unavailable", "rate limit")
-    ):
+    if "under maintenance" in lower or "temporarily unavailable" in lower:
         return "throttled", None
     return "failed", None
+
+
+# ── Request ledger ───────────────────────────────────────────────────────────
+
+
+def _read_ledger(now: float) -> dict:
+    data = _read_json(ledger_path())
+    if not isinstance(data, dict):
+        data = {}
+    banned = data.get("banned_until")
+    requests = sorted(
+        float(t) for t in data.get("requests") or [] if isinstance(t, (int, float)) and t > now - WINDOW
+    )
+    return {
+        "banned_until": banned if isinstance(banned, (int, float)) and banned > now else None,
+        "requests": requests,
+    }
+
+
+def next_request_at(now: float | None = None) -> float:
+    """Epoch seconds when the ledger next admits a request (<= now: already)."""
+    now = time.time() if now is None else now
+    ledger = _read_ledger(now)
+    requests = ledger["requests"]
+    candidates = [now]
+    if ledger["banned_until"]:
+        candidates.append(ledger["banned_until"])
+    if requests:
+        candidates.append(requests[-1] + MIN_GAP)
+    if len(requests) >= DAILY_LIMIT:
+        candidates.append(requests[-DAILY_LIMIT] + WINDOW)
+    return max(candidates)
+
+
+def reserve_request(now: float | None = None) -> float:
+    """Record a request and return 0, or return the seconds until one is allowed."""
+    now = time.time() if now is None else now
+    at = next_request_at(now)
+    if at > now:
+        return at - now
+    ledger = _read_ledger(now)
+    ledger["requests"].append(now)
+    _write_json(ledger_path(), ledger)
+    return 0.0
+
+
+def record_ban(now: float | None = None) -> None:
+    now = time.time() if now is None else now
+    ledger = _read_ledger(now)
+    ledger["banned_until"] = now + BAN_COOLDOWN
+    _write_json(ledger_path(), ledger)
+
+
+def blocked_message(now: float | None = None) -> str | None:
+    """Why requests are refused for longer than the normal gap, or None."""
+    now = time.time() if now is None else now
+    at = next_request_at(now)
+    if at - now <= MIN_GAP:
+        return None
+    when = dt.datetime.fromtimestamp(at).isoformat(timespec="minutes")
+    if _read_ledger(now)["banned_until"]:
+        return f"chessgames.com banned this IP; requests are paused until {when}."
+    return f"The daily limit of {DAILY_LIMIT} chessgames.com requests is used up until {when}."
+
+
+def admit_request(sleep: Callable[[float], None], clock: Callable[[], float]) -> bool:
+    """Wait out the ledger's short gap; False when it is closed for longer."""
+    while True:
+        wait = reserve_request(clock())
+        if wait <= 0:
+            return True
+        if wait > MIN_GAP:
+            return False
+        sleep(wait)
 
 
 def safe_file_name(title: str) -> str:
@@ -227,6 +330,7 @@ def run_job(
     job: Path,
     fetch: Fetch = fetch_url,
     sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.time,
 ) -> dict:
     """Fetch every uncached game of every collection in the job, serially."""
     spec = _read_json(job / JOB_FILE) or {}
@@ -261,7 +365,12 @@ def run_job(
                     if not first_request:
                         sleep(delay)
                     first_request = False
+                    if not admit_request(sleep, clock):
+                        raise Banned(blocked_message(clock()) or "chessgames.com requests are paused.")
                     outcome, pgn = classify_pgn_response(*fetch(pgn_url(gid), gid))
+                    if outcome == "banned":
+                        record_ban(clock())
+                        raise Banned(blocked_message(clock()) or "chessgames.com banned this IP.")
                     if outcome != "throttled":
                         break
                     if backoff is None:
@@ -279,6 +388,10 @@ def run_job(
         tick(state="done", current=None)
     except Stopped:
         tick(state="stopped")
+    except Banned as e:
+        status.pop("throttled_until", None)
+        tick(state="banned", current=None, error=str(e),
+             note="Fetched games stay cached; the same chessgames_download resumes after the pause.")
     except Exception as e:  # noqa: BLE001 - the job must always leave a status
         tick(state="failed", error=f"{type(e).__name__}: {e}")
         raise
@@ -352,7 +465,7 @@ def main(argv: list[str] | None = None) -> int:
 
     signal.signal(signal.SIGTERM, handler)
     result = run_job(Path(args.job))
-    return 0 if result.get("state") in ("done", "stopped") else 1
+    return 0 if result.get("state") in ("done", "stopped", "banned") else 1
 
 
 # ── Tools ────────────────────────────────────────────────────────────────────
@@ -369,7 +482,12 @@ def resolve_collection(
     if html_file:
         page = Path(html_file).expanduser().read_text(encoding="utf-8", errors="replace")
     else:
+        if not admit_request(time.sleep, time.time):
+            raise ChessgamesError(blocked_message() or "chessgames.com requests are paused.")
         code, page = fetch(collection_url(cid), None)
+        if is_ban_page(page) or code in (429, 403):
+            record_ban()
+            raise ChessgamesError(blocked_message() or "chessgames.com banned this IP.")
         if code == 0:
             raise ChessgamesError(f"Could not reach chessgames.com for collection {cid}.")
     gids = extract_game_ids(page)
@@ -399,6 +517,9 @@ def register_chessgames_tools(registry: Any) -> None:
         delay = float(args.get("delay_seconds") or DEFAULT_DELAY)
         if delay < MIN_DELAY:
             raise ToolError(f"delay_seconds below {MIN_DELAY:g} gets the IP banned.")
+        blocked = blocked_message()
+        if blocked:
+            raise ToolError(blocked + " Fetched games stay cached; retry after that.")
         busy = running_job()
         if busy is not None:
             raise ToolError(
@@ -466,8 +587,10 @@ def register_chessgames_tools(registry: Any) -> None:
         "file per collection, games in collection order, named after the collection "
         "(default folder ~/Documents/chessgames). Reads each collection page now and returns "
         "titles, game counts, output paths and an ETA; the PGNs are then fetched by a "
-        "background process one game every delay_seconds (default 22 — faster gets the IP "
-        "banned), so 60 games take ~22 minutes. Poll chessgames_status. Games are cached by id, "
+        "background process one game every delay_seconds (default 30 — faster gets the IP "
+        "banned), so 60 games take ~30 minutes. A persistent budget allows at most 150 requests "
+        "a day and pauses all requests for 24 hours after a ban page; a ban stops the job. "
+        "Poll chessgames_status. Games are cached by id, "
         "so repeating the call resumes a stopped or failed download. Only one download runs at "
         "a time. If a collection page comes back without game links (a browser challenge), ask "
         "the user to save the page from their browser and pass it as html_file.",
@@ -481,7 +604,7 @@ def register_chessgames_tools(registry: Any) -> None:
                 "out_dir": _s("Folder for the PGN files (default ~/Documents/chessgames)."),
                 "html_file": _s("Saved collection page to read game ids from instead of the "
                                 "site; exactly one collection."),
-                "delay_seconds": _n("Seconds between game requests (default 22, minimum 10)."),
+                "delay_seconds": _n("Seconds between game requests (default 30, minimum 20)."),
             },
             ["collections"],
         ),
@@ -489,7 +612,7 @@ def register_chessgames_tools(registry: Any) -> None:
     )
     registry._add(
         "chessgames_status",
-        "Progress of a chessgames_download: state (running, done, stopped, failed, died), per "
+        "Progress of a chessgames_download: state (running, done, stopped, banned, failed, died), per "
         "collection games saved / total / failed ids and output path, remaining games and ETA, "
         "and throttled_until while backing off from a rate limit. With no id: the recent "
         "downloads and how many games are cached.",
