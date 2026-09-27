@@ -52,4 +52,5 @@ String studySourceFailureLabel(AppLocalizations l, StudyImportException e) =>
       ),
       StudySourceFailure.http => l.studyImportLichessHttp(e.statusCode!),
       StudySourceFailure.empty => l.studyImportLichessEmpty,
+      StudySourceFailure.rateLimited => l.studyImportChessgamesLimited,
     };

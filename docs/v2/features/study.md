@@ -178,7 +178,7 @@ controls; reordering silently turns off while the search box has text; a study *
 whole file is rewritten on every edit, so an unknown PGN construct is deleted rather than kept.
 
 ## Questions for the owner
-- Is chessgames.com collection import still wanted, given the bot check and the 22-second pacing?
+- Is chessgames.com collection import still wanted, given the bot check, the 30-second pacing and the 150-games-a-day limit?
 - Does the chapter manager dialog survive, or does the sidebar do everything?
 - Should quiz markers stay a hidden right-click action, or become visible chapter-level settings?
 - Should a study opened from outside `Documents/studies/` be editable at all, or copied in first?

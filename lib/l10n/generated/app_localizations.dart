@@ -1525,7 +1525,7 @@ abstract class AppLocalizations {
   /// Study import progress, results and recovery
   ///
   /// In en, this message translates to:
-  /// **'chessgames.com is refusing requests. Downloaded games are cached — start the same collection again later to resume.'**
+  /// **'Stopped: chessgames.com limited requests, or the app\'s own limit (150 games a day, 24 hours\' pause after a ban) was reached. Downloaded games are cached — start the same collection again later to resume.'**
   String get studyImportThrottled;
 
   /// Study import progress, results and recovery
@@ -1629,6 +1629,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Lichess returned HTTP {status}.'**
   String studyImportLichessHttp(int status);
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'chessgames.com downloads are paused: the site limited requests, or the app\'s limit (150 games a day, 24 hours after a ban) was reached. Try again later.'**
+  String get studyImportChessgamesLimited;
 
   /// Study import progress, results and recovery
   ///
@@ -2119,7 +2125,7 @@ abstract class AppLocalizations {
   /// Study workflow control: studyImportDelayHelp
   ///
   /// In en, this message translates to:
-  /// **'chessgames.com bans fast downloads: 2–3 s apart gets blocked after ~20 games, 22 s apart sustains 60. At 22 s a 60-game collection takes about 25 minutes, running in the background.'**
+  /// **'chessgames.com bans fast or heavy downloading. Games are at least 20 s apart, at most 150 a day, and a ban pauses all downloads for 24 hours. At 30 s a 60-game collection takes about 35 minutes, running in the background.'**
   String get studyImportDelayHelp;
 
   /// Study workflow control: studyImportContacting

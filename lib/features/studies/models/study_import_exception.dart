@@ -6,6 +6,9 @@ enum StudySourceFailure {
   userMissing,
   http,
   empty,
+
+  /// chessgames.com banned us, or the app's request budget is spent.
+  rateLimited,
 }
 
 /// Transport failure data; presentation chooses localized guidance.

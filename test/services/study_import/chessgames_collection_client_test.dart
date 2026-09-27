@@ -82,27 +82,29 @@ void main() {
       expect(result.pgn, startsWith('[Event '));
     });
 
-    test('429 and 403 are throttles', () {
+    test('429 and 403 are bans; 503 is a transient throttle', () {
+      expect(classifyPgnResponse(429, '').status, ChessgamesFetchStatus.banned);
+      expect(classifyPgnResponse(403, '').status, ChessgamesFetchStatus.banned);
       expect(
-        classifyPgnResponse(429, '').status,
-        ChessgamesFetchStatus.throttled,
-      );
-      expect(
-        classifyPgnResponse(403, '').status,
+        classifyPgnResponse(503, '').status,
         ChessgamesFetchStatus.throttled,
       );
     });
 
-    test('a 200 soft-ban page is a throttle, not a hit', () {
+    test('a 200 ban page is a ban, not a hit', () {
       // The failure mode that matters: chessgames.com answers a rate limit
       // with a 200 and an HTML page as often as with a 429.
       expect(
         classifyPgnResponse(
           200,
-          '<html><body>You have made too many requests.</body></html>',
+          '<html><body>You have had too many requests. Please email us at '
+          'chess@chessgames.com if you feel this is a mistake.</body></html>',
         ).status,
-        ChessgamesFetchStatus.throttled,
+        ChessgamesFetchStatus.banned,
       );
+    });
+
+    test('a maintenance page is a transient throttle', () {
       expect(
         classifyPgnResponse(
           200,

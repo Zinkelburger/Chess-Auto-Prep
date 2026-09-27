@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import '../../features/documents/models/pgn_document.dart';
 import '../../features/documents/repositories/pgn_document_store.dart';
 import '../../features/studies/models/import_source.dart';
+import '../../features/studies/models/study_import_exception.dart';
 import '../../features/studies/models/study_import_state.dart';
 import '../../features/studies/repositories/study_import_repository.dart';
 import '../../features/studies/repositories/study_library_repository.dart';
@@ -14,6 +15,7 @@ import '../../services/storage/study_naming.dart';
 import '../../services/lichess_api_client.dart';
 import '../../utils/atomic_file.dart';
 import 'chessgames_collection_client.dart';
+import 'chessgames_request_ledger.dart';
 import 'lichess_study_client.dart' as lichess;
 
 class StorageStudyImportRepository implements StudyImportRepository {
@@ -23,7 +25,15 @@ class StorageStudyImportRepository implements StudyImportRepository {
     required this.cacheDirectory,
     required this.authHeaders,
     http.Client Function()? createClient,
-  }) : _createClient = createClient ?? http.Client.new;
+    ChessgamesRequestLedger? ledger,
+  }) : _createClient = createClient ?? http.Client.new,
+       ledger =
+           ledger ??
+           ChessgamesRequestLedger(
+             () async => File(
+               p.join((await cacheDirectory()).path, 'request_ledger.json'),
+             ),
+           );
 
   final StudyLibraryRepository library;
   final PgnDocumentStore documents;
@@ -31,8 +41,13 @@ class StorageStudyImportRepository implements StudyImportRepository {
   final Future<Map<String, String>> Function() authHeaders;
   final http.Client Function() _createClient;
 
+  /// Shared by every source this repository opens, so the dialog's collection
+  /// request and the background run's game requests draw on one budget.
+  final ChessgamesRequestLedger ledger;
+
   @override
-  StudyImportSource openSource() => _Source(_createClient(), authHeaders);
+  StudyImportSource openSource() =>
+      _Source(_createClient(), authHeaders, ledger);
 
   Future<File> _cache(String id) async {
     if (!RegExp(r'^\d+$').hasMatch(id)) throw ArgumentError.value(id, 'id');
@@ -95,9 +110,10 @@ class StorageStudyImportRepository implements StudyImportRepository {
 }
 
 class _Source implements StudyImportSource {
-  _Source(this.client, this.authHeaders);
+  _Source(this.client, this.authHeaders, this.ledger);
   final http.Client client;
   final Future<Map<String, String>> Function() authHeaders;
+  final ChessgamesRequestLedger ledger;
   bool _closed = false;
   final _closing = Completer<void>();
   Future<T> _whileOpen<T>(Future<T> operation) => Future.any([
@@ -124,10 +140,27 @@ class _Source implements StudyImportSource {
     }
   }
 
+  /// Wait out the ledger's short gap, or report `false` when the budget is
+  /// closed for longer (ban cooldown or daily limit).
+  Future<bool> _admitChessgamesRequest() async {
+    while (true) {
+      _checkOpen();
+      final wait = await _whileOpen(ledger.reserve());
+      if (wait == Duration.zero) return true;
+      if (wait > ChessgamesRequestLedger.minGap) return false;
+      await _whileOpen(Future<void>.delayed(wait));
+    }
+  }
+
   @override
   Future<StudyGameFetch> fetchGame(String id) async {
-    _checkOpen();
+    if (!await _admitChessgamesRequest()) {
+      return (status: StudyGameFetchStatus.banned, pgn: null);
+    }
     final result = await _whileOpen(fetchGamePgn(id, client: client));
+    if (result.status == ChessgamesFetchStatus.banned) {
+      await ledger.recordBan();
+    }
     _checkOpen();
     return (
       status: StudyGameFetchStatus.values.byName(result.status.name),
@@ -137,8 +170,14 @@ class _Source implements StudyImportSource {
 
   @override
   Future<StudyCollectionSource> fetchCollection(String id) async {
-    _checkOpen();
+    if (!await _admitChessgamesRequest()) {
+      throw const StudyImportException(StudySourceFailure.rateLimited);
+    }
     final html = await _whileOpen(fetchCollectionHtml(id, client: client));
+    if (html != null && isChessgamesBanPage(html)) {
+      await ledger.recordBan();
+      throw const StudyImportException(StudySourceFailure.rateLimited);
+    }
     _checkOpen();
     return (
       gameIds: List<String>.unmodifiable(
