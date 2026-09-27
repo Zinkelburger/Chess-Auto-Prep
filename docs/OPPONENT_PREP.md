@@ -40,6 +40,8 @@ claude mcp add chess-prep -- python3 /abs/path/to/tools/mcp/chess_prep/__main__.
 | `people_upsert` | Add or merge one person; web finds go in as candidates with evidence |
 | `people_confirm` | Promote an approved candidate to an account the app downloads from |
 | `master_player_search` | A player in the master-games database under any spelling, grouped by FIDE ID |
+| `pgn_collection_open` / `pgn_games_search` | Snapshot a PGN/ZIP and select played games by player, metadata, exact move order or transposed position |
+| `pgn_selection_report` / `pgn_game_get` / `pgn_selection_export` | Evidence-backed counts/continuations, complete game retrieval and verified export of the same selection |
 | `pgn_open` | Load a PGN (course/repertoire/games) as a FEN-keyed opening tree |
 | `pgn_position` | Book moves at a FEN, plus one-ply transpositions into book |
 | `pgn_walk` | Ply-by-ply: in-book / transposition / novelty, with replies |
@@ -74,6 +76,54 @@ roster alone with `CHESS_PREP_ROSTER`).
 The tournament tools need the Flutter SDK's `dart` on PATH (or
 `CHESS_PREP_DART`), because they run the app's own tournament code rather than
 a second copy of it. See [ENGINE_TOURNAMENT.md](ENGINE_TOURNAMENT.md).
+
+### PGN game collections
+
+`pgn_collection.py` owns immutable PGN snapshots and game IDs;
+`pgn_selection.py` searches, reports and exports them;
+`pgn_collection_tools.py` registers their MCP contracts. This pipeline is for
+played games, while `pgn_open` and its opening graph serve repertoires/courses.
+
+```text
+pgn_collection_open {path: "/…/Karpov.zip"}  → collection_id
+pgn_games_search {collection_id, player: "Karpov", color: "white",
+  moves: "1.e4 c6 2.d4 d5 3.Nd2 dxe4 4.Nxe4 Bf5", match: "position"} → selection_id
+pgn_selection_report {selection_id, depth: 8}
+pgn_game_get {game_id: "<id from search/report>"}
+pgn_selection_export {selection_id, path: "/…/Karpov_Bf5.pgn", sort: "date_asc"}
+```
+
+The position search includes Nc3/Nd2 transpositions and ignores move clocks;
+turn, castling rights and legal en passant remain part of position identity.
+`match: "prefix"` instead requires the same initial position and move order.
+A `selection_id` can replace `collection_id` in a new search to narrow the
+existing set while preserving its matching ply when no new position is given.
+Each source record counts once, from its first mainline match. Analysis
+variations and repeated visits never inflate statistics. Duplicate candidates
+(same headers, start and mainline) are reported and retained. Results use the
+matched player's side, otherwise White, and unknown results are excluded from
+the score denominator. Full-date filters exclude incomplete dates; year
+filters accept known years. Event strings are never inferred time controls.
+Reports include supporting and exception game IDs with explicit evidence and
+node limits; continuation prefixes overlap across depths.
+
+Snapshots live under `CHESS_PREP_PGN_DIR` (default
+`~/.local/share/chess-prep/pgn-collections/`) and survive server restarts and
+one-shot helper calls. IDs fingerprint source content/provenance, decoding,
+parser version and format version. Reopening a changed source produces a new
+snapshot; earlier selections remain reproducible. Source files and app DBs
+are never modified. PGN/ZIP inputs are bounded to 32 MiB compressed and
+uncompressed; ZIP members are read in memory, never extracted to their names.
+Multiple PGNs require an explicit member. UTF-8 is tried first, then labelled
+CP1252/Latin-1 heuristics; `encoding` overrides detection. Parser-reported
+invalid games are excluded and counted, with bounded error details.
+
+Export keeps headers, comments, NAGs and variations by default, reparses the
+rendered PGN and verifies selected headers/mainlines/count and retained
+annotations before atomically publishing it. Existing output requires
+`overwrite: true`; source/cache paths cannot be export targets. IDs are returned
+in export order. Pagination never changes the selection or its totals.
+Offline regression tests: `tools/mcp/test_pgn_collection.py`.
 
 ### PGN opening tree
 

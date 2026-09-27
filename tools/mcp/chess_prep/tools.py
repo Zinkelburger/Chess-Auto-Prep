@@ -428,6 +428,10 @@ class Registry:
 
         register_opening_tools(self)
 
+        from .pgn_collection_tools import register_collection_tools
+
+        register_collection_tools(self)
+
         from .master_games import register_master_games_tools
 
         register_master_games_tools(self)

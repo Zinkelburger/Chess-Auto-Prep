@@ -19,6 +19,7 @@ TESTS=(
   tools/test_windows_ort_bundle.py
   tools/mcp/test_chess_prep.py
   tools/mcp/test_opening_tree.py
+  tools/mcp/test_pgn_collection.py
   tools/mcp/test_expectimax.py
   tools/mcp/test_engine_tournament.py
   tools/mcp/test_master_games.py
