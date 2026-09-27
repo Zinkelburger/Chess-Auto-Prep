@@ -84,7 +84,8 @@ locked. One private supervised Stockfish (one core, 64 MiB) scores the positions
 after the stored and played moves at depth 14; a loss of at most 50 cp from the
 solver's viewpoint passes with `Correct! {move} is just as good.` and finishes on
 the played move. The stored solution is unchanged; Analyze examines the accepted
-move without inserting it. Both colours use the same score conversion. A 30-second
+move without inserting it into the puzzle. The global Analyze action includes
+the accepted move as a variation in its temporary copy of the full game. Both colours use the same score conversion. A 30-second
 deadline, unavailable/shallow verdict or startup failure gives `Not checked` and
 leaves the attempt ungraded, rather than inventing an incorrect answer. Reset,
 reveal, navigation, mode changes, disposal and close preparation cancel the check;

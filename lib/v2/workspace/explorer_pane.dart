@@ -262,7 +262,7 @@ class _Sentence extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(Space.m),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

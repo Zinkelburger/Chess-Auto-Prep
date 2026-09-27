@@ -366,6 +366,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   }
 
   Future<void> _analyze() async {
+    _train.puzzles.inspectAlternative();
     final result = await _requests.newAnalysisBoard();
     if (!mounted || result is! RequestDone) return;
     _tabs.show(WorkspaceTab.moves);

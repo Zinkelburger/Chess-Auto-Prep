@@ -1,6 +1,7 @@
 import 'package:chess_auto_prep/v2/app/mode.dart';
 import 'package:chess_auto_prep/v2/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/v2/features/tactics/my_games.dart';
+import 'package:chess_auto_prep/v2/features/tactics/puzzle_pane.dart';
 import 'package:chess_auto_prep/v2/workspace/comment_field.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
 import 'package:chess_auto_prep/v2/workspace/explorer_pane.dart';
@@ -119,7 +120,12 @@ void main() {
       findsNothing,
       reason: 'off stays collapsed after revealing the answer',
     );
-    await tester.tap(find.text('Analyze'));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(PuzzlePane),
+        matching: find.text('Analyze'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(w.analysis.state, isA<EngineFailed>(), reason: 'it was asked');
     expect(find.text('Solution: e5 Nf3 Nc6'), findsNothing);

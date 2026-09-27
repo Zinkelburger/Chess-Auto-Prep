@@ -422,6 +422,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     final ticket = _nextRequest();
     _session.snapshot();
     final cursor = _session.cursor;
+    final preview = _session.commentLine.value;
     final side = _session.orientation;
     final board = withSide(
       await readChapter(
@@ -436,6 +437,13 @@ final class WorkspaceRequests extends ChangeNotifier {
     final shown = await _session.showAnalysisBoard(board);
     if (!shown || _overtaken(ticket)) return const RequestDropped();
     _session.goTo(cursor);
+    // A read-only line preview belongs only in the new scratch tab. Preserve
+    // the full source game and insert the visible line as a variation there.
+    if (preview != null) {
+      for (final move in preview.moves.take(preview.at + 1)) {
+        _session.playMove(move.uci);
+      }
+    }
     _saidCopy(leave);
     return const RequestDone();
   }

@@ -277,6 +277,25 @@ void main() {
   );
 
   test(
+    'new analysis tab keeps the accepted position and original solution',
+    () => sitting((async) {
+      w.trainer.play('e7e5');
+      async.flushMicrotasks();
+      finish(async, 0);
+      finish(async, 0);
+      final expected = w.trainer.board.value!.fen;
+      w.trainer.inspectAlternative();
+      unawaited(w.requests.newAnalysisBoard());
+      async.flushMicrotasks();
+      expect(w.session.source, isNull);
+      expect(w.session.fen, expected);
+      expect(w.session.tree!.children.map((n) => n.uci), ['d7d5', 'e7e5']);
+      expect(w.tactics.at(3)!.answer, ['d5']);
+      expect(w.tactics.at(3)!.stats.reviews, 1);
+    }),
+  );
+
+  test(
     'illegal move never starts an engine or grades the puzzle',
     () => sitting((async) {
       w.trainer.play('e7e3');

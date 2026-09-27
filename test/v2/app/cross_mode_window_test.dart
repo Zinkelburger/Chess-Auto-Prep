@@ -34,6 +34,11 @@ void main() {
             .last,
       );
       await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'layout in ${app.requests.mode}',
+      );
       final node = NodePath.of([0]);
       app.session.goTo(node);
       await _ctrl(tester, LogicalKeyboardKey.keyE);
@@ -51,12 +56,22 @@ void main() {
       app.store.saves.add(const SaveRefused('injected save refusal'));
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'layout in ${app.requests.mode}',
+      );
       expect(app.saver.state, isA<SaveStopped>());
       expect(app.session.commentAt(node), contains('A note across modes'));
       app.question.answer = DraftChoice.keepWaiting;
       for (final mode in Mode.values) {
         app.requests.switchTo(mode);
         await tester.pumpAndSettle();
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'layout in ${app.requests.mode}',
+        );
         expect(app.requests.mode, mode);
         expect(find.text(mode.label), findsWidgets);
         expect(app.session.source, kidMain);
@@ -65,8 +80,18 @@ void main() {
       }
       app.requests.switchTo(Mode.repertoires);
       await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'layout in ${app.requests.mode}',
+      );
       final opening = app.requests.open(benkoMain);
       await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'layout in ${app.requests.mode}',
+      );
       await opening;
       expect(app.session.source, kidMain);
       expect(app.question.asked, isNotEmpty);
@@ -75,12 +100,22 @@ void main() {
       app.explorer.choose(const ExplorerChoice(source: ExplorerSource.lichess));
       await tester.tap(find.text('Explorer'));
       await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'layout in ${app.requests.mode}',
+      );
       expect(app.explorer.state, isA<ExplorerFailed>());
       expect(find.text('Try again'), findsOneWidget);
       app.lichess.throwing = null;
       app.lichess.answer = (_) => const ExplorerFetched(ExplorerAnswer.empty);
       await tester.tap(find.text('Try again'));
       await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'layout in ${app.requests.mode}',
+      );
       expect(app.explorer.state, isNot(isA<ExplorerFailed>()));
       expect(app.session.commentAt(node), contains('A note across modes'));
 
@@ -96,6 +131,11 @@ void main() {
       addTearDown(exit.closing.dispose);
       final closing = exit.leave();
       await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'layout in ${app.requests.mode}',
+      );
       expect(await closing, AppExitResponse.cancel);
       expect(stopped, 0);
       expect(app.session.source, kidMain);
