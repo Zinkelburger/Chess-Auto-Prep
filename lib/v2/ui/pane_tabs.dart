@@ -135,8 +135,7 @@ class PaneTabs<K extends Object> extends ChangeNotifier {
 /// scrolls instead — the wheel scrolls it, and the tab that comes up is
 /// brought into view.
 ///
-/// As in the old viewer, the row is left out while only one tab is open: a
-/// row with one word in it says nothing the pane does not.
+/// The strip stays visible with one tab so navigation has a stable place.
 class PaneTabStrip<K extends Object> extends StatefulWidget {
   const PaneTabStrip({super.key, required this.tabs});
 
@@ -194,7 +193,6 @@ class _PaneTabStripState<K extends Object> extends State<PaneTabStrip<K>>
   Widget build(BuildContext context) {
     final tabs = widget.tabs;
     _keys.removeWhere((id, _) => !tabs.isOpen(id));
-    if (tabs.open.length < 2) return const SizedBox.shrink();
     _reveal(tabs.selected);
     List<Widget> slots() => [
       for (final id in tabs.open)

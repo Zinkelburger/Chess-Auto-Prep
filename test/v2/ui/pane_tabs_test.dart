@@ -79,9 +79,11 @@ void main() {
   });
 
   group('PaneTabStrip layout', () {
-    testWidgets('is left out while one tab is open', (tester) async {
+    testWidgets('keeps navigation visible while one tab is open', (
+      tester,
+    ) async {
       final tabs = await pumpStrip(tester);
-      expect(find.text('Moves'), findsNothing);
+      expect(find.text('Moves'), findsOneWidget);
       tabs.show('replies');
       await tester.pumpAndSettle();
       expect(find.text('Moves'), findsOneWidget);

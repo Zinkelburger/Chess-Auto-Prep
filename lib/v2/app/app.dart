@@ -5,6 +5,9 @@ import 'dart:ui' show AppExitResponse;
 import 'package:flutter/material.dart';
 
 import '../diagnostics/log.dart';
+import '../features/settings/lichess_login_dialog.dart';
+import '../features/databases/twic_download_dialog.dart';
+import '../features/databases/twic_download.dart';
 import '../features/settings/setting_rows.dart';
 import '../ui/theme.dart';
 import '../workspace/copy_name_dialog.dart';
@@ -162,9 +165,27 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
                 fullScreen: _parts.fullScreen,
                 settingRows: _settingRows,
                 settingsAlso: _parts.account,
+                onDownloadTwic: _downloadTwic,
+                onExplorerLogin: (context) =>
+                    showLichessLogin(context, _parts.account),
               ),
       ),
     );
+  }
+
+  Future<bool> _downloadTwic(BuildContext context) async {
+    final path = _parts.env.twicDownloadPath;
+    if (path == null) return false;
+    final download = TwicDownload(
+      path,
+      pendingWrites: _parts.env.pendingWrites,
+    );
+    try {
+      await showTwicDownload(context, download);
+      return await _parts.env.masterBook.available();
+    } finally {
+      download.dispose();
+    }
   }
 
   Widget _startup() =>

@@ -45,6 +45,8 @@ final class WorkspaceHooks {
     this.onBoardMove,
     this.onEngineMove,
     this.onExplorerGame,
+    this.onExplorerLogin,
+    this.onDownloadTwic,
     this.onOpenChapter,
     this.onOpenPlace,
     this.onEditBooks,
@@ -59,6 +61,8 @@ final class WorkspaceHooks {
   /// Asked to open a game the explorer lists, which is the shell's
   /// business: another mode shows it.
   final ValueChanged<ExplorerGame>? onExplorerGame;
+  final Future<bool> Function(BuildContext)? onExplorerLogin;
+  final Future<bool> Function(BuildContext)? onDownloadTwic;
 
   /// What a right-click on a move offers, which is the mode's business: a
   /// study marks where a quiz starts, and nothing else offers anything yet.
@@ -97,7 +101,7 @@ final class WorkspaceHooks {
 
 /// The board with the game counter, the engine's lines and the move's note
 /// under it on the left; on the right the reading card, top to bottom in a
-/// fixed order: the heading, the tab strip, the moves, the opponent's
+/// fixed order: the tab strip, the heading, the moves, the opponent's
 /// replies, the explorer or the search, the edit strip while there is
 /// editing or trouble, and the navigation row.
 /// The card starts wider than the board. The keys that
@@ -186,10 +190,6 @@ class WorkspaceView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (hooks.header)
-            ReadingHeader(session: workspace.session)
-          else
-            const SizedBox(height: Space.s),
           Expanded(
             child: _Tabbed(workspace: workspace, tabs: tabs, hooks: hooks),
           ),
@@ -296,6 +296,8 @@ class _Tabbed extends StatelessWidget {
         tree: workspace.tree,
         books: workspace.books,
         onOpenGame: hooks.onExplorerGame,
+        onLogIn: hooks.onExplorerLogin,
+        onDownloadTwic: hooks.onDownloadTwic,
         onOpenPlace: hooks.onOpenPlace,
         onEditBooks: hooks.onEditBooks,
       ),
@@ -338,6 +340,8 @@ class _Tabbed extends StatelessWidget {
             ),
             child: PaneTabStrip(tabs: tabs),
           ),
+          const Divider(height: 1),
+          if (hooks.header) ReadingHeader(session: workspace.session),
           Expanded(
             child: ValueListenableBuilder<BoardClaim?>(
               valueListenable: hooks.lesson ?? const _NoClaim(),

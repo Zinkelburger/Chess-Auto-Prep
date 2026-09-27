@@ -269,7 +269,7 @@ List<SettingGroup> settingGroups({
       SettingRow(
         'Lichess',
         AccountSetting(account),
-        hint: account.problem ?? _accountHint(account.status),
+        hint: account.problem ?? accountHint(account.status),
         warn: account.problem != null,
       ),
       if (account.status case SignedOut() || Checking())
@@ -289,7 +289,7 @@ List<SettingGroup> settingGroups({
   ];
 }
 
-String _accountHint(AccountStatus status) => switch (status) {
+String accountHint(AccountStatus status) => switch (status) {
   SignedOut() =>
     'lifts the API limits; needed for private studies and the explorer',
   Connecting(browserOpened: true) => 'Waiting for the browser…',

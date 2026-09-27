@@ -12,12 +12,12 @@ import 'engine_analysis.dart';
 import 'line_preview.dart';
 
 /// The engine's lines for the position on the board, laid out as the old
-/// app's engine bar: a compact power control and the engine's status,
+/// app's engine bar: a labelled sliding switch and the engine's status,
 /// then one fixed-height row per MultiPV line, each a score gutter and the
 /// line's moves. The score is read in the gutter and nowhere larger.
 ///
 /// A row keeps its height while it has no line yet, so the moves below never
-/// jump as lines arrive; switched off, the pane takes no room.
+/// jump as lines arrive; switched off, only the switch and status remain.
 /// Resting the pointer on a move floats the position
 /// after it on a small board; clicking a move plays the line up to it.
 /// A chevron opens a long line out to several rows.
@@ -107,26 +107,24 @@ class _EnginePaneState extends State<EnginePane>
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: Listenable.merge([widget.analysis, widget.session]),
-      builder: (context, _) => widget.analysis.state is EngineOff
-          ? const SizedBox.shrink()
-          : LinePreviewOverlay(
-              preview: _preview,
-              orientation: widget.session.orientation,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _Header(analysis: widget.analysis),
-                  // Paused, only the status row remains.
-                  if (widget.analysis.enabled && !widget.analysis.paused)
-                    for (
-                      var multiPv = 1;
-                      multiPv <= widget.analysis.multiPv;
-                      multiPv++
-                    )
-                      _row(multiPv),
-                ],
-              ),
-            ),
+      builder: (context, _) => LinePreviewOverlay(
+        preview: _preview,
+        orientation: widget.session.orientation,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Header(analysis: widget.analysis),
+            // Paused, only the status row remains.
+            if (widget.analysis.enabled && !widget.analysis.paused)
+              for (
+                var multiPv = 1;
+                multiPv <= widget.analysis.multiPv;
+                multiPv++
+              )
+                _row(multiPv),
+          ],
+        ),
+      ),
     );
   }
 
@@ -149,14 +147,13 @@ class _EnginePaneState extends State<EnginePane>
 }
 
 /// The height reserved only while the engine has something to show.
-double enginePaneHeight(EngineAnalysis analysis) => analysis.state is EngineOff
-    ? 0
-    : engineBarHeight +
-          (analysis.enabled && !analysis.paused
-              ? analysis.multiPv * engineRowHeight
-              : 0);
+double enginePaneHeight(EngineAnalysis analysis) =>
+    engineBarHeight +
+    (analysis.enabled && !analysis.paused
+        ? analysis.multiPv * engineRowHeight
+        : 0);
 
-/// A compact power control beside the engine's status.
+/// A sliding switch beside the engine's status, visible when off too.
 class _Header extends StatelessWidget {
   const _Header({required this.analysis});
 
@@ -168,7 +165,7 @@ class _Header extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final best = analysis.snapshot?.best;
     final (String status, Color? colour) = switch (analysis.state) {
-      EngineOff() => ('Engine', null),
+      EngineOff() => ('Off', null),
       EngineStarting() => ('Starting…', null),
       EngineFailed(:final reason) => (reason, scheme.error),
       EnginePaused(:final reason) => (reason, scheme.onSurfaceVariant),
@@ -181,24 +178,23 @@ class _Header extends StatelessWidget {
       height: engineBarHeight,
       child: Row(
         children: [
-          IconButton(
-            icon: Icon(
-              analysis.enabled ? Icons.power_settings_new : Icons.refresh,
-              size: IconSize.menu,
-            ),
-            tooltip: withKey(
-              analysis.enabled ? 'Turn engine off' : 'Retry engine',
+          Tooltip(
+            message: withKey(
+              analysis.enabled ? 'Turn engine off' : 'Turn engine on',
               'E',
             ),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints.tightFor(
-              width: engineBarHeight,
-              height: engineBarHeight,
-            ),
-            onPressed: () => unawaited(
-              analysis.enabled ? analysis.disable() : analysis.enable(),
+            child: Semantics(
+              label: 'Engine',
+              child: Switch(
+                value: analysis.enabled,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                onChanged: (enabled) =>
+                    unawaited(enabled ? analysis.enable() : analysis.disable()),
+              ),
             ),
           ),
+          Text('Engine', style: text.labelSmall),
+          const SizedBox(width: Space.s),
           const SizedBox(width: Space.xs),
           Expanded(
             child: Tooltip(

@@ -57,8 +57,9 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    expect(find.text('Engine'), findsNothing);
-    await analysis.enable();
+    expect(find.text('Engine'), findsOneWidget);
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+    await tester.tap(find.byType(Switch));
     await tester.pump();
     expect(find.text('Scripted 1'), findsOneWidget);
     engine.current.emit(
@@ -78,10 +79,10 @@ void main() {
     expect(find.text('1... e5'), findsOneWidget);
   });
 
-  testWidgets('off, the pane collapses; on, every row keeps its height '
+  testWidgets('off, the switch stays; on, every row keeps its height '
       'before and after it has a line', (tester) async {
     await pump(tester);
-    expect(tester.getSize(find.byType(EnginePane)).height, 0);
+    expect(tester.getSize(find.byType(EnginePane)).height, engineBarHeight);
     await analysis.enable();
     await tester.pump();
     final before = tester.getSize(find.byType(EnginePane));
@@ -93,7 +94,7 @@ void main() {
     expect(tester.getSize(find.byType(EnginePane)), before);
     await tester.tap(find.byTooltip('Turn engine off (E)'));
     await tester.pump();
-    expect(tester.getSize(find.byType(EnginePane)).height, 0);
+    expect(tester.getSize(find.byType(EnginePane)).height, engineBarHeight);
     expect(analysis.enabled, isFalse);
   });
 
@@ -185,6 +186,6 @@ void main() {
     await analysis.enable();
     await tester.pump();
     expect(find.text('No Stockfish in this build'), findsOneWidget);
-    expect(find.byTooltip('Retry engine (E)'), findsOneWidget);
+    expect(find.byTooltip('Turn engine on (E)'), findsOneWidget);
   });
 }

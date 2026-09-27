@@ -18,6 +18,7 @@ import 'package:chess_auto_prep/v2/workspace/finds.dart';
 import 'package:chess_auto_prep/v2/workspace/move_field.dart';
 import 'package:chess_auto_prep/v2/workspace/move_tree_view.dart';
 import 'package:chess_auto_prep/v2/workspace/replies.dart';
+import 'package:chess_auto_prep/v2/workspace/reading_header.dart';
 import 'package:chess_auto_prep/v2/workspace/replies_pane.dart';
 import 'package:chess_auto_prep/v2/workspace/workspace_keys.dart';
 import 'package:chess_auto_prep/v2/workspace/workspace_tabs.dart';
@@ -197,7 +198,7 @@ void main() {
     expect(comment, findsNothing);
     expect(find.text('Saved'), findsNothing);
     expect(find.byTooltip('Undo (Ctrl+Z)'), findsNothing);
-    expect(find.text('Engine'), findsNothing, reason: 'off takes no room');
+    expect(find.text('Engine'), findsOneWidget, reason: 'off keeps the switch');
   });
 
   testWidgets('Ctrl+E opens the edit strip and Done closes it', (tester) async {
@@ -250,7 +251,25 @@ void main() {
     expect(session.cursor.isRoot, isTrue);
   });
 
-  testWidgets('engine off returns its entire space to the board column', (
+  testWidgets('tabs stay above the game heading in every reading tab', (
+    tester,
+  ) async {
+    await pump(tester);
+    for (final tab in [
+      WorkspaceTab.moves,
+      WorkspaceTab.replies,
+      WorkspaceTab.explorer,
+    ]) {
+      tabs.show(tab);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getBottomLeft(find.byType(PaneTabStrip<WorkspaceTab>)).dy,
+        lessThanOrEqualTo(tester.getTopLeft(find.byType(ReadingHeader)).dy),
+      );
+    }
+  });
+
+  testWidgets('engine off returns its line space and keeps the switch', (
     tester,
   ) async {
     analysis.dispose();
@@ -263,7 +282,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       tester.getTopLeft(field).dy - offAt,
-      engineBarHeight + engineRowHeight * analysis.multiPv,
+      engineRowHeight * analysis.multiPv,
     );
     await tester.tap(find.byTooltip('Turn engine off (E)'));
     await tester.pumpAndSettle();
@@ -387,7 +406,7 @@ void main() {
     tabs.close(WorkspaceTab.search);
     await tester.pumpAndSettle();
     expect(tabs.open, [WorkspaceTab.moves]);
-    expect(find.text('Moves'), findsNothing, reason: 'one tab: no strip');
+    expect(find.text('Moves'), findsOneWidget, reason: 'stable tab strip');
     tabs.show(WorkspaceTab.replies);
     await tester.pumpAndSettle();
     expect(find.byType(RepliesPane), findsOneWidget);

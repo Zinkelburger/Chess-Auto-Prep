@@ -92,6 +92,8 @@ final class ExplorerNothing extends ExplorerState {
   final String sentence;
 }
 
+enum ExplorerRecovery { login, download }
+
 final class ExplorerFailed extends ExplorerState {
   const ExplorerFailed(this.sentence);
 
@@ -150,6 +152,7 @@ final class Explorer extends ChangeNotifier {
   var _choiceNow = ExplorerChoice.defaults;
   ExplorerState _state = const ExplorerIdle();
   String? _notice;
+  ExplorerRecovery? _recovery;
   bool _twic = false;
   Timer? _rest;
   int _ticket = 0;
@@ -161,14 +164,16 @@ final class Explorer extends ChangeNotifier {
   /// One line beside the rows: a refresh that failed while they stayed.
   String? get notice => _notice;
 
+  ExplorerRecovery? get recovery => _recovery;
+
   ExplorerChoice get choice => _choiceNow;
 
-  /// The databases that can be asked: TWIC only when it is on this machine.
+  /// TWIC stays discoverable when absent so its download can be offered.
   List<ExplorerSource> get sources => [
     ExplorerSource.book,
     ExplorerSource.masters,
     ExplorerSource.lichess,
-    if (_twic) ExplorerSource.twic,
+    ExplorerSource.twic,
     ExplorerSource.thisFile,
     ExplorerSource.myGames,
   ];
@@ -201,6 +206,7 @@ final class Explorer extends ChangeNotifier {
   /// Asks again, now, whatever the cache holds: the user's `Try again`.
   Future<void> retry() async {
     _notice = null;
+    _recovery = null;
     final fen = _session.fen;
     if (_session.chapter == null) return;
     if (_databases.local(_choiceNow.source) case final games?) {
@@ -260,6 +266,7 @@ final class Explorer extends ChangeNotifier {
     // A line beside the rows is about the rows it came with; what is shown
     // next says its own.
     _notice = null;
+    _recovery = null;
     // The book is the Book pane's own ([RepertoireTree]): nothing to ask.
     if (_session.chapter == null || _choiceNow.source == ExplorerSource.book) {
       _show(const ExplorerIdle());
@@ -342,8 +349,9 @@ final class Explorer extends ChangeNotifier {
     if (kept == null) _show(ExplorerAsking(choice.source));
     ExplorerAnswer? answer;
     String? problem;
+    ExplorerRecovery? recovery;
     try {
-      (answer, problem) = await _databases.ask(fen, choice);
+      (answer, problem, recovery) = await _databases.ask(fen, choice);
     } on Object catch (error) {
       log.e('ask ${choice.source.title} about ${fen.value}', error);
       problem = 'Could not ask ${choice.source.title}.';
@@ -353,6 +361,7 @@ final class Explorer extends ChangeNotifier {
     // The board has moved on, or another database was chosen: what is on
     // the screen now is about somewhere else, and a failure here is not.
     if (fen != _session.fen || choice != _choiceNow) return;
+    _recovery = recovery;
     if (answer == null) {
       if (kept != null) {
         _notice = problem;
@@ -543,24 +552,39 @@ final class ExplorerDatabases {
   /// What [choice] says about [fen], or the sentence saying why there is
   /// no answer: the online databases and TWIC, not the trees on this
   /// machine. A network failure names TWIC when the book is here.
-  Future<(ExplorerAnswer?, String?)> ask(Fen fen, ExplorerChoice choice) async {
+  Future<(ExplorerAnswer?, String?, ExplorerRecovery?)> ask(
+    Fen fen,
+    ExplorerChoice choice,
+  ) async {
     if (choice.source == ExplorerSource.twic) {
       return switch (await _book.lookup(
         fen,
         classicalOnly: choice.classicalOnly,
       )) {
-        BookFound(:final answer) => (answer, null),
-        BookAbsent() => (null, 'There is no master database on this machine.'),
-        BookUnreadable() => (null, 'The master database could not be read.'),
+        BookFound(:final answer) => (answer, null, null),
+        BookAbsent() => (
+          null,
+          'Download the TWIC database to explore master games offline.',
+          ExplorerRecovery.download,
+        ),
+        BookUnreadable() => (
+          null,
+          'The master database could not be read.',
+          null,
+        ),
       };
     }
     switch (await _lichess.fetch(ExplorerQuery(fen, choice))) {
       case ExplorerFetched(:final answer):
-        return (answer, null);
+        return (answer, null, null);
       case ExplorerNotFetched(:final problem, :final sentence):
         final offline =
             problem == ExplorerProblem.unreachable && await _book.available();
-        return (null, offline ? '$sentence TWIC works offline.' : sentence);
+        return (
+          null,
+          offline ? '$sentence TWIC works offline.' : sentence,
+          problem == ExplorerProblem.rejected ? ExplorerRecovery.login : null,
+        );
     }
   }
 

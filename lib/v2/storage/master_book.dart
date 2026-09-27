@@ -69,13 +69,22 @@ final class SqliteMasterBook implements MasterBook {
   List<int>? _dictionary;
 
   @override
-  Future<bool> available() => File(path).exists();
+  Future<bool> available() async {
+    if (!await File(path).exists()) return false;
+    try {
+      return _open().select('SELECT 1 FROM games LIMIT 1').isNotEmpty;
+    } on Object {
+      return false;
+    }
+  }
 
   @override
   Future<BookLookup> lookup(Fen fen, {required bool classicalOnly}) async {
-    if (!await available()) return const BookAbsent();
+    if (!await File(path).exists()) return const BookAbsent();
     try {
       final db = _open();
+      if (db.select('SELECT 1 FROM games LIMIT 1').isEmpty)
+        return const BookAbsent();
       final rows = db.select(_bookSql, [positionKey(fen)]);
       final moves = <ExplorerMove>[];
       final citedBy = <String, int>{};
@@ -219,5 +228,34 @@ final class SqliteMasterBook implements MasterBook {
       final List<int> bytes => bytes,
       _ => const [],
     };
+  }
+}
+
+/// Prefer the existing full master database; use the downloaded V2 cache
+/// when the older database has no games. Neither reader writes either file.
+final class TwicBook implements MasterBook {
+  TwicBook(String sharedPath, String downloadPath)
+    : shared = SqliteMasterBook(sharedPath),
+      downloaded = SqliteMasterBook(downloadPath);
+
+  final SqliteMasterBook shared;
+  final SqliteMasterBook downloaded;
+
+  Future<MasterBook> _book() async =>
+      await shared.available() ? shared : downloaded;
+
+  @override
+  Future<bool> available() async => (await _book()).available();
+
+  @override
+  Future<BookLookup> lookup(Fen fen, {required bool classicalOnly}) async =>
+      (await _book()).lookup(fen, classicalOnly: classicalOnly);
+
+  @override
+  Future<String?> gamePgn(String id) async => (await _book()).gamePgn(id);
+
+  void close() {
+    shared.close();
+    downloaded.close();
   }
 }

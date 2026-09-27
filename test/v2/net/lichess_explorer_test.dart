@@ -74,7 +74,7 @@ void main() {
     final stub = _Stub((_) => http.Response(jsonEncode(_answer), 200));
     await stub.api.fetch(_masters);
     final url = stub.asked.single.url;
-    expect(url.host, 'explorer.lichess.ovh');
+    expect(url.host, 'explorer.lichess.org');
     expect(url.path, '/masters');
     expect(url.queryParameters['fen'], Fen.initial.value);
     expect(url.queryParameters['topGames'], '15');
@@ -183,7 +183,7 @@ void main() {
     final masters = stub.asked.single;
     expect(
       masters.url.toString(),
-      'https://explorer.lichess.ovh/masters/pgn/abcd1234',
+      'https://explorer.lichess.org/masters/pgn/abcd1234',
     );
     expect(masters.headers['Accept'], 'application/x-chess-pgn');
     await stub.api.gamePgn('efgh5678', masters: false);

@@ -35,7 +35,7 @@ void main() {
       source: ExplorerSource.twic,
       classicalOnly: true,
     );
-    final (fromBook, _) = await databases.ask(Fen.initial, twic);
+    final (fromBook, _, _) = await databases.ask(Fen.initial, twic);
     expect(fromBook, same(startAnswer));
     expect(book.asked.single, (Fen.initial, true));
     expect(lichess.asked, isEmpty);
@@ -48,18 +48,21 @@ void main() {
     lichess.answer = (_) =>
         const ExplorerNotFetched(ExplorerProblem.unreachable);
     databases = over(book);
-    final (_, noBook) = await databases.ask(
+    final (_, noBook, _) = await databases.ask(
       Fen.initial,
       const ExplorerChoice(source: ExplorerSource.twic),
     );
-    expect(noBook, 'There is no master database on this machine.');
-    final (_, offline) = await databases.ask(
+    expect(
+      noBook,
+      'Download the TWIC database to explore master games offline.',
+    );
+    final (_, offline, _) = await databases.ask(
       Fen.initial,
       ExplorerChoice.defaults,
     );
     expect(offline, ExplorerProblem.unreachable.sentence);
     databases = over(ScriptedBook(present: true));
-    final (_, offlineWithBook) = await databases.ask(
+    final (_, offlineWithBook, _) = await databases.ask(
       Fen.initial,
       ExplorerChoice.defaults,
     );

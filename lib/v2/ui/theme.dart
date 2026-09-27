@@ -104,7 +104,7 @@ const navRowHeight = 36.0;
 /// line, each with a gutter this
 /// wide for the score and the moves after it. The score is read there and
 /// nowhere larger.
-const engineBarHeight = 24.0;
+const engineBarHeight = 40.0;
 const engineRowHeight = 28.0;
 const engineScoreWidth = 54.0;
 

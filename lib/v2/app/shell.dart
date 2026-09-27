@@ -56,6 +56,8 @@ class Shell extends StatefulWidget {
     required this.fullScreen,
     required this.settingRows,
     required this.settingsAlso,
+    this.onExplorerLogin,
+    this.onDownloadTwic,
   });
 
   final WorkspaceRequests requests;
@@ -71,6 +73,8 @@ class Shell extends StatefulWidget {
   /// besides the store they are built from: the Lichess account.
   final List<SettingGroup> Function() settingRows;
   final Listenable settingsAlso;
+  final Future<bool> Function(BuildContext)? onExplorerLogin;
+  final Future<bool> Function(BuildContext)? onDownloadTwic;
 
   @override
   State<Shell> createState() => _ShellState();
@@ -584,6 +588,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         lesson: _train.lines.board,
         onBoardMove: _boardMove,
         onEngineMove: _engineMove,
+        onExplorerLogin: widget.onExplorerLogin,
+        onDownloadTwic: widget.onDownloadTwic,
         onExplorerGame: (game) => unawaited(
           _requests.openExplorerGame(
             game,

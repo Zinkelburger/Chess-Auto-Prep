@@ -93,6 +93,7 @@ final class AppEnvironment {
     required this.lichessStudies,
     required this.lichessExplorer,
     required this.masterBook,
+    this.twicDownloadPath,
     required this.gameStore,
     required this.gameSites,
     required this.accounts,
@@ -130,7 +131,8 @@ final class AppEnvironment {
     final client = http.Client();
     final engines = EngineSupervisor();
     final maia = MaiaLaunch();
-    final book = SqliteMasterBook(p.join(support.path, 'master_games.db'));
+    final twicPath = p.join(support.path, 'twic_book.db');
+    final book = TwicBook(p.join(support.path, 'master_games.db'), twicPath);
     final evalCache = EvalCacheOnDemand(support);
     final finds = FindsStoreOnDemand(support);
     final repertoires = p.join(documents.path, 'repertoires');
@@ -187,6 +189,7 @@ final class AppEnvironment {
       lichessStudies: LichessStudyApi(client, token: readLichessToken),
       lichessExplorer: LichessExplorerApi(client, token: readLichessToken),
       masterBook: book,
+      twicDownloadPath: twicPath,
       gameStore: SqliteGameStore(p.join(support.path, 'app_games.db')),
       gameSites: [
         LichessGamesApi(client, token: readLichessToken),
@@ -257,6 +260,7 @@ final class AppEnvironment {
 
   /// The old app's master database: TWIC, when the file is there.
   final MasterBook masterBook;
+  final String? twicDownloadPath;
 
   /// The old app's database of the user's games, `app_games.db`.
   final GameStore gameStore;

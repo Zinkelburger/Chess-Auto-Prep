@@ -193,7 +193,7 @@ void main() {
       (explorer.state as ExplorerFailed).sentence,
       'Could not reach the Lichess database — it needs a connection.',
     );
-    expect(explorer.sources, isNot(contains(ExplorerSource.twic)));
+    expect(explorer.sources, contains(ExplorerSource.twic));
   });
 
   test('a forced refresh that fails keeps the rows on the screen, with one '

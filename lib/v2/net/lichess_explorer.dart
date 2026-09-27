@@ -44,8 +44,8 @@ enum ExplorerProblem {
   unreachable('Could not reach the Lichess database — it needs a connection.'),
   rateLimited('Lichess is rate-limiting requests.'),
   rejected(
-    'Lichess turned the request away. Add your Lichess token in Settings '
-    'and try again.',
+    'Log in to Lichess to use the opening explorer. '
+    'If you were already logged in, your session may have expired.',
   ),
   http('Lichess could not answer.');
 
@@ -90,7 +90,7 @@ const explorerBackoffMost = Duration(seconds: 240);
 /// How many times a request that throws is tried.
 const explorerAttempts = 3;
 
-const _explorerHost = 'explorer.lichess.ovh';
+const _explorerHost = 'explorer.lichess.org';
 const _siteHost = 'lichess.org';
 
 final class LichessExplorerApi implements LichessExplorer {

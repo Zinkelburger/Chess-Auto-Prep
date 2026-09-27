@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/v2/net/lichess_explorer.dart';
 import 'package:chess_auto_prep/v2/storage/my_accounts.dart';
+import 'package:chess_auto_prep/v2/storage/master_book.dart';
 import 'package:chess_auto_prep/v2/storage/my_games_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
@@ -63,6 +64,8 @@ void main() {
     WidgetTester tester, {
     LocalGames? thisFile,
     SavedGames? myGames,
+    Future<bool> Function(BuildContext)? onLogIn,
+    Future<bool> Function(BuildContext)? onDownloadTwic,
   }) async {
     explorer = explorerOver(
       fixture.session,
@@ -102,6 +105,8 @@ void main() {
                     tree: tree,
                     books: books,
                     onOpenGame: opened.add,
+                    onLogIn: onLogIn,
+                    onDownloadTwic: onDownloadTwic,
                   ),
                 ),
               ),
@@ -244,6 +249,50 @@ void main() {
     expect(find.text('0-1'), findsOneWidget);
     await tester.tap(find.text('Me – Rival'));
     expect(opened.single.id, 'lichess_Mine1234');
+  });
+
+  testWidgets(
+    'authentication rejection offers login and retries after success',
+    (tester) async {
+      lichess.answer = (_) =>
+          const ExplorerNotFetched(ExplorerProblem.rejected);
+      var logins = 0;
+      await show(
+        tester,
+        onLogIn: (_) async {
+          logins++;
+          lichess.answer = (_) => const ExplorerFetched(startAnswer);
+          return true;
+        },
+      );
+      expect(find.text('Log in to Lichess'), findsOneWidget);
+      expect(find.text('Try again'), findsNothing);
+      await tester.tap(find.text('Log in to Lichess'));
+      await tester.pumpAndSettle();
+      expect(logins, 1);
+      expect(explorer.state, isA<ExplorerShown>());
+    },
+  );
+
+  testWidgets('missing TWIC offers download then shows the downloaded games', (
+    tester,
+  ) async {
+    book = ScriptedBook(answer: (_, _) => const BookAbsent());
+    var downloads = 0;
+    await show(
+      tester,
+      onDownloadTwic: (_) async {
+        downloads++;
+        book.answer = (_, _) => const BookFound(startAnswer);
+        return true;
+      },
+    );
+    await tester.tap(find.text('TWIC'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Download TWIC database'));
+    await tester.pumpAndSettle();
+    expect(downloads, 1);
+    expect(explorer.state, isA<ExplorerShown>());
   });
 
   testWidgets('a failure is a sentence with Try again, and the table comes '

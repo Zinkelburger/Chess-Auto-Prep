@@ -43,33 +43,45 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   expanding it to a six-row viewport, and empty slots keeping their height. Defaults: **cores 1**
   (max = logical cores), **memory 128 MB** (16–8192, step 16), **depth 15** (1–99), **lines 3**
   (1–10); evals are White-relative, one decimal (`+0.35`), mate `#5` / `-#5`.
-  (v2 uses a 24px power/status row with `Depth {d} · {engine}` at 12px, 54px gutters; hover floats a
+  (v2 uses a 40px labelled sliding switch/status row with `Depth {d} · {engine}` at 12px, 54px gutters; hover floats a
   200px board under the move, a click plays the line up to it, the chevron opens six rows; no
   threat, gear, nodes or settings yet. The old app's large headline score was tried and dropped.
   Since 2026-09-23 it sits **under the board**, not above the card's tabs (owner: "ugly above all
-  the tabs"). Since 2026-09-24 the dock collapses completely when off, including its reserved
-  layout space; the board and move field may move as it opens. E or Actions ▸ Board ▸ Engine on
-  restores it. Failures keep a compact retry row; a paused engine keeps just its status.
+  the tabs"). Since 2026-09-27 the engine switch and status stay visible when off; only the PV rows
+  collapse. The same switch turns it back on or retries a failed start, alongside E and
+  Actions ▸ Board ▸ Engine on. A paused engine keeps its switch and status.
   Training boards likewise reserve no empty engine area.)
 - **Tab strip and Replies** (v2, 2026-09-21; browser tabs 2026-09-22; big tabs 2026-09-23) —
-  under the card's heading, `Moves | Train | Replies | Explorer | Search`. Since 2026-09-23
+  above the card's heading and controls, `Moves | Train | Replies | Explorer | Search`. Since 2026-09-23
   the tabs share the strip's width, 40px tall, the one that is up filled (owner: the small
   underlined tabs were "ugly, small and hard to click"); no `×` is drawn and no control sits at
   the strip's end. Fixed identities: `Moves` is pinned, a middle click closes, a drag puts a tab
   in front of another, Ctrl+Tab / Ctrl+Shift+Tab walk them and
   Ctrl+W closes the one that is up. A closed tab comes back from Actions ▸ Panels ▸ `Show Replies`; the
-  strip is left out while only one tab is open. Which tabs are open is window state, kept across
+  strip stays visible even with only one tab open. Which tabs are open is window state, kept across
   modes and lost with the window. `Moves` starts up. `Next gap` is an outlined button at the end
   of the Replies tab's status line. Replies is the Maia-3 table described in `repertoires.md`: share
   gutter, numbered move, tick or `gap`, a hover board of the position after the move, a click
   plays it. A new tab is one `PaneTab` in `workspace/workspace_tabs.dart` and one body in the card.
 - **Explorer (Database dock)** — sources: Engine evals, ChessDB, Repertoire, Opening explorer,
-  Local PGN. Live explorer: Lichess, Masters, TWIC (only with a local master database), behind a
+  Local PGN. Live explorer: Lichess, Masters, TWIC (with a download action when missing), behind a
   collapsed filter summary; Lichess has speed and rating chips (defaults blitz/rapid/classical,
   2000/2200/2500), TWIC a "Classical OTB only" chip. Columns: **Move** (checked when already in the
   repertoire) · **Games** (`1.2k`/`1.2M` plus share, `<1%` under 0.5%) · **White / Draw / Black**
   bar, closed by a `Σ` totals row — no rating, performance or eval column and no sorting. Below it,
   games here (4+4 Lichess, 15 Masters, 12 TWIC).
+  Authentication rejection offers **Log in to Lichess**, using the shared browser login with
+  cancel/copy-link recovery and automatically retrying the position after a saved login.
+  Requests use `explorer.lichess.org`, the authenticated endpoint in the
+  [Lichess API specification](https://raw.githubusercontent.com/lichess-org/api/master/doc/specs/tags/openingexplorer/lichess.yaml).
+  Missing TWIC data offers **Download TWIC database**: choose 1–520 weeks (default 52),
+  see download/import progress, stop between issues and resume without duplicate counts.
+  Issues come from the [TWIC archive](https://theweekinchess.com/twic). A separate derived
+  `twic_book.db` cache holds new downloads; an existing populated `master_games.db` takes
+  priority and stays read-only. Imports run off the UI isolate and commit one issue at a time;
+  unsupported/unfinished games are counted and reported. The opening index covers 40 plies,
+  with full games available from the list. Closing the download dialog refreshes the explorer.
+
 - **Explorer `Book`** (v2, 2026-09-22 as the Tree tab; a source of the Explorer since
   2026-09-23) — the first source, `Book | Masters | Lichess | TWIC | This file | My games`, with the
   book chip beside it (see `books.md`). The book in use as an opening explorer; `No book set.`

@@ -40,6 +40,8 @@ class ExplorerPane extends StatefulWidget {
     required this.tree,
     required this.books,
     this.onOpenGame,
+    this.onLogIn,
+    this.onDownloadTwic,
     this.onOpenPlace,
     this.onEditBooks,
   });
@@ -64,6 +66,9 @@ class ExplorerPane extends StatefulWidget {
   /// the game becomes a file and the viewer shows it. Null when nothing
   /// can, and then the games are listed without a click.
   final ValueChanged<ExplorerGame>? onOpenGame;
+
+  final Future<bool> Function(BuildContext)? onLogIn;
+  final Future<bool> Function(BuildContext)? onDownloadTwic;
 
   @override
   State<ExplorerPane> createState() => _ExplorerPaneState();
@@ -163,9 +168,31 @@ class _ExplorerPaneState extends State<ExplorerPane>
       ExplorerFailed(:final sentence) => _Sentence(
         sentence,
         retry: explorer.retry,
+        logIn:
+            explorer.recovery == ExplorerRecovery.login &&
+                widget.onLogIn != null
+            ? _logIn
+            : null,
+        download:
+            explorer.recovery == ExplorerRecovery.download &&
+                widget.onDownloadTwic != null
+            ? _downloadTwic
+            : null,
       ),
       ExplorerShown(:final rows, :final answer) => _table(rows, answer),
     };
+  }
+
+  Future<void> _logIn() async {
+    final loggedIn = await widget.onLogIn!(context);
+    if (!mounted || !loggedIn) return;
+    await widget.explorer.retry();
+  }
+
+  Future<void> _downloadTwic() async {
+    final ready = await widget.onDownloadTwic!(context);
+    if (!mounted || !ready) return;
+    await widget.explorer.retry();
   }
 
   Widget _table(List<ExplorerRow> rows, ExplorerAnswer answer) {
@@ -174,7 +201,20 @@ class _ExplorerPaneState extends State<ExplorerPane>
     // Each row is made when it scrolls into view.
     final items = <WidgetBuilder>[
       if (explorer.notice case final notice?)
-        (_) => _Sentence(notice, retry: explorer.retry),
+        (_) => _Sentence(
+          notice,
+          retry: explorer.retry,
+          logIn:
+              explorer.recovery == ExplorerRecovery.login &&
+                  widget.onLogIn != null
+              ? _logIn
+              : null,
+          download:
+              explorer.recovery == ExplorerRecovery.download &&
+                  widget.onDownloadTwic != null
+              ? _downloadTwic
+              : null,
+        ),
       (_) => const _Header(),
       for (final row in rows)
         (_) => _MoveRow(
@@ -206,10 +246,12 @@ class _ExplorerPaneState extends State<ExplorerPane>
 /// A sentence where the table would be, with `Try again` when that is a
 /// thing to do.
 class _Sentence extends StatelessWidget {
-  const _Sentence(this.words, {this.retry});
+  const _Sentence(this.words, {this.retry, this.logIn, this.download});
 
   final String words;
   final Future<void> Function()? retry;
+  final Future<void> Function()? logIn;
+  final Future<void> Function()? download;
 
   @override
   Widget build(BuildContext context) {
@@ -221,7 +263,17 @@ class _Sentence extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(words, style: text.bodySmall),
-          if (retry case final again?)
+          if (logIn case final login?)
+            TextButton(
+              onPressed: () => unawaited(login()),
+              child: const Text('Log in to Lichess'),
+            )
+          else if (download case final start?)
+            TextButton(
+              onPressed: () => unawaited(start()),
+              child: const Text('Download TWIC database'),
+            )
+          else if (retry case final again?)
             TextButton(
               onPressed: () => unawaited(again()),
               child: const Text('Try again'),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../ui/theme.dart';
+import '../../ui/number_field.dart';
 import 'lichess_account.dart';
 import 'setting_rows.dart';
 
@@ -70,7 +71,15 @@ class SettingRowView extends StatelessWidget {
 
   Widget _control(SettingControl control) => switch (control) {
     ChoiceSetting() => _Choice(control),
-    NumberSetting() => _Number(control, label: row.label),
+    NumberSetting() => NumberField(
+      label: row.label,
+      value: control.value,
+      min: control.min,
+      max: control.max,
+      step: control.step,
+      unit: control.unit,
+      onChanged: control.onChanged,
+    ),
     ToggleSetting(:final value, :final onChanged) => Transform.scale(
       scale: 0.75,
       child: Switch(value: value, onChanged: onChanged),
@@ -137,119 +146,6 @@ class _Choice extends StatelessWidget {
     ),
     onSelectionChanged: (chosen) => setting.pick(chosen.first),
   );
-}
-
-/// A number typed into a box, or stepped with − and +. Enter or leaving
-/// the box takes what was typed, kept inside the row's range.
-class _Number extends StatefulWidget {
-  const _Number(this.setting, {required this.label});
-
-  final String label;
-
-  final NumberSetting setting;
-
-  @override
-  State<_Number> createState() => _NumberState();
-}
-
-class _NumberState extends State<_Number> {
-  late final _box = TextEditingController(text: '${widget.setting.value}');
-  final _focus = FocusNode();
-
-  @override
-  void initState() {
-    super.initState();
-    _focus.addListener(_onFocus);
-  }
-
-  @override
-  void didUpdateWidget(_Number old) {
-    super.didUpdateWidget(old);
-    if (old.setting.value != widget.setting.value && !_focus.hasFocus) {
-      _box.text = '${widget.setting.value}';
-    }
-  }
-
-  @override
-  void dispose() {
-    _focus.removeListener(_onFocus);
-    _focus.dispose();
-    _box.dispose();
-    super.dispose();
-  }
-
-  void _onFocus() {
-    if (!_focus.hasFocus) _typed(_box.text);
-  }
-
-  void _typed(String text) {
-    final typed = int.tryParse(text.trim());
-    final next = (typed ?? widget.setting.value).clamp(
-      widget.setting.min,
-      widget.setting.max,
-    );
-    _box.text = '$next';
-    if (next != widget.setting.value) widget.setting.onChanged(next);
-  }
-
-  void _step(int by) {
-    final next = (widget.setting.value + by).clamp(
-      widget.setting.min,
-      widget.setting.max,
-    );
-    if (next != widget.setting.value) widget.setting.onChanged(next);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final setting = widget.setting;
-    final text = Theme.of(context).textTheme;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          icon: const Icon(Icons.remove, size: IconSize.menu),
-          tooltip: 'Decrease ${widget.label}',
-          onPressed: setting.value > setting.min
-              ? () => _step(-setting.step)
-              : null,
-          visualDensity: VisualDensity.compact,
-        ),
-        SizedBox(
-          width: settingNumberWidth,
-          child: TextField(
-            controller: _box,
-            focusNode: _focus,
-            textAlign: TextAlign.center,
-            style: monoText.copyWith(color: text.bodyMedium?.color),
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            onSubmitted: _typed,
-            decoration: const InputDecoration(
-              isDense: true,
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: Space.xs,
-                vertical: Space.xs,
-              ),
-              border: OutlineInputBorder(),
-            ),
-          ),
-        ),
-        if (setting.unit case final unit?) ...[
-          const SizedBox(width: Space.xs),
-          Text(unit, style: text.bodySmall),
-        ],
-        IconButton(
-          icon: const Icon(Icons.add, size: IconSize.menu),
-          tooltip: 'Increase ${widget.label}',
-          onPressed: setting.value < setting.max
-              ? () => _step(setting.step)
-              : null,
-          visualDensity: VisualDensity.compact,
-        ),
-      ],
-    );
-  }
 }
 
 /// A token: dots while it is typed, written when the field is left, and a
