@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../chess/game_filter.dart';
+import '../chess/fen.dart';
 import '../chess/pgn/chapter_line.dart';
 import '../chess/pgn/game_text.dart';
 import '../storage/chapter_files.dart';
@@ -61,6 +62,10 @@ final class FileFilter extends ChangeNotifier {
 
   /// The rules as they stand, being typed or applied.
   GameFilter get filter => _filter;
+
+  /// Capture once: later board navigation never changes the search target.
+  void reachingBoardPosition() => reaching(_session.boardFen);
+  void reaching(Fen position) => apply(_filter.copyWith(position: position));
 
   /// The rules the games were last filtered by.
   GameFilter get applied => _applied;
@@ -155,7 +160,12 @@ final class FileFilter extends ChangeNotifier {
       final run = _run = FilterRun.start(
         [for (final line in _lines) line.tags],
         _applied,
-        timeout: timeout,
+        timeout: _applied.position == null
+            ? timeout
+            : const Duration(seconds: 15),
+        trees: _applied.position == null
+            ? null
+            : [for (final line in _lines) line.tree],
       );
       unawaited(_receive(run));
       return;
@@ -169,6 +179,7 @@ final class FileFilter extends ChangeNotifier {
   /// Small literal filters remain immediate. Regex always runs elsewhere;
   /// ordinary filters also move off-thread once their input is substantial.
   bool get _needsWorker {
+    if (_applied.position != null) return true;
     if (_applied.active.any((rule) => rule.rule == FilterRule.regex)) {
       return true;
     }

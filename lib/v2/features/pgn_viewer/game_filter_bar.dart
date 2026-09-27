@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:dartchess/dartchess.dart' show Side;
+
+import '../../workspace/board_view.dart';
 
 import '../../chess/game_filter.dart';
 import '../../ui/choice_field.dart';
@@ -15,9 +18,10 @@ import '../../workspace/file_filter.dart';
 /// clearing apply at once. The explorer's `This file` reads the same
 /// filter, so its table narrows with the list.
 class GameFilterBar extends StatefulWidget {
-  const GameFilterBar({super.key, required this.filter});
+  const GameFilterBar({super.key, required this.filter, this.onPosition});
 
   final FileFilter filter;
+  final VoidCallback? onPosition;
 
   @override
   State<GameFilterBar> createState() => _GameFilterBarState();
@@ -38,8 +42,16 @@ class _GameFilterBarState extends State<GameFilterBar> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _heading(context),
-            if (!_unfolded && _filter.applied.active.isNotEmpty) _chips(),
+            if (!_filter.applied.isEmpty) _chips(),
             if (_unfolded) ..._editor(),
+            if (!_unfolded && !_filter.applied.isEmpty)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => _filter.apply(GameFilter.none),
+                  child: const Text('Clear all'),
+                ),
+              ),
           ],
         ),
       ),
@@ -91,6 +103,28 @@ class _GameFilterBarState extends State<GameFilterBar> {
       spacing: Space.xs,
       runSpacing: Space.xs,
       children: [
+        if (applied.position case final position?)
+          InputChip(
+            avatar: const Icon(Icons.grid_on, size: IconSize.menu),
+            label: Tooltip(
+              richMessage: WidgetSpan(
+                child: SizedBox(
+                  width: diagramSize,
+                  child: BoardView(
+                    fen: position,
+                    orientation: Side.white,
+                    onMove: (_) {},
+                    movable: false,
+                    coordinates: false,
+                  ),
+                ),
+              ),
+              child: const Text('Position'),
+            ),
+            deleteButtonTooltipMessage: 'Remove position filter',
+            onDeleted: () =>
+                _filter.apply(applied.copyWith(clearPosition: true)),
+          ),
         for (final rule in applied.active)
           InputChip(
             label: Text(rule.label),
@@ -114,6 +148,11 @@ class _GameFilterBarState extends State<GameFilterBar> {
     final rules = filter.rules.isEmpty ? const [HeaderRule()] : filter.rules;
     final fields = _fieldOptions();
     return [
+      TextButton.icon(
+        onPressed: widget.onPosition ?? _filter.reachingBoardPosition,
+        icon: const Icon(Icons.grid_on, size: IconSize.menu),
+        label: const Text('Reaching this position'),
+      ),
       for (final (index, rule) in rules.indexed)
         _RuleBlock(
           key: ValueKey(index),

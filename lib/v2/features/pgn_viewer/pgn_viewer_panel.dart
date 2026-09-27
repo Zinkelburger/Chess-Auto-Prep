@@ -13,6 +13,7 @@ import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
 import '../../workspace/file_filter.dart';
 import 'game_filter_bar.dart';
+import 'export_dialog.dart';
 import 'pgn_viewer.dart';
 
 /// Opens a PGN file in the workspace with its first game on the board.
@@ -34,9 +35,13 @@ class PgnViewerPanel extends StatefulWidget {
     required this.onOpen,
     required this.onBrowse,
     this.trailing,
+    this.say,
+    this.onPosition,
   });
 
   final PgnViewer viewer;
+  final VoidCallback? onPosition;
+  final void Function(String?)? say;
 
   /// Which of the file's games the list shows, set under the search box.
   final FileFilter filter;
@@ -172,7 +177,21 @@ class _PgnViewerPanelState extends State<PgnViewerPanel>
             },
           ),
         ),
-        GameFilterBar(filter: widget.filter),
+        GameFilterBar(filter: widget.filter, onPosition: widget.onPosition),
+        if (widget.filter.narrowing)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Space.m),
+            child: TextButton(
+              onPressed:
+                  widget.filter.busy ||
+                      widget.filter.problem != null ||
+                      _viewer.visible.isEmpty
+                  ? null
+                  : () =>
+                        exportViewerPgn(context, _viewer, widget.say ?? (_) {}),
+              child: const Text('Export matching games…'),
+            ),
+          ),
         Expanded(child: _rows()),
       ],
     );

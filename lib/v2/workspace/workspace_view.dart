@@ -278,7 +278,7 @@ class _Tabbed extends StatelessWidget {
   final WorkspaceHooks hooks;
 
   Widget _body(BuildContext context, WorkspaceTab tab) => switch (tab) {
-    WorkspaceTab.moves => MoveTreeView(
+    WorkspaceTab.moves || WorkspaceTab.analysis => MoveTreeView(
       session: workspace.session,
       moveMenu: hooks.moveMenu,
     ),
@@ -320,6 +320,7 @@ class _Tabbed extends StatelessWidget {
   /// The tabs that show the document's moves or what follows them.
   static bool _tellsAnswers(WorkspaceTab tab) => switch (tab) {
     WorkspaceTab.moves ||
+    WorkspaceTab.analysis ||
     WorkspaceTab.replies ||
     WorkspaceTab.explorer ||
     WorkspaceTab.search ||
@@ -343,9 +344,9 @@ class _Tabbed extends StatelessWidget {
               readingCardInset - Space.m,
               Space.s,
               readingCardInset - Space.m,
-              Space.xs,
+              0,
             ),
-            child: PaneTabStrip(tabs: tabs),
+            child: PaneTabStrip(tabs: tabs, connected: true),
           ),
           const Divider(height: 1),
           if (hooks.header) ReadingHeader(session: workspace.session),

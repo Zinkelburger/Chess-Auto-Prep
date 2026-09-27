@@ -3,21 +3,23 @@ import 'dart:isolate';
 
 import '../chess/game_filter.dart';
 import '../chess/pgn/game_text.dart';
+import '../chess/pgn/game_tree.dart';
 
 /// A filter over one immutable header snapshot. Regex evaluation must never
 /// run on the UI isolate: even a short header can cause exponential work.
 /// Cancellation and the deadline kill the isolate, including one still being
-/// spawned. Only headers cross the boundary, not the games' move trees.
+/// spawned. Move trees cross the boundary only for a position search.
 final class FilterRun {
   FilterRun.start(
     List<List<PgnHeader>> headers,
     GameFilter filter, {
     Duration timeout = const Duration(seconds: 2),
+    List<GameTree?>? trees,
   }) {
     _timer = Timer(timeout, () {
       _fail(TimeoutException('Filtering exceeded its time limit.'));
     });
-    unawaited(_spawn(headers, filter));
+    unawaited(_spawn(headers, filter, trees));
   }
 
   final _done = Completer<List<bool>?>();
@@ -34,7 +36,11 @@ final class FilterRun {
     _done.complete(null);
   }
 
-  Future<void> _spawn(List<List<PgnHeader>> headers, GameFilter filter) async {
+  Future<void> _spawn(
+    List<List<PgnHeader>> headers,
+    GameFilter filter,
+    List<GameTree?>? trees,
+  ) async {
     final port = _port = ReceivePort();
     port.listen((message) {
       switch (message) {
@@ -50,7 +56,7 @@ final class FilterRun {
     try {
       final isolate = await Isolate.spawn(
         _filterHeaders,
-        (port.sendPort, headers, filter),
+        (port.sendPort, headers, filter, trees),
         onError: port.sendPort,
         onExit: port.sendPort,
         debugName: 'PGN filter',
@@ -75,9 +81,14 @@ final class FilterRun {
   }
 }
 
-void _filterHeaders((SendPort, List<List<PgnHeader>>, GameFilter) job) {
-  final (port, headers, filter) = job;
+void _filterHeaders(
+  (SendPort, List<List<PgnHeader>>, GameFilter, List<GameTree?>?) job,
+) {
+  final (port, headers, filter, trees) = job;
   Isolate.exit(port, [
-    for (final tags in headers) filter.keeps((name) => tagValue(tags, name)),
+    for (final (index, tags) in headers.indexed)
+      filter.keeps((name) => tagValue(tags, name)) &&
+          (filter.position == null ||
+              trees?[index]?.mainLineTo(filter.position!) != null),
   ]);
 }

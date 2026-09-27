@@ -9,6 +9,7 @@ import '../ui/pane_tabs.dart';
 /// and the Actions menu know nothing about which tabs there are.
 enum WorkspaceTab {
   moves('Moves'),
+  analysis('Analysis'),
   train('Train'),
   replies('Replies'),
   explorer('Explorer'),
@@ -55,7 +56,11 @@ PaneTabs<WorkspaceTab> newWorkspaceTabs() => PaneTabs(
 /// explorer.
 /// Repertoire operations stay in the builder.
 PaneTabs<WorkspaceTab> readingTabs() => PaneTabs(
-  [WorkspaceTab.moves.tab, WorkspaceTab.explorer.tab],
+  [
+    WorkspaceTab.moves.tab,
+    WorkspaceTab.explorer.tab,
+    WorkspaceTab.analysis.tab,
+  ],
   open: const [WorkspaceTab.moves, WorkspaceTab.explorer],
 );
 

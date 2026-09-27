@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 import '../game_filter.dart';
+import '../fen.dart';
+import 'tree_edit.dart' show positionOf;
 import 'chapter_line.dart';
 import 'game_order.dart';
 import 'game_text.dart';
@@ -33,6 +35,7 @@ final class ReadingPlace {
     'v2Fen': fen,
     'v2Filter': {
       'any': filter.any,
+      if (filter.position case final position?) 'position': position.value,
       'rules': [
         for (final r in filter.active)
           {'field': r.field, 'rule': r.rule.name, 'value': r.value},
@@ -93,7 +96,16 @@ GameFilter _filter(Object? data) {
         ),
       );
   }
-  return GameFilter(rules: List.unmodifiable(rules), any: data['any'] == true);
+  final position = data['position'] is String
+      ? Fen(data['position'] as String)
+      : null;
+  return GameFilter(
+    rules: List.unmodifiable(rules),
+    any: data['any'] == true,
+    position: position != null && positionOf(position) != null
+        ? position
+        : null,
+  );
 }
 
 /// Rebuilds the existing canonical identity from parsed headers/mainline.

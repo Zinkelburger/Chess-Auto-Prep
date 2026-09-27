@@ -321,6 +321,12 @@ final class ViewerView extends _DocumentModeView {
   Widget list(Widget toggle) => PgnViewerPanel(
     viewer: _modes.viewer,
     filter: _modes.filter,
+    say: requests.say,
+    onPosition: () => _modes.filter.reaching(
+      workspace.inspection?.active == true
+          ? workspace.inspection!.session.boardFen
+          : workspace.session.boardFen,
+    ),
     onOpen: (file) => unawaited(requests.openFile(file)),
     onBrowse: () => unawaited(requests.browse()),
     trailing: toggle,

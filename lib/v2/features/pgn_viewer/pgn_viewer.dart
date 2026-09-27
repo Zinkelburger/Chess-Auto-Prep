@@ -378,7 +378,13 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
     notifyListeners();
   }
 
-  void showGame(int index) => _session.showGame(index);
+  void showGame(int index) {
+    _session.showGame(index);
+    if (_filter.applied.position case final position?) {
+      if (_session.tree?.mainLineTo(position) case final path?)
+        _session.goTo(path);
+    }
+  }
 
   /// The rows follow the document. A new chapter value is told to the
   /// list, which shows which game is on the board; the games are

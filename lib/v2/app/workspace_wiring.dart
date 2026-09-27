@@ -8,6 +8,7 @@ import '../engines/fixed_depth.dart';
 import '../workspace/repertoire_catalog.dart';
 import '../storage/my_games_files.dart';
 import '../workspace/books.dart';
+import '../workspace/collection_analysis.dart';
 import '../workspace/engine_analysis.dart';
 import '../workspace/explorer.dart';
 import '../workspace/file_filter.dart';
@@ -58,6 +59,7 @@ final class WorkspaceWiring {
 
   late final workspace = Workspace(
     session: _session,
+    inspection: _inspection,
     saver: _saver,
     settings: _env.settings,
     analysis: _analysis,
@@ -78,6 +80,14 @@ final class WorkspaceWiring {
     _env.startEngine,
     multiPv: _env.settings.value.engineLines,
     elsewhere: _tree.board,
+  );
+
+  late final _inspection = CollectionAnalysis(
+    source: _session,
+    store: _env.store,
+    launch: _env.startEngine,
+    sourceEngine: _analysis,
+    multiPv: _env.settings.value.engineLines,
   );
 
   late final _fileTree = FileTree(filter: _filter);
@@ -190,6 +200,7 @@ final class WorkspaceWiring {
     final s = _env.settings.value;
     _engineRunsWith = (s.engineCores, s.engineMemoryMb);
     _analysis.setLines(s.engineLines);
+    _inspection.engine.setLines(s.engineLines);
     _env.settings.addListener(_engineSettings);
     await _analysis.enable();
   }
@@ -202,10 +213,12 @@ final class WorkspaceWiring {
   void _engineSettings() {
     final s = _env.settings.value;
     _analysis.setLines(s.engineLines);
+    _inspection.engine.setLines(s.engineLines);
     final wanted = (s.engineCores, s.engineMemoryMb);
     if (_engineRunsWith != wanted) {
       _engineRunsWith = wanted;
       unawaited(_analysis.restart());
+      unawaited(_inspection.engine.restart());
     }
   }
 
@@ -246,6 +259,7 @@ final class WorkspaceWiring {
     _catalog.removeListener(_filesChanged);
     _fill.dispose();
     _finds.dispose();
+    _inspection.dispose();
     _analysis.dispose();
     _replies.dispose();
     _gaps.dispose();

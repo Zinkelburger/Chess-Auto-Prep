@@ -56,10 +56,14 @@ sections below describing old paths are not claims of v2 parity.
   rating estimates; PGN final-board previews run off the UI thread and the
   display choice persists. Unknown or damaged runs report visible warnings.
 - `v2/features/pgn_viewer/`: visible-game export uses the shared exclusive PGN
-  exporter; sorting drives both list and workspace counter/keyboard. Reading
-  checkpoints preserve the legacy session key and game identity, with v2
-  variation-path/FEN and header-filter extensions; queued preference snapshots
-  survive disposal. Explicit game handoffs override restored reading state.
+  exporter; sorting drives both list and workspace counter/keyboard. Position
+  filters capture the board FEN, match full main lines off-thread and export
+  complete matching games. Reading checkpoints preserve the legacy session key
+  and game identity, with v2 variation-path/FEN, header and position filters;
+  queued preference snapshots survive disposal. Explicit game handoffs override
+  restored reading state. `v2/workspace/collection_analysis.dart` owns scratch
+  game analysis under the inner Analysis tab, preserving collection state and
+  source drafts; file-tab styling is unchanged.
 - `v2/features/study/`: PGN-file import through the shared import/document
   boundary; exclusive snapshot export; guarded file rename with retained retry;
   chapter tags, legal starting FEN and undoable annotation/variation cleanup.

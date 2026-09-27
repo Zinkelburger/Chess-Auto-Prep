@@ -239,7 +239,7 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
   Regex filters always run in a cancellable worker; literal filters also do so for 500 or more games or at least 64 KiB of headers. A worker has a 2-second deadline.
   The list shows `Filtering games…` while waiting and a problem if the work times out or fails;
   changing or clearing the rules recovers. Cancelled or superseded results never replace the current
-  selection. Not built: position and move-sequence filters, the saved slice per path, `Check filters`.
+  selection. Position filtering and per-file restoration were added below. Not built: move-sequence filters, multiple position conditions and `Check filters`.
 
 ## Owner decisions (2026-09-23)
 
@@ -262,10 +262,13 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
 
 - Compact document and pane tabs have left-aligned labels, close buttons, drag
   ordering and no click splash. The pane's plus menu reopens closed tools.
-- Analyze opens a separate temporary tab containing the entire current game,
-  variations and comments at the current move, and starts the engine. The source
-  stays in its own tab; analysis moves never write it. File tabs restore their
-  selected game and cursor; temporary analyses also retain their undo history.
+- Analyze opens **Analysis beside Moves and Explorer**, containing a scratch copy
+  of the complete current game, variations and comments at the current move,
+  and starts the engine. The collection, filters and file tab stay in place;
+  analysis moves and pasted PGN/FEN never write the source. Each game's scratch
+  analysis and undo history survive switching inner tabs and collections for
+  this window. Choosing another game returns to Moves. File tabs retain their
+  appearance; inner tabs have square lower edges and join the reading card.
 - Flip board is visible in the top toolbar. The viewer opens with Moves and
   Explorer, omits repertoire actions and the chapter-editing sidebar, and only
   offers Save/Discard after edits exist.
@@ -283,3 +286,17 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
   overrides the saved place. A restored header slice matching nothing clears.
   Checkpoints coalesce per path and survive owner disposal; failed writes remain
   retryable and visible. No PGN is written by reading-state changes.
+
+- **Filter games → Reaching this position** captures the board position once.
+  It searches complete main lines (including custom starting positions and moves
+  beyond the opening tree's depth), matching transpositions while ignoring move
+  counters and respecting side to move, castling rights and en passant. It
+  intersects with the existing all/any header conditions. The removable position
+  chip previews the captured board on hover; Clear all restores the collection.
+  Matching runs in a cancellable worker with a 15-second deadline. Selecting a
+  matching game lands at its first occurrence of the position. The position is
+  remembered with the file's reading state.
+- **Export matching games…** beside filtered results uses the existing exclusive
+  PGN export. It snapshots complete visible games, in the selected sort order,
+  including their comments and variations. It is disabled during filtering,
+  after a filtering failure, or with no results. Source files are unchanged.

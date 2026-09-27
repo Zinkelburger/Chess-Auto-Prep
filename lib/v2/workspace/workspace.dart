@@ -1,5 +1,6 @@
 import '../storage/settings_store.dart';
 import 'books.dart';
+import 'collection_analysis.dart';
 import 'document_saver.dart';
 import 'document_session.dart';
 import 'engine_analysis.dart';
@@ -24,6 +25,7 @@ import 'repertoire_tree.dart';
 final class Workspace {
   const Workspace({
     required this.session,
+    this.inspection,
     required this.saver,
     required this.settings,
     required this.analysis,
@@ -40,6 +42,28 @@ final class Workspace {
   });
 
   final DocumentSession session;
+  final CollectionAnalysis? inspection;
+
+  /// The same workspace while the collection's scratch tab owns the board.
+  /// Only its document views are shown; source explorer/book owners stay parked.
+  Workspace get inspecting => inspection == null
+      ? this
+      : Workspace(
+          session: inspection!.session,
+          saver: inspection!.saver,
+          analysis: inspection!.engine,
+          settings: settings,
+          explorer: explorer,
+          games: games,
+          replies: replies,
+          gaps: gaps,
+          shelf: shelf,
+          books: books,
+          tree: tree,
+          fill: fill,
+          finds: finds,
+          myGamesTree: myGamesTree,
+        );
   final DocumentSaver saver;
   final SettingsStore settings;
   final EngineAnalysis analysis;

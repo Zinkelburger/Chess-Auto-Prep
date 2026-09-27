@@ -26,6 +26,7 @@ import '../ui/listening_state.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
 import '../workspace/board_claim.dart';
+import '../workspace/document_actions.dart';
 import '../workspace/book_chip.dart';
 import '../workspace/copy_name_dialog.dart';
 import '../storage/finds_store.dart';
@@ -129,15 +130,56 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   void _modeMayHaveChanged() {
     final mode = _requests.mode;
     if (mode == _shown) return;
-    if (_shown case final left?) _views[left]!.left();
+    if (_shown case final left?) {
+      final previous = _views[left]!;
+      if (previous.tabs.selected == WorkspaceTab.analysis) {
+        previous.tabs.show(WorkspaceTab.moves);
+      }
+      previous.left();
+    }
+    _ws.inspection?.hide();
     _shown = mode;
     _views[mode]!.entered();
+    _innerTabChanged();
     _outlineShown = _wantsOutline;
     _arrange();
   }
 
   /// The reading card's tabs of the mode on screen.
   PaneTabs<WorkspaceTab> get _tabs => _view.tabs;
+
+  bool get _inspecting =>
+      _tabs.selected == WorkspaceTab.analysis &&
+      (_ws.inspection?.active ?? false);
+  Workspace get _boardWorkspace => _inspecting ? _ws.inspecting : _ws;
+
+  void _innerTabChanged() {
+    if (!mounted) return;
+    if (_tabs.selected == WorkspaceTab.analysis) {
+      if (!(_ws.inspection?.active ?? false)) unawaited(_showAnalysis());
+    } else {
+      _ws.inspection?.hide();
+    }
+    setState(() {});
+  }
+
+  Future<void> _showAnalysis() async {
+    final tabs = _tabs;
+    final shown = await _ws.inspection?.show() ?? false;
+    if (!mounted) return;
+    if (!shown && tabs.selected == WorkspaceTab.analysis)
+      tabs.show(WorkspaceTab.moves);
+    setState(() {});
+  }
+
+  void _analysisChanged() {
+    if (!mounted) return;
+    if (!(_ws.inspection?.active ?? false) &&
+        _tabs.selected == WorkspaceTab.analysis) {
+      _tabs.show(WorkspaceTab.moves);
+    }
+    setState(() {});
+  }
 
   late final _sitting = SittingInView(
     trainer: _train.lines,
@@ -194,22 +236,26 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     _arrange();
     for (final view in _views.values) {
       view.tabs.addListener(_sitting.check);
+      view.tabs.addListener(_innerTabChanged);
     }
     _sitting.check();
     _puzzle.check();
     _shown = _requests.mode;
     _requests.addListener(_modeMayHaveChanged);
+    _ws.inspection?.addListener(_analysisChanged);
   }
 
   @override
   void dispose() {
     _requests.removeListener(_modeMayHaveChanged);
+    _ws.inspection?.removeListener(_analysisChanged);
     _sitting.dispose();
     _puzzle.dispose();
     _editing.dispose();
     _moves.dispose();
     _claim.dispose();
     for (final view in _views.values) {
+      view.tabs.removeListener(_innerTabChanged);
       view.dispose();
     }
     _panes.dispose();
@@ -311,6 +357,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// Space shows the answer while a puzzle is on the board; otherwise it
   /// is the mode's: the viewer's autoplay.
   void _space() {
+    if (_inspecting) return;
     if (_train.puzzles.up == null) return _view.space();
     _train.puzzles.showSolution();
   }
@@ -323,6 +370,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// when it has one (My games), the puzzles in a sitting, else the file's
   /// games.
   void _walk(int by) {
+    if (_inspecting) _tabs.show(WorkspaceTab.moves);
     if (_listShown && _positionsShown) {
       if (_ws.finds.step(by) case final next?) _openFind(next);
       return;
@@ -368,10 +416,30 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
 
   Future<void> _analyze() async {
     _train.puzzles.inspectAlternative();
-    final result = await _requests.newAnalysisBoard();
-    if (!mounted || result is! RequestDone) return;
-    _tabs.show(WorkspaceTab.moves);
-    await _ws.analysis.enable();
+    _docs.autoplay.stop();
+    _tabs.add(WorkspaceTab.analysis.tab);
+  }
+
+  Future<void> _paste({bool positionOnly = false}) async {
+    if (!_inspecting) {
+      await (positionOnly ? _requests.pasteFen() : _requests.paste());
+      return;
+    }
+    final source = _ws.session.source;
+    final game = _ws.session.game;
+    final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    if (!mounted ||
+        !_inspecting ||
+        source != _ws.session.source ||
+        game != _ws.session.game)
+      return;
+    if (text == null || text.trim().isEmpty) {
+      _requests.say('Nothing to paste: copy a PGN or FEN first.');
+      return;
+    }
+    _requests.say(
+      await _ws.inspection!.paste(text, positionOnly: positionOnly),
+    );
   }
 
   Future<void> _saveCopy() async {
@@ -402,25 +470,43 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     ),
   ];
 
-  List<AppAction> _modeActions() => _view.actions((
-    editing: _editing,
-    board: () => boardActions(
-      context,
-      session: _ws.session,
-      requests: _requests,
-      library: _docs.library,
-      studies: _docs.studies,
-      onAnalyze: () => unawaited(_analyze()),
-    ),
-    dialogs: (
-      saveCopy: () => unawaited(_saveCopy()),
-      exportPgn: () =>
-          unawaited(exportViewerPgn(context, _docs.viewer, _requests.say)),
-      search: () => unawaited(_search.search(_tabs)),
-      accounts: () => unawaited(editAccounts(context, _train.myGames)),
-      newBook: () => unawaited(newBook(context, _ws.books, say: _requests.say)),
-    ),
-  ));
+  List<AppAction> _modeActions() => _inspecting
+      ? [
+          ...documentActions(
+            session: _boardWorkspace.session,
+            analysis: _boardWorkspace.analysis,
+            editing: _editing,
+            onSaveCopy: () {},
+          ),
+          AppAction(
+            'Paste PGN or FEN',
+            () => unawaited(_paste()),
+            shortcut: 'Ctrl+V',
+            group: 'Document',
+          ),
+          ...tabActions(_tabs),
+        ]
+      : _view.actions((
+          editing: _editing,
+          board: () => boardActions(
+            context,
+            session: _ws.session,
+            requests: _requests,
+            library: _docs.library,
+            studies: _docs.studies,
+            onAnalyze: () => unawaited(_analyze()),
+          ),
+          dialogs: (
+            saveCopy: () => unawaited(_saveCopy()),
+            exportPgn: () => unawaited(
+              exportViewerPgn(context, _docs.viewer, _requests.say),
+            ),
+            search: () => unawaited(_search.search(_tabs)),
+            accounts: () => unawaited(editAccounts(context, _train.myGames)),
+            newBook: () =>
+                unawaited(newBook(context, _ws.books, say: _requests.say)),
+          ),
+        ));
 
   /// The same actions, typed for: a searchable list that the enter key
   /// takes the one match of.
@@ -450,7 +536,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   Map<ShortcutActivator, VoidCallback> get _windowKeys => {
     // ← takes back a move made past the file on the explorer Book's free board
     // before it steps back in the file.
-    const SingleActivator(LogicalKeyboardKey.arrowLeft): _ws.tree.back,
+    if (!_inspecting)
+      const SingleActivator(LogicalKeyboardKey.arrowLeft): _ws.tree.back,
     ..._command(LogicalKeyboardKey.comma, () => unawaited(_settings())),
     ..._history,
     ..._command(LogicalKeyboardKey.keyB, _toggleList),
@@ -459,10 +546,10 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       LogicalKeyboardKey.keyO,
       () => unawaited(_requests.openPgnFile()),
     ),
-    ..._command(LogicalKeyboardKey.keyV, () => unawaited(_requests.paste())),
+    ..._command(LogicalKeyboardKey.keyV, () => unawaited(_paste())),
     ..._command(
       LogicalKeyboardKey.keyV,
-      () => unawaited(_requests.pasteFen()),
+      () => unawaited(_paste(positionOnly: true)),
       shift: true,
     ),
     ..._command(LogicalKeyboardKey.keyN, () => unawaited(_analyze())),
@@ -558,7 +645,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
                 children: [
                   IconButton(
                     tooltip: withKey('Flip board', 'F'),
-                    onPressed: _ws.session.flip,
+                    onPressed: _boardWorkspace.session.flip,
                     icon: const Icon(
                       Icons.flip_camera_android_outlined,
                       size: IconSize.action,
@@ -569,7 +656,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
                     onPressed: () => unawaited(_analyze()),
                     icon: const Icon(Icons.add, size: IconSize.menu),
                     label: Tooltip(
-                      message: withKey('Analyze in new tab', 'Ctrl+N'),
+                      message: withKey('Open Analysis tab', 'Ctrl+N'),
                       child: const Text('Analyze'),
                     ),
                   ),
@@ -592,8 +679,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         child:
             screen ??
             WorkspaceKeys(
-              session: _ws.session,
-              analysis: _ws.analysis,
+              session: _boardWorkspace.session,
+              analysis: _boardWorkspace.analysis,
               editing: _editing,
               tabs: _tabs,
               moves: _moves,
@@ -605,7 +692,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
                     tabs: _requests.documents.tabs,
                     onSelect: (id) => unawaited(_requests.documents.select(id)),
                     onClose: (id) => unawaited(_requests.documents.close(id)),
-                    onAdd: () => unawaited(_analyze()),
+                    onAdd: () => unawaited(_requests.newEmptyAnalysis()),
                   ),
                   Expanded(child: _columns()),
                 ],
@@ -643,20 +730,20 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       onOpen: (ref) => unawaited(_requests.open(ref)),
     ),
     _ => WorkspaceView(
-      workspace: _ws,
+      workspace: _boardWorkspace,
       tabs: _tabs,
       editing: _editing,
       moves: _moves,
       hooks: WorkspaceHooks(
         header: _view.header,
-        gameCounter: _view.gameCounter,
+        gameCounter: !_inspecting && _view.gameCounter,
         gameOrdering: _view.gameOrdering,
-        moveMenu: _view.moveMenu,
+        moveMenu: _inspecting ? null : _view.moveMenu,
         tabBody: _tabBody,
-        boardClaim: _claim,
-        lesson: _train.lines.board,
-        onBoardMove: _boardMove,
-        onEngineMove: _engineMove,
+        boardClaim: _inspecting ? null : _claim,
+        lesson: _inspecting ? null : _train.lines.board,
+        onBoardMove: _inspecting ? null : _boardMove,
+        onEngineMove: _inspecting ? null : _engineMove,
         onExplorerLogin: widget.onExplorerLogin,
         onDownloadTwic: widget.onDownloadTwic,
         onExplorerGame: (game) => unawaited(

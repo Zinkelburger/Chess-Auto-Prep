@@ -161,11 +161,15 @@ class PaneTabStrip<K extends Object> extends StatefulWidget {
     this.onSelect,
     this.onClose,
     this.onAdd,
+    this.connected = false,
   });
 
   final ValueChanged<K>? onSelect;
   final ValueChanged<K>? onClose;
   final VoidCallback? onAdd;
+
+  /// Inner tools join the reading surface; document tabs retain their style.
+  final bool connected;
 
   final PaneTabs<K> tabs;
 
@@ -248,6 +252,7 @@ class _PaneTabStripState<K extends Object> extends State<PaneTabStrip<K>>
                           tab: tabs.tabOf(id),
                           onSelect: widget.onSelect,
                           onClose: widget.onClose,
+                          connected: widget.connected,
                         ),
                       ),
                   ],
@@ -287,6 +292,7 @@ class _TabSlot<K extends Object> extends StatelessWidget {
     super.key,
     required this.tabs,
     required this.tab,
+    required this.connected,
     this.onSelect,
     this.onClose,
   });
@@ -296,6 +302,7 @@ class _TabSlot<K extends Object> extends StatelessWidget {
 
   final PaneTabs<K> tabs;
   final PaneTab<K> tab;
+  final bool connected;
 
   @override
   Widget build(BuildContext context) {
@@ -333,6 +340,7 @@ class _TabSlot<K extends Object> extends StatelessWidget {
 
   Widget _tab() => _Tab(
     title: tab.title,
+    connected: connected,
     selected: tabs.selected == tab.id,
     onTap: () => (onSelect ?? tabs.show)(tab.id),
     onClose: tab.pinned || (tabs.open.length == 1 && onClose == null)
@@ -345,12 +353,14 @@ class _TabSlot<K extends Object> extends StatelessWidget {
 class _Tab extends StatelessWidget {
   const _Tab({
     required this.title,
+    required this.connected,
     required this.selected,
     required this.onTap,
     required this.onClose,
   });
 
   final String title;
+  final bool connected;
   final bool selected;
   final VoidCallback onTap;
   final VoidCallback? onClose;
@@ -361,16 +371,33 @@ class _Tab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final shape = BorderRadius.circular(paneTabRadius);
+    final scheme = Theme.of(context).colorScheme;
+    final shape = connected
+        ? const BorderRadius.vertical(top: Radius.circular(paneTabRadius))
+        : BorderRadius.circular(paneTabRadius);
     return Listener(
       onPointerDown: onClose == null ? null : _pointerDown,
       child: Padding(
-        padding: const EdgeInsets.all(paneTabInset),
+        padding: connected
+            ? const EdgeInsets.only(top: paneTabInset, right: Space.xs)
+            : const EdgeInsets.all(paneTabInset),
         child: Material(
-          color: selected ? scheme.surfaceContainerHigh : Colors.transparent,
-          borderRadius: shape,
+          color: selected
+              ? (connected
+                    ? scheme.surfaceContainerLowest
+                    : scheme.surfaceContainerHigh)
+              : Colors.transparent,
+          shape: connected
+              ? RoundedRectangleBorder(
+                  borderRadius: shape,
+                  side: BorderSide(
+                    color: selected
+                        ? scheme.outlineVariant
+                        : Colors.transparent,
+                  ),
+                )
+              : null,
+          borderRadius: connected ? null : shape,
           child: InkWell(
             onTap: onTap,
             borderRadius: shape,
@@ -387,7 +414,10 @@ class _Tab extends StatelessWidget {
                       textAlign: TextAlign.left,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: connected && selected
+                            ? FontWeight.w600
+                            : null,
                         color: selected
                             ? scheme.onSurface
                             : scheme.onSurfaceVariant,

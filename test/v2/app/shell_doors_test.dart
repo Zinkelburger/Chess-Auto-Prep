@@ -2,6 +2,8 @@ import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/features/library/library_panel.dart';
 import 'package:chess_auto_prep/v2/features/pgn_viewer/pgn_viewer_panel.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
+import 'package:chess_auto_prep/v2/ui/pane_tabs.dart';
+import 'package:chess_auto_prep/v2/workspace/workspace_tabs.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -133,11 +135,45 @@ void main() {
     await pumpWithChapter(tester);
     w.session.forward();
     await pressCtrl(tester, LogicalKeyboardKey.keyN);
-    expect(w.session.isScratch, isTrue);
-    expect(w.session.currentMove?.san, 'c5');
+    expect(w.session.source, kidMain);
+    expect(w.parts.workspace.inspection!.active, isTrue);
+    expect(w.parts.workspace.inspection!.session.currentMove?.san, 'c5');
     expect(find.text('Analysis'), findsWidgets);
     expect(find.text('Temporary analysis'), findsOneWidget);
   });
+
+  testWidgets(
+    'inner analysis leaves file tabs intact and closes back to source',
+    (tester) async {
+      await pumpWithChapter(tester);
+      final original = w.session.chapter;
+      final fileTabs = List.of(w.requests.documents.tabs.open);
+      await pressCtrl(tester, LogicalKeyboardKey.keyN);
+      final inspection = w.parts.workspace.inspection!;
+      expect(w.requests.documents.tabs.open, fileTabs);
+      expect(w.session.chapter, same(original));
+      final inner = tester.widget<PaneTabStrip<WorkspaceTab>>(
+        find.byType(PaneTabStrip<WorkspaceTab>),
+      );
+      expect(inner.connected, isTrue);
+      expect(inner.tabs.selected, WorkspaceTab.analysis);
+      final outer = tester.widget<PaneTabStrip<Object>>(
+        find.byType(PaneTabStrip<Object>),
+      );
+      expect(outer.connected, isFalse);
+      clipboardHolds(tester, pasted);
+      await pressCtrl(tester, LogicalKeyboardKey.keyV);
+      expect(inspection.session.tree!.children.single.san, 'e4');
+      expect(w.session.chapter, same(original));
+      await tester.tap(find.byTooltip('Close Analysis').last);
+      await tester.pumpAndSettle();
+      expect(inspection.active, isFalse);
+      expect(w.session.chapter, same(original));
+      await pressCtrl(tester, LogicalKeyboardKey.keyN);
+      expect(inspection.session.tree!.children.single.san, 'e4');
+      expect(w.requests.documents.tabs.open, fileTabs);
+    },
+  );
 
   testWidgets('a clipboard with no moves is refused in plain English', (
     tester,

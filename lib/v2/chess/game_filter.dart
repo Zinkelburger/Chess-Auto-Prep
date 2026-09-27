@@ -5,6 +5,8 @@ library;
 
 import 'package:collection/collection.dart';
 
+import 'fen.dart';
+
 /// How a rule compares a header with the value typed. `≥` and `≤` compare
 /// numbers as numbers — a rating of 2400 is at least 500 — and anything
 /// else, such as a `YYYY.MM.DD` date, as text, which orders dates.
@@ -148,11 +150,15 @@ int _ordered(String a, String b) {
 
 /// Every rule of a list at once, or any one of them.
 final class GameFilter {
-  const GameFilter({this.rules = const [], this.any = false});
+  const GameFilter({this.rules = const [], this.any = false, this.position});
 
   static const none = GameFilter();
 
   final List<HeaderRule> rules;
+
+  /// A captured mainline position, intersected with the header rules.
+  /// Counters do not matter; side, castling and en passant do.
+  final Fen? position;
 
   /// A game passes when one rule keeps it, rather than all of them.
   final bool any;
@@ -164,10 +170,18 @@ final class GameFilter {
   ];
 
   /// Whether the filter keeps every game.
-  bool get isEmpty => active.isEmpty;
+  bool get isEmpty => active.isEmpty && position == null;
 
-  GameFilter copyWith({List<HeaderRule>? rules, bool? any}) =>
-      GameFilter(rules: rules ?? this.rules, any: any ?? this.any);
+  GameFilter copyWith({
+    List<HeaderRule>? rules,
+    bool? any,
+    Fen? position,
+    bool clearPosition = false,
+  }) => GameFilter(
+    rules: rules ?? this.rules,
+    any: any ?? this.any,
+    position: clearPosition ? null : position ?? this.position,
+  );
 
   bool keeps(String? Function(String header) headers) {
     final rules = active;
@@ -181,6 +195,7 @@ final class GameFilter {
   bool operator ==(Object other) =>
       other is GameFilter &&
       other.any == any &&
+      other.position == position &&
       const ListEquality<HeaderRule>().equals(other.rules, rules);
 
   @override
