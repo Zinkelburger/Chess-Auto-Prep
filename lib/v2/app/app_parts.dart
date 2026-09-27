@@ -15,6 +15,7 @@ import 'exit_guard.dart';
 import 'full_screen.dart';
 import 'mode.dart';
 import 'mode_wiring.dart';
+import 'player_wiring.dart';
 import 'window_input.dart';
 import 'workspace_requests.dart';
 import 'workspace_wiring.dart';
@@ -142,6 +143,13 @@ final class AppParts {
 
   /// The labs: the Bughouse lab's owners.
   late final labs = wireLabModes(env);
+  late final players = PlayerModes(
+    env,
+    workspace,
+    requests,
+    documents.studies,
+    gamesCache,
+  );
 
   bool _disposed = false;
   bool _started = false;
@@ -160,6 +168,7 @@ final class AppParts {
     _started = true;
     unawaited(documents.library.refresh());
     unawaited(books.load());
+    unawaited(players.directory.load());
     unawaited(training.myGames.load());
     unawaited(account.load());
     unawaited(labs.offer(env.bughouse.bundled));
@@ -170,6 +179,7 @@ final class AppParts {
   /// Keeping the window open leaves these jobs paused and resumable.
   void prepareToClose() {
     requests.cancelPending();
+    players.stop();
     workspace.fill.cancel();
     training.myGames.pause();
     training.lines.leave();
@@ -190,6 +200,7 @@ final class AppParts {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    players.dispose();
     labs.dispose();
     _training.dispose();
     requests.dispose();

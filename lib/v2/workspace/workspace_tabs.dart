@@ -14,7 +14,9 @@ enum WorkspaceTab {
   explorer('Explorer'),
   search('Search'),
   puzzle('Puzzle'),
-  book('Book');
+  book('Book'),
+  player('Player openings'),
+  playerBook('My book');
 
   const WorkspaceTab(this.title, {this.pinned = false});
 
@@ -28,7 +30,11 @@ enum WorkspaceTab {
 /// puzzle and the book verdict belong to their modes.
 List<PaneTab<WorkspaceTab>> get _documentTabs => [
   for (final tab in WorkspaceTab.values)
-    if (tab != WorkspaceTab.puzzle && tab != WorkspaceTab.book) tab.tab,
+    if (tab != WorkspaceTab.puzzle &&
+        tab != WorkspaceTab.book &&
+        tab != WorkspaceTab.player &&
+        tab != WorkspaceTab.playerBook)
+      tab.tab,
 ];
 
 /// The card's tabs as the Repertoire builder starts: all of the document's

@@ -34,6 +34,8 @@ import '../workspace/move_tree_view.dart' show MoveMenu;
 import '../workspace/workspace.dart';
 import '../workspace/workspace_tabs.dart';
 import 'mode.dart';
+import 'player_wiring.dart';
+import 'player_views.dart';
 import 'workspace_requests.dart';
 
 /// What the window's own dialogs do, which the shell runs: they need its
@@ -623,6 +625,7 @@ Map<Mode, ModeView> modeViews({
   required DocumentModes documents,
   required TrainingModes training,
   required LabModes labs,
+  required PlayerModes players,
 }) => {
   for (final mode in Mode.values)
     mode: switch (mode) {
@@ -634,6 +637,8 @@ Map<Mode, ModeView> modeViews({
       Mode.tactics => TacticsView(workspace, training),
       Mode.myGames => MyGamesView(workspace, requests, training),
       Mode.bughouse => BughouseView(workspace, labs),
+      Mode.playerAnalysis => PlayerAnalysisView(workspace, requests, players),
+      Mode.players => PlayersView(workspace, players),
     },
 };
 

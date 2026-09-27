@@ -27,6 +27,8 @@ enum Mode {
   study('Study'),
   tactics('Tactics'),
   myGames('My games'),
+  playerAnalysis('Player analysis'),
+  players('Players & prep'),
   bughouse('Bughouse lab');
 
   const Mode(this.label);

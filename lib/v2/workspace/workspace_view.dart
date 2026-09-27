@@ -310,6 +310,7 @@ class _Tabbed extends StatelessWidget {
     ),
     WorkspaceTab.puzzle => _supplied(context, tab),
     WorkspaceTab.book => _supplied(context, tab),
+    WorkspaceTab.player || WorkspaceTab.playerBook => _supplied(context, tab),
   };
 
   /// The tabs that show the document's moves or what follows them.
@@ -317,7 +318,9 @@ class _Tabbed extends StatelessWidget {
     WorkspaceTab.moves ||
     WorkspaceTab.replies ||
     WorkspaceTab.explorer ||
-    WorkspaceTab.search => true,
+    WorkspaceTab.search ||
+    WorkspaceTab.player ||
+    WorkspaceTab.playerBook => true,
     WorkspaceTab.train || WorkspaceTab.puzzle || WorkspaceTab.book => false,
   };
 

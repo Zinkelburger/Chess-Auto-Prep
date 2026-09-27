@@ -37,6 +37,7 @@ import '../workspace/workspace_view.dart';
 import 'full_screen.dart';
 import 'mode_view.dart';
 import 'mode.dart';
+import 'player_wiring.dart';
 import 'top_bar.dart';
 import 'workspace_requests.dart';
 
@@ -53,6 +54,7 @@ class Shell extends StatefulWidget {
     required this.documents,
     required this.training,
     required this.labs,
+    required this.players,
     required this.fullScreen,
     required this.settingRows,
     required this.settingsAlso,
@@ -65,6 +67,7 @@ class Shell extends StatefulWidget {
   final DocumentModes documents;
   final TrainingModes training;
   final LabModes labs;
+  final PlayerModes players;
 
   /// Whether the window fills the screen: F11, Esc and the Actions menu.
   final FullScreen fullScreen;
@@ -100,6 +103,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     documents: _docs,
     training: _train,
     labs: widget.labs,
+    players: widget.players,
   );
 
   ModeView get _view => _views[_requests.mode]!;
@@ -115,6 +119,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     if (_shown case final left?) _views[left]!.left();
     _shown = mode;
     _views[mode]!.entered();
+    _arrange();
   }
 
   /// The reading card's tabs of the mode on screen.
@@ -140,6 +145,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   // The list starts as narrow as it goes: the board is what the window is
   // for, and the divider is there for whoever wants more of the list.
   final _list = Area(data: _Pane.list, size: paneMinWidth, min: paneMinWidth);
+  final _playerList = Area(
+    data: _Pane.list,
+    size: playerColumnWidth,
+    min: playerColumnWidth,
+  );
   final _outline = Area(
     data: _Pane.outline,
     size: outlineColumnWidth,
@@ -193,7 +203,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   }
 
   void _arrange() => _panes.areas = [
-    if (_listShown) _list,
+    if (_listShown) _requests.mode == Mode.playerAnalysis ? _playerList : _list,
     if (_outlineShown) _outline,
     _workspace,
   ];

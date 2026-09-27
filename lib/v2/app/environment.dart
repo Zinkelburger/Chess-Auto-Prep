@@ -21,7 +21,11 @@ import '../net/lichess_explorer.dart';
 import '../net/lichess_login.dart';
 import '../net/lichess_studies.dart';
 import '../net/recent_games.dart';
+import '../net/player_ratings.dart';
 import '../storage/book_file.dart';
+import '../storage/player_files.dart';
+import '../storage/saved_players.dart';
+import '../chess/players/player.dart';
 import '../storage/bughouse_books.dart';
 import '../storage/bughouse_matches.dart';
 import '../storage/chapter_files.dart';
@@ -108,6 +112,9 @@ final class AppEnvironment {
     this.backupHistory,
     this.finds = FindsStore.inMemory,
     BookStore? books,
+    PlayerStore? players,
+    this.savedPlayerList = _noSavedPlayers,
+    this.playerRating,
     required this.setFullScreen,
     required this.bughouse,
     this.now = DateTime.now,
@@ -117,7 +124,8 @@ final class AppEnvironment {
     this.exitWait = const Duration(seconds: 5),
     this.close = _nothingToClose,
   }) : store = DocumentRepository(store),
-       books = books ?? MemoryBooks() {
+       books = books ?? MemoryBooks(),
+       players = players ?? MemoryPlayers() {
     settings.pendingWrites = pendingWrites;
     this.store.pendingWrites = pendingWrites;
   }
@@ -212,6 +220,10 @@ final class AppEnvironment {
       backupHistory: BackupHistory(documentsStore.recovery),
       finds: () => finds.store,
       books: documentsStore.books,
+      players: PlayerFiles(Directory(p.join(documents.path, 'opponents'))),
+      playerRating: PlayerRatings(client).lookup,
+      savedPlayerList: () =>
+          savedPlayers(Directory(p.join(documents.path, 'analysis_games'))),
       setFullScreen: _setFullScreen,
       bughouse: (
         bundled: _bughouseBundled,
@@ -295,6 +307,9 @@ final class AppEnvironment {
   /// The user's books, `books.json` in the support folder; in memory for
   /// a test.
   final BookStore books;
+  final PlayerStore players;
+  final Future<List<Player>> Function() savedPlayerList;
+  final Future<PlayerRating> Function(String id)? playerRating;
 
   /// Keeps a fill's search tree beside its chapter.
   final TreeKeeper keepTree;
@@ -492,3 +507,5 @@ Future<bool> _bughouseBundled() async {
     return false;
   }
 }
+
+Future<List<Player>> _noSavedPlayers() async => const [];

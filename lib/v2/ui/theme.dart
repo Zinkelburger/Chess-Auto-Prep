@@ -574,3 +574,6 @@ const labHintColor = Color(0x99003088);
 const booksListWidth = 260.0;
 const bookRowHeight = 36.0;
 const bookChapterIndent = 28.0;
+
+/// Player statistics need room for their three related views.
+const double playerColumnWidth = 340;
