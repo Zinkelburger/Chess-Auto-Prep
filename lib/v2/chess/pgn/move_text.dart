@@ -1,3 +1,4 @@
+import '../fen.dart';
 import 'game_tree.dart';
 
 /// PGN movetext for [tree], ending with [terminator] as the game-termination
@@ -105,4 +106,26 @@ void _writeMove(
   }
   final comment = node.comment;
   if (comment != null) buffer.write('{$comment} ');
+}
+
+/// The moves from the start of [tree] to [path] as a game of their own, the
+/// way Lichess copies a variation: the SAN only, without the comments, NAGs
+/// and variations along the way, so it pastes cleanly into another board.
+/// A tree that starts from another position says so in `SetUp`/`FEN` tags.
+String writeLineTo(GameTree tree, NodePath path) {
+  final buffer = StringBuffer();
+  final root = tree.rootFen;
+  if (root != Fen.initial) {
+    buffer.write('[SetUp "1"]\n[FEN "${root.value}"]\n\n');
+  }
+  var number = root.fullMove;
+  var white = root.whiteToMove;
+  for (final (depth, node) in tree.lineTo(path).indexed) {
+    if (white || depth == 0) buffer.write(white ? '$number. ' : '$number... ');
+    buffer.write('${node.san} ');
+    if (!white) number++;
+    white = !white;
+  }
+  buffer.write('*');
+  return buffer.toString();
 }

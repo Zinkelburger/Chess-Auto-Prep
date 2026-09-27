@@ -2,6 +2,7 @@ import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/move_tree_view.dart';
 import 'package:chess_auto_prep/v2/workspace/session_results.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/session_fixture.dart';
@@ -60,6 +61,45 @@ const twoLines = '''
 ''';
 
 void main() {
+  testWidgets('a move copies the line that leads to it, or its position', (
+    tester,
+  ) async {
+    final fixture = await openSession(twoLines);
+    addTearDown(fixture.dispose);
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await pumpTree(tester, fixture);
+
+    await tester.longPress(find.textContaining('Nf6'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Copy line PGN'));
+    await tester.pumpAndSettle();
+    expect(copied, '1. d4 Nf6 *');
+
+    await tester.longPress(find.textContaining('Nf6'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Copy FEN'));
+    await tester.pumpAndSettle();
+    expect(
+      copied,
+      startsWith('rnbqkb1r/pppppppp/5n2/8/3P4/8/PPP1PPPP/RNBQKBNR w'),
+    );
+  });
+
   testWidgets('a move offers what can be done to it, and does it', (
     tester,
   ) async {
