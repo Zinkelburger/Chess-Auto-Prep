@@ -16,6 +16,7 @@ class TopBar extends StatelessWidget {
   const TopBar({
     super.key,
     required this.mode,
+    this.quickActions,
     required this.onMode,
     this.backTo,
     this.forwardTo,
@@ -29,6 +30,7 @@ class TopBar extends StatelessWidget {
     required this.actionsChange,
   });
 
+  final Widget? quickActions;
   final Mode mode;
   final ValueChanged<Mode> onMode;
 
@@ -87,6 +89,7 @@ class TopBar extends StatelessWidget {
           const SizedBox(width: Space.s),
           _ActionsMenu(actions: actions, changes: actionsChange),
           const SizedBox(width: Space.s),
+          if (quickActions != null) quickActions!,
           const Spacer(),
           IconButton(
             icon: const Icon(Icons.settings_outlined, size: IconSize.action),
@@ -275,10 +278,8 @@ class _ActionsMenuState extends State<_ActionsMenu> {
 
   /// Keep the document's work in view; secondary controls expand beside it.
   static const _secondary = {
-    'Analysis board': Icons.analytics_outlined,
-    'Board': Icons.grid_view_outlined,
     'Copy': Icons.content_copy,
-    'Panels': Icons.view_sidebar_outlined,
+    'Panels': Icons.tab_outlined,
     'Window': Icons.fullscreen,
   };
 

@@ -23,6 +23,10 @@ import '../workspace/game_fetcher.dart';
 import '../workspace/session_results.dart';
 import '../ui/error_bar.dart' show StatusAction;
 import 'exit_guard.dart';
+import 'document_tabs.dart';
+import '../chess/pgn/chapter.dart';
+import '../workspace/document_actions.dart' show gameText;
+import '../workspace/document_history.dart' show KeptBoard;
 import 'mode.dart';
 import 'window_input.dart';
 
@@ -113,7 +117,11 @@ final class WorkspaceRequests extends ChangeNotifier {
        _viewer = viewer,
        _games = games,
        _leaving = leaving,
-       _input = input;
+       _input = input {
+    documents = DocumentTabs(session: session, requests: this);
+  }
+
+  late final DocumentTabs documents;
 
   final DocumentSession _session;
   final Books _books;
@@ -381,34 +389,52 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// The analysis board as it was left, in place of the file that is up,
   /// with the same question about a draft the file never took as opening
   /// another one asks.
-  Future<RequestResult> analysisBoard() async {
+  Future<RequestResult> analysisBoard({KeptBoard? page}) async {
     final ticket = _nextRequest();
-    if (_session.isScratch) return const RequestDone();
+    if (_session.isScratch && page == null) return const RequestDone();
     final leave = await _leaving.mayLeaveDocument();
     if (_overtaken(ticket) || leave is! Go) return const RequestDropped();
-    if (!await _session.showAnalysisBoard()) return const RequestDropped();
+    final shown = page == null
+        ? await _session.showAnalysisBoard()
+        : await _session.restoreAnalysisPage(page);
+    if (!shown || _overtaken(ticket)) return const RequestDropped();
     _saidCopy(leave);
     return const RequestDone();
   }
 
-  /// A new analysis board holding the line on the board up to where the
-  /// user is, from whatever is up — a file, a game, the analysis board
-  /// itself — and facing the same way, so it looks as it did.
-  Future<RequestResult> newAnalysisBoard() async {
+  Future<RequestResult> newEmptyAnalysis() async {
     final ticket = _nextRequest();
-    final tree = _session.tree;
-    final side = _session.orientation;
-    final root = tree?.rootFen ?? Fen.initial;
-    final sans = [
-      if (tree != null)
-        for (final node in tree.lineTo(_session.cursor)) node.san,
-    ];
     final leave = await _leavingFile();
     if (_overtaken(ticket) || leave == null) return const RequestDropped();
-    final shown = await _session.showAnalysisBoard(
-      boards.analysisBoard(side: side, root: root, sans: sans),
+    if (!await _session.showAnalysisBoard(
+          boards.analysisBoard(side: Side.white),
+        ) ||
+        _overtaken(ticket))
+      return const RequestDropped();
+    _saidCopy(leave);
+    return const RequestDone();
+  }
+
+  /// A separate analysis tab with the entire current game, its variations
+  /// and comments, positioned and oriented exactly like the source.
+  Future<RequestResult> newAnalysisBoard() async {
+    final ticket = _nextRequest();
+    _session.snapshot();
+    final cursor = _session.cursor;
+    final side = _session.orientation;
+    final board = withSide(
+      await readChapter(
+        name: boards.analysisBoardName,
+        text: gameText(_session),
+      ),
+      side,
     );
-    if (!shown) return const RequestDropped();
+    if (_overtaken(ticket)) return const RequestDropped();
+    final leave = await _leavingFile();
+    if (_overtaken(ticket) || leave == null) return const RequestDropped();
+    final shown = await _session.showAnalysisBoard(board);
+    if (!shown || _overtaken(ticket)) return const RequestDropped();
+    _session.goTo(cursor);
     _saidCopy(leave);
     return const RequestDone();
   }
@@ -612,6 +638,7 @@ final class WorkspaceRequests extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    documents.dispose();
     super.dispose();
   }
 }

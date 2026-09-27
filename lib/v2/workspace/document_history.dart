@@ -2,6 +2,7 @@ import '../chess/pgn/chapter.dart';
 import '../chess/pgn/chapter_sections.dart';
 import '../chess/pgn/game_tree.dart';
 import '../storage/edit_scope.dart';
+import '../storage/document_ref.dart';
 import 'document_projection.dart';
 
 typedef ShownDocument = ({Chapter chapter, SectionView? view});
@@ -89,4 +90,16 @@ final class KeptBoard {
 
   /// The version before the last edit, or null when there is none.
   Chapter? takeBack() => _undo.isEmpty ? null : _undo.removeLast();
+}
+
+/// A viewer draft parked in a document tab, including its save precondition.
+final class RetainedDraft {
+  const RetainedDraft({
+    required this.shown,
+    required this.held,
+    required this.revision,
+  });
+  final ShownDocument shown;
+  final HeldEdits held;
+  final Revision revision;
 }

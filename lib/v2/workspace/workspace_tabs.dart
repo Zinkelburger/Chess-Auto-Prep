@@ -55,8 +55,8 @@ PaneTabs<WorkspaceTab> newWorkspaceTabs() => PaneTabs(
 /// explorer and Search, where a search from the board is started.
 /// The repertoire's tabs can be shown from the Actions menu.
 PaneTabs<WorkspaceTab> readingTabs() => PaneTabs(
-  _documentTabs,
-  open: const [WorkspaceTab.explorer, WorkspaceTab.search],
+  [WorkspaceTab.moves.tab, WorkspaceTab.explorer.tab],
+  open: const [WorkspaceTab.explorer],
 );
 
 /// The card's tabs in the Repertoire trainer: Train first and always

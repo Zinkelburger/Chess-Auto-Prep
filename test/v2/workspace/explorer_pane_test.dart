@@ -179,12 +179,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(settings.value.explorer.source, ExplorerSource.lichess);
     expect(lichess.asked.last.choice.source, ExplorerSource.lichess);
-    expect(find.text('blitz rapid classical · 2000+'), findsOneWidget);
+    expect(find.text('Blitz Rapid Classical · 2000+'), findsOneWidget);
     expect(find.text('Speed'), findsNothing, reason: 'folded');
-    await tester.tap(find.text('blitz rapid classical · 2000+'));
+    await tester.tap(find.text('Blitz Rapid Classical · 2000+'));
     await tester.pumpAndSettle();
     expect(find.text('Speed'), findsOneWidget);
-    await tester.tap(find.text('bullet'));
+    await tester.tap(find.text('Bullet'));
     await tester.pumpAndSettle();
     expect(settings.value.explorer.speeds, contains(LichessSpeed.bullet));
     await tester.tap(find.text('1600'));
@@ -194,7 +194,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Speed'), findsNothing);
     expect(
-      find.text('bullet blitz rapid classical · 1600 2000 2200 2500'),
+      find.text('Bullet Blitz Rapid Classical · 1600 2000 2200 2500'),
       findsOneWidget,
     );
     await tester.tap(find.text('TWIC'));

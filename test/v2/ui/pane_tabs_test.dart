@@ -90,7 +90,7 @@ void main() {
       expect(find.text('Replies'), findsOneWidget);
     });
 
-    testWidgets('the tabs share the width, whatever their words', (
+    testWidgets('tabs stay compact instead of stretching across the pane', (
       tester,
     ) async {
       await pumpStrip(tester, open: ['replies', 'explorer']);
@@ -99,19 +99,26 @@ void main() {
             .ancestor(of: find.text(label), matching: find.byType(InkWell))
             .first,
       );
-      expect(sizeOf('Moves').width, sizeOf('Explorer').width);
+      expect(sizeOf('Moves').width, lessThan(sizeOf('Explorer').width));
+      expect(sizeOf('Explorer').width, lessThan(150));
       expect(sizeOf('Moves').height, greaterThanOrEqualTo(paneTabHeight - 8));
       await expectSameWidthUnderPointer(tester, 'Replies');
     });
   });
 
   group('PaneTabStrip closing', () {
-    testWidgets('a click brings a tab up, with no × on any', (tester) async {
+    testWidgets('a click selects and a visible close button closes the tab', (
+      tester,
+    ) async {
       final tabs = await pumpStrip(tester, open: ['replies', 'explorer']);
       await tester.tap(find.text('Explorer'));
       await tester.pumpAndSettle();
       expect(tabs.selected, 'explorer');
-      expect(find.byIcon(Icons.close), findsNothing);
+      expect(find.byIcon(Icons.close), findsNWidgets(2));
+      await tester.tap(find.byTooltip('Close Explorer'));
+      await tester.pumpAndSettle();
+      expect(tabs.open, ['moves', 'replies']);
+      expect(tabs.selected, 'replies');
     });
 
     testWidgets('a middle click closes a tab', (tester) async {

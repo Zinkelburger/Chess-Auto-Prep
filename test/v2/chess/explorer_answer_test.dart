@@ -40,7 +40,7 @@ void main() {
     expect(const ExplorerChoice(source: ExplorerSource.twic).narrowing, '');
     expect(
       const ExplorerChoice(source: ExplorerSource.lichess).narrowing,
-      'blitz rapid classical · 2000+',
+      'Blitz Rapid Classical · 2000+',
     );
     expect(
       const ExplorerChoice(
@@ -48,14 +48,14 @@ void main() {
         speeds: {LichessSpeed.bullet},
         ratings: {1600, 2200},
       ).narrowing,
-      'bullet · 1600 2200',
+      'Bullet · 1600 2200',
     );
     expect(
       const ExplorerChoice(
         source: ExplorerSource.twic,
         classicalOnly: true,
       ).narrowing,
-      'classical only',
+      'Classical only',
     );
   });
 

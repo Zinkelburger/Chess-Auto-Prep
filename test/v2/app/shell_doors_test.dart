@@ -123,7 +123,7 @@ void main() {
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
     expect(find.text('Save to repertoire…'), findsOneWidget);
-    expect(find.text('Save to study…'), findsOneWidget);
+    expect(find.text('Save to study…'), findsNothing);
     expect(find.text('Paste PGN or FEN'), findsOneWidget);
   });
 
@@ -135,8 +135,8 @@ void main() {
     await pressCtrl(tester, LogicalKeyboardKey.keyN);
     expect(w.session.isScratch, isTrue);
     expect(w.session.currentMove?.san, 'c5');
-    expect(find.text('Analysis board'), findsWidgets);
-    expect(find.text('Not saved'), findsOneWidget);
+    expect(find.text('Analysis'), findsWidgets);
+    expect(find.text('Temporary analysis'), findsOneWidget);
   });
 
   testWidgets('a clipboard with no moves is refused in plain English', (

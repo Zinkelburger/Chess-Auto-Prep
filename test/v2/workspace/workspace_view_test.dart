@@ -419,8 +419,8 @@ void main() {
     analysis.dispose();
     startAnalysis();
     await pump(tester);
-    expect(find.text('Analysis board'), findsOneWidget);
-    expect(find.text('Not saved'), findsOneWidget);
+    expect(find.text('Analysis'), findsOneWidget);
+    expect(find.text('Temporary analysis'), findsOneWidget);
     expect(find.text('No moves'), findsOneWidget);
   });
 }

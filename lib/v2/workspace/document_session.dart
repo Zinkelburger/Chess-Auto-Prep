@@ -28,24 +28,10 @@ import 'session_results.dart';
 
 part 'external_document_edits.dart';
 
-/// The document open in the workspace, where the user is in it, and the
-/// edits they make to it.
-///
-/// Holds the chapter (an immutable value), the file it came from and the
-/// cursor. The board, the move list and every panel derive what they show
-/// from these; nothing else in the workspace keeps a copy of the tree, the
-/// position or which file is open. Writing belongs to the [DocumentSaver]
-/// this session was given: an edit replaces the chapter and hands the saver
-/// the new file text.
-///
-/// It notifies in two parts, so a listener hears only what it shows. The
-/// session itself notifies when the document changes — another chapter or
-/// game, an edit, a refusal, a flip — and [cursorListenable] when the cursor
-/// moves, which is every arrow key: the library, the outline and the game
-/// list never need to hear that. What follows the position, the board and
-/// the engine, listens to [anyChange]. The chapter is always replaced before
-/// the cursor moves into it, so a cursor listener never reads a path the
-/// tree does not have yet.
+/// The active immutable chapter, file, cursor and edits. DocumentSaver owns
+/// persistence. The board, move list and panels derive their state from here.
+/// This notifies for document changes; cursorListenable notifies for navigation,
+/// and anyChange combines both. A new chapter is installed before its cursor.
 final class DocumentSession extends ChangeNotifier {
   DocumentSession(this._store, this._saver) {
     _shown = (chapter: _board.chapter, view: null);
@@ -64,10 +50,7 @@ final class DocumentSession extends ChangeNotifier {
   store.Receipt? get persistedChange => _saver.lastReceipt;
   Listenable get persistedChanges => _saver;
 
-  /// The chapter on the board, and — when it is one of several a file holds
-  /// by tag — the file and where its games sit in it; the view is null when
-  /// the chapter is the whole file. Edits are made to the chapter and, with
-  /// a view, put back into the file. One field, so the two cannot disagree.
+  /// Active chapter and optional file/section projection, replaced atomically.
   ({Chapter chapter, SectionView? view})? _shown;
 
   Chapter? get _chapter => _shown?.chapter;
@@ -81,7 +64,26 @@ final class DocumentSession extends ChangeNotifier {
   String? get _readOnly => _file?.readOnly;
 
   /// The analysis board, up whenever no file is; the window starts on it.
-  final _board = KeptBoard(analysisBoard(side: Side.white));
+  var _board = KeptBoard(analysisBoard(side: Side.white));
+
+  /// Identity and undo history of the active temporary analysis tab.
+  KeptBoard get analysisPage => _board;
+
+  RetainedDraft? get retainedDraft => _held == null
+      ? null
+      : RetainedDraft(shown: _shown!, held: _held!, revision: _saver.revision!);
+
+  /// Restores a tab's unsaved viewer changes against their original revision.
+  /// A later save still checks that revision; external edits cannot be overwritten.
+  void restoreDraft(RetainedDraft draft) {
+    final source = _source;
+    if (source == null) return;
+    _shown = draft.shown;
+    _held = draft.held;
+    _saver.opened(source, draft.revision, readOnly: _readOnly);
+    notifyListeners();
+  }
+
   final _cursor = ValueNotifier<NodePath>(const NodePath.root());
   final _commentLine = ValueNotifier<CommentLine?>(null);
   EditRefused? _refused;
@@ -89,15 +91,11 @@ final class DocumentSession extends ChangeNotifier {
   bool _flipped = false;
   int _opens = 0;
 
-  /// The ticket of the open, or the change to the analysis board, still on
-  /// its way; null when none is. An undo is not made meanwhile: the saver
-  /// goes to another file when it lands, and the undo would put back the
-  /// file being left and could show it under the one arriving.
+  /// Pending navigation ticket. Undo waits so it cannot restore a previous
+  /// file's contents under the arriving file's identity.
   int? _opening;
 
-  /// Whether an undo is reading the version it put back. Edits wait for it:
-  /// one made to the chapter on screen until then would be written over
-  /// that version.
+  /// Edits wait while undo reads the version it restored.
   bool _restoring = false;
 
   bool _disposed = false;
@@ -105,12 +103,8 @@ final class DocumentSession extends ChangeNotifier {
   /// Edits to the open file shown but not written; null when there are none.
   HeldEdits? _held;
 
-  /// Whether an edit to a file is kept in memory rather than written: on in
-  /// the PGN Viewer, where moves played on the board are for looking, off
-  /// in the builder, which saves every edit as it is made. Once one edit is
-  /// held, the rest join it until [keepHeld] or [discardHeld], whichever
-  /// mode is up: a file half on disk and half in memory could not be undone
-  /// or thrown away as one.
+  /// Viewer edits stay in memory; builder edits autosave. Once held, all
+  /// further edits join the draft until keepHeld or discardHeld, in any mode.
   bool get holdsEdits => _holdsEdits;
   bool _holdsEdits = false;
   set holdsEdits(bool on) {
@@ -403,16 +397,27 @@ final class DocumentSession extends ChangeNotifier {
   /// place, once the file that was up has its last words written, as
   /// opening another file would. Whether the board is up: false when
   /// another document was asked for meanwhile, or the session went.
-  Future<bool> showAnalysisBoard([Chapter? board]) async {
+  Future<bool> showAnalysisBoard([Chapter? board]) => _selectAnalysis(
+    board == null ? _board : (KeptBoard(board)..restart(board)),
+  );
+
+  Future<bool> restoreAnalysisPage(KeptBoard page) => _selectAnalysis(page);
+
+  Future<bool> _selectAnalysis(KeptBoard page) async {
     if (_disposed) return false;
-    if (board == null && isScratch) return true;
+    if (identical(page, _board) && isScratch) return true;
     // Before the flush, which then writes what the words make of the file.
     _editors.commit();
     final ticket = ++_opens;
     if (!isScratch) await _switching(ticket, _saver.flush);
     if (_disposed || ticket != _opens) return false;
     _saver.closed();
-    if (board != null) _board.restart(board);
+    if (isScratch) {
+      _board
+        ..chapter = _chapter!
+        ..cursor = cursor;
+    }
+    _board = page;
     _showBoard();
     return true;
   }

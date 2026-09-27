@@ -107,7 +107,15 @@ class _RepliesPaneState extends State<RepliesPane> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _Status(replies: widget.replies, gaps: widget.gaps),
-            Expanded(child: _body(context)),
+            Expanded(
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: repliesMaxWidth),
+                  child: _body(context),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -289,7 +297,7 @@ class _ReplyRow extends StatelessWidget {
                   ),
                 ),
                 if (valued) _expectimax(theme),
-                _mark(theme),
+                Flexible(child: _mark(theme)),
                 const SizedBox(width: Space.m),
               ],
             ),

@@ -33,7 +33,16 @@ enum ExplorerSource {
 
 /// The time controls the Lichess database is split by, as the API names
 /// them.
-enum LichessSpeed { bullet, blitz, rapid, classical, correspondence }
+enum LichessSpeed {
+  bullet('Bullet'),
+  blitz('Blitz'),
+  rapid('Rapid'),
+  classical('Classical'),
+  correspondence('Correspondence');
+
+  const LichessSpeed(this.title);
+  final String title;
+}
 
 /// The rating bands the Lichess database offers.
 const lichessRatings = [1600, 1800, 2000, 2200, 2500];
@@ -97,9 +106,9 @@ final class ExplorerChoice {
     ExplorerSource.masters ||
     ExplorerSource.thisFile ||
     ExplorerSource.myGames => '',
-    ExplorerSource.twic => classicalOnly ? 'classical only' : '',
+    ExplorerSource.twic => classicalOnly ? 'Classical only' : '',
     ExplorerSource.lichess =>
-      '${speedsInOrder.map((s) => s.name).join(' ')} · ${_ratingsSummary()}',
+      '${speedsInOrder.map((s) => s.title).join(' ')} · ${_ratingsSummary()}',
   };
 
   /// `2000+` when the bands run to the top without a hole, else the bands.
@@ -114,7 +123,7 @@ final class ExplorerChoice {
 
   /// What a cache is keyed by: everything that changes the answer.
   String get key =>
-      '${source.name}|${speedsInOrder.map((s) => s.name).join(',')}|'
+      '${source.name}|${speedsInOrder.map((s) => s.title).join(',')}|'
       '${ratingsInOrder.join(',')}|$classicalOnly';
 
   Map<String, Object> toJson() => {
