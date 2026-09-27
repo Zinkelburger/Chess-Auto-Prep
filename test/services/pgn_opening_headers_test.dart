@@ -1,10 +1,11 @@
+import 'package:chess_auto_prep/chess_core/pgn/opening_book.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_collection.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dartchess/dartchess.dart';
-import 'package:chess_auto_prep/core/pgn/pgn_collection_helpers.dart';
 import 'package:chess_auto_prep/services/opening_book_service.dart';
-import 'package:chess_auto_prep/services/pgn_opening_headers.dart';
-import 'package:chess_auto_prep/services/pgn_mainline_lexer.dart';
-import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_opening_headers.dart';
+import 'package:chess_auto_prep/chess_core/pgn/mainline_lexer.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_text.dart';
 
 void main() {
   test(

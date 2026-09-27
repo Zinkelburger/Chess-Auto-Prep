@@ -9,8 +9,9 @@
 ///
 /// Both are small (a field is dozens of rows, the directory hundreds), so the
 /// store keeps everything in memory after one load and rewrites a whole file
-/// per change. The MCP tooling never reads these; its hand-off stays the
-/// opponents.json file, which [TournamentImport] turns into a tournament.
+/// per change. The MCP tooling (`people_populate`, `people_upsert`) writes
+/// the same files while the app is closed; rows keep its `lookup` report in
+/// [PersonRecord.extra].
 library;
 
 import 'dart:convert';
@@ -260,7 +261,7 @@ class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
 
   PersonRecord? person(String id) => _people[id];
 
-  /// Name, handle or USCF ID contains every word of [query].
+  /// Name, alias, handle or USCF ID contains every word of [query].
   List<PersonRecord> searchPeople(String query) {
     final words = query.toLowerCase().split(RegExp(r'\s+'))
       ..removeWhere((w) => w.isEmpty);
@@ -268,6 +269,7 @@ class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
     return people.where((person) {
       final haystack = [
         person.name,
+        ...person.aliases,
         person.uscfId ?? '',
         person.chesscom ?? '',
         person.lichess ?? '',
@@ -304,7 +306,8 @@ class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
     if (personName != null) {
       for (final person in candidates) {
         // A namesake on record under a different USCF ID is someone else.
-        if (_normalizedKey(person.name) == personName &&
+        if ((_normalizedKey(person.name) == personName ||
+                person.aliases.any((a) => _normalizedKey(a) == personName)) &&
             (id == null || person.uscfId == null)) {
           return person;
         }

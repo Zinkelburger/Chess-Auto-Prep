@@ -15,7 +15,7 @@
 /// drops, and the caller decides what to do about it.
 library;
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
 import 'line_extractor.dart';
@@ -78,7 +78,7 @@ class RepertoireSlicer {
   /// Rank the lines of an already-selected tree.
   ///
   /// The tree must carry its repertoire-move flags — a saved
-  /// `<name>_tree.json` does, because selection runs before it is written.
+  /// artifact generation does, because selection runs before it is written.
   static RepertoireSlicer forTree(
     BuildTree tree, {
     required TreeBuildConfig config,

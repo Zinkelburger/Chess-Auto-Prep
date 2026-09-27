@@ -1,3 +1,9 @@
+import 'dart:async';
+import 'package:chess_auto_prep/services/engine/engine_search_budget.dart';
+import 'package:chess_auto_prep/features/settings/models/engine_configuration.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
 import 'package:flutter/widgets.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import 'package:chess_auto_prep/services/engine/board_engine.dart';
@@ -8,14 +14,25 @@ import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 const _startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
 class _FailingPool extends StockfishPool {
-  _FailingPool() : super.fresh();
+  _FailingPool()
+    : super(
+        settings: EngineConfiguration.new,
+        budget: EngineSearchBudget(capacity: () => 1),
+      );
   @override
   Future<void> prepareForTreeBuild(int threadBudget) async {
     throw StateError('Provisioning failed');
   }
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= RuntimeSettings.preferences());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   WidgetsFlutterBinding.ensureInitialized();
   late EngineLifecycle lifecycle;
   late int notificationCount;
@@ -23,9 +40,8 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    lifecycle = EngineLifecycle.instance;
-    lifecycle.resetForTest();
-    EngineLifecycle.testMode = true;
+    lifecycle = engines.lifecycle;
+
     notificationCount = 0;
     countNotifications = () => notificationCount++;
     lifecycle.addListener(countNotifications);
@@ -33,15 +49,19 @@ void main() {
 
   tearDown(() {
     lifecycle.removeListener(countNotifications);
-    lifecycle.resetForTest();
   });
 
   test(
     'failed generation restores state and does not poison future toggles',
     () async {
-      EngineLifecycle.testMode = false;
-      final board = BoardEngine(createConnection: () async => null);
-      final independent = EngineLifecycle.fresh(
+      final board = BoardEngine(
+        settings: EngineConfiguration.new,
+        budget: engines.budget,
+        createConnection: () async => null,
+      );
+      final independent = EngineLifecycle(
+        loadEnabled: () async => true,
+        saveEnabled: (_) async {},
         pool: _FailingPool(),
         board: board,
       );
@@ -67,6 +87,83 @@ void main() {
     await lifecycle.exitGeneration();
     await lifecycle.resume();
     expect(lifecycle.state, EngineState.off);
+  });
+
+  test('startup read serializes with an early off toggle', () async {
+    final loading = Completer<bool>();
+    final saved = <bool>[];
+    final independent = EngineLifecycle(
+      pool: engines.pool,
+      board: engines.board,
+      loadEnabled: () => loading.future,
+      saveEnabled: (value) async => saved.add(value),
+    );
+    addTearDown(independent.dispose);
+    final startup = independent.loadPersistedState();
+    final toggle = independent.toggleOff();
+    await Future<void>.delayed(Duration.zero);
+    expect(saved, isEmpty);
+    loading.complete(true);
+    await Future.wait([startup, toggle]);
+    expect(independent.state, EngineState.off);
+    expect(saved, [false]);
+    await independent.loadPersistedState();
+    await independent.resume();
+    expect(independent.state, EngineState.off);
+  });
+
+  test('late startup cannot replace an explicit toggle', () async {
+    var reads = 0;
+    final independent = EngineLifecycle(
+      pool: engines.pool,
+      board: engines.board,
+      loadEnabled: () async {
+        reads++;
+        return true;
+      },
+      saveEnabled: (_) async {},
+    );
+    addTearDown(independent.dispose);
+    await independent.toggleOff();
+    await independent.loadPersistedState();
+    expect(reads, 0);
+    expect(independent.state, EngineState.off);
+  });
+
+  test('failed startup stays off through resume and permits retry', () async {
+    var fail = true;
+    var writes = 0;
+    final independent = EngineLifecycle(
+      pool: engines.pool,
+      board: engines.board,
+      loadEnabled: () async {
+        if (fail) throw StateError('preferences unavailable');
+        return true;
+      },
+      saveEnabled: (_) async {
+        writes++;
+      },
+    );
+    addTearDown(independent.dispose);
+    await expectLater(independent.loadPersistedState(), throwsStateError);
+    await independent.resume();
+    expect(independent.state, EngineState.off);
+    expect(writes, 0);
+    fail = false;
+    await independent.loadPersistedState();
+    expect(independent.state, EngineState.idle);
+    await independent.suspend();
+    await independent.resume();
+    expect(independent.state, EngineState.idle);
+    expect(writes, 0, reason: 'navigation must not rewrite the preference');
+  });
+
+  test('startup during generation preserves exclusive ownership', () async {
+    await lifecycle.enterGeneration(1);
+    await lifecycle.loadPersistedState();
+    expect(lifecycle.state, EngineState.generating);
+    await lifecycle.exitGeneration();
+    expect(lifecycle.state, EngineState.idle);
   });
 
   test('starts in off state', () {

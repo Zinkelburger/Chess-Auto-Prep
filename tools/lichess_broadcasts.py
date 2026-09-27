@@ -9,6 +9,7 @@ normalised PGN per broadcast, a manifest, and one merged PGN ready for
 database) or for opening in the app.
 
     python3 tools/lichess_broadcasts.py by falstan --collection massachusetts
+    python3 tools/lichess_broadcasts.py by jsr12345 --community-only --collection us-community
     python3 tools/lichess_broadcasts.py tour GiQfOTDu --collection massachusetts
     python3 tools/lichess_broadcasts.py search "World Open"
     python3 tools/lichess_broadcasts.py status --collection massachusetts
@@ -38,6 +39,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -204,7 +206,8 @@ def event_name(event: str, tour_name: str) -> str:
 
 
 def merge_games(per_tour: Iterable[tuple[dict[str, Any], list[Game]]]) -> list[Game]:
-    """Union of all tours' games with moves, newest broadcast last."""
+    """Union of all tours' games with moves, newest broadcast last, every
+    player written one way (see [canonical_names])."""
     seen: dict[str, Game] = {}
     for _tour, games in per_tour:
         for g in games:
@@ -214,7 +217,49 @@ def merge_games(per_tour: Iterable[tuple[dict[str, Any], list[Game]]]) -> list[G
             kept = seen.get(key)
             if kept is None or len(g.movetext) > len(kept.movetext):
                 seen[key] = g
-    return sorted(seen.values(), key=_sort_key)
+    names = canonical_names(seen.values())
+    merged = []
+    for g in seen.values():
+        tags = dict(g.tags)
+        for side in ("White", "Black"):
+            if side in tags:
+                tags[side] = names.get(_name_key(tags[side]), tags[side])
+        merged.append(Game(tags, g.movetext))
+    return sorted(merged, key=_sort_key)
+
+
+def surname_first(name: str) -> str:
+    """`Emma Linyue Zhang` → `Zhang, Emma Linyue`, the TWIC form. A name
+    that already has a comma, or is one word, is left alone."""
+    name = " ".join(name.split())
+    if "," in name or " " not in name:
+        return name
+    given, surname = name.rsplit(" ", 1)
+    return f"{surname}, {given}"
+
+
+def canonical_names(games: Iterable[Game]) -> dict[str, str]:
+    """One spelling per person across the collection.
+
+    Lichess broadcasters write `Felix Wu` where chess.com and TWIC write
+    `Wu, Felix`, so the same player would list twice. Per order-free name
+    key, a comma form that some source used wins (the most frequent, then
+    the longest); otherwise the name is turned surname-first.
+    """
+    spellings: dict[str, Counter[str]] = {}
+    for g in games:
+        for side in ("White", "Black"):
+            name = " ".join(g.tags.get(side, "").split())
+            if name and name != "?":
+                spellings.setdefault(_name_key(name), Counter())[name] += 1
+    out: dict[str, str] = {}
+    for key, counts in spellings.items():
+        comma = [n for n in counts if "," in n]
+        if comma:
+            out[key] = max(comma, key=lambda n: (counts[n], len(n)))
+        else:
+            out[key] = surname_first(max(counts, key=lambda n: (counts[n], len(n))))
+    return out
 
 
 def _sort_key(g: Game) -> tuple[str, str, float, int]:
@@ -423,6 +468,12 @@ def main(argv: list[str] | None = None) -> int:
 
     p_by = sub.add_parser("by", help="fetch every broadcast run by a Lichess user")
     p_by.add_argument("user")
+    p_by.add_argument(
+        "--community-only",
+        action="store_true",
+        help="skip the user's official (tiered) broadcasts; those are in the "
+        "Lichess monthly downloads (tools/lichess_broadcast_archive.py) and TWIC",
+    )
     add_collection_args(p_by)
 
     p_tour = sub.add_parser("tour", help="fetch broadcasts by tour id")
@@ -449,6 +500,11 @@ def main(argv: list[str] | None = None) -> int:
         if not tours:
             print(f"no broadcasts by {args.user}", file=sys.stderr)
             return 1
+        if args.community_only:
+            official = [t for t in tours if t.get("tier")]
+            tours = [t for t in tours if not t.get("tier")]
+            if official:
+                print(f"skipping {len(official)} official broadcasts", file=sys.stderr)
         ids = [t["id"] for t in tours]
     elif args.command == "tour":
         ids = args.tour_id

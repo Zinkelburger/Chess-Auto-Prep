@@ -178,25 +178,39 @@ extension BughouseTimeStanceX on BughouseTimeStance {
   /// What the engine is told. Only [ahead] unlocks sitting on both boards.
   bool get givesTimeAdvantage => this == BughouseTimeStance.ahead;
 
+  /// Both partners share one margin — being up on your own diagonal means
+  /// your partner is up by exactly the same amount against theirs — so the
+  /// stance is the sign of a single number and one team holds it or neither
+  /// does.
+  ///
+  /// It names the teams by their letters rather than as "we" and "they",
+  /// which is what the seat chips beside the boards and the BughouseDB page
+  /// both do. [BughouseState.seatLetter] is relative to the team you chose,
+  /// so ours is A + B whichever side of board 1 you take; these must match
+  /// [BughouseState.teamLetters].
+  ///
+  /// It names the sit rather than the margin because that is what a player
+  /// is deciding. The hint carries the caveat the label cannot: sitting is
+  /// only available to whoever is on move.
   String get label => switch (this) {
-    BughouseTimeStance.ahead => 'We are ahead',
-    BughouseTimeStance.level => 'Level',
-    BughouseTimeStance.behind => 'They are ahead',
+    BughouseTimeStance.ahead => 'A + B may sit',
+    BughouseTimeStance.level => 'Even',
+    BughouseTimeStance.behind => 'C + D may sit',
   };
 
-  String get shortLabel => switch (this) {
-    BughouseTimeStance.ahead => 'Ahead',
-    BughouseTimeStance.level => 'Level',
-    BughouseTimeStance.behind => 'Behind',
-  };
+  String get shortLabel => label;
 
-  /// A tooltip, not a lesson. [level] and [behind] read the same because they
-  /// search the same — the engine's clock model is one bit — and two identical
-  /// hints say that more quietly than a paragraph explaining it would.
+  /// A tooltip, not a lesson. It adds the two things the label leaves out:
+  /// that the right comes from the diagonal clock, and that it is only there
+  /// to be used while that team is on move — when one team holds both moves
+  /// the other cannot sit whatever its time.
   String get hint => switch (this) {
-    BughouseTimeStance.ahead => 'The team may sit on both boards',
-    BughouseTimeStance.level ||
-    BughouseTimeStance.behind => 'No sitting on both boards',
+    BughouseTimeStance.ahead =>
+      'A + B are up on the diagonal clock, so they can wait rather than move',
+    BughouseTimeStance.level =>
+      'Neither team is up on the clock: both have to move',
+    BughouseTimeStance.behind =>
+      'C + D are up on the diagonal clock, so they can wait rather than move',
   };
 }
 
@@ -387,14 +401,15 @@ class BughouseState {
   /// The letter that names the person playing [mover] on [which].
   ///
   /// Four people play a bughouse game and neither "board 1" nor a colour names
-  /// one of them, so each seat gets a letter: **A** and **B** face each other
-  /// on board 1, **C** and **D** on board 2, and our team is A and C. The
+  /// one of them, so each seat gets a letter: **A** and **C** face each other
+  /// on board 1, **D** and **B** on board 2, so that a team's two letters run
+  /// together — ours is A and B, theirs C and D. The
   /// engine's joint action reads as advice only once each half is attached to
   /// whoever has to carry it out, and a letter does that without a phrase like
   /// "your partner's opponent" in every row.
   String seatLetter(BughouseBoard which, Side mover) => which == BughouseBoard.a
-      ? (mover == team ? 'A' : 'B')
-      : (mover == team.opposite ? 'C' : 'D');
+      ? (mover == team ? 'A' : 'C')
+      : (mover == team.opposite ? 'B' : 'D');
 
   /// Who that seat is, in two or three words: `you`, `your partner`, `your
   /// opponent`, `partner's opponent`.
@@ -406,8 +421,8 @@ class BughouseState {
   String seatRole(BughouseBoard which, Side mover) =>
       switch (seatLetter(which, mover)) {
         'A' => 'You',
-        'B' => 'Opponent',
-        'C' => 'Partner',
+        'C' => 'Opponent',
+        'B' => 'Partner',
         _ => 'Partner’s opponent',
       };
 
@@ -419,16 +434,16 @@ class BughouseState {
   String seatDescription(BughouseBoard which, Side mover) {
     final who = switch (seatLetter(which, mover)) {
       'A' => 'You',
-      'B' => 'your opponent',
-      'C' => 'your partner',
+      'C' => 'your opponent',
+      'B' => 'your partner',
       _ => 'your partner\'s opponent',
     };
     return '${seatLetter(which, mover)} — $who, '
         '${mover.name} on ${which.label.toLowerCase()}';
   }
 
-  /// Both seats of a team, in board order: ours is `A + C`, theirs `B + D`.
-  String teamLetters(Side which) => which == team ? 'A + C' : 'B + D';
+  /// Both seats of a team: ours is `A + B`, theirs `C + D`.
+  String teamLetters(Side which) => which == team ? 'A + B' : 'C + D';
 
   /// Whether [team] may sit on both boards.
   ///

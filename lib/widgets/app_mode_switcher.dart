@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
-import '../theme/app_colors.dart';
 import 'app_overflow_menu.dart';
 
 class AppModeSwitcher extends StatelessWidget {
@@ -51,9 +50,12 @@ class AppModeSwitcher extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         const SizedBox(width: 16),
-        const SizedBox(
+        SizedBox(
           height: 28,
-          child: VerticalDivider(width: 1, color: AppColors.outline),
+          child: VerticalDivider(
+            width: 1,
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
         ),
         const SizedBox(width: 16),
         picker,

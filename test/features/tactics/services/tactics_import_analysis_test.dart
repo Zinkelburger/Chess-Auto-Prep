@@ -17,6 +17,10 @@
 @TestOn('vm')
 library;
 
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../../support/runtime_settings.dart';
+
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/tactics/services/tactics_database.dart';
@@ -50,7 +54,14 @@ class _FakePathProvider extends PathProviderPlatform
 /// comes back at — the shared eval cache's `minDepth` screen is keyed on it.
 const int kDepth = 8;
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Directory tempDir;
@@ -71,7 +82,7 @@ void main() {
   Future<TacticsImportService> newService() async {
     final database = TacticsDatabase();
     await database.loadPositions();
-    return TacticsImportService(database: database)..pool = pool;
+    return TacticsImportService(pool: pool, database: database);
   }
 
   setUpAll(() async {
@@ -99,7 +110,9 @@ void main() {
     // Likewise the on-disk analyzed-game list, which outlives one service.
     await StorageFactory.instance.saveAnalyzedGameIds(const <String>[]);
 
-    worker = ScriptedWorker();
+    worker = ScriptedWorker()
+      ..script[afterE4e5] = cp(0)
+      ..script[fenAfter(const ['e4', 'e5', 'Nf3', 'Nc6'])] = cp(0);
     pool = ScriptedPool(worker);
     service = await newService();
 
@@ -267,10 +280,11 @@ $moves''';
       // search would throw, the game would be dropped, and the review
       // callback below would never fire.
       worker.script[start] = cp(-500, pv: const ['e2e4', 'e7e5', 'g1f3']);
+      worker.script[afterE4e5] = cp(-500);
 
       final result = await review(twoPly('skip'));
 
-      expect(worker.searched, [start]);
+      expect(worker.searched, [start, afterE4e5]);
       expect(result.positions, isEmpty);
       // A move losing nothing is what "wcAfter := wcBefore" means: from a
       // position worth -5.00 to me, only an unchanged score leaves this clean.
@@ -280,7 +294,7 @@ $moves''';
       // ply's best line — without a second search for either.
       expect(
         annotated[key('skip')],
-        '1. e4 \$4 { [%eval -5.00,$kDepth] [%bestline e4,e5,Nf3] } ( 1. e4 e5 2. Nf3 ) 1... e5 *',
+        '1. e4 \$4 { [%eval -5.00,$kDepth] [%bestline e4,e5,Nf3] } ( 1. e4 e5 2. Nf3 ) 1... e5 { [%eval -5.00,$kDepth] [%pv e5,Nf3] } *',
       );
     });
 
@@ -293,7 +307,7 @@ $moves''';
 
       final result = await review(twoPly('noskip'));
 
-      expect(worker.searched, [start, afterE4]);
+      expect(worker.searched, [start, afterE4, afterE4e5]);
       expect(result.positions, isEmpty, reason: 'still -5.00 to me, no swing');
       expect(reviewed[key('noskip')], clean);
     });
@@ -310,14 +324,14 @@ $moves''';
 
       final result = await review(twoPly('cachehit'));
 
-      expect(worker.searched, [start]);
+      expect(worker.searched, [start, afterE4e5]);
       expect(result.positions, isEmpty);
       expect(reviewed[key('cachehit')], clean);
       // The cached number still reaches the movetext; it just brings no line
       // with it, so the next ply keeps none either.
       expect(
         annotated[key('cachehit')],
-        '1. e4 { [%eval -0.54,$kDepth] [%pv d4] } e5 *',
+        '1. e4 { [%eval -0.54,$kDepth] [%pv d4] } e5 { [%eval 0.00,$kDepth] } *',
       );
     });
 
@@ -330,7 +344,7 @@ $moves''';
 
       final result = await review(twoPly('cachemiss'));
 
-      expect(worker.searched, [start, afterE4]);
+      expect(worker.searched, [start, afterE4, afterE4e5]);
       expect(result.positions.single.mistakeType, '?!');
     });
 
@@ -342,7 +356,7 @@ $moves''';
 
       await review(twoPly('shallow'));
 
-      expect(worker.searched, [start, afterE4]);
+      expect(worker.searched, [start, afterE4, afterE4e5]);
     });
   });
 
@@ -543,7 +557,7 @@ $moves''';
 
       await review(twoPly('caps', white: 'ME'), username: 'me');
 
-      expect(worker.searched, [start, afterE4]);
+      expect(worker.searched, [start, afterE4, afterE4e5]);
       expect(reviewed[key('caps')], clean);
     });
   });
@@ -569,7 +583,7 @@ $moves''';
         // survive being written back. Both are valid PGN.
         '1. e4 { [%eval -0.30,$kDepth] [%pv d4] } '
         'e5 \$6 { [%eval 0.40,$kDepth] [%bestline e5] } ( 1... e5 ) '
-        '2. Nf3 { [%eval 0.50,$kDepth] [%pv Nc3] } Nc6 *',
+        '2. Nf3 { [%eval 0.50,$kDepth] [%pv Nc3] } Nc6 { [%eval 0.00,$kDepth] [%pv Nf6] } *',
       );
     });
 

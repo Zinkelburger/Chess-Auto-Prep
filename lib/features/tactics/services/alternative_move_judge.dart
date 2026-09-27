@@ -16,8 +16,6 @@ import 'dart:async';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
-import '../../../services/engine/engine_lifecycle.dart';
-import '../../../services/engine/stockfish_connection_factory.dart';
 import '../../../services/engine/stockfish_pool.dart';
 import 'tactics_engine.dart' show TacticsEngine;
 
@@ -56,12 +54,12 @@ bool isAcceptableAlternative({
 /// shared Stockfish pool; tests pass a canned scorer.
 class EngineAlternativeJudge {
   EngineAlternativeJudge({
-    Future<EvalResult> Function(String fen, int depth)? evaluate,
-    Future<bool> Function()? engineReady,
+    required Future<EvalResult> Function(String fen, int depth) evaluate,
+    required Future<bool> Function() engineReady,
     this.depth = defaultDepth,
     this.timeout = const Duration(seconds: 10),
-  }) : _evaluate = evaluate ?? _poolEvaluate,
-       _engineReady = engineReady ?? _poolReady;
+  }) : _evaluate = evaluate,
+       _engineReady = engineReady;
 
   /// Deep enough to tell a real alternative from a trap in a tactical
   /// position, shallow enough to answer in well under the time a wrong move
@@ -72,18 +70,6 @@ class EngineAlternativeJudge {
   final Future<bool> Function() _engineReady;
   final int depth;
   final Duration timeout;
-
-  static Future<EvalResult> _poolEvaluate(String fen, int depth) =>
-      StockfishPool.instance.evaluateFen(fen, depth);
-
-  /// One worker is plenty for two evals; a repertoire build that holds the
-  /// engine wins, as it does for every other engine consumer.
-  static Future<bool> _poolReady() async {
-    if (!StockfishConnectionFactory.isAvailable) return false;
-    if (EngineLifecycle.instance.state == EngineState.generating) return false;
-    await StockfishPool.instance.ensureWorkers(1);
-    return StockfishPool.instance.workerCount > 0;
-  }
 
   Future<bool> judge(AlternativeMoveQuery query) async {
     try {

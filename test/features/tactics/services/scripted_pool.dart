@@ -13,6 +13,9 @@
 /// deterministic without changing any decision it takes.
 library;
 
+import 'package:chess_auto_prep/features/settings/models/engine_configuration.dart';
+import 'package:chess_auto_prep/services/engine/engine_search_budget.dart';
+
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -64,7 +67,8 @@ class SilentEngine implements EngineConnection {
 /// and, just as usefully, a search the pass was supposed to *skip* fails loudly
 /// instead of silently succeeding.
 class ScriptedWorker extends EvalWorker {
-  ScriptedWorker() : super(SilentEngine());
+  ScriptedWorker()
+    : super(SilentEngine(), budget: EngineSearchBudget(capacity: () => 1));
 
   final Map<String, Eval> script = {};
 
@@ -101,7 +105,11 @@ class ScriptedWorker extends EvalWorker {
 }
 
 class ScriptedPool extends StockfishPool {
-  ScriptedPool(this.worker) : super.fresh();
+  ScriptedPool(this.worker)
+    : super(
+        settings: EngineConfiguration.new,
+        budget: EngineSearchBudget(capacity: () => 1),
+      );
 
   final ScriptedWorker worker;
   int stopAllCalls = 0;

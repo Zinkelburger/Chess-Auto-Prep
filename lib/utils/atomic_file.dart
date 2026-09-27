@@ -57,6 +57,11 @@ class AtomicWriteConflict implements IOException {
       'overwrite the newer content.';
 }
 
+class AtomicNameCollision extends FileSystemException {
+  const AtomicNameCollision(String path)
+    : super('Destination already exists; refusing to overwrite', path);
+}
+
 /// Prefix of the journal a backup-and-swap leaves beside its target.
 const _journalPrefix = '.cap-safe-write-';
 const _journalSuffix = '.json';
@@ -68,6 +73,25 @@ class AtomicFileWriter {
 
   final AtomicWriteHook? testHook;
   final bool forceBackupSwapForTesting;
+
+  /// A document boundary can validate native revisions and publish while
+  /// holding the same mutex used by legacy writers. The transaction is scoped
+  /// to this callback; retaining it after the callback fails closed.
+  Future<T> transaction<T>(
+    File target,
+    Future<T> Function(AtomicFileTransaction transaction) action,
+  ) => withFileOperationLock(target.parent.path, () async {
+    await _recoverAtomicWritesLocked(target.parent);
+    final transaction = AtomicFileTransaction._(this, target);
+    try {
+      return await action(transaction);
+    } finally {
+      transaction._active = false;
+      // A callback must not release the mutex while a write it started can
+      // still complete, even if it forgot to await that write.
+      await Future.wait(transaction._pending);
+    }
+  });
 
   /// Writes [content], keeping the file gzipped if it already was.
   ///
@@ -157,6 +181,8 @@ class AtomicFileWriter {
     File target,
     List<int> bytes, {
     required bool createOnly,
+    Future<void> Function(File staged)? validate,
+    Future<void> Function(File staged, File destination)? installNew,
   }) async {
     final parent = target.parent;
     if (!await parent.exists()) await parent.create(recursive: true);
@@ -165,18 +191,20 @@ class AtomicFileWriter {
     final tmp = File(p.join(parent.path, '.$base.$token.tmp'));
 
     await tmp.writeAsBytes(bytes, flush: true);
-    await _step(AtomicWriteStep.tempFlushed);
-
     var keepArtifactsForRecovery = false;
     try {
+      await _step(AtomicWriteStep.tempFlushed);
+      await validate?.call(tmp);
       if (createOnly) {
         if (await target.exists()) {
-          throw FileSystemException(
-            'Destination already exists; refusing to overwrite',
-            target.path,
-          );
+          throw AtomicNameCollision(target.path);
         }
-        await _installByRename(tmp, target);
+        if (installNew != null) {
+          await installNew(tmp, target);
+          await _step(AtomicWriteStep.replacementInstalled);
+        } else {
+          await _installByRename(tmp, target);
+        }
         return;
       }
       if (!forceBackupSwapForTesting) {
@@ -275,6 +303,36 @@ class AtomicFileWriter {
     if (await backup.exists()) await backup.delete();
     if (await journal.exists()) await journal.delete();
     return null;
+  }
+}
+
+/// A scoped write capability, not an independently lockable raw writer.
+class AtomicFileTransaction {
+  AtomicFileTransaction._(this._writer, this._target);
+  final AtomicFileWriter _writer;
+  final File _target;
+  bool _active = true;
+  final List<Future<void>> _pending = [];
+
+  Future<void> writeBytes(
+    List<int> bytes, {
+    required bool createOnly,
+    required Future<void> Function(File staged) validate,
+    Future<void> Function(File staged, File destination)? installNew,
+  }) {
+    if (!_active) throw StateError('File transaction has ended');
+    final operation = _writer._writeBytesLocked(
+      _target,
+      bytes,
+      createOnly: createOnly,
+      validate: validate,
+      installNew: installNew,
+    );
+    // Observe errors for the drain without changing the caller's result.
+    _pending.add(
+      operation.then<void>((_) {}, onError: (Object _, StackTrace _) {}),
+    );
+    return operation;
   }
 }
 

@@ -11,12 +11,14 @@ library;
 import 'package:dartchess/dartchess.dart' show Position;
 import 'package:flutter/foundation.dart';
 
-import '../core/pgn/solitaire_controller.dart' show SolitaireGuess;
+import '../features/documents/controllers/solitaire_controller.dart'
+    show SolitaireGuess;
 import '../models/solitaire_trophy.dart';
 import '../utils/chess_utils.dart' show tryParseFen;
 import '../utils/eval_constants.dart' show effectiveCpFromScores;
 import 'engine/stockfish_pool.dart';
-import 'move_eval.dart' show MoveEval;
+import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart'
+    show MoveEval;
 
 /// A guess must beat the game move by at least this much to earn a trophy.
 /// Below it the "improvement" is engine noise between two reasonable moves.
@@ -50,6 +52,7 @@ typedef _BestAttempt = ({String san, int advantageCp, int userCpFromUser});
 /// [existing] are skipped, so re-running analysis on the same game doesn't
 /// duplicate the shelf.
 Future<List<SolitaireTrophy>> detectSolitaireTrophies({
+  required StockfishPool pool,
   required List<SolitaireGuess> guesses,
   required List<MoveEval> evals,
   required bool userIsWhite,
@@ -92,6 +95,7 @@ Future<List<SolitaireTrophy>> detectSolitaireTrophies({
       scoreMate: gameMove.scoreMate,
     );
     final best = await _bestAttempt(
+      pool: pool,
       before: before,
       fenBefore: gameMove.fenBefore,
       attempts: guess.wrongAttempts,
@@ -132,6 +136,7 @@ String _attemptKey(String fen, String san) => '$fen|$san';
 /// [minAdvantageCp]. Attempts already in [awarded] and unparseable or
 /// failing evaluations are skipped.
 Future<_BestAttempt?> _bestAttempt({
+  required StockfishPool pool,
   required Position before,
   required String fenBefore,
   required List<String> attempts,
@@ -141,7 +146,6 @@ Future<_BestAttempt?> _bestAttempt({
   required int depth,
   required int minAdvantageCp,
 }) async {
-  final pool = StockfishPool.instance;
   _BestAttempt? best;
   for (final san in attempts) {
     if (awarded.contains(_attemptKey(fenBefore, san))) continue;

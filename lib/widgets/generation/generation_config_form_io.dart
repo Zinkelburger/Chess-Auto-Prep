@@ -7,28 +7,13 @@ mixin _GenerationConfigIo
     _searchAlgorithm = config.isRollingSearch
         ? SearchAlgorithm.rolling
         : SearchAlgorithm.pure;
-    _cutoffCtrl.text = (config.minProbability * 100).toString();
     _maxPlyCtrl.text = config.maxPly.toString();
 
     _evalGuardCtrl.text = config.maxEvalLossCp.toString();
-    _minEvalCtrl.text = config.minEvalCp.toString();
-    _maxEvalCtrl.text = config.maxEvalCp.toString();
     _maiaEloCtrl.text = config.maiaElo.toString();
-    _oppPolicyTempCtrl.text = config.oppPolicyTemperature.toString();
-    _multipvCtrl.text = config.ourMultipv.toString();
     _oppMaxChildrenCtrl.text = config.oppMaxChildren.toString();
     _oppMassTargetCtrl.text = config.oppMassTarget.toString();
-    _leafConfidenceCtrl.text = config.leafConfidence.toString();
-    _ourAltDiscountCtrl.text = config.ourAltDiscount.toString();
-    _fastAltGapCtrl.text = config.fastAltGapCp.toString();
-    _maiaPriorGamesCtrl.text = config.maiaPriorGames.toString();
-    _coverMinProbCtrl.text = config.coverMinProb.toString();
-    _verifyDepthCtrl.text = config.verifyDepth.toString();
-    _setupMovesCtrl.text = config.setupMoves;
-    _setupToleranceCtrl.text = config.setupToleranceCp.toString();
-    _memorabilityToleranceCtrl.text = config.memorabilityToleranceCp.toString();
     _timeBudgetCtrl.text = config.timeBudgetMinutes.toString();
-    _wideOpening = config.openingWidthPlies > 0;
     _verifyFinal = config.verifyFinal;
     _trapsOnly = config.trapsOnly;
     _dbMinGamesCtrl.text = config.dbMinGames.toString();
@@ -36,8 +21,6 @@ mixin _GenerationConfigIo
     _minEloCtrl.text = config.minElo.toString();
     _buildMode = config.buildMode;
     _selectionMode = config.selectionMode;
-    _relativeEval = config.relativeEval;
-    _preferNovelties = config.noveltyWeight > 0;
     _engineTailCtrl.text = config.engineTailPlies.toString();
     _rankLinesByImportance = config.rankLinesByImportance;
     _annotationDetail = config.annotationDetail;
@@ -51,12 +34,8 @@ mixin _GenerationConfigIo
     _alternativeLines = config.alternativeLines;
     _useMasterGames = config.useMasterGames;
     _downloadMasterGamesIfMissing = config.downloadMasterGamesIfMissing;
-    _masterDepthBonusCtrl.text = config.masterDepthBonusPlies.toString();
-    _masterPriorityWeightCtrl.text = config.masterPriorityWeight.toString();
-    _offBookOppMaxChildrenCtrl.text = config.offBookOppMaxChildren.toString();
     _bookTailMaxPlyCtrl.text = config.bookTailMaxPly.toString();
     _bookTieBreakCtrl.text = config.bookTieBreakWindowCp.toString();
-    _replyWindowCtrl.text = config.replyWindowCp.toString();
     // The three sub-editors keep their state in controllers this form owns,
     // so seeding them needs neither a mounted widget nor a post-frame hop.
     //
@@ -72,16 +51,6 @@ mixin _GenerationConfigIo
     // Auto-expand the skeleton when non-empty so a resumed/preset plan is
     // visible, not silently carried.
     _showSkeleton = !config.skeletonPlan.isEmpty;
-  }
-
-  /// Pre-configure DB Explorer mode with the given PGN file paths and
-  /// minimum game count.
-  void seedDbExplorer({required List<String> pgnPaths, int minGames = 1}) {
-    setState(() {
-      _buildMode = BuildMode.dbExplorer;
-      _dbMinGamesCtrl.text = minGames.toString();
-    });
-    _pgnSources.seedFromPaths(pgnPaths);
   }
 
   void setMaxPly(int maxPly) {
@@ -102,6 +71,10 @@ mixin _GenerationConfigIo
 
   /// Returns an error message when the current settings cannot start a build.
   String? validateBeforeStart() {
+    final databases = context.read<EvalDatabaseSettings>();
+    if (databases.state.committed == null) {
+      return 'Load saved evaluation database preferences before starting. Retry above if loading failed.';
+    }
     final numError = _firstNumFieldError();
     if (numError != null) return numError;
     if (_buildMode == BuildMode.dbExplorer && _pgnSources.filePaths.isEmpty) {
@@ -114,7 +87,7 @@ mixin _GenerationConfigIo
     if (_buildMode == BuildMode.maiaDbExplore &&
         !_evalSources.enableLocalChessDb &&
         !_evalSources.enableChessDbApi &&
-        !EvalDatabaseSettings.instance.enableCdbDirect) {
+        !databases.committed.enableCdbDirect) {
       setState(() => _showEvalSources = true);
       return '"Database win rates" needs at least one evaluation database. '
           'Expand "Evaluation databases" at the bottom of the form and '
@@ -122,7 +95,7 @@ mixin _GenerationConfigIo
     }
     if (_buildMode == BuildMode.chessDbBook &&
         !_evalSources.enableChessDbApi &&
-        !EvalDatabaseSettings.instance.enableCdbDirect) {
+        !databases.committed.enableCdbDirect) {
       setState(() => _showEvalSources = true);
       return 'The ChessDB mainline book needs ChessDB itself. Expand '
           '"Evaluation databases" at the bottom of the form and enable the '
@@ -149,12 +122,10 @@ mixin _GenerationConfigIo
     required String startFen,
     required bool playAsWhite,
   }) {
-    final evalDepth = BulkAnalysisSettings.instance.depth;
-    final engineThreads = EngineSettings.instance.cores;
+    final evalDepth = context.read<BulkAnalysisSettings>().depth;
+    final engineThreads = context.read<EngineSettings>().cores;
 
-    final seed =
-        _seedConfig ??
-        TreeBuildConfig(startFen: startFen, playAsWhite: playAsWhite);
+    final seed = _configSeed;
 
     final config = seed.copyWith(
       startFen: startFen,
@@ -165,10 +136,7 @@ mixin _GenerationConfigIo
       // its own root, and inheriting a plan point's exclusions would narrow
       // it silently.
       rootReplyExclude: const [],
-      minProbability: _parsePercentToFraction(
-        _cutoffCtrl.text,
-        fallbackPercent: 0.01,
-      ),
+      minProbability: (seed.minProbability * 100).clamp(0.0, 100.0) / 100,
       maxPly: int.tryParse(_maxPlyCtrl.text.trim()) ?? 4,
       buildMode: _buildMode,
       // The sources panel keeps its files across a trip through another
@@ -182,16 +150,8 @@ mixin _GenerationConfigIo
       evalDepth: evalDepth,
       engineThreads: engineThreads,
       maxEvalLossCp: int.tryParse(_evalGuardCtrl.text.trim()) ?? 30,
-      // Colour-independent: with relativeEval on (the default) this is an
-      // offset from the root's own eval, and an offset has no colour.
-      minEvalCp: int.tryParse(_minEvalCtrl.text.trim()) ?? -100,
-      maxEvalCp: int.tryParse(_maxEvalCtrl.text.trim()) ?? 200,
       maiaElo: int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200,
-      oppPolicyTemperature:
-          (double.tryParse(_oppPolicyTempCtrl.text.trim()) ?? 1.0).clamp(
-            0.1,
-            10.0,
-          ),
+      oppPolicyTemperature: seed.oppPolicyTemperature.clamp(0.1, 10.0),
       engineTailPlies: (int.tryParse(_engineTailCtrl.text.trim()) ?? 6).clamp(
         0,
         40,
@@ -222,25 +182,14 @@ mixin _GenerationConfigIo
       downloadMasterGamesIfMissing:
           _buildMode != BuildMode.stockfishExpectimax &&
           _downloadMasterGamesIfMissing,
-      masterDepthBonusPlies:
-          (int.tryParse(_masterDepthBonusCtrl.text.trim()) ?? 10).clamp(0, 40),
-      masterPriorityWeight:
-          (double.tryParse(_masterPriorityWeightCtrl.text.trim()) ?? 0.35)
-              .clamp(0.0, 3.0),
-      offBookOppMaxChildren:
-          (int.tryParse(_offBookOppMaxChildrenCtrl.text.trim()) ?? 2).clamp(
-            0,
-            20,
-          ),
+      masterDepthBonusPlies: seed.masterDepthBonusPlies.clamp(0, 40),
+      masterPriorityWeight: seed.masterPriorityWeight.clamp(0.0, 3.0),
+      offBookOppMaxChildren: seed.offBookOppMaxChildren.clamp(0, 20),
       bookTailMaxPly: (int.tryParse(_bookTailMaxPlyCtrl.text.trim()) ?? 40)
           .clamp(0, 200),
       bookTieBreakWindowCp: (int.tryParse(_bookTieBreakCtrl.text.trim()) ?? 0)
           .clamp(0, 200),
-      replyWindowCp: (int.tryParse(_replyWindowCtrl.text.trim()) ?? 0).clamp(
-        0,
-        200,
-      ),
-      ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? 4,
+      replyWindowCp: seed.replyWindowCp.clamp(0, 200),
       oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 4,
       oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.80,
       searchAlgorithm: _searchAlgorithm,
@@ -248,54 +197,31 @@ mixin _GenerationConfigIo
         0,
         24 * 60,
       ),
-      ourAltDiscount: (double.tryParse(_ourAltDiscountCtrl.text.trim()) ?? 0.25)
-          .clamp(0.0, 1.0),
-      fastAltGapCp: (int.tryParse(_fastAltGapCtrl.text.trim()) ?? 30).clamp(
-        0,
-        500,
-      ),
-      // "Wide opening search" on → widen the first few plies (both colors'
-      // first two of our moves); off → 0 (legacy: only the root ply is wide).
-      // A seed that carried its own width keeps it: the checkbox says
-      // whether to widen, not by how much.
-      openingWidthPlies: _wideOpening
-          ? (seed.openingWidthPlies > 0 ? seed.openingWidthPlies : 3)
+      ourAltDiscount: seed.ourAltDiscount.clamp(0.0, 1.0),
+      fastAltGapCp: seed.fastAltGapCp.clamp(0, 500),
+      openingWidthPlies: seed.openingWidthPlies > 0
+          ? seed.openingWidthPlies
           : 0,
-      maiaPriorGames: double.tryParse(_maiaPriorGamesCtrl.text.trim()) ?? 30.0,
-      coverMinProb: (double.tryParse(_coverMinProbCtrl.text.trim()) ?? 0.05)
-          .clamp(0.0, 1.0),
+      coverMinProb: seed.coverMinProb.clamp(0.0, 1.0),
       // Verification is not merely off in these modes, it is meaningless:
       // the move came from a database, and re-ranking it by a local search
       // would replace the answer with a different one.
       verifyFinal: _verifyFinal && !_noVerifyMode,
-      verifyDepth: (int.tryParse(_verifyDepthCtrl.text.trim()) ?? 0).clamp(
-        0,
-        40,
-      ),
-      setupMoves: _setupMovesCtrl.text.trim(),
+      verifyDepth: seed.verifyDepth.clamp(0, 40),
+      setupMoves: seed.setupMoves.trim(),
       skeletonPlan: _skeleton.currentPlan(playAsWhite: playAsWhite),
-      setupToleranceCp: (int.tryParse(_setupToleranceCtrl.text.trim()) ?? 30)
-          .clamp(0, 500),
-      // Novelties and the natural-move bias pull in opposite directions;
-      // the field keeps its value but is ignored while novelties are on.
-      memorabilityToleranceCp: _preferNovelties
+      setupToleranceCp: seed.setupToleranceCp.clamp(0, 500),
+      // Preserve the preset policy: novelty disables natural-move bias.
+      memorabilityToleranceCp: seed.noveltyWeight > 0
           ? 0
-          : (int.tryParse(_memorabilityToleranceCtrl.text.trim()) ?? 0).clamp(
-              0,
-              500,
-            ),
-      relativeEval: _relativeEval,
+          : seed.memorabilityToleranceCp.clamp(0, 500),
       // A ChessDB book has one child at each of our nodes, so every
       // selection mode picks the same move. Pin it so the form and the
       // summary say what actually runs.
       selectionMode: _buildMode == BuildMode.chessDbBook
           ? SelectionMode.engineOnly
           : _selectionMode,
-      // Same as the opening width: on keeps a seed's own weight.
-      noveltyWeight: _preferNovelties
-          ? (seed.noveltyWeight > 0 ? seed.noveltyWeight : 60)
-          : 0,
-      leafConfidence: double.tryParse(_leafConfidenceCtrl.text.trim()) ?? 1.0,
+      noveltyWeight: seed.noveltyWeight > 0 ? seed.noveltyWeight : 0,
     );
 
     return _evalSources.applyTo(
@@ -314,18 +240,9 @@ mixin _GenerationConfigIo
               selectionMode: SelectionMode.expectimax,
               engineTailPlies: 0,
             ),
-      databases: EvalDatabaseSettings.instance,
+      databases: context.read<EvalDatabaseSettings>().committed,
       cdbDirectAvailable: _cdbDirectAvailable,
       engineEvalDepth: evalDepth,
     );
-  }
-
-  double _parsePercentToFraction(
-    String raw, {
-    required double fallbackPercent,
-  }) {
-    final parsed = double.tryParse(raw.replaceAll('%', '').trim());
-    final safePercent = (parsed ?? fallbackPercent).clamp(0.0, 100.0);
-    return safePercent / 100.0;
   }
 }

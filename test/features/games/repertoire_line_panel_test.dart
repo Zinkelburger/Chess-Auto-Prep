@@ -2,6 +2,7 @@
 /// line on the viewer's own board.
 library;
 
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/features/games/services/game_deviation_service.dart';
 import 'package:chess_auto_prep/features/games/services/my_repertoire_settings.dart';
 import 'package:chess_auto_prep/features/games/widgets/repertoire_line_panel.dart';
@@ -90,6 +91,8 @@ Future<void> _pump(
   addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: RepertoireLinePanel(
           gameLabel: 'me vs opp',

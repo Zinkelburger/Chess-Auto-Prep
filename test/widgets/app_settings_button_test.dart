@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import '../support/runtime_settings.dart';
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/screens/settings_screen.dart';
 import 'package:chess_auto_prep/widgets/app_mode_switcher.dart';
@@ -5,13 +7,20 @@ import 'package:chess_auto_prep/widgets/app_overflow_menu.dart';
 import 'package:chess_auto_prep/widgets/app_settings_button.dart';
 import 'package:chess_auto_prep/widgets/settings/settings_navigation.dart';
 import 'package:flutter/material.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+RuntimeSettings? _settings;
+RuntimeSettings get settings => _settings ??= testRuntimeSettings();
 void main() {
+  setUp(() {
+    _settings = null;
+    addTearDown(() => _settings?.dispose());
+  });
   setUp(() => SharedPreferences.setMockInitialValues({}));
   tearDown(unavailableModes.clear);
 
@@ -21,10 +30,14 @@ void main() {
     addTearDown(tester.view.reset);
     final app = AppState();
     addTearDown(app.dispose);
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      settings,
       ChangeNotifierProvider.value(
         value: app,
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Consumer<AppState>(
             builder: (context, app, _) => Scaffold(
               appBar: AppBar(

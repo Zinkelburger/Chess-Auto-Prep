@@ -17,6 +17,11 @@
 /// the uncovered check.
 library;
 
+import 'package:chess_auto_prep/services/tree_build_service.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
+
 import 'package:chess_auto_prep/features/audit/models/audit_finding.dart';
 import 'package:chess_auto_prep/features/holes/services/hole_hunt_config.dart';
 import 'package:chess_auto_prep/features/holes/services/hole_hunt_service.dart';
@@ -57,7 +62,14 @@ Future<OpeningTree> _build(List<String> games) => OpeningTreeBuilder.buildTree(
   maxDepth: 12,
 );
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   late OpeningTree tree;
   late ScriptedEngine engine;
   late EvalWorker worker;
@@ -109,14 +121,24 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await clearEvalCache();
     engine = ScriptedEngine();
-    worker = await installScriptedWorker(engine);
-    service = HoleHuntService();
+    worker = await installScriptedWorker(
+      engine,
+      pool: engines.pool,
+      budget: engines.budget,
+    );
+    service = HoleHuntService(
+      pool: engines.pool,
+      probeTreeBuilder: TreeBuildService(
+        pool: engines.pool,
+        lifecycle: engines.lifecycle,
+      ).build,
+    );
     tree = await _build(_repertoire);
   });
 
   tearDown(() {
     useMaia(null);
-    resetPool();
+    resetPool(engines.pool);
   });
 
   Future<List<AuditFinding>> hunt({

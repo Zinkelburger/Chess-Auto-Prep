@@ -1,18 +1,22 @@
+import 'package:chess_auto_prep/design_system/theme/app_theme.dart';
+import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'dart:async';
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:provider/provider.dart';
-import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'dart:ui' show PointerDeviceKind;
 
 import 'package:dartchess/dartchess.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 
 import 'package:chess_auto_prep/services/engine/engine_connection.dart';
-import 'package:chess_auto_prep/services/engine/board_engine.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_connection_factory.dart';
 import 'package:chess_auto_prep/widgets/engine/inline_engine_bar.dart';
 import 'package:flutter/material.dart';
-import 'package:chess_auto_prep/models/engine_settings.dart';
+import 'package:chess_auto_prep/features/settings/controllers/engine_settings.dart';
 import 'package:chess_auto_prep/widgets/common/number_stepper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -61,21 +65,29 @@ class _Connection implements EngineConnection {
   }
 }
 
+RuntimeSettings? _runtimeSettings;
+RuntimeSettings get runtimeSettings =>
+    _runtimeSettings ??= testRuntimeSettings();
+EngineRuntime get engines => testEngines(runtimeSettings);
 void main() {
+  setUp(() {
+    _runtimeSettings = null;
+    addTearDown(() => _runtimeSettings?.dispose());
+  });
   const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    EngineLifecycle.instance.resetForTest();
-    EngineLifecycle.testMode = true;
+
     StockfishConnectionFactory.createForTest = () async => _Connection();
   });
   tearDown(() {
-    BoardEngine.instance.dispose();
+    engines.board.dispose();
     StockfishConnectionFactory.createForTest = null;
-    EngineLifecycle.instance.resetForTest();
   });
 
   Widget harness({required bool active}) => MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(
       body: TickerMode(
         enabled: active,
@@ -87,8 +99,12 @@ void main() {
   testWidgets(
     'compact engine starts and stops analysis with settings available',
     (tester) async {
-      await tester.pumpWidget(
+      await pumpRuntimeWidget(
+        tester,
+        runtimeSettings,
         const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(body: InlineEngineBar(fen: fen, compactChrome: true)),
         ),
       );
@@ -111,6 +127,61 @@ void main() {
     },
   );
 
+  testWidgets('live appearance preserves the active engine search and PV', (
+    tester,
+  ) async {
+    final theme = ValueNotifier(AppTheme.dark());
+    addTearDown(theme.dispose);
+    final connections = <_Connection>[];
+    StockfishConnectionFactory.createForTest = () async {
+      final connection = _Connection();
+      connections.add(connection);
+      return connection;
+    };
+    await pumpRuntimeWidget(
+      tester,
+      runtimeSettings,
+      ValueListenableBuilder(
+        valueListenable: theme,
+        builder: (_, value, _) => MaterialApp(
+          theme: value,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: InlineEngineBar(fen: fen)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    InlineEngineBar.toggleEngine(tester.element(find.byType(InlineEngineBar)));
+    await tester.pumpAndSettle();
+    final searches = connections.single.commands
+        .where((command) => command.startsWith('go '))
+        .length;
+    await tester.tap(find.byTooltip('Show full line'));
+    await tester.pumpAndSettle();
+    theme.value = AppTheme.light();
+    await tester.pumpAndSettle();
+    expect(connections, hasLength(1));
+    expect(connections.single.disposed, isFalse);
+    expect(
+      connections.single.commands.where((command) => command.startsWith('go ')),
+      hasLength(searches),
+    );
+    expect(find.text('e4'), findsOneWidget);
+    expect(find.byTooltip('Collapse line'), findsOneWidget);
+    await tester.tap(find.byTooltip('Show threat'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Hide threat'), findsOneWidget);
+    expect(
+      connections.single.commands.where((command) => command.startsWith('go ')),
+      hasLength(searches + 1),
+    );
+    InlineEngineBar.toggleEngine(tester.element(find.byType(InlineEngineBar)));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Collapse line'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'off prepares one engine and repeated toggles keep its configuration',
     (tester) async {
@@ -120,16 +191,20 @@ void main() {
         connections.add(connection);
         return connection;
       };
-      await tester.pumpWidget(harness(active: true));
+      await pumpRuntimeWidget(tester, runtimeSettings, harness(active: true));
       await tester.pumpAndSettle();
       expect(connections, hasLength(1));
       final connection = connections.single;
       expect(connection.commands.where((c) => c.startsWith('go ')), isEmpty);
       for (var i = 0; i < 3; i++) {
-        InlineEngineBar.toggleEngine();
+        InlineEngineBar.toggleEngine(
+          tester.element(find.byType(InlineEngineBar).first),
+        );
         await tester.pumpAndSettle();
         expect(find.text('e4'), findsOneWidget);
-        InlineEngineBar.toggleEngine();
+        InlineEngineBar.toggleEngine(
+          tester.element(find.byType(InlineEngineBar).first),
+        );
         await tester.pumpAndSettle();
         expect(connection.disposed, isFalse);
       }
@@ -144,7 +219,7 @@ void main() {
         connection.commands.where((c) => c.startsWith('setoption name Hash')),
         hasLength(1),
       );
-      await tester.pumpWidget(const SizedBox());
+      await pumpRuntimeWidget(tester, runtimeSettings, const SizedBox());
       await tester.pump();
       expect(connection.disposed, isTrue);
     },
@@ -153,7 +228,7 @@ void main() {
   testWidgets('PV refreshes keep the PGN below the engine at a fixed offset', (
     tester,
   ) async {
-    final settings = EngineSettings.instance;
+    final settings = runtimeSettings.engine;
     final previousMultiPv = settings.multiPv;
     settings.multiPv = 3;
     addTearDown(() {
@@ -164,6 +239,8 @@ void main() {
     const pgnKey = ValueKey('pgn-content');
 
     Widget viewer(String position, {double textScale = 1}) => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: MediaQuery(
         data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
         child: Scaffold(
@@ -182,9 +259,11 @@ void main() {
 
     double pgnTop() => tester.getTopLeft(find.byKey(pgnKey)).dy;
 
-    await tester.pumpWidget(viewer(fen));
+    await pumpRuntimeWidget(tester, runtimeSettings, viewer(fen));
     final disabledTop = pgnTop();
-    InlineEngineBar.toggleEngine();
+    InlineEngineBar.toggleEngine(
+      tester.element(find.byType(InlineEngineBar).first),
+    );
     await tester.pump();
     final enabledTop = pgnTop();
     expect(enabledTop, greaterThan(disabledTop));
@@ -222,7 +301,7 @@ void main() {
     // Navigating clears the old PVs before the new search responds.
     const nextFen =
         'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
-    await tester.pumpWidget(viewer(nextFen));
+    await pumpRuntimeWidget(tester, runtimeSettings, viewer(nextFen));
     expect(find.text('Analyzing...'), findsOneWidget);
     expect(find.text('d4'), findsNothing);
     expect(pgnTop(), enabledTop);
@@ -231,23 +310,23 @@ void main() {
     );
     connection.output.add('bestmove e7e5');
     await tester.pumpAndSettle();
-    expect(find.text('1 lines • depth 1'), findsOneWidget);
+    expect(find.text('1 line • depth 1'), findsOneWidget);
     expect(pgnTop(), enabledTop);
 
     const mateFen = '7k/6Q1/5K2/8/8/8/8/8 b - - 0 1';
-    await tester.pumpWidget(viewer(mateFen));
+    await pumpRuntimeWidget(tester, runtimeSettings, viewer(mateFen));
     connection.output.add('bestmove (none)');
     await tester.pumpAndSettle();
     expect(find.text('No legal moves.'), findsOneWidget);
     expect(pgnTop(), enabledTop);
 
-    // Explicit line-count and accessibility changes can resize the panel.
+    // Committed line count applies to the next search, preserving this result.
     settings.multiPv = 1;
     await tester.pump();
-    expect(pgnTop(), lessThan(enabledTop));
+    expect(pgnTop(), enabledTop);
     connection.output.add('bestmove (none)');
     await tester.pumpAndSettle();
-    await tester.pumpWidget(viewer(fen, textScale: 2));
+    await pumpRuntimeWidget(tester, runtimeSettings, viewer(fen, textScale: 2));
     final scaledTop = pgnTop();
     connection.output.add(
       'info depth 1 multipv 1 score cp 20 nodes 10 pv e2e4 e7e5 g1f3',
@@ -256,10 +335,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(pgnTop(), scaledTop);
     expect(tester.takeException(), isNull);
-    InlineEngineBar.toggleEngine();
+    InlineEngineBar.toggleEngine(
+      tester.element(find.byType(InlineEngineBar).first),
+    );
     await tester.pumpAndSettle();
     expect(pgnTop(), lessThan(scaledTop));
-    await tester.pumpWidget(const SizedBox());
+    await pumpRuntimeWidget(tester, runtimeSettings, const SizedBox());
   });
 
   testWidgets('full PV expands and later moves insert the complete line', (
@@ -269,8 +350,12 @@ void main() {
     StockfishConnectionFactory.createForTest = () async => connection;
     List<String>? inserted;
     int? clicked;
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      runtimeSettings,
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: SizedBox(
             width: 360,
@@ -285,7 +370,9 @@ void main() {
         ),
       ),
     );
-    InlineEngineBar.toggleEngine();
+    InlineEngineBar.toggleEngine(
+      tester.element(find.byType(InlineEngineBar).first),
+    );
     await tester.pump();
     connection.output.add(
       'info depth 15 multipv 1 score cp 20 nodes 100 pv '
@@ -307,7 +394,7 @@ void main() {
     await tester.tap(find.text('e4'));
     expect(clicked, 0);
     expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox());
+    await pumpRuntimeWidget(tester, runtimeSettings, const SizedBox());
   });
 
   testWidgets('hover lines preserve perspective across turns and board flips', (
@@ -315,12 +402,16 @@ void main() {
   ) async {
     StockfishConnectionFactory.createForTest = () async => _Connection();
     Widget previewHarness(bool flipped) => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: InlineEngineBar(fen: fen, previewFlipped: flipped),
       ),
     );
-    await tester.pumpWidget(previewHarness(true));
-    InlineEngineBar.toggleEngine();
+    await pumpRuntimeWidget(tester, runtimeSettings, previewHarness(true));
+    InlineEngineBar.toggleEngine(
+      tester.element(find.byType(InlineEngineBar).first),
+    );
     await tester.pumpAndSettle();
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: const Offset(799, 599));
@@ -336,16 +427,16 @@ void main() {
     expect(preview().flipped, isTrue);
     expect(preview().position.turn, Side.white);
 
-    await tester.pumpWidget(previewHarness(false));
+    await pumpRuntimeWidget(tester, runtimeSettings, previewHarness(false));
     await tester.pumpAndSettle();
     expect(preview().flipped, isFalse);
-    await tester.pumpWidget(previewHarness(true));
+    await pumpRuntimeWidget(tester, runtimeSettings, previewHarness(true));
     await tester.pumpAndSettle();
     expect(preview().flipped, isTrue);
     await mouse.removePointer();
     await tester.pumpAndSettle();
     expect(find.byType(ChessBoardWidget), findsNothing);
-    await tester.pumpWidget(const SizedBox());
+    await pumpRuntimeWidget(tester, runtimeSettings, const SizedBox());
   });
 
   testWidgets('hidden mode never starts an engine and releases it on leaving', (
@@ -357,20 +448,22 @@ void main() {
       connections.add(connection);
       return connection;
     };
-    await tester.pumpWidget(harness(active: false));
-    InlineEngineBar.toggleEngine();
+    await pumpRuntimeWidget(tester, runtimeSettings, harness(active: false));
+    InlineEngineBar.toggleEngine(
+      tester.element(find.byType(InlineEngineBar).first),
+    );
     await tester.pump();
     expect(connections, isEmpty);
-    await tester.pumpWidget(harness(active: true));
+    await pumpRuntimeWidget(tester, runtimeSettings, harness(active: true));
     await tester.pump();
     expect(connections, hasLength(1));
-    await tester.pumpWidget(harness(active: false));
+    await pumpRuntimeWidget(tester, runtimeSettings, harness(active: false));
     await tester.pump();
     expect(connections.single.disposed, isTrue);
-    await tester.pumpWidget(harness(active: true));
+    await pumpRuntimeWidget(tester, runtimeSettings, harness(active: true));
     await tester.pump();
     expect(connections, hasLength(2));
-    await tester.pumpWidget(const SizedBox());
+    await pumpRuntimeWidget(tester, runtimeSettings, const SizedBox());
     await tester.pump();
     expect(connections.every((c) => c.disposed), isTrue);
     expect(tester.takeException(), isNull);
@@ -382,8 +475,12 @@ void main() {
       final connection = _Connection();
       StockfishConnectionFactory.createForTest = () async => connection;
       var inserted = false;
-      await tester.pumpWidget(
+      await pumpRuntimeWidget(
+        tester,
+        runtimeSettings,
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: InlineEngineBar(
               fen: fen,
@@ -392,7 +489,9 @@ void main() {
           ),
         ),
       );
-      InlineEngineBar.toggleEngine();
+      InlineEngineBar.toggleEngine(
+        tester.element(find.byType(InlineEngineBar).first),
+      );
       await tester.pumpAndSettle();
       expect(connection.commands, contains('position fen $fen'));
       await tester.tap(find.byTooltip('Show threat'));
@@ -412,16 +511,18 @@ void main() {
         connection.commands.lastWhere((c) => c.startsWith('position fen')),
         'position fen $fen',
       );
-      await tester.pumpWidget(const SizedBox());
+      await pumpRuntimeWidget(tester, runtimeSettings, const SizedBox());
     },
   );
 
   testWidgets(
     'compact engine cores read and write the global setting while off',
     (tester) async {
-      final settings = EngineSettings.instance;
+      final settings = runtimeSettings.engine;
       final before = settings.cores;
-      await tester.pumpWidget(
+      await pumpRuntimeWidget(
+        tester,
+        runtimeSettings,
         ChangeNotifierProvider(
           create: (_) => AppState(),
           child: harness(active: true),
@@ -437,8 +538,8 @@ void main() {
       settings.cores = before;
       await tester.pumpAndSettle();
       expect(tester.widget<NumberStepper>(cores).value, before);
-      expect(InlineEngineBar.isEngineEnabled, isFalse);
-      await tester.pumpWidget(const SizedBox());
+      expect(engines.lifecycle.state, EngineState.off);
+      await pumpRuntimeWidget(tester, runtimeSettings, const SizedBox());
     },
   );
 
@@ -446,14 +547,20 @@ void main() {
     tester,
   ) async {
     StockfishConnectionFactory.createForTest = () async => _Connection();
-    await tester.pumpWidget(harness(active: true));
-    InlineEngineBar.toggleEngine();
+    await pumpRuntimeWidget(tester, runtimeSettings, harness(active: true));
+    InlineEngineBar.toggleEngine(
+      tester.element(find.byType(InlineEngineBar).first),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Show threat'));
     await tester.pumpAndSettle();
     expect(find.byTooltip('Hide threat'), findsOneWidget);
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      runtimeSettings,
       const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: TickerMode(
             enabled: true,
@@ -476,16 +583,18 @@ void main() {
           .onPressed,
       isNull,
     );
-    await tester.pumpWidget(const SizedBox());
+    await pumpRuntimeWidget(tester, runtimeSettings, const SizedBox());
   });
 
   testWidgets('connection arriving after unmount is disposed', (tester) async {
     final created = Completer<EngineConnection?>();
     StockfishConnectionFactory.createForTest = () => created.future;
-    await tester.pumpWidget(harness(active: true));
-    InlineEngineBar.toggleEngine();
+    await pumpRuntimeWidget(tester, runtimeSettings, harness(active: true));
+    InlineEngineBar.toggleEngine(
+      tester.element(find.byType(InlineEngineBar).first),
+    );
     await tester.pump();
-    await tester.pumpWidget(const SizedBox());
+    await pumpRuntimeWidget(tester, runtimeSettings, const SizedBox());
     final connection = _Connection();
     created.complete(connection);
     await tester.pump();

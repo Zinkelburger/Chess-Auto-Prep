@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/study_controller.dart';
+import '../../studies/controllers/study_controller.dart';
 import '../../../models/pgn_game_entry.dart';
-import '../../../models/study_document.dart';
-import '../../../services/storage/storage_factory.dart';
+import '../../studies/models/study_document.dart';
 import '../../../utils/app_messages.dart';
 import '../../../widgets/pgn/add_to_study_dialog.dart';
 
@@ -42,6 +41,7 @@ Future<void> addGamesToStudy(
   final destination = await showDialog<AddToStudyResult>(
     context: context,
     builder: (_) => AddToStudyDialog(
+      loadStudies: context.read<StudyController>().listStudies,
       initialChapterName: snapshots[selected.first].name,
       title: 'Add to study',
       selectionSummary: selected.length == 1
@@ -54,7 +54,7 @@ Future<void> addGamesToStudy(
   try {
     final path =
         destination.existingPath ??
-        await StorageFactory.instance.studyFilePath(destination.newStudyName!);
+        await study.copyDestination(destination.newStudyName!);
     await study.addChaptersToStudyFile(path, [
       for (final index in selected)
         StudyChapter.fromGameText(
@@ -63,7 +63,7 @@ Future<void> addGamesToStudy(
               ? destination.chapterName
               : snapshots[index].name,
         ),
-    ]);
+    ], createOnly: destination.newStudyName != null);
   } catch (error) {
     debugPrint('Add games to study failed: $error');
     if (context.mounted) {

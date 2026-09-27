@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chess_auto_prep/models/trap_line_info.dart';
+import 'package:chess_auto_prep/chess_core/generation/trap_line_info.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_tour_order.dart';
 

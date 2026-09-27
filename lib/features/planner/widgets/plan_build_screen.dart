@@ -21,7 +21,6 @@ import 'package:flutter/material.dart';
 import '../../../utils/app_shortcuts.dart';
 import '../../../utils/keyboard_shortcut_utils.dart';
 import '../../../constants/chess_constants.dart';
-import '../../../models/board_annotation.dart';
 import '../../../services/analysis_games_service.dart';
 import '../../../services/generation/generation_config.dart';
 import '../../../theme/app_colors.dart';
@@ -71,7 +70,7 @@ class PlanBuildScreen extends StatefulWidget {
     required this.baseConfig,
     this.chesscomUsername,
     this.lichessUsername,
-    this.dataSource,
+    required this.dataSource,
     this.gamesService,
     this.defaultElo = 1800,
   });
@@ -91,8 +90,8 @@ class PlanBuildScreen extends StatefulWidget {
   final String? chesscomUsername;
   final String? lichessUsername;
 
-  /// Injectable for tests.
-  final PlanDataSource? dataSource;
+  /// Captured by the caller for this planning session.
+  final PlanDataSource dataSource;
   final AnalysisGamesService? gamesService;
   final int defaultElo;
 
@@ -101,12 +100,10 @@ class PlanBuildScreen extends StatefulWidget {
 }
 
 class _PlanBuildScreenState extends State<PlanBuildScreen> {
-  late final PlanDataSource _source =
-      widget.dataSource ?? DefaultPlanDataSource();
   late final AnalysisGamesService _games =
       widget.gamesService ?? AnalysisGamesService();
   late final PlanController _plan = PlanController(
-    source: _source,
+    source: widget.dataSource,
     isWhite: widget.isWhite,
     elo: widget.defaultElo,
   );
@@ -141,9 +138,9 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
 
   List<String>? _previewMoves;
 
-  /// Arrow for the explorer row under the pointer. Its own notifier so a
-  /// hover repaints the board, not the whole screen.
-  final ValueNotifier<BoardAnnotation?> _hoverArrow = ValueNotifier(null);
+  /// From/to squares of the explorer row under the pointer. Its own notifier
+  /// so a hover repaints the board, not the whole screen.
+  final ValueNotifier<Set<String>> _hoverSquares = ValueNotifier(const {});
 
   // Review-phase state.
   final GlobalKey<GenerationConfigFormState> _configKey = GlobalKey();
@@ -169,7 +166,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
     _plan.dispose();
     _movesText.dispose();
     _keys.dispose();
-    _hoverArrow.dispose();
+    _hoverSquares.dispose();
     super.dispose();
   }
 
@@ -546,7 +543,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
             ...KeyBinding.forShortcut(
               AppShortcut.toggleEngine,
               'Toggle engine',
-              InlineEngineBar.toggleEngine,
+              () => InlineEngineBar.toggleEngine(context),
             ),
           ],
           event,
@@ -726,12 +723,16 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
             child: Center(
               child: AspectRatio(
                 aspectRatio: 1,
-                child: ValueListenableBuilder<BoardAnnotation?>(
-                  valueListenable: _hoverArrow,
-                  builder: (context, arrow, _) => ChessBoardWidget(
+                child: ValueListenableBuilder<Set<String>>(
+                  valueListenable: _hoverSquares,
+                  builder: (context, hovered, _) => ChessBoardWidget(
                     position: pos,
                     flipped: !widget.isWhite,
-                    annotations: arrow == null ? const [] : [arrow],
+                    highlightedSquares: hovered,
+                    recentMoveSquares: recentMoveTrailSquares(
+                      Chess.initial,
+                      _boardMoves,
+                    ),
                     // Start: the board sets the root. Walk: a move played
                     // at the question position becomes a candidate and is
                     // selected — Maia's list is a suggestion, not a fence.
@@ -829,9 +830,10 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                             });
                           }
                         },
-                        onHoverMove: (move) => _hoverArrow.value = move == null
-                            ? null
-                            : BoardAnnotation.arrowFromUci(move.uci),
+                        onHoverMove: (move) =>
+                            _hoverSquares.value = move == null
+                            ? const {}
+                            : uciHighlightSquares(move.uci),
                       ),
                     ],
                   ),
@@ -1204,7 +1206,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                   onSelect: (san) => _selectRow(step, san),
                   evaluating: _plan.evaluating,
                   onEvaluate: (san) => unawaited(_plan.evaluateCandidate(san)),
-                  evalSourceLabel: switch (_source) {
+                  evalSourceLabel: switch (_plan.source) {
                     final DefaultPlanDataSource d => d.evalSourceLabel,
                     _ => 'Eval',
                   },

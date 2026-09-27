@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/app_colors.dart';
-import '../../theme/app_text_styles.dart';
+import '../../design_system/theme/app_typography.dart';
+import '../../design_system/theme/workspace_theme.dart';
+import '../../l10n/generated/app_localizations.dart';
 import '../clickable_move_line.dart';
 
 /// A continuous, numbered PV with a fixed eval gutter and optional wrapping.
@@ -43,6 +44,8 @@ class _EnginePvRowState extends State<EnginePvRow> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
     final line = ClickableMoveLineWidget(
       sanMoves: widget.sanMoves,
       startPly: widget.startPly,
@@ -57,11 +60,11 @@ class _EnginePvRowState extends State<EnginePvRow> {
       onHoverExit: widget.onHoverExit,
     );
     return Material(
-      color: AppColors.engineSurface,
+      color: WorkspaceTheme.of(context).panel,
       child: DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           border: Border(
-            bottom: BorderSide(color: AppColors.divider, width: 0.5),
+            bottom: BorderSide(color: colors.outlineVariant, width: 0.5),
           ),
         ),
         child: Row(
@@ -76,10 +79,10 @@ class _EnginePvRowState extends State<EnginePvRow> {
                   textAlign: TextAlign.center,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.mono.copyWith(
+                  style: AppTypography.mono(context).copyWith(
                     fontSize: EnginePvRow.fontSize,
                     fontWeight: FontWeight.w400,
-                    color: widget.evalColor ?? AppColors.ink,
+                    color: widget.evalColor ?? colors.onSurface,
                   ),
                 ),
               ),
@@ -110,7 +113,9 @@ class _EnginePvRowState extends State<EnginePvRow> {
                       style: const ButtonStyle(
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      tooltip: _expanded ? 'Collapse line' : 'Show full line',
+                      tooltip: _expanded
+                          ? l10n.engineAppearanceCollapseLine
+                          : l10n.engineAppearanceShowFullLine,
                       icon: Icon(
                         _expanded ? Icons.expand_less : Icons.expand_more,
                         size: 16,

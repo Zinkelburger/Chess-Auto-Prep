@@ -2,7 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../../services/move_eval.dart' show MoveClassification;
+import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart'
+    show MoveClassification;
 import '../../../services/games_library/game_filter.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';

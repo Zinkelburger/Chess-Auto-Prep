@@ -7,33 +7,58 @@
 /// the top of the movetext and the game nav bar at the bottom.
 library;
 
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
-import '../../core/pgn_viewer_controller.dart';
+import '../../features/documents/controllers/solitaire_controller.dart';
 import '../common/number_stepper.dart';
-import '../../theme/app_colors.dart';
-import '../../theme/app_text_styles.dart';
+import '../common/horizontal_wheel_scroll.dart';
+import '../../design_system/theme/app_typography.dart';
 import '../../utils/app_shortcuts.dart';
 import '../shortcut_tooltip.dart';
 
 /// The choices offered before a session starts. Replaces the status bar while
 /// open; Start begins the game, the close button (or Esc) leaves.
 class SolitaireSetupStrip extends StatelessWidget {
-  final PgnViewerController controller;
+  const SolitaireSetupStrip({
+    super.key,
+    required this.userIsWhite,
+    required this.fromCurrentMove,
+    required this.includeVariations,
+    required this.canStartHere,
+    required this.hasSidelines,
+    required this.startHereLabel,
+    required this.userMovesToGuess,
+    required this.revealDelaySeconds,
+    required this.onUserSideChanged,
+    required this.onFromCurrentMoveChanged,
+    required this.onIncludeVariationsChanged,
+    required this.onRevealDelayChanged,
+    required this.onCancel,
+    required this.onBegin,
+  });
 
-  const SolitaireSetupStrip({super.key, required this.controller});
+  final bool userIsWhite;
+  final bool fromCurrentMove;
+  final bool includeVariations;
+  final bool canStartHere;
+  final bool hasSidelines;
+  final String startHereLabel;
+  final int userMovesToGuess;
+  final int revealDelaySeconds;
+  final ValueChanged<bool> onUserSideChanged;
+  final ValueChanged<bool> onFromCurrentMoveChanged;
+  final ValueChanged<bool> onIncludeVariationsChanged;
+  final ValueChanged<int> onRevealDelayChanged;
+  final VoidCallback onCancel;
+  final VoidCallback onBegin;
 
   @override
   Widget build(BuildContext context) {
-    final setup = controller.solitaireSetup;
-    if (setup == null) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final primary = theme.colorScheme.primary;
-    final delay = controller.solitaire.revealDelaySec;
-    final count = setup.userMovesToGuess;
-    final side = setup.userIsWhite ? 'White' : 'Black';
+    final delay = revealDelaySeconds;
+    final count = userMovesToGuess;
+    final side = userIsWhite ? 'White' : 'Black';
 
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 8, 10),
@@ -47,25 +72,23 @@ class SolitaireSetupStrip extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 'Solitaire',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                  color: primary,
-                ),
+                style: AppTypography.secondary(
+                  context,
+                ).copyWith(fontWeight: FontWeight.bold, color: primary),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Guess the moves of one side; the game unfolds as you get '
                   'them right.',
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.onSurfaceMuted,
+                  style: AppTypography.caption(context).copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               IconButton(
-                onPressed: controller.cancelSolitaireSetup,
+                onPressed: onCancel,
                 icon: const Icon(Icons.close, size: 18),
                 tooltip: actionTooltip('Cancel', shortcut: AppShortcut.leave),
                 visualDensity: VisualDensity.compact,
@@ -88,12 +111,11 @@ class SolitaireSetupStrip extends StatelessWidget {
                     (value: true, label: 'White'),
                     (value: false, label: 'Black'),
                   ],
-                  selected: setup.userIsWhite,
-                  onChanged: (v) =>
-                      controller.updateSolitaireSetup(userIsWhite: v),
+                  selected: userIsWhite,
+                  onChanged: (v) => onUserSideChanged(v),
                 ),
               ),
-              if (setup.canStartHere)
+              if (canStartHere)
                 _Field(
                   label: 'Start',
                   tooltip:
@@ -105,17 +127,16 @@ class SolitaireSetupStrip extends StatelessWidget {
                       (value: false, label: 'Game start'),
                       (
                         value: true,
-                        label: setup.startHereLabel.isEmpty
+                        label: startHereLabel.isEmpty
                             ? 'From here'
-                            : 'From here (${setup.startHereLabel})',
+                            : 'From here ($startHereLabel)',
                       ),
                     ],
-                    selected: setup.fromCurrentMove,
-                    onChanged: (v) =>
-                        controller.updateSolitaireSetup(fromCurrentMove: v),
+                    selected: fromCurrentMove,
+                    onChanged: (v) => onFromCurrentMoveChanged(v),
                   ),
                 ),
-              if (setup.hasSidelines)
+              if (hasSidelines)
                 Tooltip(
                   message:
                       'Also drill the saved sidelines, in the order they '
@@ -124,11 +145,17 @@ class SolitaireSetupStrip extends StatelessWidget {
                   waitDuration: const Duration(milliseconds: 500),
                   child: FilterChip(
                     label: const Text('Include variations'),
-                    selected: setup.includeVariations,
-                    onSelected: (v) =>
-                        controller.updateSolitaireSetup(includeVariations: v),
+                    selected: includeVariations,
+                    onSelected: (v) => onIncludeVariationsChanged(v),
                     visualDensity: VisualDensity.compact,
-                    labelStyle: AppTextStyles.caption,
+                    selectedColor: theme.colorScheme.primaryContainer,
+                    backgroundColor: theme.colorScheme.surfaceContainerLow,
+                    checkmarkColor: theme.colorScheme.onPrimaryContainer,
+                    labelStyle: AppTypography.caption(context).copyWith(
+                      color: includeVariations
+                          ? theme.colorScheme.onPrimaryContainer
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               _Field(
@@ -144,8 +171,7 @@ class SolitaireSetupStrip extends StatelessWidget {
                   suffix: 's',
                   bordered: false,
                   fieldWidth: 36,
-                  onChanged: (v) =>
-                      unawaited(controller.setSolitaireRevealDelay(v)),
+                  onChanged: (v) => onRevealDelayChanged(v),
                 ),
               ),
             ],
@@ -161,8 +187,8 @@ class SolitaireSetupStrip extends StatelessWidget {
                   count == 0
                       ? 'No $side moves to guess with these choices.'
                       : '$count $side move${count == 1 ? '' : 's'} to guess.',
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.onSurfaceMuted,
+                  style: AppTypography.caption(context).copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -177,12 +203,12 @@ class SolitaireSetupStrip extends StatelessWidget {
                       ),
                 waitDuration: const Duration(milliseconds: 500),
                 child: FilledButton.icon(
-                  onPressed: count == 0 ? null : controller.beginSolitaire,
+                  onPressed: count == 0 ? null : onBegin,
                   icon: const Icon(Icons.play_arrow, size: 18),
                   label: const Text('Start'),
                   style: FilledButton.styleFrom(
                     visualDensity: VisualDensity.compact,
-                    textStyle: AppTextStyles.caption,
+                    textStyle: AppTypography.caption(context),
                   ),
                 ),
               ),
@@ -210,18 +236,20 @@ class _Field extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       waitDuration: const Duration(milliseconds: 500),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: AppTextStyles.caption.copyWith(
-              color: AppColors.onSurfaceMuted,
+      child: IntrinsicWidth(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: AppTypography.caption(
+                context,
+              ).copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
-          ),
-          const SizedBox(width: 8),
-          child,
-        ],
+            const SizedBox(width: 8),
+            Flexible(child: HorizontalWheelScroll(child: child)),
+          ],
+        ),
       ),
     );
   }
@@ -248,10 +276,12 @@ class _Segmented<T> extends StatelessWidget {
       selected: {selected},
       onSelectionChanged: (set) => onChanged(set.first),
       showSelectedIcon: false,
-      style: const ButtonStyle(
+      style: ButtonStyle(
         visualDensity: VisualDensity.compact,
-        textStyle: WidgetStatePropertyAll(AppTextStyles.caption),
-        padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 10)),
+        textStyle: WidgetStatePropertyAll(AppTypography.caption(context)),
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(horizontal: 10),
+        ),
       ),
     );
   }
@@ -260,7 +290,8 @@ class _Segmented<T> extends StatelessWidget {
 /// Compact end-of-game strip shown above the movetext instead of a modal
 /// overlay: the user is left freely browsing their fully annotated game.
 class SolitaireCompleteBanner extends StatelessWidget {
-  final PgnViewerController controller;
+  final SolitaireController controller;
+  final VoidCallback onNextGame;
 
   /// Copies the current game's annotated PGN (with guess notes) to the clipboard.
   final VoidCallback onCopyPgn;
@@ -278,6 +309,7 @@ class SolitaireCompleteBanner extends StatelessWidget {
   const SolitaireCompleteBanner({
     super.key,
     required this.controller,
+    required this.onNextGame,
     required this.onCopyPgn,
     required this.onAddToStudy,
     required this.onAnalyse,
@@ -286,7 +318,7 @@ class SolitaireCompleteBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = controller.solitaire;
+    final s = controller;
     final parts = <String>[
       '${s.correctFirstTry}/${s.totalUserMoves} first try',
       if (s.hintedCount > 0) '${s.hintedCount} hinted',
@@ -295,18 +327,22 @@ class SolitaireCompleteBanner extends StatelessWidget {
     final hadWrongTries = s.guessLog.any((g) => g.wrongAttempts.isNotEmpty);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      color: AppColors.success.withValues(alpha: 0.12),
+      color: Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              const Icon(Icons.flag, size: 16, color: AppColors.success),
+              Icon(
+                Icons.flag,
+                size: 16,
+                color: Theme.of(context).colorScheme.tertiary,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Complete — ${parts.join(', ')}.',
-                  style: const TextStyle(fontSize: 12),
+                  style: AppTypography.caption(context),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 2,
                 ),
@@ -320,8 +356,8 @@ class SolitaireCompleteBanner extends StatelessWidget {
               child: Text(
                 'Analyse the game to check whether any of your other tries '
                 'beat the move played — those earn trophies.',
-                style: AppTextStyles.caption.copyWith(
-                  color: AppColors.onSurfaceMuted,
+                style: AppTypography.caption(context).copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
             ),
@@ -339,7 +375,7 @@ class SolitaireCompleteBanner extends StatelessWidget {
                 label: const Text('Exit solitaire'),
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
-                  textStyle: const TextStyle(fontSize: 12),
+                  textStyle: AppTypography.caption(context),
                 ),
               ),
               TextButton.icon(
@@ -348,7 +384,7 @@ class SolitaireCompleteBanner extends StatelessWidget {
                 label: const Text('Copy PGN'),
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
-                  textStyle: const TextStyle(fontSize: 12),
+                  textStyle: AppTypography.caption(context),
                 ),
               ),
               TextButton.icon(
@@ -357,7 +393,7 @@ class SolitaireCompleteBanner extends StatelessWidget {
                 label: const Text('Add to study…'),
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
-                  textStyle: const TextStyle(fontSize: 12),
+                  textStyle: AppTypography.caption(context),
                 ),
               ),
               if (hadWrongTries)
@@ -368,15 +404,15 @@ class SolitaireCompleteBanner extends StatelessWidget {
                   style: FilledButton.styleFrom(
                     visualDensity: VisualDensity.compact,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    textStyle: const TextStyle(fontSize: 12),
+                    textStyle: AppTypography.caption(context),
                   ),
                 ),
               FilledButton.tonal(
-                onPressed: controller.nextGame,
+                onPressed: onNextGame,
                 style: FilledButton.styleFrom(
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  textStyle: const TextStyle(fontSize: 12),
+                  textStyle: AppTypography.caption(context),
                 ),
                 child: const Text('Next game (↓)'),
               ),
@@ -394,7 +430,9 @@ class SolitaireCompleteBanner extends StatelessWidget {
 /// Hint and Reveal live here — beside the cue that says it is your move —
 /// rather than in the game nav bar at the far end of the pane.
 class SolitaireStatusBar extends StatelessWidget {
-  final PgnViewerController controller;
+  final SolitaireController controller;
+  final VoidCallback onHint;
+  final VoidCallback onReveal;
 
   /// Leaves solitaire (asking first when guesses would be lost).
   final VoidCallback onExit;
@@ -402,12 +440,14 @@ class SolitaireStatusBar extends StatelessWidget {
   const SolitaireStatusBar({
     super.key,
     required this.controller,
+    required this.onHint,
+    required this.onReveal,
     required this.onExit,
   });
 
   @override
   Widget build(BuildContext context) {
-    final s = controller.solitaire;
+    final s = controller;
     final done = s.totalUserMoves;
     final total = s.userMovesInScript;
     final progress = total > 0 ? (done / total).clamp(0.0, 1.0) : 0.0;
@@ -426,20 +466,18 @@ class SolitaireStatusBar extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 'Solitaire · ${s.userIsWhite ? "White" : "Black"}',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                  color: primary,
-                ),
+                style: AppTypography.secondary(
+                  context,
+                ).copyWith(fontWeight: FontWeight.bold, color: primary),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   _cue(s),
-                  style: AppTextStyles.caption.copyWith(
+                  style: AppTypography.caption(context).copyWith(
                     color: s.waitingForUser
-                        ? AppColors.ink
-                        : AppColors.onSurfaceMuted,
+                        ? Theme.of(context).colorScheme.onSurface
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
                     fontWeight: s.waitingForUser
                         ? FontWeight.w600
                         : FontWeight.w400,
@@ -483,21 +521,25 @@ class SolitaireStatusBar extends StatelessWidget {
                     const SizedBox(width: 10),
                     Text(
                       total > 0 ? '$done/$total' : '$done',
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.ink,
+                      style: AppTypography.caption(context).copyWith(
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     if (done > 0) ...[
                       const SizedBox(width: 6),
                       Text(
                         '· ${s.correctFirstTry} first try',
-                        style: AppTextStyles.caption,
+                        style: AppTypography.caption(context),
                       ),
                     ],
                   ],
                 ),
               ),
-              _HelpControls(controller: controller),
+              _HelpControls(
+                controller: controller,
+                onHint: onHint,
+                onReveal: onReveal,
+              ),
             ],
           ),
         ],
@@ -542,13 +584,20 @@ class SolitaireStatusBar extends StatelessWidget {
 /// their timer runs out — Hint at half the reveal delay, so help escalates
 /// (a nudge, then giving up) instead of arriving all at once.
 class _HelpControls extends StatelessWidget {
-  const _HelpControls({required this.controller});
+  const _HelpControls({
+    required this.controller,
+    required this.onHint,
+    required this.onReveal,
+  });
 
-  final PgnViewerController controller;
+  final VoidCallback onHint;
+  final VoidCallback onReveal;
+
+  final SolitaireController controller;
 
   @override
   Widget build(BuildContext context) {
-    final s = controller.solitaire;
+    final s = controller;
     final canHint = s.canHint;
     final canReveal = s.canReveal;
     final hintWait = s.waitingForUser ? s.hintCountdownSec : 0;
@@ -571,9 +620,9 @@ class _HelpControls extends StatelessWidget {
           child: Text(
             next > 0 ? '${next}s' : '',
             textAlign: TextAlign.right,
-            style: AppTextStyles.caption.copyWith(
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
+            style: AppTypography.caption(
+              context,
+            ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
           ),
         ),
         const SizedBox(width: 6),
@@ -583,16 +632,24 @@ class _HelpControls extends StatelessWidget {
               : waitLabel(hintWait),
           shortcut: AppShortcut.hintMove,
           child: ActionChip(
-            onPressed: canHint ? controller.hintCurrentMove : null,
+            onPressed: canHint ? onHint : null,
             avatar: Icon(
               Icons.lightbulb_outline,
               size: 16,
-              color: canHint ? AppColors.ink : AppColors.onSurfaceDisabled,
+              color: canHint
+                  ? Theme.of(context).colorScheme.onSurface
+                  : Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.38),
             ),
             label: Text(
               'Hint',
-              style: AppTextStyles.caption.copyWith(
-                color: canHint ? AppColors.ink : AppColors.onSurfaceDisabled,
+              style: AppTypography.caption(context).copyWith(
+                color: canHint
+                    ? Theme.of(context).colorScheme.onSurface
+                    : Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.38),
               ),
             ),
             visualDensity: VisualDensity.compact,
@@ -605,16 +662,24 @@ class _HelpControls extends StatelessWidget {
               : waitLabel(revealWait),
           shortcut: AppShortcut.revealMove,
           child: ActionChip(
-            onPressed: canReveal ? controller.revealCurrentMove : null,
+            onPressed: canReveal ? onReveal : null,
             avatar: Icon(
               Icons.visibility_outlined,
               size: 16,
-              color: canReveal ? AppColors.ink : AppColors.onSurfaceDisabled,
+              color: canReveal
+                  ? Theme.of(context).colorScheme.onSurface
+                  : Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.38),
             ),
             label: Text(
               'Reveal',
-              style: AppTextStyles.caption.copyWith(
-                color: canReveal ? AppColors.ink : AppColors.onSurfaceDisabled,
+              style: AppTypography.caption(context).copyWith(
+                color: canReveal
+                    ? Theme.of(context).colorScheme.onSurface
+                    : Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.38),
               ),
             ),
             visualDensity: VisualDensity.compact,

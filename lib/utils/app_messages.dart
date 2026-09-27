@@ -3,7 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../theme/app_colors.dart';
+import 'log.dart';
+import 'network_errors.dart';
 
 /// All user-facing notification strings in one place for easy auditing.
 ///
@@ -27,6 +28,21 @@ class AppMessages {
   static const clipboardReadFailed = 'Could not read clipboard.';
   static const clipboardWriteFailed = 'Could not copy to clipboard.';
   static const renameLineFailed = 'Could not rename line.';
+
+  /// A download that never reached the server. Naming the site and the
+  /// connection is the difference between "try again" and knowing that
+  /// clicking again will not help until the network is back.
+  static String downloadFailed(Object error, {required String site}) =>
+      looksOffline(error)
+      ? 'Could not reach $site. Check your internet connection and try again.'
+      : 'Could not download from $site. Please try again.';
+
+  /// What a list says while it is showing games the network could not be
+  /// asked about. The games are real and already on this computer; the only
+  /// thing missing is anything played since [lastFetched].
+  static String showingSavedGames(String? lastFetched) => lastFetched == null
+      ? 'Offline — showing the games saved on this computer.'
+      : 'Offline — showing the games saved $lastFetched.';
 
   // ── Informational (SnackBar, auto-dismiss 3s) ─────────────────
   static String noGamesFound(String username) =>
@@ -70,6 +86,12 @@ void showAppSnackBar(
   Duration? duration,
 }) {
   if (!isError && !requiresAttention) return;
+  // What the user was shown belongs in the log too: a report of "some red
+  // message" is otherwise unanswerable, and the message names the action
+  // that failed even when the cause was caught and handled.
+  if (isError) {
+    log.w(message, name: 'UI');
+  }
   final screenWidth = MediaQuery.sizeOf(context).width;
   ScaffoldMessenger.of(context).clearSnackBars();
   ScaffoldMessenger.of(context).showSnackBar(
@@ -88,18 +110,9 @@ void showAppSnackBar(
       duration:
           duration ??
           (isError ? const Duration(days: 365) : const Duration(seconds: 3)),
-      backgroundColor: isError ? AppColors.dangerSurface : null,
       showCloseIcon: true,
-      // Must clear 3:1 on BOTH snackbar fills: 11.8:1 on the default
-      // surfaceInset, 5.0:1 on the dangerSurface error fill (where
-      // onSurfaceSoft measured only 2.99:1).
-      closeIconColor: AppColors.ink,
       action: actionLabel != null && onAction != null
-          ? SnackBarAction(
-              label: actionLabel,
-              onPressed: onAction,
-              textColor: AppColors.ink,
-            )
+          ? SnackBarAction(label: actionLabel, onPressed: onAction)
           : null,
     ),
   );

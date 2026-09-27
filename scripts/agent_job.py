@@ -148,6 +148,16 @@ def profile_env(checkout: Path) -> dict[str, str]:
         f'XDG_DOCUMENTS_DIR="{profile / "Documents"}"\n'
         f'XDG_DOWNLOAD_DIR="{profile / "Downloads"}"\n')
     env['BUGHOUSE_DB_HOME'] = str(profile / 'data/com.example.chess_auto_prep')
+    # Native GTK first-run setup is modal and invisible to Flutter screenshots.
+    # Fresh disposable profiles decline desktop integration so native close/input
+    # tests exercise the app window. Preserve explicit fixture choices.
+    desktop_choice = profile / 'data/chess_auto_prep/desktop-integration-choice'
+    desktop_choice.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with desktop_choice.open('x') as choice:
+            choice.write('no')
+    except FileExistsError:
+        pass
     env['CHESS_AUTO_PREP_NEW_INSTANCE'] = '1'
     env['OMP_NUM_THREADS'] = '1'
     env['OPENBLAS_NUM_THREADS'] = '1'
@@ -305,6 +315,13 @@ def run(args) -> int:
                '-p', 'CPUQuota=200%', '-p', 'MemoryHigh=6G', '-p', 'MemoryMax=8G',
                '-p', 'MemorySwapMax=0', '-p', 'KillMode=control-group',
                '-p', 'TimeoutStopSec=5s', '-p', 'OOMPolicy=stop', '-p', 'OOMScoreAdjust=800']
+    if args.offline:
+        # A network namespace of the job's own, with loopback only: the job
+        # can still reach its own VM service and session bus, and nothing
+        # else. This is how an offline path is proved in the running app —
+        # `unshare` around this script would not work, because the unit is
+        # started by the user manager, not as a child of the caller.
+        command += ['-p', 'PrivateNetwork=yes']
     if args.headless:
         # systemd removes this only after the service's entire cgroup stops,
         # including on cancellation/failure. Never reuse the desktop runtime.
@@ -364,6 +381,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['run', '_worker', 'status', 'setup'])
     parser.add_argument('--headless', action='store_true')
+    parser.add_argument('--offline', action='store_true',
+                        help='run the job with no network but its own loopback')
     parser.add_argument('--wait-seconds', type=float, default=120)
     parser.add_argument('--owner', type=int, default=0)
     parser.add_argument('--token', default='')

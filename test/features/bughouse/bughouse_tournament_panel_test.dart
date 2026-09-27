@@ -26,8 +26,8 @@ BughouseGameRecord _game(int number, GameResult result) => BughouseGameRecord(
   number: number,
   whiteIndex: number.isOdd ? 0 : 1,
   blackIndex: number.isOdd ? 1 : 0,
-  whiteName: number.isOdd ? 'A + C' : 'B + D',
-  blackName: number.isOdd ? 'B + D' : 'A + C',
+  whiteName: number.isOdd ? 'A + B' : 'C + D',
+  blackName: number.isOdd ? 'C + D' : 'A + B',
   result: result,
   termination: TerminationReason.checkmate,
   detail: 'board 1',
@@ -159,7 +159,7 @@ void main() {
     expect(find.text('1½/2'), findsNWidgets(2));
     expect(find.text('Board 1: d4 d5 Bf4'), findsOneWidget);
     // Both games are rows, headed by the seats rather than by "White".
-    expect(find.text('A + C (White on 1)'), findsOneWidget);
+    expect(find.text('A + B (White on 1)'), findsOneWidget);
     expect(find.text('1-0'), findsOneWidget);
     expect(find.text('1/2-1/2'), findsOneWidget);
   });

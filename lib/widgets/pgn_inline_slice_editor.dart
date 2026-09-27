@@ -12,7 +12,8 @@ import 'package:flutter/material.dart';
 import '../core/board_preview_controller.dart';
 import '../core/slice_filter_controller.dart';
 import '../models/pgn_filter_models.dart';
-import '../services/pgn_slice_filter.dart' as pgn;
+import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_filter.dart'
+    as pgn;
 import 'lines_preview_panel.dart';
 import 'slice/header_filters.dart';
 import 'slice/position_filter.dart';

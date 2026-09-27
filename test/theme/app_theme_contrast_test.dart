@@ -1,5 +1,10 @@
+import '../support/runtime_settings.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
+import 'package:chess_auto_prep/core/app_state.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
-import 'package:chess_auto_prep/theme/app_theme.dart';
+import 'package:chess_auto_prep/design_system/theme/app_theme.dart';
 import 'package:chess_auto_prep/widgets/app_overflow_menu.dart';
 import 'package:chess_auto_prep/widgets/analysis/stockfish_settings_dialog.dart';
 import 'package:chess_auto_prep/widgets/engine/inline_engine_settings.dart';
@@ -80,6 +85,8 @@ void main() {
     (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           theme: AppTheme.dark(),
           home: Scaffold(
             appBar: AppBar(
@@ -143,12 +150,22 @@ void main() {
   );
 
   testWidgets(
-    'rendered engine settings labels and inputs contrast with their raised panel',
+    'rendered engine settings labels and inputs contrast with the settings page',
     (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.dark(),
-          home: const Scaffold(body: InlineEngineSettings()),
+      SharedPreferences.setMockInitialValues({});
+      final runtimeSettings = testRuntimeSettings();
+      addTearDown(runtimeSettings.dispose);
+      await pumpRuntimeWidget(
+        tester,
+        runtimeSettings,
+        ChangeNotifierProvider(
+          create: (_) => AppState(),
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            theme: AppTheme.dark(),
+            home: const Scaffold(body: InlineEngineSettings()),
+          ),
         ),
       );
       await tester.tap(find.byTooltip('Engine settings'));
@@ -156,7 +173,6 @@ void main() {
       final settings = find.byType(StockfishSettingsBody);
       expect(settings, findsOneWidget);
       final panel = panelFor(tester, settings);
-      expectRaised(panel);
       final labels = find.descendant(of: settings, matching: find.byType(Text));
       expect(labels, findsWidgets);
       for (final label in labels.evaluate()) {
@@ -186,6 +202,8 @@ void main() {
   testWidgets('legacy popup menus share the raised surface', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         theme: AppTheme.dark(),
         home: Scaffold(
           body: PopupMenuButton<int>(
@@ -208,6 +226,8 @@ void main() {
     (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           theme: AppTheme.dark(),
           home: Scaffold(
             body: IconButton(

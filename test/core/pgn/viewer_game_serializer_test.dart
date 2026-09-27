@@ -1,7 +1,7 @@
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/core/pgn/viewer_game_serializer.dart';
+import 'package:chess_auto_prep/chess_core/pgn/viewer_game_serializer.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 
 MoveNode _node(
@@ -27,6 +27,30 @@ String _movetext(PgnNode<PgnNodeData> tree) => PgnGame<PgnNodeData>(
 
 void main() {
   group('buildViewerPgnTree', () {
+    test('synchronizing engine references never changes owner annotations', () {
+      final move = PgnNodeData(
+        san: 'e4',
+        comments: ['Keep this [%bestline d4,d5,c4]'],
+        startingComments: ['Before'],
+        nags: [1],
+      );
+      final tree = buildViewerPgnTree(
+        moveHistory: [move],
+        sidelines: {
+          0: [
+            _node('d4', kids: [_node('d5')]),
+          ],
+        },
+      );
+      final serialized = tree.children.first.data;
+      expect(serialized.comments, ['Keep this [%bestline d4,d5]']);
+      expect(move.comments, ['Keep this [%bestline d4,d5,c4]']);
+      serialized.startingComments!.clear();
+      serialized.nags!.clear();
+      expect(move.startingComments, ['Before']);
+      expect(move.nags, [1]);
+    });
+
     test('sidelines at ply p become siblings of mainline move p', () {
       final tree = buildViewerPgnTree(
         moveHistory: [

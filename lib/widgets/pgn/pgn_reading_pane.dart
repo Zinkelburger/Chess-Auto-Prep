@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
-import '../../models/move_tree.dart';
+import '../../chess_core/moves/move_tree_view.dart';
+import '../../chess_core/moves/sideline_tree.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/chess_utils.dart' show coordsAtPly;
@@ -12,10 +13,10 @@ import 'pgn_reading_scroll.dart';
 /// A sideline is identified by its actual first move, including for games
 /// starting from a FEN. No generated chapter names or separate variation index.
 class PgnReadingBranch {
-  final MoveNode root;
+  final MoveNodeView root;
   final int ply;
   final int branchPly;
-  final MoveNode? parent;
+  final MoveNodeView? parent;
   const PgnReadingBranch(this.root, this.ply, this.branchPly, this.parent);
 }
 
@@ -24,7 +25,27 @@ typedef PgnDocumentBuilder =
       GlobalKey currentMoveKey,
       PgnReadingBranch? scope,
       bool expandAll,
+      PgnReadingViewport viewport,
     );
+
+/// Reading policy supplied to the document's bounded viewport. The pane owns
+/// the scroll controller and exact anchor; the renderer owns row identity.
+class PgnReadingViewport {
+  const PgnReadingViewport({
+    required this.controller,
+    required this.padding,
+    required this.revision,
+    required this.foldRevision,
+    required this.onAnchorChanged,
+    this.restoreAnchor,
+  });
+  final ScrollController controller;
+  final EdgeInsets padding;
+  final int revision;
+  final int foldRevision;
+  final ValueChanged<Object?> onAnchorChanged;
+  final Object? restoreAnchor;
+}
 
 /// Owns reading position independently of the board cursor. Browsing prose
 /// never changes the board; only a navigation action requests an anchor.
@@ -38,12 +59,13 @@ class PgnReadingPane extends StatefulWidget {
 
   /// Keep the quoted passage on screen while its moves play on the board.
   final bool previewingComment;
-  final List<MoveNode> analysisPath;
+  final List<MoveNodeView> analysisPath;
+  final Map<int, List<MoveNodeView>> variationsByPly;
   final int branchPly;
   final int startingMoveNumber;
   final bool startingWhiteTurn;
   final VoidCallback onMainline;
-  final void Function(MoveNode, int) onNode;
+  final void Function(MoveNodeView, int) onNode;
   final PgnDocumentBuilder documentBuilder;
 
   const PgnReadingPane({
@@ -54,6 +76,7 @@ class PgnReadingPane extends StatefulWidget {
     this.continuationPicker,
     this.previewingComment = false,
     required this.analysisPath,
+    required this.variationsByPly,
     required this.branchPly,
     required this.startingMoveNumber,
     required this.startingWhiteTurn,
@@ -77,7 +100,10 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
     resolveAnchor: _resolveAnchor,
   );
   var _currentMove = GlobalKey();
-  final _bookmarks = <({PgnReadingBranch? scope, double offset})>[];
+  final _bookmarks =
+      <({PgnReadingBranch? scope, double offset, Object? anchor})>[];
+  Object? _documentAnchor;
+  Object? _restoreAnchor;
   PgnReadingBranch? _scope;
   bool _expandAll = false;
   int _foldRevision = 0;
@@ -139,7 +165,7 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
     final path = widget.analysisPath;
     return [
       for (var i = 0; i < path.length; i++)
-        if (i == 0 || path[i - 1].children.firstOrNull != path[i])
+        if (i == 0 || path[i - 1].children.firstOrNull?.id != path[i].id)
           PgnReadingBranch(
             path[i],
             widget.branchPly + i,
@@ -167,6 +193,17 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
   @override
   void didUpdateWidget(PgnReadingPane oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.variationsByPly, widget.variationsByPly)) {
+      _scope = _refreshBranch(_scope);
+      for (var i = 0; i < _bookmarks.length; i++) {
+        final bookmark = _bookmarks[i];
+        _bookmarks[i] = (
+          scope: _refreshBranch(bookmark.scope),
+          offset: bookmark.offset,
+          anchor: bookmark.anchor,
+        );
+      }
+    }
     if (oldWidget.selection != widget.selection && !widget.previewingComment) {
       if (_scope != null &&
           !widget.analysisPath.any((n) => n.id == _scope!.root.id)) {
@@ -176,6 +213,21 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
       _browsing = false;
       _scheduleAnchor();
     }
+  }
+
+  PgnReadingBranch? _refreshBranch(PgnReadingBranch? branch) {
+    if (branch == null) return null;
+    final path = widget.variationsByPly.pathToNode(
+      branch.root,
+      branchPly: branch.branchPly,
+    );
+    if (path == null) return null;
+    return PgnReadingBranch(
+      path.last,
+      branch.branchPly + path.length - 1,
+      branch.branchPly,
+      path.length > 1 ? path[path.length - 2] : null,
+    );
   }
 
   @override
@@ -195,16 +247,27 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
   double _resolveAnchor(double viewportDimension) {
     final restore = _restoreOffset;
     _restoreOffset = null;
+    _restoreAnchor = null;
     if (restore != null) return restore;
     final target = _currentMove.currentContext?.findRenderObject();
     if (target == null) return 0;
     // Resolve against this viewport only; ancestor TabBarViews must not move.
     final viewport = RenderAbstractViewport.of(target);
-    // Only the origin is needed. Reading descendant paint bounds during
-    // viewport layout would access a size outside its permitted layout scope.
-    final top = viewport.getOffsetToReveal(target, 0, rect: Rect.zero).offset;
+    // Only the origin is needed. The viewport mounts a selected row on its
+    // forward sliver before requesting an anchor, so this transform never
+    // needs a reverse-sliver child's height during ancestor layout.
+    final top =
+        MatrixUtils.transformPoint(
+          target.getTransformTo(viewport),
+          Offset.zero,
+        ).dy +
+        (viewport as RenderViewport).offset.pixels;
     final inset = _anchor == 0 ? 52.0 : viewportDimension * _anchor;
-    return top - inset;
+    // A centered sliver viewport permits offset zero even when its trailing
+    // half is shorter than the viewport. Clamp to the document end as well,
+    // so a final move cannot leave an otherwise avoidable empty page below it.
+    final end = viewport.lastChild!.geometry!.scrollExtent - viewportDimension;
+    return top - inset < end ? top - inset : end;
   }
 
   /// Returns false when Escape has no reading action to perform, so the host
@@ -222,7 +285,11 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
       return false;
     }
     setState(() {
-      _bookmarks.add((scope: _scope, offset: _scroll.offset));
+      _bookmarks.add((
+        scope: _scope,
+        offset: _scroll.offset,
+        anchor: _documentAnchor,
+      ));
       _scope = branch;
       _browsing = false;
     });
@@ -248,6 +315,7 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
           final bookmark = _bookmarks.removeLast();
           _scope = bookmark.scope;
           _restoreOffset = bookmark.offset;
+          _restoreAnchor = bookmark.anchor;
         } else {
           _scope = null;
         }
@@ -315,33 +383,24 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
                   child: SelectionArea(
                     child: Scrollbar(
                       controller: _scroll,
-                      child: SingleChildScrollView(
-                        key: const ValueKey('pgn-reading-scroll'),
-                        controller: _scroll,
-                        // Only add clearance for controls that are visible.
-                        // This keeps the document end reachable beneath the
-                        // overlay without reserving a row in the viewport.
-                        padding: EdgeInsets.fromLTRB(
-                          inset,
-                          32,
-                          inset,
-                          floatingHeight == 0 ? 32 : floatingHeight + 24,
-                        ),
-                        child: Align(
-                          alignment: Alignment.topLeft,
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 900),
-                            child: PgnReadingAnchorLayout(
-                              revision: _scrollRequest,
-                              child: KeyedSubtree(
-                                key: ValueKey(_foldRevision),
-                                child: widget.documentBuilder(
-                                  _currentMove,
-                                  _scope,
-                                  _expandAll,
-                                ),
-                              ),
+                      child: PgnReadingAnchorLayout(
+                        revision: _scrollRequest,
+                        child: widget.documentBuilder(
+                          _currentMove,
+                          _scope,
+                          _expandAll,
+                          PgnReadingViewport(
+                            controller: _scroll,
+                            revision: _scrollRequest,
+                            foldRevision: _foldRevision,
+                            padding: EdgeInsets.fromLTRB(
+                              inset,
+                              32,
+                              inset,
+                              floatingHeight == 0 ? 32 : floatingHeight + 24,
                             ),
+                            restoreAnchor: _restoreAnchor,
+                            onAnchorChanged: (key) => _documentAnchor = key,
                           ),
                         ),
                       ),

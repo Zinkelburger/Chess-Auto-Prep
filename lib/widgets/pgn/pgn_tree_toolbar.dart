@@ -3,37 +3,46 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../core/pgn_viewer_controller.dart';
 import '../../models/pgn_filter_models.dart';
-import '../../theme/app_text_styles.dart';
+import '../../design_system/theme/app_typography.dart';
 
 /// One row for choosing a tree and narrowing the collection.
 class PgnTreeToolbar extends StatelessWidget {
   const PgnTreeToolbar({
     super.key,
-    required this.controller,
+    required this.config,
+    required this.player,
+    required this.loading,
+    required this.hasActiveFilters,
+    required this.onApplyPreset,
+    required this.onApplyConfig,
     required this.database,
     required this.onSourceChanged,
     required this.onFilter,
   });
 
-  final PgnViewerController controller;
+  final SliceConfig config;
+  final String? player;
+  final bool loading;
+  final bool hasActiveFilters;
+  final Future<void> Function(HeaderFilterConfig) onApplyPreset;
+  final Future<void> Function(SliceConfig) onApplyConfig;
   final bool database;
   final ValueChanged<bool> onSourceChanged;
   final VoidCallback onFilter;
 
   @override
   Widget build(BuildContext context) {
-    final player = controller.collectionPlayer;
+    final player = this.player;
     final selected = <String>{
-      for (final filter in controller.activeSliceConfig.headerFilters)
+      for (final filter in config.headerFilters)
         if (filter.value == player &&
             filter.mode == MatchMode.exact &&
             (filter.field == 'White' || filter.field == 'Black'))
           filter.field,
     };
     final style = TextButton.styleFrom(
-      textStyle: AppTextStyles.caption,
+      textStyle: AppTypography.caption(context),
       visualDensity: VisualDensity.compact,
       minimumSize: const Size(0, 32),
       padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -67,9 +76,7 @@ class PgnTreeToolbar extends StatelessWidget {
               style: style,
               onPressed: onFilter,
               icon: Icon(
-                controller.hasActiveFilters
-                    ? Icons.filter_alt
-                    : Icons.filter_list,
+                hasActiveFilters ? Icons.filter_alt : Icons.filter_list,
                 size: 16,
               ),
               label: const Text('Filter'),
@@ -82,7 +89,7 @@ class PgnTreeToolbar extends StatelessWidget {
                   constraints: const BoxConstraints(maxWidth: 100),
                   child: Text(
                     player.split(',').first,
-                    style: AppTextStyles.caption,
+                    style: AppTypography.caption(context),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -101,13 +108,13 @@ class PgnTreeToolbar extends StatelessWidget {
                 selected: selected.take(1).toSet(),
                 emptySelectionAllowed: true,
                 showSelectedIcon: false,
-                onSelectionChanged: controller.isLoading
+                onSelectionChanged: loading
                     ? null
                     : (value) {
                         if (!context.mounted) return;
                         if (value.isNotEmpty) {
                           unawaited(
-                            controller.applySlicePreset(
+                            onApplyPreset(
                               HeaderFilterConfig(
                                 field: value.single,
                                 mode: MatchMode.exact,
@@ -116,9 +123,8 @@ class PgnTreeToolbar extends StatelessWidget {
                             ),
                           );
                         } else {
-                          final config = controller.activeSliceConfig;
                           unawaited(
-                            controller.recomputeAndApplyConfig(
+                            onApplyConfig(
                               SliceConfig(
                                 positionInput: config.positionInput,
                                 additionalPositions: config.additionalPositions,

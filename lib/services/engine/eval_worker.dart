@@ -53,9 +53,9 @@ enum EngineWorkerState { idle, searching, stopping, dead, disposed }
 class EvalWorker {
   EvalWorker(
     this.engine, {
-    EngineSearchBudget? budget,
+    required EngineSearchBudget budget,
     this.protocolTimeout = const Duration(seconds: 10),
-  }) : _budget = budget ?? EngineSearchBudget.instance {
+  }) : _budget = budget {
     _sub = engine.stdout.listen(_onOutput, onError: _die, onDone: () => _die());
     unawaited(engine.done.then((_) => _die(), onError: _die));
   }

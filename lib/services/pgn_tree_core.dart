@@ -19,7 +19,7 @@ import 'package:dartchess/dartchess.dart';
 
 import '../models/opening_tree.dart';
 import '../models/pgn_filter_models.dart' show splitPlayerNames;
-import '../core/pgn/pgn_dummy_mainline.dart';
+import '../chess_core/pgn/pgn_dummy_mainline.dart';
 import '../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
 import '../utils/fen_utils.dart' show normalizeFen;
 

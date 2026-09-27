@@ -1,19 +1,25 @@
 // WS-C: tests for the extracted AutoPlayEngine (timer-driven playback logic).
 
-import 'package:chess_auto_prep/core/pgn/auto_play_engine.dart';
+import 'package:chess_auto_prep/features/documents/controllers/auto_play_engine.dart';
 import 'package:fake_async/fake_async.dart';
+import 'package:chess_auto_prep/features/documents/repositories/pgn_viewer_handle.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A scriptable board: each goForward advances along [fens] until the end,
 /// after which currentFen stops changing (mimicking "no more moves").
-class _FakeBoard {
+class _FakeBoard implements PgnViewerHandle {
   _FakeBoard(this.fens);
   final List<String> fens;
   int idx = 0;
+  @override
   String? get currentFen => idx < fens.length ? fens[idx] : fens.last;
+  @override
   void goForward() {
     if (idx < fens.length - 1) idx++;
   }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 AutoPlayEngine _engine(
@@ -23,8 +29,7 @@ AutoPlayEngine _engine(
 }) {
   return AutoPlayEngine(
     isActive: () => true,
-    currentFen: () => board.currentFen,
-    goForward: board.goForward,
+    handle: board,
     hasNextGame: () => hasNext,
     nextGame: onNext ?? () {},
     onChanged: () {},
@@ -78,6 +83,57 @@ void main() {
       final e = _engine(_FakeBoard(['a']));
       e.setSpeed(2.5);
       expect(e.delaySec, 2.5);
+    });
+
+    test(
+      'a retained post-frame callback cannot restart playback after disposal',
+      () {
+        fakeAsync((async) {
+          final board = _FakeBoard(['a', 'b', 'c']);
+          void Function()? afterFrame;
+          final engine = AutoPlayEngine(
+            isActive: () => true,
+            handle: board,
+            hasNextGame: () => false,
+            nextGame: () {},
+            onChanged: () {},
+            schedulePostFrame: (callback) => afterFrame = callback,
+          );
+          engine.start();
+          async.elapse(const Duration(milliseconds: 300));
+          expect(board.currentFen, 'b');
+          engine.dispose();
+          afterFrame!();
+          engine.start();
+          async.elapse(const Duration(seconds: 5));
+          expect(engine.isPlaying, isFalse);
+          expect(board.currentFen, 'b');
+          expect(async.pendingTimers, isEmpty);
+        });
+      },
+    );
+
+    test('a previous run cannot stop playback started after replacement', () {
+      fakeAsync((async) {
+        final board = _FakeBoard(['end']);
+        final frames = <void Function()>[];
+        final engine = AutoPlayEngine(
+          isActive: () => true,
+          handle: board,
+          hasNextGame: () => false,
+          nextGame: () {},
+          onChanged: () {},
+          schedulePostFrame: frames.add,
+        );
+        engine.start();
+        async.elapse(AutoPlayEngine.firstStepDelay);
+        engine.stop();
+        engine.start();
+        frames.single();
+        expect(engine.isPlaying, isTrue);
+        expect(async.pendingTimers, hasLength(1));
+        engine.dispose();
+      });
     });
 
     test('dispose cancels the timer (no further ticks)', () {

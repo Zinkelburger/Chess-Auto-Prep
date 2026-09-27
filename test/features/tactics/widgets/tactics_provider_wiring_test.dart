@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../../support/runtime_settings.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_import_coordinator.dart';
 import 'package:chess_auto_prep/features/tactics/controllers/tactics_session_controller.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_database.dart';
@@ -11,7 +14,14 @@ import 'package:provider/provider.dart';
 /// directly — i.e. a single source of truth. A regression in provider ordering
 /// (session/import created before the database, or against a different db)
 /// would fail here instead of silently at runtime.
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   testWidgets('tactics providers resolve and share one database', (
     tester,
   ) async {
@@ -19,7 +29,9 @@ void main() {
     late TacticsSessionController session;
     late TacticsImportCoordinator import;
 
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      _engineFixtureSettings ??= testRuntimeSettings(),
       MultiProvider(
         providers: [
           ChangeNotifierProvider<TacticsDatabase>(
@@ -30,8 +42,11 @@ void main() {
                 TacticsSessionController(database: ctx.read<TacticsDatabase>()),
           ),
           ChangeNotifierProvider<TacticsImportCoordinator>(
-            create: (ctx) =>
-                TacticsImportCoordinator(database: ctx.read<TacticsDatabase>()),
+            create: (ctx) => TacticsImportCoordinator(
+              pool: engines.pool,
+              lifecycle: engines.lifecycle,
+              database: ctx.read<TacticsDatabase>(),
+            ),
           ),
         ],
         child: Builder(

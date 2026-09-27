@@ -71,7 +71,11 @@ class PlayerDownloadRunner {
       debugPrint('Download failed: $e');
       close();
       if (context.mounted) {
-        showAppSnackBar(context, AppMessages.genericError, isError: true);
+        showAppSnackBar(
+          context,
+          AppMessages.downloadFailed(e, site: config.platformDisplayName),
+          isError: true,
+        );
       }
       return false;
     } finally {
@@ -152,7 +156,10 @@ class PlayerDownloadRunner {
           imported++;
         } catch (e) {
           debugPrint('Opponent import failed for ${opponent.name}: $e');
-          failed.add('${opponent.name}: $e');
+          failed.add(
+            '${opponent.name}: '
+            '${AppMessages.downloadFailed(e, site: info.platformDisplayName)}',
+          );
         }
       }
     } finally {

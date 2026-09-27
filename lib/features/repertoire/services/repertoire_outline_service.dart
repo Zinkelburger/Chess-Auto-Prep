@@ -15,7 +15,7 @@ library;
 import 'package:path/path.dart' as p;
 
 import '../../../models/repertoire_line.dart';
-import '../../../models/repertoire_metadata.dart';
+import '../../repertoires/models/repertoire_metadata.dart';
 import '../../../services/repertoire_review_service.dart';
 import '../../../services/repertoire_service.dart';
 import '../../../services/storage/storage_factory.dart';
@@ -23,13 +23,15 @@ import '../../../services/storage/storage_service.dart';
 import '../../../utils/safe_file_name.dart';
 import '../models/repertoire_outline.dart';
 import 'chapter_splitter.dart';
-import 'chapter_store.dart';
+import '../../repertoires/repositories/repertoire_catalog_repository.dart';
+import '../../documents/models/pgn_document.dart';
 import 'review_progress_repointer.dart';
 
 /// Why a structural edit was refused, in words the user can act on.
 class OutlineEditException implements Exception {
   final String message;
-  const OutlineEditException(this.message);
+  const OutlineEditException(this.message, {this.splitFailure});
+  final ChapterSplitException? splitFailure;
   @override
   String toString() => message;
 }
@@ -48,28 +50,20 @@ class RepertoireOutlineService {
   RepertoireOutlineService({
     StorageService? storage,
     RepertoireService? repertoire,
-    ChapterStore? chapters,
-    ChapterSplitter? splitter,
+    required this._catalog,
+    required this._splitter,
     ReviewProgressRepointer? repointer,
   }) : _storage = storage ?? StorageFactory.instance,
-       _repertoire = repertoire ?? RepertoireService(),
-       _chapters = chapters ?? ChapterStore(storage: storage),
+       _repertoire = repertoire ?? RepertoireService(storage: storage),
        _repointer =
            repointer ??
            ReviewProgressRepointer(
              review: RepertoireReviewService(storage: storage),
-           ),
-       _splitter =
-           splitter ??
-           ChapterSplitter(
-             storage: storage,
-             repertoire: repertoire,
-             repointer: repointer,
            );
 
   final StorageService _storage;
   final RepertoireService _repertoire;
-  final ChapterStore _chapters;
+  final RepertoireCatalogRepository _catalog;
   final ChapterSplitter _splitter;
   final ReviewProgressRepointer _repointer;
 
@@ -93,7 +87,7 @@ class RepertoireOutlineService {
   }) async {
     final (subdirs, chapters) = await (
       _storage.listSubdirectories(folderPath),
-      _storage.listChapters(folderPath),
+      _catalog.listChapters(folderPath),
     ).wait;
     chapters.sort(
       (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
@@ -102,7 +96,9 @@ class RepertoireOutlineService {
     final (folders, chapterNodes) = await (
       Future.wait([
         for (final dir in subdirs)
-          build(dir, loadLines: loadLines, trainingColor: trainingColor),
+          // Native document recovery bytes are not user chapter folders.
+          if (p.basename(dir) != '.cap-pgn-history')
+            build(dir, loadLines: loadLines, trainingColor: trainingColor),
       ]),
       Future.wait([
         for (final chapter in chapters)
@@ -211,28 +207,26 @@ class RepertoireOutlineService {
     required String name,
     required bool isWhite,
   }) async {
-    final result = await _chapters.create(
+    final result = await _catalog.createChapter(
       folderPath: folderPath,
       name: _validName(name),
       isWhite: isWhite,
     );
-    final chapter = result.chapter;
-    if (chapter == null) {
-      final failure = result.failure!;
-      throw switch (failure) {
-        ChapterCreationFailure.nameTaken => OutlineNameTakenException(
-          failure.message,
-        ),
-        ChapterCreationFailure.writeFailed => OutlineEditException(
-          failure.message,
-        ),
-      };
-    }
-    return OutlineChapter(
-      path: chapter.filePath,
-      name: chapter.name,
-      lines: const [],
-    );
+    return switch (result) {
+      PgnSaved(:final after) => OutlineChapter(
+        path: after.path,
+        name: name,
+        lines: const [],
+      ),
+      PgnNameCollision() => throw const OutlineNameTakenException(
+        'That chapter already exists.',
+      ),
+      PgnWriteUncertain(:final recoveryPath) => throw OutlineEditException(
+        'Chapter creation needs verification: ${p.join(folderPath, "$name.pgn")}.'
+        '${recoveryPath == null ? "" : " Recovery: $recoveryPath."} Do not retry.',
+      ),
+      _ => throw const OutlineEditException('Could not create chapter.'),
+    };
   }
 
   /// Renames the chapter file, keeping it in the same folder. Returns the new
@@ -269,11 +263,6 @@ class RepertoireOutlineService {
     return newPath;
   }
 
-  Future<void> deleteChapter(String chapterPath) async {
-    await _storage.deleteFile(chapterPath);
-    _lineCache.remove(chapterPath);
-  }
-
   /// Promotes the `[White]` course chapters inside [chapterPath] to real
   /// chapter files beside it — what an imported Chessable-style course needs
   /// before the builder's structure means anything.
@@ -285,17 +274,16 @@ class RepertoireOutlineService {
     String chapterPath, {
     required bool isWhite,
   }) async {
-    final ChapterSplitResult result;
     try {
-      result = await _splitter.split(chapterPath, isWhite: isWhite);
+      return await _splitter.split(chapterPath, isWhite: isWhite);
     } on ChapterSplitException catch (e) {
-      throw OutlineEditException(e.message);
+      throw OutlineEditException(e.message, splitFailure: e);
+    } finally {
+      // A partial split leaves its acknowledged destinations in this folder.
+      _lineCache.removeWhere(
+        (path, _) => p.equals(p.dirname(path), p.dirname(chapterPath)),
+      );
     }
-    _lineCache.remove(chapterPath);
-    for (final path in result.createdPaths) {
-      _lineCache.remove(path);
-    }
-    return result;
   }
 
   // ── Folders ────────────────────────────────────────────────────────────

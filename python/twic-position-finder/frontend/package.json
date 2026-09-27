@@ -11,8 +11,9 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "prebuild": "python3 ../../../tools/bughouse_web/prepare_assets.py",
-    "predev": "python3 ../../../tools/bughouse_web/prepare_assets.py"
+    "prebuild": "npm run test:bughouse && astro check && python3 ../../../tools/bughouse_web/prepare_assets.py",
+    "predev": "python3 ../../../tools/bughouse_web/prepare_assets.py",
+    "test:bughouse": "node scripts/test-bughouse-state.mjs"
   },
   "dependencies": {
     "@lichess-org/chessground": "10.2.0",
@@ -25,6 +26,7 @@
     "@astrojs/check": "^0.9.10",
     "@types/node": "^26.3.0",
     "puppeteer-core": "^25.9.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "esbuild": "0.27.4"
   }
 }

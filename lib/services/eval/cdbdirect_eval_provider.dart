@@ -16,7 +16,7 @@ import '../../utils/fen_utils.dart';
 import 'cdbdirect_parse.dart';
 import 'chessdb_score.dart';
 import 'db_move_list.dart';
-import 'eval_canonicalize.dart';
+import '../../chess_core/position/eval_canonicalize.dart';
 import 'external_eval_provider.dart';
 
 typedef _InitializeNative = Pointer<Void> Function(Pointer<Utf8> path);

@@ -77,7 +77,7 @@ void main() {
       );
       // White on A and black on B belong to the same team.
       final action = joint('(e2e4,d7d5)');
-      expect(n.describeJoint(action, team: Side.white), 'A e4   ·   C d5');
+      expect(n.describeJoint(action, team: Side.white), 'A e4   ·   B d5');
       expect(n.describeMoves(action, team: Side.white), 'e4  ·  d5');
     });
   });
@@ -89,13 +89,13 @@ void main() {
       ).describePv(pv(['(e2e4,pass)', '(e7e5,d2d4)']), team: Side.white);
       expect(steps, hasLength(2));
       expect(steps[0].team, Side.white);
-      expect(steps[0].seats, 'A + C');
+      expect(steps[0].seats, 'A + B');
       expect(steps[0].onA, 'e4');
       expect(steps[0].onB, isNull, reason: 'C is not on move on board 2');
       expect(steps[0].before.dualFen, initial.dualFen);
 
       expect(steps[1].team, Side.black);
-      expect(steps[1].seats, 'B + D');
+      expect(steps[1].seats, 'C + D');
       expect(steps[1].onA, 'e5');
       expect(steps[1].onB, 'd4');
       expect(steps[1].before.boardA.turn, Side.black);

@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/features/games/models/game_view_preferences.dart';
 import 'package:chess_auto_prep/features/games/widgets/game_view_settings_dialog.dart';
 import 'package:chess_auto_prep/widgets/settings/settings_widgets.dart';
@@ -11,6 +12,8 @@ void main() {
     var prefs = const GameViewPreferences();
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(
@@ -68,6 +71,8 @@ void main() {
       final actions = <String>[];
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: GameViewSettingsDialog(
               preferences: const GameViewPreferences(),

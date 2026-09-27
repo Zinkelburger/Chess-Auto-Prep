@@ -5,11 +5,11 @@
 /// Explorer — see [CoverageService.masterBook] for why.
 library;
 
+import 'package:chess_auto_prep/chess_core/moves/opening_graph.dart';
 import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
 
-import '../../../models/opening_tree.dart';
 import '../../../services/maia/maia_factory.dart';
 import '../../../services/master_games/master_games_db.dart'
     show BookLookup, BookMove;
@@ -278,13 +278,13 @@ class CoverageService {
   /// to find. Our own single child is a choice; theirs is a hole.
   ///
   /// Returns the moves played, the node they land on, and its FEN.
-  ({List<String> moves, OpeningTreeNode node, String fen}) findRepertoireRoot(
-    OpeningTree tree, {
+  ({List<String> moves, OpeningNodeView node, String fen}) findRepertoireRoot(
+    OpeningGraph tree, {
     required bool isWhiteRepertoire,
   }) {
     final moves = <String>[];
     Chess position = Chess.initial;
-    OpeningTreeNode current = tree.root;
+    OpeningNodeView current = tree.root;
 
     while (current.children.length == 1) {
       final ourTurn = (position.turn == Side.white) == isWhiteRepertoire;
@@ -303,7 +303,7 @@ class CoverageService {
   }
 
   Future<CoverageResult> analyzeOpeningTree(
-    OpeningTree tree, {
+    OpeningGraph tree, {
     required double targetPercent,
     required bool isWhiteRepertoire,
     CoverageProgressCallback? onProgress,
@@ -411,7 +411,7 @@ class CoverageService {
   /// Opponent moves the master book (or, failing that, Maia) sees at the
   /// repertoire's opponent-to-move positions and the file does not answer.
   Future<List<UnaccountedMove>> _calculateUnaccounted(
-    OpeningTree tree,
+    OpeningGraph tree,
     Map<String, List<String>> positions, {
     required bool isWhiteRepertoire,
     required List<String> rootMoves,
@@ -514,14 +514,14 @@ class _LeafCollector {
   final List<LeafNode> leaves = [];
   final Map<String, List<String>> positions = {};
 
-  Future<void> collect(OpeningTreeNode root) =>
+  Future<void> collect(OpeningNodeView root) =>
       _visit(root, const [], firstBelowThresholdPly: null);
 
   /// [firstBelowThresholdPly] is the ply at which the game count first
   /// dropped below the target on this path; a leaf
   /// [CoverageService.tooDeepThresholdPly] or more beyond it is "too deep".
   Future<void> _visit(
-    OpeningTreeNode node,
+    OpeningNodeView node,
     List<String> currentMoves, {
     required int? firstBelowThresholdPly,
   }) async {

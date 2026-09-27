@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Drive the running Chess Auto Prep desktop app from a shell.
 
-    driver.py start [--src DIR] [--worktree] [--visible]   build + launch (queues on the
+    driver.py start [--src DIR] [--worktree] [--visible] [--offline] [--target FILE]   build + launch (queues on the
                                                two-slot resource runner), daemonised
     driver.py dump [kinds=text,key,tooltip,field]
     driver.py tap text=Play | tooltip=… | key=… | x=10 y=20 [index=N] [count=2]
     driver.py type text="hello" [key=…|text_target=…] [submit=true] [append=true]
     driver.py scroll text=… [dy=300] [dx=0]
+    driver.py drag x=10 y=20 | text=… [dx=0] [dy=0]   press, move, release
     driver.py ss [name]                         screenshot → SHOTS/<name>.png
     driver.py settle | reload | restart | log [n=80] | status | stop
 
@@ -57,10 +58,12 @@ def flutter_bin() -> str:
     return "flutter"
 
 
-def resource_scoped_command(cmd: list[str], visible: bool = False) -> list[str]:
+def resource_scoped_command(cmd: list[str], visible: bool = False, offline: bool = False) -> list[str]:
     runner = [sys.executable, str(REPO / "scripts/agent_job.py"), "run", "--wait-seconds", str(BUILD_TIMEOUT)]
     if not visible:
         runner.append("--headless")
+    if offline:
+        runner.append("--offline")
     return [*runner, "--", *cmd]
 
 
@@ -94,9 +97,15 @@ def pid_alive(pid: int | None) -> bool:
 # Daemon: owns the `flutter run --machine` process and the unix socket
 # ---------------------------------------------------------------------------
 class Daemon:
-    def __init__(self, src: Path, visible: bool = False):
+    def __init__(self, src: Path, visible: bool = False, target: str = "lib/main.dart",
+                 offline: bool = False):
         self.src = src
         self.visible = visible
+        # Launch the app with no network at all, to see what a screen says
+        # when a service cannot be reached. The build must already be warm:
+        # a cold build inside the namespace cannot fetch packages.
+        self.offline = offline
+        self.target = target
         self.proc: subprocess.Popen | None = None
         self.app_id: str | None = None
         self.started = threading.Event()
@@ -185,12 +194,15 @@ class Daemon:
         # Keep the run's own Dart/analysis noise out of the interesting log.
         cmd = [
             flutter_bin(), "run", "-d", "linux", "--machine",
-            "--dart-define=AGENT_DRIVER=true",
+            "--dart-define=AGENT_DRIVER=true", "--target", self.target,
+            # With no network `pub get` cannot even check the lock file, so an
+            # offline launch runs the packages the last online one resolved.
+            *(["--no-pub"] if self.offline else []),
         ]
-        launch_cmd = resource_scoped_command(cmd, self.visible)
+        launch_cmd = resource_scoped_command(cmd, self.visible, self.offline)
         self.logline(f"launch: {shlex.join(cmd)} (cwd {self.src})")
         write_state(status="starting", pid=os.getpid(), token=agent_job.process_token(os.getpid()), src=str(self.src),
-                    appId=None, vmService=None, headless=not self.visible,
+                    appId=None, vmService=None, headless=not self.visible, target=self.target,
                     profile=str(agent_job.driver_dir(self.src) / "profile"))
         self.proc = subprocess.Popen(
             launch_cmd, cwd=self.src, env=env, text=True, bufsize=1,
@@ -281,7 +293,7 @@ class Daemon:
             path = SHOTS / (name if name.endswith(".png") else f"{name}.png")
             r = self.ext("screenshot", {"path": str(path)})
             return {"result": r}
-        if cmd in ("dump", "tap", "type", "scroll", "settle", "ping"):
+        if cmd in ("dump", "tap", "type", "scroll", "drag", "settle", "ping"):
             return {"result": self.ext(cmd, args)}
         return {"error": f"unknown command {cmd!r}"}
 
@@ -374,6 +386,15 @@ def cmd_start(argv: list[str]) -> None:
             # Build from a clean snapshot of HEAD plus the driver files, so a
             # half-edited shared working tree cannot break the launch.
             src = make_worktree()
+        target = 'lib/main.dart'
+        if '--target' in rest:
+            index = rest.index('--target')
+            if index + 1 >= len(rest):
+                raise SystemExit('--target requires a Dart entrypoint')
+            candidate = (src / rest[index + 1]).resolve()
+            if not candidate.is_relative_to(src) or candidate.suffix != '.dart' or not candidate.is_file():
+                raise SystemExit('--target must name a Dart file inside the source checkout')
+            target = candidate.relative_to(src).as_posix()
         st = read_state()
         if SOCK.exists() and pid_alive(st.get("pid")):
             print(
@@ -388,7 +409,9 @@ def cmd_start(argv: list[str]) -> None:
                 pass
         APP_LOG.write_text("")
         child = subprocess.Popen(
-            [sys.executable, str(Path(__file__).resolve()), "_serve", str(src), *( ["--visible"] if "--visible" in rest else [])],
+            [sys.executable, str(Path(__file__).resolve()), "_serve", str(src), "--target", target,
+             *(["--visible"] if "--visible" in rest else []),
+             *(["--offline"] if "--offline" in rest else [])],
             start_new_session=True,
             stdin=subprocess.DEVNULL,
             stdout=open(STATE_DIR / "daemon.out", "w"),
@@ -444,7 +467,9 @@ def main(argv: list[str]) -> None:
         return
     if cmd == "_serve":
         src = Path(rest[0])
-        d = Daemon(src, visible="--visible" in rest)
+        target = rest[rest.index("--target") + 1] if "--target" in rest else "lib/main.dart"
+        d = Daemon(src, visible="--visible" in rest, target=target,
+                   offline="--offline" in rest)
         d.launch()
         d.serve()
         return

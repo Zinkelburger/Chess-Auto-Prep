@@ -9,10 +9,14 @@
 /// (floors, coverage, transpositions, explored-marking) without engines.
 library;
 
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/build_run.dart';
 import 'package:chess_auto_prep/services/generation/fen_map.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
@@ -21,7 +25,6 @@ import 'package:chess_auto_prep/services/generation/opponent_prior.dart';
 import 'package:chess_auto_prep/services/generation/run_debug_dump.dart';
 import 'package:chess_auto_prep/services/generation/tree_build_progress.dart';
 import 'package:chess_auto_prep/services/generation/tree_eval_resolver.dart';
-import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import 'package:chess_auto_prep/services/tree_build_service.dart';
 
 import 'generation_test_helpers.dart';
@@ -53,7 +56,7 @@ BuildRun _makeRun({
     config: config,
     tree: tree,
     fenMap: fenMap ?? FenMap(),
-    pool: StockfishPool.instance,
+    pool: engines.pool,
     evalResolver: TreeEvalResolver()..stats = stats,
     stats: stats,
     runLog: RunDebugLog(),
@@ -72,7 +75,14 @@ BuildTree _singleNodeTree(BuildTreeNode root) {
   return tree;
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   group('BuildCancellation', () {
     test('starts not cancelled', () {
       final cancel = BuildCancellation();
@@ -455,7 +465,10 @@ void main() {
     test(
       're-entrancy guard rejects an overlapping build before any await',
       () async {
-        final service = TreeBuildService();
+        final service = TreeBuildService(
+          pool: engines.pool,
+          lifecycle: engines.lifecycle,
+        );
         final first = service.build(
           config: _headlessConfig(),
           isCancelled: () => false,
@@ -476,7 +489,10 @@ void main() {
     );
 
     test('completed headless build marks buildComplete', () async {
-      final service = TreeBuildService();
+      final service = TreeBuildService(
+        pool: engines.pool,
+        lifecycle: engines.lifecycle,
+      );
       final tree = await service.build(
         config: _headlessConfig(),
         isCancelled: () => false,
@@ -487,7 +503,10 @@ void main() {
     });
 
     test('externally cancelled build is NOT marked complete', () async {
-      final service = TreeBuildService();
+      final service = TreeBuildService(
+        pool: engines.pool,
+        lifecycle: engines.lifecycle,
+      );
       final tree = await service.build(
         config: _headlessConfig(),
         isCancelled: () => true,
@@ -497,7 +516,10 @@ void main() {
     });
 
     test('stopBuild during the run leaves the tree incomplete', () async {
-      final service = TreeBuildService();
+      final service = TreeBuildService(
+        pool: engines.pool,
+        lifecycle: engines.lifecycle,
+      );
       var polls = 0;
       final tree = await service.build(
         config: _headlessConfig(),
@@ -514,7 +536,10 @@ void main() {
     });
 
     test('a second build works after the first finishes', () async {
-      final service = TreeBuildService();
+      final service = TreeBuildService(
+        pool: engines.pool,
+        lifecycle: engines.lifecycle,
+      );
       await service.build(
         config: _headlessConfig(),
         isCancelled: () => false,
@@ -573,7 +598,10 @@ void main() {
         );
         tree.computeMetadata();
 
-        final service = TreeBuildService();
+        final service = TreeBuildService(
+          pool: engines.pool,
+          lifecycle: engines.lifecycle,
+        );
         await service.build(
           config: _headlessConfig(),
           isCancelled: () => false,
@@ -624,7 +652,10 @@ void main() {
         );
         tree.computeMetadata();
 
-        final service = TreeBuildService();
+        final service = TreeBuildService(
+          pool: engines.pool,
+          lifecycle: engines.lifecycle,
+        );
         await service.build(
           config: _headlessConfig(),
           isCancelled: () => false,
@@ -684,7 +715,10 @@ void main() {
       tree.computeMetadata();
       final nodesBefore = tree.totalNodes;
 
-      final service = TreeBuildService();
+      final service = TreeBuildService(
+        pool: engines.pool,
+        lifecycle: engines.lifecycle,
+      );
       final result = await service.build(
         config: _headlessConfig(coverMinProb: 0.05),
         isCancelled: () => false,
@@ -721,7 +755,10 @@ void main() {
       tree.computeMetadata();
       final nodesBefore = tree.totalNodes;
 
-      final service = TreeBuildService();
+      final service = TreeBuildService(
+        pool: engines.pool,
+        lifecycle: engines.lifecycle,
+      );
       final result = await service.build(
         config: _headlessConfig(coverMinProb: 0.05),
         isCancelled: () => false,

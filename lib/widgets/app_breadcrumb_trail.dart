@@ -4,8 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../core/app_history.dart';
 import '../core/app_state.dart';
-import '../theme/app_colors.dart';
-import '../theme/app_text_styles.dart';
+import '../design_system/theme/app_typography.dart';
 
 /// A screen's app-bar title with the [AppHistory] trail beside it —
 /// `PGN Viewer   Tactics ▸ Game 12 vs foo` — instead of on a strip of its own
@@ -82,12 +81,12 @@ class AppBreadcrumbTrail extends StatelessWidget {
           const SizedBox(width: 16),
           for (var i = 0; i < entries.length; i++) ...[
             if (i > 0)
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 1),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 1),
                 child: Icon(
                   Icons.chevron_right,
                   size: 17,
-                  color: AppColors.onSurfaceSoft,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
             _Crumb(
@@ -118,10 +117,12 @@ class _Crumb extends StatelessWidget {
     // where you are is the one thing on the bar you have to be able to read at
     // a glance. The current crumb gets full ink; earlier ones are the soft
     // step, which is where the hierarchy now lives.
-    final style = AppTextStyles.body.copyWith(
+    final style = AppTypography.body(context).copyWith(
       fontSize: 14,
       fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w400,
-      color: isCurrent ? AppColors.ink : AppColors.onSurfaceSoft,
+      color: isCurrent
+          ? Theme.of(context).colorScheme.onSurface
+          : Theme.of(context).colorScheme.onSurfaceVariant,
     );
     return InkWell(
       onTap: onTap,

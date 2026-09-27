@@ -3,7 +3,6 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../models/engine_settings.dart';
 import '../engine/stockfish_pool.dart';
 import '../generation/generation_config.dart';
 import 'generation_phase.dart';
@@ -186,13 +185,17 @@ const _fifoDepthWeight = 0.85;
 const _fifoLayerWeight = 0.15;
 
 /// Resource chip text for engine-backed builds.
-String? generationResourceLabel(TreeBuildConfig? config, {int? workers}) {
+String? generationResourceLabel(
+  TreeBuildConfig? config, {
+  int? workers,
+  required int hashPerWorkerMb,
+}) {
   if (config == null || !config.needsStockfish) return null;
   final threads = config.resolvedEngineThreads;
   final lanes = StockfishPool.laneCountFor(threads, workers: workers);
   final threadsPerWorker = StockfishPool.threadsPerLane(threads, lanes);
   final activeThreads = lanes * threadsPerWorker;
-  final hashMb = lanes * EngineSettings.instance.hashMb;
+  final hashMb = lanes * hashPerWorkerMb;
   return '$lanes worker${lanes == 1 ? '' : 's'} × '
       '$threadsPerWorker thread${threadsPerWorker == 1 ? '' : 's'} · '
       '$activeThreads/$threads CPU · $hashMb MB hash + engine memory';

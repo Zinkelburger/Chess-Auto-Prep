@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import '../l10n/generated/app_localizations.dart';
 
-import '../theme/app_text_styles.dart';
+import '../design_system/theme/app_typography.dart';
 import '../utils/app_messages.dart';
 
 /// A button that copies something, and says so.
@@ -27,7 +28,7 @@ class CopyButton extends StatefulWidget {
   const CopyButton({
     super.key,
     required this.text,
-    this.label = 'Copy',
+    this.label,
     this.icon = Icons.copy_all_outlined,
     this.tooltip,
     this.foreground,
@@ -56,7 +57,7 @@ class CopyButton extends StatefulWidget {
   final ValueGetter<String> text;
 
   /// Resting label. Becomes "Copied" while the confirmation shows.
-  final String label;
+  final String? label;
 
   final IconData icon;
 
@@ -105,6 +106,7 @@ class _CopyButtonState extends State<CopyButton> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final icon = Icon(
       _copied ? Icons.check : widget.icon,
       size: widget.iconSize ?? (widget.dense ? 16 : 18),
@@ -115,7 +117,7 @@ class _CopyButtonState extends State<CopyButton> {
       return IconButton(
         onPressed: widget.enabled ? _copy : null,
         icon: icon,
-        tooltip: _copied ? 'Copied' : widget.tooltip,
+        tooltip: _copied ? l10n.copyDone : widget.tooltip,
         padding: widget.dense ? EdgeInsets.zero : null,
         visualDensity: widget.dense ? VisualDensity.compact : null,
         color: widget.foreground,
@@ -123,8 +125,8 @@ class _CopyButtonState extends State<CopyButton> {
     }
 
     final label = Text(
-      _copied ? 'Copied' : widget.label,
-      style: AppTextStyles.caption.copyWith(color: widget.foreground),
+      _copied ? l10n.copyDone : (widget.label ?? l10n.copyAction),
+      style: AppTypography.caption(context).copyWith(color: widget.foreground),
     );
     final button = TextButton.icon(
       onPressed: widget.enabled ? _copy : null,

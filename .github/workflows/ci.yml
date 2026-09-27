@@ -7,6 +7,9 @@ on:
   workflow_call:
 
 jobs:
+  v2-desktop:
+    uses: ./.github/workflows/desktop-contracts.yml
+
   test:
     runs-on: ubuntu-latest
     steps:

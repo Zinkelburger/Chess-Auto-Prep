@@ -2,7 +2,7 @@
 // structurally-identical move-tree node types, so one generic routine works
 // across all of them (the foundation for a single cursor/serializer).
 
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/models/move_tree_node_view.dart';
 import 'package:flutter_test/flutter_test.dart';

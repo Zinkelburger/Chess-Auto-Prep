@@ -1,7 +1,6 @@
 /// Difficulty formula constants and helpers shared across the analysis pipeline.
 ///
-/// Used by [AnalysisService] (per-move difficulty) and [UnifiedEnginePane]
-/// (overall position difficulty).
+/// Used by analysis and generation for move and position difficulty.
 library;
 
 import 'dart:math' as math;

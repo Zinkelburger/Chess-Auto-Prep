@@ -42,6 +42,17 @@ class PersonRecord {
   final int? rating;
   final String? title;
 
+  /// Other spellings of the name (`Denis Shmeliov` for `Denys Shmelov`),
+  /// matched by search and import like the name itself.
+  final List<String> aliases;
+
+  /// FIDE ID, the key master-games records carry under every spelling.
+  final int? fideId;
+
+  /// Keys this version does not model — the MCP tooling's `lookup` report
+  /// among them — written back unchanged so a save never drops them.
+  final Map<String, dynamic> extra;
+
   /// Free text. Global: carries across tournaments, unlike the prep file's
   /// lines which are also global but live in a study.
   final String notes;
@@ -64,6 +75,9 @@ class PersonRecord {
     this.lichess,
     this.rating,
     this.title,
+    this.aliases = const [],
+    this.fideId,
+    this.extra = const {},
     this.notes = '',
     this.prepFilePath,
     this.gameSetKeys = const [],
@@ -71,6 +85,24 @@ class PersonRecord {
     required this.createdAt,
     required this.updatedAt,
   });
+
+  static const _knownKeys = {
+    'id',
+    'name',
+    'uscf_id',
+    'chesscom',
+    'lichess',
+    'rating',
+    'title',
+    'aliases',
+    'fide_id',
+    'notes',
+    'prep_file',
+    'game_sets',
+    'studies',
+    'created_at',
+    'updated_at',
+  };
 
   /// A fresh person, id and timestamps minted now.
   factory PersonRecord.create({
@@ -107,6 +139,19 @@ class PersonRecord {
       lichess: _blankToNull(json['lichess'] as String?),
       rating: (json['rating'] as num?)?.toInt(),
       title: _blankToNull(json['title'] as String?),
+      aliases: [
+        for (final alias in json['aliases'] as List? ?? const [])
+          if (alias is String && alias.trim().isNotEmpty) alias.trim(),
+      ],
+      fideId: switch (json['fide_id']) {
+        final num id => id.toInt(),
+        final String id => int.tryParse(id.trim()),
+        _ => null,
+      },
+      extra: {
+        for (final MapEntry(:key, :value) in json.entries)
+          if (!_knownKeys.contains(key)) key: value,
+      },
       notes: json['notes'] as String? ?? '',
       prepFilePath: _blankToNull(json['prep_file'] as String?),
       gameSetKeys: (json['game_sets'] as List? ?? const [])
@@ -154,6 +199,7 @@ class PersonRecord {
   ].join(' · ');
 
   Map<String, dynamic> toJson() => {
+    ...extra,
     'id': id,
     'name': name,
     if (uscfId != null) 'uscf_id': uscfId,
@@ -161,6 +207,8 @@ class PersonRecord {
     if (lichess != null) 'lichess': lichess,
     if (rating != null) 'rating': rating,
     if (title != null) 'title': title,
+    if (aliases.isNotEmpty) 'aliases': aliases,
+    if (fideId != null) 'fide_id': fideId,
     if (notes.isNotEmpty) 'notes': notes,
     if (prepFilePath != null) 'prep_file': prepFilePath,
     'game_sets': gameSetKeys,
@@ -184,6 +232,7 @@ class PersonRecord {
     bool clearRating = false,
     String? title,
     bool clearTitle = false,
+    List<String>? aliases,
     String? notes,
     String? prepFilePath,
     bool clearPrepFilePath = false,
@@ -198,6 +247,9 @@ class PersonRecord {
     lichess: clearLichess ? null : (_blankToNull(lichess) ?? this.lichess),
     rating: clearRating ? null : (rating ?? this.rating),
     title: clearTitle ? null : (_blankToNull(title) ?? this.title),
+    aliases: aliases ?? this.aliases,
+    fideId: fideId,
+    extra: extra,
     notes: notes ?? this.notes,
     prepFilePath: clearPrepFilePath
         ? null

@@ -66,17 +66,19 @@ class RepertoireLine {
     this.sourcePath,
     this.sourceLineId,
     required this.name,
-    required this.moves,
+    required List<String> moves,
     required this.color,
     required this.startPosition,
     required this.fullPgn,
-    this.comments = const {},
-    this.headers = const {},
+    Map<String, String> comments = const {},
+    Map<String, String> headers = const {},
     this.importance,
     this.chapter,
     this.isModelGame = false,
     this.gameIndex = -1,
-  });
+  }) : moves = List.unmodifiable(moves),
+       comments = Map.unmodifiable(comments),
+       headers = Map.unmodifiable(headers);
 
   /// The same line under a different id (collision resolution at parse time).
   RepertoireLine copyWithId(String newId) => _copyWith(id: newId);

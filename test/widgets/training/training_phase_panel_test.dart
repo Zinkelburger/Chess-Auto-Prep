@@ -1,5 +1,5 @@
 import 'package:chess_auto_prep/models/repertoire_line.dart';
-import 'package:chess_auto_prep/services/training/training_phase.dart';
+import 'package:chess_auto_prep/features/training/models/training_phase.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_movetext_view.dart';
 import 'package:chess_auto_prep/widgets/training/training_board_controls.dart';
 import 'package:dartchess/dartchess.dart' show Chess;
@@ -22,6 +22,7 @@ Widget _panel({
   String? feedback,
   String? annotation,
   VoidCallback? onNext,
+  RepertoireLine? line,
 }) => MaterialApp(
   home: Scaffold(
     body: SizedBox(
@@ -36,7 +37,7 @@ Widget _panel({
         opponentWaitingForAck: false,
         replayIndex: 0,
         wrongMoveCount: 1,
-        currentLine: _line,
+        currentLine: line ?? _line,
         currentMoveIndex: 2,
         waitingForUser: quizzing,
         isWhiteLine: true,
@@ -49,6 +50,54 @@ Widget _panel({
 );
 
 void main() {
+  testWidgets(
+    'long lesson prose remains scrollable without revealing future moves',
+    (tester) async {
+      final line = RepertoireLine(
+        id: 'long',
+        name: 'Long lesson',
+        moves: _line.moves,
+        fullPgn: '',
+        color: 'white',
+        startPosition: Chess.initial,
+        comments: {
+          '2': List.filled(100, 'An explanation worth reading.').join(' '),
+        },
+      );
+      await tester.pumpWidget(_panel(line: line));
+      await tester.pumpAndSettle();
+      final scrolling = find.descendant(
+        of: find.byType(PgnMovetextView),
+        matching: find.byType(Scrollable),
+      );
+      final position = tester.state<ScrollableState>(scrolling).position;
+      final before = position.pixels;
+      await tester.drag(scrolling, const Offset(0, -200));
+      await tester.pumpAndSettle();
+      expect(position.pixels, greaterThan(before));
+      final scrolled = position.pixels;
+      final history = tester
+          .widget<PgnMovetextView>(find.byType(PgnMovetextView))
+          .moveHistory;
+      await tester.pumpWidget(_panel(line: line));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<PgnMovetextView>(find.byType(PgnMovetextView))
+            .moveHistory,
+        same(history),
+      );
+      expect(position.pixels, scrolled);
+      expect(
+        tester
+            .widget<PgnMovetextView>(find.byType(PgnMovetextView))
+            .moveHistory
+            .map((m) => m.san),
+        ['e4', 'e5', 'Nf3'],
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets(
     'lesson uses PGN notation, reveals only played moves and compact Next',
     (tester) async {

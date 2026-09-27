@@ -7,11 +7,13 @@
 /// comments, NAGs), and scratch analysis must never reach the file.
 library;
 
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
+
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/core/pgn/solitaire_reveal.dart';
+import 'package:chess_auto_prep/features/documents/models/solitaire_reveal.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_movetext_view.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
@@ -39,6 +41,8 @@ Future<List<String>> _pump(
   final emissions = <String>[];
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: SizedBox(
           width: 480,
@@ -75,6 +79,8 @@ void main() {
     final emissions = <String>[];
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: ValueListenableBuilder<bool>(
             valueListenable: editing,
@@ -283,15 +289,18 @@ void main() {
       initialMainLineIndex: 1,
     );
     final label = tester.widget<Text>(find.text('Comment:'));
-    expect(label.style?.color, Colors.white);
+    final colors = Theme.of(
+      tester.element(find.byType(PgnAnnotationPanel)),
+    ).colorScheme;
+    expect(label.style?.color, colors.onSurface);
     final field = tester.widget<TextField>(
       find.descendant(
         of: find.byType(PgnAnnotationPanel),
         matching: find.byType(TextField),
       ),
     );
-    expect(field.decoration?.enabledBorder?.borderSide.color, Colors.white);
-    expect(field.decoration?.focusedBorder?.borderSide.color, Colors.white);
+    expect(field.decoration?.enabledBorder?.borderSide.color, colors.onSurface);
+    expect(field.decoration?.focusedBorder?.borderSide.color, colors.onSurface);
     await tester.enterText(
       find.descendant(
         of: find.byType(PgnAnnotationPanel),

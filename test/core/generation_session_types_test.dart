@@ -1,9 +1,11 @@
 /// Value types of the generation session: the few derived facts they carry.
 library;
 
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
+
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/generation_session_types.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:chess_auto_prep/services/generation/line_extractor.dart';
 import 'package:chess_auto_prep/services/generation/line_pruner.dart';
@@ -29,12 +31,13 @@ void main() {
 
     test('a fresh build has no tree, no known lines, and exports', () {
       const request = GenerationRequest(
+        jobLabel: 'Test generation',
         config: TreeBuildConfig(startFen: 'x', playAsWhite: true),
         repertoireFilePath: '/r.pgn',
         buildRootFen: 'x',
         lineMovePrefix: [],
         repertoireStartFen: 'x',
-        onLinesSaved: _ignore,
+        onPublished: _ignore,
       );
       expect(request.existingTree, isNull);
       expect(request.existingLineKeys, isEmpty);
@@ -99,23 +102,25 @@ void main() {
     );
 
     GenerationRequest resuming(BuildTree tree) => GenerationRequest(
+      jobLabel: 'Test generation',
       config: const TreeBuildConfig(startFen: afterE4, playAsWhite: true),
       repertoireFilePath: '/r.pgn',
       buildRootFen: afterE4,
       lineMovePrefix: const ['e4'],
       repertoireStartFen: kStandardStartFen,
-      onLinesSaved: _ignore,
+      onPublished: _ignore,
       existingTree: tree,
     );
 
     test('a fresh build uses the caller\'s prefix', () {
       const request = GenerationRequest(
+        jobLabel: 'Test generation',
         config: TreeBuildConfig(startFen: 'x', playAsWhite: true),
         repertoireFilePath: '/r.pgn',
         buildRootFen: 'x',
         lineMovePrefix: ['e4', 'c5'],
         repertoireStartFen: 'x',
-        onLinesSaved: _ignore,
+        onPublished: _ignore,
       );
       expect(request.resolveLinePrefix(), ['e4', 'c5']);
     });
@@ -229,10 +234,8 @@ void main() {
       expect(request.repertoireStartFen, 'x');
       expect(request.existingTree, isNull);
       expect(request.existingLineKeys, isEmpty);
-      // Nothing to report: the callback is a no-op rather than a throw.
-      request.onLinesSaved(const []);
     });
   });
 }
 
-void _ignore(List<GeneratedLineExport> _) {}
+void _ignore(PgnSnapshot _) {}

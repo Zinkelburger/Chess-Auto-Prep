@@ -8,7 +8,7 @@ library;
 
 import 'package:dartchess/dartchess.dart' show Move;
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import '../../utils/chess_utils.dart' show moveToStandardUci;
 import '../../utils/fen_utils.dart';
 import 'build_run.dart';

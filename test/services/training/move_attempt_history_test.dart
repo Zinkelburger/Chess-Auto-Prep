@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
+import '../../support/training_source_fixture.dart';
 import 'dart:async';
 import 'package:chess_auto_prep/services/repertoire_review_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_service.dart';
@@ -20,11 +23,20 @@ void main() {
   test(
     'answers survive a fresh service and correct replay retains the wrong move',
     () async {
+      final root = await Directory.systemTemp.createTemp('attempt-history-');
+      addTearDown(() => root.delete(recursive: true));
+      final path = '${root.path}/chapter.pgn';
+      await File(path).writeAsString('1. e4 *');
+      final source = await captureTrainingSource(
+        NativePgnDocumentStore(),
+        path,
+      );
       final storage = _MemoryStorage();
       final service = RepertoireReviewService(storage: storage);
       for (final correct in [false, true]) {
         await service.recordAttempt(
-          repertoireId: '/book/chapter.pgn',
+          source: source,
+          repertoireId: path,
           lineId: 'line',
           moveIndex: 2,
           fen: 'position',
@@ -35,9 +47,7 @@ void main() {
         );
       }
       final reopened = RepertoireReviewService(storage: storage);
-      final records = await reopened.loadAttempts(
-        repertoireId: '/book/chapter.pgn',
-      );
+      final records = await reopened.loadAttempts(repertoireId: path);
       expect(records, hasLength(2));
       expect(records.first['playedSan'], 'Bc4');
       expect(records.first['correct'], isFalse);

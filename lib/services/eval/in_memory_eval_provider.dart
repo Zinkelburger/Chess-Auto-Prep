@@ -1,7 +1,7 @@
 /// In-memory [ExternalEvalProvider] for unit tests.
 library;
 
-import 'eval_canonicalize.dart';
+import '../../chess_core/position/eval_canonicalize.dart';
 import 'external_eval_provider.dart';
 
 /// Answers from a map of four-field FENs, honouring the depth gate like a

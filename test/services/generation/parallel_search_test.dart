@@ -5,7 +5,7 @@ import 'package:chess_auto_prep/services/generation/eca_calculator.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:chess_auto_prep/services/generation/pure_tree_builder.dart';
 import 'package:chess_auto_prep/services/generation/pure_position.dart';
-import 'package:chess_auto_prep/services/generation/tree_serialization.dart';
+import 'package:chess_auto_prep/chess_core/generation/tree_serialization.dart';
 import 'package:chess_auto_prep/services/maia/maia_factory.dart';
 import 'package:chess_auto_prep/services/maia/maia_service.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart';

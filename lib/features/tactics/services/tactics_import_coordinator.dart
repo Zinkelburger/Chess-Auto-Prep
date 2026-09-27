@@ -12,6 +12,7 @@ import '../../../utils/app_messages.dart';
 import '../../../utils/log.dart';
 import '../../../utils/safe_change_notifier.dart';
 import '../../../services/engine/engine_lifecycle.dart';
+import '../../../services/engine/stockfish_pool.dart';
 import '../../../services/games_library/game_review_store.dart';
 import '../../../services/jobs/repertoire_job.dart';
 import 'tactics_database.dart';
@@ -49,11 +50,15 @@ class TacticsImportParams {
 /// prunes the game store once it is over.
 class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
   TacticsImportCoordinator({
+    required this.pool,
+    required this.lifecycle,
     TacticsDatabase? database,
     GamesWindowSettings? windowSettings,
   }) : database = database ?? TacticsDatabase(),
        _windowSettings = windowSettings ?? GamesWindowSettings.instance;
 
+  final StockfishPool pool;
+  final EngineLifecycle lifecycle;
   final TacticsDatabase database;
 
   /// Builds the import service a run drives. A hook rather than a `new`:
@@ -62,8 +67,8 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
   /// only through that service, and the real one needs Stockfish. Tests
   /// substitute a service on a scripted pool and drive all of it offline.
   @visibleForTesting
-  TacticsImportService Function(TacticsDatabase database) importFactory =
-      (database) => TacticsImportService(database: database);
+  late TacticsImportService Function(TacticsDatabase database) importFactory =
+      (database) => TacticsImportService(database: database, pool: pool);
 
   /// The app-wide "which of my games are we talking about" window — the same
   /// one the recent-games list and the review strip run on. Read directly
@@ -206,7 +211,7 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
   /// [_recordReview]) and is marked analyzed, so the next run picks up at the
   /// first game it did not reach.
   void _beginJob(String label) {
-    EngineLifecycle.instance.retainPool();
+    lifecycle.retainPool();
     _jobProgress = JobProgress.zero;
     final job = _job = JobManager.instance.createJob(
       type: JobType.tacticsImport,
@@ -220,7 +225,7 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
   /// Close out the job registered by [_beginJob]. A job already marked
   /// failed keeps that status.
   void _endJob({required bool cancelled}) {
-    EngineLifecycle.instance.releasePool();
+    lifecycle.releasePool();
     final job = _job;
     _job = null;
     if (job == null || !job.isActive) return;

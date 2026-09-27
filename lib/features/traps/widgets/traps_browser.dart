@@ -11,8 +11,8 @@ library;
 
 import '../../../utils/pgn_nags.dart';
 import 'package:flutter/material.dart';
-import 'package:chess_auto_prep/models/trap_line_info.dart';
-import 'package:chess_auto_prep/models/trap_reply.dart';
+import 'package:chess_auto_prep/chess_core/generation/trap_line_info.dart';
+import 'package:chess_auto_prep/chess_core/generation/trap_reply.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../../theme/app_text_styles.dart';

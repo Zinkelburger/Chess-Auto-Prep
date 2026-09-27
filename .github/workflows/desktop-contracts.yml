@@ -1,0 +1,89 @@
+name: V2 desktop contracts
+
+on:
+  workflow_call:
+    inputs:
+      targets:
+        type: string
+        default: '[{"os":"windows-2022","device":"windows"},{"os":"windows-2025","device":"windows"},{"os":"macos-latest","device":"macos"},{"os":"ubuntu-22.04","device":"linux"}]'
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(inputs.targets) }}
+    runs-on: ${{ matrix.target.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.2
+          channel: stable
+          cache: true
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang libgtk-3-dev pkg-config xvfb
+      - name: Disposable Windows file associations
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -Path HKCU:\Software\ChessAutoPrep -Force | Out-Null
+          New-ItemProperty -Path HKCU:\Software\ChessAutoPrep -Name FileAssociationChoice -Value no -PropertyType String -Force | Out-Null
+      - run: flutter pub get
+      - name: Native v2 document and application contracts
+        run: |
+          set -o pipefail
+          flutter test --reporter expanded \
+            test/v2/storage/document_file_io_test.dart \
+            test/v2/storage/platform_documents_test.dart \
+            test/v2/storage/pgn_file_store_test.dart \
+            test/v2/storage/compound_completed_retry_test.dart \
+            test/v2/storage/snapshot_lifetime_test.dart \
+            test/v2/storage/training_source_test.dart \
+            test/v2/storage/training_retry_test.dart \
+            test/v2/storage/relocation_sync_test.dart \
+            test/v2/storage/file_lock_test.dart \
+            test/v2/ui/name_dialog_test.dart \
+            test/v2/app/native_file_requests_test.dart \
+            test/v2/app/app_exit_test.dart \
+            test/v2/net/lichess_login_test.dart 2>&1 | tee desktop-contracts.log
+      - name: Fetch this host's Stockfish
+        run: python tools/fetch_assets.py --only stockfish
+      - name: Built v2 app, native engines and login sockets
+        run: |
+          set -o pipefail
+          if [[ '${{ runner.os }}' == Linux ]]; then
+            xvfb-run -a flutter test integration_test/v2_desktop_test.dart -d linux --reporter expanded 2>&1 | tee desktop-integration.log
+          else
+            flutter test integration_test/v2_desktop_test.dart -d '${{ matrix.target.device }}' --reporter expanded 2>&1 | tee desktop-integration.log
+          fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: desktop-contracts-${{ matrix.target.os }}
+          path: desktop-*.log
+      - name: Build the macOS release with its release entitlements
+        if: runner.os == 'macOS'
+        run: flutter build macos --release -t lib/main_v2.dart
+      - name: Check the sandboxed macOS release executable
+        if: runner.os == 'macOS'
+        run: |
+          APP=$(ls -d build/macos/Build/Products/Release/*.app)
+          EXEC=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")
+          codesign --verify --deep --strict "$APP"
+          python tools/test_desktop_bundle.py "$APP/Contents/MacOS/$EXEC" --report desktop-release.json
+      - uses: actions/upload-artifact@v7
+        if: always() && runner.os == 'macOS'
+        with:
+          name: desktop-release-${{ matrix.target.os }}
+          path: desktop-release.json

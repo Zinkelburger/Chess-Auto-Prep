@@ -1,6 +1,14 @@
 /// Flat shared preferences and directly editable view settings.
 library;
 
+import '../features/settings/widgets/settings_section_status.dart';
+import 'package:chess_auto_prep/features/settings/models/board_display_configuration.dart';
+
+import '../app/legacy_theme_boundary.dart';
+import '../design_system/theme/app_typography.dart';
+import '../features/settings/widgets/appearance_settings.dart';
+import '../l10n/generated/app_localizations.dart';
+
 import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
@@ -12,26 +20,29 @@ import '../features/updates/widgets/app_updates.dart';
 import '../constants/engine_defaults.dart';
 import '../core/app_state.dart';
 import '../features/games/widgets/my_repertoires_section.dart';
-import '../models/board_display_settings.dart';
-import '../models/engine_settings.dart';
-import '../models/bulk_analysis_settings.dart';
-import '../models/eval_database_settings.dart';
+import '../features/settings/controllers/board_display_settings.dart';
+import '../features/settings/controllers/engine_settings.dart';
+import '../features/settings/controllers/bulk_analysis_settings.dart';
+import '../features/settings/controllers/eval_database_settings.dart';
+import '../features/settings/models/settings_state.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../utils/app_shortcuts.dart';
-import '../utils/san_display.dart';
+import 'package:chess_auto_prep/features/settings/widgets/san_display.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/analysis/stockfish_settings_dialog.dart';
 import '../widgets/analysis/analysis_panels_dialog.dart';
-import '../widgets/common/list_search_field.dart';
+import '../design_system/components/list_search_field.dart';
 import '../features/databases/widgets/databases_screen.dart';
-import '../widgets/common/confirm_dialog.dart';
+import '../design_system/components/confirm_dialog.dart';
 import '../widgets/settings/account_settings_section.dart';
 import '../widgets/settings/settings_widgets.dart';
 import '../widgets/settings/settings_navigation.dart';
 import '../widgets/settings/keyboard_shortcuts_section.dart';
 import '../widgets/shortcut_tooltip.dart';
+import '../infrastructure/diagnostics/app_log_file.dart';
+import '../utils/open_in_file_manager.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -54,7 +65,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static final _projectUri = Uri.parse(
     'https://github.com/Zinkelburger/Chess-Auto-Prep',
   );
-  final _engine = EngineSettings.instance;
+  late final _engine = context.read<EngineSettings>();
   late int _selected;
   AppMode? _mode;
   String _query = '';
@@ -63,6 +74,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late ViewSettingsRegistry _registry;
   final _navigationScroll = ScrollController();
   bool get _global => _mode == null;
+  String _sectionLabel(int index) => index == 7
+      ? AppLocalizations.of(context).appearance
+      : _sections[index].label;
   static const _sections = [
     (
       label: 'Accounts',
@@ -100,6 +114,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       label: 'Shortcuts',
       icon: Icons.keyboard_outlined,
       words: 'keyboard keys reference',
+    ),
+    (
+      label: 'Appearance',
+      icon: Icons.brightness_6_outlined,
+      words: 'theme light dark system display',
     ),
   ];
   static const _views = [
@@ -213,8 +232,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       .split(RegExp(r'\s+'))
       .every((term) => '$label $words'.toLowerCase().contains(term));
   List<Widget> _navigation() => [
-    for (final i in [0, 1, 3])
-      if (_matches(_sections[i].label, _sections[i].words)) _globalNavTile(i),
+    for (final i in [7, 0, 1, 3])
+      if (_matches(_sectionLabel(i), _sections[i].words)) _globalNavTile(i),
     for (final view in _views)
       if (view.mode.isAvailable && _matches(view.label, view.words))
         ListTile(
@@ -222,24 +241,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
           dense: true,
           minTileHeight: 38,
           selected: _mode == view.mode,
-          selectedTileColor: AppColors.accent.withValues(alpha: .12),
+          selectedTileColor: Theme.of(
+            context,
+          ).colorScheme.primary.withValues(alpha: .12),
           title: Text(
             view.label,
             style: _mode == view.mode
-                ? AppTextStyles.bodyStrong
-                : AppTextStyles.body,
+                ? AppTypography.bodyStrong(context)
+                : AppTypography.body(context),
           ),
           onTap: () => _selectView(view.mode),
         ),
     for (final i in [4, 5, 6])
-      if (_matches(_sections[i].label, _sections[i].words)) _globalNavTile(i),
+      if (_matches(_sectionLabel(i), _sections[i].words)) _globalNavTile(i),
   ];
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: AppColors.surface,
+    backgroundColor: Theme.of(context).colorScheme.surface,
     appBar: AppBar(
-      title: const Text('Settings', style: AppTextStyles.bodyStrong),
+      title: Text('Settings', style: AppTypography.bodyStrong(context)),
       automaticallyImplyLeading: false,
       actions: [
         ShortcutIconButton(
@@ -270,18 +291,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
             builder: (context, _) => IndexedStack(
               index: _global
                   ? _selected
-                  : 7 + _views.indexWhere((v) => v.mode == _mode),
+                  : _sections.length +
+                        _views.indexWhere((v) => v.mode == _mode),
               children: [
                 for (var i = 0; i < _sections.length; i++)
                   if (!_visitedGlobals.contains(i))
                     const SizedBox.shrink()
+                  else if (i == 7)
+                    const AppearanceSettings()
                   else if (i == 4)
-                    const DatabasesScreen(embedded: true)
+                    const LegacyThemeBoundary(
+                      child: DatabasesScreen(embedded: true),
+                    )
                   else
-                    _globalPage(i, compact),
+                    LegacyThemeBoundary(child: _globalPage(i, compact)),
                 for (final view in _views)
                   if (_visitedViews.contains(view.mode))
-                    _viewContent(view.mode)
+                    LegacyThemeBoundary(child: _viewContent(view.mode))
                   else
                     const SizedBox.shrink(),
               ],
@@ -350,12 +376,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     dense: true,
     minTileHeight: 38,
     selected: _global && _selected == index,
-    selectedTileColor: AppColors.accent.withValues(alpha: .12),
+    selectedTileColor: Theme.of(
+      context,
+    ).colorScheme.primary.withValues(alpha: .12),
     title: Text(
-      _sections[index].label,
+      _sectionLabel(index),
       style: _global && _selected == index
-          ? AppTextStyles.bodyStrong
-          : AppTextStyles.body,
+          ? AppTypography.bodyStrong(context)
+          : AppTypography.body(context),
     ),
     onTap: () => _selectGlobal(index),
   );
@@ -462,6 +490,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  /// Show the user where the app writes what went wrong, so a bug report can
+  /// carry the log instead of a remembered colour.
+  Future<void> _openLogFolder() async {
+    var opened = false;
+    try {
+      opened = await openInFileManager((await AppLogFile.directory()).path);
+    } catch (_) {
+      opened = false;
+    }
+    if (!opened && mounted) {
+      showAppSnackBar(context, 'Could not open the log folder', isError: true);
+    }
+  }
+
   Widget _buildAboutSection() {
     return SettingsGroup(
       title: 'About & open source',
@@ -479,6 +521,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
           subtitle: const Text('Source code, releases, and issue tracker'),
           trailing: const Icon(Icons.open_in_new, size: 17),
           onTap: () => unawaited(_openProject()),
+        ),
+        const Divider(
+          height: 1,
+          indent: 20,
+          endIndent: 20,
+          color: AppColors.divider,
+        ),
+        ListTile(
+          key: const Key('settings-open-log-folder'),
+          titleTextStyle: AppTextStyles.bodyStrong,
+          subtitleTextStyle: AppTextStyles.muted,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 8,
+          ),
+          leading: const Icon(Icons.article_outlined, size: 22),
+          title: const Text('Open log folder'),
+          subtitle: const Text(
+            'Errors are written to app.log — attach it to a bug report',
+          ),
+          trailing: const Icon(Icons.open_in_new, size: 17),
+          onTap: () => unawaited(_openLogFolder()),
         ),
         const Divider(
           height: 1,
@@ -516,38 +580,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// before the screen is left.
   Widget _buildDisplaySection() {
     return ListenableBuilder(
-      listenable: BoardDisplaySettings.instance,
+      listenable: context.read<BoardDisplaySettings>(),
       builder: (context, _) {
-        final display = BoardDisplaySettings.instance;
+        final display = context.read<BoardDisplaySettings>();
         return SettingsGroup(
           title: 'Board and moves',
           icon: Icons.grid_on_outlined,
           children: [
+            SettingsSectionStatus(
+              owner: display,
+              policy: 'Saved display changes apply to all boards immediately.',
+            ),
             SettingsChoiceTile<BoardCoordinates>(
               label: 'Board coordinates',
-              value: display.coordinates,
+              value: display.editing.coordinates,
               items: const [
                 (BoardCoordinates.none, 'Off'),
                 (BoardCoordinates.inside, 'Inside the board'),
                 (BoardCoordinates.outside, 'Outside the board'),
                 (BoardCoordinates.everySquare, 'Every square'),
               ],
-              onChanged: (v) => unawaited(display.setCoordinates(v)),
+              onChanged: (v) => unawaited(
+                display.setCoordinates(v).catchError((Object _) {}),
+              ),
             ),
             SettingsSwitchTile(
               label: 'Show legal moves',
               description: 'Show possible destinations when selecting a piece',
-              value: display.showLegalMoves,
-              onChanged: (value) => unawaited(display.setShowLegalMoves(value)),
+              value: display.editing.showLegalMoves,
+              onChanged: (value) => unawaited(
+                display.setShowLegalMoves(value).catchError((Object _) {}),
+              ),
             ),
             SettingsChoiceTile<PieceNotation>(
               label: 'Piece notation',
-              value: display.pieceNotation,
+              value: display.editing.pieceNotation,
               items: const [
                 (PieceNotation.letters, 'Letters (KQRBN)'),
                 (PieceNotation.figurines, 'Figurines (♔♕♖♗♘)'),
               ],
-              onChanged: (v) => unawaited(display.setPieceNotation(v)),
+              onChanged: (v) => unawaited(
+                display.setPieceNotation(v).catchError((Object _) {}),
+              ),
             ),
             const Divider(
               height: 1,
@@ -564,15 +638,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // ── Engine section ─────────────────────────────────────────────────────────
 
-  Widget _buildMaiaSection() => SettingsStepperTile(
-    label: 'Opponent rating for predictions',
-    description: 'Maia predictions',
-    value: _engine.maiaElo,
-    min: kMinMaiaElo,
-    max: kMaxMaiaElo,
-    step: 100,
-    suffix: 'Elo',
-    onChanged: (v) => _engine.maiaElo = v,
+  Widget _buildMaiaSection() => ListenableBuilder(
+    listenable: _engine,
+    builder: (context, _) => Column(
+      children: [
+        SettingsSectionStatus(
+          owner: _engine,
+          policy: 'Saved prediction changes apply to the next position.',
+        ),
+        SettingsStepperTile(
+          label: 'Opponent rating for predictions',
+          description: 'Maia predictions',
+          value: _engine.editing.maiaElo,
+          min: kMinMaiaElo,
+          max: kMaxMaiaElo,
+          step: 100,
+          suffix: 'Elo',
+          onChanged: (v) => _engine.maiaElo = v,
+        ),
+      ],
+    ),
   );
 
   // ── Reset button ───────────────────────────────────────────────────────────
@@ -591,22 +676,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
       confirmLabel: 'Reset',
     );
     if (!confirmed) return;
-    _engine.resetToDefaults();
-    await BulkAnalysisSettings.instance.setDepth(
-      BulkAnalysisSettings.defaultDepth,
-    );
-    await EvalDatabaseSettings.instance.resetToDefaults();
-    await BoardDisplaySettings.instance.resetToDefaults();
-    if (mounted) showAppSnackBar(context, 'Settings restored to defaults');
+    if (!mounted) return;
+    final bulk = context.read<BulkAnalysisSettings>();
+    final display = context.read<BoardDisplaySettings>();
+    final databases = context.read<EvalDatabaseSettings>();
+    try {
+      await _engine.resetToDefaults();
+      await bulk.setDepth(BulkAnalysisSettings.defaultDepth);
+      await databases.resetToDefaults();
+      await display.resetToDefaults();
+      if (mounted) showAppSnackBar(context, 'Settings restored to defaults');
+    } catch (_) {
+      if (mounted)
+        showAppSnackBar(
+          context,
+          'Some preferences could not be saved. Retry the failed section.',
+        );
+    }
   }
 
   Widget _buildResetButton() {
+    final databases = context.watch<EvalDatabaseSettings>();
     return SettingsGroup(
       title: 'Reset analysis, board and data preferences',
       icon: Icons.restore,
       subtitle:
           'Reset engine, analysis, display and database preferences. Your accounts, games and repertoires are kept.',
       children: [
+        if (databases.state.phase == SettingsPhase.failed)
+          SettingsSectionStatus(
+            owner: databases,
+            policy: 'Database preferences are saved.',
+          ),
         Padding(
           padding: const EdgeInsets.all(20),
           child: Align(

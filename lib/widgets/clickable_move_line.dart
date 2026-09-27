@@ -7,9 +7,8 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
-import '../theme/app_text_styles.dart';
-import '../utils/san_display.dart';
+import '../design_system/theme/app_typography.dart';
+import 'package:chess_auto_prep/features/settings/widgets/san_display.dart';
 
 /// Per-move annotation rendered inline after or before the move SAN.
 class MoveAnnotation {
@@ -103,6 +102,9 @@ class ClickableMoveLineWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     if (sanMoves.isEmpty) return const SizedBox.shrink();
 
+    final colors = Theme.of(context).colorScheme;
+    final style = AppTypography.mono(context).copyWith(fontSize: fontSize);
+
     var moveNum = (startPly ~/ 2) + 1;
     var isWhite = startPly % 2 == 0;
 
@@ -118,10 +120,8 @@ class ClickableMoveLineWidget extends StatelessWidget {
       spans.add(
         TextSpan(
           text: label,
-          style: TextStyle(
-            fontSize: fontSize,
-            color: moveColor ?? AppColors.pgnMove,
-            fontFamily: AppTextStyles.monoFamily,
+          style: style.copyWith(
+            color: moveColor ?? colors.onSurface,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -144,22 +144,14 @@ class ClickableMoveLineWidget extends StatelessWidget {
         spans.add(
           TextSpan(
             text: '$moveNum.',
-            style: TextStyle(
-              fontSize: fontSize,
-              color: AppColors.pgnMoveNumber,
-              fontFamily: AppTextStyles.monoFamily,
-            ),
+            style: style.copyWith(color: colors.onSurfaceVariant),
           ),
         );
       } else if (!hasCallback && isFirst) {
         spans.add(
           TextSpan(
             text: '$moveNum...',
-            style: TextStyle(
-              fontSize: fontSize,
-              color: AppColors.pgnMoveNumber,
-              fontFamily: AppTextStyles.monoFamily,
-            ),
+            style: style.copyWith(color: colors.onSurfaceVariant),
           ),
         );
       }
@@ -180,7 +172,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
               child: Icon(
                 annotation!.prefixIcon,
                 size: annotation.iconSize,
-                color: annotation.prefixIconColor ?? AppColors.onSurfaceMuted,
+                color: annotation.prefixIconColor ?? colors.onSurfaceVariant,
               ),
             ),
           );
@@ -216,7 +208,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
                       onTap: onMoveTapped != null
                           ? () => onMoveTapped!(idx)
                           : null,
-                      hoverColor: AppColors.pgnMoveHoverBg,
+                      hoverColor: colors.primary.withValues(alpha: 0.1),
                       child: Container(
                         // Include the separator in this move's hit target.
                         padding:
@@ -224,10 +216,10 @@ class ClickableMoveLineWidget extends StatelessWidget {
                             EdgeInsets.only(right: fontSize * 0.6),
                         decoration: isActive
                             ? BoxDecoration(
-                                color: AppColors.pgnMoveCurrentBg,
+                                color: colors.primaryContainer,
                                 borderRadius: BorderRadius.circular(4),
                                 border: Border.all(
-                                  color: AppColors.pgnMoveCurrent,
+                                  color: colors.primary,
                                   width: 1,
                                 ),
                               )
@@ -246,20 +238,16 @@ class ClickableMoveLineWidget extends StatelessWidget {
                             if (numberPrefix.isNotEmpty)
                               Text(
                                 numberPrefix,
-                                style: TextStyle(
-                                  fontSize: fontSize,
-                                  color: AppColors.pgnMoveNumber,
-                                  fontFamily: AppTextStyles.monoFamily,
+                                style: style.copyWith(
+                                  color: colors.onSurfaceVariant,
                                 ),
                               ),
                             Text(
                               displaySan(context, sanMoves[i]),
-                              style: TextStyle(
-                                fontSize: fontSize,
+                              style: style.copyWith(
                                 color: isActive
-                                    ? AppColors.pgnMoveCurrentFg
-                                    : moveColor ?? AppColors.pgnMove,
-                                fontFamily: AppTextStyles.monoFamily,
+                                    ? colors.onPrimaryContainer
+                                    : moveColor ?? colors.onSurface,
                                 fontWeight: isActive
                                     ? FontWeight.bold
                                     : FontWeight.normal,
@@ -280,11 +268,10 @@ class ClickableMoveLineWidget extends StatelessWidget {
           spans.add(
             TextSpan(
               text: annotation!.suffix,
-              style: TextStyle(
+              style: style.copyWith(
                 fontSize: fontSize - 1,
-                color: annotation.suffixColor ?? AppColors.pgnMove,
+                color: annotation.suffixColor ?? colors.onSurface,
                 fontWeight: annotation.suffixFontWeight,
-                fontFamily: AppTextStyles.monoFamily,
               ),
             ),
           );
@@ -293,11 +280,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
         spans.add(
           TextSpan(
             text: '${displaySan(context, sanMoves[i])} ',
-            style: TextStyle(
-              fontSize: fontSize,
-              color: moveColor ?? AppColors.pgnMove,
-              fontFamily: AppTextStyles.monoFamily,
-            ),
+            style: style.copyWith(color: moveColor ?? colors.onSurface),
           ),
         );
       }

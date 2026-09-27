@@ -18,7 +18,7 @@ import 'package:path/path.dart' as p;
 import '../services/eval/storage_volumes.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
-import 'common/item_title.dart';
+import '../design_system/components/item_title.dart';
 
 /// What the picker currently points at.
 class StorageDestination {

@@ -6,10 +6,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../services/games_library/game_filter.dart';
 import '../../../services/games_library/game_review_store.dart';
 import '../../../services/games_library/games_library_service.dart';
+import '../../../utils/network_errors.dart';
 import '../../../utils/safe_change_notifier.dart';
 import '../models/recent_game.dart';
 import '../services/game_deviation_service.dart';
-import '../../../services/pgn_mainline_lexer.dart' show mainlineSansOfBatch;
+import '../../../chess_core/pgn/mainline_lexer.dart' show mainlineSansOfBatch;
 import '../services/game_preview.dart';
 import '../services/game_review_summary.dart';
 import '../services/games_window.dart';
@@ -121,6 +122,11 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
   String? _statusMessage;
   String? _error;
 
+  /// Set when the rows on screen came from the on-disk cache because the
+  /// download could not be made — the list is real, it is just not fresh.
+  /// Cleared by the next load that reaches a site.
+  String? _staleNotice;
+
   /// Every row the last load built: the union of the game-count slice *and*
   /// the day slice, whatever mode was active. [_games] is the active window's
   /// view of it — which is why flipping "last N games" ↔ "last N days" is a
@@ -135,6 +141,10 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
   bool get hasLoadedOnce => _hasLoadedOnce;
   String? get statusMessage => _statusMessage;
   String? get error => _error;
+
+  /// Why the listed games may be behind what the user has played, or null
+  /// when the last load reached the sites. Never a reason to hide the list.
+  String? get staleNotice => _staleNotice;
   List<RecentGame> get games => _games;
   GamesListFilters get filters => _filters;
 
@@ -304,6 +314,11 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
 
       final collected = <RecentGame>[];
       final errors = <String>[];
+      // Sites whose games came off this computer, and sites this load could
+      // not reach at all. Both mean the same thing to the reader: what is
+      // listed may be behind what they have played.
+      final stale = <GamesPlatform>{};
+      final failed = <GamesPlatform>{};
       for (final (platform, username) in _sources()) {
         try {
           collected.addAll(
@@ -314,23 +329,36 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
               otherSelection: otherSelection,
               force: force,
               epoch: epoch,
+              onStaleCache: (_) => stale.add(platform),
             ),
           );
         } catch (e) {
-          errors.add('${platform.name}: $e');
+          failed.add(platform);
+          errors.add(_siteError(platform, e));
         }
       }
       if (epoch != _refreshEpoch) return;
 
-      collected.sort(_newestFirst);
-      _allGames = collected;
-      _builtWindow = buildWindow;
-      _games = _sliceForWindow(buildWindow);
-      _hasLoadedOnce = true;
+      // Rows from a site this load could not reach are kept exactly as they
+      // were. The load learned nothing about that site, and an empty list is
+      // a far stronger claim than "could not check" — this is what turned a
+      // startup with no connection into a page with no games on it.
+      final kept = [
+        for (final game in _allGames)
+          if (failed.contains(game.platform)) game,
+      ];
       _statusMessage = null;
-      _error = collected.isEmpty && errors.isNotEmpty
+      _allGames = [...collected, ...kept]..sort(_newestFirst);
+      // A load that had to keep rows from an earlier one has not built this
+      // window for every site, so it does not claim to have.
+      if (kept.isEmpty) _builtWindow = buildWindow;
+      _games = _sliceForWindow(buildWindow);
+      final unreached = {...stale, ...failed};
+      _staleNotice = unreached.isEmpty ? null : _staleNoticeFor(unreached);
+      _error = _allGames.isEmpty && errors.isNotEmpty
           ? errors.join('\n')
           : null;
+      _hasLoadedOnce = true;
     } catch (e) {
       if (epoch == _refreshEpoch) {
         _statusMessage = null;
@@ -359,6 +387,26 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
+  /// What the user is told when a site could not be reached: the site's name
+  /// and that the games on screen are the saved ones, never a stack trace.
+  static String _siteError(GamesPlatform platform, Object error) =>
+      looksOffline(error)
+      ? 'Could not reach ${_siteLabel(platform)} — check your internet '
+            'connection.'
+      : '${_siteLabel(platform)}: $error';
+
+  static String _siteLabel(GamesPlatform platform) =>
+      platform == GamesPlatform.chesscom ? 'Chess.com' : 'Lichess';
+
+  /// The line over a list whose games came off this computer rather than the
+  /// sites named in [platforms].
+  static String _staleNoticeFor(Iterable<GamesPlatform> platforms) {
+    final names = platforms.map(_siteLabel).toSet().join(' and ');
+    return names.isEmpty
+        ? 'Showing saved games'
+        : 'Could not reach $names — showing saved games';
+  }
+
   /// One site's rows: its games for both slices, each with its mainline,
   /// final position and review summary, built off the UI isolate.
   Future<List<RecentGame>> _loadSite(
@@ -368,6 +416,7 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
     required GameSelection otherSelection,
     required bool force,
     required int epoch,
+    void Function(Object? error)? onStaleCache,
   }) async {
     final records = await _library.getGames(
       platform: platform,
@@ -381,6 +430,7 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
         notifyListeners();
       },
       onFetched: (at) => _onFetched?.call(platform, at),
+      onStaleCache: onStaleCache,
     );
     final cachePath = await _library.cacheFilePath(platform, username);
     final sides = [for (final r in records) _sideFor(r, username)];

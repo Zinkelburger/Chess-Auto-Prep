@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/services/move_eval.dart';
+import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart';
 import 'package:chess_auto_prep/widgets/game_analysis_chart.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';

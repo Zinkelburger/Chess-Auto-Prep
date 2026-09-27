@@ -9,18 +9,24 @@
 @TestOn('vm')
 library;
 
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
+
+import 'package:chess_auto_prep/app/study_dependencies.dart';
+import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
+import 'package:chess_auto_prep/utils/atomic_file.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/services/jobs/repertoire_job.dart';
-import 'package:chess_auto_prep/services/pgn_parsing_service.dart'
+import 'package:chess_auto_prep/chess_core/pgn/pgn_text.dart'
     show extractHeaders, splitPgnIntoGames;
 import 'package:chess_auto_prep/services/storage/app_paths.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/storage/storage_service.dart';
-import 'package:chess_auto_prep/services/study_import/study_import_controller.dart';
-import 'package:chess_auto_prep/services/study_import/study_import_exception.dart';
+import 'package:chess_auto_prep/features/studies/controllers/study_import_controller.dart';
+import 'package:chess_auto_prep/features/studies/models/study_import_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -63,8 +69,13 @@ class _FileStorage implements StorageService {
     if (failWrites) throw const FileSystemException('disk full');
     final file = File(path);
     await file.parent.create(recursive: true);
+    if (createOnly && await file.exists()) throw AtomicWriteConflict(path);
     await file.writeAsString(content);
   }
+
+  @override
+  Future<String?> readFile(String path) async =>
+      await File(path).exists() ? File(path).readAsString() : null;
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>
@@ -229,6 +240,19 @@ void main() {
     await tempDir.delete(recursive: true);
   });
 
+  StudyImportController createController() {
+    final documents = LegacyPgnDocumentStore(storage);
+    final controller = createStudyImportController(
+      documents: documents,
+      repository: createStudyImportRepository(documents: documents),
+    );
+    addTearDown(() async {
+      await controller.shutdown();
+      controller.dispose();
+    });
+    return controller;
+  }
+
   Future<File> cacheFile(String gid) async {
     final dir = await AppPaths.chessgamesCacheDirectory(create: true);
     return File(p.join(dir.path, '$gid.pgn'));
@@ -247,20 +271,20 @@ void main() {
 
   group('refusals', () {
     test('an empty id list is refused before anything starts', () async {
-      final c = StudyImportController.fresh();
-      await expectLater(run(c, const []), throwsA(isA<StudyImportException>()));
+      final c = createController();
+      await expectLater(run(c, const []), throwsA(isA<StudyImportRejected>()));
       expect(c.isRunning, isFalse);
       expect(c.lastResult, isNull);
     });
 
     test('a second run while one is going is refused', () async {
       await seedCache('1', _game());
-      final c = StudyImportController.fresh();
+      final c = createController();
       final first = run(c, const ['1']);
       expect(c.isRunning, isTrue);
       await expectLater(
         run(c, const ['1'], name: 'Other'),
-        throwsA(isA<StudyImportException>()),
+        throwsA(isA<StudyImportRejected>()),
       );
       final result = await first;
       expect(result.chapters, 1, reason: 'the first run is unaffected');
@@ -268,16 +292,16 @@ void main() {
     });
 
     test('cancel with nothing running is a no-op', () {
-      final c = StudyImportController.fresh();
+      final c = createController();
       c.cancel();
-      expect(c.message, '');
+      expect(c.progress.stage, StudyImportStage.idle);
     });
   });
 
   group('a fetched game', () {
     test('is written as a renamed chapter and cached raw', () async {
       stub.routes[_pgnUrl('42')] = (status: 200, body: _game());
-      final c = StudyImportController.fresh();
+      final c = createController();
 
       final result = await run(c, const ['42']);
 
@@ -288,7 +312,7 @@ void main() {
       expect(result.chapters, 1);
       expect(result.failed, 0);
       expect(result.cancelled, isFalse);
-      expect(result.error, isNull);
+      expect(result.failure, isNull);
       expect(result.wroteAnything, isTrue);
 
       final written = await File(result.studyPath!).readAsString();
@@ -309,7 +333,7 @@ void main() {
       expect(stub.requests.map((u) => u.toString()), [_pgnUrl('42')]);
 
       expect(c.isRunning, isFalse);
-      expect(c.message, '');
+      expect(c.progress.stage, StudyImportStage.idle);
       expect(c.gamesDone, 1);
       expect(c.gamesTotal, 1);
       expect(c.resultGeneration, 1);
@@ -320,7 +344,7 @@ void main() {
 
     test('keeps a single Event tag on a CRLF body', () async {
       stub.routes[_pgnUrl('7')] = (status: 200, body: _game(eol: '\r\n'));
-      final result = await run(StudyImportController.fresh(), const ['7']);
+      final result = await run(createController(), const ['7']);
       final written = await File(result.studyPath!).readAsString();
       expect(RegExp(r'^\[Event ', multiLine: true).allMatches(written), [
         anything,
@@ -335,12 +359,12 @@ void main() {
     test('a 404 game is skipped, not fatal', () async {
       await seedCache('1', _game(white: 'A', black: 'B'));
       // gid 2 has no route → 404 → failed.
-      final c = StudyImportController.fresh();
+      final c = createController();
       final result = await run(c, const ['1', '2']);
 
       expect(result.chapters, 1);
       expect(result.failed, 1);
-      expect(result.error, isNull);
+      expect(result.failure, isNull);
       expect(result.cancelled, isFalse);
       expect(await (await cacheFile('2')).exists(), isFalse);
       expect(newestJob().status, JobStatus.completed);
@@ -348,7 +372,7 @@ void main() {
     });
 
     test('a run where every game fails writes nothing', () async {
-      final c = StudyImportController.fresh();
+      final c = createController();
       final result = await run(c, const ['404']);
       expect(result.studyPath, isNull);
       expect(result.chapters, 0);
@@ -369,7 +393,7 @@ void main() {
         '2',
         _game(white: '?', black: '?', event: '?', date: '?', result: '*'),
       );
-      final c = StudyImportController.fresh();
+      final c = createController();
 
       final result = await run(c, const ['3', '1', '2']);
 
@@ -388,7 +412,7 @@ void main() {
     test('a blank cache file is a miss', () async {
       await seedCache('5', '  \n');
       stub.routes[_pgnUrl('5')] = (status: 200, body: _game());
-      final result = await run(StudyImportController.fresh(), const ['5']);
+      final result = await run(createController(), const ['5']);
       expect(stub.requests, hasLength(1));
       expect(result.chapters, 1);
       expect(await (await cacheFile('5')).readAsString(), _game().trim());
@@ -402,7 +426,7 @@ void main() {
       await existing.writeAsString('precious');
       await seedCache('1', _game());
 
-      final result = await run(StudyImportController.fresh(), const ['1']);
+      final result = await run(createController(), const ['1']);
 
       expect(result.studyPath, endsWith('Memorable (2).pgn'));
       expect(await existing.readAsString(), 'precious');
@@ -411,19 +435,17 @@ void main() {
     test('a failed write is reported and fails the job', () async {
       await seedCache('1', _game());
       storage.failWrites = true;
-      final c = StudyImportController.fresh();
+      final c = createController();
 
       final result = await run(c, const ['1']);
 
       expect(result.studyPath, isNull);
       expect(result.chapters, 0);
       expect(result.wroteAnything, isFalse);
-      expect(
-        result.error,
-        'Downloaded 1 games but could not save the study file.',
-      );
+      expect(result.failure, StudyImportFailure.uncertainPublication);
+      expect(result.publication?.outcome, isA<PgnWriteUncertain>());
       expect(newestJob().status, JobStatus.failed);
-      expect(newestJob().error, result.error);
+      expect(newestJob().error, contains('could not be confirmed'));
       expect(c.isRunning, isFalse);
     });
   });
@@ -434,13 +456,14 @@ void main() {
       () async {
         stub.routes[_pgnUrl('1')] = (status: 200, body: _game());
         stub.routes[_pgnUrl('2')] = (status: 200, body: _game(white: 'X'));
-        final c = StudyImportController.fresh();
+        final c = createController();
         var cancelled = false;
         c.addListener(() {
           // Game 1 came back at once; game 2 is now waiting out the pace.
           if (!cancelled &&
               c.gamesDone == 1 &&
-              c.message.startsWith('Game 2/2')) {
+              c.progress.stage == StudyImportStage.waiting &&
+              c.progress.game == 2) {
             cancelled = true;
             c.cancel();
           }
@@ -455,7 +478,7 @@ void main() {
         expect(result.cancelled, isTrue);
         expect(result.chapters, 1);
         expect(result.failed, 0, reason: 'an unfetched game is not a failure');
-        expect(result.error, isNull);
+        expect(result.failure, isNull);
         expect(stub.requests, hasLength(1));
         expect(await File(result.studyPath!).exists(), isTrue);
         expect(newestJob().status, JobStatus.cancelled);
@@ -467,10 +490,10 @@ void main() {
       'during a rate-limit backoff writes nothing and is not a failure',
       () async {
         stub.routes[_pgnUrl('9')] = (status: 429, body: '');
-        final c = StudyImportController.fresh();
+        final c = createController();
         var cancelled = false;
         c.addListener(() {
-          if (!cancelled && c.message.startsWith('Rate-limited')) {
+          if (!cancelled && c.progress.stage == StudyImportStage.retrying) {
             cancelled = true;
             c.cancel();
           }
@@ -484,7 +507,7 @@ void main() {
         expect(result.cancelled, isTrue);
         expect(result.chapters, 0);
         expect(result.studyPath, isNull);
-        expect(result.error, isNull);
+        expect(result.failure, isNull);
         expect(await (await cacheFile('9')).exists(), isFalse);
         expect(newestJob().status, JobStatus.cancelled);
         expect(stub.requests, hasLength(1), reason: 'no retry after cancel');
@@ -496,10 +519,10 @@ void main() {
         status: 200,
         body: '<html><body>Too many requests</body></html>',
       );
-      final c = StudyImportController.fresh();
+      final c = createController();
       var cancelled = false;
       c.addListener(() {
-        if (!cancelled && c.message.startsWith('Rate-limited')) {
+        if (!cancelled && c.progress.stage == StudyImportStage.retrying) {
           cancelled = true;
           c.cancel();
         }
@@ -516,7 +539,7 @@ void main() {
   group('runs in sequence', () {
     test('resultGeneration counts finished runs', () async {
       await seedCache('1', _game());
-      final c = StudyImportController.fresh();
+      final c = createController();
       await run(c, const ['1'], name: 'One');
       await run(c, const ['1'], name: 'Two');
       expect(c.resultGeneration, 2);

@@ -1,13 +1,15 @@
-import 'package:dartchess/dartchess.dart' show PgnGame, PgnNodeData, Side;
+import 'package:chess_auto_prep/chess_core/pgn/pgn_game_view.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
+import 'package:dartchess/dartchess.dart' show PgnNodeData, Side;
 import 'package:flutter/material.dart';
 
-import '../../core/repertoire_controller.dart';
+import '../../features/repertoires/controllers/repertoire_board_controller.dart';
 import '../../models/repertoire_line.dart';
-import '../../services/training/training_phase.dart';
-import '../../services/training/training_session_controller.dart';
+import '../../features/training/models/training_phase.dart';
+import '../../features/training/controllers/training_session_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
-import '../../theme/pgn_text_styles.dart';
+import '../pgn/pgn_text_styles.dart';
 import '../pgn/pgn_movetext_view.dart';
 import '../../utils/app_shortcuts.dart';
 import '../../utils/pgn_comment_utils.dart' show filterDisplayComment;
@@ -21,7 +23,7 @@ import 'move_input_widget.dart';
 /// [showMoveInput] off — as the idle board that keeps the browse screens
 /// looking like the rest of the app instead of a bare list.
 class TrainingBoardPane extends StatelessWidget {
-  final RepertoireController session;
+  final RepertoireBoardController session;
   final bool boardFlipped;
   final bool waitingForUser;
   final void Function(CompletedMove move)? onMove;
@@ -174,7 +176,7 @@ class TrainingPhasePanel extends StatelessWidget {
               ? SingleChildScrollView(
                   child: Text(
                     filterDisplayComment(currentAnnotation!),
-                    style: PgnTextStyles.comment,
+                    style: PgnTextStyles.comment(context),
                   ),
                 )
               : const SizedBox.shrink(),
@@ -216,77 +218,67 @@ class _LessonMovetext extends StatefulWidget {
 }
 
 class _LessonMovetextState extends State<_LessonMovetext> {
-  final _scroll = ScrollController();
-  PgnGame? _game;
+  PgnGameMetadata? _game;
+  List<PgnMoveSnapshot> _moves = const [];
   void _readIntroduction() {
     _game = widget.line.fullPgn.isEmpty
         ? null
-        : PgnGame.parsePgn(widget.line.fullPgn);
+        : PgnGameMetadata.capture(parsePgnGame(widget.line.fullPgn));
   }
 
   @override
   void initState() {
     super.initState();
     _readIntroduction();
+    _captureMoves();
   }
 
-  List<PgnNodeData> get _moves => [
+  void _captureMoves() => _moves = [
     for (int i = 0; i < widget.revealed; i++)
-      PgnNodeData(
-        san: widget.line.moves[i],
-        comments:
-            widget.showComments && widget.line.comments[i.toString()] != null
-            ? [widget.line.comments[i.toString()]!]
-            : [],
+      PgnMoveSnapshot.capture(
+        PgnNodeData(
+          san: widget.line.moves[i],
+          comments:
+              widget.showComments && widget.line.comments[i.toString()] != null
+              ? [widget.line.comments[i.toString()]!]
+              : [],
+        ),
+        identity: i < _moves.length ? _moves[i].identity : null,
       ),
   ];
   @override
   void didUpdateWidget(_LessonMovetext oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.line != widget.line) _readIntroduction();
-    if (oldWidget.revealed != widget.revealed) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _scroll.hasClients) {
-          _scroll.animateTo(
-            _scroll.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOut,
-          );
-        }
-      });
+    if (oldWidget.line != widget.line) {
+      _readIntroduction();
+      _moves = const [];
+    }
+    if (oldWidget.line != widget.line ||
+        oldWidget.revealed != widget.revealed ||
+        oldWidget.showComments != widget.showComments) {
+      _captureMoves();
     }
   }
 
   @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      controller: _scroll,
-      child: IgnorePointer(
-        child: PgnMovetextView(
-          game: widget.showComments && widget.revealed > 0 ? _game : null,
-          moveHistory: _moves,
-          variationsByPly: const {},
-          mainLineIndex: widget.revealed,
-          analysisPath: const [],
-          editingCommentIndex: null,
-          canEditComments: false,
-          bookFormatting: true,
-          startingMoveNumber: widget.line.startPosition.fullmoves,
-          startingWhiteTurn: widget.line.startPosition.turn == Side.white,
-          startPosition: widget.line.startPosition,
-          onMainLineMoveClicked: (_) {},
-          onShowMoveContextMenu: (_, _) {},
-          onSaveComment: (_, _) {},
-          onCancelEditingComment: () {},
-          onGoToAnalysisNode: (_, _) {},
-        ),
-      ),
+    return PgnMovetextView(
+      game: widget.showComments && widget.revealed > 0 ? _game : null,
+      moveHistory: _moves,
+      variationsByPly: const {},
+      mainLineIndex: widget.revealed,
+      analysisPath: const [],
+      editingCommentIndex: null,
+      canEditComments: false,
+      bookFormatting: true,
+      startingMoveNumber: widget.line.startPosition.fullmoves,
+      startingWhiteTurn: widget.line.startPosition.turn == Side.white,
+      startPosition: widget.line.startPosition,
+      onMainLineMoveClicked: (_) {},
+      onShowMoveContextMenu: (_, _) {},
+      onSaveComment: (_, _) {},
+      onCancelEditingComment: () {},
+      onGoToAnalysisNode: (_, _) {},
     );
   }
 }

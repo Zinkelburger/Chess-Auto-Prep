@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/features/settings/controllers/eval_database_settings.dart';
+import 'package:chess_auto_prep/features/settings/models/eval_database_configuration.dart';
+import '../../support/runtime_settings.dart';
 import 'dart:io';
 import 'dart:math';
 
@@ -45,6 +48,8 @@ void main() {
   // The test binding otherwise answers every socket with an empty 400.
   setUpAll(() => HttpOverrides.global = null);
 
+  late MemorySettingsSection<EvalDatabaseConfiguration> settingsStorage;
+  late EvalDatabaseSettings settings;
   late Directory tmp;
   late _FakeMirror mirror;
   late CdbSnapshot snapshot;
@@ -55,6 +60,9 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    settingsStorage = MemorySettingsSection(EvalDatabaseConfiguration());
+    settings = EvalDatabaseSettings(settingsStorage);
+    await settings.ensureLoaded();
     tmp = await Directory.systemTemp.createTemp('cdb_download_test');
     final rng = Random(7);
     payload = List<int>.generate(fileBytes, (_) => rng.nextInt(256));
@@ -67,12 +75,17 @@ void main() {
   });
 
   tearDown(() async {
+    settings.dispose();
     await mirror.stop();
     if (await tmp.exists()) await tmp.delete(recursive: true);
   });
 
   CdbSnapshotDownloadController newController() =>
-      CdbSnapshotDownloadController(concurrency: 1, urlBuilder: mirror.urlFor);
+      CdbSnapshotDownloadController(
+        settings: settings,
+        concurrency: 1,
+        urlBuilder: mirror.urlFor,
+      );
 
   File localFile() => File(p.join(tmp.path, repoPath));
 
@@ -90,6 +103,84 @@ void main() {
     expect(mirror.rangeHeaders, [null]);
     controller.dispose();
   });
+
+  test(
+    'activation failure retains complete files and retries only settings',
+    () async {
+      final controller = newController();
+      await controller.prepare(snapshot: snapshot, parentDir: tmp.path);
+      settingsStorage.failure = StateError('settings unavailable');
+
+      await controller.start();
+
+      expect(controller.phase, CdbDownloadPhase.complete);
+      expect(controller.error, isNull);
+      expect(await localFile().readAsBytes(), payload);
+      expect(settings.state.error, isNotNull);
+      expect(settings.committed.enableCdbDirect, isFalse);
+      expect(mirror.rangeHeaders, [null]);
+      settingsStorage.failure = null;
+      await settings.retry();
+      expect(settings.committed.enableCdbDirect, isTrue);
+      expect(settings.committed.cdbDirectPath, controller.dataDirectory);
+      expect(mirror.rangeHeaders, [null]);
+      await controller.close();
+      controller.dispose();
+    },
+  );
+
+  test(
+    'invalid manual activation preserves selection and publishes failure',
+    () async {
+      final controller = newController();
+      await settings.configureCdbDirectory('/retained/dump');
+      await expectLater(
+        controller.activateDirectory(tmp.path),
+        throwsStateError,
+      );
+      expect(controller.error, contains('Missing'));
+      expect(settings.committed.cdbDirectPath, '/retained/dump');
+      expect(settings.committed.enableCdbDirect, isTrue);
+      await controller.loadSaved();
+      expect(controller.phase, CdbDownloadPhase.idle);
+      expect(mirror.rangeHeaders, isEmpty);
+
+      await File(p.join(tmp.path, 'CURRENT')).writeAsString('manifest');
+      await File(p.join(tmp.path, '000001.sst')).writeAsBytes(payload);
+      await controller.activateDirectory(tmp.path);
+      expect(controller.error, isNull);
+      expect(settings.committed.cdbDirectPath, tmp.path);
+      expect(settings.committed.enableCdbDirect, isTrue);
+      await controller.close();
+      controller.dispose();
+    },
+  );
+
+  test(
+    'failed selection clear keeps files until explicit delete succeeds',
+    () async {
+      final controller = newController();
+      await controller.prepare(snapshot: snapshot, parentDir: tmp.path);
+      await controller.start();
+      settingsStorage.failure = StateError('preferences unavailable');
+
+      await expectLater(controller.deleteFiles(), throwsStateError);
+      expect(await localFile().exists(), isTrue);
+      expect(controller.snapshot, snapshot);
+      expect(controller.error, contains('preferences unavailable'));
+      expect(settings.committed.enableCdbDirect, isTrue);
+
+      settingsStorage.failure = null;
+      await controller.deleteFiles();
+      expect(await localFile().exists(), isFalse);
+      expect(settings.committed.cdbDirectPath, isEmpty);
+      expect(settings.committed.enableCdbDirect, isFalse);
+      await settings.retry();
+      expect(settings.committed.enableCdbDirect, isFalse);
+      await controller.close();
+      controller.dispose();
+    },
+  );
 
   test('a partial file resumes with a range request', () async {
     final target = localFile();

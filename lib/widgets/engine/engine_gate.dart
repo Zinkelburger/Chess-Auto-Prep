@@ -11,10 +11,13 @@
 ///   render an [EngineBusyNotice] instead of analyzing.
 library;
 
+import 'package:provider/provider.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../services/engine/engine_lifecycle.dart';
-import '../../theme/app_colors.dart';
+import '../../design_system/theme/app_typography.dart';
+import '../../l10n/generated/app_localizations.dart';
 import '../../utils/app_messages.dart';
 
 class EngineGate {
@@ -22,23 +25,16 @@ class EngineGate {
 
   /// True while repertoire generation actively holds the engine. A paused
   /// build releases it, so this is false while paused.
-  static bool get isLocked =>
-      EngineLifecycle.instance.state == EngineState.generating;
-
-  /// Notifies when [isLocked] may have changed.
-  static Listenable get listenable => EngineLifecycle.instance;
-
-  static const lockedMessage =
-      'Stockfish is busy building your repertoire. Pause the build or wait '
-      'for it to finish before using engine analysis.';
+  static bool isLocked(BuildContext context) =>
+      context.read<EngineLifecycle>().state == EngineState.generating;
 
   /// Returns true when engine work may start. Otherwise shows the standard
   /// warning snackbar and returns false.
   static bool ensureAvailable(BuildContext context) {
-    if (!isLocked) return true;
+    if (!isLocked(context)) return true;
     showAppSnackBar(
       context,
-      lockedMessage,
+      AppLocalizations.of(context).engineNoticeLocked,
       duration: const Duration(seconds: 4),
       requiresAttention: true,
     );
@@ -57,18 +53,20 @@ class EngineBusyNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
     if (dense) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.hourglass_top, size: 16, color: AppColors.warning),
-            SizedBox(width: 8),
+            Icon(Icons.hourglass_top, size: 16, color: colors.tertiary),
+            const SizedBox(width: 8),
             Flexible(
               child: Text(
-                'Engine busy — building your repertoire.',
-                style: TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
+                l10n.engineNoticeBusyCompact,
+                style: AppTypography.secondary(context),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -83,31 +81,33 @@ class EngineBusyNotice extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
         constraints: const BoxConstraints(maxWidth: 340),
         decoration: BoxDecoration(
-          color: AppColors.warningSurface.withValues(alpha: 0.15),
+          color: colors.tertiaryContainer,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.warning, width: 1),
+          border: Border.all(color: colors.onTertiaryContainer, width: 1),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.hourglass_top, size: 32, color: AppColors.warning),
+            Icon(
+              Icons.hourglass_top,
+              size: 32,
+              color: colors.onTertiaryContainer,
+            ),
             const SizedBox(height: 10),
             Text(
-              'Engine Busy',
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+              l10n.engineNoticeBusyTitle,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: colors.onTertiaryContainer,
+              ),
             ),
             const SizedBox(height: 6),
-            const Text(
-              'Stockfish is building your repertoire.\n'
-              'Pause the build or let it finish to analyze again.',
+            Text(
+              l10n.engineNoticeBusyBody,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                color: AppColors.onSurfaceSoft,
-                height: 1.5,
-              ),
+              style: AppTypography.secondary(
+                context,
+              ).copyWith(color: colors.onTertiaryContainer, height: 1.5),
             ),
           ],
         ),

@@ -20,7 +20,7 @@
 /// build can end thousands of lines this way.
 library;
 
-import '../../../models/build_tree_node.dart' show PruneReason;
+import '../../../chess_core/generation/build_tree_node.dart' show PruneReason;
 import '../../../utils/chess_utils.dart';
 import '../../../utils/fen_utils.dart';
 import '../../engine/stockfish_pool.dart';
@@ -72,10 +72,10 @@ typedef AlternativeMap = Map<String, RefutedAlternative>;
 class RefutationProber {
   RefutationProber({
     required this.config,
-    StockfishPool? pool,
+    required StockfishPool pool,
     this.freqMap,
     this.masterBook,
-  }) : pool = pool ?? StockfishPool.instance;
+  }) : pool = pool;
 
   final TreeBuildConfig config;
   final StockfishPool pool;

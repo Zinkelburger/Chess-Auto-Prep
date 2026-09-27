@@ -7,7 +7,7 @@ library;
 
 import 'package:path/path.dart' as p;
 
-import '../../../models/study_document.dart';
+import '../../studies/models/study_document.dart';
 import '../../../services/storage/storage_factory.dart';
 import '../../../services/storage/storage_service.dart';
 import '../../../services/storage/study_naming.dart';

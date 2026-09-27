@@ -2,7 +2,10 @@
 /// My-repertoires panel cannot write two different headers.
 library;
 
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_creation.dart';
 import 'dart:io';
+import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -48,6 +51,38 @@ class _TempStorage implements StorageService {
       throw UnimplementedError('${invocation.memberName} is not used here');
 }
 
+class _ImportDocuments extends NativePgnDocumentStore {
+  @override
+  bool get supportsQuarantine => false;
+  final created = <String>[];
+  bool failSecond = false;
+  bool failFirst = false;
+  @override
+  Future<PgnWriteResult> create(String path, String content) async {
+    created.add(path);
+    if (failFirst) {
+      await Directory(p.dirname(path)).create(recursive: true);
+      return PgnWriteFailed(StateError('write unavailable'));
+    }
+    final result = await super.create(path, content);
+    if (failSecond && created.length == 2) {
+      return PgnWriteUncertain(
+        error: StateError('acknowledgement lost'),
+        before: null,
+        observed: result is PgnSaved ? result.after : null,
+        recoveryPath: '$path.recovery',
+      );
+    }
+    return result;
+  }
+
+  @override
+  Future<PgnQuarantineResult> quarantine(
+    PgnSnapshot baseline, {
+    String? allowedRoot,
+  }) => throw StateError('new imports have no existing source to quarantine');
+}
+
 void main() {
   late Directory dir;
   late _TempStorage storage;
@@ -59,8 +94,95 @@ void main() {
 
   tearDown(() => dir.deleteSync(recursive: true));
 
+  String course() => [
+    for (final chapter in ['One', 'Two'])
+      for (final end in ['Nf3', 'Bc4'])
+        '[Event "Course"]\n[White "$chapter"]\n[Black "$end"]\n[Result "*"]\n'
+            '[EventDate "2026.??.??"]\n\n'
+            '${chapter == 'One' ? '1. e4 e5' : '1. e4 c5'} 2. $end *\n',
+  ].join('\n');
+
+  test(
+    'legacy first write failure reports the final candidate, not private preparation',
+    () async {
+      final documents = _ImportDocuments()..failFirst = true;
+      await expectLater(
+        createRepertoire(
+          name: 'Course',
+          color: 'White',
+          pgnContent: course(),
+          documents: documents,
+          storage: storage,
+        ),
+        throwsA(
+          isA<RepertoireCreationUncertain>()
+              .having((e) => e.createdPaths, 'acknowledged', isEmpty)
+              .having((e) => e.pathsToInspect, 'candidate', [
+                p.join(dir.path, 'Course', 'One.pgn'),
+              ]),
+        ),
+      );
+      expect(Directory(p.join(dir.path, 'Course')).existsSync(), isTrue);
+      expect(documents.created, hasLength(1));
+    },
+  );
+
+  test(
+    'legacy import creates the shared plan directly without a temporary source',
+    () async {
+      final documents = _ImportDocuments();
+      final result = await createRepertoire(
+        name: 'Direct course',
+        color: 'White',
+        documents: documents,
+        storage: storage,
+        pgnContent: course(),
+      );
+      expect(documents.created.map(p.basename), ['One.pgn', 'Two.pgn']);
+      expect(result.chapterPaths, documents.created);
+      expect(result.gameCount, 4);
+      expect(
+        File(p.join(result.directoryPath, 'Main.pgn')).existsSync(),
+        isFalse,
+      );
+      for (final path in result.chapterPaths) {
+        expect(await File(path).readAsString(), contains('[LineID "'));
+      }
+    },
+  );
+
+  test(
+    'legacy partial import retains confirmed paths and distinct uncertain candidate',
+    () async {
+      final documents = _ImportDocuments()..failSecond = true;
+      final first = p.join(dir.path, 'Partial', 'One.pgn');
+      final second = p.join(dir.path, 'Partial', 'Two.pgn');
+      await expectLater(
+        createRepertoire(
+          name: 'Partial',
+          color: 'White',
+          documents: documents,
+          storage: storage,
+          pgnContent: course(),
+        ),
+        throwsA(
+          isA<RepertoireCreationUncertain>()
+              .having((e) => e.createdPaths, 'acknowledged', [first])
+              .having((e) => e.pathsToInspect, 'unconfirmed and recovery', [
+                second,
+                '$second.recovery',
+              ]),
+        ),
+      );
+      expect(documents.created, [first, second]);
+      expect(File(first).existsSync(), isTrue);
+      expect(File(second).existsSync(), isTrue);
+    },
+  );
+
   test('an empty repertoire is a folder with a headed Main chapter', () async {
     final created = await createRepertoire(
+      documents: NativePgnDocumentStore(),
       name: 'Caro-Kann',
       color: 'Black',
       createdAt: DateTime(2026, 8, 21, 9, 30),
@@ -80,6 +202,7 @@ void main() {
 
   test('imported PGN lands in that chapter, under the same header', () async {
     final created = await createRepertoire(
+      documents: NativePgnDocumentStore(),
       name: 'London',
       color: 'White',
       pgnContent: '1. d4 d5 2. Bf4 *',
@@ -96,6 +219,7 @@ void main() {
 
   test('the colour written is the one asked for, not guessed', () async {
     final black = await createRepertoire(
+      documents: NativePgnDocumentStore(),
       name: 'Benko',
       color: 'Black',
       pgnContent: '1. d4 Nf6 2. c4 c5 3. d5 b5 *',
@@ -115,6 +239,7 @@ void main() {
     'a name with no lines still reports zero, not the count given',
     () async {
       final created = await createRepertoire(
+        documents: NativePgnDocumentStore(),
         name: 'Empty',
         color: 'White',
         gameCount: 7,
@@ -137,6 +262,7 @@ void main() {
         '[Event "?"]\n[White "$chapter"]\n[Black "$title"]\n'
         '[Result "*"]\n\n$moves *\n\n';
     final created = await createRepertoire(
+      documents: NativePgnDocumentStore(),
       name: 'Course',
       color: 'White',
       chapterName: 'Course',
@@ -167,6 +293,7 @@ void main() {
 
   test('a study\'s variations are written as lines of their own', () async {
     final created = await createRepertoire(
+      documents: NativePgnDocumentStore(),
       name: 'Study',
       color: 'Black',
       pgnContent:
@@ -190,12 +317,22 @@ void main() {
   test(
     'creating over an existing chapter refuses instead of writing',
     () async {
-      await createRepertoire(name: 'Najdorf', color: 'Black', storage: storage);
+      await createRepertoire(
+        documents: NativePgnDocumentStore(),
+        name: 'Najdorf',
+        color: 'Black',
+        storage: storage,
+      );
       final path = p.join(dir.path, 'Najdorf', 'Main.pgn');
       File(path).writeAsStringSync('// Main\n// Color: Black\n\n1. e4 c5 *\n');
 
       await expectLater(
-        createRepertoire(name: 'Najdorf', color: 'White', storage: storage),
+        createRepertoire(
+          documents: NativePgnDocumentStore(),
+          name: 'Najdorf',
+          color: 'White',
+          storage: storage,
+        ),
         throwsA(isA<RepertoireExistsException>()),
       );
       expect(

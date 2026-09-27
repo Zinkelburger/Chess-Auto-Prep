@@ -2,7 +2,7 @@
 /// up, how it went, which games reached it, and the engine's view of it.
 library;
 
-import '../services/pgn_parsing_service.dart' show extractHeaders;
+import '../chess_core/pgn/pgn_text.dart' show extractHeaders;
 import '../utils/chess_utils.dart' show formatEvalDisplay;
 import '../utils/fen_utils.dart';
 

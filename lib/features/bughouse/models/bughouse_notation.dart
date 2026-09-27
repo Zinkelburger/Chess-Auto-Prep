@@ -69,7 +69,7 @@ class BughousePvStep {
   /// The team that plays this ply — it alternates down the variation.
   final Side team;
 
-  /// That team's two seats, `A + C` or `B + D`, so a continuation row says
+  /// That team's two seats, `A + B` or `C + D`, so a continuation row says
   /// whose move it is without the reader counting plies.
   final String seats;
 

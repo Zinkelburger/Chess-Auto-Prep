@@ -14,9 +14,8 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../theme/app_colors.dart';
-import '../../theme/app_text_styles.dart';
-import 'list_search_field.dart';
+import '../../design_system/theme/app_typography.dart';
+import '../../design_system/components/list_search_field.dart';
 
 /// One row of a [SearchablePickerDialog].
 class PickerItem<T> {
@@ -146,8 +145,8 @@ class _SearchablePickerDialogState<T> extends State<SearchablePickerDialog<T>> {
                         widget.items.isEmpty
                             ? widget.emptyMessage
                             : 'No matches for "$_query"',
-                        style: const TextStyle(
-                          color: AppColors.onSurfaceMuted,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           fontSize: 13,
                         ),
                       ),
@@ -177,7 +176,7 @@ class _SearchablePickerDialogState<T> extends State<SearchablePickerDialog<T>> {
                                   item.subtitle!,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: AppTextStyles.caption,
+                                  style: AppTypography.caption(context),
                                 ),
                           trailing: isSelected
                               ? const Icon(Icons.check, size: 18)
@@ -194,7 +193,7 @@ class _SearchablePickerDialogState<T> extends State<SearchablePickerDialog<T>> {
                 children: [
                   Text(
                     '${visible.length} of ${widget.items.length}',
-                    style: AppTextStyles.caption,
+                    style: AppTypography.caption(context),
                   ),
                   const Spacer(),
                   TextButton(

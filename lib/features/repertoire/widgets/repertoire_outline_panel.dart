@@ -32,6 +32,11 @@
 library;
 
 import 'dart:async';
+import 'package:provider/provider.dart';
+import '../../documents/models/pgn_document.dart';
+import '../../repertoires/repositories/repertoire_catalog_repository.dart';
+import '../../repertoires/widgets/repertoire_messages.dart';
+import '../../../l10n/generated/app_localizations.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HardwareKeyboard;
@@ -40,9 +45,9 @@ import 'package:path/path.dart' as p;
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/app_messages.dart';
-import '../../../widgets/common/confirm_dialog.dart';
-import '../../../widgets/common/list_search_field.dart';
-import '../../../widgets/common/name_entry_dialog.dart';
+import '../../../design_system/components/confirm_dialog.dart';
+import '../../../design_system/components/list_search_field.dart';
+import '../../../design_system/components/name_entry_dialog.dart';
 import '../controllers/repertoire_outline_controller.dart';
 import '../models/outline_rows.dart';
 import '../models/repertoire_outline.dart';
@@ -775,17 +780,57 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
       case 'split':
         await _promptSplitChapter(chapter);
       case 'delete':
-        if (!mounted) return;
-        if (await confirmAction(
+        await _deleteChapter(chapter);
+    }
+  }
+
+  bool _deletingChapter = false;
+  Future<void> _deleteChapter(OutlineChapter chapter) async {
+    if (_deletingChapter) return;
+    _deletingChapter = true;
+    final controller = _c;
+    final revision = controller.viewRevision;
+    bool isCurrent() =>
+        mounted &&
+        identical(controller, _c) &&
+        revision == controller.viewRevision;
+    try {
+      final captured = await context
+          .read<RepertoireCatalogRepository>()
+          .prepareChapterDeletion(chapter.path);
+      if (!mounted || !isCurrent()) return;
+      if (captured is! PgnOpened) {
+        await showChapterDeletionResult(
           context,
-          title: 'Delete chapter "${chapter.name}"?',
-          message:
-              '${chapter.lineCount} line(s) will be moved to Chess Auto Prep '
-              'recovery trash.',
-          confirmLabel: 'Delete',
-        )) {
-          _report(await _c.deleteChapter(chapter.path));
-        }
+          captured,
+          chapterPath: chapter.path,
+        );
+        return;
+      }
+      final confirmed = await confirmAction(
+        context,
+        title: AppLocalizations.of(context).chapterDeleteTitle(chapter.name),
+        message: AppLocalizations.of(context).chapterDeleteConfirm,
+        confirmLabel: AppLocalizations.of(context).delete,
+      );
+      if (!confirmed || !mounted || !isCurrent()) return;
+      final result = await controller.deleteChapter(captured.snapshot);
+      if (!mounted || !identical(controller, _c)) return;
+      await showChapterDeletionResult(
+        context,
+        result,
+        chapterPath: chapter.path,
+      );
+    } catch (_) {
+      if (mounted && isCurrent()) {
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).chapterDeleteFailed,
+          isError: true,
+        );
+      }
+    } finally {
+      _deletingChapter = false;
     }
   }
 
@@ -924,6 +969,7 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
     )) {
       return;
     }
+    if (!mounted) return;
     _report(await _c.splitChapter(chapter.path));
   }
 
@@ -1116,6 +1162,36 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
   void _report(OutlineEditOutcome outcome) {
     if (!mounted) return;
     if (!outcome.ok) {
+      final split = outcome.splitFailure;
+      if (split != null &&
+          (split.createdPaths.isNotEmpty || split.pathsToInspect.isNotEmpty)) {
+        unawaited(
+          showDialog<void>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Review chapter split'),
+              content: SingleChildScrollView(
+                child: SelectableText(
+                  [
+                    split.message,
+                    if (split.createdPaths.isNotEmpty)
+                      'Saved chapters:\n${split.createdPaths.join('\n')}',
+                    if (split.pathsToInspect.isNotEmpty)
+                      'Paths to inspect (not all writes are confirmed):\n${split.pathsToInspect.join('\n')}',
+                  ].join('\n\n'),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close'),
+                ),
+              ],
+            ),
+          ),
+        );
+        return;
+      }
       showAppSnackBar(context, outcome.error!, isError: true);
       return;
     }

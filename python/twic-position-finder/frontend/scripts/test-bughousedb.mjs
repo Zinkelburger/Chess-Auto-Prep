@@ -29,7 +29,10 @@ try {
   assert.equal(await page.$eval('#bdb-mover-A', (n) => n.textContent), 'Move: Player A');
   assert.ok(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight), 'fits without scrolling');
   assert.match(start[0][2], /^[+−]?\d+\.\d\d$/, 'Even is in pawns');
-  assert.equal(await page.$eval('#bdb-missing', (n) => n.hidden), true);
+  const shown = () => page.$eval('#bdb-missing', (n) => n.dataset.shown === 'true');
+  const tableTop = () => page.$eval('#bdb-moves-A', (n) => n.getBoundingClientRect().top);
+  assert.equal(await shown(), false);
+  const foundTop = await tableTop();
   assert.equal(await page.$$eval('.bb-square img', (imgs) => imgs.length), 64);
   await page.screenshot({ path: path.join(output, 'bughousedb-start.png') });
 
@@ -85,7 +88,7 @@ try {
     assert.ok(row >= 0, san);
     await page.click(`#bdb-moves-A tr:nth-child(${row + 1})`);
     await page.waitForFunction(() => document.querySelector('#bdb-mover-A').textContent === 'Move: Player B');
-    missing = !(await page.$eval('#bdb-missing', (n) => n.hidden));
+    missing = await shown();
     if (missing) break;
     await page.click('#bdb-prev-A');
     await page.waitForFunction(() => document.querySelector('#bdb-mover-A').textContent === 'Move: Player A');
@@ -95,16 +98,18 @@ try {
   assert.equal(await page.$$eval('#bdb-board-A .last', (s) => s.length), 2);
   assert.equal(await page.$$eval('#bdb-history-B button:not(.future)', (b) => b.length), 0);
   assert.equal((await rows('A'))[0][2], '—');
+  assert.equal(await tableTop(), foundTop, 'the analyse controls do not push the tables down');
   await page.screenshot({ path: path.join(output, 'bughousedb-missing.png') });
 
   // Analyse it here and upload.
   await page.click('#bdb-analyse');
   // Done means the page reloaded the position as stored, computed in a browser.
-  await page.waitForFunction(() => (document.querySelector('#bdb-missing').hidden
-      && /browser/.test(document.querySelector('#bdb-source').textContent))
+  await page.waitForFunction(() => (document.querySelector('#bdb-missing').dataset.shown === 'false'
+      && /Added to the book/.test(document.querySelector('#bdb-status').textContent))
     || document.querySelector('#bdb-status').dataset.error === 'true', { timeout: 15 * 60_000, polling: 1000 });
   const status = await page.$eval('#bdb-status', (n) => n.textContent);
-  assert.match(await page.$eval('#bdb-source', (n) => n.textContent), /browser/, status);
+  assert.match(status, /Added to the book/);
+  assert.equal(await tableTop(), foundTop);
   assert.notEqual((await rows('B'))[0][2], '—');
   await page.hover('#bdb-moves-B tr:first-child');
   await page.screenshot({ path: path.join(output, 'bughousedb-analysed.png') });
@@ -114,6 +119,8 @@ try {
   await page.waitForFunction(() => document.querySelector('#bdb-history-A button.future'));
   await page.keyboard.press('ArrowRight');
   await page.waitForFunction(() => document.querySelector('#bdb-history-A button[aria-current="true"]'));
+  // Revisited, the stored position says it came from a browser.
+  await page.waitForFunction(() => /browser/.test(document.querySelector('#bdb-status').textContent));
   assert.deepEqual(errors, []);
   console.log('BughouseDB browser passed:', status);
 } finally {

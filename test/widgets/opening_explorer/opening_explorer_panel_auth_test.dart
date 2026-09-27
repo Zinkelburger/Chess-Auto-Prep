@@ -58,7 +58,10 @@ void main() {
 
     expect(find.text('Lichess login needed'), findsOneWidget);
     expect(find.text('Open Lichess to log in'), findsOneWidget);
-    expect(find.text('Could not reach the Lichess explorer.'), findsNothing);
+    expect(
+      find.textContaining('Could not reach the Lichess database'),
+      findsNothing,
+    );
     expect(client.calls, 0, reason: 'no point asking an API that will 401');
   });
 }

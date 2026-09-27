@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/core/board_editor_controller.dart';
 import 'package:chess_auto_prep/widgets/board_editor/board_editor_panel.dart';
 import 'package:chess_auto_prep/widgets/board_editor/piece_palette.dart';
@@ -13,6 +14,8 @@ void main() {
     ValueChanged<Position>? onAction,
   }) => tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: SizedBox(
           width: 600,
@@ -151,6 +154,8 @@ void main() {
       addTearDown(editor.dispose);
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: SizedBox(
               width: width,

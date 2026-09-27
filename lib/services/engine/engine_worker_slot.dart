@@ -11,14 +11,14 @@ import 'stockfish_connection_factory.dart';
 class EngineWorkerSlot {
   EngineWorkerSlot({
     Future<EngineConnection?> Function()? createConnection,
-    this.budget,
+    required this.budget,
     this.protocolTimeout = const Duration(seconds: 10),
   }) : _createConnection =
            createConnection ?? StockfishConnectionFactory.create;
 
   static const _startupTimeout = Duration(seconds: 15);
 
-  final EngineSearchBudget? budget;
+  final EngineSearchBudget budget;
   final Duration protocolTimeout;
 
   final Future<EngineConnection?> Function() _createConnection;

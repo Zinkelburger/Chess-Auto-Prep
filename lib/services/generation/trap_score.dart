@@ -14,7 +14,7 @@
 /// absent.
 library;
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import '../../utils/eval_constants.dart';
 import '../../utils/findability.dart';
 

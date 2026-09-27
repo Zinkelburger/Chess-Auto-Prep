@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +10,9 @@ void main() {
       String? comment;
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+
           home: Scaffold(
             body: PgnAnnotationPanel(
               compact: true,

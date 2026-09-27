@@ -9,13 +9,13 @@ library;
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/models/analysis/discovery_result.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/course/refutation_prober.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:chess_auto_prep/services/generation/line_extractor.dart';
 import 'package:chess_auto_prep/services/generation/pgn_freq_map.dart';
 import 'package:chess_auto_prep/services/maia/maia_factory.dart';
-import 'package:chess_auto_prep/services/eval/eval_canonicalize.dart';
+import 'package:chess_auto_prep/chess_core/position/eval_canonicalize.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 

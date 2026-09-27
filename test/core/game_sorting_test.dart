@@ -1,6 +1,6 @@
 // The orderings behind the PGN viewer's sort modes.
 
-import 'package:chess_auto_prep/core/game_sorting.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_game_sorting.dart';
 import 'package:chess_auto_prep/models/pgn_filter_models.dart';
 import 'package:chess_auto_prep/models/pgn_game_entry.dart';
 import 'package:flutter_test/flutter_test.dart';

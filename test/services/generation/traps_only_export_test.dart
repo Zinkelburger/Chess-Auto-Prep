@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/models/trap_line_info.dart';
+import 'package:chess_auto_prep/chess_core/generation/trap_line_info.dart';
 import 'package:chess_auto_prep/services/generation/trap_extractor.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
@@ -34,6 +35,7 @@ class OpeningTreeBuilder {
     bool? includeVariations,
     bool preserveSetupRoots = false,
     void Function(int processed, int total)? onProgress,
+    IsolateTask? task,
   }) async {
     final args = (
       pgnList: pgnList,
@@ -45,13 +47,14 @@ class OpeningTreeBuilder {
       preserveSetupRoots: preserveSetupRoots,
       reportProgress: onProgress != null,
     );
-    final transferJson = await IsolateTask().run<Map<String, dynamic>>(
-      _bindEntry(_buildTreeEntry, args),
-      onProgress: (message) {
-        final progress = message as List;
-        onProgress?.call(progress[0] as int, progress[1] as int);
-      },
-    );
+    final transferJson = await (task ?? IsolateTask())
+        .run<Map<String, dynamic>>(
+          _bindEntry(_buildTreeEntry, args),
+          onProgress: (message) {
+            final progress = message as List;
+            onProgress?.call(progress[0] as int, progress[1] as int);
+          },
+        );
     return OpeningTree.fromTransferJson(transferJson);
   }
 
@@ -87,7 +90,7 @@ class OpeningTreeBuilder {
           try {
             addGame(
               tree,
-              PgnGame.parsePgn(trimmed),
+              parsePgnGame(trimmed),
               usernameLower: usernameLower,
               userIsWhite: args.userIsWhite,
               maxDepth: args.maxDepth,

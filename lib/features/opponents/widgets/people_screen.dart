@@ -9,7 +9,7 @@ import '../../../services/opponent_list.dart';
 import '../../../theme/app_text_styles.dart';
 import '../services/tournament_import.dart';
 import 'player_import_panel.dart';
-import '../../../widgets/common/confirm_dialog.dart';
+import '../../../design_system/components/confirm_dialog.dart';
 import '../models/person_record.dart';
 import '../services/opponent_store.dart';
 import 'opponent_actions.dart';

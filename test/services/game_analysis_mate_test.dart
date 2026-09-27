@@ -1,9 +1,19 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/services/game_analysis_controller.dart';
-import 'package:chess_auto_prep/services/move_eval.dart';
+import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart';
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   // Fool's mate: Black mates on move 2. The mating move must never be
@@ -37,7 +47,10 @@ void main() {
       ('with a stale mate-0 eval on the mating move', foolsMateWithBogusEval),
     ]) {
       test('mating move is synthesized from the board $label', () async {
-        final controller = GameAnalysisController();
+        final controller = GameAnalysisController(
+          pool: engines.pool,
+          lifecycle: engines.lifecycle,
+        );
         addTearDown(controller.dispose);
 
         final loaded = await controller.tryLoadFromPgn(pgn);
@@ -68,7 +81,10 @@ void main() {
     }
 
     test('the loser\'s losing move is still classified', () async {
-      final controller = GameAnalysisController();
+      final controller = GameAnalysisController(
+        pool: engines.pool,
+        lifecycle: engines.lifecycle,
+      );
       addTearDown(controller.dispose);
 
       await controller.tryLoadFromPgn(foolsMate);

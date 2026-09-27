@@ -1,0 +1,32 @@
+[Event "A move that is not legal"]
+[Result "*"]
+
+1. e4 e5 2. Ke3 Nf6 {kept in the file} *
+
+[Event "A variation with nothing in it"]
+[Result "*"]
+
+1. d4 () d5 *
+
+[Event "A directive among the moves"]
+[Result "*"]
+
+1. c4
+%an escape line
+c5 *
+
+[Event "A word that is not a move"]
+[Result "*"]
+
+1. Nf3 zzz d5 *
+
+[Event "A position nobody can read"]
+[FEN "not a fen"]
+[Result "*"]
+
+1. e4 *
+
+[Event "A comment nobody closed"]
+[Result "*"]
+
+1. e4 e5 {this never ends

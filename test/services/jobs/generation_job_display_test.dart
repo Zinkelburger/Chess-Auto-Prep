@@ -116,7 +116,7 @@ void main() {
       );
 
       expect(
-        generationResourceLabel(config, workers: 2),
+        generationResourceLabel(config, workers: 2, hashPerWorkerMb: 128),
         '2 workers × 1 thread · 2/2 CPU · '
         '256 MB hash + engine memory',
       );
@@ -130,7 +130,7 @@ void main() {
       );
 
       expect(
-        generationResourceLabel(config, workers: 1),
+        generationResourceLabel(config, workers: 1, hashPerWorkerMb: 128),
         '1 worker × 2 threads · 2/2 CPU · '
         '128 MB hash + engine memory',
       );
@@ -144,7 +144,7 @@ void main() {
       );
 
       expect(
-        generationResourceLabel(config, workers: 8),
+        generationResourceLabel(config, workers: 8, hashPerWorkerMb: 128),
         '1 worker × 1 thread · 1/1 CPU · '
         '128 MB hash + engine memory',
       );

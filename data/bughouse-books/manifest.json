@@ -1,0 +1,44 @@
+{
+  "format": 1,
+  "created_at": "2026-09-24T20:31:34.806203+00:00",
+  "databases": [
+    {
+      "name": "bughouse_book.db",
+      "bytes": 177512448,
+      "sha256": "2933e390a9a66b565f3ca647e95f2d1c96295920ce16039bb44ae66dbf13dac5",
+      "chunks": [
+        {
+          "name": "bughouse_book.db.gz.000",
+          "sha256": "62b46fe2b584b548031c20f3cce6a1da10fb5cc61667f246de59065ad987cd0f"
+        },
+        {
+          "name": "bughouse_book.db.gz.001",
+          "sha256": "4205923f5e24ac86427509fa2f831dc2a4a3be9f86f34c6faf12da6973fbe51b"
+        },
+        {
+          "name": "bughouse_book.db.gz.002",
+          "sha256": "ca98abe2f239f16c02e4b10c17969b94b40ba5638217397688416ed2e7a5d7dd"
+        },
+        {
+          "name": "bughouse_book.db.gz.003",
+          "sha256": "fb012e5fb2339cd506171409b3d30dff1dd9aa8c869a8d8a18e91abbe76fdf34"
+        },
+        {
+          "name": "bughouse_book.db.gz.004",
+          "sha256": "766faea3f44f21bb9f7df6e5d995ab8cec17685ca014208fba8cfc318be4aa02"
+        }
+      ]
+    },
+    {
+      "name": "hivemind_book.db",
+      "bytes": 16531456,
+      "sha256": "6dbad2aa08a723698cabefb9e5597dfc551eaf2542106168dec423e2707a66bb",
+      "chunks": [
+        {
+          "name": "hivemind_book.db.gz.000",
+          "sha256": "1dfd2eb9075fcfe60d96b0c26b8e32db57eaa8770fb716c6a3d20e9aa618b126"
+        }
+      ]
+    }
+  ]
+}

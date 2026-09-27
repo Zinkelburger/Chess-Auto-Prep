@@ -1,14 +1,18 @@
+import '../features/training/models/training_history_operation.dart';
+import '../features/training/models/training_source_context.dart';
+import '../infrastructure/training/training_source_admission.dart';
 import 'dart:math';
+import '../features/training/repositories/training_review_repository.dart';
 
 import '../models/repertoire_line.dart';
 import '../models/repertoire_move_progress.dart';
 import '../models/repertoire_review_entry.dart';
 import '../models/repertoire_review_history_entry.dart';
-import '../models/training_settings.dart';
+import '../features/training/models/training_settings.dart';
 import '../utils/training_csv.dart';
 import 'storage/storage_factory.dart';
 import 'storage/storage_service.dart';
-import 'training/move_attempt_store.dart';
+import '../infrastructure/training/move_attempt_store.dart';
 
 /// Spaced-repetition scheduling for repertoire lines, and the CSV files
 /// that keep line ratings, review history and per-move progress.
@@ -16,7 +20,7 @@ import 'training/move_attempt_store.dart';
 /// Saves are optimistic: the rows seen at the last load are remembered, and
 /// a save that would overwrite a row another session changed since throws
 /// instead of clobbering it.
-class RepertoireReviewService {
+class RepertoireReviewService implements TrainingReviewRepository {
   static const _header =
       'repertoire_id,line_id,line_name,difficulty,interval_days,due_utc,last_rating,last_reviewed_utc,pass_count,fail_count,excluded';
   static const _historyHeader =
@@ -61,6 +65,7 @@ class RepertoireReviewService {
   /// in one weekend does not come back as one 900-line day. Injectable so
   /// tests can pin it.
   final Random _fuzz;
+  final DateTime Function() _now;
 
   /// Rows as of the last [loadAll] / [loadMoveProgress], keyed like the
   /// merge, so a save can tell its own edits from another session's.
@@ -70,9 +75,46 @@ class RepertoireReviewService {
   /// [storage] is injectable only so tests can hold the review CSVs in
   /// memory instead of writing to the user's real `~/Documents`; every
   /// caller outside a test passes nothing.
-  RepertoireReviewService({Random? fuzz, StorageService? storage})
-    : _fuzz = fuzz ?? Random(),
-      _storage = storage ?? StorageFactory.instance;
+  RepertoireReviewService({
+    Random? fuzz,
+    StorageService? storage,
+    DateTime Function()? now,
+    this.validateSource = validateTrainingSource,
+  }) : _now = now ?? DateTime.now,
+       _fuzz = fuzz ?? Random(),
+       _storage = storage ?? StorageFactory.instance;
+
+  final Future<void> Function(TrainingSourceContext, String) validateSource;
+
+  /// Administrative identity migration, separate from session-authorized saves.
+  /// Each transform reads the latest rows inside storage's recovery guard.
+  Future<void> repointLines({
+    required String from,
+    required Map<String, String> movedLinePaths,
+  }) async {
+    for (final table in [
+      (_reviewsFile, _header, 11),
+      (_progressFile, _moveProgressHeader, 5),
+    ]) {
+      if (await _storage.readFile(table.$1) == null) continue;
+      await _preserveBeforeMigration(table.$1);
+      await _storage.updateFile(table.$1, (raw) {
+        var changed = false;
+        final rows = <String>[];
+        for (final row in trainingRows(raw)) {
+          final cells = decodeTrainingRow(row, table.$3);
+          final target = cells[0] == from ? movedLinePaths[cells[1]] : null;
+          if (target != null) {
+            cells[0] = target;
+            changed = true;
+          }
+          rows.add(encodeTrainingRow(cells));
+        }
+        return changed ? '${table.$2}\n${rows.join('\n')}\n' : raw ?? '';
+      });
+    }
+    await repointAttempts(from: from, movedLinePaths: movedLinePaths);
+  }
 
   static String _reviewKey(RepertoireReviewEntry e) =>
       '${e.repertoireId.length}:${e.repertoireId}${e.lineId}';
@@ -83,8 +125,10 @@ class RepertoireReviewService {
 
   /// Append each answer immediately, independently of line ratings. A later
   /// correct replay must never erase what the user originally played.
+  @override
   Future<void> recordAttempt({
     required String repertoireId,
+    required TrainingSourceContext source,
     required String lineId,
     required int moveIndex,
     required String fen,
@@ -92,8 +136,9 @@ class RepertoireReviewService {
     required String expectedSan,
     required bool correct,
     required String phase,
-  }) => MoveAttemptStore(_storage).record(
+  }) => MoveAttemptStore(_storage, validateSource: validateSource).record(
     repertoireId: repertoireId,
+    source: source,
     lineId: lineId,
     moveIndex: moveIndex,
     fen: fen,
@@ -103,6 +148,7 @@ class RepertoireReviewService {
     phase: phase,
   );
 
+  @override
   Future<List<Map<String, dynamic>>> loadAttempts({String? repertoireId}) =>
       MoveAttemptStore(_storage).load(repertoireId: repertoireId);
 
@@ -115,6 +161,7 @@ class RepertoireReviewService {
 
   // ── Line ratings ──────────────────────────────────────────────────────
 
+  @override
   Future<List<RepertoireReviewEntry>> loadAll() async {
     final entries = trainingRows(
       await _storage.readRepertoireReviewsCsv(),
@@ -127,26 +174,28 @@ class RepertoireReviewService {
     return entries;
   }
 
-  /// Save [entries] — all of them, or only those of [repertoireId] — merging
-  /// into whatever the file holds now. Lines of the saved repertoire(s) that
-  /// were loaded but are not in [entries] are removed.
+  /// Merge the captured source's entries into the latest stored rows.
+  /// Other source entries may be present in a folder snapshot and are ignored.
+  /// Rows loaded for this source but absent from [entries] are removed.
+  @override
   Future<void> saveAll(
     List<RepertoireReviewEntry> entries, {
     String? repertoireId,
-  }) async {
+    required TrainingSourceContext source,
+  }) => source.run(() async {
     await _preserveBeforeMigration(_reviewsFile);
     final snapshot = {
       for (final e in entries)
-        if (repertoireId == null || e.repertoireId == repertoireId)
+        if (e.repertoireId == (repertoireId ?? source.path))
           _reviewKey(e): e.toCsvRow(),
     };
     bool inScope(String row) =>
-        repertoireId == null ||
-        RepertoireReviewEntry.fromCsvRow(row).repertoireId == repertoireId;
+        RepertoireReviewEntry.fromCsvRow(row).repertoireId ==
+        (repertoireId ?? source.path);
 
-    await _storage.updateFile(
-      _reviewsFile,
-      (raw) => _mergeRows(
+    await _storage.updateFile(_reviewsFile, (raw) async {
+      await validateSource(source, repertoireId ?? source.path);
+      return _mergeRows(
         header: _header,
         current: {
           for (final e in trainingRows(
@@ -163,31 +212,72 @@ class RepertoireReviewService {
         removalConflict:
             'Training progress changed before removal. '
             'Reload before saving.',
-      ),
-    );
+      );
+    });
     _rememberSaved(_loadedReviewRows, snapshot, inScope);
-  }
+  });
 
   // ── Review history ────────────────────────────────────────────────────
 
+  @override
   Future<List<RepertoireReviewHistoryEntry>> loadHistory() async =>
       trainingRows(
         await _storage.readRepertoireReviewHistoryCsv(),
       ).map(RepertoireReviewHistoryEntry.fromCsvRow).toList();
 
-  Future<void> appendHistory(List<RepertoireReviewHistoryEntry> entries) async {
-    await _preserveBeforeMigration(_historyFile);
-    final additions = [for (final e in entries) e.toCsvRow()];
-    await _storage.updateFile(_historyFile, (raw) {
-      final existing = trainingRows(
-        raw,
-      ).map(RepertoireReviewHistoryEntry.fromCsvRow);
-      return '$_historyHeader\n${[...existing.map((e) => e.toCsvRow()), ...additions].join('\n')}\n';
+  @override
+  Future<void> appendHistory(
+    List<RepertoireReviewHistoryEntry> entries, {
+    required TrainingSourceContext source,
+    required TrainingHistoryOperation operation,
+  }) async {
+    final additions = [
+      for (final entry in entries) entry.toCsvRow(),
+    ].join('\n');
+    if (entries.any((entry) => entry.repertoireId != source.path)) {
+      throw StateError('History spans another training source.');
+    }
+    final plan = _historyPlans[operation] ??= _HistoryAppend(
+      _storage,
+      source,
+      additions,
+    );
+    if (!identical(plan.storage, _storage) ||
+        !identical(plan.source, source) ||
+        plan.additions != additions) {
+      throw StateError(
+        'A history retry must retain its original source and rows.',
+      );
+    }
+    await source.run(() async {
+      if (plan.complete) return;
+      await _preserveBeforeMigration(_historyFile);
+      await _storage.updateFile(_historyFile, (raw) async {
+        await validateSource(source, source.path);
+        if (plan.after case final prepared?) {
+          if (raw == prepared) return prepared;
+          if (raw == plan.before) return prepared;
+          throw StateError(
+            'Training history changed before recovery. Preserve the pending result.',
+          );
+        }
+        final existing = trainingRows(
+          raw,
+        ).map(RepertoireReviewHistoryEntry.fromCsvRow);
+        plan.before = raw;
+        return plan.after =
+            '$_historyHeader\n${[...existing.map((e) => e.toCsvRow()), if (additions.isNotEmpty) additions].join('\n')}\n';
+      });
+      plan.complete = true;
     });
   }
 
+  // Weak keys keep the accepted operation alive only as long as its owner does.
+  static final _historyPlans = Expando<_HistoryAppend>();
+
   // ── Move progress ─────────────────────────────────────────────────────
 
+  @override
   Future<List<RepertoireMoveProgress>> loadMoveProgress() async {
     final entries = trainingRows(
       await _storage.readRepertoireMoveProgressCsv(),
@@ -201,23 +291,25 @@ class RepertoireReviewService {
   }
 
   /// The move-progress counterpart of [saveAll].
+  @override
   Future<void> saveMoveProgress(
     List<RepertoireMoveProgress> entries, {
     String? repertoireId,
-  }) async {
+    required TrainingSourceContext source,
+  }) => source.run(() async {
     await _preserveBeforeMigration(_progressFile);
     final snapshot = {
       for (final e in entries)
-        if (repertoireId == null || e.repertoireId == repertoireId)
+        if (e.repertoireId == (repertoireId ?? source.path))
           _progressKey(e): e.toCsvRow(),
     };
     bool inScope(String row) =>
-        repertoireId == null ||
-        RepertoireMoveProgress.fromCsvRow(row).repertoireId == repertoireId;
+        RepertoireMoveProgress.fromCsvRow(row).repertoireId ==
+        (repertoireId ?? source.path);
 
-    await _storage.updateFile(
-      _progressFile,
-      (raw) => _mergeRows(
+    await _storage.updateFile(_progressFile, (raw) async {
+      await validateSource(source, repertoireId ?? source.path);
+      return _mergeRows(
         header: _moveProgressHeader,
         current: {
           for (final e in trainingRows(
@@ -234,10 +326,10 @@ class RepertoireReviewService {
         removalConflict:
             'Move progress changed before removal. '
             'Reload before saving.',
-      ),
-    );
+      );
+    });
     _rememberSaved(_loadedProgressRows, snapshot, inScope);
-  }
+  });
 
   // ── Optimistic CSV merge ──────────────────────────────────────────────
 
@@ -354,6 +446,7 @@ class RepertoireReviewService {
   ///
   /// [dueOnly] is the spaced-repetition filter; pass `false` (linear mode)
   /// to include every line regardless of its due date.
+  @override
   List<RepertoireLine> orderLinesForReview(
     List<RepertoireLine> lines,
     Map<String, RepertoireReviewEntry> reviewMap,
@@ -385,7 +478,7 @@ class RepertoireReviewService {
           });
         }
       case ReviewOrder.random:
-        due.shuffle(Random());
+        due.shuffle(_fuzz);
       case ReviewOrder.weakestFirst:
         due.sort((a, b) {
           final ea = reviewMap[a.id];
@@ -425,11 +518,12 @@ class RepertoireReviewService {
 
   // ── Scheduling ────────────────────────────────────────────────────────
 
+  @override
   RepertoireReviewEntry applyRating(
     RepertoireReviewEntry entry,
     ReviewRating rating,
   ) {
-    final now = DateTime.now().toUtc();
+    final now = _now().toUtc();
     final ease = _easeAfter(_clampedEase(entry), rating);
     final interval = _fuzzed(_nextInterval(entry.intervalDays, rating, ease));
 
@@ -497,19 +591,19 @@ class RepertoireReviewService {
   /// Dry-run of [applyRating] that returns the predicted interval without
   /// persisting anything or fuzzing it.  Used to show "Again (5m)" /
   /// "Good (4d)" previews, which should read as round numbers.
+  @override
   double previewInterval(RepertoireReviewEntry entry, ReviewRating rating) =>
       _nextInterval(entry.intervalDays, rating, _clampedEase(entry));
+}
 
-  /// Human-readable label for a review interval in days.
-  static String formatInterval(double intervalDays) {
-    // "Again" schedules zero days on purpose — the line comes back inside the
-    // session you are in — and "<1m" reads as a rounding artefact rather than
-    // as the promise it is.
-    if (intervalDays <= 0) return 'now';
-    if (intervalDays < 1 / 24) return '<1m';
-    if (intervalDays < 1) return '${(intervalDays * 24).round()}h';
-    if (intervalDays < 30) return '${intervalDays.round()}d';
-    if (intervalDays < 365) return '${(intervalDays / 30).round()}mo';
-    return '${(intervalDays / 365).round()}y';
-  }
+/// In-process exact append retry. Preparation precedes publication inside the
+/// existing storage lock; acknowledgement follows the complete guarded write.
+class _HistoryAppend {
+  _HistoryAppend(this.storage, this.source, this.additions);
+  final StorageService storage;
+  final TrainingSourceContext source;
+  final String additions;
+  String? before;
+  String? after;
+  bool complete = false;
 }

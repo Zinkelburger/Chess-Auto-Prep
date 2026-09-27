@@ -1,16 +1,18 @@
+import 'dart:async';
+import '../../features/settings/models/settings_state.dart';
+import '../../features/training/models/training_configuration.dart';
+import '../../features/training/controllers/training_settings_controller.dart';
 import 'package:flutter/material.dart';
 
-import '../../models/training_settings.dart';
+import '../../features/training/models/training_settings.dart';
 import '../../theme/app_text_styles.dart';
 import '../settings/settings_widgets.dart';
 import '../common/choice_field.dart';
 
 /// Focused preference pages, using the same rows and cards as app settings.
 class TrainingSettingsPanel extends StatefulWidget {
-  final TrainingSettings settings;
-  final VoidCallback onQueueSettingsChanged;
-  final VoidCallback onSettingsChanged;
-  final VoidCallback? onChapterSettingsChanged;
+  final TrainingSettingsController configuration;
+  final bool applyNextSitting;
   final TrainingMode trainingMode;
   final RepetitionMode repetitionMode;
   final ValueChanged<TrainingMode> onTrainingModeChanged;
@@ -26,10 +28,8 @@ class TrainingSettingsPanel extends StatefulWidget {
 
   const TrainingSettingsPanel({
     super.key,
-    required this.settings,
-    required this.onQueueSettingsChanged,
-    required this.onSettingsChanged,
-    this.onChapterSettingsChanged,
+    required this.configuration,
+    this.applyNextSitting = false,
     required this.trainingMode,
     required this.repetitionMode,
     required this.onTrainingModeChanged,
@@ -49,26 +49,141 @@ class TrainingSettingsPanel extends StatefulWidget {
 }
 
 class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
-  TrainingSettings get settings => widget.settings;
+  late TrainingSettings settings;
+  final _fieldControllers = <String, TextEditingController>{};
+  final _fieldFocusNodes = <String, FocusNode>{};
+  bool _disposing = false;
 
-  void _change(
-    VoidCallback update, {
-    bool queue = false,
-    bool chapters = false,
-  }) {
+  Map<String, String> get _textValues => {
+    'New lines': '${settings.newLinesPerSession}',
+    'Reviews': '${settings.reviewsPerSession}',
+    'Correct answers in a row': '${settings.correctStreakThreshold}',
+    'Seconds before quiz': '${settings.learnDelaySec}',
+    'training-depth': settings.trainingDepth?.toString() ?? '',
+    'training-chapter-delimiter': settings.chapterDelimiter,
+  };
+
+  void _syncFields() {
+    for (final entry in _textValues.entries) {
+      final controller = _fieldControllers[entry.key];
+      if (controller == null ||
+          (_fieldFocusNodes[entry.key]?.hasFocus ?? false) ||
+          controller.text == entry.value) {
+        continue;
+      }
+      controller.value = TextEditingValue(
+        text: entry.value,
+        selection: TextSelection.collapsed(offset: entry.value.length),
+      );
+    }
+  }
+
+  TextEditingController _fieldController(String key, String value) =>
+      _fieldControllers.putIfAbsent(
+        key,
+        () => TextEditingController(text: value),
+      );
+
+  FocusNode _fieldFocus(String key) => _fieldFocusNodes.putIfAbsent(key, () {
+    final focus = FocusNode();
+    focus.addListener(() {
+      if (!_disposing && mounted && !focus.hasFocus) _syncFields();
+    });
+    return focus;
+  });
+
+  @override
+  void initState() {
+    super.initState();
+    _listen();
+  }
+
+  @override
+  void didUpdateWidget(TrainingSettingsPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(widget.configuration, oldWidget.configuration)) {
+      oldWidget.configuration.removeListener(_onSettingsChanged);
+      _listen();
+    }
+  }
+
+  void _listen() {
+    _readSettings();
+    widget.configuration.addListener(_onSettingsChanged);
+  }
+
+  void _onSettingsChanged() {
     if (!mounted) return;
+    setState(_readSettings);
+  }
+
+  void _readSettings() {
+    final state = widget.configuration.state;
+    settings =
+        (state.draft ?? state.committed)?.toSettings() ?? TrainingSettings();
+    _syncFields();
+  }
+
+  @override
+  void dispose() {
+    _disposing = true;
+    for (final controller in _fieldControllers.values) {
+      controller.dispose();
+    }
+    for (final focus in _fieldFocusNodes.values) {
+      focus.dispose();
+    }
+    widget.configuration.removeListener(_onSettingsChanged);
+    super.dispose();
+  }
+
+  void _change(VoidCallback update) {
+    if (!mounted) return;
+    final before = TrainingConfiguration(settings);
     update();
-    settings.saveSoon();
-    if (queue) widget.onQueueSettingsChanged();
-    if (chapters) widget.onChapterSettingsChanged?.call();
-    widget.onSettingsChanged();
+    final changes = TrainingConfiguration(settings).changesFrom(before);
+    unawaited(widget.configuration.edit(changes).catchError((Object _) {}));
     setState(() {});
+  }
+
+  Widget _status() {
+    final state = widget.configuration.state;
+    final label = switch (state.phase) {
+      SettingsPhase.unloaded ||
+      SettingsPhase.loading => 'Loading training settings…',
+      SettingsPhase.saving => 'Saving training settings…',
+      SettingsPhase.failed =>
+        state.committed == null
+            ? 'Training settings could not be loaded.'
+            : 'Training settings could not be saved. Your changes are kept for retry.',
+      SettingsPhase.ready =>
+        widget.applyNextSitting
+            ? 'Saved changes apply to your next sitting.'
+            : 'Changes apply when you start training.',
+    };
+    return ListTile(
+      title: Text(label),
+      trailing: state.phase == SettingsPhase.failed
+          ? TextButton(
+              onPressed: () => unawaited(
+                widget.configuration.retry().catchError((Object _) {}),
+              ),
+              child: const Text('Retry'),
+            )
+          : null,
+    );
   }
 
   @override
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.all(24),
-    children: [..._session(), ..._learning(), ..._playback(), ..._material()],
+    children: [
+      _status(),
+      ..._session(),
+      ..._learning(),
+      ..._playback(),
+      ..._material(),
+    ],
   );
 
   List<Widget> _session() => [
@@ -147,7 +262,11 @@ class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
               width: 100,
               child: TextFormField(
                 key: const Key('training-depth'),
-                initialValue: settings.trainingDepth?.toString() ?? '',
+                controller: _fieldController(
+                  'training-depth',
+                  settings.trainingDepth?.toString() ?? '',
+                ),
+                focusNode: _fieldFocus('training-depth'),
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   hintText: 'All',
@@ -181,8 +300,7 @@ class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
             items: [
               for (final order in ReviewOrder.values) (order, order.label),
             ],
-            onChanged: (v) =>
-                _change(() => settings.reviewOrder = v, queue: true),
+            onChanged: (v) => _change(() => settings.reviewOrder = v),
           ),
       ],
     ),
@@ -299,8 +417,7 @@ class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
               (ChapterGroupingMode.namePrefix, 'Line name prefix'),
               (ChapterGroupingMode.off, 'One flat list'),
             ],
-            onChanged: (v) =>
-                _change(() => settings.chapterGrouping = v, chapters: true),
+            onChanged: (v) => _change(() => settings.chapterGrouping = v),
           ),
         if (!widget.chaptersDeclined &&
             settings.chapterGrouping == ChapterGroupingMode.namePrefix)
@@ -310,7 +427,11 @@ class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
             control: SizedBox(
               width: 100,
               child: TextFormField(
-                initialValue: settings.chapterDelimiter,
+                controller: _fieldController(
+                  'training-chapter-delimiter',
+                  settings.chapterDelimiter,
+                ),
+                focusNode: _fieldFocus('training-chapter-delimiter'),
                 maxLength: 3,
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
@@ -318,10 +439,7 @@ class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
                 ),
                 onChanged: (v) {
                   if (v.isNotEmpty) {
-                    _change(
-                      () => settings.chapterDelimiter = v,
-                      chapters: true,
-                    );
+                    _change(() => settings.chapterDelimiter = v);
                   }
                 },
               ),
@@ -378,7 +496,8 @@ class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
       width: 100,
       child: TextFormField(
         key: ValueKey(label),
-        initialValue: '$value',
+        controller: _fieldController(label, '$value'),
+        focusNode: _fieldFocus(label),
         keyboardType: TextInputType.number,
         decoration: const InputDecoration(border: OutlineInputBorder()),
         onChanged: (text) {

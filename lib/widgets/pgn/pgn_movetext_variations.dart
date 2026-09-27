@@ -1,11 +1,5 @@
 part of 'pgn_movetext_view.dart';
 
-/// Deepest sideline level rendered unconditionally. Alternatives that would
-/// land deeper are folded behind their first move, which the reader can open.
-/// Machine-generated repertoire trees routinely nest far past anything a human
-/// wants to read in one pass; without a fold they bury the mainline.
-const _kAlwaysVisibleDepth = 2;
-
 /// A single, unannotated alternative this many plies long is faster to read in
 /// place than as a separate block. Anything longer, commented, or branching
 /// gets the full-width treatment below. Four plies is enough to answer the
@@ -20,9 +14,50 @@ const _kMaxInlineVariationPlies = 4;
 /// aside. Structural variations use whitespace + a gutter instead, which
 /// avoids the wall of nested brackets found in raw PGN dumps.
 List<InlineSpan>? _buildInlineVariationAtPly(
+  BuildContext context,
   PgnMovetextView view,
   int ply, {
-  bool Function(MoveNode node)? nodeVisible,
+  bool Function(MoveNodeView node)? nodeVisible,
+}) {
+  final line = _inlineVariationNodes(view, ply, nodeVisible: nodeVisible);
+  if (line == null) return null;
+  final spans = <InlineSpan>[
+    TextSpan(text: '(', style: PgnTextStyles.parenthesisAt(context, 1)),
+  ];
+  var coords = _coordsAtPly(view, ply);
+  for (var i = 0; i < line.length; i++) {
+    if (coords.isWhite) {
+      spans.add(
+        TextSpan(
+          text: '${coords.moveNumber}. ',
+          style: PgnTextStyles.moveNumberAt(context, 1),
+        ),
+      );
+    } else if (i == 0) {
+      spans.add(
+        TextSpan(
+          text: '${coords.moveNumber}... ',
+          style: PgnTextStyles.moveNumberAt(context, 1),
+        ),
+      );
+    }
+    spans.add(_variationMoveSpan(context, view, line[i], 1, ply));
+    if (i < line.length - 1) spans.add(const TextSpan(text: ' '));
+    coords = (
+      moveNumber: coords.isWhite ? coords.moveNumber : coords.moveNumber + 1,
+      isWhite: !coords.isWhite,
+    );
+  }
+  spans.add(
+    TextSpan(text: ') ', style: PgnTextStyles.parenthesisAt(context, 1)),
+  );
+  return spans;
+}
+
+List<MoveNodeView>? _inlineVariationNodes(
+  PgnMovetextView view,
+  int ply, {
+  bool Function(MoveNodeView)? nodeVisible,
 }) {
   var roots = view.variationsByPly[ply];
   if (roots == null || roots.length != 1) return null;
@@ -30,9 +65,12 @@ List<InlineSpan>? _buildInlineVariationAtPly(
   var node = roots.single;
   if (nodeVisible != null && !nodeVisible(node)) return null;
 
-  final line = <MoveNode>[];
+  final line = <MoveNodeView>[];
   while (true) {
-    if (node.comment?.trim().isNotEmpty ?? false) return null;
+    if ((node.comment?.trim().isNotEmpty ?? false) ||
+        (node.startingComment?.trim().isNotEmpty ?? false)) {
+      return null;
+    }
     line.add(node);
     if (line.length > _kMaxInlineVariationPlies) return null;
 
@@ -44,79 +82,36 @@ List<InlineSpan>? _buildInlineVariationAtPly(
     node = visibleChildren.single;
   }
 
-  final spans = <InlineSpan>[
-    TextSpan(text: '(', style: PgnTextStyles.parenthesisAt(1)),
-  ];
-  var coords = _coordsAtPly(view, ply);
-  for (var i = 0; i < line.length; i++) {
-    if (coords.isWhite) {
-      spans.add(
-        TextSpan(
-          text: '${coords.moveNumber}. ',
-          style: PgnTextStyles.moveNumberAt(1),
-        ),
-      );
-    } else if (i == 0) {
-      spans.add(
-        TextSpan(
-          text: '${coords.moveNumber}... ',
-          style: PgnTextStyles.moveNumberAt(1),
-        ),
-      );
-    }
-    spans.add(_variationMoveSpan(view, line[i], 1, ply));
-    if (i < line.length - 1) spans.add(const TextSpan(text: ' '));
-    coords = (
-      moveNumber: coords.isWhite ? coords.moveNumber : coords.moveNumber + 1,
-      isWhite: !coords.isWhite,
-    );
-  }
-  spans.add(TextSpan(text: ') ', style: PgnTextStyles.parenthesisAt(1)));
-  return spans;
+  return line;
 }
-
-/// Render sidelines as ordinary paragraphs, with a disclosure arrow beside
-/// the first real move. Nesting never changes the size of the explanation.
-List<Widget> _buildVariationRowsAtPly(
-  PgnMovetextView view,
-  int ply, {
-  bool Function(MoveNode node)? nodeVisible,
-  required Map<int, bool> branchVisibility,
-  required ValueChanged<int> onToggleBranch,
-}) => [
-  for (final root in view.variationsByPly[ply] ?? <MoveNode>[])
-    if (nodeVisible == null || nodeVisible(root))
-      if (_isRepeatedProseReference(view, root, ply))
-        _buildProseReference(view, root, ply)
-      else
-        _buildVariationDocument(
-          view,
-          root,
-          ply: ply,
-          branchPly: ply,
-          depth: 1,
-          branchVisibility: branchVisibility,
-          onToggleBranch: onToggleBranch,
-          nodeVisible: nodeVisible,
-        ),
-];
 
 // Course exporters encode clickable mentions as duplicate one-move RAVs.
 // Keep the nodes intact, but read a leaf repeating the principal move as prose.
 // Editing, NAGs, scratch analysis and actual continuations retain their rows.
-bool _isRepeatedProseReference(PgnMovetextView view, MoveNode node, int ply) =>
+bool _isRepeatedProseReference(
+  PgnMovetextView view,
+  MoveNodeView node,
+  int ply,
+) =>
     !view.editMode &&
     !node.isEphemeral &&
     node.children.isEmpty &&
     (node.nags?.isEmpty ?? true) &&
-    _metricsSpans(node.comment ?? '').isEmpty &&
+    (node.startingComment?.trim().isEmpty ?? true) &&
+    MoveMetrics.parse(node.comment ?? '').summary.isEmpty &&
     ply < view.moveHistory.length &&
     node.san == view.moveHistory[ply].san &&
     filterDisplayComment(node.comment ?? '').isNotEmpty;
 
-Widget _buildProseReference(PgnMovetextView view, MoveNode node, int ply) {
+Widget _buildProseReference(
+  BuildContext context,
+  PgnMovetextView view,
+  MoveNodeView node,
+  int ply,
+) {
   final coords = _coordsAtPly(view, ply);
   final rendered = _renderProseComment(
+    context,
     view,
     '${coords.moveNumber}${coords.isWhite ? '.' : '...'}${node.san} ${node.comment}',
     anchorPos: _posAt(_buildPrefixPositions(view), ply),
@@ -127,23 +122,24 @@ Widget _buildProseReference(PgnMovetextView view, MoveNode node, int ply) {
   );
 }
 
-Widget _buildVariationDocument(
+Widget _buildVariationRow(
+  BuildContext context,
   PgnMovetextView view,
-  MoveNode root, {
-  required int ply,
-  required int branchPly,
-  required int depth,
-  required Map<int, bool> branchVisibility,
+  ViewerVariationRow row, {
   required ValueChanged<int> onToggleBranch,
-  bool Function(MoveNode)? nodeVisible,
-  String? leadingLabel,
 }) {
-  final containsCurrent = view.analysisPath.any((n) => n.id == root.id);
-  final defaultOpen = branchVisibility.putIfAbsent(
-    root.id,
-    () => view.expandAll || depth <= _kAlwaysVisibleDepth,
-  );
-  final open = depth == 0 || containsCurrent || defaultOpen;
+  if (row.proseReference) {
+    return _buildProseReference(context, view, row.root, row.ply);
+  }
+  final root = row.root;
+  final ply = row.ply;
+  final branchPly = row.branchPly;
+  final depth = row.depth;
+  final containsCurrent = row.containsCurrent;
+  final open = row.open;
+  final leadingLabel = row.engineMove != null && row.first && depth == 1
+      ? 'Best: '
+      : null;
   final coords = _coordsAtPly(view, ply);
   final label =
       '${coords.moveNumber}${coords.isWhite ? '.' : '...'} ${root.san}';
@@ -177,10 +173,13 @@ Widget _buildVariationDocument(
           padding: EdgeInsets.only(left: indent),
           child: text,
         );
-  var firstRun = true;
+  var firstRun = row.first;
   final run = <InlineSpan>[
     if (leadingLabel != null)
-      TextSpan(text: leadingLabel, style: PgnTextStyles.metricsAt(depth)),
+      TextSpan(
+        text: leadingLabel,
+        style: PgnTextStyles.metricsAt(context, depth),
+      ),
   ];
   void flush() {
     if (run.isEmpty) return;
@@ -190,7 +189,7 @@ Widget _buildVariationDocument(
         child: moveRow(
           Text.rich(
             TextSpan(
-              style: PgnTextStyles.rowRootAt(depth),
+              style: PgnTextStyles.rowRootAt(context, depth),
               children: List.of(run),
             ),
           ),
@@ -203,16 +202,41 @@ Widget _buildVariationDocument(
   }
 
   if (open) {
-    MoveNode? cursor = root;
     var index = ply;
-    var alternatives = <MoveNode>[];
-    while (cursor != null) {
-      final node = cursor;
+    for (final node in row.nodes) {
+      final introduction = node.startingComment;
+      if (introduction != null && introduction.trim().isNotEmpty) {
+        flush();
+        final prose = _renderComment(
+          context,
+          view,
+          introduction,
+          anchorPly: index,
+          interactive: false,
+        );
+        if (prose.block != null || prose.spans.isNotEmpty) {
+          children.add(
+            Padding(
+              padding: EdgeInsets.only(left: indent),
+              child: _readableProse(
+                prose.block ??
+                    Text.rich(
+                      TextSpan(
+                        style: PgnTextStyles.commentAt(context, depth),
+                        children: prose.spans,
+                      ),
+                    ),
+              ),
+            ),
+          );
+        }
+      }
       final pos = _coordsAtPly(view, index);
       final comment = node.comment;
       final rendered = comment == null
           ? (block: null, spans: <InlineSpan>[])
           : _renderComment(
+              context,
               view,
               comment,
               anchorPos: node.positionOrNull,
@@ -221,7 +245,7 @@ Widget _buildVariationDocument(
             );
       final metrics = comment == null
           ? <InlineSpan>[]
-          : _metricsSpans(comment, depth: depth);
+          : _metricsSpans(context, comment, depth: depth);
       final annotated = rendered.block != null || rendered.spans.isNotEmpty;
       if (annotated) flush();
       final passageStart = children.length;
@@ -230,12 +254,13 @@ Widget _buildVariationDocument(
           run.add(
             TextSpan(
               text: '${pos.moveNumber}${pos.isWhite ? '.' : '...'} ',
-              style: PgnTextStyles.moveNumberAt(depth),
+              style: PgnTextStyles.moveNumberAt(context, depth),
             ),
           );
         }
         run.add(
           _variationMoveSpan(
+            context,
             view,
             node,
             depth,
@@ -263,7 +288,7 @@ Widget _buildVariationDocument(
               rendered.block ??
                   Text.rich(
                     TextSpan(
-                      style: PgnTextStyles.commentAt(depth),
+                      style: PgnTextStyles.commentAt(context, depth),
                       children: rendered.spans,
                     ),
                   ),
@@ -282,31 +307,6 @@ Widget _buildVariationDocument(
           ),
         );
       }
-      if (alternatives.isNotEmpty) {
-        flush();
-        for (final alternative in alternatives) {
-          children.add(
-            Padding(
-              padding: EdgeInsets.only(left: indent),
-              child: _buildVariationDocument(
-                view,
-                alternative,
-                ply: index,
-                branchPly: branchPly,
-                depth: depth + 1,
-                branchVisibility: branchVisibility,
-                onToggleBranch: onToggleBranch,
-                nodeVisible: nodeVisible,
-              ),
-            ),
-          );
-        }
-      }
-      final next = nodeVisible == null
-          ? node.children
-          : node.children.where(nodeVisible).toList();
-      alternatives = next.skip(1).toList();
-      cursor = next.firstOrNull;
       index++;
     }
     flush();
@@ -326,23 +326,24 @@ Widget _buildVariationDocument(
                       if (leadingLabel != null)
                         TextSpan(
                           text: leadingLabel,
-                          style: PgnTextStyles.metricsAt(depth),
+                          style: PgnTextStyles.metricsAt(context, depth),
                         ),
                       TextSpan(
                         text:
                             '${coords.moveNumber}${coords.isWhite ? '.' : '...'} ',
-                        style: PgnTextStyles.moveNumberAt(depth),
+                        style: PgnTextStyles.moveNumberAt(context, depth),
                       ),
                       TextSpan(
                         text: root.san,
-                        style: PgnTextStyles.moveAt(depth),
+                        style: PgnTextStyles.moveAt(context, depth),
                       ),
                       if (allNagSuffix(root.nags).isNotEmpty)
                         TextSpan(
                           text: allNagSuffix(root.nags),
                           style: PgnTextStyles.nagAt(
+                            context,
                             depth,
-                            moveStyle: PgnTextStyles.moveAt(depth),
+                            moveStyle: PgnTextStyles.moveAt(context, depth),
                             nags: root.nags,
                           ),
                         ),
@@ -354,17 +355,23 @@ Widget _buildVariationDocument(
             ),
           ],
   );
-  if (depth == 0) return content;
+  final ancestorIndent =
+      (depth - 1).clamp(0, PgnTextStyles.maxStyledDepth) * 24.0;
   return Padding(
-    padding: const EdgeInsets.only(top: 6, bottom: 8),
+    padding: EdgeInsets.only(
+      left: ancestorIndent,
+      top: depth > 0 && row.first ? 6 : 0,
+      bottom: depth > 0 ? 8 : 0,
+    ),
     child: content,
   );
 }
 
 /// A tappable SAN chip inside a sideline row.
 InlineSpan _variationMoveSpan(
+  BuildContext context,
   PgnMovetextView view,
-  MoveNode node,
+  MoveNodeView node,
   int depth,
   int branchPly, {
   bool attachKey = true,
@@ -376,9 +383,13 @@ InlineSpan _variationMoveSpan(
   // sideline is there.
   final nagSuffix = allNagSuffix(node.nags);
 
-  final base = PgnTextStyles.moveAt(depth, ephemeral: node.isEphemeral);
+  final base = PgnTextStyles.moveAt(
+    context,
+    depth,
+    ephemeral: node.isEphemeral,
+  );
   final sanStyle = isCurrentNode
-      ? base.copyWith(color: AppColors.pgnMoveCurrentFg)
+      ? base.copyWith(color: Theme.of(context).colorScheme.onPrimaryContainer)
       : base;
 
   return WidgetSpan(
@@ -390,17 +401,15 @@ InlineSpan _variationMoveSpan(
       nagSuffix: nagSuffix,
       sanStyle: sanStyle,
       nagStyle: PgnTextStyles.nagAt(
+        context,
         depth,
         moveStyle: sanStyle,
         nags: node.nags,
       ),
-      decoration: PgnMoveDecorations.resolve(
-        selected: isCurrentNode,
-        isEphemeral: node.isEphemeral,
-      ),
+      decoration: PgnMoveDecorations.resolve(context, selected: isCurrentNode),
       hoverDecoration: PgnMoveDecorations.resolve(
+        context,
         selected: isCurrentNode,
-        isEphemeral: node.isEphemeral,
         hovered: true,
       ),
       behavior: HitTestBehavior.opaque,

@@ -1,7 +1,7 @@
 /// A scripted Stockfish stand-in for services that talk to [StockfishPool].
 ///
 /// The hole hunt, the trick hunt and the engine-weakness finder all reach the
-/// engine through `StockfishPool.instance`, so a unit test drives them by
+/// engine through their injected pool, so a unit test drives them by
 /// injecting an [EvalWorker] built on one of these ([StockfishPool
 /// .addWorkerForTest]) instead of spawning a real binary.
 ///

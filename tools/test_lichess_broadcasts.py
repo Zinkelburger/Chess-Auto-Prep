@@ -137,6 +137,24 @@ class MergeTest(unittest.TestCase):
         self.assertEqual(len(merged), 2)
         self.assertEqual([g.tags["Round"] for g in merged], ["1.3", "2.1"])
 
+    def test_one_spelling_per_player(self):
+        def game(white, black, moves):
+            return lb.parse_pgn(
+                f'[Event "E"]\n[Date "2025.01.01"]\n[White "{white}"]\n'
+                f'[Black "{black}"]\n[Result "1-0"]\n\n{moves} 1-0\n'
+            )[0]
+
+        merged = lb.merge_games(
+            [
+                (TOUR, [game("Felix Wu", "Emma Linyue Zhang", "1. e4 e5")]),
+                (TOUR, [game("Wu, Felix", "Ivanov, Alexander", "1. d4 d5")]),
+            ]
+        )
+        names = {g.tags[s] for g in merged for s in ("White", "Black")}
+        self.assertEqual(names, {"Wu, Felix", "Zhang, Emma Linyue", "Ivanov, Alexander"})
+        self.assertEqual(lb.surname_first("Nico Mehta"), "Mehta, Nico")
+        self.assertEqual(lb.surname_first("Carlsen, Magnus"), "Carlsen, Magnus")
+
 
 class FakeFetcher(lb.Fetcher):
     """Serves canned responses; records what was asked."""

@@ -4,9 +4,15 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../design_system/theme/app_typography.dart';
+import '../../l10n/generated/app_localizations.dart';
 import 'package:flutter/services.dart';
 
-import '../../core/study_controller.dart';
+import '../../features/studies/controllers/study_controller.dart';
+import '../../features/studies/widgets/study_selector.dart';
+import '../../features/studies/models/study_projection.dart';
+import '../../chess_core/moves/tree_path.dart';
+import '../../chess_core/moves/move_tree_snapshot.dart';
 import '../../utils/app_messages.dart';
 import '../engine/inline_engine_bar.dart';
 import '../interactive_pgn_editor.dart';
@@ -21,7 +27,7 @@ class StudySidePane extends StatelessWidget {
     required this.onAddChapter,
     required this.onPickChapter,
     required this.onManageChapters,
-    required this.actions,
+    required this.onChapterAction,
   });
 
   final StudyController study;
@@ -30,16 +36,20 @@ class StudySidePane extends StatelessWidget {
   final VoidCallback onAddChapter;
   final VoidCallback onPickChapter;
   final VoidCallback onManageChapters;
-  final StudyChapterActions actions;
+  final void Function(ChapterAction, int) onChapterAction;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        InlineEngineBar(
-          fen: study.currentPosition.fen,
-          previewFlipped: study.flipped,
-          onLineMoveTapped: onEngineLine,
+        StudySelector<(String, bool)>(
+          study: study,
+          select: (owner) => (owner.cursor.position.fen, owner.cursor.flipped),
+          builder: (context, view) => InlineEngineBar(
+            fen: view.$1,
+            previewFlipped: view.$2,
+            onLineMoveTapped: onEngineLine,
+          ),
         ),
         const Divider(height: 1),
         if (compact) ...[
@@ -48,7 +58,7 @@ class StudySidePane extends StatelessWidget {
             onAddChapter: onAddChapter,
             onPickChapter: onPickChapter,
             onManageChapters: onManageChapters,
-            actions: actions,
+            onChapterAction: onChapterAction,
           ),
           const Divider(height: 8),
         ] else
@@ -56,20 +66,24 @@ class StudySidePane extends StatelessWidget {
         Expanded(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: InteractivePgnEditor(
-              tree: study.tree,
-              currentPath: study.path,
-              showAnnotationPanel: true,
-              onJump: study.jump,
-              onCommentChanged: study.setComment,
-              onToggleNag: study.toggleNag,
-              onDelete: study.deleteAt,
-              onPromote: study.promote,
-              onMakeMainLine: study.makeMainLine,
-              onCopyToClipboard: (text, message) {
-                unawaited(Clipboard.setData(ClipboardData(text: text)));
-                showAppSnackBar(context, message);
-              },
+            child: StudySelector<(MoveTreeSnapshot, TreePath)>(
+              study: study,
+              select: (owner) => (owner.tree, owner.path),
+              builder: (context, view) => InteractivePgnEditor(
+                tree: view.$1,
+                currentPath: view.$2,
+                showAnnotationPanel: true,
+                onJump: study.jump,
+                onCommentChanged: study.setComment,
+                onToggleNag: study.toggleNag,
+                onDelete: study.deleteAt,
+                onPromote: study.promote,
+                onMakeMainLine: study.makeMainLine,
+                onCopyToClipboard: (text, message) {
+                  unawaited(Clipboard.setData(ClipboardData(text: text)));
+                  showAppSnackBar(context, message);
+                },
+              ),
             ),
           ),
         ),
@@ -89,18 +103,26 @@ class _CompactChapterBar extends StatelessWidget {
     required this.onAddChapter,
     required this.onPickChapter,
     required this.onManageChapters,
-    required this.actions,
+    required this.onChapterAction,
   });
 
   final StudyController study;
   final VoidCallback onAddChapter;
   final VoidCallback onPickChapter;
   final VoidCallback onManageChapters;
-  final StudyChapterActions actions;
+  final void Function(ChapterAction, int) onChapterAction;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      StudySelector<(StudyChapterListProjection, int)>(
+        study: study,
+        select: (owner) => (owner.chapterList, owner.chapterIndex),
+        builder: (context, _) => _buildBar(context),
+      );
+
+  Widget _buildBar(BuildContext context) {
     final theme = Theme.of(context);
+    final chapter = study.chapterList.chapters[study.chapterIndex];
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
       child: Row(
@@ -121,9 +143,12 @@ class _CompactChapterBar extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        study.doc.chapters.isEmpty
-                            ? 'No chapters'
-                            : study.doc.chapters[study.chapterIndex].name,
+                        study.chapterList.chapters.isEmpty
+                            ? AppLocalizations.of(context).studyNoChapters
+                            : study
+                                  .chapterList
+                                  .chapters[study.chapterIndex]
+                                  .name,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodyMedium,
                       ),
@@ -136,32 +161,45 @@ class _CompactChapterBar extends StatelessWidget {
           ),
           IconButton(
             icon: const Icon(Icons.add, size: 18),
-            tooltip: 'New chapter',
+            tooltip: AppLocalizations.of(context).studyNewChapter,
             visualDensity: VisualDensity.compact,
             onPressed: onAddChapter,
           ),
           PopupMenuButton<Object>(
-            tooltip: 'Chapter actions',
-            onSelected: (action) => action is ChapterAction
-                ? actions.run(action, study.chapterIndex)
-                : onManageChapters(),
+            key: ObjectKey(chapter.key),
+            tooltip: AppLocalizations.of(context).studyChapterActions,
+            onSelected: (action) {
+              if (!context.mounted) return;
+              if (action is! ChapterAction) {
+                onManageChapters();
+                return;
+              }
+              final current = study.chapterList.chapters.indexWhere(
+                (item) => item.key == chapter.key,
+              );
+              if (current >= 0) onChapterAction(action, current);
+            },
             itemBuilder: (_) => [
-              const PopupMenuItem<Object>(
+              PopupMenuItem<Object>(
                 value: _manageChapters,
-                child: Text('Manage & reorder chapters…'),
+                child: Text(AppLocalizations.of(context).studyManageChapters),
               ),
               const PopupMenuDivider(),
-              ...StudyChapterActions.menuItems(
-                canDelete: study.doc.chapters.length > 1,
+              ...studyChapterMenuItems(
+                context,
+                canDelete: study.chapterList.chapters.length > 1,
               ),
             ],
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Chapter', style: TextStyle(fontSize: 13)),
-                  Icon(Icons.arrow_drop_down, size: 18),
+                  Text(
+                    AppLocalizations.of(context).studyChapter,
+                    style: AppTypography.secondary(context),
+                  ),
+                  const Icon(Icons.arrow_drop_down, size: 18),
                 ],
               ),
             ),

@@ -1,0 +1,348 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+import 'package:crypto/crypto.dart';
+
+import '../diagnostics/log.dart';
+import 'engine.dart';
+import 'hivemind_engine.dart';
+import 'hivemind_install.dart';
+import 'uci_engine.dart';
+import 'uci_process.dart';
+
+sealed class EngineStart {
+  const EngineStart();
+}
+
+final class Started extends EngineStart {
+  const Started(this.engine);
+
+  final Engine engine;
+}
+
+final class StartFailed extends EngineStart {
+  const StartFailed(this.reason);
+
+  /// A sentence for the user.
+  final String reason;
+}
+
+/// Owns every engine process the app starts and ends them all on
+/// [dispose]. One per app; nothing else spawns an engine.
+final class EngineSupervisor {
+  final _running = <EngineProcess>{};
+  final _handshakes = <SpawnedProcess>{};
+  final _starts = <Future<void>>{};
+  Future<void>? _closing;
+
+  /// Set once the app is on its way out: an engine that finishes starting
+  /// after that is quit at once rather than kept.
+  bool _disposed = false;
+
+  /// Process ids of the engines alive right now. Only the tests and the
+  /// exit harness ask: the app never addresses an engine by its pid.
+  Iterable<int> get pids => [
+    for (final engine in _running) engine.pid,
+    for (final process in _handshakes) process.pid,
+  ];
+
+  /// [patience] is how long the handshake may take; a binary that is not a
+  /// UCI engine is killed after it. [finitePatience] bounds each fixed-depth
+  /// search from its `go`; continuous analysis is uncapped until stopped.
+  Future<EngineStart> start(
+    String executable, {
+    Map<String, String> options = const {},
+    Duration patience = const Duration(seconds: 10),
+    Duration finitePatience = UciEngine.defaultFinitePatience,
+  }) {
+    if (_disposed) {
+      return Future.value(const StartFailed('The app is closing.'));
+    }
+    if (finitePatience <= Duration.zero) {
+      return Future.value(
+        const StartFailed('The finite search deadline must be positive.'),
+      );
+    }
+    return _own(
+      _start(executable, Map.unmodifiable(options), patience, finitePatience),
+    );
+  }
+
+  Future<EngineStart> _start(
+    String executable,
+    Map<String, String> options,
+    Duration patience,
+    Duration finitePatience,
+  ) async {
+    final name = p.basename(executable);
+    final SpawnedProcess process;
+    try {
+      process = await SpawnedProcess.start(executable);
+    } on ProcessException catch (e) {
+      log.e('start $name', e.message);
+      return StartFailed('Could not start $name: ${e.message}');
+    }
+    _handshakes.add(process);
+    try {
+      if (_disposed) {
+        await process.kill();
+        return const StartFailed('The app is closing.');
+      }
+      final engine = await UciEngine.start(
+        process,
+        options: options,
+        patience: patience,
+        finitePatience: finitePatience,
+      );
+      if (!_keep(engine, process)) {
+        await engine.quit();
+        return const StartFailed('The app is closing.');
+      }
+      return Started(engine);
+    } on TimeoutException {
+      await process.kill();
+      log.e('start $name', 'no uciok; stderr: ${process.recentErrors}');
+      return StartFailed('$name did not answer as a UCI engine');
+    } on EngineFailure catch (e) {
+      await process.kill();
+      if (_disposed) return const StartFailed('The app is closing.');
+      final said = process.recentErrors.join(' ');
+      log.e('start $name', '$e; stderr: ${process.recentErrors}');
+      return StartFailed('$name failed to start: ${e.message}. $said'.trim());
+    } on Object catch (error) {
+      await process.kill();
+      log.e('start $name', error);
+      return StartFailed('$name failed to start: $error');
+    } finally {
+      _handshakes.remove(process);
+    }
+  }
+
+  /// Hivemind from its installed [files], limited to [cores] where the
+  /// platform lets a process be held to some of them (Linux).
+  Future<HivemindStart> startHivemind(
+    HivemindFiles files, {
+    required int cores,
+    Duration patience = const Duration(seconds: 90),
+  }) => _disposed
+      ? Future.value(const HivemindStartFailed('The app is closing.'))
+      : _own(_startHivemind(files, cores, patience));
+
+  Future<HivemindStart> _startHivemind(
+    HivemindFiles files,
+    int cores,
+    Duration patience,
+  ) async {
+    final SpawnedProcess process;
+    final identity = {
+      'engine_sha256': await fileSha256(files.executable),
+      'network_sha256': await fileSha256(files.model),
+      'cores': cores,
+    };
+    try {
+      if (_disposed) return const HivemindStartFailed('The app is closing.');
+      process = await SpawnedProcess.start(
+        files.executable,
+        // Named from the engine's own folder: on Windows the support folder
+        // has spaces in it, and a bare file name survives any quoting.
+        arguments: ['--model', p.basename(files.model)],
+        workingDirectory: files.directory,
+        environment: hivemindEnvironment(files.directory, Platform.environment),
+      );
+    } on Object catch (e) {
+      log.e('start the bughouse engine', '$e');
+      return HivemindStartFailed('Could not start the bughouse engine: $e');
+    }
+    _handshakes.add(process);
+    try {
+      if (_disposed) {
+        await process.kill();
+        return const HivemindStartFailed('The app is closing.');
+      }
+      final engine = await HivemindProcess.start(
+        process,
+        options: const {'Hash': '256', 'BatchSize': '8'},
+        provenance: identity,
+        patience: patience,
+      );
+      if (engine == null) {
+        if (_disposed) return const HivemindStartFailed('The app is closing.');
+        final said = process.recentErrors.join(' ');
+        final code = await process.exitCode;
+        log.e(
+          'start the bughouse engine',
+          'no uciok; exit $code; stderr: $said',
+        );
+        return HivemindStartFailed(
+          [
+            'The bughouse engine did not start.',
+            ?hivemindExitReason(code),
+            said,
+          ].where((part) => part.isNotEmpty).join(' '),
+        );
+      }
+      if (!_keep(engine, process)) {
+        await engine.quit();
+        return const HivemindStartFailed('The app is closing.');
+      }
+      await limitCores(process.pid, cores);
+      if (_disposed) {
+        await engine.quit();
+        return const HivemindStartFailed('The app is closing.');
+      }
+      return HivemindStarted(engine);
+    } on Object catch (error) {
+      await process.kill();
+      log.e('start the bughouse engine', error);
+      return HivemindStartFailed('Could not start the bughouse engine: $error');
+    } finally {
+      _handshakes.remove(process);
+    }
+  }
+
+  /// Transfers a handshaking process to its protocol owner without a gap.
+  /// On refusal the starter awaits its quit before its owned future settles.
+  bool _keep(EngineProcess engine, SpawnedProcess process) {
+    _handshakes.remove(process);
+    if (_disposed) return false;
+    _running.add(engine);
+    unawaited(engine.exited.then((_) => _running.remove(engine)));
+    return true;
+  }
+
+  /// Holds even a start whose native spawn has not returned. Late arrivals
+  /// see [_disposed] and confirm their own cleanup before this future ends.
+  Future<T> _own<T>(Future<T> start) {
+    late final Future<void> settled;
+    settled = start
+        .then<void>((_) {}, onError: (Object _) {})
+        .whenComplete(() => _starts.remove(settled));
+    _starts.add(settled);
+    return start;
+  }
+
+  /// Rejects new starts, kills handshakes, and waits for every accepted start
+  /// and running engine to confirm exit. Repeated calls share that same wait.
+  Future<void> dispose() {
+    _disposed = true;
+    return _closing ??= Future.wait([
+      for (final process in _handshakes.toList()) process.kill(),
+      for (final engine in _running.toList()) engine.quit(),
+      ..._starts,
+    ]);
+  }
+}
+
+final _hashes = <String, ({int size, DateTime modified, String hash})>{};
+
+/// The SHA-256 of the file at [path], recorded with saved bughouse analysis
+/// so it says which engine and network made it. Worked out once per file
+/// version (size and modification time) rather than on every start. Null
+/// when the file cannot be read: provenance is never a reason not to start.
+Future<String?> fileSha256(String path) async {
+  try {
+    final stat = await File(path).stat();
+    final known = _hashes[path];
+    if (known != null &&
+        known.size == stat.size &&
+        known.modified == stat.modified) {
+      return known.hash;
+    }
+    final hash = (await sha256.bind(File(path).openRead()).first).toString();
+    _hashes[path] = (size: stat.size, modified: stat.modified, hash: hash);
+    return hash;
+  } on Object catch (error) {
+    log.w('hash ${p.basename(path)}', error);
+    return null;
+  }
+}
+
+/// What Hivemind is started with besides this process's environment: where
+/// its ONNX Runtime library is — beside it, in [directory] — and on Windows a
+/// PATH cut to that folder and the system's, so no stray 32-bit
+/// `MSVCP140.dll` on the user's PATH is loaded ahead of the one it ships.
+Map<String, String> hivemindEnvironment(
+  String directory,
+  Map<String, String> inherited,
+) {
+  if (Platform.isWindows) {
+    final root = inherited['SystemRoot'] ?? r'C:\Windows';
+    // Windows names are case-insensitive but the block is a list: reuse the
+    // spelling the parent has, or two PATHs would race.
+    final key = inherited.keys.firstWhere(
+      (name) => name.toLowerCase() == 'path',
+      orElse: () => 'PATH',
+    );
+    return {
+      key: [directory, p.join(root, 'System32'), root].join(';'),
+    };
+  }
+  final key = Platform.isMacOS ? 'DYLD_LIBRARY_PATH' : 'LD_LIBRARY_PATH';
+  final existing = inherited[key];
+  return {
+    key: existing == null || existing.isEmpty
+        ? directory
+        : '$directory:$existing',
+  };
+}
+
+/// What a Windows loader failure means, in words, for an engine that exited
+/// with [code] before it could say anything; null for any other exit.
+String? hivemindExitReason(int? code) {
+  if (code == null) return null;
+  // Windows reports an NTSTATUS as a negative 32-bit exit code.
+  final status = code & 0xFFFFFFFF;
+  return switch (status) {
+    0xC0000135 =>
+      'Windows could not find a library it needs (exit 0xC0000135); '
+          'installing the Microsoft Visual C++ runtime fixes this.',
+    0xC000007B => 'Windows refused to load one of its files (exit 0xC000007B).',
+    0xC000001D =>
+      'This processor lacks an instruction the engine needs '
+          '(exit 0xC000001D).',
+    0xC0000005 => 'The engine crashed as it started (exit 0xC0000005).',
+    _ => null,
+  };
+}
+
+/// Holds every thread of [pid] to the first [cores] CPUs this process may
+/// use, on Linux; elsewhere the engine chooses. A failure is a log line:
+/// the engine still runs, on more cores than asked.
+Future<void> limitCores(int pid, int cores) async {
+  if (!Platform.isLinux) return;
+  try {
+    final status = await File('/proc/self/status').readAsString();
+    final allowed = RegExp(
+      r'^Cpus_allowed_list:\s*(.+)$',
+      multiLine: true,
+    ).firstMatch(status)?.group(1);
+    if (allowed == null) return;
+    final cpus = cpuList(allowed);
+    final chosen = cpus.take(cores.clamp(1, cpus.length)).join(',');
+    final result = await Process.run('taskset', [
+      '--all-tasks',
+      '--pid',
+      '--cpu-list',
+      chosen,
+      '$pid',
+    ]);
+    if (result.exitCode != 0) {
+      log.w('limit the bughouse engine to $cores cores', result.stderr);
+    }
+  } on Object catch (error) {
+    log.w('limit the bughouse engine to $cores cores', error);
+  }
+}
+
+/// `0-3,8,10-11` → 0, 1, 2, 3, 8, 10, 11.
+List<int> cpuList(String list) => [
+  for (final part in list.trim().split(','))
+    if (part.split('-') case [final from, ...final rest])
+      for (
+        var cpu = int.parse(from.trim());
+        cpu <= int.parse((rest.isEmpty ? from : rest.first).trim());
+        cpu++
+      )
+        cpu,
+];

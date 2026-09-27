@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/core/repertoire_controller.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_board_controller.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 import 'package:chess_auto_prep/widgets/training/move_input_widget.dart';
 import 'package:chess_auto_prep/widgets/training/training_board_controls.dart';
@@ -15,7 +15,7 @@ void main() {
     testWidgets('drilling a line shows the board and the move field', (
       tester,
     ) async {
-      final session = RepertoireController();
+      final session = RepertoireBoardController();
       addTearDown(session.dispose);
 
       await tester.pumpWidget(
@@ -36,7 +36,7 @@ void main() {
     testWidgets('idle board keeps the board but drops the move field', (
       tester,
     ) async {
-      final session = RepertoireController();
+      final session = RepertoireBoardController();
       addTearDown(session.dispose);
 
       await tester.pumpWidget(

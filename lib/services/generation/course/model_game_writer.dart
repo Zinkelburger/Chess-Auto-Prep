@@ -3,7 +3,7 @@
 /// A model game travels twice: inside the course as a chapter entry with
 /// study headers (`[White]` = chapter, `[Black]` = variation, `[Result "*"]`,
 /// the real game data under `ModelGame*` tags), and again in the companion
-/// `<title>_model_games.pgn` as a plain game record a PGN viewer opens as a
+/// run-local `model_games.pgn` as a plain game record a PGN viewer opens as a
 /// collection.  Both share one movetext, annotated at the move where the game
 /// leaves the repertoire with what the repertoire does instead.
 library;

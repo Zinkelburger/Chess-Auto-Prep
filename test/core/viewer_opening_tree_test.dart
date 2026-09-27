@@ -1,7 +1,9 @@
+import 'package:chess_auto_prep/features/documents/controllers/viewer_collection_controller.dart';
+import 'package:chess_auto_prep/app/viewer_dependencies.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/core/pgn/viewer_opening_tree.dart';
+import 'package:chess_auto_prep/features/documents/controllers/viewer_opening_tree.dart';
 import 'package:chess_auto_prep/models/opening_tree.dart';
 import 'package:chess_auto_prep/utils/fen_utils.dart';
 
@@ -21,10 +23,10 @@ Position _play(List<String> sans) {
 
 ViewerOpeningTree _make(_Board board) {
   return ViewerOpeningTree(
+    repository: createViewerOpenings(),
     isActive: () => true,
     onChanged: () {},
-    filteredGames: () => const [],
-    allGames: () => const [],
+    collection: ViewerCollectionController(),
     fenIndex: () => null,
     currentFen: () => board.position.fen,
     applyPosition: (pos) => board.position = pos,

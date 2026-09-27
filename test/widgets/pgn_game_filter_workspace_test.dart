@@ -1,3 +1,8 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
+import 'dart:async';
+
+import 'package:chess_auto_prep/features/documents/repositories/pgn_collection_filter.dart';
+import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_filter.dart';
 import 'package:chess_auto_prep/services/opening_catalog.dart';
 import 'package:chess_auto_prep/core/board_editor_controller.dart';
 import 'package:chess_auto_prep/models/pgn_filter_models.dart';
@@ -34,6 +39,7 @@ const _games = <GameRecord>[
 
 Future<void> _open(
   WidgetTester tester, {
+  PgnCollectionFilter matcher = const IsolatePgnCollectionFilter(),
   SliceApplyCallback? onApply,
   void Function(List<int>, SliceConfig, int)? onOpenGame,
   SliceConfig? initialConfig,
@@ -45,9 +51,12 @@ Future<void> _open(
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: ThemeData.dark(),
       home: Scaffold(
         body: PgnGameFilterWorkspace(
+          matcher: matcher,
           allGames: games,
           collectionPlayer: collectionPlayer,
           initialConfig: initialConfig,
@@ -90,7 +99,87 @@ Future<void> _chooseField(WidgetTester tester, String field) async {
   await tester.pumpAndSettle();
 }
 
+class _ControlledMatcher implements PgnCollectionFilter {
+  final requests = <Completer<List<int>>>[];
+  @override
+  Future<List<int>> match(
+    SliceConfig config,
+    List<GameRecord> games, {
+    Map<String, List<int>>? fenIndex,
+  }) {
+    final request = Completer<List<int>>();
+    requests.add(request);
+    return request.future;
+  }
+}
+
 void main() {
+  testWidgets(
+    'a failed injected matcher disables apply and retries the same draft',
+    (tester) async {
+      final matcher = _ControlledMatcher();
+      List<int>? applied;
+      await _open(
+        tester,
+        matcher: matcher,
+        onApply: (indices, _) => applied = indices,
+      );
+      final filters = tester
+          .widget<HeaderFilters>(find.byType(HeaderFilters))
+          .controller;
+      filters.setHeaderField(0, 'White');
+      filters.setHeaderValue(0, 'Fischer');
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(matcher.requests, hasLength(1));
+      expect(tester.widget<FilledButton>(_apply).onPressed, isNull);
+      matcher.requests.single.completeError(StateError('worker unavailable'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Could not search these games. Try again.'),
+        findsOneWidget,
+      );
+      expect(tester.widget<FilledButton>(_apply).onPressed, isNull);
+      await tester.tap(find.text('Could not search these games. Try again.'));
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(matcher.requests, hasLength(2));
+      matcher.requests.last.complete([0]);
+      await tester.pumpAndSettle();
+      expect(tester.widget<FilledButton>(_apply).onPressed, isNotNull);
+      await tester.tap(_apply);
+      expect(applied, [0]);
+      expect(filters.headerRows.single.value, 'Fischer');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('older matcher results cannot enable applying a newer draft', (
+    tester,
+  ) async {
+    final matcher = _ControlledMatcher();
+    List<int>? applied;
+    await _open(
+      tester,
+      matcher: matcher,
+      onApply: (indices, _) => applied = indices,
+    );
+    final filters = tester
+        .widget<HeaderFilters>(find.byType(HeaderFilters))
+        .controller;
+    filters.setHeaderField(0, 'White');
+    filters.setHeaderValue(0, 'Fischer');
+    await tester.pump(const Duration(milliseconds: 350));
+    filters.setHeaderValue(0, 'Spassky');
+    await tester.pump(const Duration(milliseconds: 350));
+    matcher.requests.first.complete([0]);
+    await tester.pump();
+    expect(tester.widget<FilledButton>(_apply).onPressed, isNull);
+    matcher.requests.last.complete([1]);
+    await tester.pumpAndSettle();
+    await tester.tap(_apply);
+    expect(applied, [1]);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('starts with one blank row and keeps results and apply visible', (
     tester,
   ) async {
@@ -501,6 +590,8 @@ void main() {
     var searching = true;
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: StatefulBuilder(
           builder: (context, setState) => Scaffold(
             appBar: AppBar(
@@ -518,6 +609,7 @@ void main() {
                 children: [
                   const Text('Game reader'),
                   PgnGameFilterWorkspace(
+                    matcher: const IsolatePgnCollectionFilter(),
                     allGames: _games,
                     currentFen: _fen,
                     onApply: (_, _) {},

@@ -1,10 +1,13 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/services/game_analysis_controller.dart';
-import 'package:chess_auto_prep/services/game_eval_annotations.dart';
-import 'package:chess_auto_prep/services/move_eval.dart';
+import 'package:chess_auto_prep/chess_core/analysis/game_eval_annotations.dart';
+import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart';
 
 MoveEval _eval(String san) => MoveEval(
   ply: 1,
@@ -17,10 +20,19 @@ MoveEval _eval(String san) => MoveEval(
 CachedGameAnalysis _analysis(String san) =>
     (evals: [_eval(san)], startWinChance: 0, totalMoves: 1);
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   test('a slower cached parse cannot replace the newest game', () async {
     final pending = <String, Completer<CachedGameAnalysis?>>{};
     final controller = GameAnalysisController(
+      pool: engines.pool,
+      lifecycle: engines.lifecycle,
       cachedAnalysisLoader: (pgn) =>
           (pending[pgn] ??= Completer<CachedGameAnalysis?>()).future,
     );
@@ -45,6 +57,8 @@ void main() {
   test('cancel invalidates an in-flight cached parse', () async {
     final pending = Completer<CachedGameAnalysis?>();
     final controller = GameAnalysisController(
+      pool: engines.pool,
+      lifecycle: engines.lifecycle,
       cachedAnalysisLoader: (_) => pending.future,
     );
     addTearDown(controller.dispose);

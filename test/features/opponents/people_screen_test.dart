@@ -5,7 +5,7 @@ import 'package:chess_auto_prep/features/opponents/widgets/people_screen.dart';
 import 'package:chess_auto_prep/features/opponents/widgets/player_table.dart';
 import 'package:chess_auto_prep/models/analysis_player_info.dart';
 import 'package:chess_auto_prep/services/analysis_games_service.dart';
-import 'package:chess_auto_prep/theme/app_theme.dart';
+import 'package:chess_auto_prep/design_system/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

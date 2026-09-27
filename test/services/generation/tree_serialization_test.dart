@@ -4,8 +4,8 @@ library;
 
 import 'dart:convert';
 
-import 'package:chess_auto_prep/models/build_tree_node.dart';
-import 'package:chess_auto_prep/services/generation/tree_serialization.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/tree_serialization.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'generation_test_helpers.dart';
@@ -67,13 +67,5 @@ void main() {
       depth++;
     }
     expect(depth, 20000);
-  });
-
-  test('serializeTreeInIsolate matches the synchronous encoding', () async {
-    final tree = StandardTree().toTree();
-    expect(
-      await serializeTreeInIsolate(tree, indent: false),
-      serializeTree(tree, indent: false),
-    );
   });
 }

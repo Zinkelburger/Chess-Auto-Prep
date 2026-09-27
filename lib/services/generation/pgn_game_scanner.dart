@@ -11,7 +11,7 @@ import 'package:dartchess/dartchess.dart' show Chess, Move, Position;
 import 'package:flutter/foundation.dart';
 
 import '../../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
-import '../eval/eval_canonicalize.dart';
+import '../../chess_core/position/eval_canonicalize.dart';
 import 'pgn_freq_map.dart';
 import 'pgn_lexer.dart';
 

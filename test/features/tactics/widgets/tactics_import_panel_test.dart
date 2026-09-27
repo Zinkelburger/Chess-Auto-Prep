@@ -1,7 +1,13 @@
 /// The Play block: what is playable, and the button that plays it.
 library;
 
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+
+import '../../../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+
 import 'package:flutter/material.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,7 +24,7 @@ import 'package:chess_auto_prep/features/games/controllers/recent_games_controll
 import 'package:chess_auto_prep/features/games/services/home_review_runner.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_import_coordinator.dart';
 import 'package:chess_auto_prep/features/tactics/widgets/tactics_view_settings.dart';
-import 'package:chess_auto_prep/models/engine_settings.dart';
+import 'package:chess_auto_prep/features/settings/controllers/engine_settings.dart';
 
 /// A puzzle mined today, so no expiry window can filter it out.
 TacticsPosition _position({required String id, String mistakeType = '??'}) {
@@ -40,7 +46,15 @@ TacticsPosition _position({required String id, String mistakeType = '??'}) {
   );
 }
 
+RuntimeSettings? _runtimeSettings;
+RuntimeSettings get runtimeSettings =>
+    _runtimeSettings ??= testRuntimeSettings();
+EngineRuntime get engines => testEngines(runtimeSettings);
 void main() {
+  setUp(() {
+    _runtimeSettings = null;
+    addTearDown(() => _runtimeSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -49,15 +63,21 @@ void main() {
     WidgetTester tester, {
     required List<TacticsPosition> positions,
     bool isImporting = false,
+    int? maxAgeDays,
   }) async {
     final session = TacticsSessionController();
     addTearDown(session.dispose);
-    // Never expire, so the fixtures stay playable.
+    // Most fixtures use no expiry; expiry journeys select an explicit window.
     session.setSessionSettings(
-      const TacticsSessionSettings().copyWith(clearMaxAgeDays: true),
+      const TacticsSessionSettings().copyWith(
+        maxAgeDays: maxAgeDays,
+        clearMaxAgeDays: maxAgeDays == null,
+      ),
       save: false,
     );
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      runtimeSettings,
       MultiProvider(
         providers: [
           ChangeNotifierProvider<AppState>(create: (_) => AppState()),
@@ -66,6 +86,8 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             appBar: AppBar(
               actions: [
@@ -169,6 +191,7 @@ void main() {
       tester,
       positions: [_position(id: '1')],
       isImporting: false,
+      maxAgeDays: 14,
     );
 
     await tester.tap(find.text('Filters…'));
@@ -197,6 +220,7 @@ void main() {
       tester,
       positions: [_position(id: '1')],
       isImporting: false,
+      maxAgeDays: 14,
     );
 
     await tester.tap(find.text('Filters…'));
@@ -224,6 +248,7 @@ void main() {
       tester,
       positions: [_position(id: '1')],
       isImporting: false,
+      maxAgeDays: 14,
     );
 
     await tester.tap(find.text('Filters…'));
@@ -249,16 +274,21 @@ void main() {
     tester.view.physicalSize = const Size(1280, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final before = EngineSettings.instance.cores;
-    addTearDown(() => EngineSettings.instance.cores = before);
-    EngineSettings.instance.cores = 1;
+    final before = runtimeSettings.engine.cores;
+    addTearDown(() => runtimeSettings.engine.cores = before);
+    runtimeSettings.engine.cores = 1;
     final session = TacticsSessionController();
     final games = RecentGamesController(
       lichessUsername: () => null,
       chesscomUsername: () => null,
     );
-    final coordinator = TacticsImportCoordinator();
+    final coordinator = TacticsImportCoordinator(
+      pool: engines.pool,
+      lifecycle: engines.lifecycle,
+    );
     final runner = HomeReviewRunner(
+      bulkSettings: runtimeSettings.bulk,
+      engine: runtimeSettings.engine,
       games: games,
       importCoordinator: coordinator,
       lichessUsername: () => null,
@@ -268,7 +298,9 @@ void main() {
     addTearDown(games.dispose);
     addTearDown(coordinator.dispose);
     addTearDown(runner.dispose);
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      runtimeSettings,
       MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => AppState()),
@@ -278,6 +310,8 @@ void main() {
           ChangeNotifierProvider.value(value: runner),
         ],
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             appBar: AppBar(
               actions: [

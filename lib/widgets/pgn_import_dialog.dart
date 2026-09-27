@@ -8,12 +8,13 @@ library;
 import 'dart:isolate';
 import 'dart:async';
 import '../utils/isolate_task.dart';
+import '../utils/atomic_file.dart' show AtomicWriteConflict;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
-import '../services/pgn_parsing_service.dart' as pgn;
+import '../chess_core/pgn/pgn_text.dart' as pgn;
 import '../services/repertoire_color_inference.dart';
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
@@ -125,19 +126,28 @@ Future<PgnImportResult?> showPgnImportDialog(
   BuildContext context, {
   String title = 'Import PGN',
   String confirmLabel = 'Import',
+  Future<void> Function(PgnImportResult)? onConfirm,
 }) {
   return showDialog<PgnImportResult>(
     context: context,
-    builder: (context) =>
-        _PgnImportDialog(title: title, confirmLabel: confirmLabel),
+    builder: (context) => _PgnImportDialog(
+      title: title,
+      confirmLabel: confirmLabel,
+      onConfirm: onConfirm,
+    ),
   );
 }
 
 class _PgnImportDialog extends StatefulWidget {
   final String title;
   final String confirmLabel;
+  final Future<void> Function(PgnImportResult)? onConfirm;
 
-  const _PgnImportDialog({required this.title, required this.confirmLabel});
+  const _PgnImportDialog({
+    required this.title,
+    required this.confirmLabel,
+    this.onConfirm,
+  });
 
   @override
   State<_PgnImportDialog> createState() => _PgnImportDialogState();
@@ -153,6 +163,7 @@ class _PgnImportDialogState extends State<_PgnImportDialog> {
   /// File contents stay out of the editable text layout. Pasting replaces them.
   String? _loadedContent;
   bool _reading = false;
+  bool _saving = false;
   IsolateTask? _countTask;
   int _inputGeneration = 0;
 
@@ -261,17 +272,30 @@ class _PgnImportDialogState extends State<_PgnImportDialog> {
     _focus.requestFocus();
   }
 
-  void _confirm() {
+  Future<void> _confirm() async {
     final text = _content.trim();
-    if (text.isEmpty || _gameCount == 0) return;
-
-    Navigator.of(context).pop(
-      PgnImportResult(
-        pgnContent: text,
-        gameCount: _gameCount,
-        fileName: _fileName,
-      ),
+    if (_saving || _reading || text.isEmpty || _gameCount == 0) return;
+    final result = PgnImportResult(
+      pgnContent: text,
+      gameCount: _gameCount,
+      fileName: _fileName,
     );
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.onConfirm?.call(result);
+      if (mounted) Navigator.of(context).pop(result);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = error is AtomicWriteConflict
+            ? 'Chapter changed. PGN kept; retry to add to latest.'
+            : 'Not saved. Your PGN is still here; retry.';
+      });
+    }
   }
 
   @override
@@ -279,106 +303,118 @@ class _PgnImportDialogState extends State<_PgnImportDialog> {
     final cs = Theme.of(context).colorScheme;
     final hasText = _content.isNotEmpty;
 
-    return AlertDialog(
-      titlePadding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
-      contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      title: Row(
-        children: [
-          Expanded(
-            child: Text(
-              widget.title,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.close, size: 18),
-            tooltip: 'Close',
-            visualDensity: VisualDensity.compact,
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ],
-      ),
-      content: SizedBox(
-        width: 500,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    return PopScope(
+      canPop: !_saving,
+      child: AlertDialog(
+        titlePadding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Row(
           children: [
-            _FilePickTile(
-              fileName: _fileName,
-              busy: _reading,
-              onPressed: _reading ? null : _pickFile,
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(child: Divider(color: cs.outlineVariant)),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Text(
-                    'or paste it',
-                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                  ),
-                ),
-                Expanded(child: Divider(color: cs.outlineVariant)),
-              ],
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: _controller,
-              focusNode: _focus,
-              autofocus: true,
-              maxLines: 8,
-              minLines: 5,
-              style: const TextStyle(
-                fontFamily: AppTextStyles.monoFamily,
-                fontSize: 12,
-              ),
-              decoration: InputDecoration(
-                hintText: _fileName == null
-                    ? null
-                    : 'File selected. Paste text to replace it.',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                contentPadding: const EdgeInsets.all(12),
-                isDense: true,
-              ),
-              onChanged: (value) {
-                _inputGeneration++;
-                _reading = false;
-                if (_fileName != null && value != _loadedContent) {
-                  _fileName = null;
-                  _loadedContent = null;
-                }
-                unawaited(_recount());
-              },
-            ),
-            SizedBox(
-              height: 30,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: _StatusLine(
-                  error: _error,
-                  gameCount: _gameCount,
-                  onClear: hasText ? _clear : null,
+            Expanded(
+              child: Text(
+                widget.title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              tooltip: 'Close',
+              visualDensity: VisualDensity.compact,
+              onPressed: _saving ? null : () => Navigator.of(context).pop(),
             ),
           ],
         ),
+        content: SizedBox(
+          width: 500,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _FilePickTile(
+                fileName: _fileName,
+                busy: _reading,
+                onPressed: _reading || _saving ? null : _pickFile,
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(child: Divider(color: cs.outlineVariant)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Text(
+                      'or paste it',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  Expanded(child: Divider(color: cs.outlineVariant)),
+                ],
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                enabled: !_saving,
+                controller: _controller,
+                focusNode: _focus,
+                autofocus: true,
+                maxLines: 8,
+                minLines: 5,
+                style: const TextStyle(
+                  fontFamily: AppTextStyles.monoFamily,
+                  fontSize: 12,
+                ),
+                decoration: InputDecoration(
+                  hintText: _fileName == null
+                      ? null
+                      : 'File selected. Paste text to replace it.',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  contentPadding: const EdgeInsets.all(12),
+                  isDense: true,
+                ),
+                onChanged: (value) {
+                  _inputGeneration++;
+                  _reading = false;
+                  if (_fileName != null && value != _loadedContent) {
+                    _fileName = null;
+                    _loadedContent = null;
+                  }
+                  unawaited(_recount());
+                },
+              ),
+              SizedBox(
+                height: 30,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _StatusLine(
+                    error: _error,
+                    gameCount: _gameCount,
+                    onClear: hasText && !_saving ? _clear : null,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: _saving ? null : () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: !_reading && !_saving && _gameCount > 0
+                ? _confirm
+                : null,
+            child: Text(_saving ? 'Saving…' : widget.confirmLabel),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: !_reading && _gameCount > 0 ? _confirm : null,
-          child: Text(widget.confirmLabel),
-        ),
-      ],
     );
   }
 }
@@ -474,7 +510,7 @@ class _StatusLine extends StatelessWidget {
         if (error != null) ...[
           Icon(Icons.warning_amber, size: 14, color: cs.error),
           const SizedBox(width: 6),
-          Flexible(
+          Expanded(
             child: Text(
               error!,
               overflow: TextOverflow.ellipsis,
@@ -493,7 +529,7 @@ class _StatusLine extends StatelessWidget {
             ),
           ),
         ],
-        const Spacer(),
+        if (error == null) const Spacer(),
         if (onClear != null)
           TextButton(
             onPressed: onClear,

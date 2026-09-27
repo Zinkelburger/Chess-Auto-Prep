@@ -18,7 +18,7 @@ library;
 import 'dart:async';
 
 import '../../../constants/engine_defaults.dart';
-import '../../../models/eval_database_settings.dart';
+import '../../settings/models/eval_database_configuration.dart';
 import '../../../services/engine/engine_lifecycle.dart';
 import '../../../services/engine/stockfish_pool.dart';
 import '../../../services/eval/cdbdirect_eval_provider.dart';
@@ -66,6 +66,9 @@ abstract class PlanDataSource {
 
 class DefaultPlanDataSource implements PlanDataSource {
   DefaultPlanDataSource({
+    required this.pool,
+    required this.lifecycle,
+    required this.databases,
     Future<EcoTrie>? trie,
     ExternalEvalProvider? evals,
     this.evalTimeout = const Duration(seconds: 6),
@@ -75,6 +78,9 @@ class DefaultPlanDataSource implements PlanDataSource {
   }
 
   /// Depth for on-demand Stockfish evaluations.
+  final StockfishPool pool;
+  final EngineLifecycle lifecycle;
+  final EvalDatabaseConfiguration databases;
   final int engineDepth;
 
   /// How long one database lookup may take before its cell stays blank.
@@ -117,16 +123,7 @@ class DefaultPlanDataSource implements PlanDataSource {
   }
 
   Future<void> _resolveEvalProvider() async {
-    final settings = EvalDatabaseSettings.instance;
-    if (!settings.isLoaded) {
-      try {
-        await settings.load();
-      } catch (_) {
-        // Unreadable settings just mean no local database; the API and
-        // engine paths below still work.
-      }
-    }
-    final local = await _openLocalDatabase(settings);
+    final local = await _openLocalDatabase(databases);
     if (local != null) {
       _evals = local;
       evalSourceLabel = 'ChessDB (local)';
@@ -147,7 +144,7 @@ class DefaultPlanDataSource implements PlanDataSource {
   }
 
   Future<ExternalEvalProvider?> _openLocalDatabase(
-    EvalDatabaseSettings settings,
+    EvalDatabaseConfiguration settings,
   ) async {
     if (!settings.enableCdbDirect ||
         settings.cdbDirectPath.isEmpty ||
@@ -285,9 +282,8 @@ class DefaultPlanDataSource implements PlanDataSource {
   @override
   Future<PlanEngineEval?> engineEval(String fen) async {
     // A running build owns the engine; don't fight it.
-    if (EngineLifecycle.instance.state == EngineState.generating) return null;
+    if (lifecycle.state == EngineState.generating) return null;
     try {
-      final pool = StockfishPool.instance;
       await pool.ensureWorkers(1);
       final result = await pool.evaluateFen(fen, engineDepth);
       final cp = isWhiteToMove(fen) ? result.effectiveCp : -result.effectiveCp;

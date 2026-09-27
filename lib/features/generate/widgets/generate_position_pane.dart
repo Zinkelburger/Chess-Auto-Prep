@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/generation_session_controller.dart';
 import '../../../services/eval/chessdb_api_provider.dart';
 import '../../../services/eval/db_move_list.dart';
+import '../../../services/jobs/generation_job_display.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/chess_utils.dart';
@@ -161,6 +162,67 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
     }
   }
 
+  /// The one control for the run: it starts it, then parks and restarts it.
+  /// A greyed-out Generate button while a run is in progress said nothing
+  /// about the run and left Stop as the only live control.
+  Widget _runControl(
+    GenerationSessionController gen, {
+    required bool canStart,
+    required bool extending,
+  }) {
+    if (!gen.isGenerating) {
+      // Not "Resume": a run does not continue where an earlier one stopped,
+      // it scores this position and merges the result into what is saved.
+      return Tooltip(
+        message: extending
+            ? 'Score this position and add it to the saved database'
+            : 'Score this position and start a database beside the chapter',
+        child: TextButton.icon(
+          key: const ValueKey('generation-run-control'),
+          onPressed: canStart ? () => _generate() : null,
+          icon: const Icon(Icons.play_arrow, size: 16),
+          label: Text(
+            _starting
+                ? 'Starting…'
+                : extending
+                ? 'Extend'
+                : 'Generate',
+          ),
+        ),
+      );
+    }
+    if (gen.isPaused) {
+      return TextButton.icon(
+        key: const ValueKey('generation-run-control'),
+        onPressed: gen.isCancelling
+            ? null
+            : () {
+                if (mounted) gen.resumeBuild();
+              },
+        icon: const Icon(Icons.play_arrow, size: 16),
+        label: const Text('Resume'),
+      );
+    }
+    // The remaining phases are short synchronous passes that would ignore a
+    // pause request, so the control says so rather than doing nothing.
+    final pausable = gen.canPause;
+    return Tooltip(
+      message: pausable
+          ? 'Park the run and hand the engine back'
+          : 'This step finishes too quickly to pause',
+      child: TextButton.icon(
+        key: const ValueKey('generation-run-control'),
+        onPressed: pausable
+            ? () {
+                if (mounted) gen.pauseBuild();
+              }
+            : null,
+        icon: const Icon(Icons.pause, size: 16),
+        label: const Text('Pause'),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -169,6 +231,9 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
       builder: (context, _) {
         final gen = widget.generation;
         final busy = gen.isGenerating || _starting;
+        // What a previous run left beside the chapter. A run adds to it; it
+        // never starts the database over.
+        final savedPositions = gen.generatedTreeFenMap?.size ?? 0;
         final stmWhite = widget.fen.split(' ').elementAtOrNull(1) == 'w';
         final rows = positionMoves(
           widget.fen,
@@ -178,19 +243,6 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
           chessDb: _dbMoves,
           sortByChessDb: _showChessDb,
         );
-        // The visible score determines the ordering; expected-score analysis
-        // belongs to the generation pipeline, not a second table column.
-        if (!_showChessDb && rows.isNotEmpty) {
-          rows.sort((a, b) {
-            final x = a.evalCp, y = b.evalCp;
-            if (x == null && y != null) return 1;
-            if (y == null && x != null) return -1;
-            final score = x != null && y != null
-                ? (stmWhite ? y.compareTo(x) : x.compareTo(y))
-                : 0;
-            return score != 0 ? score : a.san.compareTo(b.san);
-          });
-        }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -232,10 +284,10 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                           ),
                         ),
                   ),
-                  TextButton.icon(
-                    onPressed: busy || rows.isEmpty ? null : () => _generate(),
-                    icon: const Icon(Icons.play_arrow, size: 16),
-                    label: Text(_starting ? 'Starting…' : 'Generate'),
+                  _runControl(
+                    gen,
+                    canStart: !busy && rows.isNotEmpty,
+                    extending: savedPositions > 0,
                   ),
                   IconButton(
                     key: const ValueKey('generation-settings'),
@@ -294,8 +346,24 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                 ],
               ),
             ),
+            if (!gen.isGenerating && savedPositions > 0)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+                child: Text(
+                  'Database on disk · $savedPositions position'
+                  '${savedPositions == 1 ? '' : 's'}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.caption,
+                ),
+              ),
             if (gen.isGenerating) ...[
-              const LinearProgressIndicator(minHeight: 2),
+              LinearProgressIndicator(
+                minHeight: 2,
+                // A bar still sweeping under a parked run would claim work
+                // that is not happening.
+                value: gen.isPaused ? gen.progress.jobProgress.fraction : null,
+              ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Row(
@@ -304,7 +372,8 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                       child: Tooltip(
                         message: gen.progress.status,
                         child: Text(
-                          '${gen.progress.depthExplored.fold<int>(0, (a, b) => a + b)} positions evaluated',
+                          '${gen.isPaused ? 'Paused' : gen.progress.phase.label}'
+                          ' · ${gen.progress.jobProgress.message}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTextStyles.caption,
@@ -348,22 +417,30 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
                 children: [
-                  const SizedBox(
-                    width: 60,
+                  const Expanded(
                     child: Text('Move', style: AppTextStyles.caption),
                   ),
                   const SizedBox(
                     width: 84,
                     child: Tooltip(
-                      message: 'Evaluation from White’s perspective',
+                      message: 'Engine evaluation, from White’s perspective',
                       child: Text('Evaluation', style: AppTextStyles.caption),
                     ),
                   ),
-                  Expanded(
-                    child: Text(
-                      _showChessDb ? 'Annotation' : 'Continuation',
-                      style: AppTextStyles.caption,
-                    ),
+                  SizedBox(
+                    width: 84,
+                    child: _showChessDb
+                        ? const Text('Annotation', style: AppTextStyles.caption)
+                        : const Tooltip(
+                            message:
+                                'Expectimax: the score expected once the '
+                                'opponent’s likely replies are weighed in, '
+                                'from White’s perspective',
+                            child: Text(
+                              'Expected',
+                              style: AppTextStyles.caption,
+                            ),
+                          ),
                   ),
                   const SizedBox(width: 32),
                 ],
@@ -382,15 +459,24 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                                   ? null
                                   : dbScore * (stmWhite ? 1 : -1)
                             : row.evalCp;
-                        final fullDetail = _showChessDb
-                            ? row.chessDb?.note ?? ''
-                            : row.pvSan.join(' ');
+                        // The engine continuation is no longer a column of
+                        // its own; it stays reachable as the row's tooltip.
                         final detail = _showChessDb
-                            ? RegExp(
-                                    r'^[!?]+',
-                                  ).stringMatch(fullDetail.trim()) ??
+                            ? RegExp(r'^[!?]+').stringMatch(
+                                    (row.chessDb?.note ?? '').trim(),
+                                  ) ??
                                   ''
-                            : fullDetail;
+                            : row.expectedCp == null
+                            ? ''
+                            : formatPackedEval(row.expectedCp!, decimals: 2);
+                        final tooltip = _showChessDb
+                            ? row.chessDb?.note ?? ''
+                            : row.pvSan.isNotEmpty
+                            ? row.pvSan.join(' ')
+                            : row.expectedCp == null
+                            ? 'Generate from this position to calculate an '
+                                  'expected score.'
+                            : '';
                         return MouseRegion(
                           onEnter: (_) {
                             if (mounted) widget.onHoverMove?.call(row.uci);
@@ -410,8 +496,7 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                               ),
                               child: Row(
                                 children: [
-                                  SizedBox(
-                                    width: 60,
+                                  Expanded(
                                     child: Text(
                                       row.san,
                                       style: AppTextStyles.bodyStrong,
@@ -426,26 +511,14 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                                               score,
                                               decimals: 2,
                                             ),
-                                      style: AppTextStyles.mono.copyWith(
-                                        color: score == null || score == 0
-                                            ? AppColors.onSurfaceMuted
-                                            : score > 0
-                                            ? AppColors.evalPositive
-                                            : AppColors.evalNegative,
-                                      ),
+                                      style: AppTextStyles.mono,
                                     ),
                                   ),
-                                  Expanded(
-                                    child: Tooltip(
-                                      message: fullDetail,
-                                      child: Text(
-                                        detail.isEmpty ? '—' : detail,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: AppTextStyles.mono.copyWith(
-                                          color: AppColors.onSurfaceMuted,
-                                        ),
-                                      ),
+                                  SizedBox(
+                                    width: 84,
+                                    child: _Detail(
+                                      text: detail,
+                                      tooltip: tooltip,
                                     ),
                                   ),
                                   SizedBox(
@@ -479,5 +552,25 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
         );
       },
     );
+  }
+}
+
+/// The third column's cell: the expected score, or a ChessDB annotation.
+/// An empty tooltip would otherwise show as a blank popup on hover.
+class _Detail extends StatelessWidget {
+  const _Detail({required this.text, required this.tooltip});
+  final String text;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = Text(
+      text.isEmpty ? '—' : text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: AppTextStyles.mono,
+    );
+    if (tooltip.isEmpty) return label;
+    return Tooltip(message: tooltip, child: label);
   }
 }

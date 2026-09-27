@@ -25,3 +25,61 @@
 #bh-promotion::backdrop { background: #0009; }
 #bh-promotion h2 { margin-bottom: 16px; font-size: 1.1rem; }
 .bh-promotion-options { display: flex; gap: 8px; margin-bottom: 16px; }
+
+/* Lab uses document scrolling: setup/errors must never overlap the footer. */
+body:has(#bughouse-lab) { height: auto !important; min-height: 100dvh !important; }
+#bughouse-lab {
+  --board: min(420px, calc((100vw - 430px) / 2));
+  grid-template-columns: minmax(0, 1fr) 330px;
+  align-items: start;
+}
+.bh-toolbar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.bh-toolbar h1 { font-size: 20px; margin: 0; }
+.bh-toolbar .dim { font-size: 13px; }
+.bh-tools, .bh-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.bh-toolbar svg { width: 18px; height: 18px; }
+#bh-copy-status:empty { display: none; }
+#bughouse-lab .bb-boards { justify-content: center; }
+#bughouse-lab[data-editing="false"] .bb-setup,
+#bughouse-lab[data-editing="false"] .bb-outstanding { display: none; }
+#bughouse-lab .bh-row { grid-template-columns: 66px minmax(0, 1fr); gap: 8px; margin-top: 8px; }
+#bughouse-lab .choice-row { gap: 6px; }
+#bughouse-lab .choice span { padding: 6px 9px; font-size: 12px; }
+#bughouse-lab .bh-label { font-size: 13px; }
+.bh-actions .btn { padding: 8px 10px; font-size: 13px; }
+.bh-settings summary, .bh-keyboard summary { cursor: pointer; font-size: 14px; color: var(--text-dim); }
+#bughouse-lab .bh-go { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 8px 0; }
+#bughouse-lab .bh-go .btn { flex: 1; }
+#bughouse-lab .bh-result { overflow: visible; }
+#bh-availability:empty { display: none; }
+.bh-table tbody tr[aria-disabled="true"] { cursor: progress; }
+.bh-move-entry { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 18px; }
+.bh-move-entry input { flex: 1; width: 100px; min-width: 80px; }
+.bh-move-entry select { width: auto; flex: 1; padding: 8px; background: var(--bg-raised); color: var(--text); border: 1px solid var(--border); border-radius: 4px; }
+.bh-move-entry p { margin: 0; font-size: 13px; }
+#bh-copy-dialog { margin: auto; padding: 24px; width: min(90vw, 700px); background: var(--bg-card); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); }
+#bh-copy-dialog::backdrop { background: #0009; }
+#bh-copy-text { width: 100%; height: 240px; margin: 16px 0; font-family: var(--mono); }
+@media (max-width: 1100px) {
+  #bughouse-lab { --board: min(420px, calc((100vw - 76px) / 2)); grid-template-columns: minmax(0, 1fr); }
+  #bughouse-lab .bb-boards { flex-direction: row; }
+  #bughouse-lab .bh-panel { grid-row: 2; }
+  #bughouse-lab .bh-row { grid-template-columns: 100px 1fr; }
+}
+@media (max-width: 560px) {
+  #bughouse-lab { --board: min(420px, calc(100vw - 48px)); gap: 16px; }
+  #bughouse-lab .bb-boards { flex-direction: column; }
+  #bughouse-lab .bh-row { grid-template-columns: 66px minmax(0, 1fr); }
+  body:has(#bughouse-lab) { padding-bottom: 78px; }
+  #bughouse-lab .bh-go { position: fixed; top: auto; bottom: 0; left: 0; right: 0; z-index: 50; margin: 0; padding: 12px 24px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); }
+  #bughouse-lab #bh-jump:not([hidden]) { display: inline-flex; }
+  #bh-result { scroll-margin-top: 135px; }
+  .bh-tools { width: 100%; }
+  .bh-tools .btn { padding: 8px 10px; }
+  .bh-promotion-options { flex-wrap: wrap; }
+}
+
+#bh-jump { display: none; }
+.bh-keyboard { margin-top: 16px; }
+.bh-result:empty { display: none; }
+#bh-undo-reset { border-color: transparent; color: var(--accent); }

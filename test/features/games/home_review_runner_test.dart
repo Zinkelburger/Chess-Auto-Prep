@@ -2,6 +2,11 @@
 /// the engine pass with work left, and play carries on.
 library;
 
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+
+import '../../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -11,7 +16,7 @@ import 'package:chess_auto_prep/features/games/services/games_window.dart';
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/services/games_library/game_review_store.dart';
 import 'package:chess_auto_prep/services/games_library/games_library_service.dart';
-import 'package:chess_auto_prep/models/bulk_analysis_settings.dart';
+import 'package:chess_auto_prep/features/settings/controllers/bulk_analysis_settings.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_import_coordinator.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,6 +36,7 @@ class _EmptyLibrary extends GamesLibraryService {
     bool forceRefresh = false,
     void Function(String message)? onProgress,
     void Function(DateTime fetchedAt)? onFetched,
+    void Function(Object? error)? onStaleCache,
   }) async {
     fetches++;
     forcedFetches.add(forceRefresh);
@@ -97,6 +103,7 @@ class _OneGameLibrary extends GamesLibraryService {
     bool forceRefresh = false,
     void Function(String message)? onProgress,
     void Function(DateTime fetchedAt)? onFetched,
+    void Function(Object? error)? onStaleCache,
   }) async {
     forcedFetches.add(forceRefresh);
     return [GameRecord.parse(pgn)];
@@ -109,7 +116,10 @@ class _OneGameLibrary extends GamesLibraryService {
 
 /// Records the engine-pass calls without touching the network or an engine.
 class _RecordingCoordinator extends TacticsImportCoordinator {
+  _RecordingCoordinator()
+    : super(pool: engines.pool, lifecycle: engines.lifecycle);
   final imports = <TacticsImportParams>[];
+  Future<void> Function()? afterImport;
 
   /// Whether each call was handed already-downloaded games (rather than being
   /// told to fetch them itself).
@@ -129,6 +139,7 @@ class _RecordingCoordinator extends TacticsImportCoordinator {
     imports.add(params);
     gotPgns.add(pgnContent != null);
     forced.add(forceDedupKeys);
+    await afterImport?.call();
     return true;
   }
 
@@ -141,6 +152,8 @@ class _RecordingCoordinator extends TacticsImportCoordinator {
 /// wind-down. Refuses a second concurrent pass the way the real coordinator
 /// does (it still holds the engine pool).
 class _BlockingCoordinator extends TacticsImportCoordinator {
+  _BlockingCoordinator()
+    : super(pool: engines.pool, lifecycle: engines.lifecycle);
   int imports = 0;
   int cancels = 0;
 
@@ -188,7 +201,14 @@ Future<void> pumpUntil(bool Function() done, {int times = 500}) async {
   }
 }
 
+late RuntimeSettings runtimeSettings;
+EngineRuntime get engines => testEngines(runtimeSettings);
 void main() {
+  setUp(() async {
+    runtimeSettings = testRuntimeSettings();
+    await runtimeSettings.load();
+    addTearDown(runtimeSettings.dispose);
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   ({
@@ -208,12 +228,13 @@ void main() {
     final coordinator = _RecordingCoordinator();
     return (
       runner: HomeReviewRunner(
+        engine: runtimeSettings.engine,
         games: games,
         importCoordinator: coordinator,
         lichessUsername: () => lichess,
         chesscomUsername: () => chesscom,
         windowSettings: GamesWindowSettings.forTest(),
-        bulkSettings: BulkAnalysisSettings.forTest(),
+        bulkSettings: runtimeSettings.bulk,
       ),
       games: games,
       coordinator: coordinator,
@@ -290,6 +311,41 @@ void main() {
     expect(h.coordinator.imports.map((p) => p.username), ['me', 'me2']);
   });
 
+  test(
+    'review captures configuration across accounts and applies edits next run',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await runtimeSettings.load();
+      final h = build(lichess: 'me', chesscom: 'me2');
+      addTearDown(h.games.dispose);
+      addTearDown(h.runner.dispose);
+      final originalDepth = runtimeSettings.bulk.depth;
+      final originalCores = runtimeSettings.engine.cores;
+      h.coordinator.afterImport = () async {
+        await runtimeSettings.bulk.setDepth(originalDepth + 1);
+        await runtimeSettings.engine.edit({'engine_settings.cores': 1});
+        expect(h.runner.depth, originalDepth);
+        expect(h.runner.cores, originalCores);
+      };
+      await h.runner.start();
+      expect(h.coordinator.imports.map((p) => p.depth), [
+        originalDepth,
+        originalDepth,
+      ]);
+      expect(h.coordinator.imports.map((p) => p.cores), [
+        originalCores,
+        originalCores,
+      ]);
+      h.coordinator.afterImport = null;
+      await h.runner.start();
+      expect(h.coordinator.imports.skip(2).map((p) => p.depth), [
+        originalDepth + 1,
+        originalDepth + 1,
+      ]);
+      expect(h.coordinator.imports.skip(2).map((p) => p.cores), [1, 1]);
+    },
+  );
+
   test('with no username there is nothing to start', () {
     SharedPreferences.setMockInitialValues({});
     final h = build(lichess: null);
@@ -360,12 +416,13 @@ void main() {
     );
     final coordinator = _RecordingCoordinator();
     final runner = HomeReviewRunner(
+      engine: runtimeSettings.engine,
       games: games,
       importCoordinator: coordinator,
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      bulkSettings: BulkAnalysisSettings.forTest(),
+      bulkSettings: runtimeSettings.bulk,
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -385,12 +442,13 @@ void main() {
     );
     final coordinator = _RecordingCoordinator();
     final runner = HomeReviewRunner(
+      engine: runtimeSettings.engine,
       games: games,
       importCoordinator: coordinator,
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      bulkSettings: BulkAnalysisSettings.forTest(),
+      bulkSettings: runtimeSettings.bulk,
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -421,12 +479,13 @@ void main() {
     );
     final coordinator = _RecordingCoordinator();
     final runner = HomeReviewRunner(
+      engine: runtimeSettings.engine,
       games: games,
       importCoordinator: coordinator,
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      bulkSettings: BulkAnalysisSettings.forTest(),
+      bulkSettings: runtimeSettings.bulk,
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -454,12 +513,13 @@ void main() {
     );
     final coordinator = _RecordingCoordinator();
     final runner = HomeReviewRunner(
+      engine: runtimeSettings.engine,
       games: games,
       importCoordinator: coordinator,
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      bulkSettings: BulkAnalysisSettings.forTest(),
+      bulkSettings: runtimeSettings.bulk,
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -492,12 +552,13 @@ void main() {
     );
     final coordinator = _BlockingCoordinator();
     final runner = HomeReviewRunner(
+      engine: runtimeSettings.engine,
       games: games,
       importCoordinator: coordinator,
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      bulkSettings: BulkAnalysisSettings.forTest(),
+      bulkSettings: runtimeSettings.bulk,
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -537,12 +598,13 @@ void main() {
     );
     final coordinator = _BlockingCoordinator();
     final runner = HomeReviewRunner(
+      engine: runtimeSettings.engine,
       games: games,
       importCoordinator: coordinator,
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      bulkSettings: BulkAnalysisSettings.forTest(),
+      bulkSettings: runtimeSettings.bulk,
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -588,12 +650,13 @@ void main() {
       windowSettings: GamesWindowSettings.forTest(),
     );
     final runner = HomeReviewRunner(
+      engine: runtimeSettings.engine,
       games: games,
       importCoordinator: _RecordingCoordinator(),
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      bulkSettings: BulkAnalysisSettings.forTest(),
+      bulkSettings: runtimeSettings.bulk,
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -619,12 +682,13 @@ void main() {
         windowSettings: GamesWindowSettings.forTest(),
       );
       final runner = HomeReviewRunner(
+        engine: runtimeSettings.engine,
         games: games,
         importCoordinator: _RecordingCoordinator(),
         lichessUsername: () => 'me',
         chesscomUsername: () => null,
         windowSettings: GamesWindowSettings.forTest(),
-        bulkSettings: BulkAnalysisSettings.forTest(),
+        bulkSettings: runtimeSettings.bulk,
       );
       addTearDown(games.dispose);
       addTearDown(runner.dispose);

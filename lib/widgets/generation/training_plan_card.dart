@@ -3,7 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import '../common/number_stepper.dart';
 import '../../services/generation/generation_config.dart';
 import '../../services/generation/line_extractor.dart';

@@ -2,8 +2,9 @@
 // its root, finding which tree owns a node, re-scoring after a graft, and the
 // probe store's round trip.
 
+import 'package:chess_auto_prep/chess_core/generation/expectimax_probe_codec.dart';
 import 'package:chess_auto_prep/core/generated_repertoire.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/expectimax_probe.dart';
 import 'package:chess_auto_prep/services/generation/fen_map.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
@@ -159,8 +160,8 @@ void main() {
     () {
       final tree = _host();
       tree.root.enginePv = ['e2e4', 'c7c5', 'g1f3'];
-      final loaded = ExpectimaxProbeStore.decode(
-        ExpectimaxProbeStore.encode([tree]),
+      final loaded = ExpectimaxProbeCodec.decode(
+        ExpectimaxProbeCodec.encode([tree]),
       ).single;
       expect(loaded.root.enginePv, ['e2e4', 'c7c5', 'g1f3']);
       expect(loaded.root.children, hasLength(2));
@@ -272,12 +273,12 @@ void main() {
     expect(host.root.children.any((c) => c.isRepertoireMove), isFalse);
   });
 
-  test('ExpectimaxProbeStore round-trips every tree', () {
+  test('ExpectimaxProbeCodec round-trips every tree', () {
     final probe = _probe()..startMoves = 'e4';
     final other = _host();
-    final raw = ExpectimaxProbeStore.encode([probe, other]);
+    final raw = ExpectimaxProbeCodec.encode([probe, other]);
 
-    final back = ExpectimaxProbeStore.decode(raw);
+    final back = ExpectimaxProbeCodec.decode(raw);
 
     expect(back.length, 2);
     expect(back[0].root.fen, _afterE4);
@@ -285,13 +286,6 @@ void main() {
     expect(back[0].totalNodes, 4);
     expect(back[1].root.fen, _start);
     expect(back[1].root.children.length, 2);
-  });
-
-  test('ExpectimaxProbeStore.pathFor sits beside the repertoire', () {
-    expect(
-      ExpectimaxProbeStore.pathFor('/r/benko.pgn'),
-      '/r/benko_expectimax.json',
-    );
   });
 
   test('a bundle with probes finds their positions through its FenMap', () {

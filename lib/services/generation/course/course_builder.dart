@@ -13,15 +13,15 @@
 /// the user is told when a pass finds nothing — and none of it needs a
 /// running build, a notifier, or a file on disk.
 ///
-/// Everything here degrades rather than fails. A missing opening book means
-/// move-based chapter names; a build with no game database simply has no
-/// model games; a cancelled or failed enrichment pass contributes nothing.
+/// A missing opening book means move-based chapter names; a build with no
+/// game database simply has no model games. Engine failures are best-effort;
+/// errors preparing a pass still fail the export.
 library;
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-import '../../../models/build_tree_node.dart';
+import '../../../chess_core/generation/build_tree_node.dart';
 import '../../../utils/fen_utils.dart';
 import '../../master_games/master_games_db.dart';
 import '../../master_games/master_model_games.dart';
@@ -35,22 +35,25 @@ import '../line_pruner.dart';
 import '../pgn_freq_map.dart' show PgnFreqMap, PgnGameRecord;
 import 'chapter_titles.dart';
 import 'course_composer.dart';
-import 'enrichment_runner.dart';
 import 'master_improvements.dart';
 import 'model_game_selector.dart';
 import 'opening_namer.dart';
 import 'refutation_prober.dart';
 
-/// A composed course and the one thing about it the run summary has to say
-/// that the document itself cannot: why there are no model games.
+/// A composed course, enrichment counts, and any missing-model-games note.
 ///
 /// Returned rather than written back into the caller's fields, so the passes
 /// below have no reason to reach outward and the whole build is a value a
 /// test can assert on.
 class CourseBuild {
-  const CourseBuild({required this.course, required this.modelGameNote});
+  const CourseBuild({
+    required this.course,
+    required this.modelGameNote,
+    required this.enrichment,
+  });
 
   final ComposedCourse course;
+  final ({int refutations, int alternatives, int improvements}) enrichment;
 
   /// Empty when the course has model games, or was never asked for any.
   /// Otherwise a sentence naming what was searched and came up empty —
@@ -68,15 +71,17 @@ class CourseBuild {
 /// and a cached reference would quietly serve the previous run's data.
 class CourseBuilder {
   CourseBuilder({
-    required this.enrichment,
+    required this.pool,
+    required this.isCancelled,
+    required this.onStatus,
     required this.gameDatabase,
     required this.masterDbFor,
     required this.fenMap,
   });
 
-  /// Runs the four optional passes and keeps their counts; shared with the
-  /// owner, which reports those counts in the run summary.
-  final EnrichmentRunner enrichment;
+  final StockfishPool pool;
+  final bool Function() isCancelled;
+  final void Function(String message) onStatus;
 
   /// The build's own game database, when it loaded one. Reassigned per run.
   final PgnFreqMap? Function() gameDatabase;
@@ -88,13 +93,6 @@ class CourseBuilder {
   /// The finished tree's FEN index, used to test whether a candidate game
   /// actually follows the repertoire. Null until the tree is built.
   final FenMap? Function() fenMap;
-
-  /// Companion file path for a course at [courseFilePath] — the model games
-  /// again, as a game collection a PGN viewer opens directly.
-  static String modelGamesPathFor(String courseFilePath) => p.join(
-    p.dirname(courseFilePath),
-    '${p.basenameWithoutExtension(courseFilePath)}_model_games.pgn',
-  );
 
   /// Enrich [lines] and compose them into a course.
   ///
@@ -142,7 +140,46 @@ class CourseBuilder {
           improvements: improvements,
         );
 
-    return CourseBuild(course: course, modelGameNote: note);
+    return CourseBuild(
+      course: course,
+      modelGameNote: note,
+      enrichment: (
+        refutations: refutations.length,
+        alternatives: alternatives.length,
+        improvements: improvements.length,
+      ),
+    );
+  }
+
+  /// Prepare only enabled work. Preparation errors remain fatal; engine
+  /// startup and probing failures cost this pass its output, not the export.
+  Future<Map<String, T>> _runPass<T>(
+    TreeBuildConfig config,
+    String label, {
+    required bool enabled,
+    required String Function(int done, int total) status,
+    required Future<Map<String, T>> Function({
+      required bool Function() isCancelled,
+      required void Function(int done, int total) onProgress,
+    })?
+    Function()
+    prepare,
+  }) async {
+    if (!enabled || !config.needsStockfish || isCancelled()) return const {};
+    final probe = prepare();
+    if (probe == null) return const {};
+    try {
+      if (pool.workerCount == 0) {
+        await pool.prepareForTreeBuild(config.resolvedEngineThreads);
+      }
+      return await probe(
+        isCancelled: isCancelled,
+        onProgress: (done, total) => onStatus(status(done, total)),
+      );
+    } catch (error) {
+      debugPrint('$label pass failed: $error');
+      return const {};
+    }
   }
 
   // ── The four enrichment passes ──────────────────────────────────────────
@@ -152,14 +189,15 @@ class CourseBuilder {
   Future<RefutationMap> _refutations(
     List<ExtractedLine> lines,
     TreeBuildConfig config,
-  ) => enrichment.run<List<String>>(
-    EnrichmentPass.refutations,
+  ) => _runPass<List<String>>(
+    config,
+    'Refutation',
     enabled: config.refutationLines,
     status: (done, total) =>
         'Phase 3.5: Showing how losing replies are punished '
         '($done of $total)...',
     prepare: () {
-      final prober = RefutationProber(config: config);
+      final prober = RefutationProber(pool: pool, config: config);
       if (prober.targets(lines).isEmpty) return null;
       return ({required isCancelled, required onProgress}) =>
           prober.probe(lines, isCancelled: isCancelled, onProgress: onProgress);
@@ -171,14 +209,16 @@ class CourseBuilder {
   Future<AlternativeMap> _alternatives(
     List<ExtractedLine> lines,
     TreeBuildConfig config,
-  ) => enrichment.run<RefutedAlternative>(
-    EnrichmentPass.alternatives,
+  ) => _runPass<RefutedAlternative>(
+    config,
+    'Alternatives',
     enabled: config.alternativeLines,
     status: (done, total) =>
         'Phase 3.6: Checking the moves the book leaves out '
         '($done of $total positions)...',
     prepare: () {
       final prober = RefutationProber(
+        pool: pool,
         config: config,
         freqMap: gameDatabase(),
         masterBook: masterDbFor(config)?.bookMoves,
@@ -203,8 +243,9 @@ class CourseBuilder {
   Future<Map<String, EngineTail>> _engineTails(
     List<ExtractedLine> lines,
     TreeBuildConfig config,
-  ) => enrichment.run<EngineTail>(
-    EnrichmentPass.engineTails,
+  ) => _runPass<EngineTail>(
+    config,
+    'Engine tail',
     enabled:
         config.buildMode != BuildMode.stockfishExpectimax &&
         config.engineTailPlies > 0,
@@ -215,7 +256,7 @@ class CourseBuilder {
         ({required isCancelled, required onProgress}) => computeEngineTails(
           lines: lines,
           config: config,
-          pool: StockfishPool.instance,
+          pool: pool,
           isCancelled: isCancelled,
           onProgress: onProgress,
         ),
@@ -227,8 +268,9 @@ class CourseBuilder {
   Future<ImprovementMap> _improvements(
     List<ExtractedLine> lines,
     TreeBuildConfig config,
-  ) => enrichment.run<MasterImprovement>(
-    EnrichmentPass.improvements,
+  ) => _runPass<MasterImprovement>(
+    config,
+    'Improvements',
     enabled: true,
     status: (done, total) =>
         'Phase 3.8: Comparing with master practice '
@@ -237,6 +279,7 @@ class CourseBuilder {
       final db = masterDbFor(config);
       if (db == null) return null;
       final prober = MasterImprovementProber(
+        pool: pool,
         config: config,
         book: db.bookMoves,
         gameById: db.game,

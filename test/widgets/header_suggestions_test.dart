@@ -48,7 +48,7 @@ void main() {
   });
 
   test(
-    'dates and results are suggested as stored, without fabricated values',
+    'dates keep stored spellings; results include unused standard choices',
     () {
       final suggestions = HeaderSuggestions(const [
         (headers: {'Date': '2026.09.09', 'Result': '1/2-1/2'}, pgnText: '*'),
@@ -59,7 +59,8 @@ void main() {
         (value: '2026.??.??', count: 1),
       ]);
       expect(suggestions.matching('Result', '*'), [(value: '*', count: 1)]);
-      expect(suggestions.matching('Result', '0-1'), isEmpty);
+      expect(suggestions.matching('Result', '0-1'), [(value: '0-1', count: 0)]);
+      expect(suggestions.matching('Result', '1-0'), [(value: '1-0', count: 0)]);
     },
   );
 }

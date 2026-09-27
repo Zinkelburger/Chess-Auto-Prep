@@ -2,10 +2,12 @@
 /// The pane owns and disposes its live explorer client and debounce timer.
 library;
 
+import 'package:chess_auto_prep/chess_core/moves/opening_graph.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../controllers/repertoire_layout_prefs.dart';
 import '../../../models/explorer_response.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/master_games_prompt_banner.dart';
@@ -13,9 +15,8 @@ import 'local_reference_pane.dart';
 import 'reference_game_dialog.dart';
 import '../../../services/explorer_game_opener.dart';
 import '../../../models/pgn_game_entry.dart';
-import '../../../services/pgn_parsing_service.dart';
+import '../../../chess_core/pgn/pgn_text.dart';
 import '../../../utils/app_messages.dart';
-import '../../../models/opening_tree.dart';
 import '../../../models/repertoire_line.dart';
 import '../../../widgets/opening_tree_widget.dart';
 import '../../../services/live_explorer_service.dart';
@@ -45,7 +46,7 @@ class RepertoireDatabasePane extends StatefulWidget {
   final int? source;
   final ValueChanged<int>? onSourceChanged;
   final Widget Function(Widget sourceMenu, bool chessDb)? evaluationsBuilder;
-  final OpeningTree? tree;
+  final OpeningGraph? tree;
   final List<RepertoireLine> repertoireLines;
   final ValueChanged<String?>? onHoverTreeMove;
   final VoidCallback? onGoBack;
@@ -85,8 +86,14 @@ class _RepertoireDatabasePaneState extends State<RepertoireDatabasePane> {
   Future<void> _restoreSource() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final source = prefs.getInt('repertoire.reference_source');
-      if (mounted && source != null && source >= 0 && source <= 2) {
+      final source = prefs.getInt(RepertoireLayoutPrefs.databaseSourceKey);
+      // Engine evals and ChessDB are only reachable when the host supplies
+      // their builder; restoring one without it would label the pane for a
+      // source it cannot show.
+      final maxSource = widget.evaluationsBuilder == null
+          ? 2
+          : RepertoireLayoutPrefs.maxDatabaseSource;
+      if (mounted && source != null && source >= 0 && source <= maxSource) {
         setState(() => _selectedSource = source);
       }
     } catch (_) {
@@ -102,7 +109,7 @@ class _RepertoireDatabasePaneState extends State<RepertoireDatabasePane> {
     widget.onSourceChanged?.call(source);
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('repertoire.reference_source', source);
+      await prefs.setInt(RepertoireLayoutPrefs.databaseSourceKey, source);
     } catch (_) {}
   }
 

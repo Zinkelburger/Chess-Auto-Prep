@@ -11,9 +11,14 @@
 ///   400-row wall of every variation in the course.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
-import '../common/item_title.dart';
+import '../../features/training/controllers/training_session_controller.dart';
+import '../../features/training/models/training_settings.dart';
+
+import '../../design_system/components/item_title.dart';
 
 import '../../models/line_status.dart';
 import '../../models/repertoire_line.dart';
@@ -21,7 +26,7 @@ import '../../models/repertoire_review_entry.dart';
 import '../../theme/app_colors.dart';
 import '../common/choice_field.dart';
 import '../../theme/app_text_styles.dart';
-import '../common/list_search_field.dart';
+import '../../design_system/components/list_search_field.dart';
 
 part 'trainer_browser_cards.dart';
 
@@ -56,85 +61,20 @@ extension LineSortModeLabel on LineSortMode {
 }
 
 class TrainerBrowser extends StatefulWidget {
-  /// Name of the loaded repertoire or study — the title when no chapter is
-  /// open.
-  final String title;
+  final TrainingSessionController session;
 
-  /// One muted line under the title (colour, mode). Never a status the user
-  /// has to decode.
-  final String? subtitle;
-
-  final List<RepertoireLine> lines;
-  final Map<String, RepertoireReviewEntry> reviewMap;
-
-  /// Chapter of a line under the current grouping, or null when the line has
-  /// none. Null callback = this source has no chapters at all.
-  final String? Function(RepertoireLine line)? chapterOf;
-
-  /// Chapter currently open (null = the chapter list). Owned by the
-  /// controller so the training queue is scoped to the same chapter.
-  final String? activeChapter;
-  final void Function(String? chapter)? onChapterSelected;
-
-  /// Sentinel [activeChapter] value for lines the chapter scheme misses.
-  final String ungroupedChapter;
-
-  /// Start a Learn / Review run over the current scope. Null = nothing to do
-  /// (the button renders muted and unclickable).
-  final VoidCallback? onLearn;
+  /// Navigation stays with the screen; practice commands belong to [session].
   final VoidCallback? onBrowseChapters;
-  final VoidCallback? onReview;
-
-  /// How many lines one press of each button actually covers, or 0 when the
-  /// run is uncapped. The buttons say what the sitting is, not how big the
-  /// backlog is — "930 untrained" on a bought course reads as a threat.
-  final int learnBatchSize;
-  final int reviewBatchSize;
-
-  /// Train one specific line now.
-  final void Function(RepertoireLine line) onTrainLine;
-
-  /// Open the read-only board + comments view of a line.
   final void Function(RepertoireLine line)? onPreviewLine;
-
-  /// Open the book view of the lines on screen — the open chapter, or the
-  /// whole file when it has no chapters — so it can be read end to end
-  /// instead of one line at a time.
   final void Function(List<RepertoireLine> lines)? onReadLines;
-
-  /// Bulk "I already know these" pass over the visible lines.
-  final Future<void> Function(Set<String> checkedLineIds, Set<String> scope)?
-  onApplyLearnedSelection;
-
-  /// Whether the uncommented intro auto-plays (dims those moves in the row
-  /// preview, since they are shown rather than quizzed).
-  final bool introEnabled;
-  final void Function(RepertoireLine line, bool excluded)? onExcludeLine;
-
-  /// Narrow side-panel rendering: same structure, tighter, no page header.
   final bool dense;
 
   const TrainerBrowser({
     super.key,
-    required this.title,
-    this.subtitle,
-    required this.lines,
-    required this.reviewMap,
-    this.chapterOf,
-    this.activeChapter,
-    this.onChapterSelected,
-    required this.ungroupedChapter,
-    this.onLearn,
+    required this.session,
     this.onBrowseChapters,
-    this.onReview,
-    this.learnBatchSize = 0,
-    this.reviewBatchSize = 0,
-    required this.onTrainLine,
     this.onPreviewLine,
     this.onReadLines,
-    this.onApplyLearnedSelection,
-    this.introEnabled = false,
-    this.onExcludeLine,
     this.dense = false,
   });
 
@@ -143,6 +83,8 @@ class TrainerBrowser extends StatefulWidget {
 }
 
 class _TrainerBrowserState extends State<TrainerBrowser> {
+  TrainingSessionController get session => widget.session;
+
   LineSortMode _sortMode = LineSortMode.training;
 
   /// True while the deliberate "mark lines I already know" pass is active.
@@ -151,6 +93,7 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
   bool _selecting = false;
   bool _savingSelection = false;
   final Set<String> _checked = {};
+  List<RepertoireLine>? _selectionLines;
 
   /// Type-to-filter over whichever list is showing. Deliberately *not* part
   /// of the selection scope: "mark known" keeps applying to the whole
@@ -165,59 +108,64 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
 
   /// Chapter titles in file order; empty when the source has no chapters.
   List<String> get _chapters {
-    final resolve = widget.chapterOf;
-    if (resolve == null) return const [];
+    final resolve = session.chapterOf;
     final seen = <String>{};
     final ordered = <String>[];
-    for (final line in widget.lines) {
+    for (final line in session.lines) {
       final chapter = resolve(line);
       if (chapter != null && seen.add(chapter)) ordered.add(chapter);
     }
     return ordered;
   }
 
-  bool _inChapter(RepertoireLine line, String? chapter) {
-    if (chapter == null) return true;
-    final own = widget.chapterOf?.call(line);
-    return chapter == widget.ungroupedChapter ? own == null : own == chapter;
-  }
-
   /// Lines under the open chapter — what every count, section and selection
   /// pass operates on.
   List<RepertoireLine> get _visibleLines => [
-    for (final line in widget.lines)
-      if (_inChapter(line, widget.activeChapter)) line,
+    for (final line in session.lines)
+      if (session.lineInChapter(line, session.activeChapter)) line,
   ];
 
   void _enterSelection() {
+    if (!mounted) return;
     setState(() {
+      _selectionLines = session.lines;
       _selecting = true;
       _savingSelection = false;
       _checked
         ..clear()
         ..addAll([
           for (final line in _visibleLines)
-            if (lineStatusOf(widget.reviewMap[line.id]) != LineStatus.untrained)
+            if (lineStatusOf(session.reviewMap[line.id]) !=
+                LineStatus.untrained)
               line.id,
         ]);
     });
   }
 
   Future<void> _saveSelection() async {
-    final apply = widget.onApplyLearnedSelection;
-    if (apply == null) return;
+    if (!mounted || _savingSelection) return;
+    if (!identical(_selectionLines, session.lines)) {
+      setState(() => _selecting = false);
+      return;
+    }
     setState(() => _savingSelection = true);
-    await apply(Set.of(_checked), {for (final line in _visibleLines) line.id});
-    if (!mounted) return;
-    setState(() {
-      _selecting = false;
-      _savingSelection = false;
-    });
+    try {
+      await session.applyLearnedSelection(
+        Set.of(_checked),
+        within: {for (final line in _visibleLines) line.id},
+      );
+      if (mounted) setState(() => _selecting = false);
+    } catch (_) {
+      // The session retains the failure and offers a durable reload, not a
+      // second save of a possibly partly committed selection.
+    } finally {
+      if (mounted) setState(() => _savingSelection = false);
+    }
   }
 
   void _openChapter(String? chapter) {
-    if (_selecting) return;
-    widget.onChapterSelected?.call(chapter);
+    if (!mounted || _selecting) return;
+    session.setActiveChapter(chapter);
   }
 
   List<RepertoireLine> _sorted(List<RepertoireLine> lines) {
@@ -230,7 +178,7 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
         // (Dart's sort is not stable on its own).
         final index = {for (int i = 0; i < sorted.length; i++) sorted[i].id: i};
         int rank(RepertoireLine line) =>
-            switch (lineStatusOf(widget.reviewMap[line.id])) {
+            switch (lineStatusOf(session.reviewMap[line.id])) {
               LineStatus.due => 0,
               LineStatus.untrained => 1,
               LineStatus.learned => 2,
@@ -259,10 +207,11 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
     final multipleChapters =
         chapters.length > 1 ||
         (chapters.isNotEmpty &&
-            widget.lines.any((line) => widget.chapterOf?.call(line) == null));
-    final showingChapterList = multipleChapters && widget.activeChapter == null;
+            session.lines.any((line) => session.chapterOf(line) == null));
+    final showingChapterList =
+        multipleChapters && session.activeChapter == null;
     final visible = _visibleLines;
-    final counts = countLines(visible, widget.reviewMap);
+    final counts = countLines(visible, session.reviewMap);
     final matchedChapters = [
       for (final chapter in chapters)
         if (matchesSearch(_search, chapter)) chapter,
@@ -274,25 +223,45 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _BrowserHeader(
-          title: widget.activeChapter == null
-              ? widget.title
-              : _chapterTitle(widget.activeChapter!),
-          subtitle: widget.subtitle,
+          title: session.activeChapter == null
+              ? session.repertoire!.name
+              : _chapterTitle(session.activeChapter!),
+          subtitle: session.sourceIsStudy
+              ? null
+              : '${session.sourceIsBlack ? 'Black' : 'White'} repertoire',
           counts: counts,
           dense: widget.dense,
           onBack: _selecting
               ? null
-              : widget.activeChapter == null || !multipleChapters
-              ? widget.onBrowseChapters
+              : session.activeChapter == null || !multipleChapters
+              ? widget.onBrowseChapters == null
+                    ? null
+                    : () {
+                        if (mounted) widget.onBrowseChapters!();
+                      }
               : () => _openChapter(null),
-          onLearn: _selecting ? null : widget.onLearn,
-          onReview: _selecting ? null : widget.onReview,
+          onLearn: _selecting
+              ? null
+              : () {
+                  if (mounted) session.startLearnSession();
+                },
+          onReview: _selecting
+              ? null
+              : () {
+                  if (mounted) session.startReviewSession();
+                },
           // Read the selected chapter, or the whole source.
           onRead: _selecting || visible.isEmpty || widget.onReadLines == null
               ? null
-              : () => widget.onReadLines!(visible),
-          learnBatchSize: widget.learnBatchSize,
-          reviewBatchSize: widget.reviewBatchSize,
+              : () {
+                  if (mounted) widget.onReadLines!(visible);
+                },
+          learnBatchSize: session.repetitionMode == RepetitionMode.linear
+              ? 0
+              : session.settings.newLinesPerSession,
+          reviewBatchSize: session.repetitionMode == RepetitionMode.linear
+              ? 0
+              : session.settings.reviewsPerSession,
         ),
         const Divider(height: 1),
         _ListToolbar(
@@ -310,11 +279,10 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
           sortMode: _sortMode,
           onSortChanged: showingChapterList || widget.dense
               ? null
-              : (mode) => setState(() => _sortMode = mode),
-          onMarkKnown:
-              _selecting ||
-                  widget.onApplyLearnedSelection == null ||
-                  showingChapterList
+              : (mode) {
+                  if (mounted) setState(() => _sortMode = mode);
+                },
+          onMarkKnown: _selecting || showingChapterList
               ? null
               : _enterSelection,
         ),
@@ -325,13 +293,17 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
             onSave: _saveSelection,
             onCancel: _savingSelection
                 ? null
-                : () => setState(() => _selecting = false),
+                : () {
+                    if (mounted) setState(() => _selecting = false);
+                  },
           ),
         Padding(
           padding: EdgeInsets.fromLTRB(widget.dense ? 8 : 16, 8, 16, 0),
           child: ListSearchField(
             hintText: showingChapterList ? 'Search chapters' : 'Search lines',
-            onChanged: (v) => setState(() => _search = v),
+            onChanged: (v) {
+              if (mounted) setState(() => _search = v);
+            },
           ),
         ),
         Expanded(
@@ -344,19 +316,21 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
   }
 
   String _chapterTitle(String chapter) =>
-      chapter == widget.ungroupedChapter ? 'Other lines' : chapter;
+      chapter == TrainingSessionController.ungroupedChapter
+      ? 'Other lines'
+      : chapter;
 
   /// [chapters] is every chapter (lines are grouped against all of them, or
   /// a filtered-out chapter's lines would have nowhere to land); [shown] is
   /// the subset that survived the search box.
   Widget _buildChapterList(List<String> chapters, List<String> shown) {
-    final resolve = widget.chapterOf;
+    final resolve = session.chapterOf;
     final grouped = <String, List<RepertoireLine>>{
       for (final chapter in chapters) chapter: <RepertoireLine>[],
     };
     final ungrouped = <RepertoireLine>[];
-    for (final line in widget.lines) {
-      final chapter = resolve?.call(line);
+    for (final line in session.lines) {
+      final chapter = resolve(line);
       if (chapter == null) {
         ungrouped.add(line);
       } else {
@@ -373,7 +347,7 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
         for (final chapter in shown)
           _ChapterCard(
             title: chapter,
-            counts: countLines(grouped[chapter]!, widget.reviewMap),
+            counts: countLines(grouped[chapter]!, session.reviewMap),
             lineCount: grouped[chapter]!.length,
             dense: widget.dense,
             onTap: () => _openChapter(chapter),
@@ -381,10 +355,11 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
         if (ungrouped.isNotEmpty && matchesSearch(_search, 'Other lines'))
           _ChapterCard(
             title: 'Other lines',
-            counts: countLines(ungrouped, widget.reviewMap),
+            counts: countLines(ungrouped, session.reviewMap),
             lineCount: ungrouped.length,
             dense: widget.dense,
-            onTap: () => _openChapter(widget.ungroupedChapter),
+            onTap: () =>
+                _openChapter(TrainingSessionController.ungroupedChapter),
           ),
       ],
     );
@@ -412,35 +387,47 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
         final line = lines[index];
         return _LineCard(
           line: line,
-          status: lineStatusOf(widget.reviewMap[line.id]),
-          entry: widget.reviewMap[line.id],
-          onExclude: widget.onExcludeLine == null
-              ? null
-              : () => widget.onExcludeLine!(
-                  line,
-                  !(widget.reviewMap[line.id]?.excluded ?? false),
-                ),
+          status: lineStatusOf(session.reviewMap[line.id]),
+          entry: session.reviewMap[line.id],
+          onExclude: () {
+            if (!mounted) return;
+            unawaited(
+              session.setLineExcluded(
+                line,
+                !(session.reviewMap[line.id]?.excluded ?? false),
+              ),
+            );
+          },
           // A puzzle-start marker auto-plays its prelude in every mode; the
           // comment-based intro only applies when the setting is on.
           introLength:
               line.puzzleStartIndex ??
-              (widget.introEnabled ? line.uncommentedIntroLength : 0),
+              (session.settings.skipToFirstComment
+                  ? line.uncommentedIntroLength
+                  : 0),
           dense: widget.dense,
           selecting: _selecting,
           checked: _checked.contains(line.id),
           onPreview: _selecting || widget.onPreviewLine == null
               ? null
-              : () => widget.onPreviewLine!(line),
+              : () {
+                  if (mounted) widget.onPreviewLine!(line);
+                },
           // A model game is not yours to reproduce; the row opens the book
           // view instead of starting a drill the queue would refuse anyway.
-          onTap: _selecting
-              ? () => setState(() {
-                  if (!_checked.remove(line.id)) _checked.add(line.id);
-                })
-              : line.readOnlyLabel != null ||
-                    (widget.reviewMap[line.id]?.excluded ?? false)
-              ? () => widget.onPreviewLine?.call(line)
-              : () => widget.onTrainLine(line),
+          onTap: () {
+            if (!mounted) return;
+            if (_selecting) {
+              setState(() {
+                if (!_checked.remove(line.id)) _checked.add(line.id);
+              });
+            } else if (line.readOnlyLabel != null ||
+                (session.reviewMap[line.id]?.excluded ?? false)) {
+              widget.onPreviewLine?.call(line);
+            } else {
+              session.startLine(line);
+            }
+          },
         );
       },
     );

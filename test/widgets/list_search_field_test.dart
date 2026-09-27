@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/widgets/common/list_search_field.dart';
+import 'package:chess_auto_prep/design_system/components/list_search_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

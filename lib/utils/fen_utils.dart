@@ -23,7 +23,7 @@
 /// most common allocation.
 library;
 
-import '../services/eval/eval_canonicalize.dart';
+import '../chess_core/position/eval_canonicalize.dart';
 
 const int _space = 0x20;
 const int _w = 0x77;

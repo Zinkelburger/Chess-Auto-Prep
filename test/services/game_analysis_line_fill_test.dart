@@ -4,12 +4,16 @@
 /// that runs when a review-pass graph opens without lines on its mistakes.
 library;
 
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dartchess/dartchess.dart';
 
 import 'package:chess_auto_prep/services/game_analysis_controller.dart';
-import 'package:chess_auto_prep/services/game_eval_annotations.dart';
-import 'package:chess_auto_prep/services/move_eval.dart';
+import 'package:chess_auto_prep/chess_core/analysis/game_eval_annotations.dart';
+import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart';
 
 const _header =
     '[Event "Test"]\n'
@@ -27,11 +31,21 @@ const _series =
     '3. Bb5 {[%eval 0.30,12]} a6 {[%eval 0.30,12]} '
     '4. Ng5 {[%eval -6.00,12] [%pv Ba4,Nf6]} Nf6 {[%eval -0.50,12]} *\n';
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('a stored [%pv] restores the move\'s best line', () async {
-    final controller = GameAnalysisController();
+    final controller = GameAnalysisController(
+      pool: engines.pool,
+      lifecycle: engines.lifecycle,
+    );
     addTearDown(controller.dispose);
     expect(await controller.tryLoadFromPgn(_series), isTrue);
 
@@ -42,7 +56,10 @@ void main() {
   });
 
   test('classified moves without a line are the ones to fill', () async {
-    final controller = GameAnalysisController();
+    final controller = GameAnalysisController(
+      pool: engines.pool,
+      lifecycle: engines.lifecycle,
+    );
     addTearDown(controller.dispose);
     await controller.tryLoadFromPgn(_series);
 
@@ -124,7 +141,10 @@ void main() {
     final movetext = injectBestLines(_series, {
       8: ['Qxg5', 'd3'],
     })!;
-    final controller = GameAnalysisController();
+    final controller = GameAnalysisController(
+      pool: engines.pool,
+      lifecycle: engines.lifecycle,
+    );
     addTearDown(controller.dispose);
     await controller.tryLoadFromPgn('$_header$movetext\n');
     expect(controller.movesMissingBestLine, isEmpty);

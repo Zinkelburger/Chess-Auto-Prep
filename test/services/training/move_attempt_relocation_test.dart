@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
+import '../../support/training_source_fixture.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/repertoire/services/review_progress_repointer.dart';
@@ -23,16 +25,26 @@ void main() {
   });
   tearDown(() => root.delete(recursive: true));
 
-  Future<void> record(String source, String line) => review.recordAttempt(
-    repertoireId: source,
-    lineId: line,
-    moveIndex: 2,
-    fen: 'position',
-    playedSan: 'Bc4',
-    expectedSan: 'Nf3',
-    correct: false,
-    phase: 'drilling',
-  );
+  Future<void> record(String source, String line) async {
+    final file = File(source);
+    await file.parent.create(recursive: true);
+    if (!await file.exists()) await file.writeAsString('1. e4 *');
+    final context = await captureTrainingSource(
+      NativePgnDocumentStore(guardOperation: storage.guardDocumentOperation),
+      source,
+    );
+    return review.recordAttempt(
+      source: context,
+      repertoireId: source,
+      lineId: line,
+      moveIndex: 2,
+      fen: 'position',
+      playedSan: 'Bc4',
+      expectedSan: 'Nf3',
+      correct: false,
+      phase: 'drilling',
+    );
+  }
 
   test(
     'moving selected lines keeps their mistakes and leaves other source identities alone',

@@ -115,8 +115,8 @@ class RepertoireJob extends ChangeNotifier with SafeChangeNotifier {
 
 /// Registry of every job the app has started this session, newest first.
 class JobManager extends ChangeNotifier with SafeChangeNotifier {
-  JobManager._();
-  static final instance = JobManager._();
+  JobManager();
+  static final instance = JobManager();
 
   final List<RepertoireJob> _jobs = [];
 
@@ -134,13 +134,16 @@ class JobManager extends ChangeNotifier with SafeChangeNotifier {
     required JobType type,
     required String label,
     String? subtreeFen,
+    Map<String, dynamic>? configSnapshot,
+    JobStatus status = JobStatus.queued,
   }) {
     final job = RepertoireJob(
       id: '${type.name}_${DateTime.now().millisecondsSinceEpoch}',
       type: type,
       label: label,
       subtreeFen: subtreeFen,
-    );
+      configSnapshot: configSnapshot,
+    )..updateStatus(status);
     _jobs.insert(0, job);
     job.addListener(_onJobChanged);
     notifyListeners();

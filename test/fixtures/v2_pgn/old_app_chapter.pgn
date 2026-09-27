@@ -1,0 +1,30 @@
+// Queen's Gambit
+// Color: White
+// Chapter: 1) Exchange
+// Created on 2026-09-18 21:04:11
+// Root: 1. d4 d5 2. c4
+
+[Event "Queen's Gambit: Repertoire for White"]
+[White "Me"]
+[Black "Training"]
+[Result "*"]
+[LineID "line_MS4gZDQgZDUgMi4gYzQ"]
+[LastReview "2026-09-10T08:12:00.000Z"]
+[Difficulty "2.50"]
+[Interval "6.00"]
+[DueDate "2026-09-16T08:12:00.000Z"]
+[PassCount "3"]
+[FailCount "1"]
+[CumProb "0.42"]
+[Annotator "Chess Auto Prep"]
+
+{Our repertoire against 1... d5. [%expectimax 0.31]} 1. d4 d5 2. c4 e6 {[%eval 0.21] [%clk 0:29:41] [%score 46.4%] [%games 1281] [%humanFrequency 0.37]} 3. cxd5 exd5 (3... Nf6 $6 {Rarely played. [%chessDbMove e2e4]} 4. dxe6) 4. Nc3 *
+
+[Event "Queen's Gambit: Repertoire for White"]
+[White "Me"]
+[Black "Training"]
+[Result "*"]
+[LineID "line_MS4gZDQgZDUgMi4gYzUx"]
+[CumProb "0.31"]
+
+1. d4 d5 2. c4 c6 {The Slav [%eval 0.18] [%pv 3. Nf3 Nf6 4. Nc3 dxc4]} 3. Nf3 *

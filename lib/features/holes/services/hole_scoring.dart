@@ -13,7 +13,7 @@
 /// [TrickCandidateMetrics.fromWhiteCp] — the single flip point.
 library;
 
-import '../../../models/opening_tree.dart';
+import '../../../chess_core/moves/opening_graph.dart';
 import '../../audit/services/engine_position_probe.dart';
 
 /// An attacker-to-move position collected during the walk, candidate for
@@ -21,7 +21,7 @@ import '../../audit/services/engine_position_probe.dart';
 /// position across transpositions (owner branching attenuates, attacker
 /// steering does not).
 class TrickTarget {
-  final OpeningTreeNode node;
+  final OpeningNodeView node;
   final List<String> movePath;
   double reach;
 

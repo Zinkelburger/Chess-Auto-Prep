@@ -13,22 +13,22 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     final built = TrapLineBuilder.build(trap);
     if (built == null) {
       // Stale/corrupt trap file: fall back to the bare sequence.
-      _controller.loadMoveSequence(trap.movesSan);
+      _controller.composeMoves(trap.movesSan);
       _toolsTabController.animateTo(0);
       return;
     }
-    _controller.loadAnnotatedTree(
+    _controller.inspectAnnotatedTree(
       built.tree,
       cursor: built.cursor,
       label: _trapSession.titleFor(trap),
     );
-    if (ply != null) _controller.jumpToMoveIndex(ply);
+    if (ply != null) _controller.board.jumpToMoveIndex(ply);
     _toolsTabController.animateTo(0);
   }
 
-  void _sessionAwareGoBack() => _controller.goBack();
+  void _sessionAwareGoBack() => _controller.board.goBack();
 
-  void _sessionAwareGoForward() => _controller.goForward();
+  void _sessionAwareGoForward() => _controller.board.goForward();
 
   Future<void> _performUndo() async {
     if (!_controller.writer.canUndo) return;
@@ -49,16 +49,16 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   void _resumeInterruptedAudit() {
     final snap = _auditController.interruptedSnapshot;
     if (snap == null) return;
-    final tree = _controller.openingTree;
+    final tree = _controller.document.openingGraph;
     if (tree == null) return;
     _openBottomPane(BottomPaneTab.findings);
     unawaited(
       _auditController.launchResume(
         snapshot: snap,
         tree: tree,
-        isWhiteRepertoire: _controller.isRepertoireWhite,
+        isWhiteRepertoire: _controller.document.isRepertoireWhite,
         jobManager: _jobManager,
-        repertoireLabel: _controller.currentRepertoire?.name,
+        repertoireLabel: _controller.document.currentRepertoire?.name,
         repertoireFilePath: _repertoireFilePath,
       ),
     );
@@ -71,12 +71,12 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
 
   void _onFindingSelected(AuditFinding finding) {
     _navigatingToFinding = true;
-    _controller.navigateToLineMove(finding.movePath);
+    _controller.board.navigateToLineMove(finding.movePath);
     _navigatingToFinding = false;
 
     final preview = EphemeralFindingPreview.forFinding(
       finding,
-      _controller.fen,
+      _controller.board.fen,
     );
     if (preview == null && _ephemeralPreview == null) return;
     setState(() => _ephemeralPreview = preview);
@@ -88,7 +88,7 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
 
     final lineMoves = preview.lineMoves;
     setState(() => _ephemeralPreview = null);
-    _controller.navigateToLineMove(lineMoves);
+    _controller.board.navigateToLineMove(lineMoves);
   }
 
   void _onGenerationChanged() {
@@ -98,19 +98,10 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
       _lastRunWasPositionGeneration = ctrl.isExpectimaxProbe;
     }
 
-    if (ctrl.isGenerating && ctrl.currentJob == null) {
-      final probe = ctrl.isExpectimaxProbe;
-      ctrl.currentJob = _jobManager.createJob(
-        type: JobType.generation,
-        label: probe
-            ? 'Expectimax · ${ctrl.expectimaxProbeLabel}'
-            : _controller.currentRepertoire?.name ?? 'Generation',
-        subtreeFen: _controller.fen,
-      );
-      ctrl.currentJob!.updateStatus(JobStatus.running);
-      // A probe reports inside the expectimax pane that started it; the
-      // Jobs pane is still there for anyone who wants the tile.
-      if (!probe) _openBottomPane(BottomPaneTab.jobs);
+    if (ctrl.isGenerating &&
+        !_generationRouter.wasGenerating &&
+        !ctrl.isExpectimaxProbe) {
+      _openBottomPane(BottomPaneTab.jobs);
     }
 
     context.read<AppState>().setRepertoireGenerating(ctrl.isGenerating);
@@ -135,7 +126,7 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
       unawaited(
         _trapSession.adoptFromBuild(
           ctrl.current?.traps,
-          fallbackFilePath: _controller.currentRepertoire?.filePath,
+          fallbackFilePath: _controller.document.currentRepertoire?.filePath,
         ),
       );
       if (actions.justFinished && !_lastRunWasPositionGeneration) {
@@ -143,16 +134,7 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
       }
     }
 
-    if (actions.shouldCoalesceRebuild) {
-      _genRebuildThrottle ??= Timer(_kGenRebuildInterval, () {
-        _genRebuildThrottle = null;
-        if (mounted) setState(() {});
-      });
-    } else {
-      _genRebuildThrottle?.cancel();
-      _genRebuildThrottle = null;
-      setState(() {});
-    }
+    setState(() {});
   }
 
   void _onAuditChanged() {
@@ -166,7 +148,7 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   }
 
   void _selectLine(RepertoireLine line) {
-    _controller.loadPgnLine(line);
+    _controller.selectLine(line);
     // Bring the PGN editor into view; in the wide layout it is always
     // visible and the lines panel stays put so the user can keep clicking
     // between lines.
@@ -176,18 +158,12 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   }
 
   Future<void> _renameLine(RepertoireLine line, String newTitle) async {
-    final filePath = _controller.currentRepertoire?.filePath;
+    final filePath = _controller.document.currentRepertoire?.filePath;
     if (filePath == null) return;
 
-    final success = await const RepertoireFileEditor().updateLineTitle(
-      filePath,
-      line.id,
-      newTitle,
-    );
+    final success = await _controller.document.renameLine(line, newTitle);
 
-    if (success) {
-      await _controller.loadRepertoire();
-    } else {
+    if (!success) {
       if (mounted) {
         showAppSnackBar(context, AppMessages.renameLineFailed, isError: true);
       }
@@ -195,7 +171,7 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   }
 
   Future<void> _deleteLine(RepertoireLine line) async {
-    final success = await _controller.deleteLine(line);
+    final success = await _controller.document.deleteLine(line);
     if (!success && mounted) {
       showAppSnackBar(context, 'Failed to delete line', isError: true);
     }
@@ -228,7 +204,7 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
         return;
       }
 
-      final success = _controller.setPositionFromFen(fen);
+      final success = _controller.composePosition(fen);
       if (!success && mounted) {
         showAppSnackBar(
           context,
@@ -248,8 +224,71 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     }
   }
 
+  Future<void> _inspectDraftCopy(BuilderCopyUncertainty copy) async {
+    try {
+      final observed = await _controller.inspectCopy(copy);
+      if (!mounted) return;
+      final current = _controller.uncertainCopies
+          .where((item) => item.draftKey == copy.draftKey)
+          .firstOrNull;
+      if (current == null) return;
+      if (observed is! PgnOpened) {
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).builderCopyInspectionFailed,
+          isError: true,
+        );
+        return;
+      }
+      final keep = await showDialog<bool>(
+        context: context,
+        builder: (context) => BuilderCopyInspectionDialog(
+          destination: copy.destination,
+          content: observed.snapshot.content,
+        ),
+      );
+      if (keep == true) await _controller.acknowledgeInspectedCopy(current);
+    } catch (error) {
+      if (mounted) {
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).builderCopyRetained,
+          isError: true,
+        );
+      }
+    }
+  }
+
+  Future<void> _saveCurrentDraft() async {
+    final snapshot = _controller.captureWorkspace();
+    final draft = snapshot.drafts
+        .where((draft) => draft.key == snapshot.activeKey)
+        .firstOrNull;
+    if (draft == null) return;
+    final pick = await _workspaceNavigation.push<ChapterPick>(
+      MaterialPageRoute(
+        builder: (context) => const RepertoireSelectionScreen(),
+      ),
+    );
+    if (!mounted || pick == null) return;
+    try {
+      final chapter = await _resolveChapter(pick.chapter);
+      if (!mounted || chapter == null) return;
+      await _controller.saveDraftToChapter(draft, chapter);
+    } catch (error) {
+      if (mounted) {
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).builderDraftRetained,
+          isError: true,
+        );
+      }
+    }
+    _reclaimFocus();
+  }
+
   Future<void> _showRepertoireSelection() async {
-    final pick = await Navigator.of(context).push<ChapterPick>(
+    final pick = await _workspaceNavigation.push<ChapterPick>(
       MaterialPageRoute(
         builder: (context) => const RepertoireSelectionScreen(),
       ),
@@ -258,12 +297,34 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     // A course chapter picked inside a file opens that file: the outline
     // already shows the chapters.
     if (pick != null && mounted) {
-      final picked = pick.chapter;
-      final chapters = p.extension(picked.filePath).toLowerCase() == '.pgn'
-          ? [picked]
-          : await StorageFactory.instance.listChapters(picked.filePath);
-      if (!mounted || chapters.isEmpty) return;
-      await _controller.setRepertoire(chapters.first);
+      // A selection made now supersedes an older deferred source request.
+      _appState?.takeHandoff<OpenBuilder>();
+      await _openSelectedRepertoire(pick.chapter);
+    }
+    _reclaimFocus();
+  }
+
+  Future<RepertoireMetadata?> _resolveChapter(RepertoireMetadata picked) async {
+    if (p.extension(picked.filePath).toLowerCase() == '.pgn') return picked;
+    final chapters = await context
+        .read<RepertoireCatalogRepository>()
+        .listChapters(picked.filePath);
+    return chapters.firstOrNull;
+  }
+
+  Future<void> _openSelectedRepertoire(RepertoireMetadata picked) async {
+    try {
+      final chapter = await _resolveChapter(picked);
+      if (!mounted || chapter == null) return;
+      await _controller.document.setRepertoire(chapter);
+    } catch (error) {
+      if (mounted) {
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).catalogLoadFailed,
+          isError: true,
+        );
+      }
     }
     _reclaimFocus();
   }
@@ -277,13 +338,15 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     await showRepertoireReloadDialog(
       context,
       reload: () async {
-        final before = List<RepertoireLine>.of(_controller.repertoireLines);
-        await _controller.loadRepertoire();
-        final error = _controller.loadError;
+        final before = List<RepertoireLine>.of(
+          _controller.document.repertoireLines,
+        );
+        await _controller.document.loadRepertoire();
+        final error = _controller.document.loadError;
         if (error != null) return RepertoireReloadSummary.failed(error);
         return RepertoireReloadSummary.between(
           before,
-          _controller.repertoireLines,
+          _controller.document.repertoireLines,
         );
       },
     );
@@ -293,19 +356,19 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   /// Handle moves from the chessboard - board has already made the move and gives us rich info
   void _handleMove(CompletedMove move) {
     if (!mounted) return;
-    _controller.playMove(move.san);
+    _controller.board.playMove(move.san);
   }
 
   /// The position for [fen] — the controller's cached cursor position when
   /// that is what the board shows (the common case), a fresh parse only for
   /// a preview or session FEN.
   Position _positionFromFen(String fen) {
-    if (fen == _controller.fen) return _controller.position;
+    if (fen == _controller.board.fen) return _controller.board.position;
     try {
       return Chess.fromSetup(Setup.parseFen(fen));
     } catch (e) {
       log.d('Invalid FEN "$fen": $e', name: 'RepertoireScreen');
-      return _controller.position;
+      return _controller.board.position;
     }
   }
 
@@ -343,7 +406,7 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     final config = await showCoverageConfigDialog(context);
     if (config == null || !mounted) return;
 
-    final tree = _controller.openingTree;
+    final tree = _controller.document.openingGraph;
     if (tree == null) {
       showAppSnackBar(
         context,
@@ -358,10 +421,10 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
       final result = await _coverageController.runAsJob(
         config: config,
         tree: tree,
-        isWhiteRepertoire: _controller.isRepertoireWhite,
+        isWhiteRepertoire: _controller.document.isRepertoireWhite,
         jobManager: _jobManager,
         label:
-            '${_controller.currentRepertoire?.name ?? 'Repertoire'} coverage',
+            '${_controller.document.currentRepertoire?.name ?? 'Repertoire'} coverage',
       );
       if (result != null && mounted) {
         showAppSnackBar(
@@ -381,12 +444,12 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   }
 
   void _runCoherence() {
-    if (_controller.repertoireLines.length < 5) return;
+    if (_controller.document.repertoireLines.length < 5) return;
     final cs = _generationController.coherenceService;
     unawaited(
       cs.compute(
-        lines: _controller.repertoireLines,
-        playAsWhite: _controller.isRepertoireWhite,
+        lines: _controller.document.repertoireLines,
+        playAsWhite: _controller.document.isRepertoireWhite,
       ),
     );
     // Remove first: _runCoherence fires on every generation notify, and
@@ -401,9 +464,9 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   }
 
   void _trainRepertoire() {
-    if (_controller.currentRepertoire == null) return;
+    if (_controller.document.currentRepertoire == null) return;
     context.read<AppState>().switchToTrainer(
-      repertoirePath: _controller.currentRepertoire!.filePath,
+      repertoirePath: _controller.document.currentRepertoire!.filePath,
     );
   }
 
@@ -411,34 +474,26 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   /// same act with two sources, so they belong in one window rather than as
   /// two menu items that make the user commit before they see either.
   Future<void> _importPgn() async {
+    final destination = _controller.document.currentRepertoire;
+    var added = 0;
     final result = await showPgnImportDialog(
       context,
       confirmLabel: 'Add to repertoire',
+      onConfirm: (result) async {
+        if (!mounted ||
+            !identical(_controller.document.currentRepertoire, destination)) {
+          throw StateError('The selected chapter changed.');
+        }
+        added = await _controller.document.importPgnContent(result.pgnContent);
+      },
     );
     if (result == null || !mounted) return;
-
-    final added = await _controller.importPgnContent(result.pgnContent);
-    if (!mounted) return;
 
     showAppSnackBar(
       context,
       'Added $added line${added == 1 ? '' : 's'} to repertoire.',
     );
     _reclaimFocus();
-  }
-
-  /// Loads the sibling chapters of the active repertoire folder so the toolbar
-  /// breadcrumb can offer one-click switching.
-  Future<void> _loadChapters() async {
-    final current = _controller.currentRepertoire;
-    if (current == null) return;
-    try {
-      final chapters = await _chapterStore.listSiblings(current.filePath);
-      if (!mounted) return;
-      setState(() => _chapters = chapters);
-    } catch (e) {
-      log.w('Load chapters failed', name: 'RepertoireScreen', error: e);
-    }
   }
 
   /// Confirm before throwing a paused build away — the partial tree is deleted
@@ -480,28 +535,28 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   /// chapter's file path is `.../<repertoire>/<chapter>.pgn`; its parent
   /// directory is the repertoire folder.
   Future<void> _showChapterList() async {
-    final current = _controller.currentRepertoire;
+    final current = _controller.document.currentRepertoire;
     if (current == null) return;
-    final folder = _chapterStore.folderMetadata(current.filePath);
+    final generation = _controller.document.loadGeneration;
+    final folderPath = p.dirname(current.filePath);
+    final folder = RepertoireMetadata(
+      filePath: folderPath,
+      name: p.basename(folderPath),
+      lastModified: DateTime.now(),
+    );
 
-    final chapter = (await Navigator.of(context).push<ChapterPick>(
+    final chapter = (await _workspaceNavigation.push<ChapterPick>(
       MaterialPageRoute(
         builder: (_) => RepertoireChaptersScreen(repertoire: folder),
       ),
     ))?.chapter;
 
-    if (chapter != null && mounted && chapter.filePath != current.filePath) {
-      await _controller.setRepertoire(chapter);
+    if (!mounted || !_controller.document.isCurrent(generation)) return;
+    if (chapter != null) {
+      _appState?.takeHandoff<OpenBuilder>();
+      await _openChapterPath(chapter.filePath);
     }
-    // Chapters may have been added/renamed/deleted without switching.
-    await _loadChapters();
-    _reclaimFocus();
-  }
-
-  /// Switches the active chapter from the breadcrumb dropdown.
-  Future<void> _onChapterSelected(RepertoireMetadata chapter) async {
-    if (chapter.filePath == _controller.currentRepertoire?.filePath) return;
-    await _controller.setRepertoire(chapter);
+    if (mounted) unawaited(_outline.refresh());
     _reclaimFocus();
   }
 
@@ -509,10 +564,12 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   /// to it, without the full-screen chapter manager. The chapter inherits the
   /// repertoire's color from the currently loaded chapter.
   Future<void> _addChapterInline() async {
-    final current = _controller.currentRepertoire;
+    final current = _controller.document.currentRepertoire;
     if (current == null) return;
 
-    final taken = {for (final c in _chapters) c.name.toLowerCase()};
+    final generation = _controller.document.loadGeneration;
+    final isWhite = _controller.document.isRepertoireWhite;
+    final folderPath = p.dirname(current.filePath);
     final name = await showNameEntryDialog(
       context,
       title: 'New chapter',
@@ -520,27 +577,28 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
       confirmLabel: 'Create',
       prompt: 'Name this chapter (e.g. a variation or system):',
       allowUnchanged: true,
-      validate: (name) =>
-          RepertoireOutlineService.validateName(name) ??
-          (taken.contains(name.toLowerCase())
-              ? 'A chapter named "$name" already exists.'
-              : null),
+      validate: RepertoireOutlineService.validateName,
     );
-    if (name == null || !mounted) return;
-
-    final result = await _chapterStore.create(
-      folderPath: _chapterStore.folderOf(current.filePath),
-      name: name,
-      isWhite: _controller.isRepertoireWhite,
-    );
-    if (!mounted) return;
-    if (!result.succeeded) {
-      showAppSnackBar(context, result.error!, isError: true);
+    if (name == null ||
+        !mounted ||
+        !_controller.document.isCurrent(generation)) {
       return;
     }
-
-    await _controller.setRepertoire(result.chapter!);
-    await _loadChapters();
+    final result = await context
+        .read<RepertoireCatalogRepository>()
+        .createChapter(folderPath: folderPath, name: name, isWhite: isWhite);
+    if (!mounted || !_controller.document.isCurrent(generation)) return;
+    if (result case PgnSaved(:final after)) {
+      await _openChapterPath(after.path);
+    } else {
+      showAppSnackBar(context, switch (result) {
+        PgnNameCollision() => 'That chapter already exists.',
+        PgnWriteUncertain(:final recoveryPath) =>
+          'Chapter creation needs verification: ${p.join(folderPath, "$name.pgn")}.'
+              '${recoveryPath == null ? "" : " Recovery: $recoveryPath."} Do not retry.',
+        _ => 'Could not create chapter.',
+      }, isError: true);
+    }
     _reclaimFocus();
   }
 }

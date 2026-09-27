@@ -1,12 +1,15 @@
+import 'package:chess_auto_prep/features/training/models/training_history_operation.dart';
+import '../../support/training_source_fixture.dart';
+import 'package:chess_auto_prep/features/training/models/training_source_context.dart';
 import 'package:chess_auto_prep/models/repertoire_line.dart';
 import 'package:chess_auto_prep/models/repertoire_move_progress.dart';
 import 'package:chess_auto_prep/models/repertoire_review_entry.dart';
 import 'package:chess_auto_prep/models/repertoire_review_history_entry.dart';
-import 'package:chess_auto_prep/models/training_settings.dart';
+import 'package:chess_auto_prep/features/training/models/training_settings.dart';
 import 'package:chess_auto_prep/services/repertoire_review_service.dart';
 import 'package:chess_auto_prep/services/repertoire_file_editor.dart';
 import 'package:chess_auto_prep/services/repertoire_service.dart';
-import 'package:chess_auto_prep/services/training/review_progress_store.dart';
+import 'package:chess_auto_prep/features/training/controllers/review_progress_store.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -37,6 +40,7 @@ class _FakeReviewService extends RepertoireReviewService {
   @override
   Future<void> saveAll(
     List<RepertoireReviewEntry> entries, {
+    required TrainingSourceContext source,
     String? repertoireId,
   }) async {
     saved = List.of(entries);
@@ -46,13 +50,18 @@ class _FakeReviewService extends RepertoireReviewService {
   @override
   Future<void> saveMoveProgress(
     List<RepertoireMoveProgress> entries, {
+    required TrainingSourceContext source,
     String? repertoireId,
   }) async {
     savedProgress = List.of(entries);
   }
 
   @override
-  Future<void> appendHistory(List<RepertoireReviewHistoryEntry> entries) async {
+  Future<void> appendHistory(
+    List<RepertoireReviewHistoryEntry> entries, {
+    required TrainingSourceContext source,
+    required TrainingHistoryOperation operation,
+  }) async {
     history.addAll(entries);
   }
 }
@@ -78,12 +87,21 @@ void main() {
     repertoire = _FakeRepertoireService();
     settings = TrainingSettings();
     repertoireId = '/rep.pgn';
-    store = ReviewProgressStore(
-      reviewService: review,
-      repertoireService: repertoire,
-      settings: () => settings,
-      repertoireId: () => repertoireId,
-    );
+    store =
+        ReviewProgressStore(
+            reviewService: review,
+            headers: repertoire.files,
+            settings: () => settings,
+            repertoireId: () => repertoireId,
+          )
+          ..sources = scriptedTrainingSources([
+            '/a,b.pgn',
+            '/course/one.pgn',
+            '/first.pgn',
+            '/other.pgn',
+            '/rep.pgn',
+            '/second.pgn',
+          ]);
   });
 
   tearDown(() => store.dispose());
@@ -94,7 +112,12 @@ void main() {
       final scoped = line('same').inSource('/course/one.pgn', 'One');
       repertoireId = '/course';
       store.recordMove(scoped, 0, wasCorrect: false);
-      await store.recordRating(scoped, ReviewRating.again, hadMistake: true);
+      await store.recordRating(
+        scoped,
+        ReviewRating.again,
+        attempt: Object(),
+        hadMistake: true,
+      );
       await store.flushHeaders();
       expect(store.byLine.keys, [scoped.id]);
       expect(review.saved.single.repertoireId, '/course/one.pgn');
@@ -156,38 +179,73 @@ void main() {
 
   group('recordRating', () {
     test('creates an entry for a line seen for the first time', () async {
-      await store.recordRating(line('A'), ReviewRating.good, hadMistake: false);
+      await store.recordRating(
+        line('A'),
+        ReviewRating.good,
+        attempt: Object(),
+        hadMistake: false,
+      );
       expect(store.byLine['A'], isNotNull);
       expect(store.byLine['A']!.lineName, 'Line A');
     });
 
     test('a clean pass increments passCount only', () async {
-      await store.recordRating(line('A'), ReviewRating.good, hadMistake: false);
+      await store.recordRating(
+        line('A'),
+        ReviewRating.good,
+        attempt: Object(),
+        hadMistake: false,
+      );
       expect(store.byLine['A']!.passCount, 1);
       expect(store.byLine['A']!.failCount, 0);
     });
 
     test('a line with a mistake increments failCount only', () async {
-      await store.recordRating(line('A'), ReviewRating.again, hadMistake: true);
+      await store.recordRating(
+        line('A'),
+        ReviewRating.again,
+        attempt: Object(),
+        hadMistake: true,
+      );
       expect(store.byLine['A']!.passCount, 0);
       expect(store.byLine['A']!.failCount, 1);
     });
 
     test('schedules the line — it is no longer new', () async {
-      await store.recordRating(line('A'), ReviewRating.good, hadMistake: false);
+      await store.recordRating(
+        line('A'),
+        ReviewRating.good,
+        attempt: Object(),
+        hadMistake: false,
+      );
       expect(store.byLine['A']!.isNew, isFalse);
     });
 
     test('writes a history row naming the rating', () async {
-      await store.recordRating(line('A'), ReviewRating.hard, hadMistake: false);
+      await store.recordRating(
+        line('A'),
+        ReviewRating.hard,
+        attempt: Object(),
+        hadMistake: false,
+      );
       expect(review.history, hasLength(1));
       expect(review.history.single.rating, 'hard');
       expect(review.history.single.sessionType, 'trainer');
     });
 
     test('pushes the schedule into the PGN headers, batched', () async {
-      await store.recordRating(line('A'), ReviewRating.good, hadMistake: false);
-      await store.recordRating(line('B'), ReviewRating.good, hadMistake: false);
+      await store.recordRating(
+        line('A'),
+        ReviewRating.good,
+        attempt: Object(),
+        hadMistake: false,
+      );
+      await store.recordRating(
+        line('B'),
+        ReviewRating.good,
+        attempt: Object(),
+        hadMistake: false,
+      );
       expect(
         repertoire.headerUpdates,
         isEmpty,
@@ -206,10 +264,28 @@ void main() {
     });
 
     test('a source switch flushes what the old file was owed', () async {
-      await store.recordRating(line('A'), ReviewRating.good, hadMistake: false);
+      await store.recordRating(
+        line('A'),
+        ReviewRating.good,
+        attempt: Object(),
+        hadMistake: false,
+      );
       final oldPath = repertoireId;
+      await store.prepareSourceLoad();
       repertoireId = '/other.pgn';
-      store.adopt(byLine: {}, moveProgress: {}, otherRepertoires: []);
+      store.adopt(
+        sources: scriptedTrainingSources([
+          '/a,b.pgn',
+          '/course/one.pgn',
+          '/first.pgn',
+          '/other.pgn',
+          '/rep.pgn',
+          '/second.pgn',
+        ]),
+        byLine: {},
+        moveProgress: {},
+        otherRepertoires: [],
+      );
       await pumpEventQueue();
 
       expect(repertoire.headerUpdates, ['A']);
@@ -224,11 +300,24 @@ void main() {
           lineId: 'Z',
           lineName: 'Other',
         );
-        store.adopt(byLine: {}, moveProgress: {}, otherRepertoires: [other]);
+        store.adopt(
+          sources: scriptedTrainingSources([
+            '/a,b.pgn',
+            '/course/one.pgn',
+            '/first.pgn',
+            '/other.pgn',
+            '/rep.pgn',
+            '/second.pgn',
+          ]),
+          byLine: {},
+          moveProgress: {},
+          otherRepertoires: [other],
+        );
 
         await store.recordRating(
           line('A'),
           ReviewRating.good,
+          attempt: Object(),
           hadMistake: false,
         );
         expect(
@@ -243,7 +332,11 @@ void main() {
 
   group('recordCompletion (linear mode)', () {
     test('bumps the tallies but leaves the line unscheduled', () async {
-      await store.recordCompletion(line('A'), hadMistake: false);
+      await store.recordCompletion(
+        line('A'),
+        attempt: Object(),
+        hadMistake: false,
+      );
       expect(store.byLine['A']!.passCount, 1);
       expect(
         store.byLine['A']!.isNew,
@@ -253,14 +346,22 @@ void main() {
     });
 
     test('writes a history row with no rating', () async {
-      await store.recordCompletion(line('A'), hadMistake: true);
+      await store.recordCompletion(
+        line('A'),
+        attempt: Object(),
+        hadMistake: true,
+      );
       expect(review.history.single.rating, '');
       expect(review.history.single.sessionType, 'linear');
       expect(review.history.single.hadMistake, isTrue);
     });
 
     test('never touches the PGN headers', () async {
-      await store.recordCompletion(line('A'), hadMistake: false);
+      await store.recordCompletion(
+        line('A'),
+        attempt: Object(),
+        hadMistake: false,
+      );
       expect(repertoire.headerUpdates, isEmpty);
     });
   });
@@ -298,8 +399,18 @@ void main() {
     });
 
     test('keeps pass/fail history across a reset to new', () async {
-      await store.recordRating(line('A'), ReviewRating.good, hadMistake: false);
-      await store.recordRating(line('A'), ReviewRating.again, hadMistake: true);
+      await store.recordRating(
+        line('A'),
+        ReviewRating.good,
+        attempt: Object(),
+        hadMistake: false,
+      );
+      await store.recordRating(
+        line('A'),
+        ReviewRating.again,
+        attempt: Object(),
+        hadMistake: true,
+      );
       expect(store.byLine['A']!.passCount, 1);
       expect(store.byLine['A']!.failCount, 1);
 
@@ -340,14 +451,13 @@ void main() {
       expect(repertoire.headerUpdates, isEmpty);
     });
 
-    test('repaints before writing to disk', () async {
-      final order = <String>[];
+    test('publishes learned state after acknowledged persistence', () async {
       review.saved = [];
-      await store.applyLearnedSelection(lines, {
-        'A',
-      }, onApplied: () => order.add('repaint'));
-      order.add('written');
-      expect(order, ['repaint', 'written']);
+      final saving = store.applyLearnedSelection(lines, {'A'});
+      expect(store.byLine['A']?.isNew ?? true, isTrue);
+      await saving;
+      expect(store.byLine['A']!.isNew, isFalse);
+      expect(review.saved, isNotEmpty);
     });
   });
 
@@ -401,17 +511,36 @@ void main() {
 
   test('supplier reads follow the owner’s current repertoire id', () async {
     var id = '/first.pgn';
-    final s = ReviewProgressStore(
-      reviewService: review,
-      repertoireService: repertoire,
-      settings: () => settings,
-      repertoireId: () => id,
+    final s =
+        ReviewProgressStore(
+            reviewService: review,
+            headers: repertoire.files,
+            settings: () => settings,
+            repertoireId: () => id,
+          )
+          ..sources = scriptedTrainingSources([
+            '/a,b.pgn',
+            '/course/one.pgn',
+            '/first.pgn',
+            '/other.pgn',
+            '/rep.pgn',
+            '/second.pgn',
+          ]);
+    await s.recordRating(
+      line('A'),
+      ReviewRating.good,
+      attempt: Object(),
+      hadMistake: false,
     );
-    await s.recordRating(line('A'), ReviewRating.good, hadMistake: false);
     expect(s.byLine['A']!.repertoireId, '/first.pgn');
 
     id = '/second.pgn';
-    await s.recordRating(line('B'), ReviewRating.good, hadMistake: false);
+    await s.recordRating(
+      line('B'),
+      ReviewRating.good,
+      attempt: Object(),
+      hadMistake: false,
+    );
     expect(s.byLine['B']!.repertoireId, '/second.pgn');
   });
 }

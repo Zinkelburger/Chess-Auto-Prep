@@ -6,10 +6,10 @@
 library;
 
 import '../../utils/pgn_nags.dart';
+import 'pgn_text_styles.dart';
 import 'package:flutter/material.dart';
-import '../../theme/app_text_styles.dart';
-import '../../theme/app_colors.dart';
-import '../../utils/san_display.dart';
+import '../../design_system/theme/app_typography.dart';
+import 'package:chess_auto_prep/features/settings/widgets/san_display.dart';
 
 /// Borderless move states shared by the editor, mainline and sidelines.
 /// A transparent border keeps the existing one-pixel inset in every state;
@@ -20,22 +20,18 @@ abstract final class PgnMoveDecorations {
     border: Border.fromBorderSide(BorderSide(color: Colors.transparent)),
   );
 
-  static final hover = idle.copyWith(color: AppColors.pgnMoveHoverBg);
-  static final current = idle.copyWith(color: AppColors.pgnMoveCurrentBg);
-  static final ephemeral = idle.copyWith(color: AppColors.pgnEphemeralBg);
-  static final contextPath = idle.copyWith(
-    color: AppColors.pgnMoveCurrentBg.withValues(alpha: 0.35),
-  );
-
-  static BoxDecoration resolve({
+  static BoxDecoration resolve(
+    BuildContext context, {
     bool selected = false,
     bool hovered = false,
-    bool isEphemeral = false,
     bool onContextPath = false,
   }) {
-    if (selected) return isEphemeral ? ephemeral : current;
-    if (hovered) return hover;
-    return onContextPath ? contextPath : idle;
+    final colors = Theme.of(context).colorScheme;
+    if (selected) return idle.copyWith(color: colors.primaryContainer);
+    if (hovered) return idle.copyWith(color: colors.surfaceContainerHighest);
+    return onContextPath
+        ? idle.copyWith(color: colors.primaryContainer.withValues(alpha: 0.35))
+        : idle;
   }
 }
 
@@ -157,6 +153,7 @@ class GlyphButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Tooltip(
       message: name,
       waitDuration: const Duration(milliseconds: 400),
@@ -170,9 +167,7 @@ class GlyphButton extends StatelessWidget {
             color: isActive ? color.withValues(alpha: 0.2) : null,
             borderRadius: BorderRadius.circular(5),
             border: Border.all(
-              color: isActive
-                  ? color.withValues(alpha: 0.7)
-                  : AppColors.outline,
+              color: isActive ? color.withValues(alpha: 0.7) : colors.outline,
             ),
           ),
           child: Text(
@@ -180,10 +175,19 @@ class GlyphButton extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.bold,
-              fontFamily: AppTextStyles.monoFamily,
+              fontFamily: AppTypography.monoFamily,
               color: onTap == null
-                  ? AppColors.onSurfaceDisabled
-                  : (isActive ? color : AppColors.ink),
+                  ? colors.onSurfaceVariant
+                  : (isActive
+                        ? PgnTextStyles.annotationInk(
+                            context,
+                            color,
+                            background: Color.alphaBlend(
+                              color.withValues(alpha: 0.2),
+                              colors.surface,
+                            ),
+                          )
+                        : colors.onSurface),
             ),
           ),
         ),

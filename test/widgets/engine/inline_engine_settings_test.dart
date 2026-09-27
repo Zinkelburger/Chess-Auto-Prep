@@ -1,32 +1,40 @@
-import 'package:chess_auto_prep/models/bulk_analysis_settings.dart';
+import '../../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:provider/provider.dart';
-import 'package:chess_auto_prep/models/engine_settings.dart';
 import 'package:chess_auto_prep/widgets/analysis/stockfish_settings_dialog.dart';
 import 'package:chess_auto_prep/widgets/engine/inline_engine_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+RuntimeSettings? _runtimeSettings;
+RuntimeSettings get runtimeSettings =>
+    _runtimeSettings ??= testRuntimeSettings();
 void main() {
+  setUp(() {
+    _runtimeSettings = null;
+    addTearDown(() => _runtimeSettings?.dispose());
+  });
   testWidgets('engine shortcut edits shared settings and returns to its host', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
-    final engine = EngineSettings.instance;
-    final bulk = BulkAnalysisSettings.instance;
-    final boardBefore = engine.depth;
-    final bulkBefore = bulk.depth;
-    addTearDown(() async {
-      engine.depth = boardBefore;
-      await bulk.setDepth(bulkBefore);
-    });
+    final engine = runtimeSettings.engine;
+    final bulk = runtimeSettings.bulk;
     engine.depth = 12;
     await bulk.setDepth(18);
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      runtimeSettings,
       ChangeNotifierProvider(
         create: (_) => AppState(),
-        child: const MaterialApp(home: Scaffold(body: InlineEngineSettings())),
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: InlineEngineSettings()),
+        ),
       ),
     );
     await tester.tap(find.byTooltip('Engine settings'));

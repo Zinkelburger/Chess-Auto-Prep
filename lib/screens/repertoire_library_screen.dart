@@ -1,4 +1,11 @@
+import '../features/repertoire/services/repertoire_outline_service.dart';
 import 'dart:async';
+import '../features/repertoires/repositories/repertoire_catalog_repository.dart';
+import '../app/legacy_theme_boundary.dart';
+import '../features/repertoires/controllers/repertoire_catalog_controller.dart';
+import '../design_system/layout/workspace_navigation_controller.dart';
+import '../design_system/layout/workspace_shell.dart';
+import '../app/navigation/workspace_destination_toolbar.dart';
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -7,8 +14,8 @@ import 'package:provider/provider.dart';
 import '../core/app_state.dart';
 import '../features/repertoire/controllers/repertoire_outline_controller.dart';
 import '../features/repertoire/widgets/repertoire_outline_panel.dart';
-import '../models/repertoire_metadata.dart';
-import '../services/pgn_parsing_service.dart' as pgn;
+import '../features/repertoires/models/repertoire_metadata.dart';
+import '../chess_core/pgn/pgn_text.dart' as pgn;
 import '../services/storage/storage_factory.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
@@ -16,7 +23,7 @@ import '../widgets/app_breadcrumb_trail.dart';
 import '../widgets/app_mode_switcher.dart';
 import '../widgets/app_overflow_menu.dart';
 import '../widgets/app_settings_button.dart';
-import '../widgets/repertoire_list_body.dart';
+import '../features/repertoires/widgets/repertoire_list_body.dart';
 
 /// Material management independent of an editor, engine or training session.
 /// Structural edits use the same controller and Undo as the builder outline.
@@ -29,17 +36,28 @@ class RepertoireLibraryScreen extends StatefulWidget {
 }
 
 class _RepertoireLibraryScreenState extends State<RepertoireLibraryScreen> {
-  late final RepertoireOutlineController _outline = RepertoireOutlineController(
-    onActiveChapterMoved: (path) {
-      if (!mounted) return;
-      _outline.setActiveChapter(path);
-    },
-  );
+  late final RepertoireOutlineController _outline;
   AppState? _app;
   AppMode? _lastMode;
   RepertoireMetadata? _folder;
-  int _revision = 0;
+  final _workspaceNavigation = WorkspaceNavigationController();
+
+  void _refreshCatalog() =>
+      unawaited(context.read<RepertoireCatalogController>().refresh());
   int _openEpoch = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _outline = RepertoireOutlineController(
+      service: context.read<RepertoireOutlineService>(),
+      catalog: context.read<RepertoireCatalogRepository>(),
+      onActiveChapterMoved: (path) {
+        if (!mounted) return;
+        _outline.setActiveChapter(path);
+      },
+    );
+  }
 
   @override
   void didChangeDependencies() {
@@ -60,7 +78,7 @@ class _RepertoireLibraryScreenState extends State<RepertoireLibraryScreen> {
     // Other views can import, rename and edit the same material while this
     // IndexedStack child is parked. Refresh only on re-entry.
     if (_folder == null) {
-      setState(() => _revision++);
+      _refreshCatalog();
     } else {
       unawaited(_outline.refresh());
     }
@@ -121,7 +139,7 @@ class _RepertoireLibraryScreenState extends State<RepertoireLibraryScreen> {
     _outline.close();
     setState(() {
       _folder = null;
-      _revision++;
+      _refreshCatalog();
     });
   }
 
@@ -144,11 +162,17 @@ class _RepertoireLibraryScreenState extends State<RepertoireLibraryScreen> {
   void dispose() {
     _app?.removeListener(_modeChanged);
     _outline.dispose();
+    _workspaceNavigation.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => WorkspaceShell(
+    navigation: _workspaceNavigation,
+    destinationAppBar: WorkspaceDestinationToolbar(
+      mode: AppMode.repertoireLibrary,
+      navigation: _workspaceNavigation,
+    ),
     appBar: AppBar(
       titleSpacing: 16,
       title: AppBarTitleWithTrail(
@@ -176,7 +200,7 @@ class _RepertoireLibraryScreenState extends State<RepertoireLibraryScreen> {
               onRun: () {
                 if (!mounted) return;
                 if (_folder == null) {
-                  setState(() => _revision++);
+                  _refreshCatalog();
                 } else {
                   unawaited(_outline.refresh());
                 }
@@ -188,103 +212,116 @@ class _RepertoireLibraryScreenState extends State<RepertoireLibraryScreen> {
         const AppSettingsButton(mode: AppMode.repertoireLibrary),
       ],
     ),
-    body: _folder == null
-        ? RepertoireListBody(
-            key: ValueKey(_revision),
+    body: IndexedStack(
+      index: _folder == null ? 0 : 1,
+      children: [
+        ExcludeFocus(
+          excluding: _folder != null,
+          child: RepertoireListBody(
             onRepertoireSelected: (folder) => unawaited(_openFolder(folder)),
             onSelected: _openChapterFolder,
-          )
-        : Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1040),
-              child: ListenableBuilder(
-                listenable: _outline,
-                builder: (context, _) {
-                  final path = _outline.activeChapterPath;
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Organize your repertoire',
-                              style: AppTextStyles.title,
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Drag chapters into folders and lines between chapters. Right-click for more actions.',
-                              style: AppTextStyles.muted,
-                            ),
-                            const SizedBox(height: 16),
-                            Wrap(
-                              spacing: 12,
-                              runSpacing: 8,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                FilledButton.icon(
-                                  onPressed: () => _train(_folder!.filePath),
-                                  icon: const Icon(Icons.school_outlined),
-                                  label: const Text('Train repertoire'),
-                                ),
-                                if (path != null) ...[
-                                  OutlinedButton.icon(
-                                    onPressed: () => _read(path),
-                                    icon: const Icon(Icons.menu_book_outlined),
-                                    label: const Text('Read chapter'),
-                                  ),
-                                  OutlinedButton.icon(
-                                    onPressed: () => _train(path),
+          ),
+        ),
+        if (_folder != null)
+          LegacyThemeBoundary(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1040),
+                child: ListenableBuilder(
+                  listenable: _outline,
+                  builder: (context, _) {
+                    final path = _outline.activeChapterPath;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Organize your repertoire',
+                                style: AppTextStyles.title,
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Drag chapters into folders and lines between chapters. Right-click for more actions.',
+                                style: AppTextStyles.muted,
+                              ),
+                              const SizedBox(height: 16),
+                              Wrap(
+                                spacing: 12,
+                                runSpacing: 8,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  FilledButton.icon(
+                                    onPressed: () => _train(_folder!.filePath),
                                     icon: const Icon(Icons.school_outlined),
-                                    label: const Text('Train chapter'),
+                                    label: const Text('Train repertoire'),
                                   ),
-                                  TextButton.icon(
-                                    onPressed: () {
-                                      if (!mounted) return;
-                                      context.read<AppState>().handOff(
-                                        OpenBuilder(
-                                          repertoirePath: path,
-                                          reloadFromDisk: true,
-                                        ),
-                                      );
-                                    },
-                                    icon: const Icon(Icons.edit_outlined),
-                                    label: const Text('Build chapter'),
-                                  ),
-                                  Text(
-                                    p.basenameWithoutExtension(path),
-                                    style: AppTextStyles.muted,
-                                  ),
+                                  if (path != null) ...[
+                                    OutlinedButton.icon(
+                                      onPressed: () => _read(path),
+                                      icon: const Icon(
+                                        Icons.menu_book_outlined,
+                                      ),
+                                      label: const Text('Read chapter'),
+                                    ),
+                                    OutlinedButton.icon(
+                                      onPressed: () => _train(path),
+                                      icon: const Icon(Icons.school_outlined),
+                                      label: const Text('Train chapter'),
+                                    ),
+                                    TextButton.icon(
+                                      onPressed: () {
+                                        if (!mounted) return;
+                                        context.read<AppState>().handOff(
+                                          OpenBuilder(
+                                            repertoirePath: path,
+                                            reloadFromDisk: true,
+                                          ),
+                                        );
+                                      },
+                                      icon: const Icon(Icons.edit_outlined),
+                                      label: const Text('Build chapter'),
+                                    ),
+                                    Text(
+                                      p.basenameWithoutExtension(path),
+                                      style: AppTextStyles.muted,
+                                    ),
+                                  ],
                                 ],
-                              ],
-                            ),
-                          ],
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const Divider(height: 1),
-                      Expanded(
-                        child: RepertoireOutlinePanel(
-                          controller: _outline,
-                          showPositionFilter: false,
-                          onOpenChapter: (path) {
-                            if (!mounted) return;
-                            _outline.setActiveChapter(path);
-                          },
-                          onOpenLine: (path, line) =>
-                              _read(path, gameIndex: line.gameIndex),
-                          onTrainChapter: (path) => _train(path),
-                          onTrainLine: (path, line) =>
-                              _train(path, lineId: line.id),
+                        const Divider(height: 1),
+                        Expanded(
+                          child: RepertoireOutlinePanel(
+                            controller: _outline,
+                            showPositionFilter: false,
+                            onOpenChapter: (path) {
+                              if (!mounted) return;
+                              _outline.setActiveChapter(path);
+                            },
+                            onOpenLine: (path, line) =>
+                                _read(path, gameIndex: line.gameIndex),
+                            onTrainChapter: (path) => _train(path),
+                            onTrainLine: (path, line) =>
+                                _train(path, lineId: line.id),
+                          ),
                         ),
-                      ),
-                    ],
-                  );
-                },
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
-          ),
+          )
+        else
+          const SizedBox.shrink(),
+      ],
+    ),
   );
 }

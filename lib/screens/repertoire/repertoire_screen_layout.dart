@@ -42,11 +42,10 @@ mixin _RepertoireLayout
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _buildOutlineSidePanel(outlineWidth),
-              RepertoireLinesPanelDragHandle(
+              RepertoireOutlineResizeHandle(
                 currentWidth: outlineWidth,
                 minWidth: RepertoireLayoutPrefs.minPanelWidth,
                 maxWidth: constraints.maxWidth * .24,
-                panelOnLeft: true,
                 onWidthChanged: _layout.dragOutlinePanelWidth,
                 onDragEnd: _layout.saveOutlinePanelWidth,
               ),
@@ -71,17 +70,8 @@ mixin _RepertoireLayout
   /// The left column: the outline, collapsible to a strip.
   Widget _buildOutlineSidePanel(double width) {
     if (_layout.outlinePanelCollapsed) {
-      return RepertoireLinesSidePanel(
-        collapsed: true,
-        width: width,
-        lineCount: _controller.repertoireLines.length,
-        tabController: _sidePanelTabController,
-        tabs: const [],
-        stripLabel: 'Chapters',
-        hideTooltip: 'Hide chapters',
-        showTooltip: 'Show chapters',
-        onCollapsedChanged: _layout.setOutlinePanelCollapsed,
-        children: const [],
+      return RepertoireOutlineStrip(
+        onExpand: () => _layout.setOutlinePanelCollapsed(false),
       );
     }
     return SizedBox(
@@ -116,21 +106,21 @@ mixin _RepertoireLayout
                 ),
               ),
               IconButton(
-                tooltip: _layout.linesPanelCollapsed
+                tooltip: _layout.analysisCollapsed
                     ? 'Show analysis panel'
                     : 'Hide analysis panel',
                 icon: Icon(
-                  _layout.linesPanelCollapsed
+                  _layout.analysisCollapsed
                       ? Icons.expand_more
                       : Icons.expand_less,
                   size: 18,
                 ),
-                onPressed: _layout.toggleLinesPanelCollapsed,
+                onPressed: _layout.toggleAnalysisCollapsed,
               ),
             ],
           ),
         ),
-        if (!_layout.linesPanelCollapsed)
+        if (!_layout.analysisCollapsed)
           Expanded(
             child: TabBarView(
               controller: _sidePanelTabController,
@@ -176,10 +166,10 @@ mixin _RepertoireLayout
         if (_trapSession.closeTour()) return true;
         // Start at the trap under the cursor when there is one.
         return _trapSession.openTour(
-          startTrap: _trapSession.trapAtFen(_controller.fen),
+          startTrap: _trapSession.trapAtFen(_controller.board.fen),
         );
       },
-      onToggleEngine: InlineEngineBar.toggleEngine,
+      onToggleEngine: () => InlineEngineBar.toggleEngine(context),
       onFocusComment: PgnAnnotationPanel.focusActive,
       onGoBack: _sessionAwareGoBack,
       onGoForward: _sessionAwareGoForward,
@@ -237,13 +227,18 @@ mixin _RepertoireLayout
       children: [
         Expanded(
           child: _cursorScoped(
-            (_) => BoardZone(
+            (_) => RepertoireBoardPane(
               boardPreview: _boardPreview,
-              fen: _ephemeralPreview?.fen ?? _controller.fen,
+              fen: _ephemeralPreview?.fen ?? _controller.board.fen,
               positionFromFen: _positionFromFen,
               boardFlipped: _boardFlipped,
               onMove: _handleMove,
-              annotations: _auditAnnotationsAt(_controller.fen),
+              annotations: _auditAnnotationsAt(_controller.board.fen),
+              // An ephemeral finding puts a foreign position on the board;
+              // the cursor's trail belongs to a different one.
+              recentMoveSquares: _ephemeralPreview != null
+                  ? const {}
+                  : _controller.board.recentMoveTrail(),
             ),
           ),
         ),
@@ -258,7 +253,7 @@ mixin _RepertoireLayout
   }
 
   /// Compact-layout tools pane: PGN | Lines/Draft | Tree tabs + nav.
-  /// Engine bars live inside PGN tab only.
+  /// Live engine analysis has its own reference tab.
   Widget _buildToolsColumn() {
     return Column(
       children: [
@@ -286,12 +281,11 @@ mixin _RepertoireLayout
         Expanded(
           flex: 2,
           child: RepertoireWorkspacePanel(
-            icon: Icons.edit_note,
             child: _cursorScoped((_) => _buildPgnTab()),
           ),
         ),
         const SizedBox(height: 8),
-        if (_layout.linesPanelCollapsed)
+        if (_layout.analysisCollapsed)
           SizedBox(height: 34, child: _buildAnalysisDock())
         else
           Expanded(flex: 3, child: _buildAnalysisDock()),
@@ -323,7 +317,7 @@ mixin _RepertoireLayout
 
   Widget _buildNavControls() {
     return RepertoireNavControls(
-      onGoToStart: _controller.goToStart,
+      onGoToStart: _controller.board.goToStart,
       onGoBack: _sessionAwareGoBack,
       onGoForward: _sessionAwareGoForward,
       onGenerateFromHere: _openGenerateTab,

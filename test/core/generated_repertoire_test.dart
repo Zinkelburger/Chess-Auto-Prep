@@ -1,10 +1,8 @@
-// Phase 1: the GeneratedRepertoire bundle is the single derivation point.
-// These tests lock in that tree / FenMap / snapshot / traps all come from the
-// same instant and agree with each other.
+// The generated bundle keeps the adopted tree, position index and traps together.
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/generated_repertoire.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 BuildTree _smallTree() {
@@ -44,22 +42,14 @@ BuildTree _smallTree() {
 
 void main() {
   group('GeneratedRepertoire.fromTree', () {
-    test('snapshot, fenMap and tree agree on the root', () {
+    test('fenMap indexes the adopted tree', () {
       final tree = _smallTree();
       final bundle = GeneratedRepertoire.fromTree(tree, playAsWhite: true);
 
-      expect(bundle.snapshot.root.fen, tree.root.fen);
-      expect(bundle.snapshot.playAsWhite, isTrue);
+      expect(bundle.tree, same(tree));
+      expect(bundle.playAsWhite, isTrue);
       expect(bundle.fenMap.contains(tree.root.fen), isTrue);
       expect(bundle.fenMap.size, 3, reason: 'three distinct positions');
-    });
-
-    test('snapshot indexes every node in the tree', () {
-      final tree = _smallTree();
-      final bundle = GeneratedRepertoire.fromTree(tree, playAsWhite: true);
-      for (final id in [0, 1, 2]) {
-        expect(bundle.snapshot.tryNode(id), isNotNull, reason: 'node $id');
-      }
     });
 
     test('a tree with no trap structure yields an empty trap index', () {
@@ -69,10 +59,10 @@ void main() {
       expect(bundle.traps.metrics.totalTraps, 0);
     });
 
-    test('playAsWhite flows into the snapshot perspective', () {
+    test('the bundle retains the generation perspective', () {
       final tree = _smallTree();
       final bundle = GeneratedRepertoire.fromTree(tree, playAsWhite: false);
-      expect(bundle.snapshot.playAsWhite, isFalse);
+      expect(bundle.playAsWhite, isFalse);
     });
   });
 }

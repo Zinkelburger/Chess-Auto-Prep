@@ -1,3 +1,7 @@
+import 'package:chess_auto_prep/features/settings/models/engine_configuration.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
 import 'dart:async';
 
 import 'package:chess_auto_prep/services/engine/engine_connection.dart';
@@ -49,7 +53,14 @@ Future<void> flush() async {
   }
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   late _Connection connection;
   late EvalWorker worker;
   late EngineSearchBudget budget;
@@ -72,7 +83,10 @@ void main() {
   test(
     'bulk reuse waits for old bestmove and never assigns old PV to new FEN',
     () async {
-      final pool = StockfishPool.fresh()..addWorkerForTest(worker);
+      final pool = StockfishPool(
+        settings: EngineConfiguration.new,
+        budget: engines.budget,
+      )..addWorkerForTest(worker);
       addTearDown(pool.dispose);
       final old = pool.evaluateFen('old position', 20);
       final cancelled = expectLater(old, throwsA(isA<EngineSearchCancelled>()));

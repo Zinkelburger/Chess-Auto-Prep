@@ -70,8 +70,13 @@ have different remaining horizons, half-move clocks, or repetition histories;
 Pure never borrows their backed-up values or merges their policies by FEN.
 Starting a new search from an old Pure subtree rebuilds it with the new history.
 
-Checkmate and stalemate are exact terminals. Insufficient material is detected
-by the chess rules implementation. The model assumes both players immediately
+Checkmate and stalemate are exact terminals. A terminal's value is chess, not
+an estimate, but it still carries the score an engine would report there, so
+the engine-loss window and the tie-break rank it against ordinary moves on one
+scale: a checkmate is ±10000 from the mated side, which is what Stockfish's
+`mate 0` packs to, and every draw is 0. Both builders write that score in
+rather than asking the engine about a finished game. Insufficient material is
+detected by the chess rules implementation. The model assumes both players immediately
 claim a draw at the third occurrence or 100 half-moves, with checkmate taking
 precedence. Repetition keys include side to move, castling rights, and legal
 en-passant availability. History before the supplied root is unknown.

@@ -5,6 +5,13 @@ and Support directories; `app_games.db` contains tactics source games that may
 have no remaining PGN-file copy. Stop the app before a plain filesystem backup
 of SQLite, or use SQLite's backup API so committed WAL data is included.
 
+V2's proposed cross-store guarantees and their implementation status live in
+[the renewal plan](ARCHITECTURE_RENEWAL.md#data-correctness-contracts), with
+[bounded hardening batches](ARCHITECTURE_RENEWAL.md#correctness-hardening-order).
+They are target contracts, not a claim that the current app already implements
+compound undo, recovery before every affected read, or all cross-version gates.
+This document remains the description of stored data and recovery formats.
+
 ## Shared file operations
 
 `atomic_file.dart` owns text updates, expected-content checks, recovery and

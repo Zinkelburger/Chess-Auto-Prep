@@ -6,6 +6,10 @@
 /// depends on.
 library;
 
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
+
 import 'dart:async';
 
 import 'package:chess_auto_prep/features/audit/models/audit_finding.dart';
@@ -116,7 +120,14 @@ class _HoldingPool extends FakeStockfishPool {
   }
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late OpeningTree white;
@@ -607,7 +618,10 @@ void main() {
       () async {
         final db = _ScriptedDb({});
         final config = _quiet.copyWith(useChessDb: true);
-        final service = RepertoireAuditService(chessDbProvider: db);
+        final service = RepertoireAuditService(
+          pool: engines.pool,
+          chessDbProvider: db,
+        );
         final first = await service.audit(
           tree: white,
           isWhiteRepertoire: true,

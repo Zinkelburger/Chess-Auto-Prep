@@ -8,7 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/position_analysis.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
-import 'common/list_search_field.dart';
+import '../design_system/components/list_search_field.dart';
 
 class GamesListWidget extends StatefulWidget {
   final List<GameInfo> games;

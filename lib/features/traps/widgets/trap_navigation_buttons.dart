@@ -3,17 +3,17 @@ import 'package:flutter/material.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/shortcut_tooltip.dart';
 
-import '../../../core/repertoire_controller.dart';
+import '../../repertoires/controllers/builder_workspace_controller.dart';
 import '../../../models/repertoire_line.dart';
-import 'package:chess_auto_prep/models/trap_line_info.dart';
+import 'package:chess_auto_prep/chess_core/generation/trap_line_info.dart';
 import '../../../utils/app_shortcuts.dart';
 import '../services/trap_index_service.dart';
 
 /// Prev/next trap controls for the repertoire board toolbar.
 ///
 /// Uses [TrapIndexService.trapsInLine] against the active line path
-/// ([RepertoireController.moveHistory] when loaded, otherwise
-/// [RepertoireController.currentMoveSequence]).
+/// ([BuilderWorkspaceController.moveHistory] when loaded, otherwise
+/// [BuilderWorkspaceController.currentMoveSequence]).
 class TrapNavigationButtons extends StatelessWidget {
   const TrapNavigationButtons({
     super.key,
@@ -24,7 +24,7 @@ class TrapNavigationButtons extends StatelessWidget {
   });
 
   final TrapIndexService trapIndex;
-  final RepertoireController controller;
+  final BuilderWorkspaceController controller;
 
   /// Shows a "Tour" pill that starts the trap tour when set.
   final VoidCallback? onStartTour;
@@ -36,19 +36,19 @@ class TrapNavigationButtons extends StatelessWidget {
   ///
   /// Prefer the longest repertoire line that contains the current position so
   /// next/prev can reach traps beyond the current ply.
-  static List<String> lineMovesForTraps(RepertoireController controller) {
-    final selected = controller.selectedPgnLine;
+  static List<String> lineMovesForTraps(BuilderWorkspaceController controller) {
+    final selected = controller.document.selectedPgnLine;
     if (selected != null && selected.moves.isNotEmpty) {
       return selected.moves;
     }
 
-    final path = controller.moveHistory.isNotEmpty
-        ? controller.moveHistory
-        : controller.currentMoveSequence;
+    final path = controller.board.moveHistory.isNotEmpty
+        ? controller.board.moveHistory
+        : controller.board.currentMoveSequence;
     if (path.isEmpty) return path;
 
     RepertoireLine? bestMatch;
-    for (final line in controller.repertoireLines) {
+    for (final line in controller.document.repertoireLines) {
       if (line.moves.length >= path.length && _isPrefix(path, line.moves)) {
         if (bestMatch == null || line.moves.length > bestMatch.moves.length) {
           bestMatch = line;
@@ -84,28 +84,31 @@ class TrapNavigationButtons extends StatelessWidget {
 
   static List<TrapLineInfo> trapsInCurrentLine(
     TrapIndexService trapIndex,
-    RepertoireController controller,
+    BuilderWorkspaceController controller,
   ) {
     return trapIndex.trapsInLine(lineMovesForTraps(controller));
   }
 
-  static void jumpToTrap(RepertoireController controller, TrapLineInfo trap) {
+  static void jumpToTrap(
+    BuilderWorkspaceController controller,
+    TrapLineInfo trap,
+  ) {
     final lineMoves = lineMovesForTraps(controller);
     if (lineMoves.length >= trap.movesSan.length &&
         _isPrefix(trap.movesSan, lineMoves)) {
-      if (!_isPrefix(lineMoves, controller.moveHistory) ||
-          controller.moveHistory.length != lineMoves.length) {
-        controller.loadMoveHistory(lineMoves);
+      if (!_isPrefix(lineMoves, controller.board.moveHistory) ||
+          controller.board.moveHistory.length != lineMoves.length) {
+        controller.board.navigateToLineMove(lineMoves);
       }
-      controller.jumpToMoveIndex(trap.movesSan.length - 1);
+      controller.board.jumpToMoveIndex(trap.movesSan.length - 1);
       return;
     }
-    controller.loadMoveSequence(trap.movesSan);
+    controller.composeMoves(trap.movesSan);
   }
 
   static bool goToPreviousTrap({
     required TrapIndexService? trapIndex,
-    required RepertoireController controller,
+    required BuilderWorkspaceController controller,
   }) {
     if (trapIndex == null) return false;
 
@@ -114,7 +117,7 @@ class TrapNavigationButtons extends StatelessWidget {
 
     final currentTrapIdx = findCurrentTrapIndex(
       traps,
-      controller.currentMoveIndex,
+      controller.board.currentMoveIndex,
     );
     if (currentTrapIdx <= 0) return false;
 
@@ -124,7 +127,7 @@ class TrapNavigationButtons extends StatelessWidget {
 
   static bool goToNextTrap({
     required TrapIndexService? trapIndex,
-    required RepertoireController controller,
+    required BuilderWorkspaceController controller,
   }) {
     if (trapIndex == null) return false;
 
@@ -133,7 +136,7 @@ class TrapNavigationButtons extends StatelessWidget {
 
     final currentTrapIdx = findCurrentTrapIndex(
       traps,
-      controller.currentMoveIndex,
+      controller.board.currentMoveIndex,
     );
     final nextIdx = currentTrapIdx + 1;
     if (nextIdx >= traps.length) return false;
@@ -169,7 +172,7 @@ class TrapNavigationButtons extends StatelessWidget {
         final traps = trapsInCurrentLine(trapIndex, controller);
         final currentTrapIdx = findCurrentTrapIndex(
           traps,
-          controller.currentMoveIndex,
+          controller.board.currentMoveIndex,
         );
 
         if (traps.isEmpty) {

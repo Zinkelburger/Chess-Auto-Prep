@@ -8,7 +8,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/widgets/common/name_entry_dialog.dart';
+import 'package:chess_auto_prep/design_system/components/name_entry_dialog.dart';
 
 /// Pumps a button that opens the dialog and records what it returned.
 Future<void> pumpDialog(

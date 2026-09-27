@@ -24,15 +24,20 @@
 /// for in writing rather than appearing by omission.
 library;
 
+import 'package:chess_auto_prep/services/generation/generation_presets.dart';
+import 'package:chess_auto_prep/widgets/common/choice_field.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
+
+import '../../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+
 import 'package:flutter/material.dart';
-import 'package:chess_auto_prep/models/bulk_analysis_settings.dart';
-import 'package:chess_auto_prep/models/engine_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
-import 'package:chess_auto_prep/models/eval_database_settings.dart';
+import 'package:chess_auto_prep/features/settings/controllers/eval_database_settings.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:chess_auto_prep/services/generation/skeleton_plan.dart';
 import 'package:chess_auto_prep/widgets/generation/generation_config_form.dart';
@@ -70,7 +75,7 @@ const Map<String, String> _knownLossy = {
   'memorability_tolerance_cp': 'forced to 0 while novelties are on',
 
   // ── Owned by global settings, not by the config ──────────────────────
-  // These three are read from EvalDatabaseSettings.instance at build time,
+  // These three are read from runtimeSettings.databases at build time,
   // not from the form, and are gated behind a runtime probe for a cdb-direct
   // install that no test machine has. A config cannot dictate them.
   'enable_cdbdirect': 'read from EvalDatabaseSettings, gated on availability',
@@ -139,18 +144,22 @@ TreeBuildConfig _fullyMutatedConfig() {
 /// their values are readable whether or not their widgets ever mount.
 Future<TreeBuildConfig> _throughForm(
   WidgetTester tester,
-  TreeBuildConfig config, {
+  TreeBuildConfig? config, {
   bool playAsWhite = true,
 }) async {
   final formKey = GlobalKey<GenerationConfigFormState>();
-  await tester.pumpWidget(
+  await pumpRuntimeWidget(
+    tester,
+    runtimeSettings,
     MultiProvider(
       providers: [
         ChangeNotifierProvider<EvalDatabaseSettings>.value(
-          value: EvalDatabaseSettings.instance,
+          value: runtimeSettings.databases,
         ),
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: SingleChildScrollView(
             child: GenerationConfigForm(
@@ -190,7 +199,161 @@ List<String> _lostKeys(
   return lost;
 }
 
+RuntimeSettings? _runtimeSettings;
+RuntimeSettings get runtimeSettings =>
+    _runtimeSettings ??= testRuntimeSettings();
 void main() {
+  setUp(() {
+    _runtimeSettings = null;
+    addTearDown(() => _runtimeSettings?.dispose());
+  });
+  for (final mode in BuildMode.values) {
+    for (final white in [true, false]) {
+      testWidgets(
+        'unseeded $mode $white preserves the complete default config',
+        (tester) async {
+          SharedPreferences.setMockInitialValues({});
+          await _throughForm(tester, null, playAsWhite: white);
+          tester
+              .widget<ChoiceField<BuildMode>>(
+                find.byType(ChoiceField<BuildMode>),
+              )
+              .onChanged(mode);
+          await tester.pumpAndSettle();
+          final state = tester.state<GenerationConfigFormState>(
+            find.byType(GenerationConfigForm),
+          );
+          final actual = state.toConfig(
+            startFen: _startFen,
+            playAsWhite: white,
+          );
+          final pure = mode == BuildMode.stockfishExpectimax;
+          final expected =
+              TreeBuildConfig.formDefaults(
+                startFen: _startFen,
+                playAsWhite: white,
+              ).copyWith(
+                buildMode: mode,
+                evalDepth: runtimeSettings.bulk.depth,
+                engineThreads: runtimeSettings.engine.cores,
+                enableChessDbApi: true,
+                chaptersByEco: mode == BuildMode.chessDbBook,
+                selectionMode: mode == BuildMode.chessDbBook
+                    ? SelectionMode.engineOnly
+                    : SelectionMode.expectimax,
+                verifyFinal:
+                    mode != BuildMode.chessDbBook &&
+                    mode != BuildMode.maiaDbExplore,
+                useMasterGames: !pure,
+                downloadMasterGamesIfMissing: !pure,
+                masterDepthBonusPlies: pure ? 0 : 10,
+                masterPriorityWeight: pure ? 0 : 0.35,
+                engineTailPlies: pure ? 0 : 6,
+              );
+          expect(actual.toJson(), expected.toJson());
+        },
+      );
+    }
+  }
+
+  testWidgets(
+    'saved presets replace inherited values while visible edits and mode switches remain local',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      const first = TreeBuildConfig(
+        startFen: _startFen,
+        playAsWhite: true,
+        buildMode: BuildMode.dbExplorer,
+        pgnFilePaths: ['/tmp/first.pgn'],
+        minProbability: 0.217,
+        minEvalCp: -73,
+        maxEvalCp: 181,
+        openingWidthPlies: 7,
+        noveltyWeight: 27,
+        memorabilityToleranceCp: 44,
+        setupMoves: '  e4 e5  ',
+        masterDepthBonusPlies: 12,
+        masterPriorityWeight: 0.7,
+        replyWindowCp: 18,
+        relativeEval: false,
+        enableChessDbApi: true,
+      );
+      final second = first.copyWith(
+        minProbability: 0.083,
+        minEvalCp: -91,
+        openingWidthPlies: 5,
+        noveltyWeight: 0,
+        memorabilityToleranceCp: 31,
+        setupMoves: '  d4 d5 ',
+        masterDepthBonusPlies: 14,
+      );
+      await GenerationPresetStore().save('First profile', first);
+      await GenerationPresetStore().save('Second profile', second);
+      await _throughForm(
+        tester,
+        const TreeBuildConfig(startFen: _startFen, playAsWhite: true),
+      );
+      final state = tester.state<GenerationConfigFormState>(
+        find.byType(GenerationConfigForm),
+      );
+      Future<void> apply(String name) async {
+        final menu = find.byTooltip('Saved setting presets');
+        await tester.ensureVisible(menu);
+        await tester.tap(menu);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(name));
+        await tester.pumpAndSettle();
+      }
+
+      TreeBuildConfig current() =>
+          state.toConfig(startFen: _startFen, playAsWhite: true);
+      await apply('First profile');
+      final length = find.byWidgetPredicate(
+        (w) =>
+            w is TextField &&
+            (w.decoration?.labelText?.startsWith('Max line length') ?? false),
+      );
+      await tester.ensureVisible(length);
+      await tester.enterText(length, '18');
+      await tester.pumpAndSettle();
+      expect(state.validateBeforeStart(), isNull);
+      expect(current().maxPly, 18);
+      expect(current().minProbability, closeTo(0.217, 1e-15));
+      expect(current().minEvalCp, -73);
+      expect(current().openingWidthPlies, 7);
+      expect(current().noveltyWeight, 27);
+      expect(current().memorabilityToleranceCp, 0);
+      expect(current().setupMoves, 'e4 e5');
+      final choice = tester.widget<ChoiceField<BuildMode>>(
+        find.byType(ChoiceField<BuildMode>),
+      );
+      choice.onChanged(BuildMode.stockfishExpectimax);
+      await tester.pumpAndSettle();
+      expect(current().noveltyWeight, 0);
+      expect(current().setupMoves, '');
+      expect(current().masterDepthBonusPlies, 0);
+      tester
+          .widget<ChoiceField<BuildMode>>(find.byType(ChoiceField<BuildMode>))
+          .onChanged(BuildMode.dbExplorer);
+      await tester.pumpAndSettle();
+      expect(current().noveltyWeight, 27);
+      expect(current().setupMoves, 'e4 e5');
+      expect(current().masterDepthBonusPlies, 12);
+      expect(current().pgnFilePaths, ['/tmp/first.pgn']);
+      await apply('Second profile');
+      expect(state.validateBeforeStart(), isNull);
+      expect(current().maxPly, second.maxPly);
+      expect(current().minProbability, closeTo(0.083, 1e-15));
+      expect(current().minEvalCp, -91);
+      expect(current().openingWidthPlies, 5);
+      expect(current().noveltyWeight, 0);
+      expect(current().memorabilityToleranceCp, 31);
+      expect(current().setupMoves, 'd4 d5');
+      expect(current().relativeEval, isFalse);
+      expect(current().masterDepthBonusPlies, 14);
+    },
+  );
+
   testWidgets('PGN metrics start unchecked and can be selected independently', (
     tester,
   ) async {
@@ -340,22 +503,14 @@ void main() {
       final result = await _throughForm(tester, seed);
 
       expect(result.minAcceptableEvalDepth, 0);
-      expect(result.evalDepth, BulkAnalysisSettings.instance.depth);
+      expect(result.evalDepth, runtimeSettings.bulk.depth);
     });
   });
 
   testWidgets('new builds capture global bulk depth and cores', (tester) async {
     SharedPreferences.setMockInitialValues({});
-    final bulk = BulkAnalysisSettings.instance;
-    final engine = EngineSettings.instance;
-    final oldBulk = bulk.depth;
-    final oldBoard = engine.depth;
-    final oldCores = engine.cores;
-    addTearDown(() async {
-      await bulk.setDepth(oldBulk);
-      engine.depth = oldBoard;
-      engine.cores = oldCores;
-    });
+    final bulk = runtimeSettings.bulk;
+    final engine = runtimeSettings.engine;
     await bulk.setDepth(19);
     engine.depth = 12;
     engine.cores = 1;
@@ -478,9 +633,8 @@ void main() {
     testWidgets('Pure clears retired novelty weights from presets', (
       tester,
     ) async {
-      // Any positive width means "wide opening on"; the checkbox says
-      // whether to widen, not by how much, so a planner or preset value
-      // survives the trip. Same shape for the novelty weight.
+      // Keep the seed's positive width exactly. Pure still clears novelty
+      // explicitly; inherited settings never become an editable state mirror.
       const wide = TreeBuildConfig(
         startFen: _startFen,
         playAsWhite: true,
@@ -506,14 +660,18 @@ void main() {
       tester,
     ) async {
       final formKey = GlobalKey<GenerationConfigFormState>();
-      await tester.pumpWidget(
+      await pumpRuntimeWidget(
+        tester,
+        runtimeSettings,
         MultiProvider(
           providers: [
             ChangeNotifierProvider<EvalDatabaseSettings>.value(
-              value: EvalDatabaseSettings.instance,
+              value: runtimeSettings.databases,
             ),
           ],
           child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(
               body: SingleChildScrollView(
                 child: GenerationConfigForm(
@@ -636,14 +794,18 @@ void main() {
   group('an unseeded form', () {
     testWidgets('reads back its own declared defaults', (tester) async {
       final formKey = GlobalKey<GenerationConfigFormState>();
-      await tester.pumpWidget(
+      await pumpRuntimeWidget(
+        tester,
+        runtimeSettings,
         MultiProvider(
           providers: [
             ChangeNotifierProvider<EvalDatabaseSettings>.value(
-              value: EvalDatabaseSettings.instance,
+              value: runtimeSettings.databases,
             ),
           ],
           child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(
               body: SingleChildScrollView(
                 child: GenerationConfigForm(

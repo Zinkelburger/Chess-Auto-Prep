@@ -14,6 +14,7 @@ python3 scripts/app_driver.py dump
 python3 scripts/app_driver.py tap tooltip="App settings"
 python3 scripts/app_driver.py type text="example" key=field-key
 python3 scripts/app_driver.py scroll text="Section" dy=400
+python3 scripts/app_driver.py drag x=540 y=400 dx=-120   # press, move, release
 python3 scripts/app_driver.py ss settings
 python3 scripts/app_driver.py reload
 python3 scripts/app_driver.py status
@@ -27,6 +28,18 @@ It neither copies nor uses the user's saved accounts and databases. `ss` saves
 a PNG from Flutter's layer tree; inspect the returned image after UI changes.
 `start --visible` uses a real window only for requested demos or native desktop
 behavior that needs testing. It still uses the isolated profile.
+
+`start --offline` gives the app its own network namespace with loopback only:
+the display, the VM service and the session bus still work, nothing else is
+reachable. Use it to see what a screen says when a service cannot be answered,
+after a normal `start` has warmed the build — a cold build inside the namespace
+cannot fetch packages. `unshare` around the driver would not do this: the app
+runs in a user-manager unit, not as a child of the caller.
+
+For the component catalog, use `start --target widgetbook/main.dart`.
+`--target` accepts a Dart entrypoint inside the selected source checkout. The
+same headless display, isolated profile and bounded runner still apply. Stop the
+current preview before changing entrypoints; `status` records the active target.
 
 Driver state is per checkout. Work in your own worktree so another task cannot
 navigate or stop your app. `start --src DIR` builds a specific checkout and

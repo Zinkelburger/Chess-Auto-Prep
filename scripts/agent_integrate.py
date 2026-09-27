@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Land a tested task on local main and back it up without publishing origin/main."""
+"""Land a tested task on local main, back it up, then remove the task worktree and branch.
+
+origin/main is never published here.
+"""
 import argparse
 from contextlib import contextmanager
 import fcntl
@@ -59,7 +62,23 @@ def verify_main(checkout: Path) -> None:
         print(dirty)
 
 
-def integrate(task: Path) -> None:
+def remove_task(checkout: Path, task: Path, branch: str) -> None:
+    """Delete the landed task's worktree and branches; main already holds its commits."""
+    steps = (
+        ('worktree', 'remove', str(task)),
+        ('branch', '-d', branch),
+        ('push', 'origin', '--delete', branch),
+    )
+    for step in steps:
+        result = subprocess.run(['git', *step], cwd=checkout, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f'Task is on main, but cleanup stopped at `git {" ".join(step)}`: '
+                  f'{result.stderr.strip()}')
+            return
+    print(f'Removed task worktree {task} and branch {branch} (local and origin)')
+
+
+def integrate(task: Path, keep: bool = False) -> None:
     task = task.resolve()
     branch = branch_name(task)
     if branch is None or not branch.startswith('codex/'):
@@ -91,11 +110,15 @@ def integrate(task: Path) -> None:
                 'Keep both worktrees and retry; do not force-push or undo the integration',
             ) from exc
         verify_main(checkout)
+        if not keep:
+            remove_task(checkout, task, branch)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--verify', action='store_true', help='verify local main backup only')
+    parser.add_argument('--keep', action='store_true',
+                        help='keep the task worktree and branch after landing')
     args = parser.parse_args()
     task = Path.cwd()
     if args.verify:
@@ -103,7 +126,7 @@ def main():
         with integration_lock(checkout):
             verify_main(checkout)
     else:
-        integrate(task)
+        integrate(task, keep=args.keep)
 
 
 if __name__ == '__main__':

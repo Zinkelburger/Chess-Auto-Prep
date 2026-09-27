@@ -10,6 +10,9 @@
 /// to reset it to null in tearDown).
 library;
 
+import 'package:chess_auto_prep/features/settings/models/engine_configuration.dart';
+import 'package:chess_auto_prep/services/engine/engine_search_budget.dart';
+
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import 'package:chess_auto_prep/services/maia/maia_factory.dart';
 import 'package:chess_auto_prep/services/maia/maia_service.dart';
@@ -17,7 +20,11 @@ import 'package:chess_auto_prep/utils/chess_utils.dart' show playUciMove;
 import 'package:chess_auto_prep/utils/fen_utils.dart' show isWhiteToMove;
 
 class FakeStockfishPool extends StockfishPool {
-  FakeStockfishPool({this.workers = 1}) : super.fresh();
+  FakeStockfishPool({this.workers = 1})
+    : super(
+        settings: EngineConfiguration.new,
+        budget: EngineSearchBudget(capacity: () => 1),
+      );
 
   /// Reported [workerCount]; 0 simulates "engine unavailable".
   int workers;

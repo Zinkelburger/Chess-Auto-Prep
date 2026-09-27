@@ -5,11 +5,12 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/generated/app_localizations.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/board_editor_controller.dart';
 import '../common/choice_field.dart';
-import '../../theme/app_text_styles.dart';
+import '../../design_system/theme/app_typography.dart';
 import '../copy_button.dart';
 import '../labeled_toggle.dart';
 
@@ -86,12 +87,13 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
     _editor.setFenDraft(value);
     if (!_editor.loadFen(value)) {
       if (!mounted) return;
-      setState(() => _fenError = 'Could not parse FEN. Check all fields.');
+      setState(() => _fenError = AppLocalizations.of(context).boardInvalidFen);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final error = _editor.validationError;
 
@@ -100,16 +102,22 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
       mainAxisSize: MainAxisSize.min,
       children: [
         // ── Side to move + board shortcuts ─────────────────────────
-        // The panel is the narrow half of the editor dialog (~380px), and
-        // a SegmentedButton will not shrink its own labels, so scale it
-        // down rather than overflow.
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: SegmentedButton<Side>(
-            segments: const [
-              ButtonSegment(value: Side.white, label: Text('White to move')),
-              ButtonSegment(value: Side.black, label: Text('Black to move')),
+        LayoutBuilder(
+          builder: (context, constraints) => SegmentedButton<Side>(
+            direction:
+                constraints.maxWidth <
+                    MediaQuery.textScalerOf(context).scale(360)
+                ? Axis.vertical
+                : Axis.horizontal,
+            segments: [
+              ButtonSegment(
+                value: Side.white,
+                label: Text(l10n.boardWhiteToMove),
+              ),
+              ButtonSegment(
+                value: Side.black,
+                label: Text(l10n.boardBlackToMove),
+              ),
             ],
             selected: {_editor.turn},
             onSelectionChanged: (sel) {
@@ -126,50 +134,45 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
           children: [
             OutlinedButton.icon(
               icon: const Icon(Icons.replay, size: 16),
-              label: const Text('Start position'),
+              label: Text(l10n.boardStartPosition),
               onPressed: _editor.setStartPosition,
             ),
             OutlinedButton.icon(
               icon: const Icon(Icons.clear, size: 16),
-              label: const Text('Clear board'),
+              label: Text(l10n.boardClear),
               onPressed: _editor.clear,
             ),
             OutlinedButton.icon(
               icon: const Icon(Icons.swap_vert, size: 16),
-              label: const Text('Flip board'),
+              label: Text(l10n.studyFlipBoard),
               onPressed: _editor.toggleFlip,
             ),
           ],
         ),
         const SizedBox(height: 8),
-        Text(
-          'Drag pieces where you want them, or click a spare piece and '
-          'paint it onto squares. Right-click clears a square; with a '
-          'piece in hand it switches the colour.',
-          style: AppTextStyles.forTheme(context, AppTextStyles.caption),
-        ),
+        Text(l10n.boardSetupHelp, style: AppTypography.caption(context)),
         const SizedBox(height: 12),
 
         // ── Castling rights ────────────────────────────────────────
         ExpansionTile(
-          title: const Text('Advanced position settings'),
-          subtitle: const Text('Castling and en passant'),
+          title: Text(l10n.boardAdvanced),
+          subtitle: Text(l10n.boardCastlingEnPassant),
           initiallyExpanded: widget.advancedInitiallyExpanded,
           tilePadding: EdgeInsets.zero,
           childrenPadding: const EdgeInsets.only(bottom: 12),
           expandedCrossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Castling', style: theme.textTheme.labelLarge),
+            Text(l10n.boardCastling, style: theme.textTheme.labelLarge),
             Row(
               children: [
                 _castleBox(
-                  'White O-O',
+                  l10n.boardCastleSide(l10n.white, 'O-O'),
                   _editor.whiteKingside,
                   _editor.whiteKingsideAllowed,
                   _editor.setWhiteKingside,
                 ),
                 _castleBox(
-                  'White O-O-O',
+                  l10n.boardCastleSide(l10n.white, 'O-O-O'),
                   _editor.whiteQueenside,
                   _editor.whiteQueensideAllowed,
                   _editor.setWhiteQueenside,
@@ -179,13 +182,13 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
             Row(
               children: [
                 _castleBox(
-                  'Black O-O',
+                  l10n.boardCastleSide(l10n.black, 'O-O'),
                   _editor.blackKingside,
                   _editor.blackKingsideAllowed,
                   _editor.setBlackKingside,
                 ),
                 _castleBox(
-                  'Black O-O-O',
+                  l10n.boardCastleSide(l10n.black, 'O-O-O'),
                   _editor.blackQueenside,
                   _editor.blackQueensideAllowed,
                   _editor.setBlackQueenside,
@@ -198,7 +201,7 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Text('En passant', style: theme.textTheme.labelLarge),
+                  Text(l10n.boardEnPassant, style: theme.textTheme.labelLarge),
                   const SizedBox(width: 12),
                   SizedBox(
                     width: 120,
@@ -206,7 +209,7 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
                       value: _editor.epSquare,
                       compact: true,
                       items: [
-                        const ChoiceItem(value: null, label: 'none'),
+                        ChoiceItem(value: null, label: l10n.boardNoEnPassant),
                         for (final sq in _editor.epCandidates)
                           ChoiceItem(value: sq, label: sq.name),
                       ],
@@ -223,15 +226,13 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
         // ── FEN in/out ─────────────────────────────────────────────
         TextField(
           controller: _fenCtrl,
-          style: AppTextStyles.forTheme(context, AppTextStyles.mono),
+          style: AppTypography.mono(context),
           minLines: 2,
           maxLines: 4,
           decoration: InputDecoration(
             labelText: 'FEN',
             errorText: _fenError,
-            helperText: _editor.hasUnappliedFen
-                ? 'Apply or discard the FEN text before using this position.'
-                : null,
+            helperText: _editor.hasUnappliedFen ? l10n.boardFenPending : null,
             helperMaxLines: 2,
             errorMaxLines: 2,
             border: const OutlineInputBorder(),
@@ -240,14 +241,14 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 CopyButton.icon(
-                  tooltip: 'Copy FEN',
+                  tooltip: l10n.boardCopyFen,
                   iconSize: 16,
-                  snackBarMessage: 'FEN copied.',
+                  snackBarMessage: l10n.boardFenCopied,
                   text: () => _editor.fen,
                 ),
                 IconButton(
                   icon: const Icon(Icons.content_paste, size: 16),
-                  tooltip: 'Paste FEN',
+                  tooltip: l10n.boardPasteFen,
                   onPressed: () async {
                     final editor = _editor;
                     final data = await Clipboard.getData('text/plain');
@@ -276,12 +277,12 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
               onPressed: _editor.hasUnappliedFen
                   ? () => _applyFenInput(_fenCtrl.text)
                   : null,
-              child: const Text('Apply FEN'),
+              child: Text(l10n.boardApplyFen),
             ),
             if (_editor.hasUnappliedFen)
               TextButton(
                 onPressed: _editor.discardFenDraft,
-                child: const Text('Discard FEN changes'),
+                child: Text(l10n.boardDiscardFen),
               ),
           ],
         ),

@@ -2,6 +2,7 @@
 /// and the flaw-tag context (clocks, time control, result) read off it.
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'package:dartchess/dartchess.dart';
 
 import '../../../utils/clock_utils.dart';
@@ -29,9 +30,9 @@ class ParsedUserGame {
   /// of the username (e.g. user "tal" vs opponent "talinda").
   ///
   /// Throws on unparseable PGN or a bad `[FEN]` header, like
-  /// [PgnGame.parsePgn] and [Setup.parseFen] do.
+  /// [parsePgnGame] and [Setup.parseFen] do.
   static ParsedUserGame? parse(String gameText, String username) {
-    final game = PgnGame.parsePgn(gameText);
+    final game = parsePgnGame(gameText);
     final white = (game.headers['White'] ?? '').toLowerCase();
     final black = (game.headers['Black'] ?? '').toLowerCase();
     final Side userColor;

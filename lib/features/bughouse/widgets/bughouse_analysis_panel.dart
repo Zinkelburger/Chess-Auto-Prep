@@ -7,7 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
-import '../../../theme/pgn_text_styles.dart';
+import '../../../widgets/pgn/pgn_text_styles.dart';
 import '../../../widgets/copy_button.dart';
 import '../controllers/bughouse_controller.dart';
 import '../models/bughouse_engine_settings.dart';
@@ -572,7 +572,7 @@ class _MoveToken extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           child: Text.rich(
-            style: PgnTextStyles.moveAt(1).copyWith(height: 1.4),
+            style: PgnTextStyles.moveAt(context, 1).copyWith(height: 1.4),
             TextSpan(
               children: [
                 TextSpan(
@@ -581,7 +581,7 @@ class _MoveToken extends StatelessWidget {
                 ),
                 TextSpan(
                   text: san,
-                  style: PgnTextStyles.moveAt(1).copyWith(
+                  style: PgnTextStyles.moveAt(context, 1).copyWith(
                     height: 1.4,
                     color: AppColors.ink,
                     fontWeight: FontWeight.w600,
@@ -623,11 +623,13 @@ class _TableRules extends StatelessWidget {
 
         // The clock relationship is a rule input, not a statistic: a team that
         // is ahead on the diagonal may legally sit on both boards, and the
-        // engine plays completely differently when told so. Three stances are
-        // offered because that is how players think, but the engine takes one
-        // bit — "Level" and "Behind" run the same search. The genuinely
-        // distinct third case is the must-move constraint below.
-        const BughousePanelLabel('Your team’s clock advantage'),
+        // engine plays completely differently when told so. Three cases and no
+        // more: both boards start together and one clock per board runs, so
+        // both diagonals carry the same margin and a team is up, level or
+        // down. The engine takes one bit, so "Even" and "C + D may sit" run
+        // the same search; the genuinely distinct third case is the must-move
+        // constraint below.
+        const BughousePanelLabel('Time'),
         SegmentedButton<BughouseTimeStance>(
           style: const ButtonStyle(visualDensity: VisualDensity.compact),
           segments: [
@@ -656,7 +658,7 @@ class _TableRules extends StatelessWidget {
         ),
         if (derived)
           const Text(
-            'Both diagonal clock pairs must agree by more than 5 seconds. Mixed clocks use Level; clocks do not run in this model.',
+            'Both diagonal clock pairs must agree by more than 5 seconds. Mixed clocks use Equal; clocks do not run in this model.',
             style: AppTextStyles.muted,
           ),
         const SizedBox(height: 4),
@@ -689,9 +691,9 @@ class _TableRules extends StatelessWidget {
           message:
               'See how the best moves and your team’s evaluation change '
               'in this position when:\n'
-              '• Your team is ahead on time and may wait (sit).\n'
-              '• Your team is level or behind on time.\n'
-              '• Your team must move on Board 1.\n'
+              '• A + B may sit, and can wait rather than move.\n'
+              '• Even, or C + D may sit and we cannot outwait them.\n'
+              '• A + B must move on Board 1.\n'
               'Results open in the Engine tab under Clock scenarios. '
               'Your clocks and position stay the same.',
           child: OutlinedButton.icon(
@@ -1023,6 +1025,7 @@ class _ScenarioTable extends StatelessWidget {
             Text(
               row.best == null ? 'No move available' : _moves(row.best!),
               style: PgnTextStyles.moveAt(
+                context,
                 1,
               ).copyWith(color: AppColors.ink, fontWeight: FontWeight.w600),
             ),

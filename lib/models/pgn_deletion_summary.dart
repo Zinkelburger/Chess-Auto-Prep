@@ -1,7 +1,7 @@
 /// Counts the content removed by a PGN operation, including nested sidelines.
 library;
 
-import 'move_tree.dart';
+import '../chess_core/moves/move_tree_view.dart';
 import '../utils/pgn_comment_utils.dart' show commentProse;
 
 class PgnDeletionSummary {
@@ -10,7 +10,7 @@ class PgnDeletionSummary {
 
   const PgnDeletionSummary(this.moves, this.comments);
 
-  factory PgnDeletionSummary.nodes(Iterable<MoveNode> roots) {
+  factory PgnDeletionSummary.nodes(Iterable<MoveNodeView> roots) {
     var moves = 0;
     var comments = 0;
     final pending = roots.toList();
@@ -25,7 +25,7 @@ class PgnDeletionSummary {
     return PgnDeletionSummary(moves, comments);
   }
 
-  factory PgnDeletionSummary.tree(MoveTree tree) {
+  factory PgnDeletionSummary.tree(MoveTreeView tree) {
     final nodes = PgnDeletionSummary.nodes(tree.roots);
     return PgnDeletionSummary(
       nodes.moves,
@@ -34,8 +34,8 @@ class PgnDeletionSummary {
     );
   }
 
-  factory PgnDeletionSummary.variations(MoveTree tree) {
-    final roots = <MoveNode>[];
+  factory PgnDeletionSummary.variations(MoveTreeView tree) {
+    final roots = <MoveNodeView>[];
     var siblings = tree.roots;
     while (siblings.isNotEmpty) {
       roots.addAll(siblings.skip(1));

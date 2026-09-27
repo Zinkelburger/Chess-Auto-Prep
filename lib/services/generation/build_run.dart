@@ -14,7 +14,7 @@ import 'dart:math' as math;
 
 import 'package:dartchess/dartchess.dart';
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import '../../utils/chess_utils.dart' show playUciFrom, tryParseFen;
 import '../../utils/fen_utils.dart';
 import '../engine/stockfish_pool.dart';

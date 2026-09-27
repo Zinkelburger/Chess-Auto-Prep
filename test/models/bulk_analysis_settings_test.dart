@@ -1,4 +1,5 @@
-import 'package:chess_auto_prep/models/bulk_analysis_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/features/settings/controllers/bulk_analysis_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -11,16 +12,15 @@ void main() {
       SharedPreferences.setMockInitialValues({
         BulkAnalysisSettings.legacyPrefKey: 21,
       });
-      final settings = BulkAnalysisSettings.forTest();
+      final settings = RuntimeSettings.preferences().bulk;
       addTearDown(settings.dispose);
       await settings.ensureLoaded();
       expect(settings.depth, 21);
       await settings.setDepth(18);
-      final reloaded = BulkAnalysisSettings.forTest();
+      final reloaded = RuntimeSettings.preferences().bulk;
       addTearDown(reloaded.dispose);
       await reloaded.ensureLoaded();
       expect(reloaded.depth, 18);
-      expect(await BulkAnalysisSettings.loadSavedDepth(), 18);
     },
   );
 
@@ -28,7 +28,7 @@ void main() {
     'bulk depth accepts the engine range and clamps invalid values',
     () async {
       SharedPreferences.setMockInitialValues({});
-      final settings = BulkAnalysisSettings.forTest();
+      final settings = RuntimeSettings.preferences().bulk;
       addTearDown(settings.dispose);
       await settings.setDepth(30);
       expect(settings.depth, 30);

@@ -8,8 +8,9 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../services/chess_api_urls.dart';
+import '../../../services/games_library/games_library_service.dart';
 import '../../../services/lichess_api_client.dart';
-import '../../../services/pgn_parsing_service.dart' show splitPgnIntoGames;
+import '../../../chess_core/pgn/pgn_text.dart' show splitPgnIntoGames;
 import '../../../utils/log.dart';
 import 'tactics_import_pgn_helpers.dart' show isGameBefore;
 
@@ -20,7 +21,39 @@ const int kDefaultLichessImportGames = 20;
 const int kDefaultChesscomImportGames = 10;
 
 class TacticsGameFetcher {
-  const TacticsGameFetcher();
+  const TacticsGameFetcher({GamesLibraryService? library}) : _library = library;
+
+  /// Where the games already downloaded on this computer live. Consulted
+  /// only when a download fails: reviewing the games you have beats telling
+  /// someone with no connection that they have no games.
+  final GamesLibraryService? _library;
+
+  /// The saved games for this player, sliced the way the download would have
+  /// been, or null when there are none.
+  Future<List<String>?> _savedGames(
+    GamesPlatform platform,
+    String username, {
+    int? maxGames,
+    DateTime? since,
+  }) async {
+    final pgn = await (_library ?? GamesLibraryService()).cachedPgn(
+      platform,
+      username,
+    );
+    if (pgn == null) return null;
+    var games = splitPgnIntoGames(pgn);
+    if (since != null) {
+      games = games.where((g) => !isGameBefore(g, since)).toList();
+    }
+    if (maxGames != null && games.length > maxGames) {
+      games = games.take(maxGames).toList();
+    }
+    return games.isEmpty ? null : games;
+  }
+
+  static String _savedGamesMessage(String site, int count) =>
+      'Could not reach $site — reviewing the $count game'
+      '${count == 1 ? '' : 's'} saved on this computer.';
 
   /// The user's recent Lichess games as one PGN export, with clocks (they
   /// feed the tempo flaw tags). With [since], the window is the limit and
@@ -48,19 +81,41 @@ class TacticsGameFetcher {
     }
 
     progress?.call('Downloading games from Lichess...');
-    final response = await LichessApiClient.instance.get(
-      lichessUserGamesUrl(username, params),
-      extraHeaders: {'Accept': 'application/x-chess-pgn'},
+    http.Response? response;
+    Object? failure;
+    try {
+      response = await LichessApiClient.instance.get(
+        lichessUserGamesUrl(username, params),
+        extraHeaders: {'Accept': 'application/x-chess-pgn'},
+      );
+    } catch (e) {
+      failure = e;
+    }
+    if (response != null && response.statusCode == 200) return response.body;
+
+    // The download did not happen. Before failing the run, look at what this
+    // computer already holds: offline, the saved games are the whole answer.
+    final saved = await _savedGames(
+      GamesPlatform.lichess,
+      username,
+      maxGames: since == null
+          ? (maxGames ?? kDefaultLichessImportGames)
+          : maxGames,
+      since: since,
     );
+    if (saved != null) {
+      progress?.call(_savedGamesMessage('Lichess', saved.length));
+      return saved.join('\n\n');
+    }
+    if (failure != null) {
+      throw Exception('Failed to fetch games from Lichess: $failure');
+    }
     if (response == null) {
       throw Exception('Failed to fetch games from Lichess (request failed)');
     }
-    if (response.statusCode != 200) {
-      throw Exception(
-        'Failed to fetch games from Lichess: ${response.statusCode}',
-      );
-    }
-    return response.body;
+    throw Exception(
+      'Failed to fetch games from Lichess: ${response.statusCode}',
+    );
   }
 
   /// The user's Chess.com games, newest archive month first, as separate
@@ -84,11 +139,32 @@ class TacticsGameFetcher {
 
     progress?.call('Fetching Chess.com game archives for $username…');
 
+    // What this computer already holds, for the paths below where nothing
+    // was downloaded. Offline, these games are the whole answer.
+    Future<List<String>?> savedGames() async {
+      final saved = await _savedGames(
+        GamesPlatform.chesscom,
+        username,
+        maxGames: targetGames,
+        since: since,
+      );
+      if (saved != null) {
+        progress?.call(_savedGamesMessage('Chess.com', saved.length));
+      }
+      return saved;
+    }
+
     // Use the archives endpoint to discover which months actually have
     // games, rather than blindly checking the last N months (which fails
     // for inactive players).
-    final archives = await _fetchArchives(username);
+    var archives = const <String>[];
+    try {
+      archives = await _fetchArchives(username);
+    } catch (e) {
+      if (kDebugMode) log.e('Error fetching Chess.com archives: $e');
+    }
     if (archives.isEmpty) {
+      if (await savedGames() case final saved?) return saved;
       throw Exception('No game archives found for $username on Chess.com');
     }
     final startArchiveIndex = since == null
@@ -121,6 +197,9 @@ class TacticsGameFetcher {
 
     if (games.isEmpty) {
       if (isCancelled()) return const [];
+      // Every archive request failed (they are caught one by one above), so
+      // this is the same offline case as an unreachable archives endpoint.
+      if (await savedGames() case final saved?) return saved;
       throw Exception('No games found for $username on Chess.com');
     }
 

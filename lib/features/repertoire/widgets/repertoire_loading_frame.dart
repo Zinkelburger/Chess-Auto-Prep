@@ -8,30 +8,51 @@ class RepertoireLoadingFrame extends StatelessWidget {
     super.key,
     required this.isLoading,
     required this.child,
+    this.loadError,
+    this.onDismissError,
   });
 
   final bool isLoading;
   final Widget child;
+  final String? loadError;
+  final VoidCallback? onDismissError;
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
+    return Column(
       children: [
-        AbsorbPointer(
-          absorbing: isLoading,
-          child: ExcludeFocus(excluding: isLoading, child: child),
-        ),
-        if (isLoading)
-          const Positioned(
-            left: 0,
-            right: 0,
-            top: 0,
-            child: LinearProgressIndicator(
-              minHeight: 2,
-              semanticsLabel: 'Opening chapter',
-            ),
+        if (loadError case final error?)
+          MaterialBanner(
+            content: Text(error),
+            leading: const Icon(Icons.error_outline),
+            actions: [
+              TextButton(
+                onPressed: onDismissError,
+                child: const Text('Dismiss'),
+              ),
+            ],
           ),
+        Expanded(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              AbsorbPointer(
+                absorbing: isLoading,
+                child: ExcludeFocus(excluding: isLoading, child: child),
+              ),
+              if (isLoading)
+                const Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  child: LinearProgressIndicator(
+                    minHeight: 2,
+                    semanticsLabel: 'Opening chapter',
+                  ),
+                ),
+            ],
+          ),
+        ),
       ],
     );
   }

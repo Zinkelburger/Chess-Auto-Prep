@@ -1,7 +1,7 @@
 /// Unified model for Lichess Explorer API responses.
 ///
 /// Used across the move-generation pipeline (`ProbabilityService`,
-/// `TreeBuildService`, `AnalysisService`) so there is exactly one
+/// `TreeBuildService`, `LiveExplorerService`) so there is exactly one
 /// JSON → Dart conversion for Explorer data.
 library;
 

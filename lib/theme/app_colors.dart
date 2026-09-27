@@ -10,27 +10,28 @@
 /// header dims it (see [EngineSettings.mutedAnalysisColumns]).
 library;
 
+import '../design_system/theme/app_palette.dart';
 import 'package:flutter/material.dart';
 
 abstract final class AppColors {
   // ── Surfaces ─────────────────────────────────────────────────────────────
 
-  static const surface = Color(0xFF121212);
+  static const surface = AppPalette.darkSurface;
 
   /// Cool slate separates engine analysis from the neutral PGN canvas.
   static const engineSurface = Color(0xFF1C2329);
 
-  static const surfaceElevated = Color(0xFF1E1E1E);
-  static const surfaceContainer = Color(0xFF2A2A2A);
+  static const surfaceElevated = AppPalette.darkPanel;
+  static const surfaceContainer = AppPalette.darkContainer;
 
   /// Recessed chip/track/snackbar fill, one step above [surfaceContainer].
-  static const surfaceInset = Color(0xFF303030);
+  static const surfaceInset = AppPalette.darkInset;
 
   /// Default filled/elevated button fill (see AppTheme button themes).
-  static const buttonSurface = Color(0xFF404040);
+  static const buttonSurface = AppPalette.darkButton;
 
   /// ColorScheme.secondary — slider tracks, switches, selection chrome.
-  static const surfaceHighlight = Color(0xFF606060);
+  static const surfaceHighlight = AppPalette.darkSelection;
 
   /// Mid-gray reserve tray keeps both black and white chess pieces visible.
   static const pocketSurface = onSurfaceDisabled;
@@ -39,7 +40,7 @@ abstract final class AppColors {
 
   /// Canonical body ink (16.7:1 on [surface]). [AppTextStyles.ink] and the
   /// PGN movetext tokens alias this — there is exactly one "white" in the app.
-  static const ink = Color(0xFFF2F2F2);
+  static const ink = AppPalette.darkInk;
 
   /// Secondary text and icons (8.2:1). The one grey below [ink]: captions,
   /// meta lines, labels. Hierarchy above this comes from weight, not from a
@@ -51,7 +52,7 @@ abstract final class AppColors {
   /// noise in between. The old names below are aliases so call sites did not
   /// have to change — new code should use [ink], [onSurfaceMuted] and
   /// [onSurfaceDisabled] only.
-  static const onSurfaceMuted = Color(0xFFABABAB);
+  static const onSurfaceMuted = AppPalette.darkMuted;
 
   /// Alias of [ink] (retired second white).
   static const inkSoft = ink;
@@ -69,10 +70,10 @@ abstract final class AppColors {
   // ── Lines, overlays, states ──────────────────────────────────────────────
 
   /// Hairline divider as an alpha wash (composites over any surface).
-  static const divider = Color(0x24FFFFFF);
+  static const divider = AppPalette.darkDivider;
 
   /// Solid hairline border/outline (use where alpha washes would stack).
-  static const outline = Color(0xFF616161);
+  static const outline = AppPalette.darkOutline;
 
   /// Row-hover wash for tables/lists.
   static const hoverOverlay = Color(0x0CFFFFFF);
@@ -348,29 +349,9 @@ abstract final class AppColors {
   static const chartAreaWhite = ink;
   static const chartAreaBlack = Color(0xFF080808);
 
-  // ── Eval-tree node fills (Repertoire → Tree tab) ─────────────────────────
-  // Muted, desaturated fills hand-tuned so white node labels stay legible;
-  // classification helpers live in lib/features/eval_tree/tree_colors.dart.
-
-  static const treeNodeOurMoveRepertoire = Color(0xFF3D5245);
-  static const treeNodeOurMove = Color(0xFF354840);
-  static const treeNodeOpponentMove = Color(0xFF3A4248);
-  static const treeNodeBlunder = Color(0xFF6E4545);
-  static const treeNodeBigMistake = Color(0xFF6E4F3D);
-  static const treeNodeMistake = Color(0xFF6E5A3D);
-  static const treeNodeInaccuracy = Color(0xFF6E6640);
-  static const treeNodeNeutral = Color(0xFF424242);
-
-  /// Accent stroke/glyph marking repertoire moves inside the eval tree.
-  static const treeNodeAccentRepertoire = Color(0xFF8A9E9A);
-
   // ── Tactics mistake severity (?? / ? / ?! / custom) ─────────────────────
   //
-  // Deliberately the same three hues as the move classification above, which
-  // are in turn the ones every chess site uses: blue inaccuracy, amber
-  // mistake, red blunder. Severity is the one place hue carries meaning the
-  // reader already knows, so a "2" in the blunder column and a `??` node in
-  // the tree agree on what red means.
+  // Match PGN move classification: blue inaccuracy, amber mistake, red blunder.
 
   static const mistakeBlunder = nagBlunder;
   static const mistakeMistake = moveClassMistake;
@@ -426,8 +407,12 @@ abstract final class AppColors {
   static const boardSelected = Color(0x669BC700);
   static const boardHighlight = Color(0x556496FF);
 
-  /// Quiet destination dots / capture rings, visible on both board colours.
-  static const boardLegalMove = Color(0x55000000);
+  /// Where the piece in hand may land. A tint rather than a dot or a ring:
+  /// a marker drawn over the square either hides the piece standing there or
+  /// has to dodge it, and the destinations then read as two different marks
+  /// instead of one set. Lighter than [boardSelected] so the square you
+  /// picked up still leads.
+  static const boardLegalMove = Color(0x3D9BC700);
 
   /// Subtle tint kept on the from/to squares of the most recent half-moves
   /// (Chessable-style trail). Quieter than [boardSelected] so it reads as

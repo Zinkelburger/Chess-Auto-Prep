@@ -36,11 +36,14 @@
 ///       0 means what the form means by it — no pruning at all
 library;
 
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
-import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:chess_auto_prep/services/generation/engine_tail.dart';
 import 'package:chess_auto_prep/services/generation/fen_map.dart';
@@ -50,7 +53,7 @@ import 'package:chess_auto_prep/services/generation/line_pruner.dart';
 import 'package:chess_auto_prep/services/generation/repertoire_selector.dart';
 import 'package:chess_auto_prep/services/generation/tree_ease.dart';
 import 'package:chess_auto_prep/services/generation/tree_my_ease.dart';
-import 'package:chess_auto_prep/services/generation/tree_serialization.dart';
+import 'package:chess_auto_prep/chess_core/generation/tree_serialization.dart';
 import 'package:chess_auto_prep/services/generation/snapshot_export.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -82,7 +85,14 @@ class _RealPaths extends PathProviderPlatform with MockPlatformInterfaceMixin {
   Future<String?> getApplicationSupportPath() async => support;
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   test('extract lines from a built tree', () async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
@@ -254,9 +264,7 @@ Future<Map<String, EngineTail>> _engineTails(
       : slice.all;
 
   try {
-    await StockfishPool.instance.prepareForTreeBuild(
-      config.resolvedEngineThreads,
-    );
+    await engines.pool.prepareForTreeBuild(config.resolvedEngineThreads);
   } catch (e) {
     stdout.writeln('[extract] no engine ($e) — skipping tails');
     return const {};
@@ -265,7 +273,7 @@ Future<Map<String, EngineTail>> _engineTails(
   final tails = await computeEngineTails(
     lines: lines,
     config: config,
-    pool: StockfishPool.instance,
+    pool: engines.pool,
     onProgress: (done, total) {
       if (done == 1 || done % 50 == 0 || done == total) {
         stdout.writeln('[extract] tails $done/$total');

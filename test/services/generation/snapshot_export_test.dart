@@ -4,7 +4,7 @@ import 'package:chess_auto_prep/services/generation/course/master_improvements.d
 import 'package:chess_auto_prep/services/master_games/master_games_db.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:chess_auto_prep/services/generation/snapshot_export.dart';
-import 'package:chess_auto_prep/services/generation/tree_serialization.dart';
+import 'package:chess_auto_prep/chess_core/generation/tree_serialization.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'generation_test_helpers.dart';

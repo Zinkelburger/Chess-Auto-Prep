@@ -4,6 +4,7 @@ library;
 import 'dart:io';
 import 'dart:math';
 
+import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
 import '../../utils/file_operation_lock.dart';
@@ -29,9 +30,9 @@ class QuarantineReceipt {
   final String quarantinedPath;
 }
 
-/// Every destructive move, rename or delete of managed data goes through
-/// here: each operation is locked, refuses to leave its allowed root, refuses
-/// symlinks, and never overwrites an existing entry.
+/// Managed mutations validate roots and links under app-local locks.
+/// [moveFileNoReplace] and explicit native installers protect destinations
+/// against external creators; legacy rename paths do not share that guarantee.
 class FileMutationService {
   FileMutationService();
 
@@ -55,17 +56,25 @@ class FileMutationService {
 
   /// Moves a managed file into [quarantineRoot]. Neither the managed root nor
   /// a symlink may be deleted, and the resolved path must remain under
-  /// [allowedRoot].
+  /// [allowedRoot]. Validation and acknowledgement hooks run under the same
+  /// parent-directory mutex as the move. The generated destination is exposed
+  /// before mutation so callers can retain evidence if acknowledgement fails.
   Future<QuarantineReceipt?> quarantineFile(
     File target, {
     required Directory allowedRoot,
     required Directory quarantineRoot,
     Directory? quarantineAllowedRoot,
+    Future<void> Function(String destination)? beforeMove,
+    Future<void> Function(String destination)? afterMove,
+    Future<void> Function(String destination)? installNoReplace,
   }) => _quarantine(
     target,
     allowedRoot: allowedRoot,
     quarantineRoot: quarantineRoot,
     quarantineAllowedRoot: quarantineAllowedRoot,
+    beforeMove: beforeMove,
+    afterMove: afterMove,
+    installNoReplace: installNoReplace,
   );
 
   /// Moves a managed directory into [quarantineRoot] without traversing it.
@@ -90,6 +99,9 @@ class FileMutationService {
     required Directory allowedRoot,
     required Directory quarantineRoot,
     Directory? quarantineAllowedRoot,
+    Future<void> Function(String destination)? beforeMove,
+    Future<void> Function(String destination)? afterMove,
+    Future<void> Function(String destination)? installNoReplace,
   }) async {
     if (!await target.exists()) return null;
     return withFileOperationLock(target.parent.path, () async {
@@ -109,7 +121,13 @@ class FileMutationService {
           destination,
         );
       }
-      await target.rename(destination);
+      await beforeMove?.call(destination);
+      if (installNoReplace == null) {
+        await target.rename(destination);
+      } else {
+        await installNoReplace(destination);
+      }
+      await afterMove?.call(destination);
       return QuarantineReceipt(
         originalPath: target.path,
         quarantinedPath: destination,
@@ -145,6 +163,9 @@ class FileMutationService {
 
   /// Moves a file without overwrite. Both paths must resolve inside
   /// [allowedRoot], and links are rejected at the mutation boundary.
+  /// The native move refuses a destination created after preflight too.
+  /// Unsupported filesystems fail without a replacement fallback. This does
+  /// not validate a previously captured source identity or migrate references.
   Future<void> moveFileNoReplace(
     File source,
     File destination, {
@@ -162,7 +183,14 @@ class FileMutationService {
           destination.path,
         );
       }
-      await source.rename(destination.path);
+      try {
+        await movePathNoReplace(source.path, destination.path);
+      } on NativeNameCollision {
+        throw FileSystemException(
+          'Destination already exists; refusing to overwrite',
+          destination.path,
+        );
+      }
     });
   }
 
@@ -170,6 +198,10 @@ class FileMutationService {
     Directory source,
     Directory destination, {
     required Directory allowedRoot,
+    Directory? destinationAllowedRoot,
+    Future<void> Function()? beforeMove,
+    Future<void> Function()? afterMove,
+    Future<void> Function()? installNoReplace,
   }) async {
     if (p.equals(source.path, destination.path)) return;
     if (p.isWithin(source.path, destination.path)) {
@@ -179,7 +211,10 @@ class FileMutationService {
     }
     await withFileOperationLock(allowedRoot.path, () async {
       await _requireSafeTarget(source, allowedRoot: allowedRoot);
-      await _requireSafeDestination(destination, allowedRoot: allowedRoot);
+      await _requireSafeDestination(
+        destination,
+        allowedRoot: destinationAllowedRoot ?? allowedRoot,
+      );
       if (!await source.exists()) {
         throw FileSystemException(
           'Source directory does not exist',
@@ -192,8 +227,35 @@ class FileMutationService {
           destination.path,
         );
       }
-      await source.rename(destination.path);
+      await beforeMove?.call();
+      if (installNoReplace == null) {
+        await source.rename(destination.path);
+      } else {
+        await installNoReplace();
+      }
+      await afterMove?.call();
     });
+  }
+
+  /// Validates both live and absent journal paths before reference recovery.
+  Future<void> validateManagedDirectoryPath(
+    Directory directory, {
+    required Directory allowedRoot,
+  }) async {
+    await _requireSafeTarget(directory, allowedRoot: allowedRoot);
+    await _requireSafeDirectoryTree(directory, allowedRoot: allowedRoot);
+  }
+
+  /// Validate a managed file and all parent links before presenting a mutation.
+  /// The mutation itself must repeat validation while holding its file lock.
+  Future<void> validateManagedFilePath(
+    File file, {
+    required Directory allowedRoot,
+  }) async {
+    await _requireSafeTarget(file, allowedRoot: allowedRoot);
+    if (!p.equals(p.absolute(file.parent.path), p.absolute(allowedRoot.path))) {
+      await _requireSafeDirectoryTree(file.parent, allowedRoot: allowedRoot);
+    }
   }
 
   Future<void> _requireSafeTarget(

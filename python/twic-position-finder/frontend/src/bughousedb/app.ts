@@ -33,10 +33,13 @@ const START_DUAL = `${START}|${START}`;
  */
 const PRIORITIES: Clock[] = ['ahead', 'even', 'behind'];
 let priority: Clock = 'even';
-// The browser engine runs one network evaluation (about 80 ms) per node, so a
-// browser analysis is far shallower than the desktop builder's 1500/200.
+// The browser engine runs one network evaluation (about 80 ms) per node, so the
+// position's own search is far shallower than the desktop builder's 1500. The
+// time goes to each board's few moves the search liked most, searched as deeply
+// as the desktop builder searches every move; the rest stay unscored.
 const OWN_NODES = 200;    // each search of the position itself
-const CHILD_NODES = 16;   // each search after one move (1 would leave q = -1)
+const CHILD_NODES = 200;  // each search after one of the top moves
+const TOP_MOVES = 4;      // per board
 const SECONDS_PER_NODE = 0.085;
 const ENGINE = 'hivemind-web';
 const BOTTOM: Record<BoardName, Colour> = { A: 'white', B: 'black' };
@@ -51,6 +54,10 @@ let accepted = lines.snapshot();
 let cur: BookPosition | null = null;
 let hover: BookMove | null = null;
 let job: { fen: string; cancelled: boolean } | null = null;
+/** Positions this computer has already analysed; each computer counts once. */
+const analysedHere = new Set<string>();
+/** The latest message from loading or analysing; empty shows the position's own note. */
+let status = { text: '', error: false };
 
 const boards = new Boards('bdb', { view, play: playUci });
 const lineView = new LineView('bdb', lines, () => { void load(); });
@@ -131,23 +138,45 @@ function renderTables() {
   }
 }
 
+/** The analyse controls keep their place when hidden, and the status line under
+ * them is always there, so nothing above the tables moves. */
 function renderMissing() {
-  const missing = el('bdb-missing');
   const running = job !== null;
-  missing.hidden = !(running || (cur && !cur.found));
-  el<HTMLButtonElement>('bdb-analyse').hidden = running;
+  const missing = !!cur && !cur.found;
+  const confirmable = canConfirm();
+  el('bdb-missing').dataset.shown = String(running || missing || confirmable);
+  const analyse = el<HTMLButtonElement>('bdb-analyse');
+  analyse.hidden = running;
+  analyse.textContent = missing ? 'Analyze locally' : 'Confirm locally';
+  analyse.title = missing
+    ? 'Run Hivemind in this browser and add the position to the book for everyone'
+    : 'Run Hivemind in this browser too; the book counts every computer that has analysed a position';
   el<HTMLButtonElement>('bdb-cancel').hidden = !running;
   el('bdb-progress').hidden = !running;
   coresInput.disabled = running;
-  el('bdb-missing-text').textContent = running
-    ? (job!.fen === cur?.fen ? 'Analyzing on this computer…' : 'Analyzing an earlier position on this computer…')
-    : `Not in the book yet · about ${estimate()}`;
+  const earlier = running && job!.fen !== cur?.fen ? 'Analyzing an earlier position · ' : '';
+  el('bdb-status-text').textContent = earlier + (status.text
+    || (missing ? `Not in the book yet · about ${estimate()}` : '')
+    // Only a browser analysis is worth a note: it is much shallower than the book.
+    || (cur?.meta && cur.meta.source !== 'desktop' ? `Analyzed in a browser on ${computers(cur.meta.computers)}: a quick, shallower search.` : ''));
+  el('bdb-status').dataset.error = String(!!status.text && status.error);
+}
+
+/** A browser position can be confirmed by another computer; the desktop book is deeper than a browser. */
+function canConfirm(): boolean {
+  return !!cur?.found && cur.meta?.source === 'browser' && !analysedHere.has(cur.fen);
+}
+
+function computers(n: number): string {
+  return n === 1 ? '1 computer' : `${n} computers`;
 }
 
 function estimate(): string {
   if (!cur) return '';
-  const nodes = cur.teams.length * 2 * OWN_NODES + cur.moves.length * 2 * CHILD_NODES;
-  const seconds = (nodes * SECONDS_PER_NODE) / cores();
+  // Two rounds: the position's own searches, then two per top move.
+  const round = (searches: number, nodes: number) => Math.ceil(searches / cores()) * nodes;
+  const nodes = round(cur.teams.length * 2, OWN_NODES) + round(2 * topCount(cur), CHILD_NODES);
+  const seconds = nodes * SECONDS_PER_NODE;
   return seconds < 90 ? `${Math.max(10, Math.round(seconds / 10) * 10)} s` : `${Math.round(seconds / 60)} min`;
 }
 
@@ -174,17 +203,14 @@ coresInput.addEventListener('change', () => {
 
 function render() {
   boards.render(); lineView.render(); renderTables(); renderMissing();
-  // Only a browser analysis is worth a note: it is much shallower than the book.
-  el('bdb-source').textContent = cur?.meta && cur.meta.source !== 'desktop' ? 'Analyzed in a browser: a quick, shallower search.' : '';
   setup.fill(cur?.fen ?? lines.root);
 }
 
 function setHover(m: BookMove | null) { hover = m; boards.renderArrows(); }
 
 function setStatus(text: string, error = false) {
-  const s = el('bdb-status');
-  s.textContent = text;
-  s.dataset.error = String(error);
+  status = { text, error };
+  renderMissing();
 }
 
 // ── The line in the URL ───────────────────────────────────────────
@@ -310,50 +336,44 @@ function reset(fen: string) {
 
 // ── Analysing a missing position in this browser ──────────────────
 
-// ── CAPTCHA ───────────────────────────────────────────────────────
-// A ticket needs a fresh Turnstile token. The widget sits in the "not in the
-// book" strip, which is hidden when the page loads, so Cloudflare's automatic
-// render never draws it and no token ever comes: it is rendered here instead,
-// once per analysis, and its token awaited. Usually no puzzle appears at all.
-
-interface Turnstile {
-  render(el: HTMLElement, options: Record<string, unknown>): string;
-  remove(widget: string): void;
+/** How many moves an analysis scores: up to TOP_MOVES on each board. */
+function topCount(pos: BookPosition): number {
+  return BOARDS.reduce((n, name) => n + Math.min(TOP_MOVES, pos.moves.filter((m) => m.board === name).length), 0);
 }
-let captcha: string | null = null;
 
-async function turnstileApi(): Promise<Turnstile> {
-  for (let waited = 0; waited < 15000; waited += 100) {
-    const t = (window as unknown as { turnstile?: Turnstile }).turnstile;
-    if (t) return t;
-    await new Promise((r) => setTimeout(r, 100));
+/**
+ * Each board's TOP_MOVES from its mover's own searches (both clock bits),
+ * ranked by the visits the searches gave them, then by the network's prior.
+ */
+function topMoves(pos: BookPosition, own: { team: Team; ranked: NodeSearchResult['moves'] }[]): Set<string> {
+  const picked = new Set<string>();
+  for (const name of BOARDS) {
+    const legal = pos.moves.filter((m) => m.board === name);
+    if (!legal.length) continue;
+    const mover = moverTeam(legal[0]);
+    const score = new Map<string, { visits: number; prior: number }>();
+    for (const o of own) {
+      if (o.team !== mover) continue;
+      for (const m of o.ranked) {
+        if (m.board !== name) continue;
+        const s = score.get(m.uci) ?? { visits: 0, prior: 0 };
+        score.set(m.uci, { visits: s.visits + m.visits, prior: Math.max(s.prior, m.prior) });
+      }
+    }
+    legal.map((m) => m.uci).filter((uci) => score.has(uci))
+      .sort((a, b) => score.get(b)!.visits - score.get(a)!.visits || score.get(b)!.prior - score.get(a)!.prior)
+      .slice(0, TOP_MOVES)
+      .forEach((uci) => picked.add(`${name}:${uci}`));
   }
-  throw new Error('The CAPTCHA did not load. Check that challenges.cloudflare.com is not blocked.');
+  return picked;
 }
 
-/** A token for one ticket, or '' when the site runs without a CAPTCHA. */
-async function captchaToken(): Promise<string> {
-  const sitekey = root.dataset.turnstile;
-  if (!sitekey) return '';
-  const turnstile = await turnstileApi();
-  if (captcha !== null) turnstile.remove(captcha);
-  return new Promise((resolve, reject) => {
-    captcha = turnstile.render(el('bdb-captcha'), {
-      sitekey,
-      appearance: 'interaction-only',
-      callback: (token: string) => resolve(token),
-      'error-callback': (code: string) => reject(new Error(`The CAPTCHA failed (${code}). Try again.`)),
-      'timeout-callback': () => reject(new Error('The CAPTCHA timed out. Try again.')),
-    });
-  });
-}
-
-async function search(engine: BrowserEngine, fen: string, team: Team, ahead: boolean, nodes: number): Promise<RawSearch | null> {
+async function search(engine: BrowserEngine, fen: string, team: Team, ahead: boolean, nodes: number): Promise<(RawSearch & { ranked: NodeSearchResult['moves'] }) | null> {
   try {
     const r = await engine.request<NodeSearchResult>('search', {
       dual_fen: fen, team: team === 'AB' ? 'white' : 'black', time_advantage: ahead, nodes,
     });
-    return { q: r.mate === null ? r.q : null, mate: r.mate, pv: r.pv, best: r.best?.uci ?? null, nodes: r.nodes };
+    return { q: r.mate === null ? r.q : null, mate: r.mate, pv: r.pv, best: r.best?.uci ?? null, nodes: r.nodes, ranked: r.moves ?? [] };
   } catch (e) {
     // The answering side can have no legal move (mated); that search is empty.
     if (e instanceof Error && /no move available/i.test(e.message)) return null;
@@ -362,13 +382,13 @@ async function search(engine: BrowserEngine, fen: string, team: Team, ahead: boo
 }
 
 async function analyse() {
-  if (!cur || cur.found || job) return;
+  if (!cur || job || (cur.found && !canConfirm())) return;
   const pos = cur;
   const mine = { fen: pos.fen, cancelled: false };
   job = mine;
   renderMissing();
   const bar = el('bdb-progress').firstElementChild as HTMLElement;
-  const total = pos.teams.length * 2 + pos.moves.length * 2;
+  let total = pos.teams.length * 2 + 2 * topCount(pos);
   let done = 0;
   const started = performance.now();
   const tick = () => {
@@ -378,35 +398,43 @@ async function analyse() {
     setStatus(`Searched ${done} of ${total} · about ${left < 90 ? `${Math.round(left)} s` : `${Math.round(left / 60)} min`} left`);
   };
   try {
-    setStatus('Checking you are not a robot…');
-    const token = await captchaToken();
     setStatus('Getting a ticket…');
-    const { ticket } = await bookTicket(pos.fen, token);
-    setStatus('Loading Hivemind (about 44 MB the first time)…');
-    // Every search is independent: the position's own four, then two per move.
+    const { ticket } = await bookTicket(pos.fen);
+    setStatus('Starting Hivemind…');
+    // The position's own searches first; they rank each board's moves.
     type Task = { fen: string; team: Team; ahead: boolean; nodes: number };
-    const ownTasks: Task[] = pos.teams.flatMap((team) => [true, false].map((ahead) => ({ fen: pos.fen, team, ahead, nodes: OWN_NODES })));
-    const moveTasks: Task[] = pos.moves.flatMap((m) => [true, false].map((ahead) => ({ fen: m.child_fen, team: m.answerer, ahead, nodes: CHILD_NODES })));
-    const results = await pool.map(cores(), [...ownTasks, ...moveTasks], async (engine, t) => {
+    const run = (tasks: Task[]) => pool.map(cores(), tasks, async (engine, t) => {
       if (mine.cancelled) throw new Error('cancelled');
       const s = await search(engine, t.fen, t.team, t.ahead, t.nodes);
       tick();
       return s;
     });
-    const own = ownTasks.flatMap((t, i) => (results[i] ? [{ team: t.team, ahead: t.ahead, search: results[i]! }] : []));
-    const moves = pos.moves.map((m, i) => ({
-      board: m.board, uci: m.uci,
-      on: results[ownTasks.length + 2 * i], off: results[ownTasks.length + 2 * i + 1],
-    }));
+    const ownTasks: Task[] = pos.teams.flatMap((team) => [true, false].map((ahead) => ({ fen: pos.fen, team, ahead, nodes: OWN_NODES })));
+    const ownResults = await run(ownTasks);
+    const top = topMoves(pos, ownTasks.flatMap((t, i) => (ownResults[i] ? [{ team: t.team, ranked: ownResults[i]!.ranked }] : [])));
+    // Then the answering team's search after each top move, under both clock bits.
+    const scored = pos.moves.filter((m) => top.has(`${m.board}:${m.uci}`));
+    total = ownTasks.length + 2 * scored.length;
+    const moveTasks: Task[] = scored.flatMap((m) => [true, false].map((ahead) => ({ fen: m.child_fen, team: m.answerer, ahead, nodes: CHILD_NODES })));
+    const moveResults = await run(moveTasks);
+    const raw = (s: Awaited<ReturnType<typeof search>> | undefined): RawSearch | null =>
+      s ? { q: s.q, mate: s.mate, pv: s.pv, best: s.best, nodes: s.nodes } : null;
+    const own = ownTasks.flatMap((t, i) => (ownResults[i] ? [{ team: t.team, ahead: t.ahead, search: raw(ownResults[i])! }] : []));
+    // Every legal move is sent; the unscored ones carry no search.
+    const moves = pos.moves.map((m) => {
+      const i = scored.indexOf(m);
+      return { board: m.board, uci: m.uci, on: i < 0 ? null : raw(moveResults[2 * i]), off: i < 0 ? null : raw(moveResults[2 * i + 1]) };
+    });
     setStatus('Uploading…');
-    await bookUpload({ ticket, fen: pos.fen, engine: ENGINE, nodes: OWN_NODES, child_nodes: CHILD_NODES, own, moves });
-    setStatus('Added to the book. Thank you.');
+    const stored = await bookUpload({ ticket, fen: pos.fen, engine: ENGINE, nodes: OWN_NODES, child_nodes: CHILD_NODES, own, moves });
     job = null;
-    if (cur?.fen === pos.fen) await load(); else renderMissing();
+    analysedHere.add(pos.fen);
+    if (cur?.fen === pos.fen) await load();
+    setStatus(stored.computers > 1 ? `Confirmed: ${computers(stored.computers)} have analysed this position. Thank you.` : 'Added to the book. Thank you.');
   } catch (e) {
     job = null;
     if (mine.cancelled) setStatus('Cancelled.');
-    else if (e instanceof ApiError && e.status === 409) { setStatus('Someone else just added this position.'); await load(); }
+    else if (e instanceof ApiError && e.status === 409) { analysedHere.add(pos.fen); setStatus(e.message); await load(); }
     else setStatus(e instanceof Error && !(e instanceof ApiError) ? e.message : (e as ApiError).message, true);
     bar.style.width = '0';
     renderMissing();

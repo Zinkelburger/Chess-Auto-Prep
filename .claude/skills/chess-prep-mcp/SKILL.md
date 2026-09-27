@@ -20,7 +20,7 @@ spawns the same server for one request:
 
 ```
 M=.claude/skills/chess-prep-mcp/mcp_tools.py
-python3 $M check                     # server starts and lists its tools (50 today)
+python3 $M check                     # server starts and lists its tools (60 today)
 python3 $M list                      # every tool, one line; `list expectimax` filters
 python3 $M describe expectimax_run   # full description + every argument
 python3 $M call master_status        # call one; k=v args parse as JSON where they can
@@ -45,7 +45,9 @@ not yours to fix.
 | `pgn_*` — a PGN (repertoire, Chessable course, game collection) as a FEN-keyed tree: `open` once, then `position`, `walk`, `audit`, `eval` | the PGN you pass | `pgn_eval` and `pgn_audit` **run Stockfish** | yes |
 | `chessdb_query` — chessdb.cn moves from a position, best-first, with reply counts | the network | nothing | yes |
 | `chesscom_*` — find a chess.com account from rating clues ("blitz 2701 on June 13"): `search` → `search_status` → results; `rating_on`, `profile`, `who_plays` (opening line, cache only) | chess.com public API + website leaderboard; archive cache and SQLite index in `~/.local/share/chess-prep/chesscom/` | **`chesscom_search` starts a detached job making up to `max_requests` serial HTTP requests** (default 1500, ~5 min) | no |
+| `chessgames_*` — chessgames.com collections as PGN: `download` → `status`; `stop` | the collection pages, then one game per 22 s; games cached in `~/.local/share/chess-prep/chessgames/games/` | **`chessgames_download` starts a detached job (~22 s per game, so 60 games ≈ 22 min)**; writes one PGN per collection to `~/Documents/chessgames/` | no |
 | `roster_*`, `identity_*`, `constraint_add`, `pairing_simulate`, `opponents_export`, `uscf_*`, `directory_*` — tournament entry list → identified online accounts → the opponent list Player Analysis imports | bundled directory in `tools/mcp/chess_prep/data/`, US Chess API (`uscf_*`) | `roster.json` / `opponents.json` in `~/.local/share/chess-prep/` | no |
+| `people_*`, `player_lookup`, `master_player_search` — the app's players directory: `people_populate` looks up a whole roster and writes one person each (aliases, USCF/FIDE ID, trusted accounts, a `lookup` block of candidates and next steps) plus the event's group; `player_lookup` does one person without writing; `people_upsert` / `people_confirm` record web finds and user approvals | `Documents/opponents/people.json`, the bundled directory, US Chess API, TWIC and broadcast collections (`Documents/lichess_broadcasts/*/*.db`), chess.com/Lichess profiles | **`Documents/opponents/people.json` and `tournaments/<id>.json` — the app's own files** | no |
 
 Full contracts: `mcp_tools.py describe <tool>`. The design notes behind the
 families are `docs/OPPONENT_PREP.md` (roster pipeline), `docs/ENGINE_TOURNAMENT.md`
@@ -70,6 +72,15 @@ families are `docs/OPPONENT_PREP.md` (roster pipeline), `docs/ENGINE_TOURNAMENT.
   `identity_confirm` is the only step that makes an account drive prep, and it
   is reserved for a match the user explicitly approved. Run `roster_resolve`
   before any web search — it is exact where it hits and costs nothing.
+- **Players go into the directory, guesses do not become accounts.** For a
+  field to prepare against: `roster_import` → `roster_update aliases=[…]` for
+  known respellings → `people_populate`. Report the `summary` (found /
+  candidates / OTB only / not found) to the user. Web finds go in with
+  `people_upsert candidates=[{site, username, evidence}]`; only
+  `people_confirm`, after the user approves, puts an account where the app
+  downloads games. The app loads `people.json` once per run, so an open app
+  must be restarted to see new rows (and would overwrite them if its Players
+  screen saves first).
 - **Opening the app is a real window on the developer's display.**
   `tournament_open` / `open_app=true` write a request the app honours whether
   it is running now or started later. If the app driver
@@ -92,7 +103,9 @@ block Python:
 
 ```
 python3 tools/mcp/test_chess_prep.py          # roster / USCF / directory (80)
+python3 tools/mcp/test_people.py              # spellings, players directory, lookup (offline)
 python3 tools/mcp/test_chesscom.py            # chess.com account search (15, offline)
+python3 tools/mcp/test_chessgames.py          # chessgames.com download job (offline)
 python3 tools/mcp/test_opening_tree.py        # pgn_* (needs python-chess)
 python3 tools/mcp/test_expectimax.py
 python3 tools/mcp/test_engine_tournament.py

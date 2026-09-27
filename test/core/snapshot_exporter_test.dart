@@ -7,6 +7,10 @@
 /// an empty 400, so the tree stays at its root.
 library;
 
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
+
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/generation_progress.dart';
 import 'package:chess_auto_prep/services/jobs/generation_phase.dart';
@@ -66,18 +70,16 @@ class _Session {
   GenerationRequest? request;
   TreeBuildConfig? config;
   List<String> startMoves = const [];
-  final buildService = TreeBuildService();
+  final buildService = TreeBuildService(
+    pool: engines.pool,
+    lifecycle: engines.lifecycle,
+  );
   int notifications = 0;
 
-  late final GenerationProgress progress = GenerationProgress(
-    notify: () {},
-    job: () => null,
-    isRunning: () => generating,
-    isPaused: () => paused,
-    elapsed: Stopwatch.new,
-  );
+  late final GenerationProgress progress = GenerationProgress(notify: () {});
 
   late final SnapshotExporter exporter = SnapshotExporter(
+    pool: engines.pool,
     notify: () => notifications++,
     isGenerating: () => generating,
     isPaused: () => paused,
@@ -85,8 +87,8 @@ class _Session {
     activeRequest: () => request,
     activeConfig: () => config,
     startMoveSequence: () => startMoves,
-    buildService: () => buildService,
-    progress: () => progress,
+    buildService: buildService,
+    progress: progress,
   );
 
   /// Put the session in the state a mid-BFS export finds it in.
@@ -98,12 +100,13 @@ class _Session {
     progress.phase = GenerationPhase.buildingTree;
     config = _headlessConfig(rankLinesByImportance: rankLinesByImportance);
     request = GenerationRequest(
+      jobLabel: 'Test generation',
       config: config!,
       repertoireFilePath: repertoirePath,
       buildRootFen: kStandardStartFen,
       lineMovePrefix: const [],
       repertoireStartFen: kStandardStartFen,
-      onLinesSaved: (_) {},
+      onPublished: (_) {},
     );
   }
 
@@ -115,7 +118,14 @@ class _Session {
   );
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late _MemoryStorage storage;

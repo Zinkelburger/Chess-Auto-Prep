@@ -38,12 +38,14 @@ class _ReadingScrollPosition extends ScrollPositionWithSingleContext {
 
   @override
   bool applyContentDimensions(double minScrollExtent, double maxScrollExtent) {
+    var corrected = false;
     _applyingAnchor = controller._anchorPending;
     if (_applyingAnchor) {
       controller._anchorPending = false;
       final offset = controller
           .resolveAnchor(viewportDimension)
           .clamp(minScrollExtent, maxScrollExtent);
+      corrected = offset != pixels;
       correctBy(offset - pixels);
     }
     try {
@@ -59,7 +61,9 @@ class _ReadingScrollPosition extends ScrollPositionWithSingleContext {
           if (!_disposed && identical(activity, previousActivity)) goIdle();
         });
       }
-      return accepted;
+      // A sliver viewport must repeat layout after a pixel correction; merely
+      // accepting dimensions would paint its previous child offsets once.
+      return accepted && !corrected;
     } finally {
       _applyingAnchor = false;
     }

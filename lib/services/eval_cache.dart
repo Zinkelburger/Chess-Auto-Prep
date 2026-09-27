@@ -30,7 +30,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../utils/lru_map.dart';
-import 'eval/eval_canonicalize.dart';
+import '../chess_core/position/eval_canonicalize.dart';
 import 'storage/app_paths.dart';
 
 class EvalCache {

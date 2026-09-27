@@ -20,7 +20,7 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
   // ── Amend-mode annotation panel ──
 
   /// The variation node the amend panel targets, or null when on the mainline.
-  MoveNode? get _panelVariationTarget =>
+  MoveNodeView? get _panelVariationTarget =>
       _analysisPath.isNotEmpty ? _analysisPath.last : null;
 
   /// The mainline move index the amend panel targets (the move the board
@@ -37,24 +37,30 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
     return '${coords.moveNumber}${coords.isWhite ? '.' : '...'}$san';
   }
 
-  void _togglePanelNodeNag(MoveNode node, int nagId) {
-    setState(() => _m.toggleNodeNag(node, nagId));
+  void _togglePanelNodeNag(MoveNodeView node, int nagId) {
+    if (!mounted || !_gameReady) return;
+    if (!_m.toggleNodeNag(node, nagId)) return;
+    _refreshAfterCommentEdit();
     _notifyCommentsChanged();
   }
 
   /// Set the comment on a variation [node]. Invoked by the annotation panel,
   /// possibly as a debounce flush after navigation moved off [node] (or during
   /// panel dispose) — hence the object binding and the `mounted` guard.
-  void _setPanelNodeComment(MoveNode node, String text) {
-    _m.setNodeComment(node, text);
+  void _setPanelNodeComment(MoveNodeView node, String text) {
+    if (!mounted || !_gameReady) return;
+    if (!_m.setNodeComment(node, text)) return;
     _refreshAfterCommentEdit();
     _notifyCommentsChanged();
   }
 
   /// Mainline counterpart of [_setPanelNodeComment], bound to the move's
-  /// [PgnNodeData] so late flushes hit the move they were typed on.
-  void _setPanelMainlineComment(PgnNodeData moveData, String text) {
-    ViewerGameModel.writeWholeComment(moveData, text);
+  /// opaque identity so a late flush cannot hit a replacement game's move.
+  void _setPanelMainlineComment(int index, PgnMoveSnapshot move, String text) {
+    if (!mounted || !_gameReady) return;
+    if (!_m.setMainlineComment(index, text, expectedMove: move.identity)) {
+      return;
+    }
     _refreshAfterCommentEdit();
     _notifyCommentsChanged();
   }
@@ -107,9 +113,13 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
       nags = moveData.nags ?? const [];
       final raw = joinComments(moveData.comments);
       comment = commentProse(raw);
-      onToggleNag = (nagId) => _toggleNag(mainIndex, nagId);
-      onCommentChanged = (text) =>
-          _setPanelMainlineComment(moveData, mergeCommentProse(raw, text));
+      onToggleNag = (nagId) =>
+          _toggleNag(mainIndex, nagId, expectedMove: moveData.identity);
+      onCommentChanged = (text) => _setPanelMainlineComment(
+        mainIndex,
+        moveData,
+        mergeCommentProse(raw, text),
+      );
     }
 
     return PgnAnnotationPanel(
@@ -131,7 +141,7 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
       newComment,
     );
     setState(() {
-      ViewerGameModel.writeWholeComment(moveData, merged);
+      _m.setMainlineComment(moveIndex, merged, expectedMove: moveData.identity);
       _editingCommentIndex = null;
     });
     _notifyCommentsChanged();
@@ -157,9 +167,12 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
     if (changed) _notifyCommentsChanged();
   }
 
-  void _toggleNag(int moveIndex, int nagId) {
-    if (moveIndex < 0 || moveIndex >= _moveHistory.length) return;
-    setState(() => _m.toggleMainlineNag(moveIndex, nagId));
+  void _toggleNag(int moveIndex, int nagId, {Object? expectedMove}) {
+    if (!mounted || !_gameReady) return;
+    if (!_m.toggleMainlineNag(moveIndex, nagId, expectedMove: expectedMove)) {
+      return;
+    }
+    _refreshAfterCommentEdit();
     _notifyCommentsChanged();
   }
 }

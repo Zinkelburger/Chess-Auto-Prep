@@ -17,7 +17,8 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
-import '../../../services/eval/eval_canonicalize.dart' show canonicalizeFen4;
+import '../../../chess_core/position/eval_canonicalize.dart'
+    show canonicalizeFen4;
 import '../../../utils/chess_utils.dart' show moveToStandardUci;
 
 /// The key for [san] played in [position], or null when it is not a legal

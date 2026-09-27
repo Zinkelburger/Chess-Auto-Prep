@@ -295,7 +295,8 @@ export interface BookPosition {
   teams: Team[];
   moves: BookMove[];
   picks: BookPick[];
-  meta: { source: string; engine: string; nodes: number; child_nodes: number; created_at: number } | null;
+  /** `computers`: how many computers have analysed it; the first one's scores are shown. */
+  meta: { source: string; engine: string; nodes: number; child_nodes: number; created_at: number; computers: number } | null;
 }
 
 export interface RawSearch { q: number | null; mate: number | null; pv: string[]; best: string | null; nodes: number }
@@ -316,13 +317,11 @@ export function bookPosition(fen: string, moves: string[] = []): Promise<BookPos
   return request(`/api/bughousedb/position?fen=${encodeURIComponent(fen)}${line}`, { fallback: 'Could not load the position.' });
 }
 
-export function bookTicket(fen: string, turnstileToken: string): Promise<{ ticket: string; key: string; expires_in: number }> {
-  return request('/api/bughousedb/ticket', {
-    method: 'POST', body: { fen, cf_turnstile_token: turnstileToken }, fallback: 'Could not start the analysis.',
-  });
+export function bookTicket(fen: string): Promise<{ ticket: string; key: string; expires_in: number }> {
+  return request('/api/bughousedb/ticket', { method: 'POST', body: { fen }, fallback: 'Could not start the analysis.' });
 }
 
-export function bookUpload(body: BookUpload): Promise<{ key: string; moves: number }> {
+export function bookUpload(body: BookUpload): Promise<{ key: string; moves: number; computers: number }> {
   return request('/api/bughousedb/position', { method: 'POST', body, fallback: 'Could not upload the analysis.' });
 }
 

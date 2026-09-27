@@ -2,17 +2,24 @@
 /// line repaints the two chips whose selection changed and nothing else.
 library;
 
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart' show kSecondaryMouseButton;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/models/move_tree.dart';
-import 'package:chess_auto_prep/theme/app_colors.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
+import 'package:chess_auto_prep/design_system/theme/app_theme.dart';
 import 'package:chess_auto_prep/widgets/interactive_pgn_editor.dart';
 import 'package:chess_auto_prep/widgets/pgn/movetext_primitives.dart';
 import 'package:chess_auto_prep/widgets/pgn/comment_editor.dart';
 
 Widget _host(MoveTree tree, TreePath path) => MaterialApp(
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+
+  theme: AppTheme.dark(),
   home: Scaffold(
     body: InteractivePgnEditor(tree: tree, currentPath: path),
   ),
@@ -45,7 +52,10 @@ void main() {
     expect(before, isNotEmpty);
     final e4 = _chip(tester, 'e4');
     final nc6 = _chip(tester, 'Nc6');
-    expect(_chipBackground(tester, 'e5'), AppColors.pgnMoveCurrentBg);
+    expect(
+      _chipBackground(tester, 'e5'),
+      AppTheme.dark().colorScheme.primaryContainer,
+    );
     expect(_chipBackground(tester, 'Nf3'), isNull);
 
     await tester.pumpWidget(_host(tree, const TreePath([0, 0, 0])));
@@ -59,7 +69,10 @@ void main() {
       );
     }
     expect(_chipBackground(tester, 'e5'), isNull);
-    expect(_chipBackground(tester, 'Nf3'), AppColors.pgnMoveCurrentBg);
+    expect(
+      _chipBackground(tester, 'Nf3'),
+      AppTheme.dark().colorScheme.primaryContainer,
+    );
     expect(
       identical(_chip(tester, 'e4'), e4),
       isTrue,
@@ -67,6 +80,58 @@ void main() {
     );
     expect(identical(_chip(tester, 'Nc6'), nc6), isTrue);
   });
+
+  testWidgets(
+    'appearance changes refresh cached rows without losing the draft',
+    (tester) async {
+      final tree = MoveTree.fromPgn('1. e4 {Opening note} (1. d4 d5) e5 *');
+      const path = TreePath([0]);
+      Widget host(ThemeData theme) => MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+
+        theme: theme,
+        home: Scaffold(
+          body: InteractivePgnEditor(
+            tree: tree,
+            currentPath: path,
+            showAnnotationPanel: true,
+            onCommentChanged: tree.setComment,
+          ),
+        ),
+      );
+      await tester.pumpWidget(host(AppTheme.dark()));
+      final state = tester.state(find.byType(InteractivePgnEditor));
+      final paragraphs = _paragraphs(tester);
+      final field = tester.widget<TextField>(find.byType(TextField));
+      await tester.enterText(find.byType(TextField), 'Unsaved explanation');
+      final light = AppTheme.light();
+      await tester.pumpWidget(host(light));
+      await tester.pumpAndSettle();
+      expect(tester.state(find.byType(InteractivePgnEditor)), same(state));
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller,
+        same(field.controller),
+      );
+      expect(field.controller!.text, 'Unsaved explanation');
+      expect(tree.commentAt(path), 'Unsaved explanation');
+      expect(_paragraphs(tester).first, isNot(same(paragraphs.first)));
+      expect(
+        _chip(tester, 'e4').sanStyle.color,
+        light.colorScheme.onPrimaryContainer,
+      );
+      expect(_chip(tester, 'd4').sanStyle.color, light.colorScheme.onSurface);
+      expect(_chipBackground(tester, 'e4'), light.colorScheme.primaryContainer);
+      await tester.pumpWidget(host(AppTheme.dark()));
+      await tester.pumpAndSettle();
+      expect(
+        _chip(tester, 'd4').sanStyle.color,
+        AppTheme.dark().colorScheme.onSurface,
+      );
+      expect(field.controller!.text, 'Unsaved explanation');
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('an edit through the tree re-renders the movetext', (
     tester,
@@ -133,7 +198,10 @@ void main() {
         expect(after[i], same(before[i]));
       }
       expect(_chipBackground(tester, 'e4'), isNull);
-      expect(_chipBackground(tester, 'Nf6'), AppColors.pgnMoveCurrentBg);
+      expect(
+        _chipBackground(tester, 'Nf6'),
+        AppTheme.dark().colorScheme.primaryContainer,
+      );
       expect(tester.getRect(move('Nf6')), nested);
       expect(tester.takeException(), isNull);
     },
@@ -152,7 +220,10 @@ void main() {
     await tester.pumpWidget(_host(second, const TreePath([0])));
     expect(find.textContaining('First chapter.'), findsNothing);
     expect(find.textContaining('Second chapter.'), findsOneWidget);
-    expect(_chipBackground(tester, 'e4'), AppColors.pgnMoveCurrentBg);
+    expect(
+      _chipBackground(tester, 'e4'),
+      AppTheme.dark().colorScheme.primaryContainer,
+    );
   });
 
   testWidgets(
@@ -162,6 +233,9 @@ void main() {
       final second = MoveTree.fromMoves(['d4'])..rootComment = 'Second note';
       var active = first;
       Widget host() => MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+
         home: Scaffold(
           body: InteractivePgnEditor(
             tree: active,
@@ -207,6 +281,9 @@ void main() {
     TreePath? saved;
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+
         home: Scaffold(
           body: InteractivePgnEditor(
             tree: tree,

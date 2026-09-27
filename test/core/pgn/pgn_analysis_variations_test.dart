@@ -1,9 +1,9 @@
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/core/pgn/viewer_game_model.dart';
-import 'package:chess_auto_prep/core/pgn/pgn_analysis_variations.dart';
-import 'package:chess_auto_prep/services/game_eval_annotations.dart';
+import 'package:chess_auto_prep/features/documents/controllers/viewer_game_controller.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_analysis_variations.dart';
+import 'package:chess_auto_prep/chess_core/analysis/game_eval_annotations.dart';
 
 const _review =
     '1. e4 {[%eval 0]} e5 {[%eval 0]} '
@@ -13,7 +13,7 @@ void main() {
   test(
     'legacy review becomes one saved, legal RAV and round-trips idempotently',
     () {
-      final m = ViewerGameModel()..load(PgnGame.parsePgn(_review));
+      final m = ViewerGameController()..load(PgnGame.parsePgn(_review));
       expect(m.didMaterializeAnalysis, isTrue);
       expect(m.hasEphemeralMoves, isFalse);
       final root = m.variationsByPly[2]!.single;
@@ -33,7 +33,7 @@ void main() {
   test(
     'deleting a best line or its suffix stays deleted after save/reload',
     () {
-      final m = ViewerGameModel()..load(PgnGame.parsePgn(_review));
+      final m = ViewerGameController()..load(PgnGame.parsePgn(_review));
       final root = m.variationsByPly[2]!.single;
       m.deleteAnalysisNode(root.children.single.id);
       final shortened = m.buildAnnotatedMovetext();
@@ -71,7 +71,7 @@ void main() {
     'setup positions retain Black move numbering and reject illegal suffixes',
     () {
       const fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 7';
-      final m = ViewerGameModel()
+      final m = ViewerGameController()
         ..load(
           PgnGame.parsePgn(
             '[SetUp "1"]\n[FEN "$fen"]\n\n7... e5 {[%eval 6] [%pv c5,Nf3,invalid]} *',

@@ -230,7 +230,7 @@ class _NewBughouseMatchDialogState extends State<_NewBughouseMatchDialog> {
               ),
               BughouseNumberField(
                 key: const Key('bughouse-tournament-nodes-a'),
-                label: 'A + C thinks',
+                label: 'A + B thinks',
                 unit: 'nodes a move',
                 hint:
                     'Nodes rather than seconds, so the same run replays. Give '
@@ -244,7 +244,7 @@ class _NewBughouseMatchDialogState extends State<_NewBughouseMatchDialog> {
               ),
               BughouseNumberField(
                 key: const Key('bughouse-tournament-nodes-b'),
-                label: 'B + D thinks',
+                label: 'C + D thinks',
                 unit: 'nodes a move',
                 value: _nodesB,
                 min: minNodes,
@@ -315,7 +315,7 @@ class _NewBughouseMatchDialogState extends State<_NewBughouseMatchDialog> {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  const BughousePanelLabel('Clock stance, for the whole run'),
+                  const BughousePanelLabel('Time, for the whole run'),
                   SegmentedButton<BughouseTimeStance>(
                     style: const ButtonStyle(
                       visualDensity: VisualDensity.compact,
@@ -323,18 +323,18 @@ class _NewBughouseMatchDialogState extends State<_NewBughouseMatchDialog> {
                     segments: const [
                       ButtonSegment(
                         value: BughouseTimeStance.ahead,
-                        label: Text('White on 1 ahead'),
-                        tooltip: 'That pair may sit on both boards',
+                        label: Text('A + B may sit'),
+                        tooltip: 'A + B are up on the clock, so they may sit rather than move',
                       ),
                       ButtonSegment(
                         value: BughouseTimeStance.level,
-                        label: Text('Level'),
-                        tooltip: 'Nobody may sit on both boards',
+                        label: Text('Equal'),
+                        tooltip: 'Nobody is up on the clock: both teams have to move',
                       ),
                       ButtonSegment(
                         value: BughouseTimeStance.behind,
-                        label: Text('Black on 1 ahead'),
-                        tooltip: 'That pair may sit on both boards',
+                        label: Text('C + D may sit'),
+                        tooltip: 'C + D are up on the clock, so they may sit rather than move',
                       ),
                     ],
                     selected: {_stance},
@@ -395,11 +395,11 @@ class _NewBughouseMatchDialogState extends State<_NewBughouseMatchDialog> {
       openingLabel: start.label,
       participants: [
         BughouseParticipant(
-          name: 'A + C',
+          name: 'A + B',
           budget: BughouseBudget.nodes(_nodesA),
         ),
         BughouseParticipant(
-          name: 'B + D',
+          name: 'C + D',
           budget: BughouseBudget.nodes(_nodesB),
         ),
       ],

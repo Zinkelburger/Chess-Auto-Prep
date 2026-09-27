@@ -350,8 +350,8 @@ class _MatchView extends StatelessWidget {
             child: SizedBox(
               width: 620,
               child: MatchGamesTable(
-                whiteHeading: 'A + C (White on 1)',
-                blackHeading: 'B + D (Black on 1)',
+                whiteHeading: 'A + B (White on 1)',
+                blackHeading: 'C + D (Black on 1)',
                 selectedNumber: matches.openGameNumber,
                 games: [
                   for (final game in match.games)

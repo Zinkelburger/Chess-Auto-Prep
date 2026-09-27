@@ -22,7 +22,7 @@ import 'package:chess_auto_prep/services/generation/line_pruner.dart';
 import 'package:chess_auto_prep/services/generation/repertoire_selector.dart';
 import 'package:chess_auto_prep/services/generation/tree_ease.dart';
 import 'package:chess_auto_prep/services/generation/tree_my_ease.dart';
-import 'package:chess_auto_prep/services/generation/tree_serialization.dart';
+import 'package:chess_auto_prep/chess_core/generation/tree_serialization.dart';
 import 'package:chess_auto_prep/utils/fen_utils.dart';
 import 'package:flutter_test/flutter_test.dart';
 

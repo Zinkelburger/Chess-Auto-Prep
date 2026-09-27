@@ -1,5 +1,5 @@
 import 'package:chess_auto_prep/models/repertoire_line.dart';
-import 'package:chess_auto_prep/models/trap_line_info.dart';
+import 'package:chess_auto_prep/chess_core/generation/trap_line_info.dart';
 import 'package:chess_auto_prep/services/line_metrics_helpers.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';

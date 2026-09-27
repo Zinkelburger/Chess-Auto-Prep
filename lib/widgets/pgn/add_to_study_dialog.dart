@@ -3,13 +3,13 @@
 library;
 
 import 'dart:async';
+import '../../l10n/generated/app_localizations.dart';
 
 import 'package:flutter/material.dart';
 
-import '../../models/repertoire_metadata.dart';
-import '../../services/storage/storage_factory.dart';
-import '../../theme/app_colors.dart';
-import '../common/name_entry_dialog.dart';
+import '../../features/repertoires/models/repertoire_metadata.dart';
+import '../../design_system/components/name_entry_dialog.dart';
+import '../../design_system/theme/app_typography.dart';
 import '../study/study_name_dialog.dart' show sanitizeStudyName;
 
 /// Outcome of [AddToStudyDialog]: exactly one of [existingPath] /
@@ -31,8 +31,9 @@ class AddToStudyResult {
 }
 
 class AddToStudyDialog extends StatefulWidget {
+  final Future<List<RepertoireMetadata>> Function() loadStudies;
   final String initialChapterName;
-  final String title;
+  final String? title;
   final String? selectionSummary;
 
   /// A study to list first, labelled as the prep file — an opponent's, when
@@ -42,7 +43,8 @@ class AddToStudyDialog extends StatefulWidget {
   const AddToStudyDialog({
     super.key,
     required this.initialChapterName,
-    this.title = 'Add line to study',
+    required this.loadStudies,
+    this.title,
     this.selectionSummary,
     this.preferredPath,
   });
@@ -57,6 +59,7 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
 
   List<RepertoireMetadata>? _studies; // null while loading
   String _query = '';
+  bool _loadFailed = false;
 
   @override
   void initState() {
@@ -66,8 +69,17 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
   }
 
   Future<void> _loadStudies() async {
-    final studies = await StorageFactory.instance.listStudyFiles();
-    if (mounted) setState(() => _studies = studies);
+    try {
+      final studies = await widget.loadStudies();
+      if (mounted) {
+        setState(() {
+          _studies = List.unmodifiable(studies);
+          _loadFailed = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadFailed = true);
+    }
   }
 
   @override
@@ -113,22 +125,22 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
       for (final study in _studies ?? <RepertoireMetadata>[])
         study.name.toLowerCase(),
     };
-    var suggested = 'New study';
+    var suggested = AppLocalizations.of(context).studyNewStudy;
     for (var suffix = 2; taken.contains(suggested.toLowerCase()); suffix++) {
-      suggested = 'New study ($suffix)';
+      suggested = AppLocalizations.of(context).studyNumberedNew(suffix);
     }
     final name = await showNameEntryDialog(
       context,
-      title: 'Add new study',
-      fieldLabel: 'Study name',
-      confirmLabel: 'Create and add',
+      title: AppLocalizations.of(context).studyAddNewStudy,
+      fieldLabel: AppLocalizations.of(context).studyStudyName,
+      confirmLabel: AppLocalizations.of(context).studyCreateAndAdd,
       initialValue: suggested,
       allowUnchanged: true,
       validate: (value) {
         final safe = sanitizeStudyName(value);
-        if (safe.isEmpty) return 'Please enter a study name.';
+        if (safe.isEmpty) return AppLocalizations.of(context).studyNameRequired;
         if (taken.contains(safe.toLowerCase())) {
-          return 'A study with this name already exists.';
+          return AppLocalizations.of(context).studyNameExists;
         }
         return null;
       },
@@ -145,17 +157,24 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final studies = _studies;
     final filtered = _filtered;
 
     return AlertDialog(
-      title: Text(widget.title),
+      title: Text(widget.title ?? l10n.studyAddLine),
       content: SizedBox(
         width: 420,
         height: 420,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (_loadFailed)
+              TextButton.icon(
+                onPressed: _loadStudies,
+                icon: const Icon(Icons.refresh),
+                label: Text(l10n.studyListRetry),
+              ),
             if (widget.selectionSummary != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
@@ -164,8 +183,8 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
             else
               TextField(
                 controller: _chapterCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Chapter name',
+                decoration: InputDecoration(
+                  labelText: l10n.studyChapterName,
                   isDense: true,
                 ),
               ),
@@ -173,15 +192,15 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
             FilledButton.icon(
               onPressed: studies == null ? null : _createNew,
               icon: const Icon(Icons.add),
-              label: const Text('Add new study'),
+              label: Text(l10n.studyAddNewStudy),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _searchCtrl,
               autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Search existing studies',
-                prefixIcon: Icon(Icons.search, size: 18),
+              decoration: InputDecoration(
+                labelText: l10n.studySearchExisting,
+                prefixIcon: const Icon(Icons.search, size: 18),
                 isDense: true,
               ),
               onChanged: (v) {
@@ -205,11 +224,13 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
                             padding: const EdgeInsets.all(24),
                             child: Text(
                               studies.isEmpty
-                                  ? 'No studies yet. Use Add new study to create one.'
-                                  : 'No studies match your search.',
+                                  ? l10n.studyNoStudiesToAdd
+                                  : l10n.studyNoStudiesMatch,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: AppColors.onSurfaceMuted,
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ),
@@ -222,10 +243,10 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
                             ),
                             title: Text(s.name),
                             subtitle: Text(
-                              '${_isPreferred(s) ? 'Prep file · ' : ''}'
-                              '${s.gameCount} chapter'
-                              '${s.gameCount == 1 ? '' : 's'}',
-                              style: const TextStyle(fontSize: 12),
+                              _isPreferred(s)
+                                  ? l10n.studyPreferredChapterCount(s.gameCount)
+                                  : l10n.studyChapterCount(s.gameCount),
+                              style: AppTypography.caption(context),
                             ),
                             onTap: () => _pickExisting(s),
                           ),
@@ -238,7 +259,7 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
       ],
     );

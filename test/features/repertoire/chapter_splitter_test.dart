@@ -1,10 +1,14 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:chess_auto_prep/features/repertoire/services/course_chapter_partition.dart';
 
 import 'package:chess_auto_prep/features/repertoire/services/chapter_splitter.dart';
 import 'package:chess_auto_prep/models/repertoire_review_entry.dart';
 import 'package:chess_auto_prep/services/repertoire_review_service.dart';
 import 'package:chess_auto_prep/services/repertoire_service.dart';
+import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
+import 'package:chess_auto_prep/features/repertoire/services/review_progress_repointer.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -82,6 +86,79 @@ String _modelGame(String moves) =>
     '[EventDate "1962.??.??"]\n\n'
     '$moves 0-1\n';
 
+class _ReplacingDocuments extends NativePgnDocumentStore {
+  _ReplacingDocuments(this.source, this.replacement);
+  final String source;
+  final String replacement;
+  @override
+  Future<PgnWriteResult> create(String path, String content) async {
+    final result = await super.create(path, content);
+    if (p.basename(path) == 'Two.pgn') {
+      final winner = File('$source.external');
+      await winner.writeAsString(replacement);
+      await winner.rename(source);
+    }
+    return result;
+  }
+}
+
+class _ControlledDocuments extends NativePgnDocumentStore {
+  @override
+  bool supportsQuarantine = true;
+  int createCalls = 0;
+  int? failCreateAt;
+  bool uncertainCreate = false;
+  bool uncertainSource = false;
+  @override
+  Future<PgnWriteResult> create(String path, String content) async {
+    createCalls++;
+    if (createCalls == failCreateAt) {
+      if (!uncertainCreate) {
+        return PgnWriteFailed(StateError('destination unavailable'));
+      }
+      final result = await super.create(path, content);
+      return PgnWriteUncertain(
+        error: StateError('ack lost'),
+        before: null,
+        observed: result is PgnSaved ? result.after : null,
+        recoveryPath: '$path.recovery',
+      );
+    }
+    return super.create(path, content);
+  }
+
+  @override
+  Future<PgnQuarantineResult> quarantine(
+    PgnSnapshot baseline, {
+    String? allowedRoot,
+  }) async {
+    if (uncertainSource) {
+      return PgnQuarantineUncertain(
+        error: StateError('quarantine ack lost'),
+        before: baseline,
+        quarantinePath: '${baseline.path}.retained',
+        recoveryPath: '${baseline.path}.raw',
+        observedSource: baseline,
+        observedQuarantine: null,
+      );
+    }
+    return super.quarantine(baseline, allowedRoot: allowedRoot);
+  }
+}
+
+class _Repointer extends ReviewProgressRepointer {
+  int calls = 0;
+  Object? failure;
+  @override
+  Future<void> repoint({
+    required String from,
+    required Map<String, Set<String>> movedIdsByPath,
+  }) async {
+    calls++;
+    if (failure case final error?) throw error;
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -104,6 +181,7 @@ void main() {
     main_ = p.join(root, 'Main.pgn');
     csv = _CsvStorage();
     splitter = ChapterSplitter(
+      documents: NativePgnDocumentStore(),
       storage: IOStorageService(
         documentsRoot: tmp,
         supportRoot: tmp,
@@ -156,6 +234,173 @@ void main() {
       // The model game has no chapter of its own and stays put.
       final left = service.parseRepertoirePgn(File(main_).readAsStringSync());
       expect(left.single.isModelGame, isTrue);
+    },
+  );
+
+  for (final leaveModel in [false, true]) {
+    for (final sameText in [false, true]) {
+      test(
+        'source replacement during final destination survives (equal text: $sameText, remaining: $leaveModel)',
+        () async {
+          writeMain(
+            '${_game('One', 'a', tartakower)}\n${_game('One', 'b', '$tartakower 6. Nf3')}\n${_game('Two', 'c', catalan)}\n${_game('Two', 'd', '$catalan 6. O-O')}'
+            '${leaveModel ? _modelGame('1. e4 e5') : ''}',
+          );
+          final winner = sameText
+              ? await File(main_).readAsString()
+              : '// external winner\n${_modelGame('1. e4 e5')}';
+          final repointer = _Repointer();
+          final guarded = ChapterSplitter(
+            documents: _ReplacingDocuments(main_, winner),
+            repointer: repointer,
+            storage: IOStorageService(
+              documentsRoot: tmp,
+              supportRoot: tmp,
+              repertoiresRoot: Directory(root),
+            ),
+            review: RepertoireReviewService(storage: csv),
+          );
+          await expectLater(
+            guarded.split(main_, isWhite: false),
+            throwsA(isA<ChapterSplitException>()),
+          );
+          expect(await File(main_).readAsString(), winner);
+          expect(repointer.calls, 0);
+          expect(csv.reviews, isNull);
+          expect(csv.moveProgress, isNull);
+        },
+      );
+    }
+  }
+
+  void writeCourse() => writeMain(
+    '${_game('One', 'a', tartakower)}\n${_game('One', 'b', '$tartakower 6. Nf3')}\n'
+    '${_game('Two', 'c', catalan)}\n${_game('Two', 'd', '$catalan 6. O-O')}',
+  );
+
+  ChapterSplitter controlled(
+    _ControlledDocuments documents,
+    _Repointer repointer,
+  ) => ChapterSplitter(
+    documents: documents,
+    repointer: repointer,
+    storage: IOStorageService(
+      documentsRoot: tmp,
+      supportRoot: tmp,
+      repertoiresRoot: Directory(root),
+    ),
+  );
+
+  test(
+    'unsupported quarantine refuses before creating any destination',
+    () async {
+      writeCourse();
+      final documents = _ControlledDocuments()..supportsQuarantine = false;
+      final repointer = _Repointer();
+      await expectLater(
+        controlled(documents, repointer).split(main_, isWhite: false),
+        throwsA(
+          isA<ChapterSplitException>().having(
+            (e) => e.kind,
+            'kind',
+            ChapterSplitFailure.unsupported,
+          ),
+        ),
+      );
+      expect(documents.createCalls, 0);
+      expect(chapterFiles().map(p.basename), ['Main.pgn']);
+      expect(repointer.calls, 0);
+    },
+  );
+
+  for (final uncertain in [false, true]) {
+    test(
+      'destination failure retains acknowledged paths and candidate (uncertain: $uncertain)',
+      () async {
+        writeCourse();
+        final documents = _ControlledDocuments()
+          ..failCreateAt = 2
+          ..uncertainCreate = uncertain;
+        final repointer = _Repointer();
+        await expectLater(
+          controlled(documents, repointer).split(main_, isWhite: false),
+          throwsA(
+            isA<ChapterSplitException>()
+                .having((e) => e.createdPaths.map(p.basename), 'acknowledged', [
+                  'One.pgn',
+                ])
+                .having(
+                  (e) => e.pathsToInspect.first,
+                  'candidate',
+                  p.join(root, 'Two.pgn'),
+                )
+                .having(
+                  (e) => e.sourceState,
+                  'source',
+                  ChapterSplitSourceState.unchanged,
+                ),
+          ),
+        );
+        expect(documents.createCalls, 2);
+        expect(File(main_).existsSync(), isTrue);
+        expect(repointer.calls, 0);
+        expect(File(p.join(root, 'One.pgn')).existsSync(), isTrue);
+        expect(File(p.join(root, 'Two.pgn')).existsSync(), uncertain);
+      },
+    );
+  }
+
+  test(
+    'uncertain source mutation retains paths without moving progress',
+    () async {
+      writeCourse();
+      final documents = _ControlledDocuments()..uncertainSource = true;
+      final repointer = _Repointer();
+      await expectLater(
+        controlled(documents, repointer).split(main_, isWhite: false),
+        throwsA(
+          isA<ChapterSplitException>()
+              .having((e) => e.createdPaths.length, 'saved', 2)
+              .having(
+                (e) => e.sourceState,
+                'source',
+                ChapterSplitSourceState.uncertain,
+              )
+              .having((e) => e.pathsToInspect, 'recovery', [
+                main_,
+                '$main_.retained',
+                '$main_.raw',
+              ]),
+        ),
+      );
+      expect(repointer.calls, 0);
+      expect(documents.createCalls, 2);
+    },
+  );
+
+  test(
+    'failed progress repoint reports committed files and retained source',
+    () async {
+      writeCourse();
+      final documents = _ControlledDocuments();
+      final repointer = _Repointer()
+        ..failure = StateError('history write unavailable');
+      ChapterSplitException? failure;
+      try {
+        await controlled(documents, repointer).split(main_, isWhite: false);
+      } on ChapterSplitException catch (error) {
+        failure = error;
+      }
+      expect(failure, isNotNull);
+      expect(failure!.kind, ChapterSplitFailure.progress);
+      expect(failure.sourceState, ChapterSplitSourceState.committed);
+      expect(failure.sourceRemoved, isTrue);
+      expect(failure.createdPaths, hasLength(2));
+      expect(File(main_).existsSync(), isFalse);
+      for (final path in [...failure.createdPaths, ...failure.pathsToInspect]) {
+        expect(File(path).existsSync(), isTrue, reason: path);
+      }
+      expect(repointer.calls, 1);
     },
   );
 
@@ -248,16 +493,19 @@ void main() {
   group('fileNameFor', () {
     test('replaces what a filesystem will not take', () {
       expect(
-        ChapterSplitter.fileNameFor('QGD: Other Lines'),
+        CourseChapterPartition.fileNameFor('QGD: Other Lines'),
         'QGD Other Lines',
       );
       expect(
-        ChapterSplitter.fileNameFor(r'Reti / KIA \ lines'),
+        CourseChapterPartition.fileNameFor(r'Reti / KIA \ lines'),
         'Reti KIA lines',
       );
-      expect(ChapterSplitter.fileNameFor('Trailing dots...'), 'Trailing dots');
-      expect(ChapterSplitter.fileNameFor('   '), 'Chapter');
-      expect(ChapterSplitter.fileNameFor('x' * 200).length, 80);
+      expect(
+        CourseChapterPartition.fileNameFor('Trailing dots...'),
+        'Trailing dots',
+      );
+      expect(CourseChapterPartition.fileNameFor('   '), 'Chapter');
+      expect(CourseChapterPartition.fileNameFor('x' * 200).length, 80);
     });
   });
 }

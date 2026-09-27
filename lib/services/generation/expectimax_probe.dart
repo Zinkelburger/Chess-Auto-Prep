@@ -5,18 +5,15 @@
 /// full Generate wrote, plus every probe the user asked for from a position
 /// that tree never reached. A probe that lands on a position an existing tree
 /// already holds is grafted into it ([graftProbe]); one that lands elsewhere
-/// becomes a tree of its own ([ExpectimaxProbeStore] persists those).
+/// becomes a tree of its own (encoded separately by the artifact domain codec).
 ///
 /// Everything here is a pure function over trees. The engine work happens in
 /// the ordinary build pipeline; this file only merges and re-scores.
 library;
 
-import 'dart:convert';
 import 'dart:math' as math;
 
-import 'package:path/path.dart' as p;
-
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import 'build_run.dart' show findMaxNodeId;
 import 'build_subtree.dart' show copyNodeAnalysis;
 import 'eca_calculator.dart';
@@ -24,7 +21,6 @@ import 'fen_map.dart';
 import 'generation_config.dart';
 import 'tree_ease.dart';
 import 'tree_my_ease.dart';
-import 'tree_serialization.dart';
 
 /// The tree among [trees] whose root is an ancestor of [node], or null when
 /// [node] belongs to none of them.
@@ -162,29 +158,4 @@ void rescoreTree(BuildTree tree, TreeBuildConfig config, FenMap fenMap) {
   eca.calculate(tree);
   eca.computeTrapScores(tree.root);
   calculateMyEase(tree, playAsWhite: config.playAsWhite);
-}
-
-/// Persistence for the probe trees of one repertoire:
-/// `<repertoire>_expectimax.json` beside `<repertoire>_tree.json`.
-class ExpectimaxProbeStore {
-  static const int version = 1;
-
-  static String pathFor(String repertoireFilePath) =>
-      '${p.withoutExtension(repertoireFilePath)}_expectimax.json';
-
-  /// Every tree serialized on its own, so each one round-trips through the
-  /// same v4 format as the main tree file.
-  static String encode(List<BuildTree> trees) => jsonEncode({
-    'version': version,
-    'trees': [for (final t in trees) serializeTree(t, indent: false)],
-  });
-
-  static List<BuildTree> decode(String raw) {
-    final data = jsonDecode(raw) as Map<String, dynamic>;
-    final trees = data['trees'] as List<dynamic>? ?? const [];
-    return [
-      for (final entry in trees)
-        if (entry is String) deserializeTree(entry),
-    ];
-  }
 }

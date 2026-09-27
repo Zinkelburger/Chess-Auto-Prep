@@ -1,7 +1,13 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
+import 'package:chess_auto_prep/app/app_dependencies.dart';
+import 'package:chess_auto_prep/app/repertoire_dependencies.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/core/app_state.dart';
+import 'package:chess_auto_prep/features/repertoire/services/repertoire_outline_service.dart';
 import 'package:chess_auto_prep/features/repertoire/widgets/repertoire_outline_panel.dart';
+import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_catalog_repository.dart';
+import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
 import 'package:chess_auto_prep/screens/repertoire_library_screen.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
@@ -35,12 +41,23 @@ void main() {
         root.deleteSync(recursive: true);
         app.dispose();
       });
-      await tester.pumpWidget(
-        ChangeNotifierProvider.value(
-          value: app,
-          child: const MaterialApp(home: RepertoireLibraryScreen()),
+      final library = ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: RepertoireLibraryScreen(),
         ),
       );
+      await pumpCatalogWidget(tester, library);
+      expect(find.byType(RepertoireLibraryScreen), findsOneWidget);
+      expect(find.byType(RepertoireOutlinePanel), findsNothing);
+      // Closing the library before opening a folder must not resolve its
+      // outline dependencies for the first time from a deactivated context.
+      await pumpCatalogWidget(tester, const SizedBox());
+      expect(find.byType(RepertoireLibraryScreen), findsNothing);
+      expect(tester.takeException(), isNull);
+      await pumpCatalogWidget(tester, library);
       Future<void> until(bool Function() ready) async {
         for (var i = 0; i < 200 && !ready(); i++) {
           await tester.runAsync(
@@ -79,8 +96,21 @@ void main() {
       final build = app.takeHandoff<OpenBuilder>()!;
       expect(build.repertoirePath, chapter.path);
       expect(build.reloadFromDisk, isTrue);
-      await tester.pumpWidget(const SizedBox());
+      await pumpCatalogWidget(tester, const SizedBox());
       expect(tester.takeException(), isNull);
     },
   );
 }
+
+Future<void> pumpCatalogWidget(WidgetTester tester, Widget child) =>
+    tester.pumpWidget(
+      AppDependencies(
+        child: Provider<RepertoireOutlineService>(
+          create: (context) => createRepertoireOutline(
+            catalog: context.read<RepertoireCatalogRepository>(),
+            documents: LegacyPgnDocumentStore(StorageFactory.instance),
+          ),
+          child: child,
+        ),
+      ),
+    );

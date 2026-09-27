@@ -35,6 +35,7 @@ void installAgentDriver() {
   _register('tap', _tap);
   _register('type', _type);
   _register('scroll', _scroll);
+  _register('drag', _drag);
   _register('screenshot', _screenshot);
   _register('settle', _settleExt);
   _register('ping', (method, params) async => _ok({'ok': true}));
@@ -373,6 +374,72 @@ Future<developer.ServiceExtensionResponse> _scroll(
   final frames = await _settle();
   return _ok({
     'scrolled': [dx, dy],
+    'frames': frames,
+  });
+}
+
+/// Presses the primary button at the resolved point, moves it by `dx`,`dy`
+/// in a few steps and lets go: what a pane divider or a dragged piece needs,
+/// which a wheel event cannot give.
+Future<developer.ServiceExtensionResponse> _drag(
+  String method,
+  Map<String, String> params,
+) async {
+  final r = _resolve(params);
+  if (r.error != null) return _err(r.error!);
+  final from = r.point!;
+  final dx = double.tryParse(params['dx'] ?? '0') ?? 0;
+  final dy = double.tryParse(params['dy'] ?? '0') ?? 0;
+  final binding = GestureBinding.instance;
+  final pointer = _pointerId++;
+  binding.handlePointerEvent(
+    PointerHoverEvent(
+      position: from,
+      kind: PointerDeviceKind.mouse,
+      device: _syntheticMouse,
+    ),
+  );
+  await _settle(quiet: 30, timeout: 500);
+  binding.handlePointerEvent(
+    PointerDownEvent(
+      position: from,
+      kind: PointerDeviceKind.mouse,
+      device: _syntheticMouse,
+      pointer: pointer,
+      buttons: kPrimaryMouseButton,
+    ),
+  );
+  const steps = 8;
+  var at = from;
+  for (var i = 1; i <= steps; i++) {
+    final next = from + Offset(dx * i / steps, dy * i / steps);
+    binding.handlePointerEvent(
+      PointerMoveEvent(
+        position: next,
+        delta: next - at,
+        kind: PointerDeviceKind.mouse,
+        device: _syntheticMouse,
+        pointer: pointer,
+        buttons: kPrimaryMouseButton,
+      ),
+    );
+    at = next;
+    await Future<void>.delayed(const Duration(milliseconds: 16));
+  }
+  binding.handlePointerEvent(
+    PointerUpEvent(
+      position: at,
+      kind: PointerDeviceKind.mouse,
+      device: _syntheticMouse,
+      pointer: pointer,
+    ),
+  );
+  final frames = await _settle();
+  return _ok({
+    'dragged': {
+      'from': [from.dx, from.dy],
+      'to': [at.dx, at.dy],
+    },
     'frames': frames,
   });
 }

@@ -4,6 +4,7 @@
 /// or a [ListNavController] (previous/next forwarded by the host screen).
 library;
 
+import 'package:chess_auto_prep/chess_core/moves/opening_graph.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';

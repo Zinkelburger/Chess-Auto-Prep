@@ -1,8 +1,12 @@
+import 'package:chess_auto_prep/services/storage/storage_factory.dart';
+import '../../support/generation_artifacts_fixture.dart';
+import 'package:chess_auto_prep/app/training_dependencies.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_board_controller.dart';
 import 'dart:io';
 
-import 'package:chess_auto_prep/models/repertoire_metadata.dart';
-import 'package:chess_auto_prep/services/training/training_phase.dart';
-import 'package:chess_auto_prep/services/training/training_session_controller.dart';
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
+import 'package:chess_auto_prep/features/training/models/training_phase.dart';
+import 'package:chess_auto_prep/features/training/controllers/training_session_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -22,11 +26,16 @@ void main() {
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('drill_phase_test');
+    StorageFactory.instanceForTest = null;
     PathProviderPlatform.instance = FakePathProvider(tempDir.path);
+    await File('${tempDir.path}/rep.pgn').writeAsString('1. e4 *');
     SharedPreferences.setMockInitialValues({});
     repService = FakeRepertoireService();
     reviewService = FakeReviewService();
-    controller = TrainingSessionController(
+    controller = createTrainingSession(
+      artifacts: generationArtifactsFixture().repository,
+      configuration: createTrainingSettings(),
+      session: RepertoireBoardController(),
       repertoireService: repService,
       reviewService: reviewService,
     )..settings = fastSettings(wrongMoveReplay: false);
@@ -34,6 +43,7 @@ void main() {
 
   tearDown(() async {
     controller.dispose();
+    StorageFactory.instanceForTest = null;
     await tempDir.delete(recursive: true);
   });
 

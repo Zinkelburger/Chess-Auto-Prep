@@ -3,9 +3,8 @@
 /// The app's top-level screens live in an `IndexedStack`, so switching modes
 /// does not build the target screen — it may already be mounted and will only
 /// learn about the switch through an [AppState] notification. Whatever the
-/// source screen wanted the target to *do* ("open this line", "seed the
-/// generation tab with these PGNs") therefore has to be parked somewhere the
-/// target can read when it wakes up.
+/// source screen wanted the target to *do* ("open this line", "train this study")
+/// therefore has to be parked somewhere the target can read when it wakes up.
 ///
 /// This used to be nine loose mutable fields on [AppState]. Nothing tied the
 /// related ones together, so producers had to remember to null the fields
@@ -51,7 +50,6 @@ final class OpenBuilder extends PendingHandoff {
     required this.repertoirePath,
     this.lineId,
     this.moveSequence,
-    this.generationPgnPaths,
     this.reloadFromDisk = false,
   });
 
@@ -66,10 +64,6 @@ final class OpenBuilder extends PendingHandoff {
   /// SAN sequence to navigate the board to after load — the trainer's
   /// "Explore this position".
   final List<String>? moveSequence;
-
-  /// When set, open the generation tab in DB Explorer mode pre-seeded with
-  /// these PGN files.
-  final List<String>? generationPgnPaths;
 
   @override
   AppMode get targetMode => AppMode.repertoire;
@@ -169,16 +163,32 @@ enum PgnViewerTab { game, line, explorer, analysis }
 /// Open a PGN collection in the PGN Viewer.
 final class OpenPgnViewer extends PendingHandoff {
   const OpenPgnViewer({
-    required this.pgnPath,
+    required String this.pgnPath,
     this.sliceFen,
     this.gameId,
     this.gameIndex,
     this.autoAnalyze = false,
     this.tab = PgnViewerTab.game,
     this.ply,
-  });
+  }) : content = null,
+       title = null;
 
-  final String pgnPath;
+  /// A captured collection with no backing file. Editing and export belong to
+  /// the Viewer; opening it never writes back to the source of these games.
+  const OpenPgnViewer.content({
+    required String this.content,
+    required String this.title,
+    this.gameIndex,
+    this.ply,
+  }) : pgnPath = null,
+       sliceFen = null,
+       gameId = null,
+       autoAnalyze = false,
+       tab = PgnViewerTab.game;
+
+  final String? pgnPath;
+  final String? content;
+  final String? title;
 
   /// When set, the viewer slices the collection to games passing through this
   /// position.
@@ -210,7 +220,7 @@ final class OpenPgnViewer extends PendingHandoff {
   AppMode get targetMode => AppMode.pgnViewer;
 
   @override
-  String get defaultHistoryLabel => 'PGN: ${_displayName(pgnPath)}';
+  String get defaultHistoryLabel => 'PGN: ${title ?? _displayName(pgnPath!)}';
 }
 
 /// Open Engine Tournament, optionally on one tournament.

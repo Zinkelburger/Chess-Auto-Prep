@@ -14,7 +14,7 @@ import '../utils/atomic_file.dart';
 import '../utils/chess_utils.dart' show tryParseFen;
 import '../utils/fen_utils.dart';
 import '../utils/file_text_reader.dart';
-import 'pgn_parsing_service.dart';
+import '../chess_core/pgn/pgn_text.dart';
 import 'pgn_tree_core.dart';
 
 /// Both colours' analysis + tree, built from one pass over a player's games.
