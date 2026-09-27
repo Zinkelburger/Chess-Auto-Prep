@@ -169,7 +169,7 @@ abstract base class _DocumentModeView extends ModeView {
       group: 'File',
     ),
     fileEntry,
-    ..._repertoire(menu.dialogs),
+    if (this is _LibraryView) ..._repertoire(menu.dialogs),
     ...documentEntries(menu),
     ...menu.board(),
     ...tabActions(tabs),
@@ -680,19 +680,15 @@ List<AppAction> boardActions(
   required WorkspaceRequests requests,
   required Library library,
   required Studies studies,
+  required VoidCallback onAnalyze,
 }) {
   final scratch = session.isScratch;
   return [
     AppAction(
-      'Analysis board',
-      scratch ? null : () => unawaited(requests.analysisBoard()),
-      group: 'Analysis board',
-    ),
-    AppAction(
-      'New analysis board from here',
-      () => unawaited(requests.newAnalysisBoard()),
+      'Analyze in new tab',
+      onAnalyze,
       shortcut: 'Ctrl+N',
-      group: 'Analysis board',
+      group: 'Board',
     ),
     // On the board, Paste PGN or FEN below takes a FEN too.
     if (!scratch)
@@ -709,16 +705,18 @@ List<AppAction> boardActions(
         shortcut: 'Ctrl+V',
         group: 'File',
       ),
-      AppAction(
-        'Save to repertoire…',
-        () => unawaited(_toRepertoire(context, requests, library)),
-        group: 'Document',
-      ),
-      AppAction(
-        'Save to study…',
-        () => unawaited(_toStudy(context, requests, studies)),
-        group: 'Document',
-      ),
+      if (requests.mode == Mode.repertoires)
+        AppAction(
+          'Save to repertoire…',
+          () => unawaited(_toRepertoire(context, requests, library)),
+          group: 'Document',
+        ),
+      if (requests.mode == Mode.study)
+        AppAction(
+          'Save to study…',
+          () => unawaited(_toStudy(context, requests, studies)),
+          group: 'Document',
+        ),
     ],
   ];
 }

@@ -16,7 +16,7 @@ import 'tree_edit.dart';
 /// it prepares for.
 
 /// What the analysis board is called wherever a chapter's name is shown.
-const analysisBoardName = 'Analysis board';
+const analysisBoardName = 'Analysis';
 
 /// An analysis board from [root] with [sans] played, as far as they can be.
 /// A board that starts at the start with no moves holds no game yet; one

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:sqlite3/sqlite3.dart';
 
@@ -64,8 +65,41 @@ abstract interface class DownloadableMasterBook implements MasterBook {
 /// How many games the answer names: the old app's number for TWIC.
 const twicGamesListed = 12;
 
+/// SQLite can wait on the importer or a cold disk. Run reads off the UI
+/// isolate so source/filter clicks and closing menus never wait on that lock.
 final class SqliteMasterBook implements MasterBook {
   SqliteMasterBook(this.path);
+  final String path;
+
+  @override
+  Future<bool> available() => _readBook(path, (book) => book.available());
+
+  @override
+  Future<BookLookup> lookup(Fen fen, {required bool classicalOnly}) =>
+      _readBook(path, (book) => book.lookup(fen, classicalOnly: classicalOnly));
+
+  @override
+  Future<String?> gamePgn(String id) =>
+      _readBook(path, (book) => book.gamePgn(id));
+
+  /// Each worker closes its own connection before returning.
+  void close() {}
+}
+
+Future<T> _readBook<T>(
+  String path,
+  Future<T> Function(_SqliteMasterReader) read,
+) => Isolate.run(() async {
+  final book = _SqliteMasterReader(path);
+  try {
+    return await read(book);
+  } finally {
+    book.close();
+  }
+});
+
+final class _SqliteMasterReader implements MasterBook {
+  _SqliteMasterReader(this.path);
 
   /// `<support>/master_games.db`.
   final String path;

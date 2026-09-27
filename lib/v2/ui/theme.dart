@@ -113,9 +113,10 @@ const engineScoreWidth = 54.0;
 /// Moves, Replies, Search in the reading card: the tabs share its width,
 /// each one a target as big as a button, the chosen one filled. The line
 /// is what shows where a dragged tab will land.
-const paneTabHeight = 40.0;
+const paneTabHeight = 34.0;
 const paneTabInset = 4.0;
-const paneTabMinWidth = 84.0;
+const paneTabMaxWidth = 220.0;
+const paneTabCloseSize = 26.0;
 const paneTabRadius = 6.0;
 const paneTabUnderline = 2.0;
 
@@ -133,6 +134,7 @@ const searchValueWidth = 88.0;
 const replyRowHeight = engineRowHeight;
 const repliesStatusHeight = 44.0;
 const replyShareWidth = engineScoreWidth;
+const repliesMaxWidth = 440.0;
 
 /// How many rows a line opens out to when its chevron is pressed.
 const engineExpandedRows = 6;
@@ -350,6 +352,8 @@ ThemeData darkTheme() {
     scaffoldBackgroundColor: _surface,
     dividerColor: _outline,
     useMaterial3: true,
+    splashFactory: NoSplash.splashFactory,
+    highlightColor: Colors.transparent,
   );
   return base.copyWith(
     textTheme: _sized(base.textTheme),

@@ -36,7 +36,7 @@ final class PaneTab<K extends Object> {
 /// be moved in front of it.
 class PaneTabs<K extends Object> extends ChangeNotifier {
   PaneTabs(List<PaneTab<K>> tabs, {Iterable<K> open = const [], K? selected})
-    : this._(tabs, _opening(tabs, open), selected);
+    : this._(List.of(tabs), _opening(tabs, open), selected);
 
   PaneTabs._(this.tabs, this._open, K? selected)
     : _selected = selected != null && _open.contains(selected)
@@ -93,12 +93,30 @@ class PaneTabs<K extends Object> extends ChangeNotifier {
   /// Puts [id] away. When it was up, its left neighbour comes forward.
   void close(K id) {
     final position = _open.indexOf(id);
-    if (position < 0 || tabOf(id).pinned) return;
+    if (position < 0 || tabOf(id).pinned || _open.length == 1) return;
     _open.removeAt(position);
     if (_selected == id) {
       _selected = _open[(position - 1).clamp(0, _open.length - 1)];
     }
     notifyListeners();
+  }
+
+  /// Adds a document tab, or updates its title, and brings it forward.
+  void add(PaneTab<K> tab) {
+    final at = tabs.indexWhere((known) => known.id == tab.id);
+    if (at < 0) {
+      tabs.add(tab);
+    } else {
+      tabs[at] = tab;
+    }
+    if (!_open.contains(tab.id)) _open.add(tab.id);
+    _selected = tab.id;
+    notifyListeners();
+  }
+
+  void remove(K id) {
+    close(id);
+    if (!isOpen(id)) tabs.removeWhere((tab) => tab.id == id);
   }
 
   void closeCurrent() => close(_selected);
@@ -128,8 +146,8 @@ class PaneTabs<K extends Object> extends ChangeNotifier {
 }
 
 /// The row of tabs at the top of a pane: what the pane is showing, and the
-/// other things it could show instead. The tabs share the row's width, so
-/// each is a target as big as a button, and the one that is up is filled.
+/// other things it could show instead. Labels keep their natural width,
+/// with a visible close button and a quiet fill for the selected tab.
 /// A middle click closes a tab that can be closed, and a tab can be dragged
 /// in front of another. When the tabs would be too narrow to read, the row
 /// scrolls instead — the wheel scrolls it, and the tab that comes up is
@@ -137,7 +155,17 @@ class PaneTabs<K extends Object> extends ChangeNotifier {
 ///
 /// The strip stays visible with one tab so navigation has a stable place.
 class PaneTabStrip<K extends Object> extends StatefulWidget {
-  const PaneTabStrip({super.key, required this.tabs});
+  const PaneTabStrip({
+    super.key,
+    required this.tabs,
+    this.onSelect,
+    this.onClose,
+    this.onAdd,
+  });
+
+  final ValueChanged<K>? onSelect;
+  final ValueChanged<K>? onClose;
+  final VoidCallback? onAdd;
 
   final PaneTabs<K> tabs;
 
@@ -174,7 +202,8 @@ class _PaneTabStripState<K extends Object> extends State<PaneTabStrip<K>>
       Scrollable.ensureVisible(
         target,
         alignment: 0.5,
-        duration: const Duration(milliseconds: 120),
+        duration: Duration.zero,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
       );
     });
   }
@@ -194,39 +223,58 @@ class _PaneTabStripState<K extends Object> extends State<PaneTabStrip<K>>
     final tabs = widget.tabs;
     _keys.removeWhere((id, _) => !tabs.isOpen(id));
     _reveal(tabs.selected);
-    List<Widget> slots() => [
-      for (final id in tabs.open)
-        _TabSlot<K>(
-          key: _keys.putIfAbsent(id, GlobalKey.new),
-          tabs: tabs,
-          tab: tabs.tabOf(id),
-        ),
-    ];
     return SizedBox(
       height: paneTabHeight,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final fits =
-              constraints.maxWidth / tabs.open.length >= paneTabMinWidth;
-          if (fits) {
-            return Row(
-              children: [for (final slot in slots()) Expanded(child: slot)],
-            );
-          }
-          return Listener(
-            onPointerSignal: _wheel,
-            child: SingleChildScrollView(
-              controller: _scroll,
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final slot in slots())
-                    SizedBox(width: paneTabMinWidth, child: slot),
-                ],
+      child: Row(
+        children: [
+          Flexible(
+            child: Listener(
+              onPointerSignal: _wheel,
+              child: SingleChildScrollView(
+                controller: _scroll,
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final id in tabs.open)
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: paneTabMaxWidth,
+                          minHeight: paneTabHeight,
+                          maxHeight: paneTabHeight,
+                        ),
+                        child: _TabSlot<K>(
+                          key: _keys.putIfAbsent(id, GlobalKey.new),
+                          tabs: tabs,
+                          tab: tabs.tabOf(id),
+                          onSelect: widget.onSelect,
+                          onClose: widget.onClose,
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
-          );
-        },
+          ),
+          if (widget.onAdd != null ||
+              tabs.tabs.any((tab) => !tabs.isOpen(tab.id)))
+            MenuAnchor(
+              menuChildren: [
+                for (final tab in tabs.tabs)
+                  if (!tabs.isOpen(tab.id))
+                    MenuItemButton(
+                      onPressed: () => tabs.show(tab.id),
+                      child: Text(tab.title),
+                    ),
+              ],
+              builder: (context, menu, _) => IconButton(
+                tooltip: widget.onAdd == null ? 'Open tab' : 'New analysis tab',
+                onPressed:
+                    widget.onAdd ?? (menu.isOpen ? menu.close : menu.open),
+                icon: const Icon(Icons.add, size: IconSize.menu),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -235,7 +283,16 @@ class _PaneTabStripState<K extends Object> extends State<PaneTabStrip<K>>
 /// One tab in the row, a drop target for another tab and the source of its
 /// own drag. Dropping on it puts the dragged tab in front of it.
 class _TabSlot<K extends Object> extends StatelessWidget {
-  const _TabSlot({super.key, required this.tabs, required this.tab});
+  const _TabSlot({
+    super.key,
+    required this.tabs,
+    required this.tab,
+    this.onSelect,
+    this.onClose,
+  });
+
+  final ValueChanged<K>? onSelect;
+  final ValueChanged<K>? onClose;
 
   final PaneTabs<K> tabs;
   final PaneTab<K> tab;
@@ -277,13 +334,14 @@ class _TabSlot<K extends Object> extends StatelessWidget {
   Widget _tab() => _Tab(
     title: tab.title,
     selected: tabs.selected == tab.id,
-    onTap: () => tabs.show(tab.id),
-    onClose: tab.pinned ? null : () => tabs.close(tab.id),
+    onTap: () => (onSelect ?? tabs.show)(tab.id),
+    onClose: tab.pinned || (tabs.open.length == 1 && onClose == null)
+        ? null
+        : () => (onClose ?? tabs.close)(tab.id),
   );
 }
 
-/// The word, centred on a rounded patch that is filled while the tab is
-/// up and tinted under the pointer.
+/// A left-aligned label and close button, without a click splash.
 class _Tab extends StatelessWidget {
   const _Tab({
     required this.title,
@@ -316,15 +374,45 @@ class _Tab extends StatelessWidget {
           child: InkWell(
             onTap: onTap,
             borderRadius: shape,
-            child: Center(
-              child: Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                ),
+            splashFactory: NoSplash.splashFactory,
+            highlightColor: Colors.transparent,
+            child: Padding(
+              padding: const EdgeInsets.only(left: Space.m, right: Space.xs),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      title,
+                      textAlign: TextAlign.left,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: selected
+                            ? scheme.onSurface
+                            : scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  if (onClose != null)
+                    IconButton(
+                      tooltip: 'Close $title',
+                      onPressed: onClose,
+                      style: const ButtonStyle(
+                        overlayColor: WidgetStatePropertyAll(
+                          Colors.transparent,
+                        ),
+                        minimumSize: WidgetStatePropertyAll(
+                          Size(paneTabCloseSize, paneTabCloseSize),
+                        ),
+                        padding: WidgetStatePropertyAll(EdgeInsets.zero),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      icon: const Icon(Icons.close, size: IconSize.menu),
+                    )
+                  else
+                    const SizedBox(width: Space.s),
+                ],
               ),
             ),
           ),

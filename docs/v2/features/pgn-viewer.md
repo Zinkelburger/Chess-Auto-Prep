@@ -249,14 +249,26 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
   in the Actions menu); Ctrl+Z takes held edits back one at a time (the latest 100 steps). History
   shares immutable document versions rather than keeping a full PGN string per step; Discard still restores the
   original document after older undo steps have been dropped. Save, including Ctrl+S while typing,
-  commits the active comment field before writing. Opening another file or game
-  file, or reloading, drops them without asking. Once an edit is held, later edits join it in every
+  commits the active comment field before writing. Document tabs retain viewer
+  drafts and undo while another file or analysis is up; selecting the original tab
+  restores them against the original save revision. Reloading or closing its tab
+  discards the held edits. Once an edit is held, later edits join it in every
   mode until it is saved or discarded. The builder and Study keep autosaving.
 - **No colour for the unsaved state**, and **no snackbars anywhere in v2**: deletions say nothing
   (Ctrl+Z undoes them), and a failure goes to the status bar under the top bar, which has a Close
   button and, when there is a way out, one action such as Reload.
 
 ## Built 2026-09-27
+
+- Compact document and pane tabs have left-aligned labels, close buttons, drag
+  ordering and no click splash. The pane's plus menu reopens closed tools.
+- Analyze opens a separate temporary tab containing the entire current game,
+  variations and comments at the current move, and starts the engine. The source
+  stays in its own tab; analysis moves never write it. File tabs restore their
+  selected game and cursor; temporary analyses also retain their undo history.
+- Flip board is visible in the top toolbar. The viewer opens with Moves and
+  Explorer, omits repertoire actions and the chapter-editing sidebar, and only
+  offers Save/Discard after edits exist.
 
 - File-order, date and rating sorting preserve original game indices. The list,
   grouped chapters, counter, number entry and arrow keys use the same visible

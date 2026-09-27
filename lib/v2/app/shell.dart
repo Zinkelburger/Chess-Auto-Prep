@@ -132,6 +132,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     if (_shown case final left?) _views[left]!.left();
     _shown = mode;
     _views[mode]!.entered();
+    _outlineShown = _wantsOutline;
     _arrange();
   }
 
@@ -228,6 +229,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// whichever mode the user switches to. Hide it during a lesson too: its
   /// line previews would reveal the moves the user is being asked to recall.
   bool get _wantsOutline =>
+      (_requests.mode == Mode.repertoires || _requests.mode == Mode.trainer) &&
       _ws.session.source != null &&
       _ws.session.game == null &&
       _train.lines.board.value == null;
@@ -363,6 +365,13 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     );
   }
 
+  Future<void> _analyze() async {
+    final result = await _requests.newAnalysisBoard();
+    if (!mounted || result is! RequestDone) return;
+    _tabs.show(WorkspaceTab.moves);
+    await _ws.analysis.enable();
+  }
+
   Future<void> _saveCopy() async {
     final name = await showCopyNameDialog(
       context,
@@ -399,6 +408,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       requests: _requests,
       library: _docs.library,
       studies: _docs.studies,
+      onAnalyze: () => unawaited(_analyze()),
     ),
     dialogs: (
       saveCopy: () => unawaited(_saveCopy()),
@@ -453,10 +463,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       () => unawaited(_requests.pasteFen()),
       shift: true,
     ),
-    ..._command(
-      LogicalKeyboardKey.keyN,
-      () => unawaited(_requests.newAnalysisBoard()),
-    ),
+    ..._command(LogicalKeyboardKey.keyN, () => unawaited(_analyze())),
     ..._command(
       LogicalKeyboardKey.keyG,
       () => unawaited(_search.search(_tabs)),
@@ -543,6 +550,30 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         // A mode with a screen of its own has no list to show or hide.
         listShown: _listShown || screen != null,
         onToggleList: _toggleList,
+        quickActions: screen == null
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: withKey('Flip board', 'F'),
+                    onPressed: _ws.session.flip,
+                    icon: const Icon(
+                      Icons.flip_camera_android_outlined,
+                      size: IconSize.action,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  TextButton.icon(
+                    onPressed: () => unawaited(_analyze()),
+                    icon: const Icon(Icons.add, size: IconSize.menu),
+                    label: Tooltip(
+                      message: withKey('Analyze in new tab', 'Ctrl+N'),
+                      child: const Text('Analyze'),
+                    ),
+                  ),
+                ],
+              )
+            : null,
         actions: _actions,
         // What the entries' enabled states read, heard only while the
         // menu is open: the bar itself shows none of it.
@@ -566,7 +597,17 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
               moves: _moves,
               extra: _windowKeys,
               leave: _leave,
-              child: _columns(),
+              child: Column(
+                children: [
+                  PaneTabStrip(
+                    tabs: _requests.documents.tabs,
+                    onSelect: (id) => unawaited(_requests.documents.select(id)),
+                    onClose: (id) => unawaited(_requests.documents.close(id)),
+                    onAdd: () => unawaited(_analyze()),
+                  ),
+                  Expanded(child: _columns()),
+                ],
+              ),
             ),
       ),
     ],

@@ -26,13 +26,14 @@ List<AppAction> documentActions({
       shortcut: 'Ctrl+E',
       group: 'Document',
     ),
-    AppAction(
-      'Undo',
-      when(session.canUndo, () => unawaited(session.undo())),
-      shortcut: 'Ctrl+Z',
-      group: 'Document',
-    ),
-    if (session.hasHeldEdits || session.holdsEdits) ...[
+    if (!session.holdsEdits || session.canUndo || editing.value)
+      AppAction(
+        'Undo',
+        when(session.canUndo, () => unawaited(session.undo())),
+        shortcut: 'Ctrl+Z',
+        group: 'Document',
+      ),
+    if (session.hasHeldEdits) ...[
       AppAction(
         'Save changes',
         session.keepHeld,

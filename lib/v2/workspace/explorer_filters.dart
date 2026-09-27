@@ -85,7 +85,9 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
                   child: _FilterButton(
                     label: unfolded ? 'Filters' : _folded(choice),
                     unfolded: unfolded,
-                    onPressed: () => setState(() => _unfolded = !_unfolded),
+                    onPressed: () {
+                      if (mounted) setState(() => _unfolded = !_unfolded);
+                    },
                   ),
                 ),
             ],
@@ -160,6 +162,8 @@ class _Sources extends StatelessWidget {
       selected: {choice.source},
       showSelectedIcon: false,
       style: const ButtonStyle(
+        animationDuration: Duration.zero,
+        overlayColor: WidgetStatePropertyAll(Colors.transparent),
         visualDensity: VisualDensity.compact,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         padding: WidgetStatePropertyAll(
@@ -209,6 +213,7 @@ class _TwicFilters extends StatelessWidget {
     return Align(
       alignment: Alignment.centerLeft,
       child: FilterChip(
+        chipAnimationStyle: _quietChips,
         label: const Text('Classical OTB only'),
         selected: choice.classicalOnly,
         visualDensity: VisualDensity.compact,
@@ -237,7 +242,8 @@ class _LichessFilters extends StatelessWidget {
           chips: [
             for (final speed in LichessSpeed.values)
               FilterChip(
-                label: Text(speed.name),
+                chipAnimationStyle: _quietChips,
+                label: Text(speed.title),
                 selected: choice.speeds.contains(speed),
                 visualDensity: VisualDensity.compact,
                 onSelected: (on) => _speed(choice, speed, on),
@@ -250,6 +256,7 @@ class _LichessFilters extends StatelessWidget {
           chips: [
             for (final rating in lichessRatings)
               FilterChip(
+                chipAnimationStyle: _quietChips,
                 label: Text('$rating'),
                 selected: choice.ratings.contains(rating),
                 visualDensity: VisualDensity.compact,
@@ -315,3 +322,9 @@ class _ChipRow extends StatelessWidget {
     );
   }
 }
+
+final _quietChips = ChipAnimationStyle(
+  enableAnimation: AnimationStyle.noAnimation,
+  selectAnimation: AnimationStyle.noAnimation,
+  avatarDrawerAnimation: AnimationStyle.noAnimation,
+);

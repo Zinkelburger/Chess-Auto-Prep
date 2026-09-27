@@ -174,6 +174,15 @@ cancel superseded opens even when the latest request selects the current file.
 `DocumentSession` owns the active editor, while `document_projection.dart` owns
 file/section projection and `document_history.dart` owns held edits and board
 undo. These helpers have no widget or persistence side effects.
+`DocumentTabs` keeps file destinations, cursors, viewer drafts with their original
+save revisions, and independent temporary analysis boards. Analyze copies the
+whole current game (variations and comments included), at the current move;
+changes in that tab never write the source. Tabs have left-aligned compact labels,
+visible close buttons, drag ordering, and a plus button. Pane tabs use the same
+strip; closed tools reopen from its plus menu. Flip board is a visible toolbar
+button. The Viewer offers reading and analysis, without repertoire/training
+commands. TWIC SQLite reads run on worker isolates so a busy database cannot
+hold up filter controls or menu dismissal.
 
 `PendingWrites` belongs to the application, not to a mode. Accepted writes of
 user data (documents, ratings, books, settings, usernames) stay tracked after
