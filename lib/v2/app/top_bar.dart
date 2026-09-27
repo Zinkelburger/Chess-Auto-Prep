@@ -16,7 +16,6 @@ class TopBar extends StatelessWidget {
   const TopBar({
     super.key,
     required this.mode,
-    this.quickActions,
     required this.onMode,
     this.backTo,
     this.forwardTo,
@@ -30,7 +29,6 @@ class TopBar extends StatelessWidget {
     required this.actionsChange,
   });
 
-  final Widget? quickActions;
   final Mode mode;
   final ValueChanged<Mode> onMode;
 
@@ -88,8 +86,6 @@ class TopBar extends StatelessWidget {
           _ModeMenu(mode: mode, onMode: onMode, offered: offered),
           const SizedBox(width: Space.s),
           _ActionsMenu(actions: actions, changes: actionsChange),
-          const SizedBox(width: Space.s),
-          if (quickActions != null) quickActions!,
           const Spacer(),
           IconButton(
             icon: const Icon(Icons.settings_outlined, size: IconSize.action),

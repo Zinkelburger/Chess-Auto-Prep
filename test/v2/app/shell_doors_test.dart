@@ -146,6 +146,8 @@ void main() {
     'inner analysis leaves file tabs intact and closes back to source',
     (tester) async {
       await pumpWithChapter(tester);
+      w.session.holdsEdits = true;
+      w.session.setComment(const NodePath.root(), 'Unwritten source note');
       final original = w.session.chapter;
       final fileTabs = List.of(w.requests.documents.tabs.open);
       await pressCtrl(tester, LogicalKeyboardKey.keyN);
@@ -161,6 +163,13 @@ void main() {
         find.byType(PaneTabStrip<Object>),
       );
       expect(outer.connected, isFalse);
+      await pressCtrl(tester, LogicalKeyboardKey.keyS);
+      expect(
+        w.session.hasHeldEdits,
+        isTrue,
+        reason: 'Save in scratch must not save the source',
+      );
+      expect(w.store.requestedSaves, isEmpty);
       clipboardHolds(tester, pasted);
       await pressCtrl(tester, LogicalKeyboardKey.keyV);
       expect(inspection.session.tree!.children.single.san, 'e4');

@@ -81,8 +81,10 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
   final FileFilter _filter;
 
   /// The `pgn_collections` folder, absolute: where the file dialog starts
-  /// when nothing was opened before.
+  /// when nothing was opened before, and where a copy of a file this app
+  /// may not write goes.
   final String _collections;
+  String get collections => _collections;
 
   List<String> _recent = const [];
   String? _recentProblem;

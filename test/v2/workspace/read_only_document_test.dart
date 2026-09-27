@@ -76,4 +76,41 @@ void main() {
       );
     },
   );
+
+  group('while the viewer holds edits', () {
+    setUp(() => fixture.session.holdsEdits = true);
+
+    test('takes a move and holds it, writing nothing', () async {
+      fixture.session.playMove('e7e6');
+      await pumpEventQueue();
+      expect(fixture.session.currentMove?.san, 'e6');
+      expect(fixture.session.hasHeldEdits, isTrue);
+      expect(fixture.store.requestedSaves, isEmpty);
+      expect(fixture.onDisk, blackChapter);
+    });
+
+    test('keeping them writes nothing: they can only go to a copy', () async {
+      fixture.session.playMove('e7e6');
+      fixture.session.keepHeld();
+      await pumpEventQueue();
+      expect(fixture.session.hasHeldEdits, isTrue);
+      expect(fixture.store.requestedSaves, isEmpty);
+      expect(fixture.onDisk, blackChapter);
+    });
+
+    test('a copy into another folder carries them and opens there', () async {
+      fixture.session.playMove('e7e6');
+      final copy =
+          await fixture.session.saveCopy('Mine', into: '/documents/copies')
+              as CopySaved;
+      expect(copy.nowEditing, isTrue);
+      expect(fixture.session.source?.path, '/documents/copies/Mine.pgn');
+      expect(fixture.session.hasHeldEdits, isFalse);
+      final written = fixture.store.documents.entries.firstWhere(
+        (entry) => entry.key.path == '/documents/copies/Mine.pgn',
+      );
+      expect((written.value as Opened).text, contains('e6'));
+      expect(fixture.onDisk, blackChapter);
+    });
+  });
 }

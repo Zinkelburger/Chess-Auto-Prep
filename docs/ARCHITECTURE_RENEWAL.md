@@ -193,9 +193,10 @@ save revisions, and independent temporary analysis boards. Analyze copies the
 whole current game (variations and comments included), at the current move;
 changes in that tab never write the source. Tabs have left-aligned compact labels,
 visible close buttons, drag ordering, and a plus button. Pane tabs use the same
-strip; closed tools reopen from its plus menu. Flip board is a visible toolbar
-button. The Viewer offers reading and analysis, without repertoire/training
-commands. TWIC SQLite reads run on worker isolates so a busy database cannot
+strip; closed tools reopen from its plus menu. Flip board and Analyze are
+Actions entries; the Viewer's menu omits Analyze because its moves are already
+held unsaved, read-only files included. The Viewer offers reading and analysis,
+without repertoire/training commands. TWIC SQLite reads run on worker isolates so a busy database cannot
 hold up filter controls or menu dismissal.
 
 `PendingWrites` belongs to the application, not to a mode. Accepted writes of

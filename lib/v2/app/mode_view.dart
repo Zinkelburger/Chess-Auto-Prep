@@ -30,6 +30,7 @@ import '../ui/name_dialog.dart';
 import '../ui/pane_tabs.dart';
 import '../workspace/book_chip.dart';
 import '../workspace/chapter_commands.dart';
+import '../workspace/copy_name_dialog.dart';
 import '../workspace/document_actions.dart';
 import '../workspace/document_session.dart';
 import '../workspace/game_ordering.dart';
@@ -47,6 +48,7 @@ import 'workspace_requests.dart';
 /// context. The Actions menu only points at them.
 typedef ShellDialogs = ({
   VoidCallback saveCopy,
+  VoidCallback saveHeld,
   VoidCallback exportPgn,
   VoidCallback search,
   VoidCallback accounts,
@@ -99,6 +101,10 @@ abstract base class ModeView {
   /// anywhere but the builder itself.
   bool get offersBuilder => true;
 
+  /// Whether the Actions menu offers the game on a new analysis tab. The
+  /// viewer does not: moves played there already stay off the file.
+  bool get offersNewAnalysis => true;
+
   /// What a right-click on a move offers.
   MoveMenu? get moveMenu => null;
 
@@ -137,6 +143,7 @@ abstract base class ModeView {
     analysis: workspace.analysis,
     editing: menu.editing,
     onSaveCopy: menu.dialogs.saveCopy,
+    onSaveHeld: menu.dialogs.saveHeld,
   );
 }
 
@@ -283,6 +290,9 @@ final class ViewerView extends _DocumentModeView {
     _modes.viewer.walk(by);
     return true;
   }
+
+  @override
+  bool get offersNewAnalysis => false;
 
   /// Moves played here are for looking: they stay off the file until the
   /// user saves them.
@@ -686,16 +696,17 @@ List<AppAction> boardActions(
   required WorkspaceRequests requests,
   required Library library,
   required Studies studies,
-  required VoidCallback onAnalyze,
+  required VoidCallback? onAnalyze,
 }) {
   final scratch = session.isScratch;
   return [
-    AppAction(
-      'Analyze in new tab',
-      onAnalyze,
-      shortcut: 'Ctrl+N',
-      group: 'Board',
-    ),
+    if (onAnalyze != null)
+      AppAction(
+        'Open Analysis tab',
+        onAnalyze,
+        shortcut: 'Ctrl+N',
+        group: 'Board',
+      ),
     // On the board, Paste PGN or FEN below takes a FEN too.
     if (!scratch)
       AppAction(
@@ -744,6 +755,52 @@ Future<void> _toRepertoire(
   final name = await _chapterName(context, into.name);
   if (name == null) return;
   await requests.saveBoardToRepertoire(into, name);
+}
+
+/// Save, Ctrl+S and Save changes: the held edits into their file, or, for a
+/// file this app may not write, into a copy in [collections] or a new
+/// chapter of a study, whichever the user picks.
+Future<void> saveHeld(
+  BuildContext context, {
+  required DocumentSession session,
+  required WorkspaceRequests requests,
+  required Studies studies,
+  required String collections,
+}) async {
+  if (session.readOnly == null) return session.keepHeld();
+  final where = await showDialog<_HeldTarget>(
+    context: context,
+    builder: (context) => SimpleDialog(
+      title: const Text('Save your moves'),
+      children: [
+        for (final target in _HeldTarget.values)
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, target),
+            child: Text(target.label),
+          ),
+      ],
+    ),
+  );
+  if (where == null || !context.mounted) return;
+  switch (where) {
+    case _HeldTarget.copy:
+      final name = await showCopyNameDialog(
+        context,
+        session.chapter?.name ?? 'Chapter',
+      );
+      if (name == null) return;
+      requests.say(copySaid(await session.saveCopy(name, into: collections)));
+    case _HeldTarget.study:
+      await _toStudy(context, requests, studies);
+  }
+}
+
+enum _HeldTarget {
+  copy('Copy into Documents…'),
+  study('Add to a study…');
+
+  const _HeldTarget(this.label);
+  final String label;
 }
 
 Future<void> _toStudy(

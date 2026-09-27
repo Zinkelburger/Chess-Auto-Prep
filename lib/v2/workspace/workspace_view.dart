@@ -52,7 +52,12 @@ final class WorkspaceHooks {
     this.onOpenChapter,
     this.onOpenPlace,
     this.onEditBooks,
+    this.onSaveHeld,
   });
+
+  /// What the edit strip's Save does with held edits, when not simply
+  /// writing them to their file.
+  final VoidCallback? onSaveHeld;
 
   /// Opens the chapter a move of the book was found in, where it leads.
   final ValueChanged<TreePlace>? onOpenPlace;
@@ -201,6 +206,7 @@ class WorkspaceView extends StatelessWidget {
             session: workspace.session,
             saver: workspace.saver,
             editing: editing,
+            onSave: hooks.onSaveHeld,
           ),
           // While part of the game is hidden the arrows would walk into it.
           _UnlessHidden(

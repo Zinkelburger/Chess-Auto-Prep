@@ -57,6 +57,19 @@ void main() {
       expect(await inspection.show(), isTrue);
       expect(inspection.session.cursor, scratchCursor);
       expect(w.session.commentAt(NodePath.of([0])), 'Unsaved source note');
+      final other = collectionRef('Other collection');
+      w.store.documents[other] = Opened(
+        threeGameFile,
+        scriptedRevision(threeGameFile),
+      );
+      await w.requests.openFile(other, game: 1);
+      expect(inspection.active, isFalse);
+      expect(await inspection.show(), isTrue);
+      expect(inspection.session.tree!.children.first.san, 'd4');
+      await w.requests.documents.select(ref);
+      expect(await inspection.show(), isTrue);
+      expect(inspection.session.cursor, scratchCursor);
+      expect(w.session.hasHeldEdits, isTrue);
     },
   );
 }

@@ -254,6 +254,13 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
   restores them against the original save revision. Reloading or closing its tab
   discards the held edits. Once an edit is held, later edits join it in every
   mode until it is saved or discarded. The builder and Study keep autosaving.
+- **A read-only file holds moves too** (owner, 2026-09-27). A file outside
+  Documents that was not copied on open takes moves, notes and glyphs in the
+  viewer like any other; the strip says `Unsaved changes · this file is
+  read-only`, and Save (Ctrl+S, or Save changes in Actions) asks where they
+  go: `Copy into Documents…` writes the game with them into `pgn_collections`
+  and opens that copy, `Add to a study…` makes them a new study chapter. The
+  standing read-only notice stays hidden while the viewer holds edits.
 - **No colour for the unsaved state**, and **no snackbars anywhere in v2**: deletions say nothing
   (Ctrl+Z undoes them), and a failure goes to the status bar under the top bar, which has a Close
   button and, when there is a way out, one action such as Reload.
@@ -262,16 +269,19 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
 
 - Compact document and pane tabs have left-aligned labels, close buttons, drag
   ordering and no click splash. The pane's plus menu reopens closed tools.
-- Analyze opens **Analysis beside Moves and Explorer**, containing a scratch copy
-  of the complete current game, variations and comments at the current move,
-  and starts the engine. The collection, filters and file tab stay in place;
-  analysis moves and pasted PGN/FEN never write the source. Each game's scratch
-  analysis and undo history survive switching inner tabs and collections for
-  this window. Choosing another game returns to Moves. File tabs retain their
-  appearance; inner tabs have square lower edges and join the reading card.
-- Flip board is visible in the top toolbar. The viewer opens with Moves and
-  Explorer, omits repertoire actions and the chapter-editing sidebar, and only
-  offers Save/Discard after edits exist.
+- **Analysis beside Moves and Explorer** contains a scratch copy of the complete
+  current game, variations and comments at the current move, and starts the
+  engine. Open it from the inner strip's plus menu, Actions → Show Analysis, or
+  Ctrl+N. The collection, filters and file tab stay in place; analysis moves and
+  pasted PGN/FEN never write the source. Each game's scratch analysis and undo
+  history survive switching inner tabs and collections for this window.
+  Choosing another game returns to Moves. File tabs retain their appearance;
+  inner tabs have square lower edges and join the reading card.
+- Flip board stays in Actions; no duplicated top-bar buttons. The viewer opens
+  with Moves and Explorer, omits repertoire actions and the chapter-editing
+  sidebar, and only offers Save/Discard after edits exist. The outer strip's
+  plus opens an independent empty scratch document.
+
 
 - File-order, date and rating sorting preserve original game indices. The list,
   grouped chapters, counter, number entry and arrow keys use the same visible
