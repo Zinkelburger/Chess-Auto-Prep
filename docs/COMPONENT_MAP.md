@@ -35,6 +35,11 @@ and native-platform gates pass. The [renewal checklist](ARCHITECTURE_RENEWAL.md#
 is the authoritative inventory of its implemented and remaining workflows;
 sections below describing old paths are not claims of v2 parity.
 
+- `v2/storage/diagnostic_report.dart`: on-demand version/platform plus the last
+  32 KiB / 160 lines of `app.log`; leading partial lines and recognizable
+  credential-bearing lines are omitted. Settings owns the Copy diagnostics
+  action, rejects overlapping copies and shows success/failure on its row.
+  Missing package metadata or log files still produce an explanatory report.
 - `v2/features/databases/`: the app-owned corpus browser and TWIC job; read-only
   existing master games plus fingerprinted PGN imports into the separate cache.
 - `v2/features/tournaments/`: app-owned finite engine games, setup, verified
@@ -44,6 +49,11 @@ sections below describing old paths are not claims of v2 parity.
   opening search. Pure standings include per-opponent W/D/L, SB and optional
   rating estimates; PGN final-board previews run off the UI thread and the
   display choice persists. Unknown or damaged runs report visible warnings.
+- `v2/features/pgn_viewer/`: visible-game export uses the shared exclusive PGN
+  exporter; sorting drives both list and workspace counter/keyboard. Reading
+  checkpoints preserve the legacy session key and game identity, with v2
+  variation-path/FEN and header-filter extensions; queued preference snapshots
+  survive disposal. Explicit game handoffs override restored reading state.
 - `v2/features/study/`: PGN-file import through the shared import/document
   boundary; exclusive snapshot export; guarded file rename with retained retry;
   chapter tags, legal starting FEN and undoable annotation/variation cleanup.

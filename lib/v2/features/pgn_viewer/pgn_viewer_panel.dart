@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../chess/game_filter.dart';
+import '../../chess/pgn/game_order.dart';
 import '../../chess/pgn/game_summary.dart';
 import '../../storage/chapter_files.dart';
 import '../../ui/app_action.dart';
@@ -157,6 +158,20 @@ class _PgnViewerPanelState extends State<PgnViewerPanel>
             onChanged: _viewer.search,
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Space.m),
+          child: DropdownButton<GameOrder>(
+            isExpanded: true,
+            value: _viewer.sort,
+            items: [
+              for (final order in GameOrder.values)
+                DropdownMenuItem(value: order, child: Text(order.label)),
+            ],
+            onChanged: (order) {
+              if (order != null) _viewer.sortBy(order);
+            },
+          ),
+        ),
         GameFilterBar(filter: widget.filter),
         Expanded(child: _rows()),
       ],
@@ -219,6 +234,7 @@ class _PgnViewerPanelState extends State<PgnViewerPanel>
     required bool indented,
   }) => _GameRow(
     index: index,
+    ordinal: _viewer.ordinalOf(index),
     game: game,
     open: index == current,
     indented: indented,
@@ -407,6 +423,7 @@ class _Toolbar extends StatelessWidget {
 class _GameRow extends StatelessWidget {
   const _GameRow({
     required this.index,
+    required this.ordinal,
     required this.game,
     required this.open,
     required this.onOpen,
@@ -414,6 +431,7 @@ class _GameRow extends StatelessWidget {
   });
 
   final int index;
+  final int ordinal;
   final GameSummary game;
 
   /// This is the game on the board.
@@ -442,7 +460,13 @@ class _GameRow extends StatelessWidget {
             children: [
               SizedBox(
                 width: gameOrdinalWidth,
-                child: Text('${index + 1}', style: theme.textTheme.labelSmall),
+                child: Tooltip(
+                  message: 'Game ${index + 1} in file',
+                  child: Text(
+                    '${ordinal + 1}',
+                    style: theme.textTheme.labelSmall,
+                  ),
+                ),
               ),
               Expanded(
                 child: Text(game.title, overflow: TextOverflow.ellipsis),

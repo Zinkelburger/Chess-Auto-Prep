@@ -1,3 +1,4 @@
+import '../storage/viewer_places.dart';
 import '../storage/pgn_export.dart';
 import '../chess/tournament/config.dart';
 import '../features/tournaments/game_runner.dart';
@@ -129,6 +130,7 @@ final class AppEnvironment {
     this.playerRating,
     this.exportText,
     this.exportPgn,
+    this.viewerPlaces,
     required this.setFullScreen,
     required this.bughouse,
     this.now = DateTime.now,
@@ -253,6 +255,7 @@ final class AppEnvironment {
       playerRating: PlayerRatings(client).lookup,
       exportText: saveTextExport,
       exportPgn: const PgnExport(),
+      viewerPlaces: PreferencesViewerPlaces(),
       savedPlayerList: () =>
           savedPlayers(Directory(p.join(documents.path, 'analysis_games'))),
       setFullScreen: _setFullScreen,
@@ -290,6 +293,7 @@ final class AppEnvironment {
   /// The native Save dialog for an explicitly exported prep sheet.
   final Future<String?> Function(String name, String text)? exportText;
   final PgnExport? exportPgn;
+  final ViewerPlaces? viewerPlaces;
 
   /// The file dialogs of the builder's import and of the PGN Viewer.
   final PgnFilePicker libraryPicker;

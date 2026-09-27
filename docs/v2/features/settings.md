@@ -1,6 +1,6 @@
 # Settings
 
-Status: draft from the old app
+Status: partial v2 implementation; remaining screen details are the old-app oracle
 Old code (oracle only): `lib/screens/settings_screen.dart`, `lib/features/settings/`,
 `lib/features/updates/`, `lib/widgets/settings/`, `lib/widgets/accounts/`, `lib/infrastructure/`
 Plan step: 13
@@ -93,6 +93,13 @@ The title bar reads `Settings` with a close button (`Close settings`, Escape). N
 - **`App` ▸ About & open source** — `Chess Auto Prep on GitHub` (`Source code, releases, and issue
   tracker`), **`Open log folder`** (`Errors are written to app.log — attach it to a bug report`),
   `Open-source licenses` (`Includes Hivemind by aminwoo, the MIT-licensed bughouse engine`).
+- **`App` ▸ Diagnostics** (v2, 2026-09-27) — `Copy diagnostics` copies version,
+  OS/Dart details and up to the last 32 KiB / 160 lines of `app.log`. It does
+  not read account preferences or chess data. Leading partial log lines and
+  recognizable credential-bearing lines are omitted; logging credentials is
+  still prohibited at source. Success or clipboard failure appears on the
+  row; repeated clicks share the in-progress attempt. An absent log or package
+  version produces an explanatory line in the report.
 - **`App` ▸ Reset** — `Reset engine, analysis, display and database preferences. Your accounts, games
   and repertoires are kept.`, button `Reset settings…`.
 - **`Shortcuts`** is a read-only `Action` / `Key` / `Where` table of every binding in the app, and the
@@ -194,6 +201,7 @@ Keep — Check for updates
 Keep — Download update
 Keep — Install when I close the app
 Keep — Open log folder
+Built — Copy diagnostics (September 27 implementation instruction)
 Keep — Reset settings
 
 Quirks to rule on: tokens sit in plaintext preferences; "Lichess login" and "Lichess username" are two
@@ -201,12 +209,9 @@ unrelated settings storing two different names on one page; a failed OAuth in Se
 while the same flow elsewhere prints a sentence; logging out needs no confirmation; `Reset settings`
 covers engine, display and database preferences but not accounts, updates or any per-mode
 page; `Data & storage` is a whole other mode embedded in a pane; `Show legal moves` defaults off while
-every other display aid defaults on; the update dialog can interrupt work at startup; nothing copies
-the log or a diagnostics summary from inside the app.
+every other display aid defaults on; the update dialog can interrupt work at startup; Copy diagnostics now exists in v2.
 
 ## Questions for the owner
 - Do tokens move to an OS keychain in v2, or stay in preferences with a warning?
-- Should `Copy diagnostics` (log tail + version + OS, like the bughouse engine report) ship here, so a
-  bug report is one button rather than a file manager?
 - Is one flat settings screen still right, or do per-mode pages belong beside their mode?
 - Should `Reset settings` also cover the per-mode pages?

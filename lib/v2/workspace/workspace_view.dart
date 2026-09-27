@@ -20,6 +20,7 @@ import 'engine_pane.dart';
 import 'engine_analysis.dart';
 import 'explorer_pane.dart';
 import 'game_counter.dart';
+import 'game_ordering.dart';
 import 'move_field.dart';
 import 'move_note.dart';
 import 'move_tree_view.dart';
@@ -38,6 +39,7 @@ final class WorkspaceHooks {
   const WorkspaceHooks({
     this.header = true,
     this.gameCounter = true,
+    this.gameOrdering,
     this.moveMenu,
     this.tabBody,
     this.boardClaim,
@@ -92,6 +94,7 @@ final class WorkspaceHooks {
   /// whose game it was and the list is how to get to another.
   final bool header;
   final bool gameCounter;
+  final GameOrdering? gameOrdering;
 
   /// The body of a tab the workspace does not draw itself — Train,
   /// Puzzle, Book — which the mode on screen or the shell supplies. A tab it
@@ -157,6 +160,7 @@ class WorkspaceView extends StatelessWidget {
               analysis: workspace.analysis,
               onMove: hooks.onBoardMove ?? workspace.session.playMove,
               counter: hooks.gameCounter,
+              ordering: hooks.gameOrdering,
               moves: moves,
               // While part of the game is hidden — a puzzle's answer — the
               // engine would read it out, so it is not shown until the
@@ -391,6 +395,7 @@ class _BoardAndCounter extends StatefulWidget {
     required this.settings,
     required this.onMove,
     required this.counter,
+    this.ordering,
     required this.moves,
     required this.engine,
     required this.analysis,
@@ -405,6 +410,7 @@ class _BoardAndCounter extends StatefulWidget {
 
   /// Whether the game counter sits under the board.
   final bool counter;
+  final GameOrdering? ordering;
   final MoveEntry moves;
 
   /// The engine's lines, under the counter.
@@ -489,7 +495,10 @@ class _BoardAndCounterState extends State<_BoardAndCounter>
                       ),
                       Expanded(
                         child: counter
-                            ? GameCounter(session: session)
+                            ? GameCounter(
+                                session: session,
+                                ordering: widget.ordering,
+                              )
                             : const SizedBox.shrink(),
                       ),
                     ],

@@ -344,7 +344,7 @@ final class WorkspaceRequests extends ChangeNotifier {
       case GameNotKept(:final sentence):
         return _refused(sentence);
       case GameKept(:final ref, ply: final at):
-        final result = await _inViewer(ticket, ref);
+        final result = await _inViewer(ticket, ref, game: 0);
         if (_disposed || result is! RequestDone) return result;
         _session.goTo(NodePath.of(List.filled(at, 0)));
         return result;
@@ -575,10 +575,17 @@ final class WorkspaceRequests extends ChangeNotifier {
     ChapterRef ref, {
     int? game,
   }) async {
+    final place = game == null ? await _viewer.savedPlace(ref) : null;
+    if (_overtaken(ticket)) return const RequestDropped();
     switchTo(Mode.pgnViewer);
     final result = await _open(ticket, ref, game: game ?? 0);
-    if (!_disposed && result is RequestDone) unawaited(_viewer.opened(ref));
-    return result;
+    if (!_overtaken(ticket) && result is RequestDone)
+      await _viewer.opened(
+        ref,
+        place: place,
+        currentRequest: () => !_overtaken(ticket),
+      );
+    return _overtaken(ticket) ? const RequestDropped() : result;
   }
 
   Future<RequestResult> _imported(

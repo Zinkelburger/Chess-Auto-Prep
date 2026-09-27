@@ -1,3 +1,9 @@
+import '../../chess/pgn/reading_place.dart';
+import '../../storage/viewer_places.dart';
+import 'viewer_reading.dart';
+import '../../chess/pgn/game_order.dart';
+import '../../storage/pgn_export.dart';
+import '../../workspace/game_ordering.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
@@ -24,9 +30,11 @@ import '../../workspace/file_filter.dart';
 /// workspace has open, one game of it on the board, so the session holds
 /// them and switching game is a command over it. This owner knows which
 /// file is the viewer's and what to say about each game in the list.
-final class PgnViewer extends ChangeNotifier {
+final class PgnViewer extends ChangeNotifier implements GameOrdering {
   PgnViewer({
     required RecentFiles recent,
+    this.exporter,
+    this.places,
     PendingWrites? pendingWrites,
     required PgnFilePicker picker,
     required PgnFileImport import,
@@ -44,11 +52,26 @@ final class PgnViewer extends ChangeNotifier {
        _collections = collections {
     _session.addListener(_followTheDocument);
     _filter.addListener(_followTheFilter);
+    _reading.start();
   }
 
   /// How many files the list remembers, which is the old app's number.
   static const maxRecent = 10;
 
+  final ViewerPlaces? places;
+  late final _reading = ViewerReading(
+    session: _session,
+    filter: _filter,
+    pending: pendingWrites,
+    store: places,
+    activePath: () => file?.path,
+    sort: () => _sort,
+    setSort: sortBy,
+    changed: notifyListeners,
+  );
+  Future<ReadingPlace?> savedPlace(ChapterRef ref) => _reading.load(ref.path);
+  Future<void> retryReading() => _reading.retry();
+  final PgnExport? exporter;
   final PendingWrites pendingWrites;
   final RecentFiles _recentFiles;
   final PgnFilePicker _picker;
@@ -77,6 +100,53 @@ final class PgnViewer extends ChangeNotifier {
   /// Each game's chapter, when the file has chapters; else null.
   List<String>? _chapterOf;
   String _query = '';
+  GameOrder _sort = GameOrder.fileOrder;
+  GameOrder get sort => _sort;
+  List<int>? _order;
+  Map<int, int>? _ordinals;
+  int ordinalOf(int game) =>
+      (_ordinals ??= {
+        for (final (i, index) in gameOrder.indexed) index: i,
+      })[game] ??
+      game;
+  @override
+  List<int> get gameOrder => file == null
+      ? List.generate(_session.gameCount ?? 0, (i) => i)
+      : _order ??= List.unmodifiable(visible.map((row) => row.$1));
+
+  void sortBy(GameOrder order) {
+    if (_sort == order) return;
+    _sort = order;
+    _reading.capture();
+    _selection = null;
+    _order = null;
+    _ordinals = null;
+    notifyListeners();
+  }
+
+  void walk(int by) {
+    final indexes = gameOrder;
+    final current = indexes.indexOf(this.current ?? -1);
+    final next = current < 0 ? (by > 0 ? 0 : indexes.length - 1) : current + by;
+    if (next >= 0 && next < indexes.length) showGame(indexes[next]);
+  }
+
+  /// Capture the visible draft before a picker can change file or selection.
+  String? exportText() {
+    if (file == null || _filter.busy || _filter.problem != null) return null;
+    final chapter = _session.snapshot();
+    if (chapter == null || gameOrder.isEmpty) return null;
+    return chapter.preamble +
+        [
+          for (final index in gameOrder) chapter.lines[index].text,
+        ].join('\n\n') +
+        '\n';
+  }
+
+  Future<PgnExportResult> export(String name, String text) =>
+      exporter?.save(name, text) ??
+      Future.value(const PgnExportFailed('File export is unavailable.'));
+
   int _filterSeen = -1;
   ({List<(int, GameSummary)> games, List<ViewerChapter> chapters})? _selection;
   Map<String, int> _chapterSizes = const {};
@@ -87,7 +157,7 @@ final class PgnViewer extends ChangeNotifier {
 
   /// A sentence about the recent list when it could not be read or kept,
   /// or null when it could.
-  String? get recentProblem => _recentProblem;
+  String? get recentProblem => _recentProblem ?? _reading.problem;
 
   /// The file the viewer opened, while it is still the document on the
   /// board. Null when the workspace has moved on to a chapter or a study,
@@ -112,7 +182,12 @@ final class PgnViewer extends ChangeNotifier {
     final needle = _query.trim().toLowerCase();
     final selected = <(int, GameSummary)>[];
     final grouped = <String, List<(int, GameSummary)>>{};
-    for (final (index, game) in _rows.indexed) {
+    for (final index in orderGames(
+      _rowsLines ?? const [],
+      Iterable.generate(_rows.length),
+      _sort,
+    )) {
+      final game = _rows[index];
       if (!_filter.keeps(index)) continue;
       final title = _chapterOf?[index];
       if (needle.isNotEmpty &&
@@ -154,12 +229,15 @@ final class PgnViewer extends ChangeNotifier {
     if (query == _query) return;
     _query = query;
     _selection = null;
+    _order = null;
+    _ordinals = null;
     notifyListeners();
   }
 
   /// Retries accepted additions before reading the list. Failed additions
   /// remain owned by the registry even when this viewer has been replaced.
   Future<void> loadRecent() async {
+    await _reading.retry();
     await pendingWrites.retry(_recentFiles);
     await _inTurn(() async {
       final read = await _recentFiles.load();
@@ -215,10 +293,18 @@ final class PgnViewer extends ChangeNotifier {
   /// [ref] is now the viewer's file: it goes to the top of the recent list,
   /// which is then kept. Called once the workspace has it open, so a file
   /// that could not be read is not remembered as one that was.
-  Future<void> opened(ChapterRef ref) {
+  Future<void> opened(
+    ChapterRef ref, {
+    ReadingPlace? place,
+    bool Function()? currentRequest,
+  }) async {
     _file = ref;
+    _sort = GameOrder.fileOrder;
     _query = '';
     _selection = null;
+    _order = null;
+    _ordinals = null;
+    await _reading.restore(place, currentRequest ?? () => true);
     final intent = Object();
     _unsavedRecent[intent] = ref.path;
     _recent = _first(ref.path, _recent);
@@ -287,6 +373,8 @@ final class PgnViewer extends ChangeNotifier {
     _file = null;
     _query = '';
     _selection = null;
+    _order = null;
+    _ordinals = null;
     notifyListeners();
   }
 
@@ -313,6 +401,8 @@ final class PgnViewer extends ChangeNotifier {
     final grouping = groupChapters([for (final line in lines) line.tags]);
     _chapterOf = grouping.hasChapters ? grouping.titles : null;
     _selection = null;
+    _order = null;
+    _ordinals = null;
     final sizes = <String, int>{};
     for (final title in _chapterOf ?? const <String>[]) {
       sizes[title] = (sizes[title] ?? 0) + 1;
@@ -348,12 +438,15 @@ final class PgnViewer extends ChangeNotifier {
     if (_filter.revision == _filterSeen) return;
     _filterSeen = _filter.revision;
     _selection = null;
+    _order = null;
+    _ordinals = null;
     notifyListeners();
   }
 
   @override
   void dispose() {
     _disposed = true;
+    _reading.dispose();
     _session.removeListener(_followTheDocument);
     _filter.removeListener(_followTheFilter);
     super.dispose();

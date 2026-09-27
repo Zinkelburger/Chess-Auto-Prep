@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/v2/storage/viewer_places.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_export.dart';
 import 'package:chess_auto_prep/v2/features/pgn_viewer/pgn_viewer.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
@@ -159,6 +161,8 @@ final class ViewerFixture {
 Future<ViewerFixture> viewerOver(
   String text, {
   String name = 'games',
+  ViewerPlaces? places,
+  PgnExport? exporter,
   RecentFilesRead recent = const RecentFilesListed([]),
   String? readOnly,
 }) async {
@@ -173,6 +177,8 @@ Future<ViewerFixture> viewerOver(
   final settings = SettingsStore();
   final filter = FileFilter(session, delay: Duration.zero);
   final viewer = PgnViewer(
+    places: places,
+    exporter: exporter,
     recent: recentFiles,
     picker: picker,
     import: import,

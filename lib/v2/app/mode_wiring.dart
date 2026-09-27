@@ -67,6 +67,8 @@ DocumentModes wireDocumentModes(
       root: env.folders.studies,
     ),
     viewer: PgnViewer(
+      places: env.viewerPlaces,
+      exporter: env.exportPgn,
       pendingWrites: env.pendingWrites,
       recent: env.recentFiles,
       picker: env.viewerPicker,

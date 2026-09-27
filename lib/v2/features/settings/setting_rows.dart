@@ -34,6 +34,8 @@ sealed class SettingControl {
   const SettingControl();
 }
 
+enum DiagnosticCopyState { idle, copying, copied, failed }
+
 /// Two or three fixed choices, shown side by side.
 final class ChoiceSetting<T extends Object> extends SettingControl {
   const ChoiceSetting({
@@ -119,6 +121,8 @@ List<SettingGroup> settingGroups({
   required int coresAvailable,
   required LichessAccountState account,
   required VoidCallback openLogFolder,
+  VoidCallback? copyDiagnostics,
+  DiagnosticCopyState diagnostics = DiagnosticCopyState.idle,
 }) {
   final s = store.value;
   void change(Settings Function(Settings now) edit) =>
@@ -280,6 +284,20 @@ List<SettingGroup> settingGroups({
         ),
     ]),
     SettingGroup('App', [
+      if (copyDiagnostics != null)
+        SettingRow(
+          'Diagnostics',
+          ActionSetting('Copy diagnostics', copyDiagnostics),
+          hint: switch (diagnostics) {
+            DiagnosticCopyState.idle =>
+              'Version, platform and recent log for a bug report',
+            DiagnosticCopyState.copying => 'Preparing diagnostics…',
+            DiagnosticCopyState.copied => 'Diagnostics copied.',
+            DiagnosticCopyState.failed =>
+              'Could not copy diagnostics. Try again.',
+          },
+          warn: diagnostics == DiagnosticCopyState.failed,
+        ),
       SettingRow(
         'Log folder',
         ActionSetting('Open', openLogFolder),
