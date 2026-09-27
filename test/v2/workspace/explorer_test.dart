@@ -259,8 +259,9 @@ void main() {
     await explorer.retry();
     expect(
       (explorer.state as ExplorerFailed).sentence,
-      'There is no master database on this machine.',
+      'Download the TWIC database to explore master games offline.',
     );
+    expect(explorer.recovery, ExplorerRecovery.download);
   });
 
   test('after three empty answers going deeper the line is left alone, '

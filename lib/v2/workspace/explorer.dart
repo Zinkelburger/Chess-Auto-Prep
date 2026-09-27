@@ -153,7 +153,7 @@ final class Explorer extends ChangeNotifier {
   ExplorerState _state = const ExplorerIdle();
   String? _notice;
   ExplorerRecovery? _recovery;
-  bool _twic = false;
+  bool _canDownloadTwic = false;
   Timer? _rest;
   int _ticket = 0;
   ({GameTree? tree, NodePath at})? _board;
@@ -165,6 +165,7 @@ final class Explorer extends ChangeNotifier {
   String? get notice => _notice;
 
   ExplorerRecovery? get recovery => _recovery;
+  bool get canDownloadTwic => _canDownloadTwic;
 
   ExplorerChoice get choice => _choiceNow;
 
@@ -230,9 +231,9 @@ final class Explorer extends ChangeNotifier {
   }
 
   Future<void> _checkTheBook() async {
-    final available = await _databases.bookAvailable();
-    if (_disposed || available == _twic) return;
-    _twic = available;
+    final downloadable = await _databases.bookDownloadable();
+    if (_disposed || downloadable == _canDownloadTwic) return;
+    _canDownloadTwic = downloadable;
     notifyListeners();
   }
 
@@ -548,6 +549,11 @@ final class ExplorerDatabases {
 
   /// Whether the master book is on this machine.
   Future<bool> bookAvailable() => _book.available();
+
+  Future<bool> bookDownloadable() => switch (_book) {
+    DownloadableMasterBook book => book.canDownload(),
+    _ => Future.value(false),
+  };
 
   /// What [choice] says about [fen], or the sentence saying why there is
   /// no answer: the online databases and TWIC, not the trees on this

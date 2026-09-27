@@ -42,6 +42,21 @@ void main() {
   tearDown(() async => temp.delete(recursive: true));
 
   test(
+    'downloaded books stay resumable and existing populated master books take priority',
+    () async {
+      final shared = p.join(temp.path, 'master_games.db');
+      final book = TwicBook(shared, path);
+      addTearDown(book.close);
+      expect(await book.canDownload(), isTrue);
+      importTwicIssue(path, 1600, zipped(game));
+      expect(await book.available(), isTrue);
+      expect(await book.canDownload(), isTrue);
+      importTwicIssue(shared, 1600, zipped(game));
+      expect(await book.canDownload(), isFalse);
+    },
+  );
+
+  test(
     'issue import is readable, classified and idempotent; a bad issue rolls back',
     () async {
       final bytes = zipped(

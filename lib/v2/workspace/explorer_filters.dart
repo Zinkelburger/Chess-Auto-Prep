@@ -9,9 +9,15 @@ import 'explorer.dart';
 /// The filters fold away under it so the table keeps the room; what they
 /// are set to shows beside the button while they are folded.
 class ExplorerSourceBar extends StatefulWidget {
-  const ExplorerSourceBar({super.key, required this.explorer, this.book});
+  const ExplorerSourceBar({
+    super.key,
+    required this.explorer,
+    this.book,
+    this.onDownload,
+  });
 
   final Explorer explorer;
+  final VoidCallback? onDownload;
 
   /// Beside the databases while `Book` is chosen: which book, and the way
   /// to edit them.
@@ -56,6 +62,13 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
                     maxWidth: explorerTrailingMaxWidth,
                   ),
                   child: widget.book,
+                ),
+              if (choice.source == ExplorerSource.twic &&
+                  widget.onDownload != null)
+                TextButton.icon(
+                  onPressed: widget.onDownload,
+                  icon: const Icon(Icons.download, size: IconSize.menu),
+                  label: const Text('Download more'),
                 ),
               if (summary != null)
                 ConstrainedBox(

@@ -27,10 +27,10 @@ class NumberField extends StatefulWidget {
   final ValueChanged<int> onChanged;
 
   @override
-  State<NumberField> createState() => NumberFieldFieldState();
+  State<NumberField> createState() => _NumberFieldState();
 }
 
-class NumberFieldFieldState extends State<NumberField> {
+class _NumberFieldState extends State<NumberField> {
   late final _box = TextEditingController(text: '${widget.value}');
   final _focus = FocusNode();
 

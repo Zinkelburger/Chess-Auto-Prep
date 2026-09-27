@@ -133,6 +133,12 @@ class _ExplorerPaneState extends State<ExplorerPane>
           children: [
             ExplorerSourceBar(
               explorer: widget.explorer,
+              onDownload:
+                  widget.onDownloadTwic != null &&
+                      widget.explorer.canDownloadTwic &&
+                      widget.explorer.recovery != ExplorerRecovery.download
+                  ? () => unawaited(_downloadTwic())
+                  : null,
               book: widget.onEditBooks == null
                   ? null
                   : BookChip(books: widget.books, onEdit: widget.onEditBooks!),

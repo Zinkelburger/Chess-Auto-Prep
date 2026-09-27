@@ -56,6 +56,11 @@ abstract interface class MasterBook {
   Future<String?> gamePgn(String id);
 }
 
+/// A book whose missing or partial local cache can be filled by the app.
+abstract interface class DownloadableMasterBook implements MasterBook {
+  Future<bool> canDownload();
+}
+
 /// How many games the answer names: the old app's number for TWIC.
 const twicGamesListed = 12;
 
@@ -233,13 +238,16 @@ final class SqliteMasterBook implements MasterBook {
 
 /// Prefer the existing full master database; use the downloaded V2 cache
 /// when the older database has no games. Neither reader writes either file.
-final class TwicBook implements MasterBook {
+final class TwicBook implements DownloadableMasterBook {
   TwicBook(String sharedPath, String downloadPath)
     : shared = SqliteMasterBook(sharedPath),
       downloaded = SqliteMasterBook(downloadPath);
 
   final SqliteMasterBook shared;
   final SqliteMasterBook downloaded;
+
+  @override
+  Future<bool> canDownload() async => !await shared.available();
 
   Future<MasterBook> _book() async =>
       await shared.available() ? shared : downloaded;

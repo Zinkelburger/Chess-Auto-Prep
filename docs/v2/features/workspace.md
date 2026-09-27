@@ -76,6 +76,7 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   [Lichess API specification](https://raw.githubusercontent.com/lichess-org/api/master/doc/specs/tags/openingexplorer/lichess.yaml).
   Missing TWIC data offers **Download TWIC database**: choose 1–520 weeks (default 52),
   see download/import progress, stop between issues and resume without duplicate counts.
+  **Download more** reopens this flow for the new cache, including after an app restart.
   Issues come from the [TWIC archive](https://theweekinchess.com/twic). A separate derived
   `twic_book.db` cache holds new downloads; an existing populated `master_games.db` takes
   priority and stays read-only. Imports run off the UI isolate and commit one issue at a time;
