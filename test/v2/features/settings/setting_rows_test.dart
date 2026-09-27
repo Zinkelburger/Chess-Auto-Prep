@@ -17,17 +17,24 @@ void main() {
     );
     addTearDown(store.dispose);
     addTearDown(account.dispose);
+    var diagnostics = 0;
     final rows = [
       for (final group in settingGroups(
         store: store,
         coresAvailable: 8,
         account: account,
         openLogFolder: () {},
+        copyDiagnostics: () => diagnostics++,
       ))
         ...group.rows,
     ];
     NumberSetting number(String label) =>
         rows.firstWhere((row) => row.label == label).control as NumberSetting;
+
+    final action = rows.firstWhere((row) => row.label == 'Diagnostics');
+    expect(action.matches('bug report'), isTrue);
+    (action.control as ActionSetting).run();
+    expect(diagnostics, 1);
 
     number('CPU cores').onChanged(3);
     number('Memory').onChanged(512);

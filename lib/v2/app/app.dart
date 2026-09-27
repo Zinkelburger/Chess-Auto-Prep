@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../diagnostics/log.dart';
 import '../features/settings/lichess_login_dialog.dart';
@@ -19,6 +20,7 @@ import 'shell.dart';
 import 'window_input.dart';
 import 'native_file_requests.dart';
 import '../storage/chapter_files.dart';
+import '../storage/diagnostic_report.dart';
 
 /// The app on this machine: [AppParts] over the native environment, the
 /// window's dialogs, and the way out.
@@ -102,7 +104,26 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     coresAvailable: Platform.numberOfProcessors,
     account: _parts.account,
     openLogFolder: () => unawaited(openFolder(widget.logFolder)),
+    copyDiagnostics: () => unawaited(_copyDiagnostics()),
+    diagnostics: _diagnostics.value,
   );
+
+  final _diagnostics = ValueNotifier(DiagnosticCopyState.idle);
+  late final _settingsAlso = Listenable.merge([_parts.account, _diagnostics]);
+
+  Future<void> _copyDiagnostics() async {
+    if (_diagnostics.value == DiagnosticCopyState.copying) return;
+    _diagnostics.value = DiagnosticCopyState.copying;
+    try {
+      final report = await DiagnosticReport(widget.logFolder).read();
+      if (!mounted) return;
+      await Clipboard.setData(ClipboardData(text: report));
+      if (mounted) _diagnostics.value = DiagnosticCopyState.copied;
+    } catch (error) {
+      log.w('Copy diagnostics', error);
+      if (mounted) _diagnostics.value = DiagnosticCopyState.failed;
+    }
+  }
 
   @override
   void initState() {
@@ -136,6 +157,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     _desktopFiles.dispose();
     _lifecycle.dispose();
     _quit.closing.dispose();
+    _diagnostics.dispose();
     _parts.dispose();
     super.dispose();
   }
@@ -166,7 +188,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
                 tournaments: _parts.tournaments,
                 fullScreen: _parts.fullScreen,
                 settingRows: _settingRows,
-                settingsAlso: _parts.account,
+                settingsAlso: _settingsAlso,
                 onDownloadTwic: _downloadTwic,
                 onExplorerLogin: (context) =>
                     showLichessLogin(context, _parts.account),

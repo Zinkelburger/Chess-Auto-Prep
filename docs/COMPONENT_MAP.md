@@ -35,6 +35,11 @@ and native-platform gates pass. The [renewal checklist](ARCHITECTURE_RENEWAL.md#
 is the authoritative inventory of its implemented and remaining workflows;
 sections below describing old paths are not claims of v2 parity.
 
+- `v2/storage/diagnostic_report.dart`: on-demand version/platform plus the last
+  32 KiB / 160 lines of `app.log`; leading partial lines and recognizable
+  credential-bearing lines are omitted. Settings owns the Copy diagnostics
+  action, rejects overlapping copies and shows success/failure on its row.
+  Missing package metadata or log files still produce an explanatory report.
 - `v2/features/databases/`: the app-owned corpus browser and TWIC job; read-only
   existing master games plus fingerprinted PGN imports into the separate cache.
 - `v2/features/tournaments/`: app-owned finite engine games, setup, verified
