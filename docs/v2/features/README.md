@@ -5,9 +5,14 @@ what the user can do, what data it touches and what can go wrong. The
 `v2` rewrite builds each mode from its file here, not from the old code;
 the old code is the oracle only for file formats and algorithms.
 
-The product owner corrects these files. A row of the
-[renewal plan](../../ARCHITECTURE_RENEWAL.md#order-of-work) starts only
-when its spec says `Status: corrected by the owner`.
+The product owner corrects these files. Follow the latest explicit owner
+decisions within each spec and in the current task; draft descriptions and old
+Keep lists do not override them. A draft feature needs its scope settled before
+broad implementation, but a stale status header does not require re-approval
+of an explicitly authorized change. Use the [renewal checklist](../../ARCHITECTURE_RENEWAL.md#order-of-work)
+for what is built and the [next-agent queue](../../ARCHITECTURE_RENEWAL.md#next-agent-queue)
+for remaining work. Historical descriptions below are not proof that v2
+implements every legacy control.
 
 | Mode | Spec | Plan step |
 |---|---|---|

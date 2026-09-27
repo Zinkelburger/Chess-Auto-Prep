@@ -1,12 +1,15 @@
 # Checks
 
-Status: partly superseded (2026-09-21): gaps and coverage are the Replies tab in repertoires.md; the rest is not built
+Status: partly superseded (reconciled 2026-09-27): gaps and coverage are the Replies tab in repertoires.md. Player-specific findings and bounded practical estimates are built; the repertoire chapter audit/report workflow is not built.
 Old code (oracle only): `lib/features/audit/`, `lib/features/holes/`, `lib/features/coverage/`,
 `lib/features/traps/`, `lib/services/coherence_service.dart`, `lib/screens/repertoire/`,
 `lib/screens/analysis_screen_holes.dart`
 Plan step: 8
 
-No screenshot: the app driver was not used for this pass.
+The legacy description below is reference material pending remaining scope decisions.
+Follow [repertoires](repertoires.md), [generation](generation.md) and
+[players](players.md) for their current decisions and built workflows; do not
+port the old four-tool design or player findings again.
 
 ## Purpose
 Someone with a chapter — written by hand, imported or generated — asks what is wrong with it

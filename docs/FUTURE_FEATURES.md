@@ -16,129 +16,26 @@ Consolidated list of planned or incomplete capabilities (from `tree_builder/TODO
 
 ## Architecture renewal and eventual replacement
 
-**Status: Partial.** Parallel ownership work retires the old training service and
-Viewer core hierarchies, separates Builder document lifecycle from its board,
-and guards generated PGN publication with retained per-run output. Training now
-has one app-scoped configuration writer and an explicit next-sitting policy;
-durable sitting resume, tactics and shared UI adoption remain. Builder still needs private
-opening-graph ownership, scratch recovery and full native undo provenance.
-Stopped-profile cross-store restore has a Linux rehearsal; the bounded
-20,000-node Study profile passes its command, frame-build and RSS budgets.
-Generation's remaining derived caches, broader performance/restore coverage and
-native platform gates remain open. These are completions within the full renewal.
+**Status: Partial (reconciled 2026-09-27).** The rewrite is the separate app
+in `lib/v2/`. Its current implementation, remaining tasks, product decisions
+and acceptance gates are maintained in the
+[renewal checklist](ARCHITECTURE_RENEWAL.md#order-of-work) and
+[next-agent queue](ARCHITECTURE_RENEWAL.md#next-agent-queue).
 
-The current-code save/undo safety prerequisite is
-implemented and tested on Linux. The first replacement slice is partial:
-repertoire catalog actions now use injected repository/controller boundaries
-and the new hierarchy. Linux catalog creation now uses the typed native-identity
-PGN store. Book selections have one typed settings owner and explicit failed
-write/retry states. Linux folder rename has journaled training/book-reference
-recovery. Linux journaled deletion and its Recovery/Restore UI now preserve
-files and training/book references, including interrupted restore. New Linux
-repertoires now publish complete staged chapter sets with verified manifests.
-The migrated catalog now has English ARB localization, typed message presentation,
-plural/date formatting and enlarged-label/text layout checks. Its theme and five
-shared controls now live in `design_system/`, with light/dark Widgetbook cases
-using production widgets and a guarded ledger of remaining legacy theme users.
-The shared save session/status interaction now preserves drafts across conflicts,
-reload and exclusive copies, with scripted catalog cases; repertoire creation
-uses the shared status control and preserves input on a naming collision.
-Persisted Dark/Light/System appearance now drives the app theme, with explicit
-failure/retry feedback and retained navigation/drafts. Shared menu/breadcrumb and
-chapter-picker colors adapt; fixed dark legacy interiors remain bounded until
-migration. Study now adopts the shared typed save protocol, injected storage,
-native Linux revisions, exclusive copies/exports and retained reload/restore drafts;
-its controller/model and pure PGN text helpers have canonical feature/chess-core
-paths. App-owned close coordination now covers Study, PGN Viewer and pending
-repertoire line edits, preserving drafts if another owner cancels or changes.
-Study now checkpoints current/retained drafts, their original file revision and
-chapter/cursor/orientation, with startup review/restore and conflict-safe explicit
-saving. Recovery excludes live instances and preserves unreadable records.
-PGN Viewer collection edits now use an injected document-feature owner and native
-Linux scoped game patches, with blocked failed autosaves and preserved recovery
-copies. Its shared typed recovery UI now supports inspection, reload with draft
-retention, restoration, exclusive pasted-collection Save As and PGN exports.
-Failed recovery writes block replacement; exports leave the current source intact.
-Viewer now has app-lifetime ownership and shared durable checkpoints/startup
-discovery for current/retained drafts, original game text, uncertain writes and
-game/mainline cursor/orientation. Close protection works before the reader opens.
-Study now keeps its editable document private and publishes immutable cached
-chapter/tree projections, with incremental local-edit updates, stable annotation
-focus and detached prior revisions. The shared interactive editor now lazily
-mounts variable-height move/comment rows, preserves inline drafts across eviction
-and reveals distant selections without laying out every preceding row.
-Production single-game PGN parsing now shares a guarded chess-core entry point;
-long annotated lines avoid quadratic upstream copying, and move replay/fresh-ID
-adoption handle deep lines iteratively. The native 20,000-node debug journey opens
-in 1.3 seconds, with profile-mode memory/frame gates still pending.
-Builder now has a pure feature-owned board/cursor controller that publishes
-immutable cached move-tree views and detaches caller-owned trees at adoption.
-The feature document controller coordinates notifications and injected storage;
-its controller/writer and tests have moved out of `core/`. Draft undo receipts
-are bound to the original board adoption, including equal-looking replacements.
-Study and Builder share the projection cache; Builder autosaves
-capture the current owner revision before UI rebuilds and retain their destination
-across chapter changes. Viewer now detaches parsed input and exposes immutable
-headers/mainline annotations with stable move identities; stale mainline editor
-callbacks are rejected after game replacement. Serialization works on copies and
-preserves variation introductions separately from trailing notes. Its variation forest
-and cursor are now private in the document-feature game controller, with immutable
-projections sharing untouched branches and refreshed focused-reader scopes. Pure
-analysis/replay helpers have canonical chess-core paths, and the controller runs
-without Flutter. Async loading now has an injected archive contract and a
-request owner that rejects superseded reads/failures/callbacks. Nested annotation
-adoption validates full stored topology, retains node identities and scratch
-continuations, and updates prose/introductions/glyphs through shared projections.
-Viewer now indexes and lazily renders mainline/variation rows through the shared
-viewport, retaining reading anchors, branch bookmarks and evicted inline drafts.
-20,000-ply mainline and sideline native journeys are covered; individual long
-comments remain whole passages and full performance budgets remain pending.
-Viewer reading checkpoints now have a pure ordered session owner and injected
-preferences repository, with acknowledged-write deduplication, explicit failure/retry
-and stale recent-file read protection. Existing preference keys and game identities
-are preserved. This does not complete variation cursor, panel or whole-workspace
-restoration. Collection read/decode requests now have a pure feature owner with
-stale-result rejection and an injected isolate decoder; read-only library lookups
-are also injected. Adoption rechecks manual edits made during file reads or paste
-parsing. Accepted Viewer filters now have a pure owner with immutable snapshots,
-latest-request acceptance, failed-query recovery and recomputation after in-place
-source edits. The slice mixin is retired; matching predicates and worker scheduling
-have separate chess-core/infrastructure homes. The full filter workspace injects
-its matcher. Board orientation/fullscreen now have a pure presentation owner,
-with injected native operations, serialized intent, failure/retry and app-lifetime
-listener disposal. The last Viewer part/mixin is retired; perspective edits share
-the collection save/recovery path and preserve drill-only annotations on screen.
-Collection membership/order/selection now have one pure owner with fixed published
-lists, atomic filter/navigation validation and deterministic sorting. External
-list/index writes are retired; game entry contents still need private ownership.
-Navigation now retains private collection edit ledgers, including screen-only
-substitutions, original bytes and pending save outcomes; returning cannot silently
-rebase a draft. Save Copy forks its destination baseline from the source context.
-Durable navigation history and private game-entry values remain unfinished.
-Legacy collection presentation/widget ownership, generation inline
-filter wiring, remaining Builder session ownership and draft recovery, incremental editor indexing, undo receipts, variation-cursor/panel
-restoration and complete large-document performance evidence remain pending.
-Builder document reads/writes and decoding now use required injected contracts.
-Linux writes use the shared native PGN store; pure chapter text, headers, IDs and
-append receipts, course-header interpretation and variation expansion live in chess core.
-Line authoring is now pure and no longer constructs a storage service.
-Line saves retain acknowledged originals;
-external target edits and reordered bulk deletions conflict. Remaining legacy
-outline/generation editors, durable Builder recovery and native undo receipt
-ownership still need migration.
-Study now has independent cursor/metadata projections and scoped subscriptions;
-metadata reads avoid tree materialization and ordinary annotation edits leave the
-board/engine/sidebar unchanged. Its existing Provider bridge still needs retirement
-with the broader presentation migration.
-Other editors' persisted drafts, clean workspace/session restoration, archive
-purging, builder-draft checks and job shutdown coordination are still pending.
-Legacy unjournaled trash adoption, remaining settings/writers, transactional
-splitting of existing chapters, remaining localization, legacy appearance migration/accessibility and full slice
-gates remain unfinished in the old app. The rewrite now happens as a fresh app
-in `lib/v2/`; its rules, PGN mutation contract, data-safety tests and order of
-work live in [ARCHITECTURE_RENEWAL.md](ARCHITECTURE_RENEWAL.md). The old app is
-frozen apart from data-loss, crash and release fixes. This file retains the
-feature backlog; update step status there and feature status here.
+The shared workspace/store/engine, library, training, viewer/explorer,
+generation, Study, tactics, My games/Books, Bughouse and Players & prep have
+working v2 implementations. Remaining work includes full Databases and Engine
+tournament workflows, the named feature gaps in partial rows, services, native
+platform/scale/compatibility acceptance and the final data migration/switch-over.
+The old app is frozen except for data-loss, crash and release-blocking fixes.
+
+The earlier in-place migration is historical:
+[its evidence record](ARCHITECTURE_RENEWAL_EVIDENCE.md) must not be used to
+assign more legacy refactors. The feature backlog below mixes legacy-app
+follow-ups and longer-term ideas; it is **not** a v2 completion checklist.
+For v2, later owner decisions in [the mode specs](v2/features/README.md)
+override older backlog suggestions (for example the eval bar, folder Organize
+screen and My games being confined to Tactics).
 
 ---
 
