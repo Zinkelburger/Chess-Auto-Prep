@@ -1,15 +1,16 @@
+import 'player_lookup.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 
 import '../../ui/choice_dialog.dart';
 import '../../ui/confirm_dialog.dart';
-import '../../ui/name_dialog.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import '../../chess/players/player.dart';
 import 'player_dialogs.dart';
+import 'group_dialog.dart';
 import 'players.dart';
 
 class PlayersScreen extends StatefulWidget {
@@ -19,11 +20,19 @@ class PlayersScreen extends StatefulWidget {
     required this.onAnalyze,
     required this.onStudy,
     required this.onSaved,
+    required this.onLink,
+    required this.onLinkedStudy,
+    required this.onGroupStudy,
+    required this.onExport,
+    required this.onCopy,
   });
   final Players players;
   final ValueChanged<Player> onAnalyze;
   final ValueChanged<Player> onStudy;
   final VoidCallback onSaved;
+  final ValueChanged<Player> onLink;
+  final void Function(String path, String? chapter) onLinkedStudy;
+  final ValueChanged<PlayerGroup> onGroupStudy, onExport, onCopy;
   @override
   State<PlayersScreen> createState() => _PlayersScreenState();
 }
@@ -38,14 +47,8 @@ class _PlayersScreenState extends State<PlayersScreen> {
 
   Players get owner => widget.players;
   Future<void> _group({PlayerGroup? old}) async {
-    final name = await showNameDialog(
-      context,
-      title: old == null ? 'New group' : 'Rename group',
-      label: 'Group name',
-      confirm: 'Save',
-    );
-    if (!mounted || name == null) return;
-    final group = old?.edited({'name': name}) ?? PlayerGroup.create(name);
+    final group = await editGroup(context, group: old);
+    if (!mounted || group == null) return;
     if (await owner.saveGroup(group, expected: old) && mounted)
       owner.showGroup(group.id);
   }
@@ -168,23 +171,19 @@ class _PlayersScreenState extends State<PlayersScreen> {
                     if (group != null) ...[
                       TextButton(
                         onPressed: owner.busy ? null : () => _group(old: group),
-                        child: const Text('Rename'),
+                        child: const Text('Edit group'),
                       ),
                       TextButton(
-                        onPressed: () async {
-                          await Clipboard.setData(
-                            ClipboardData(
-                              text: groupNotes(group, owner.players),
-                            ),
-                          );
-                          if (context.mounted)
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Prep notes copied as Markdown.'),
-                              ),
-                            );
-                        },
+                        onPressed: () => widget.onGroupStudy(group),
+                        child: const Text('Open group study'),
+                      ),
+                      TextButton(
+                        onPressed: () => widget.onCopy(group),
                         child: const Text('Copy prep sheet'),
+                      ),
+                      TextButton(
+                        onPressed: () => widget.onExport(group),
+                        child: const Text('Export prep sheet…'),
                       ),
                     ],
                     TextButton(
@@ -218,6 +217,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                 ),
                 if (owner.busy) const LinearProgressIndicator(),
                 if (owner.lookupStatus != null) Text(owner.lookupStatus!),
+                for (final warning in owner.warnings) Text(warning),
                 if (owner.error != null)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: Space.s),
@@ -373,6 +373,10 @@ class _PlayersScreenState extends State<PlayersScreen> {
                         .map((a) => '${a.site.label}: ${a.username}')
                         .join(' · '),
             ),
+            if (p.files.isNotEmpty)
+              Text(
+                '${p.files.length} saved PGN ${p.files.length == 1 ? 'source' : 'sources'}',
+              ),
             if (p.text('uscf_id').isNotEmpty)
               Text('US Chess ${p.text('uscf_id')}'),
             if (p.text('notes').isNotEmpty)
@@ -385,6 +389,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                 ),
               ),
             _personActions(p),
+            PlayerLookup(player: p, owner: owner),
           ],
         ),
       ),
@@ -407,6 +412,11 @@ class _PlayersScreenState extends State<PlayersScreen> {
         child: const Text('Edit player'),
       ),
       TextButton(
+        onPressed: () => widget.onLink(p),
+        child: const Text('Link study…'),
+      ),
+      ..._studyLinks(p),
+      TextButton(
         onPressed: () => widget.onStudy(p),
         child: Text(
           p.text('prep_file').isEmpty ? 'New prep study' : 'Open prep study',
@@ -414,10 +424,29 @@ class _PlayersScreenState extends State<PlayersScreen> {
       ),
     ],
   );
-}
-
-String groupNotes(PlayerGroup group, List<Player> players) {
-  String safe(String value) =>
-      value.replaceAll('|', r'\|').replaceAll('\n', '<br>');
-  return '# ${group.name}\n\n| Player | Rating | Accounts | Prepared |\n| --- | --- | --- | --- |\n${[for (final player in players.where((p) => group.contains(p.id))) '| ${safe(player.name)} | ${player.text('rating')} | ${safe(player.accounts.map((a) => '${a.site.label}: ${a.username}').join(', '))} | ${group.prepared(player.id) ? 'Yes' : 'No'} |'].join('\n')}\n\n${[for (final player in players.where((p) => group.contains(p.id))) '## ${player.name}\n\n${player.text('notes')}\n${player.text('prep_file')}'].join('\n\n')}\n';
+  List<Widget> _studyLinks(Player player) => [
+    for (final link in player.fields['studies'] as List? ?? const [])
+      if (link is Map && link['path'] is String)
+        InputChip(
+          label: Text(
+            link['chapter'] as String? ??
+                p.basenameWithoutExtension(link['path'] as String),
+          ),
+          onPressed: () => widget.onLinkedStudy(
+            link['path'] as String,
+            link['chapter'] as String?,
+          ),
+          onDeleted: owner.busy
+              ? null
+              : () => owner.save(
+                  player.edited({
+                    'studies': [
+                      for (final other in player.fields['studies'] as List)
+                        if (!identical(other, link)) other,
+                    ],
+                  }),
+                  expected: player,
+                ),
+        ),
+  ];
 }

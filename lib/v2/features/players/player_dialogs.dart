@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../../ui/theme.dart';
 import '../../chess/players/player.dart';
@@ -41,6 +42,7 @@ class _PlayerDialogState extends State<_PlayerDialog> {
             : widget.player?.text(key) ?? '',
       ),
   };
+  late final _files = {...?widget.player?.files};
   bool _saving = false;
   String? _error;
   @override
@@ -59,6 +61,7 @@ class _PlayerDialogState extends State<_PlayerDialog> {
     });
     final player = (widget.player ?? Player.create(_boxes['name']!.text))
         .edited({
+          'pgn_files': _files.toList(),
           for (final e in _boxes.entries)
             e.key: switch (e.key) {
               'aliases' =>
@@ -129,6 +132,22 @@ class _PlayerDialogState extends State<_PlayerDialog> {
                       return null;
                     },
                   ),
+                ),
+              if (_files.isNotEmpty)
+                Wrap(
+                  spacing: Space.s,
+                  children: [
+                    for (final file in _files)
+                      InputChip(
+                        label: Text(p.basename(file)),
+                        onDeleted: _saving
+                            ? null
+                            : () {
+                                if (mounted)
+                                  setState(() => _files.remove(file));
+                              },
+                      ),
+                  ],
                 ),
               if (_error != null)
                 Text(

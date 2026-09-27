@@ -1,3 +1,4 @@
+import '../chess/fen.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -59,17 +60,18 @@ final class PlayerAnalysisView extends ModeView {
     workspace.session.holdsEdits = false;
   }
 
-  Future<void> _open(int index, PlayerPosition? at) async {
+  Future<bool> _open(int index, PlayerPosition? at, {Fen? fen}) async {
     final analysis = players.analysis;
     final corpus = analysis.corpus;
-    if (corpus == null || index >= corpus.games.length) return;
+    if (corpus == null || index < 0 || index >= corpus.games.length)
+      return false;
     final game = corpus.games[index];
-    final fen = at?.fen;
+    fen ??= at?.fen;
     if (!await analysis.currentSources()) {
       requests.say(
         'Games changed. Reload this player before opening a result.',
       );
-      return;
+      return false;
     }
     final result = await requests.openGame(
       ChapterRef.at(game.source.file.path),
@@ -77,11 +79,20 @@ final class PlayerAnalysisView extends ModeView {
       ply: 0,
       side: game.side,
     );
-    if (result is! RequestDone || !identical(corpus, analysis.corpus)) return;
+    if (result is! RequestDone || !identical(corpus, analysis.corpus))
+      return false;
+    if (workspace.session.persistedRevision !=
+        analysis.revisionOf(game.source.file)) {
+      requests.say(
+        'This file changed. Reload the player before opening a result.',
+      );
+      return false;
+    }
     if (fen != null) {
       final path = workspace.session.tree?.mainLineTo(fen);
       if (path != null) workspace.session.goTo(path);
     }
+    return true;
   }
 
   @override
@@ -92,6 +103,7 @@ final class PlayerAnalysisView extends ModeView {
     onOpen: (i, at) => unawaited(_open(i, at)),
     onChoose: players.choose,
     onImport: () => unawaited(players.importPgn()),
+    onDownload: (range) => unawaited(players.download(range)),
     onDirectory: players.showDirectory,
     trailing: toggle,
   );
@@ -100,13 +112,13 @@ final class PlayerAnalysisView extends ModeView {
     WorkspaceTab.player => PlayerTreePane(
       analysis: players.analysis,
       session: workspace.session,
-      onOpen: (i) => unawaited(_open(i, null)),
+      onOpen: (i) => unawaited(_open(i, null, fen: workspace.session.fen)),
     ),
     WorkspaceTab.playerBook => PlayerBookPane(
       book: players.book,
       onBooks: requests.editBooks,
       onOpen: (gap) async {
-        await _open(gap.game, null);
+        if (!await _open(gap.game, null)) return;
         final game = players.analysis.corpus?.games[gap.game];
         if (game != null &&
             workspace.session.source?.path == game.source.file.path)
@@ -198,6 +210,12 @@ final class PlayersView extends ModeView {
             onAnalyze: players.choose,
             onStudy: (p) => unawaited(players.openStudy(p)),
             onSaved: () => unawaited(players.addSavedPlayers()),
+            onLink: (p) => unawaited(players.linkStudy(p)),
+            onLinkedStudy: (path, chapter) =>
+                unawaited(players.openLinkedStudy(path, chapter)),
+            onGroupStudy: (g) => unawaited(players.openGroupStudy(g)),
+            onCopy: (g) => unawaited(players.exportGroup(g, copy: true)),
+            onExport: (g) => unawaited(players.exportGroup(g)),
           ),
         ),
       );

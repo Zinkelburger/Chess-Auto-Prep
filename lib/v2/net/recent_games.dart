@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../chess/pgn/game_text.dart';
+import '../chess/players/download_range.dart';
 import '../chess/tactics/game_ids.dart';
 import '../diagnostics/log.dart';
 import 'lichess_http.dart';
@@ -44,6 +45,20 @@ abstract interface class RecentGames {
   Future<GamesFetch> recent(String username, {required int max});
 }
 
+/// Optional richer export used by player preparation; ordinary recent-game
+/// callers retain their existing defaults and contract.
+abstract interface class RangedGames implements RecentGames {
+  Future<GamesFetch> range(
+    String username,
+    PlayerDownloadRange range, {
+    required bool Function() cancelled,
+    required void Function(String) progress,
+  });
+}
+
+bool _neverCancel() => false;
+void _noProgress(String _) {}
+
 /// How long one request may take before it counts as not arriving.
 const gamesTimeout = Duration(seconds: 60);
 
@@ -60,7 +75,7 @@ Future<void> _sleep(Duration d) => Future<void>.delayed(d);
 
 /// Lichess's game export: one request, the newest games first, standard
 /// chess only (the variants are left out by speed).
-final class LichessGamesApi implements RecentGames {
+final class LichessGamesApi implements RangedGames {
   LichessGamesApi(
     this._client, {
     required Future<String?> Function() token,
@@ -76,17 +91,45 @@ final class LichessGamesApi implements RecentGames {
   GameSite get site => GameSite.lichess;
 
   @override
-  Future<GamesFetch> recent(String username, {required int max}) async {
+  Future<GamesFetch> recent(String username, {required int max}) =>
+      _fetch(username, max: max);
+
+  @override
+  Future<GamesFetch> range(
+    String username,
+    PlayerDownloadRange range, {
+    required bool Function() cancelled,
+    required void Function(String) progress,
+  }) => _fetch(
+    username,
+    max: range.months == null ? range.max : null,
+    since: range.since(DateTime.now()),
+    speeds: range.speeds,
+    cancelled: cancelled,
+    progress: progress,
+  );
+
+  Future<GamesFetch> _fetch(
+    String username, {
+    int? max,
+    DateTime? since,
+    Set<String>? speeds,
+    bool Function() cancelled = _neverCancel,
+    void Function(String) progress = _noProgress,
+  }) async {
     final url = Uri.https(
       'lichess.org',
       '/api/games/user/${Uri.encodeComponent(username.trim())}',
       {
-        'max': '$max',
+        if (max != null) 'max': '$max',
+        if (since != null) 'since': '${since.millisecondsSinceEpoch}',
         'moves': 'true',
         'clocks': 'false',
         'evals': 'false',
         'opening': 'false',
-        'perfType': 'ultraBullet,bullet,blitz,rapid,classical,correspondence',
+        'perfType':
+            speeds?.join(',') ??
+            'ultraBullet,bullet,blitz,rapid,classical,correspondence',
       },
     );
     final headers = lichessHeaders(
@@ -94,6 +137,7 @@ final class LichessGamesApi implements RecentGames {
       accept: 'application/x-chess-pgn',
     );
     for (var attempt = 0; ; attempt++) {
+      if (cancelled()) return const GamesFetched([]);
       final answer = await _once(_client, url, headers);
       final last = attempt >= lichessRetries;
       switch (answer) {
@@ -105,6 +149,9 @@ final class LichessGamesApi implements RecentGames {
             'download Lichess games',
             'HTTP 429; waiting ${wait.inSeconds} s',
           );
+          progress(
+            'Lichess download limit reached. Retrying in ${wait.inSeconds} seconds…',
+          );
           await _wait(wait);
         case _:
           return _games(answer, 'download Lichess games');
@@ -115,7 +162,7 @@ final class LichessGamesApi implements RecentGames {
 
 /// Chess.com's monthly archives: the list of months, then each month's PGN
 /// from the newest, until there are enough games.
-final class ChesscomGamesApi implements RecentGames {
+final class ChesscomGamesApi implements RangedGames {
   ChesscomGamesApi(this._client, {Wait wait = _sleep}) : _wait = wait;
 
   final http.Client _client;
@@ -127,7 +174,30 @@ final class ChesscomGamesApi implements RecentGames {
   GameSite get site => GameSite.chesscom;
 
   @override
-  Future<GamesFetch> recent(String username, {required int max}) async {
+  Future<GamesFetch> recent(String username, {required int max}) =>
+      _fetch(username, max: max);
+
+  @override
+  Future<GamesFetch> range(
+    String username,
+    PlayerDownloadRange range, {
+    required bool Function() cancelled,
+    required void Function(String) progress,
+  }) => _fetch(
+    username,
+    max: range.months == null ? range.max : null,
+    range: range,
+    cancelled: cancelled,
+    progress: progress,
+  );
+
+  Future<GamesFetch> _fetch(
+    String username, {
+    int? max,
+    PlayerDownloadRange? range,
+    bool Function() cancelled = _neverCancel,
+    void Function(String) progress = _noProgress,
+  }) async {
     final name = Uri.encodeComponent(username.trim().toLowerCase());
     final listed = await _get(
       Uri.parse('https://api.chess.com/pub/player/$name/games/archives'),
@@ -141,15 +211,26 @@ final class ChesscomGamesApi implements RecentGames {
     }
     final found = <String>[];
     for (final month in months) {
-      if (found.length >= max) break;
+      if (cancelled()) return const GamesFetched([]);
+      if (max != null && found.length >= max) break;
+      final cutoff = range?.since(DateTime.now());
+      final date = _archiveDate(month);
+      if (cutoff != null && date != null && date.isBefore(cutoff)) break;
+      progress(
+        '${found.length} games downloaded · ${date == null ? 'reading archive' : '${date.year}-${date.month}'}',
+      );
       switch (await _get(Uri.parse('$month/pgn'))) {
         case final GamesNotFetched failed:
           return failed;
         case GamesFetched(:final games):
-          found.addAll(splitGames(games.single).reversed);
+          found.addAll(
+            splitGames(
+              games.single,
+            ).reversed.where((g) => range?.keeps(g, DateTime.now()) ?? true),
+          );
       }
     }
-    return GamesFetched(found.take(max).toList());
+    return GamesFetched(max == null ? found : found.take(max).toList());
   }
 
   /// One request, tried once more when it dies on the way; the body comes
@@ -220,4 +301,12 @@ GamesNotFetched? _problem(http.Response? answer, String action) {
     404 => const GamesNotFetched(GamesProblem.noSuchPlayer, status: 404),
     _ => GamesNotFetched(GamesProblem.http, status: status),
   };
+}
+
+DateTime? _archiveDate(String url) {
+  final parts = Uri.tryParse(url)?.pathSegments ?? const <String>[];
+  if (parts.length < 2) return null;
+  final year = int.tryParse(parts[parts.length - 2]),
+      month = int.tryParse(parts.last);
+  return year == null || month == null ? null : DateTime(year, month);
 }

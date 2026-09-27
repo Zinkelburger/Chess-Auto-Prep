@@ -1,7 +1,6 @@
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 
-import '../../engines/engine_line.dart';
 import '../../ui/choice_dialog.dart';
 import '../../ui/choice_field.dart';
 import '../../ui/number_field.dart';
@@ -10,6 +9,8 @@ import '../../ui/theme.dart';
 import '../../chess/players/player.dart';
 import 'player_analysis.dart';
 import 'player_dialogs.dart';
+import 'download_dialog.dart';
+import '../../chess/players/download_range.dart';
 import 'player_games.dart';
 import 'player_hunt.dart';
 import 'players.dart';
@@ -23,6 +24,7 @@ class AnalysisPanel extends StatefulWidget {
     required this.onOpen,
     required this.onChoose,
     required this.onImport,
+    required this.onDownload,
     required this.onDirectory,
     required this.trailing,
   });
@@ -32,6 +34,7 @@ class AnalysisPanel extends StatefulWidget {
   final void Function(int game, PlayerPosition? at) onOpen;
   final ValueChanged<Player> onChoose;
   final VoidCallback onImport, onDirectory;
+  final void Function(PlayerDownloadRange range) onDownload;
   final Widget trailing;
   @override
   State<AnalysisPanel> createState() => _AnalysisPanelState();
@@ -158,7 +161,11 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
                 OutlinedButton.icon(
                   onPressed: owner.busy || player.accounts.isEmpty
                       ? null
-                      : () => owner.select(player, download: true),
+                      : () async {
+                          final range = await downloadRange(context, player);
+                          if (range != null && mounted)
+                            widget.onDownload(range);
+                        },
                   icon: const Icon(Icons.download_outlined),
                   label: const Text('Get games'),
                 ),
@@ -215,7 +222,7 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
                 ButtonSegment(value: PlayerList.games, label: Text('Games')),
                 ButtonSegment(
                   value: PlayerList.weaknesses,
-                  label: Text('Weaknesses'),
+                  label: Text('Findings'),
                 ),
               ],
               selected: {owner.list},
@@ -238,7 +245,9 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
     alignment: Alignment.centerLeft,
     child: TextButton.icon(
       icon: const Icon(Icons.filter_list),
-      label: Text('Filters · ${owner.gameIndexes.length} games'),
+      label: Text(
+        'Filters · ${owner.gameIndexes.length} ${owner.gameIndexes.length == 1 ? 'game' : 'games'}',
+      ),
       onPressed: () => showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
@@ -265,7 +274,9 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
   Widget _filterFields() => ExpansionTile(
     initiallyExpanded: true,
     tilePadding: EdgeInsets.zero,
-    title: Text('Filters · ${owner.gameIndexes.length} games'),
+    title: Text(
+      'Filters · ${owner.gameIndexes.length} ${owner.gameIndexes.length == 1 ? 'game' : 'games'}',
+    ),
     children: [
       NumberField(
         label: 'Minimum games',
@@ -290,17 +301,6 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
               .where((o) => _orderName(o) == v)
               .firstOrNull;
           if (order != null) owner.configure(order: order);
-        },
-      ),
-      NumberField(
-        label: 'Games per download / account',
-        value: owner.maxGames,
-        min: 1,
-        max: 10000,
-        step: 100,
-        onChanged: (v) {
-          owner.maxGames = v;
-          owner.changed();
         },
       ),
       ChoiceField(
@@ -382,7 +382,7 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
         return ListTile(
           title: Text(at.label, maxLines: 2, overflow: TextOverflow.ellipsis),
           subtitle: Text(
-            '${at.count} games · ${at.wins}W ${at.draws}D ${at.losses}L${at.unknown == 0 ? '' : ' · ${at.unknown} unfinished'}${at.score == null ? '' : ' · ${(at.score! * 100).round()}% score'}${owner.evals[at.key] == null ? '' : ' · ${Centipawns(owner.evals[at.key]!).text}'}',
+            '${at.count} ${at.count == 1 ? 'game' : 'games'} · ${at.wins}W ${at.draws}D ${at.losses}L${at.unknown == 0 ? '' : ' · ${at.unknown} unfinished'}${at.score == null ? '' : ' · ${(at.score! * 100).round()}% score'}${owner.evals[at.key] == null ? '' : ' · ${scoreFromPacked(owner.evals[at.key]!).text}'}',
           ),
           onTap: () => widget.onOpen(at.games.first, at),
         );
@@ -421,7 +421,7 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
               return ListTile(
                 title: Text('${finding.title} · ${finding.score.text}'),
                 subtitle: Text(
-                  '${finding.position.count} games\n${finding.position.label}\n${finding.continuation}',
+                  '${finding.position.count} ${finding.position.count == 1 ? 'game' : 'games'}\n${finding.position.label}\n${finding.continuation}',
                 ),
                 onTap: () => widget.onOpen(
                   finding.position.games.first,
@@ -444,35 +444,29 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
           const Text(
             'Check frequent positions for strong replies and unfavourable evaluations. Scores are from this player’s side.',
           ),
-          ExpansionTile(
-            title: const Text('Engine settings'),
-            children: [
-              NumberField(
-                label: 'Depth',
-                value: hunt.depth,
-                min: 8,
-                max: 30,
-                onChanged: (v) {
-                  if (!hunt.running) {
-                    hunt.depth = v;
-                    owner.changed();
-                  }
-                },
+          TextButton(
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Engine settings'),
+                content: SizedBox(
+                  width: 400,
+                  child: SingleChildScrollView(
+                    child: ListenableBuilder(
+                      listenable: owner,
+                      builder: (context, _) => _engineFields(),
+                    ),
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Done'),
+                  ),
+                ],
               ),
-              NumberField(
-                label: 'Positions to check',
-                value: hunt.limit,
-                min: 1,
-                max: 1000,
-                step: 25,
-                onChanged: (v) {
-                  if (!hunt.running) {
-                    hunt.limit = v;
-                    owner.changed();
-                  }
-                },
-              ),
-            ],
+            ),
+            child: const Text('Engine settings'),
           ),
           FilledButton.icon(
             onPressed: owner.busy
@@ -488,6 +482,7 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
             ),
           ),
           if (hunt.running) const LinearProgressIndicator(),
+          if (hunt.practicalWarning != null) Text(hunt.practicalWarning!),
           if (hunt.error != null)
             Text(
               hunt.error!,
@@ -499,6 +494,89 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _engineFields() {
+    final hunt = widget.hunt;
+    return ExpansionTile(
+      title: const Text('Analysis limits'),
+      initiallyExpanded: true,
+      children: [
+        _practicalSettings(),
+        NumberField(
+          label: 'Depth',
+          value: hunt.depth,
+          min: 8,
+          max: 30,
+          onChanged: (v) {
+            if (!hunt.running) {
+              hunt.depth = v;
+              owner.changed();
+            }
+          },
+        ),
+        NumberField(
+          label: 'Positions to check',
+          value: hunt.limit,
+          min: 1,
+          max: 1000,
+          step: 25,
+          onChanged: (v) {
+            if (!hunt.running) {
+              hunt.limit = v;
+              owner.changed();
+            }
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _practicalSettings() {
+    final hunt = widget.hunt;
+    return Column(
+      children: [
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Include practical chances'),
+          subtitle: const Text('Uses Maia to estimate likely replies.'),
+          value: hunt.practical,
+          onChanged: hunt.running || hunt.model == null
+              ? null
+              : (v) {
+                  hunt.practical = v!;
+                  owner.changed();
+                },
+        ),
+        if (hunt.practical) ...[
+          NumberField(
+            label: 'Player rating',
+            value: hunt.rating,
+            min: 400,
+            max: 3000,
+            step: 100,
+            onChanged: (v) {
+              if (!hunt.running) {
+                hunt.rating = v;
+                owner.changed();
+              }
+            },
+          ),
+          NumberField(
+            label: 'Positions to probe',
+            value: hunt.probes,
+            min: 1,
+            max: 100,
+            onChanged: (v) {
+              if (!hunt.running) {
+                hunt.probes = v;
+                owner.changed();
+              }
+            },
+          ),
+        ],
+      ],
     );
   }
 }

@@ -2,13 +2,18 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:collection/collection.dart';
+import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
 import '../chess/players/player.dart';
 import 'atomic_write.dart';
 import 'file_lock.dart';
 
-typedef PlayerDirectory = ({List<Player> players, List<PlayerGroup> groups});
+typedef PlayerDirectory = ({
+  List<Player> players,
+  List<PlayerGroup> groups,
+  List<String> warnings,
+});
 
 abstract interface class PlayerStore {
   Future<PlayerDirectory> read();
@@ -63,15 +68,24 @@ final class PlayerFiles implements PlayerStore {
         players.map((p) => p.id).toSet().length != players.length)
       throw const FormatException('Player IDs are missing or duplicated.');
     final groups = <PlayerGroup>[];
+    final warnings = <String>[];
     if (await _groups.exists()) {
       await for (final file in _groups.list()) {
         if (file is! File || p.extension(file.path) != '.json') continue;
-        final data = await _read(file.path, 'chess-auto-prep/tournament@1');
-        data['id'] ??= p.basenameWithoutExtension(file.path);
-        groups.add(PlayerGroup(data));
+        try {
+          final data = await _read(file.path, 'chess-auto-prep/tournament@1');
+          data['id'] ??= p.basenameWithoutExtension(file.path);
+          final group = PlayerGroup(data);
+          if (group.id != p.basenameWithoutExtension(file.path) ||
+              group.entries.any((e) => e['person'] is! String))
+            throw const FormatException('Invalid group or member ID.');
+          groups.add(group);
+        } on Object catch (e) {
+          warnings.add('Could not read ${p.basename(file.path)}: $e');
+        }
       }
     }
-    return (players: players, groups: groups);
+    return (players: players, groups: groups, warnings: warnings);
   }
 
   @override
@@ -134,9 +148,10 @@ final class PlayerFiles implements PlayerStore {
         );
       final trash = Directory(p.join(root.path, '.removed'));
       await trash.create(recursive: true);
-      await File(
+      await movePathNoReplace(
         path,
-      ).rename(p.join(trash.path, '${group.id}-${playerId()}.json'));
+        p.join(trash.path, '${group.id}-${playerId()}.json'),
+      );
     });
   }
 }
@@ -145,8 +160,11 @@ final class MemoryPlayers implements PlayerStore {
   final players = <String, Player>{};
   final groups = <String, PlayerGroup>{};
   @override
-  Future<PlayerDirectory> read() async =>
-      (players: players.values.toList(), groups: groups.values.toList());
+  Future<PlayerDirectory> read() async => (
+    players: players.values.toList(),
+    groups: groups.values.toList(),
+    warnings: const <String>[],
+  );
   @override
   Future<void> savePlayer(Player player, {Player? expected}) async {
     players[player.id] = player;

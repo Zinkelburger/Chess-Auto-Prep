@@ -44,7 +44,7 @@ class PlayerTreePane extends StatelessWidget {
         padding: const EdgeInsets.all(Space.m),
         children: [
           Text(
-            '${analysis.player!.name} as ${analysis.side.name} · $total games',
+            '${analysis.player!.name} as ${analysis.side.name == 'white' ? 'White' : 'Black'} · $total ${total == 1 ? 'game' : 'games'}',
             style: Theme.of(context).textTheme.titleMedium,
           ),
           for (final move in answer.moves)

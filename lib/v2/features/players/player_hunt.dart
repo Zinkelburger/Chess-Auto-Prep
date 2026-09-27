@@ -1,9 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
+import '../../storage/player_reports.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 
 import '../../chess/pv_text.dart';
+import '../../chess/fen.dart';
+import '../../chess/generation/eval.dart';
+import '../../engines/maia/move_policy.dart';
+import 'practical_probe.dart';
 import '../../engines/engine.dart';
 import '../../engines/engine_line.dart';
 import '../../engines/engine_supervisor.dart';
@@ -12,7 +19,14 @@ import 'player_analysis.dart';
 import 'player_games.dart';
 
 final class PlayerWeakness {
-  const PlayerWeakness(this.position, this.score, this.line, this.unseen);
+  const PlayerWeakness(
+    this.position,
+    this.score,
+    this.line,
+    this.unseen, {
+    this.practicalGain,
+  });
+  final double? practicalGain;
   final PlayerPosition position;
 
   /// From the player's perspective. Negative means a chance for us.
@@ -27,10 +41,20 @@ final class PlayerWeakness {
 /// Finite engine work over a frozen player/colour corpus. Ordinary analysis
 /// keeps its own engine; stopping this job never stops the board's engine.
 final class PlayerHunt extends ChangeNotifier {
-  PlayerHunt(this.analysis, this.launch) {
+  PlayerHunt(this.analysis, this.launch, {this.model, PlayerReports? reports})
+    : reports = reports ?? PlayerReports() {
     analysis.addListener(_inputsChanged);
   }
   final PlayerAnalysis analysis;
+  final MovePolicy? model;
+  final PlayerReports reports;
+  Object? _inputs;
+  String? _activeReportKey;
+  Map<String, int> _scores = {};
+  bool practical = false;
+  int rating = 1800, probes = 10;
+  int _probed = 0;
+  String? practicalWarning;
   final Future<EngineStart> Function() launch;
   Engine? _engine;
   Search? _search;
@@ -40,33 +64,125 @@ final class PlayerHunt extends ChangeNotifier {
   String? error;
   List<PlayerWeakness> findings = [];
   PlayerCorpus? _corpus;
-  Side? _side;
   void _notify() {
     if (!_disposed) notifyListeners();
   }
 
+  Object get _inputKey => (
+    analysis.corpus,
+    analysis.side,
+    analysis.query,
+    analysis.recentDays,
+    analysis.speeds.join(','),
+    analysis.minGames,
+    analysis.minPly,
+    depth,
+    limit,
+    practical,
+    rating,
+    probes,
+  );
+  String get _reportKey => sha256
+      .convert(
+        utf8.encode(
+          jsonEncode([
+            analysis.fingerprint,
+            analysis.side.name,
+            analysis.query,
+            analysis.recentDays,
+            analysis.speeds.toList()..sort(),
+            analysis.minGames,
+            analysis.minPly,
+            depth,
+            limit,
+            practical,
+            rating,
+            probes,
+          ]),
+        ),
+      )
+      .toString();
   void _inputsChanged() {
-    if (!identical(_corpus, analysis.corpus) ||
-        _side != analysis.side ||
-        analysis.busy) {
-      stop();
-      findings = [];
-      done = total = 0;
-      _corpus = analysis.corpus;
-      _side = analysis.side;
+    if (_inputs == _inputKey && !analysis.busy) return;
+    _inputs = _inputKey;
+    stop();
+    findings = [];
+    analysis.evals.clear();
+    _scores = {};
+    done = total = 0;
+    _corpus = analysis.corpus;
+    if (_corpus != null && !analysis.busy) unawaited(_restore(_ticket));
+    _notify();
+  }
+
+  Future<void> _restore(int ticket) async {
+    final data = await reports.read(_reportKey);
+    if (_disposed || ticket != _ticket || data == null || running) return;
+    try {
+      final positions = {for (final p in analysis.positions) p.key: p};
+      final restored = <PlayerWeakness>[];
+      for (final row in data['findings'] as List) {
+        final value = row as Map;
+        final position = positions[value['position']];
+        if (position == null) continue;
+        final cp = value['cp'] as int;
+        restored.add(
+          PlayerWeakness(
+            position,
+            scoreFromPacked(cp),
+            (value['pv'] as List).cast<String>(),
+            value['unseen'] == true,
+            practicalGain: (value['practical'] as num?)?.toDouble(),
+          ),
+        );
+      }
+      findings = restored;
+      done = data['done'] as int;
+      total = data['total'] as int;
+      analysis.evals.addAll((data['evals'] as Map).cast<String, int>());
+      analysis.changed();
       _notify();
+    } on Object {
+      /* A derived cache can be rebuilt with Analyze. */
     }
+  }
+
+  void _keep() {
+    if (_corpus == null || done == 0) return;
+    final data = <String, Object?>{
+      'version': 1,
+      'done': done,
+      'total': total,
+      'evals': Map.of(_scores),
+      'findings': [
+        for (final f in findings)
+          {
+            'position': f.position.key,
+            'cp': packedCp(f.score).cp,
+            'pv': f.line,
+            'unseen': f.unseen,
+            'practical': f.practicalGain,
+          },
+      ],
+    };
+    final key = _activeReportKey;
+    if (key == null) return;
+    final writing = reports.keep(key, data);
+    analysis.pending.watch(this, writing);
   }
 
   Future<void> start() async {
     if (running || analysis.busy || analysis.corpus == null) return;
     _corpus = analysis.corpus;
-    _side = analysis.side;
     final ticket = ++_ticket;
+    _activeReportKey = _reportKey;
     running = true;
     done = 0;
     error = null;
     findings = [];
+    analysis.evals.clear();
+    _probed = 0;
+    practicalWarning = null;
     final candidates = analysis.positions.toList()
       ..sort((a, b) => b.count.compareTo(a.count));
     final positions = candidates.take(limit).toList();
@@ -86,10 +202,11 @@ final class PlayerHunt extends ChangeNotifier {
       }
       if (!current()) return;
       _engine = engine;
-      final scores = <String, int>{};
+      final scores = _scores = <String, int>{};
       for (final position in positions) {
         if (!current()) return;
         await _evaluate(engine, position, scores, ticket);
+        if (!current()) return;
         done++;
         _notify();
       }
@@ -102,6 +219,7 @@ final class PlayerHunt extends ChangeNotifier {
       if (!current()) return;
       analysis.evals.addAll(scores);
       analysis.changed();
+      _keep();
     } on Object catch (e) {
       if (current()) error = '$e';
     } finally {
@@ -121,19 +239,15 @@ final class PlayerHunt extends ChangeNotifier {
     Map<String, int> scores,
     int ticket,
   ) async {
-    final search = engine.analyse(position.fen, multiPv: 1, depth: depth);
-    _search = search;
-    EngineLine? best;
-    await for (final line in search.lines) {
-      if (line.multiPv == 1) best = line;
-    }
-    if (_disposed || ticket != _ticket) return;
-    if (best == null ||
-        (best.depth < depth && best.score is! MateIn && best.pv.isNotEmpty))
-      throw StateError(
-        'The engine stopped before reaching the requested depth.',
-      );
     final ourTurn = position.fen.whiteToMove == (position.side == Side.white);
+    final lines = await _lines(
+      engine,
+      position.fen,
+      ticket,
+      multiPv: !ourTurn && practical ? 3 : 1,
+    );
+    if (_disposed || ticket != _ticket) return;
+    final best = lines.first;
     final score = ourTurn ? best.score : best.score.negated;
     final cp = packedCp(score).cp;
     scores[position.key] = cp;
@@ -154,9 +268,86 @@ final class PlayerHunt extends ChangeNotifier {
         ),
       );
     }
+    if (!ourTurn) await _practical(engine, position, lines, ticket);
+  }
+
+  Future<List<EngineLine>> _lines(
+    Engine engine,
+    Fen fen,
+    int ticket, {
+    int multiPv = 1,
+  }) async {
+    final search = engine.analyse(fen, multiPv: multiPv, depth: depth);
+    _search = search;
+    final lines = <int, EngineLine>{};
+    await for (final line in search.lines) {
+      lines[line.multiPv] = line;
+    }
+    if (_disposed || ticket != _ticket) return const [];
+    final best = lines[1];
+    if (best == null ||
+        (best.depth < depth && best.score is! MateIn && best.pv.isNotEmpty))
+      throw StateError(
+        'The engine stopped before reaching the requested depth.',
+      );
+    return [
+      for (final n in lines.keys.toList()..sort())
+        if (lines[n]!.depth >= depth ||
+            lines[n]!.score is MateIn ||
+            lines[n]!.pv.isEmpty)
+          lines[n]!,
+    ];
+  }
+
+  Future<void> _practical(
+    Engine engine,
+    PlayerPosition position,
+    List<EngineLine> lines,
+    int ticket,
+  ) async {
+    final model = this.model;
+    if (!practical ||
+        model == null ||
+        _probed >= probes ||
+        practicalWarning != null)
+      return;
+    _probed++;
+    final best = lines.first;
+    final baseline = expectedScore(packedCp(best.score));
+    for (final candidate in lines) {
+      if (_disposed || ticket != _ticket) return;
+      if (packedCp(best.score).cp - packedCp(candidate.score).cp > 50) continue;
+      try {
+        final estimate = await practicalScore(
+          start: position.fen,
+          candidate: candidate,
+          model: model,
+          rating: rating,
+          cancelled: () => _disposed || ticket != _ticket,
+          evaluate: (fen) async =>
+              (await _lines(engine, fen, ticket)).firstOrNull,
+        );
+        if (_disposed || ticket != _ticket) return;
+        if (estimate != null && estimate > baseline + .05)
+          findings.add(
+            PlayerWeakness(
+              position,
+              candidate.score.negated,
+              candidate.pv,
+              false,
+              practicalGain: estimate - baseline,
+            ),
+          );
+      } on Object catch (e) {
+        practicalWarning = 'Practical search skipped: $e';
+        return;
+      }
+    }
   }
 
   void stop() {
+    if (running) _keep();
+    _activeReportKey = null;
     _ticket++;
     final search = _search, engine = _engine;
     _search = null;
@@ -174,4 +365,10 @@ final class PlayerHunt extends ChangeNotifier {
     stop();
     super.dispose();
   }
+}
+
+Score scoreFromPacked(int cp) {
+  if (cp.abs() < mateSaturationCp) return Centipawns(cp);
+  if (cp == mateBaseCp) return const MateIn(0).negated;
+  return MateIn((mateBaseCp - cp.abs()) * cp.sign);
 }

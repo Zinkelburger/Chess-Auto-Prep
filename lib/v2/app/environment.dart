@@ -24,6 +24,8 @@ import '../net/recent_games.dart';
 import '../net/player_ratings.dart';
 import '../storage/book_file.dart';
 import '../storage/player_files.dart';
+import '../storage/text_export.dart';
+import '../storage/player_reports.dart';
 import '../storage/saved_players.dart';
 import '../chess/players/player.dart';
 import '../storage/bughouse_books.dart';
@@ -113,8 +115,10 @@ final class AppEnvironment {
     this.finds = FindsStore.inMemory,
     BookStore? books,
     PlayerStore? players,
+    PlayerReports? playerReports,
     this.savedPlayerList = _noSavedPlayers,
     this.playerRating,
+    this.exportText,
     required this.setFullScreen,
     required this.bughouse,
     this.now = DateTime.now,
@@ -125,7 +129,8 @@ final class AppEnvironment {
     this.close = _nothingToClose,
   }) : store = DocumentRepository(store),
        books = books ?? MemoryBooks(),
-       players = players ?? MemoryPlayers() {
+       players = players ?? MemoryPlayers(),
+       playerReports = playerReports ?? PlayerReports() {
     settings.pendingWrites = pendingWrites;
     this.store.pendingWrites = pendingWrites;
   }
@@ -221,7 +226,11 @@ final class AppEnvironment {
       finds: () => finds.store,
       books: documentsStore.books,
       players: PlayerFiles(Directory(p.join(documents.path, 'opponents'))),
+      playerReports: PlayerReports(
+        Directory(p.join(support.path, 'player-reports')),
+      ),
       playerRating: PlayerRatings(client).lookup,
+      exportText: saveTextExport,
       savedPlayerList: () =>
           savedPlayers(Directory(p.join(documents.path, 'analysis_games'))),
       setFullScreen: _setFullScreen,
@@ -255,6 +264,9 @@ final class AppEnvironment {
   final SettingsStore settings;
   final ChapterFiles chapterFiles;
   final StudyFiles studyFiles;
+
+  /// The native Save dialog for an explicitly exported prep sheet.
+  final Future<String?> Function(String name, String text)? exportText;
 
   /// The file dialogs of the builder's import and of the PGN Viewer.
   final PgnFilePicker libraryPicker;
@@ -308,6 +320,7 @@ final class AppEnvironment {
   /// a test.
   final BookStore books;
   final PlayerStore players;
+  final PlayerReports playerReports;
   final Future<List<Player>> Function() savedPlayerList;
   final Future<PlayerRating> Function(String id)? playerRating;
 

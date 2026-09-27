@@ -23,6 +23,7 @@ final class Players extends ChangeNotifier {
   String query = '';
   bool showingGroups = false, busy = false, loaded = false;
   String? error;
+  List<String> warnings = const [];
   bool _disposed = false;
   PendingObligation<void>? _failed;
 
@@ -78,6 +79,7 @@ final class Players extends ChangeNotifier {
     if (_disposed) return;
     players = read.players;
     groups = read.groups;
+    warnings = read.warnings;
     loaded = true;
     if (groupId != null && group == null) groupId = null;
   }

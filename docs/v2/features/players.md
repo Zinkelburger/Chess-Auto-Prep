@@ -1,12 +1,56 @@
 # Player analysis, Players & prep
 
-Status: draft from the old app
+Status: implemented in v2, 2026-09-27; the old-app inventory below is the reference, not a pixel-for-pixel UI requirement.
 Old code (oracle only): `lib/screens/analysis_screen*.dart`, `lib/screens/player_selection_screen.dart`,
 `lib/features/opponents/`, `lib/widgets/position_analysis_widget*.dart`, `lib/widgets/analysis*`,
 `lib/services/analysis_games_service.dart`
 Plan step: 10
 
-No screenshot: the app driver was not used for this pass.
+## Current v2 workflow
+
+Use **Players & prep** to add/edit a person, preview a pasted roster, reconnect
+saved accounts and old PGNs, or collect people in a tournament group. Cards use
+the normal app controls and wrap at the available width. Edits use a validated
+Save dialog; notes do not save on every keystroke. Group date/rounds are editable,
+prepared checkboxes persist, and US Chess rating updates show progress and Stop.
+Saved account-research candidates show their evidence and an explicit Use account
+button; unconfirmed candidates never become download identities automatically.
+
+**Analyze games** opens **Player analysis** on the shared board. Linked accounts,
+old saved game sets and added PGNs form one corpus, deduplicated by game identity.
+Exact names, aliases and handles determine the player's colour; unmatched games
+are reported and excluded. Get games remembers count/months and time controls;
+refresh adds games without removing existing ones. Positions, Games and Findings
+share the colour/search/date/speed filters. Less common settings live in dialogs.
+The Player openings tab follows the board; clicking a game there keeps its position.
+The My book tab checks the opponent against the active book for our colour.
+
+Analyze runs a finite, cancellable Stockfish pass on the most frequent positions.
+Scores are from the selected player's perspective. Findings distinguish bad
+positions from strong replies absent in the saved games; absence is evidence of a
+coverage gap, not a forced refutation. Optional practical search probes up to three
+engine-sound candidate moves and the five most likely Maia replies, within the
+chosen position limit. This is a one-reply-layer estimate; unprobed probability
+mass assumes perfect defence. A missing Maia model leaves ordinary engine analysis
+available. Reports are disposable files under support/player-reports, keyed by
+source revisions, identities, colour, filters and engine settings. Source or
+selection changes cancel pending work; cancelled runs retain their partial report.
+
+New prep study creates ordinary As White / As Black chapters. Save line to prep
+study keeps the shared board's line and comments; linked files and previously
+linked chapters open in Study. A group study is created once from its members'
+non-empty prep chapters. Copy/Export prep sheet includes event metadata, prepared
+status, notes and the actual prep movetext. The explicit file export uses a native
+Save dialog. Training and editing these studies use the existing Study/Trainer
+workflows rather than separate player-specific tools.
+
+The shared people/group JSON formats and unknown fields survive edits. Stale saves
+are refused; failed writes offer retry/discard. One unreadable group is reported
+without blocking the rest of the directory. Removing a person/group leaves games
+and studies on disk. Remote entry-list URLs should be opened separately and their
+table pasted; the importer accepts CSV, TSV, Markdown and opponents JSON.
+
+## Old-app reference
 
 ## Purpose
 Someone is about to face a named opponent — a tournament field, a club regular, or themselves — and wants

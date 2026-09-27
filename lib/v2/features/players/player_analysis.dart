@@ -15,6 +15,7 @@ import '../../storage/my_games_files.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/pgn_document_store.dart';
 import '../../chess/players/player.dart';
+import '../../chess/players/download_range.dart';
 import 'player_games.dart';
 
 enum PositionOrder { frequent, lowScore, highScore, badEval }
@@ -45,7 +46,7 @@ final class PlayerAnalysis extends ChangeNotifier {
   PositionOrder order = PositionOrder.frequent;
   PlayerList list = PlayerList.openings;
   String query = '';
-  int minGames = 1, minPly = 2, maxGames = 500;
+  int minGames = 1, minPly = 2;
   int? recentDays;
   Set<String> speeds = {};
   bool busy = false;
@@ -110,16 +111,17 @@ final class PlayerAnalysis extends ChangeNotifier {
     final result = <PlayerPosition>[];
     for (final at in data.positions) {
       if (at.side != side || at.ply < minPly) continue;
+      final included = at.games.where((i) => includes(data.games[i])).toList();
+      if (included.length < minGames) continue;
       final filtered = PlayerPosition(
         fen: at.fen,
         side: at.side,
         line: at.line,
-        game: at.game,
+        game: included.first,
         ply: at.ply,
       );
-      for (final index in at.games) {
+      for (final index in included) {
         final game = data.games[index];
-        if (!includes(game)) continue;
         filtered.games.add(index);
         if (game.result == '1/2-1/2') {
           filtered.draws++;
@@ -216,7 +218,20 @@ final class PlayerAnalysis extends ChangeNotifier {
       changed();
       final api = sites.where((s) => s.site == account.site).firstOrNull;
       if (api == null) continue;
-      final fetched = await api.recent(account.username, max: maxGames);
+      final range = PlayerDownloadRange.from(next.fields['download']);
+      final fetched = api is RangedGames
+          ? await api.range(
+              account.username,
+              range,
+              cancelled: () => !_current(ticket),
+              progress: (value) {
+                if (_current(ticket)) {
+                  status = value;
+                  changed();
+                }
+              },
+            )
+          : await api.recent(account.username, max: range.max);
       if (!_current(ticket)) return;
       await _keepDownload(account.site, account.username, fetched, notes);
     }
@@ -312,6 +327,20 @@ final class PlayerAnalysis extends ChangeNotifier {
     }
     return _current(ticket);
   }
+
+  String get fingerprint => sha256
+      .convert(
+        utf8.encode(
+          jsonEncode([
+            player?.id,
+            player?.names,
+            for (final entry in _revisions.entries)
+              [entry.key.path, entry.value.contentHash],
+          ]),
+        ),
+      )
+      .toString();
+  Revision? revisionOf(DocumentRef ref) => _revisions[ref];
 
   Future<bool> currentSources() async {
     if (busy || corpus == null) return false;

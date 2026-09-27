@@ -188,6 +188,33 @@ void main() {
       expect(await savedPlayers(dir), isEmpty);
     },
   );
+  test(
+    'one malformed group leaves the directory and other groups usable',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('player-group-test-');
+      addTearDown(() => dir.delete(recursive: true));
+      final store = PlayerFiles(dir);
+      final player = Player.create('Alex');
+      final group = PlayerGroup.create('Good group').member(player.id);
+      await store.savePlayer(player);
+      await store.saveGroup(group);
+      await File(
+        '${dir.path}/tournaments/broken.json',
+      ).writeAsString('{broken');
+      final read = await store.read();
+      expect(read.players.single.id, player.id);
+      expect(read.groups.single.id, group.id);
+      expect(read.warnings.single, contains('broken.json'));
+      await store.savePlayer(
+        player.edited({'notes': 'Still editable'}),
+        expected: player,
+      );
+      expect(
+        (await store.read()).players.single.text('notes'),
+        'Still editable',
+      );
+    },
+  );
   test('late download cannot change another selected player', () async {
     final api = _DelayedGames();
     final store = ScriptedDocumentStore();
@@ -233,6 +260,12 @@ void main() {
       );
       expect(owner.corpus!.games, hasLength(1));
       expect(await owner.currentSources(), true);
+      final combined = '$game\n\n${game.replaceAll('Bob', 'Carol')}';
+      store.documents[ref] = Opened(combined, scriptedRevision(combined));
+      await owner.select(owner.player!);
+      owner.search('Carol');
+      expect(owner.positions.first.game, 1);
+      expect(owner.positions.first.count, 1);
       store.documents[ref] = Opened(blackGame, scriptedRevision(blackGame));
       expect(await owner.currentSources(), false);
     },

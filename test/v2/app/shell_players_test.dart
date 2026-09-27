@@ -64,7 +64,7 @@ void main() {
     await tester.runAsync(() => w.parts.players.analysis.select(player));
     w.requests.switchTo(Mode.playerAnalysis);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Filters · 1 games'));
+    await tester.tap(find.text('Filters · 1 game'));
     await tester.pumpAndSettle();
     expect(find.text('Player analysis filters'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -88,4 +88,36 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Prepared'), findsOneWidget);
   });
+  testWidgets(
+    'prep study has both colours and the saved board line opens in Study',
+    (tester) async {
+      await w.pumpShell(tester);
+      await w.parts.players.analysis.select(player);
+      await w.parts.players.openStudy(player);
+      expect(w.requests.mode, Mode.study);
+      expect(w.session.chapter!.lines, hasLength(2));
+      final saved = w.parts.players.directory.players.single;
+      expect(saved.text('prep_file'), isNotEmpty);
+      w.requests.switchTo(Mode.playerAnalysis);
+      await w.requests.analysisBoard();
+      w.session.playMove('e2e4');
+      w.session.playMove('c7c5');
+      await w.parts.players.saveLine();
+      expect(w.requests.mode, Mode.study);
+      expect(w.session.chapter!.lines, hasLength(3));
+      expect(w.session.tree!.children.first.san, 'e4');
+      expect(w.session.tree!.children.first.children.first.san, 'c5');
+      final group = PlayerGroup.create('Club Open').member(player.id);
+      await w.parts.players.directory.saveGroup(group);
+      await w.parts.players.openGroupStudy(group);
+      expect(w.session.chapter!.lines, hasLength(1));
+      expect(w.session.tree!.children.first.children.first.san, 'c5');
+      final linked = w.parts.players.directory.groups.single;
+      expect(linked.fields['study'], isNotNull);
+      await w.parts.players.openGroupStudy(linked);
+      expect(w.session.chapter!.lines, hasLength(1));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
