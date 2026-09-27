@@ -146,10 +146,6 @@ class _WorkspaceKeysState extends State<WorkspaceKeys> {
       const SingleActivator(LogicalKeyboardKey.keyE, meta: true): _edit,
       const SingleActivator(LogicalKeyboardKey.keyZ, control: true): _undo,
       const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): _undo,
-      const SingleActivator(LogicalKeyboardKey.keyS, control: true):
-          _session.keepHeld,
-      const SingleActivator(LogicalKeyboardKey.keyS, meta: true):
-          _session.keepHeld,
       const SingleActivator(LogicalKeyboardKey.tab, control: true): tabs.next,
       const SingleActivator(LogicalKeyboardKey.tab, control: true, shift: true):
           tabs.previous,
@@ -169,8 +165,20 @@ class _WorkspaceKeysState extends State<WorkspaceKeys> {
   /// is why this is not [CallbackShortcuts]: that reports every bound key as
   /// handled and the field would never see it.
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    if (_typing) return KeyEventResult.ignored;
     final keys = HardwareKeyboard.instance;
+    // Save belongs to the document even while an editor owns the caret.
+    if (const SingleActivator(
+          LogicalKeyboardKey.keyS,
+          control: true,
+        ).accepts(event, keys) ||
+        const SingleActivator(
+          LogicalKeyboardKey.keyS,
+          meta: true,
+        ).accepts(event, keys)) {
+      _session.keepHeld();
+      return KeyEventResult.handled;
+    }
+    if (_typing) return KeyEventResult.ignored;
     if (_enter.any((enter) => enter.accepts(event, keys))) {
       final ours = FocusManager.instance.primaryFocus == node;
       return ours && _session.enterVariation()

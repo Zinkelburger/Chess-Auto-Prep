@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/v2/workspace/document_history.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/edit_strip.dart';
@@ -25,6 +26,47 @@ void main() {
     fixture.session.playMove('f3d4');
     fixture.session.playMove('g8f6');
   }
+
+  void fillHistory() {
+    for (var i = 0; i < HeldEdits.undoDepth + 5; i++) {
+      fixture.session.setComment(NodePath.of([0]), 'Note $i');
+    }
+  }
+
+  test(
+    'bounded undo keeps the unsaved prefix and saves its correct scope',
+    () async {
+      fillHistory();
+      for (var i = 0; i < HeldEdits.undoDepth; i++) {
+        expect(fixture.session.canUndo, isTrue);
+        await fixture.session.undo();
+      }
+      expect(fixture.session.canUndo, isFalse);
+      expect(fixture.session.hasHeldEdits, isTrue);
+      expect(fixture.session.commentAt(NodePath.of([0])), contains('Note 4'));
+      await fixture.session.undo();
+      expect(fixture.session.commentAt(NodePath.of([0])), contains('Note 4'));
+      fixture.session.keepHeld();
+      await pumpEventQueue();
+      expect(fixture.onDisk, contains('Note 4'));
+      expect(fixture.session.hasHeldEdits, isFalse);
+    },
+  );
+
+  test(
+    'discard still restores the original after old undo steps were dropped',
+    () async {
+      fillHistory();
+      fixture.session.discardHeld();
+      expect(fixture.session.hasHeldEdits, isFalse);
+      expect(
+        fixture.session.commentAt(NodePath.of([0])),
+        contains('The Sicilian'),
+      );
+      expect(fixture.onDisk, blackChapter);
+      expect(fixture.store.requestedSaves, isEmpty);
+    },
+  );
 
   test('a new move is shown but not written', () async {
     playTwoNewMoves();

@@ -74,7 +74,7 @@ class _GameFilterBarState extends State<GameFilterBar> {
             ),
           ),
         ),
-        if (_filter.narrowing)
+        if (_filter.narrowing && !_filter.busy && _filter.problem == null)
           Text(
             '${_filter.kept} of ${_filter.total}',
             style: theme.textTheme.labelSmall?.copyWith(

@@ -8,6 +8,7 @@ import '../../chess/pgn/game_summary.dart';
 import '../../storage/chapter_files.dart';
 import '../../ui/app_action.dart';
 import '../../ui/search_field.dart';
+import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
 import '../../workspace/file_filter.dart';
 import 'game_filter_bar.dart';
@@ -53,7 +54,8 @@ class PgnViewerPanel extends StatefulWidget {
   State<PgnViewerPanel> createState() => _PgnViewerPanelState();
 }
 
-class _PgnViewerPanelState extends State<PgnViewerPanel> {
+class _PgnViewerPanelState extends State<PgnViewerPanel>
+    with ListeningState<PgnViewerPanel> {
   final _search = TextEditingController();
 
   /// The chapters folded or unfolded, and which way, for the file in
@@ -65,16 +67,26 @@ class _PgnViewerPanelState extends State<PgnViewerPanel> {
   @override
   void initState() {
     super.initState();
+    changed();
     unawaited(widget.viewer.loadRecent());
   }
 
   @override
   void dispose() {
+    stopListening();
     _search.dispose();
     super.dispose();
   }
 
   PgnViewer get _viewer => widget.viewer;
+
+  @override
+  Listenable listenableOf(PgnViewerPanel widget) => widget.viewer;
+
+  @override
+  void changed() {
+    if (_search.text != _viewer.query) _search.text = _viewer.query;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -158,22 +170,29 @@ class _PgnViewerPanelState extends State<PgnViewerPanel> {
     final current = _viewer.current;
     if (rows.isEmpty) return _nothingShown();
     final chapters = _viewer.chapters;
-    final items = chapters.isEmpty
-        ? [
-            for (final (index, game) in rows)
-              _gameRow(index, game, current, indented: false),
-          ]
-        : _chapterItems(chapters, current);
+    if (chapters.isEmpty) {
+      return ListView.builder(
+        itemCount: rows.length,
+        itemExtent: listRowHeight,
+        itemBuilder: (context, at) {
+          final (index, game) = rows[at];
+          return _gameRow(index, game, current, indented: false);
+        },
+      );
+    }
+    final items = _chapterItems(chapters, current);
     return ListView.builder(
       itemCount: items.length,
       itemExtent: listRowHeight,
-      itemBuilder: (context, at) => items[at],
+      itemBuilder: (context, at) => _chapterRow(items[at], current),
     );
   }
 
   /// Why the list is empty, and the way back to every game when a filter
   /// emptied it.
   Widget _nothingShown() {
+    if (widget.filter.busy) return const _Message('Filtering games…');
+    if (widget.filter.problem case final problem?) return _Message(problem);
     if (_viewer.games.isEmpty) return const _Message('No games in this file.');
     if (_viewer.query.trim().isNotEmpty) {
       return _Message('Nothing matches "${_viewer.query}".');
@@ -209,47 +228,52 @@ class _PgnViewerPanelState extends State<PgnViewerPanel> {
   /// A heading per chapter and, under an unfolded one, its games. A chapter
   /// of one game is that game's row, called by the chapter: a Lichess study
   /// is usually one game a chapter, and a heading over one row says it twice.
-  List<Widget> _chapterItems(List<ViewerChapter> chapters, int? current) {
+  List<_ChapterItem> _chapterItems(List<ViewerChapter> chapters, int? current) {
     if (_foldsFor != _viewer.file) {
       _folds.clear();
       _foldsFor = _viewer.file;
     }
     final searching = _viewer.query.trim().isNotEmpty;
-    final items = <Widget>[];
+    final items = <_ChapterItem>[];
     for (final chapter in chapters) {
-      if (chapter.size == 1) {
-        final (index, _) = chapter.games.single;
-        items.add(
-          _ChapterRow(
-            title: chapter.title,
-            count: null,
-            unfolded: null,
-            holdsCurrent: index == current,
-            onTap: () => _viewer.showGame(index),
-          ),
-        );
-        continue;
-      }
       final holds = chapter.games.any((game) => game.$1 == current);
-      // The chapter the board went into stays open after the board leaves
-      // it: folding it then would move the rows under the pointer.
       if (holds) _folds.putIfAbsent(chapter.title, () => true);
-      final unfolded = _folds[chapter.title] ?? searching;
-      items.add(
-        _ChapterRow(
-          title: chapter.title,
-          count: chapter.size,
-          unfolded: unfolded,
-          holdsCurrent: holds,
-          onTap: () => _fold(chapter.title, unfolded: !unfolded),
-        ),
-      );
-      if (!unfolded) continue;
-      for (final (index, game) in chapter.games) {
-        items.add(_gameRow(index, game, current, indented: true));
+      // Search temporarily reveals matches without changing manual folds.
+      final unfolded = searching || (_folds[chapter.title] ?? false);
+      items.add((
+        chapter: chapter,
+        index: null,
+        unfolded: unfolded,
+        holds: holds,
+      ));
+      if (chapter.size == 1 || !unfolded) continue;
+      for (final (index, _) in chapter.games) {
+        items.add((
+          chapter: chapter,
+          index: index,
+          unfolded: true,
+          holds: false,
+        ));
       }
     }
     return items;
+  }
+
+  Widget _chapterRow(_ChapterItem item, int? current) {
+    final (:chapter, :index, :unfolded, :holds) = item;
+    if (index != null) {
+      return _gameRow(index, _viewer.games[index], current, indented: true);
+    }
+    final single = chapter.size == 1;
+    return _ChapterRow(
+      title: chapter.title,
+      count: single ? null : chapter.size,
+      unfolded: single ? null : unfolded,
+      holdsCurrent: holds,
+      onTap: () => single
+          ? _viewer.showGame(chapter.games.single.$1)
+          : _fold(chapter.title, unfolded: !unfolded),
+    );
   }
 
   /// A chapter folded or unfolded by hand, which it stays while the file is
@@ -259,6 +283,14 @@ class _PgnViewerPanelState extends State<PgnViewerPanel> {
     setState(() => _folds[title] = unfolded);
   }
 }
+
+/// Flattened row data; widgets and tap closures are made only in the viewport.
+typedef _ChapterItem = ({
+  ViewerChapter chapter,
+  int? index,
+  bool unfolded,
+  bool holds,
+});
 
 /// A chapter of the open file, as the builder's outline shows one: its name,
 /// bold and accented while the game on the board is in it, and how many

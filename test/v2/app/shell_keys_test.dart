@@ -68,6 +68,28 @@ void main() {
     );
   }
 
+  testWidgets('Ctrl S saves a comment while typing', (tester) async {
+    final ref = collectionRef('review');
+    w.store.documents[ref] = Opened(
+      threeGameFile,
+      scriptedRevision(threeGameFile),
+    );
+    await w.pumpShell(tester);
+    await w.requests.openFile(ref);
+    await tester.pumpAndSettle();
+    await ctrl(tester, LogicalKeyboardKey.keyE);
+    final field = find.descendant(
+      of: find.byType(CommentField),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(field, 'Review note not yet blurred');
+    await ctrl(tester, LogicalKeyboardKey.keyS);
+    expect(
+      (w.store.documents[ref] as Opened).text,
+      contains('Review note not yet blurred'),
+    );
+  });
+
   testWidgets('Enter steps into the variation at the cursor; Esc goes back '
       'to where it branched', (tester) async {
     await openKid(tester);

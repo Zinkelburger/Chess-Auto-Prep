@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-import '../../chess/game_filter.dart';
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/chapter_grouping.dart';
 import '../../chess/pgn/chapter_line.dart';
@@ -78,7 +77,9 @@ final class PgnViewer extends ChangeNotifier {
   /// Each game's chapter, when the file has chapters; else null.
   List<String>? _chapterOf;
   String _query = '';
-  GameFilter _filterSeen = GameFilter.none;
+  int _filterSeen = -1;
+  ({List<(int, GameSummary)> games, List<ViewerChapter> chapters})? _selection;
+  Map<String, int> _chapterSizes = const {};
   bool _disposed = false;
 
   /// The files opened before, newest first, as absolute paths.
@@ -99,43 +100,41 @@ final class PgnViewer extends ChangeNotifier {
   /// One summary per game of [file], in file order.
   List<GameSummary> get games => file == null ? const [] : _rows;
 
-  /// The games that pass the filter and whose players, result or event
-  /// match the search, paired with their place in the file, which is what
-  /// opening one needs.
-  List<(int, GameSummary)> get visible {
-    final needle = _query.trim().toLowerCase();
-    return [
-      for (final (index, game) in games.indexed)
-        if (_filter.keeps(index) &&
-            (needle.isEmpty || game.searchText.contains(needle)))
-          (index, game),
-    ];
-  }
+  /// One cached selection feeds both flat and grouped views. A chapter-name
+  /// match includes its games, so the empty state and the rows always agree.
+  List<(int, GameSummary)> get visible =>
+      file == null ? const [] : (_selection ??= _select()).games;
 
-  /// The games that match the search under their chapters, in the order
-  /// the chapters first appear: a study or a course read as the builder
-  /// reads it. Empty when the file has no chapters, and the list is flat.
-  List<ViewerChapter> get chapters {
-    final of = _chapterOf;
-    if (file == null || of == null) return const [];
+  List<ViewerChapter> get chapters =>
+      file == null ? const [] : (_selection ??= _select()).chapters;
+
+  ({List<(int, GameSummary)> games, List<ViewerChapter> chapters}) _select() {
     final needle = _query.trim().toLowerCase();
+    final selected = <(int, GameSummary)>[];
     final grouped = <String, List<(int, GameSummary)>>{};
-    final sizes = <String, int>{};
-    for (final (index, game) in games.indexed) {
-      final title = of[index];
-      sizes[title] = (sizes[title] ?? 0) + 1;
-      final inChapter = grouped.putIfAbsent(title, () => []);
-      final found =
-          needle.isEmpty ||
-          game.searchText.contains(needle) ||
-          title.toLowerCase().contains(needle);
-      if (found && _filter.keeps(index)) inChapter.add((index, game));
+    for (final (index, game) in _rows.indexed) {
+      if (!_filter.keeps(index)) continue;
+      final title = _chapterOf?[index];
+      if (needle.isNotEmpty &&
+          !game.searchText.contains(needle) &&
+          !(title?.toLowerCase().contains(needle) ?? false)) {
+        continue;
+      }
+      final row = (index, game);
+      selected.add(row);
+      if (title != null) grouped.putIfAbsent(title, () => []).add(row);
     }
-    return [
-      for (final MapEntry(key: title, value: games) in grouped.entries)
-        if (games.isNotEmpty)
-          ViewerChapter(title, games, size: sizes[title] ?? games.length),
-    ];
+    return (
+      games: List.unmodifiable(selected),
+      chapters: List.unmodifiable([
+        for (final MapEntry(key: title, value: games) in grouped.entries)
+          ViewerChapter(
+            title,
+            List.unmodifiable(games),
+            size: _chapterSizes[title]!,
+          ),
+      ]),
+    );
   }
 
   String get query => _query;
@@ -154,6 +153,7 @@ final class PgnViewer extends ChangeNotifier {
   void search(String query) {
     if (query == _query) return;
     _query = query;
+    _selection = null;
     notifyListeners();
   }
 
@@ -218,6 +218,7 @@ final class PgnViewer extends ChangeNotifier {
   Future<void> opened(ChapterRef ref) {
     _file = ref;
     _query = '';
+    _selection = null;
     final intent = Object();
     _unsavedRecent[intent] = ref.path;
     _recent = _first(ref.path, _recent);
@@ -285,6 +286,7 @@ final class PgnViewer extends ChangeNotifier {
   void closed() {
     _file = null;
     _query = '';
+    _selection = null;
     notifyListeners();
   }
 
@@ -310,6 +312,12 @@ final class PgnViewer extends ChangeNotifier {
   void _summarise(List<ChapterLine> lines) {
     final grouping = groupChapters([for (final line in lines) line.tags]);
     _chapterOf = grouping.hasChapters ? grouping.titles : null;
+    _selection = null;
+    final sizes = <String, int>{};
+    for (final title in _chapterOf ?? const <String>[]) {
+      sizes[title] = (sizes[title] ?? 0) + 1;
+    }
+    _chapterSizes = sizes;
     _rows = List.unmodifiable([
       for (final (index, line) in lines.indexed)
         _summary(line, index, grouping),
@@ -337,8 +345,9 @@ final class PgnViewer extends ChangeNotifier {
 
   /// The filter applied: the list is another list.
   void _followTheFilter() {
-    if (_filter.applied == _filterSeen) return;
-    _filterSeen = _filter.applied;
+    if (_filter.revision == _filterSeen) return;
+    _filterSeen = _filter.revision;
+    _selection = null;
     notifyListeners();
   }
 

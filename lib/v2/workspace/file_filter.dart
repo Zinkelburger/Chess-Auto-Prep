@@ -7,6 +7,7 @@ import '../chess/pgn/chapter_line.dart';
 import '../chess/pgn/game_text.dart';
 import '../storage/chapter_files.dart';
 import 'document_session.dart';
+import 'filter_run.dart';
 
 /// Which games of the open file pass the filter: the one filter both the
 /// PGN Viewer's game list and the explorer's `This file` read. It is also
@@ -21,7 +22,11 @@ import 'document_session.dart';
 /// lands on the next. An edit to the same file keeps the rules and filters
 /// its games again at once.
 final class FileFilter extends ChangeNotifier {
-  FileFilter(this._session, {this.delay = const Duration(milliseconds: 300)}) {
+  FileFilter(
+    this._session, {
+    this.delay = const Duration(milliseconds: 300),
+    this.timeout = const Duration(seconds: 2),
+  }) {
     _session.addListener(_followTheDocument);
     _followTheDocument();
   }
@@ -30,6 +35,17 @@ final class FileFilter extends ChangeNotifier {
 
   /// How long typing must rest before the rules apply.
   final Duration delay;
+  final Duration timeout;
+  FilterRun? _run;
+  bool _disposed = false;
+  bool _busy = false;
+  String? _problem;
+  int _revision = 0;
+
+  /// Changes whenever the selection changes, even under identical rules.
+  int get revision => _revision;
+  bool get busy => _busy;
+  String? get problem => _problem;
 
   GameFilter _filter = GameFilter.none;
   GameFilter _applied = GameFilter.none;
@@ -67,13 +83,16 @@ final class FileFilter extends ChangeNotifier {
   /// Whether the game at [index] of the file passes.
   bool keeps(int index) {
     final passes = _passes;
-    return passes == null || (index < passes.length && passes[index]);
+    return index >= 0 &&
+        index < total &&
+        (passes == null || (index < passes.length && passes[index]));
   }
 
   /// Takes [filter] as the rules being typed, applied once typing rests.
   void edit(GameFilter filter) {
     if (filter == _filter) return;
     _filter = filter;
+    _cancelRun();
     _pending?.cancel();
     notifyListeners();
     if (delay == Duration.zero) {
@@ -119,16 +138,80 @@ final class FileFilter extends ChangeNotifier {
   }
 
   void _filterGames() {
+    _cancelRun();
+    _revision++;
+    _busy = false;
+    _problem = null;
     if (_applied.isEmpty) {
       _passes = null;
       return;
     }
-    final passes = [
+    if (_needsWorker) {
+      // No positional matches from the previous snapshot may escape while
+      // these headers are being read. The UI shows progress, not "no games".
+      _passes = const [];
+      _kept = 0;
+      _busy = true;
+      final run = _run = FilterRun.start(
+        [for (final line in _lines) line.tags],
+        _applied,
+        timeout: timeout,
+      );
+      unawaited(_receive(run));
+      return;
+    }
+    _accept([
       for (final line in _lines)
         _applied.keeps((header) => tagValue(line.tags, header)),
-    ];
+    ]);
+  }
+
+  /// Small literal filters remain immediate. Regex always runs elsewhere;
+  /// ordinary filters also move off-thread once their input is substantial.
+  bool get _needsWorker {
+    if (_applied.active.any((rule) => rule.rule == FilterRule.regex)) {
+      return true;
+    }
+    if (_lines.length >= 500) return true;
+    var size = 0;
+    for (final line in _lines) {
+      for (final tag in line.tags) {
+        size += tag.text.length;
+        if (size >= 64 * 1024) return true;
+      }
+    }
+    return false;
+  }
+
+  Future<void> _receive(FilterRun run) async {
+    List<bool>? passes;
+    String? problem;
+    try {
+      passes = await run.result;
+    } on TimeoutException {
+      problem =
+          'Filtering took too long. Simplify the rules or clear the filter.';
+    } on Object {
+      problem =
+          'Could not filter these games. Change the rules or clear the filter.';
+    }
+    if (_disposed || _run != run) return;
+    _run = null;
+    _busy = false;
+    _problem = problem;
+    _accept(passes ?? const []);
+    _revision++;
+    notifyListeners();
+  }
+
+  void _accept(List<bool> passes) {
     _passes = passes;
     _kept = passes.where((pass) => pass).length;
+  }
+
+  void _cancelRun() {
+    _run?.cancel();
+    _run = null;
   }
 
   /// Another file clears the rules; the same file edited is filtered again.
@@ -154,6 +237,8 @@ final class FileFilter extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _cancelRun();
     _pending?.cancel();
     _session.removeListener(_followTheDocument);
     super.dispose();

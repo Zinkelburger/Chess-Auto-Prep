@@ -6,7 +6,6 @@ import 'package:flutter/foundation.dart';
 
 import '../chess/explorer_answer.dart';
 import '../chess/fen.dart';
-import '../chess/game_filter.dart';
 import '../chess/opening_index.dart';
 import '../chess/pgn/chapter_line.dart';
 import '../chess/tactics/game_ids.dart';
@@ -94,12 +93,10 @@ abstract interface class SavedGames implements LocalGames {
 /// games the filter numbers are the games the tree numbers.
 ///
 /// Another file, a paste onto the board or the file closed stops a build
-/// still running and drops the tree at once: its answers are another
-/// file's. An edit of the same file that keeps its number of games — a
-/// comment, a move — builds again and answers from the tree it had until
-/// the new one is there, so a note typed into a large file does not blank
-/// the table; any other change drops it, since its game numbers would name
-/// other games. The filter narrows the answers without building again.
+/// still running and drops the tree at once. Any changed game list also
+/// drops it: positional IDs in an index belong to its input snapshot, and
+/// even equal-sized lists can number different games. Rules can narrow the
+/// same snapshot without building again.
 final class FileTree extends ChangeNotifier implements LocalGames {
   FileTree({required FileFilter filter}) : _filter = filter {
     _filter.addListener(_follow);
@@ -113,11 +110,15 @@ final class FileTree extends ChangeNotifier implements LocalGames {
   IndexBuild? _build;
   ChapterRef? _file;
   List<ChapterLine> _lines = const [];
-  GameFilter _filterSeen = GameFilter.none;
+  int _filterSeen = -1;
   bool _disposed = false;
 
   @override
-  TreeState get state => _state;
+  TreeState get state => _filter.busy
+      ? TreeReading(0, _filter.total)
+      : _filter.problem != null
+      ? TreeFailed(_filter.problem!)
+      : _state;
 
   @override
   String? get summary {
@@ -129,8 +130,9 @@ final class FileTree extends ChangeNotifier implements LocalGames {
   }
 
   @override
-  ExplorerAnswer? answerAt(Fen fen) =>
-      _index?.answer(fen, keeps: _filter.narrowing ? _filter.keeps : null);
+  ExplorerAnswer? answerAt(Fen fen) => _filter.busy || _filter.problem != null
+      ? null
+      : _index?.answer(fen, keeps: _filter.narrowing ? _filter.keeps : null);
 
   @override
   void want() {
@@ -187,18 +189,16 @@ final class FileTree extends ChangeNotifier implements LocalGames {
     final lines = _filter.lines;
     final file = _filter.file;
     if (sameLines(lines, _lines) && file == _file) {
-      if (_filter.applied == _filterSeen) return;
-      _filterSeen = _filter.applied;
+      if (_filter.revision == _filterSeen) return;
+      _filterSeen = _filter.revision;
       notifyListeners();
       return;
     }
-    final numberedAlike =
-        sameFile(file, _file) && lines.length == _lines.length;
     _lines = lines;
     _file = file;
-    _filterSeen = _filter.applied;
+    _filterSeen = _filter.revision;
     _stop();
-    if (!numberedAlike) _index = null;
+    _index = null;
     _state = const TreeUnbuilt();
     notifyListeners();
   }

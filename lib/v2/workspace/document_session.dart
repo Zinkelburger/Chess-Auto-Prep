@@ -141,7 +141,7 @@ final class DocumentSession extends ChangeNotifier {
   /// Whether an edit can be taken back now: from the saver's receipts for a
   /// file, from memory on the analysis board and for held edits.
   bool get canUndo =>
-      isScratch ? _board.canUndo : _held != null || _saver.canUndo;
+      isScratch ? _board.canUndo : _held?.canUndo ?? _saver.canUndo;
 
   /// The file the chapter was read from, and which game of it is on the
   /// board — null when its games are merged. A repertoire chapter is the
@@ -156,12 +156,10 @@ final class DocumentSession extends ChangeNotifier {
   /// Notifies when the cursor moves, and only then.
   ValueListenable<NodePath> get cursorListenable => _cursor;
 
-  /// Notifies just before another document or game goes up in place of the
-  /// one on the board, or the one on the board is renamed, while it is still
-  /// the session's: a view holding words typed for it hands them over now,
-  /// while the paths it holds still name the moves they were typed at.
-  Listenable get leaving => _leaving;
-  final _leaving = _Leaving();
+  /// Asks editors to commit their text before saving or leaving the document,
+  /// while their paths still name the moves the text was typed for.
+  Listenable get committingEditors => _editors;
+  final _editors = _Editors();
 
   /// Notifies for a cursor move and for everything the session notifies
   /// for: what a view of the position, rather than of the document, needs.
@@ -338,7 +336,7 @@ final class DocumentSession extends ChangeNotifier {
       case DocumentShown():
         shown = read;
     }
-    _leaving.announce();
+    _editors.commit();
     if (!leftAsIs && !_saver.settled) {
       // The document being left could still be edited while this one was
       // read, and nobody was asked about those words: they go to its file
@@ -373,7 +371,7 @@ final class DocumentSession extends ChangeNotifier {
   void relocated(ChapterRef ref) {
     final source = _source;
     if (source == null || _chapter == null) return;
-    _leaving.announce();
+    _editors.commit();
     final chapter = _chapter!;
     final moved = ref.section == null && source.section != null
         ? source.inFile(ref.path)
@@ -388,7 +386,7 @@ final class DocumentSession extends ChangeNotifier {
   /// than a chapter whose file is now in recovery.
   void closed() {
     if (_source == null) return;
-    _leaving.announce();
+    _editors.commit();
     _opens++;
     _saver.closed();
     _showBoard();
@@ -402,7 +400,7 @@ final class DocumentSession extends ChangeNotifier {
     if (_disposed) return false;
     if (board == null && isScratch) return true;
     // Before the flush, which then writes what the words make of the file.
-    _leaving.announce();
+    _editors.commit();
     final ticket = ++_opens;
     if (!isScratch) await _switching(ticket, _saver.flush);
     if (_disposed || ticket != _opens) return false;
@@ -432,7 +430,7 @@ final class DocumentSession extends ChangeNotifier {
   /// file, not to the game that was on the board when it was typed.
   void showGame(int index) {
     if (!_isAnotherGame(index)) return;
-    _leaving.announce();
+    _editors.commit();
     // The words handed over are in the chapter now, so it is read again.
     if (!_isAnotherGame(index)) return;
     final chapter = _chapter!;
@@ -704,6 +702,7 @@ final class DocumentSession extends ChangeNotifier {
   /// back leaves the file as it is on disk, with nothing held.
   UndoResult _undoHeld() {
     final held = _held!;
+    if (!held.canUndo) return const UndoRefused();
     final before = _shown!;
     final restored = held.takeBack();
     if (held.isEmpty) _held = null;
@@ -713,6 +712,7 @@ final class DocumentSession extends ChangeNotifier {
 
   /// Writes the held edits to the file, as one save.
   void keepHeld() {
+    _editors.commit();
     final held = _held;
     if (held == null) return;
     _held = null;
@@ -725,9 +725,9 @@ final class DocumentSession extends ChangeNotifier {
 
   /// Throws the held edits away and shows the file as it is on disk.
   void discardHeld() {
+    _editors.commit();
     final held = _held;
     if (held == null) return;
-    _leaving.announce();
     final before = _shown!.chapter;
     _held = null;
     _showHeld(before, held.original);
@@ -976,12 +976,12 @@ final class DocumentSession extends ChangeNotifier {
     _disposed = true;
     _cursor.dispose();
     _commentLine.dispose();
-    _leaving.dispose();
+    _editors.dispose();
     super.dispose();
   }
 }
 
-/// [DocumentSession.leaving]: only the session says when it leaves.
-final class _Leaving extends ChangeNotifier {
-  void announce() => notifyListeners();
+/// Only the session decides when editors must hand over their text.
+final class _Editors extends ChangeNotifier {
+  void commit() => notifyListeners();
 }

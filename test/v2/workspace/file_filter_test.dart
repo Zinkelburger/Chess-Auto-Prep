@@ -22,6 +22,98 @@ void main() {
       if (filter.keeps(game)) game,
   ];
 
+  Future<void> settled(FileFilter filter) async {
+    while (filter.busy) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+  }
+
+  test(
+    'regex completion notifies the viewer under unchanged applied rules',
+    () async {
+      fixture = await viewerOver(threeGameFile);
+      await fixture.open();
+      fixture.filter.apply(
+        const GameFilter(
+          rules: [HeaderRule(rule: FilterRule.regex, value: '^Carlsen')],
+        ),
+      );
+      expect(fixture.filter.busy, isTrue);
+      expect(fixture.viewer.visible, isEmpty);
+      await settled(fixture.filter);
+      expect(fixture.filter.problem, isNull);
+      expect(fixture.viewer.visible.map((row) => row.$1), [0]);
+    },
+  );
+
+  test(
+    'clearing a running regex prevents a late result from narrowing games',
+    () async {
+      fixture = await viewerOver(threeGameFile);
+      await fixture.open();
+      fixture.filter.apply(
+        const GameFilter(
+          rules: [HeaderRule(rule: FilterRule.regex, value: '^Carlsen')],
+        ),
+      );
+      fixture.filter.apply(GameFilter.none);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(fixture.filter.busy, isFalse);
+      expect(fixture.filter.problem, isNull);
+      expect(fixture.viewer.visible, hasLength(3));
+    },
+  );
+
+  test(
+    'a failed regex reports a problem and clearing restores all games',
+    () async {
+      final hostile = '[Event "${List.filled(32, 'a').join()}!"]\n\n1. e4 *';
+      fixture = await viewerOver(hostile);
+      await fixture.open();
+      final filter = FileFilter(
+        fixture.session,
+        timeout: const Duration(milliseconds: 100),
+      );
+      addTearDown(filter.dispose);
+      filter.apply(
+        const GameFilter(
+          rules: [
+            HeaderRule(
+              field: 'Event',
+              rule: FilterRule.regex,
+              value: r'^(a+)+$',
+            ),
+          ],
+        ),
+      );
+      await settled(filter);
+      expect(filter.problem, contains('too long'));
+      expect(filter.kept, 0);
+      filter.apply(GameFilter.none);
+      expect(filter.problem, isNull);
+      expect(filter.kept, 1);
+    },
+  );
+
+  test('opening another file cancels its predecessor’s filter', () async {
+    fixture = await viewerOver(threeGameFile);
+    await fixture.open();
+    fixture.filter.apply(
+      const GameFilter(
+        rules: [HeaderRule(rule: FilterRule.regex, value: '^Carlsen')],
+      ),
+    );
+    final other = collectionRef('other');
+    const text = '[Event "New"]\n\n1. d4 *';
+    fixture.store.documents[other] = Opened(text, scriptedRevision(text));
+    await fixture.session.open(other, game: 0);
+    await fixture.viewer.opened(other);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(fixture.filter.applied, GameFilter.none);
+    expect(fixture.filter.busy, isFalse);
+    expect(fixture.viewer.visible.single.$2.title, 'New');
+  });
+
   test('with no rules every game passes', () async {
     fixture = await viewerOver(threeGameFile);
     await fixture.open();

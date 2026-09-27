@@ -32,7 +32,7 @@ List<AppAction> documentActions({
       shortcut: 'Ctrl+Z',
       group: 'Document',
     ),
-    if (session.hasHeldEdits) ...[
+    if (session.hasHeldEdits || session.holdsEdits) ...[
       AppAction(
         'Save changes',
         session.keepHeld,

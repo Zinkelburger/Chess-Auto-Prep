@@ -11,35 +11,41 @@ typedef ShownDocument = ({Chapter chapter, SectionView? view});
 /// and each version they replaced, for undo.
 final class HeldEdits {
   HeldEdits(this.original, Landing first)
-    : text = first.text,
+    : _current = (chapter: first.chapter, view: first.view),
       scope = first.scope,
-      _versions = [(shown: original, text: null, scope: null)];
+      _versions = [(shown: original, scope: null)];
 
-  /// What was on the board before the first edit: the file as on disk.
+  static const undoDepth = 100;
+
+  /// Discard always returns here, even after older undo steps were dropped.
   final ShownDocument original;
-
-  String text;
+  ShownDocument _current;
   EditScope scope;
+  bool _atOriginal = false;
 
-  /// The versions the edits replaced, newest last, each with the text and
-  /// scope that had been held up to it (null for the original).
-  final List<({ShownDocument shown, String? text, EditScope? scope})> _versions;
+  /// Serialize on demand, never once per retained undo step. Unchanged games
+  /// are shared by the immutable document versions.
+  String get text => writeChapter(_current.view?.file ?? _current.chapter);
 
-  bool get isEmpty => _versions.isEmpty;
+  final List<({ShownDocument shown, EditScope? scope})> _versions;
 
-  /// One more edit, [landed], made to [before].
+  bool get canUndo => _versions.isNotEmpty;
+  bool get isEmpty => _atOriginal;
+
   void add(ShownDocument before, Landing landed) {
-    _versions.add((shown: before, text: text, scope: scope));
-    text = landed.text;
+    _versions.add((shown: before, scope: scope));
+    if (_versions.length > undoDepth) _versions.removeAt(0);
+    _current = (chapter: landed.chapter, view: landed.view);
     scope = scopeOfBoth(scope, landed.scope);
+    _atOriginal = false;
   }
 
-  /// The version before the last edit, with what was held up to it.
   ShownDocument takeBack() {
     final last = _versions.removeLast();
-    if (last.text case final earlier?) text = earlier;
+    _current = last.shown;
+    _atOriginal = last.scope == null;
     if (last.scope case final earlier?) scope = earlier;
-    return last.shown;
+    return _current;
   }
 }
 

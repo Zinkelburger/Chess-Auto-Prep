@@ -40,6 +40,42 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('search matches a chapter name', (tester) async {
+    fixture = await viewerOver(courseFile);
+    await fixture.open();
+    await pump(tester);
+    await tester.enterText(find.byType(TextField), 'sicilian');
+    await tester.pumpAndSettle();
+    expect(fixture.viewer.chapters, hasLength(1));
+    expect(find.text('Najdorf'), findsOneWidget);
+  });
+
+  testWidgets('new file clears displayed search', (tester) async {
+    fixture = await viewerOver(threeGameFile);
+    await fixture.open();
+    await pump(tester);
+    await tester.enterText(find.byType(TextField), 'giri');
+    await tester.pumpAndSettle();
+    await fixture.open();
+    await tester.pumpAndSettle();
+    expect(fixture.viewer.query, isEmpty);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      isEmpty,
+    );
+  });
+
+  testWidgets('search reveals an explicitly folded chapter', (tester) async {
+    fixture = await viewerOver(courseFile);
+    await fixture.open();
+    await pump(tester);
+    await tester.tap(find.text('Italian'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'knights');
+    await tester.pumpAndSettle();
+    expect(find.text('Two Knights'), findsOneWidget);
+  });
+
   testWidgets('with nothing open, the recent files are offered', (
     tester,
   ) async {

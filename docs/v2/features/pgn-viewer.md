@@ -208,8 +208,10 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
   its name and `N games` and folds; the chapter holding the game on the board opens and stays open
   when the board leaves it, so the rows never move under the pointer. A chapter of one game is
   that game's row. Under a chapter a course line is called by its own title (`Najdorf`, not
-  `Sicilian – Najdorf`). Search unfolds the chapters it finds games in. A plain collection stays
-  the flat list.
+  `Sicilian – Najdorf`). Search temporarily unfolds matching chapters, including ones folded by
+  hand, and matching a chapter name includes its games. Clearing search restores manual folds. The field follows the
+  query when a file is reopened, and flat and grouped rows share one cached selection. Widgets are
+  constructed only for the viewport. A plain collection stays the flat list.
 - **The start of a game names its first move.** The note under the board shows the game's
   introduction, then the first move muted with its note; clicking it plays it, as → does. Hidden
   while a line is being found (puzzles, training).
@@ -220,6 +222,8 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
   White / draw / Black (a game without a result counts as played but draws no bar), the first 100
   games under the moves. It follows the viewer's filter without building again; a file past 64 KiB
   is built on another isolate that opening another file, pasting onto the board or closing kills.
+  Any changed game list invalidates the old index before its replacement is built: equal game counts
+  do not mean the same game numbers. Filter results belong to that same list of games.
   The row's end reads `40 games` / `12 of 40 games`. A listed game is put on the board in place,
   where its own main line reaches the position. Not built: `Include variations`, the tree's own
   cursor and back button.
@@ -231,15 +235,21 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
   that remove them and `n of N`; unfolded, a Field / Rule / Value block per rule (typeable choice
   fields suggesting the file's headers and values), `Add rule`, `All` / `Any`, `Clear`. Rules are
   the old header rules (`contains`, `excludes`, `is`, `regex`, `≥`, `≤`, `Player` on either
-  colour, `;` between names) and apply 300 ms after typing rests; another file clears them. Not
-  built: position and move-sequence filters, the saved slice per path, `Check filters`.
+  colour, `;` between names) and apply 300 ms after typing rests; another file clears them.
+  Regex filters always run in a cancellable worker; literal filters also do so for 500 or more games or at least 64 KiB of headers. A worker has a 2-second deadline.
+  The list shows `Filtering games…` while waiting and a problem if the work times out or fails;
+  changing or clearing the rules recovers. Cancelled or superseded results never replace the current
+  selection. Not built: position and move-sequence filters, the saved slice per path, `Check filters`.
 
 ## Owner decisions (2026-09-23)
 
 - **Edits in the viewer are not saved until the user saves them.** Moves played on the board,
   notes and glyphs are shown at once but held in memory (`DocumentSession.holdsEdits`, on while the
   viewer is up). The edit strip then shows `Unsaved changes` with `Discard` and `Save` (Ctrl+S; also
-  in the Actions menu); Ctrl+Z takes held edits back one at a time. Opening another file or game
+  in the Actions menu); Ctrl+Z takes held edits back one at a time (the latest 100 steps). History
+  shares immutable document versions rather than keeping a full PGN string per step; Discard still restores the
+  original document after older undo steps have been dropped. Save, including Ctrl+S while typing,
+  commits the active comment field before writing. Opening another file or game
   file, or reloading, drops them without asking. Once an edit is held, later edits join it in every
   mode until it is saved or discarded. The builder and Study keep autosaving.
 - **No colour for the unsaved state**, and **no snackbars anywhere in v2**: deletions say nothing

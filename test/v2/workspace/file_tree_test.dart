@@ -42,6 +42,28 @@ void main() {
     await fixture.session.open(other, game: 0);
   }
 
+  test('equal-count reload cannot use old positional IDs', () async {
+    await over(threeGameFile);
+    tree.want();
+    await settled(tree);
+    fixture.filter.apply(
+      const GameFilter(rules: [HeaderRule(value: 'Carlsen')]),
+    );
+    expect(movesOf(tree.answerAt(Fen.initial)), ['e2e4']);
+    final texts = fixture.session.chapter!.lines
+        .map((line) => line.text)
+        .toList();
+    final reordered = [texts[1], texts[0], texts[2]].join('\n\n');
+    fixture.store.documents[fixture.ref] = Opened(
+      reordered,
+      scriptedRevision(reordered),
+    );
+    await fixture.session.reloadFromDisk();
+    final answer = tree.answerAt(Fen.initial);
+    // During rebuild it may serve a correctly mapped snapshot or no answer.
+    if (answer != null) expect(movesOf(answer), ['e2e4']);
+  });
+
   test('nothing is built until the explorer looks', () async {
     await over(threeGameFile);
     expect(tree.state, isA<TreeUnbuilt>());
@@ -134,18 +156,20 @@ void main() {
     });
   });
 
-  test('a note typed into the file keeps the tree answering until the new '
-      'one is built', () async {
-    await over(threeGameFile);
-    tree.want();
-    await settled(tree);
-    fixture.session.setComment(NodePath.of(const [0]), 'A note');
-    expect(tree.state, isA<TreeUnbuilt>());
-    expect(movesOf(tree.answerAt(Fen.initial)), hasLength(3));
-    tree.want();
-    await settled(tree);
-    expect(movesOf(tree.answerAt(Fen.initial)), hasLength(3));
-  });
+  test(
+    'an edit invalidates the index until its new snapshot is built',
+    () async {
+      await over(threeGameFile);
+      tree.want();
+      await settled(tree);
+      fixture.session.setComment(NodePath.of(const [0]), 'A note');
+      expect(tree.state, isA<TreeUnbuilt>());
+      expect(tree.answerAt(Fen.initial), isNull);
+      tree.want();
+      await settled(tree);
+      expect(movesOf(tree.answerAt(Fen.initial)), hasLength(3));
+    },
+  );
 
   test('the same file read again with another number of games drops the '
       'tree, whose numbers would name other games', () async {

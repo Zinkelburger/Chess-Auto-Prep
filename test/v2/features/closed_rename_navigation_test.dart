@@ -104,7 +104,7 @@ void main() {
         await disk.dispose();
       });
       var changed = false;
-      session.leaving.addListener(() {
+      session.committingEditors.addListener(() {
         if (changed) return;
         changed = true;
         unawaited(

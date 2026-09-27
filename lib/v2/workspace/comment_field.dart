@@ -52,7 +52,7 @@ class _CommentFieldState extends State<CommentField>
   void initState() {
     super.initState();
     _focus.addListener(_onFocusChanged);
-    widget.session.leaving.addListener(_commitBeforeLeaving);
+    widget.session.committingEditors.addListener(_commitBeforeCommand);
     changed();
   }
 
@@ -61,8 +61,8 @@ class _CommentFieldState extends State<CommentField>
   @override
   void didUpdateWidget(CommentField old) {
     if (old.session != widget.session) {
-      old.session.leaving.removeListener(_commitBeforeLeaving);
-      widget.session.leaving.addListener(_commitBeforeLeaving);
+      old.session.committingEditors.removeListener(_commitBeforeCommand);
+      widget.session.committingEditors.addListener(_commitBeforeCommand);
       _commit(old.session);
       _at = null;
     }
@@ -74,7 +74,7 @@ class _CommentFieldState extends State<CommentField>
     // Words typed into the field are the user's whether or not they left it
     // first, so the field going away writes them like any other commit.
     stopListening();
-    widget.session.leaving.removeListener(_commitBeforeLeaving);
+    widget.session.committingEditors.removeListener(_commitBeforeCommand);
     _focus.removeListener(_onFocusChanged);
     _commit();
     _focus.dispose();
@@ -86,10 +86,9 @@ class _CommentFieldState extends State<CommentField>
     if (!_focus.hasFocus) _commit();
   }
 
-  /// Another document or game is going up while the words are still in the
-  /// field — a puzzle moving on, a download landing — so they go into the
-  /// one they were typed for while it is still the session's.
-  void _commitBeforeLeaving() => _commit();
+  /// Save or navigation needs the draft, including text whose field still
+  /// has focus. It goes to the move it was typed for before the command runs.
+  void _commitBeforeCommand() => _commit();
 
   /// Takes the text of the node the cursor is on now, keeping what the user
   /// typed for the one it was on before.
@@ -127,7 +126,7 @@ class _CommentFieldState extends State<CommentField>
     final text = _controller.text;
     // A path means another move in another document, so words typed for
     // one never go into the next: the session asked for them before it
-    // left ([DocumentSession.leaving]).
+    // left ([DocumentSession.committingEditors]).
     if (at == null || text == _given || _documentOf(session) != _in) return;
     _committing = true;
     try {
