@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:convert';
+import 'package:chess_auto_prep/v2/chess/fen.dart';
 
 import 'package:chess_auto_prep/v2/storage/atomic_write.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
@@ -44,6 +46,19 @@ void main() {
   );
 
   test(
+    'a restarted owner finds only trees starting at the requested board',
+    () async {
+      const fen = '4k3/8/8/8/8/8/4P3/4K3 w - - 0 1';
+      final text = jsonEncode({
+        'tree': {'fen': fen},
+      });
+      await owner().keep(chapter, text, runId: 'saved');
+      expect(await owner().latest(chapter, const Fen(fen)), text);
+      expect(await owner().latest(chapter, const Fen('different')), isNull);
+    },
+  );
+
+  test(
     'lost acknowledgement reopens exact artifact without another run',
     () async {
       const text = '{"format":"opening_tree","version":4}';
@@ -56,7 +71,10 @@ void main() {
       expect(await artifact.readAsString(), text);
       await owner().keep(chapter, text, runId: 'fixed-id');
       expect(await artifact.parent.parent.list().length, 1);
-      await owner().keep(chapter, 'different', runId: 'fixed-id');
+      await expectLater(
+        owner().keep(chapter, 'different', runId: 'fixed-id'),
+        throwsA(isA<FileSystemException>()),
+      );
       expect(await artifact.readAsString(), text, reason: 'one tree per run');
     },
   );
@@ -73,9 +91,12 @@ void main() {
     },
   );
 
-  test('a chapter moved or deleted mid-search is skipped quietly', () async {
+  test('a missing source leaves a visible retryable failure', () async {
     await File(chapter.path).delete();
-    await owner().keep(chapter, 'tree', runId: 'fixed-id');
+    await expectLater(
+      owner().keep(chapter, 'tree', runId: 'fixed-id'),
+      throwsA(isA<FileSystemException>()),
+    );
     expect(await artifact.exists(), isFalse);
   });
 

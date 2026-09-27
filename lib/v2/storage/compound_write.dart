@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import '../diagnostics/log.dart';
 import 'journal_records.dart';
+import 'line_progress.dart';
 import 'recovery_quarantine.dart';
 import 'atomic_write.dart';
 import 'compound_commit.dart';
@@ -18,14 +19,15 @@ enum CompoundWriteStep {
   intent,
   document,
   secondaryDocument,
+  training,
   books,
   completed,
 }
 
-/// One PGN and books, or two PGNs, under locks owned by the caller.
+/// One PGN and books, or two PGNs with their training files, under caller locks.
 ///
 /// The edit is written down in `Support/compound-writes/<id>.json` before
-/// either file changes, and the record is removed once both have. A process
+/// any participant changes, and the record is removed once all have. A process
 /// killed in between leaves the record, and the next start finishes it
 /// ([recover]). A record that cannot be finished — a participant changed
 /// since, or the record is damaged — is set aside and logged rather than
@@ -102,6 +104,7 @@ final class CompoundWrites {
     if (command.secondary case final secondary?) {
       return CompoundCommit.pair(
         id: command.id,
+        training: command.training,
         primary: CompoundDocument(
           path: canonical(command.documentPath),
           before: command.documentBefore,
@@ -218,6 +221,14 @@ final class CompoundWrites {
       await _publish(_books, command.booksBefore, command.booksAfter);
       await testHook?.call(CompoundWriteStep.books);
     }
+    for (final file in command.training) {
+      await _publish(
+        p.join(documents.path, file.name),
+        file.before,
+        file.after,
+      );
+    }
+    await testHook?.call(CompoundWriteStep.training);
     _completed[command.id] = command;
     if (_completed.length > _remembered) {
       final oldest = _completed.keys.first;
@@ -249,6 +260,15 @@ final class CompoundWrites {
         await recoveryText(document.path),
         document.before,
         allowAfter ? document.after : document.before,
+      );
+    }
+    for (final file in command.training) {
+      final path = p.join(documents.path, file.name);
+      _expect(
+        path,
+        await recoveryText(path),
+        file.before,
+        allowAfter ? file.after : file.before,
       );
     }
     if (command.secondary == null) {
@@ -345,6 +365,22 @@ final class CompoundWrites {
       _utf8(document.before);
       _utf8(document.after);
     }
+    if (command.training.isNotEmpty &&
+        (command.secondary == null ||
+            command.training.length != trainingParticipants.length ||
+            command.training.map((f) => f.name).toSet().length !=
+                trainingParticipants.length ||
+            command.training.any(
+              (f) => !trainingParticipants.contains(f.name),
+            ))) {
+      throw const RecoveryRequired(
+        'Invalid training participants in compound edit.',
+      );
+    }
+    for (final file in command.training) {
+      if (file.before != null) _utf8(file.before!);
+      if (file.after != null) _utf8(file.after!);
+    }
     for (final books in [command.booksBefore, command.booksAfter]) {
       if (books == null) continue;
       _utf8(books);
@@ -365,7 +401,9 @@ final class _Note {
 
   Map<String, Object?> json() => command.secondary != null
       ? {
-          'version': 2,
+          'version': command.training.isEmpty ? 2 : 3,
+          if (command.training.isNotEmpty)
+            'training': [for (final file in command.training) file.toJson()],
           'id': command.id,
           'state': 'committing',
           'documents': [
@@ -392,7 +430,7 @@ final class _Note {
 _Note _decode(String id, Object? json) {
   if (json is Map<String, Object?> &&
       json['version'] is int &&
-      json['version'] == 2) {
+      (json['version'] == 2 || json['version'] == 3)) {
     return _decodePair(id, json);
   }
   const fields = {
@@ -436,7 +474,13 @@ _Note _decode(String id, Object? json) {
 }
 
 _Note _decodePair(String id, Map<String, Object?> json) {
-  const fields = {'version', 'id', 'state', 'documents'};
+  final fields = {
+    'version',
+    'id',
+    'state',
+    'documents',
+    if (json['version'] == 3) 'training',
+  };
   final entries = json['documents'];
   if (json.length != fields.length ||
       !json.keys.every(fields.contains) ||
@@ -467,6 +511,7 @@ _Note _decodePair(String id, Map<String, Object?> json) {
   return _Note(
     CompoundCommit.pair(
       id: id,
+      training: json['version'] == 3 ? _training(json['training']) : const [],
       primary: document(entries[0]),
       secondary: document(entries[1]),
     ),
@@ -488,7 +533,9 @@ bool _same(CompoundCommit a, CompoundCommit b) =>
     a.booksAfter == b.booksAfter &&
     a.secondary?.path == b.secondary?.path &&
     a.secondary?.before == b.secondary?.before &&
-    a.secondary?.after == b.secondary?.after;
+    a.secondary?.after == b.secondary?.after &&
+    jsonEncode(a.training.map((f) => f.toJson()).toList()) ==
+        jsonEncode(b.training.map((f) => f.toJson()).toList());
 
 void _validateId(String id) {
   if (RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$').stringMatch(id) != id) {
@@ -521,4 +568,28 @@ Future<T> _checked<T>(Future<T> Function() work) async {
       'Compound metadata appeared during preparation.',
     );
   }
+}
+
+List<CompoundTraining> _training(Object? value) {
+  if (value is! List<Object?> || value.length != trainingParticipants.length) {
+    throw const RecoveryRequired('Invalid training snapshots.');
+  }
+  return [for (final row in value) _trainingFile(row)];
+}
+
+CompoundTraining _trainingFile(Object? row) {
+  if (row is! Map<String, Object?> ||
+      row.length != 3 ||
+      !row.keys.every({'name', 'before', 'after'}.contains) ||
+      row['name'] is! String ||
+      !trainingParticipants.contains(row['name']) ||
+      (row['before'] != null && row['before'] is! String) ||
+      (row['after'] != null && row['after'] is! String)) {
+    throw const RecoveryRequired('Invalid training snapshot.');
+  }
+  return CompoundTraining(
+    name: row['name'] as String,
+    before: row['before'] as String?,
+    after: row['after'] as String?,
+  );
 }

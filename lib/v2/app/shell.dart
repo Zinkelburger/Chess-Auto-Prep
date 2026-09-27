@@ -8,6 +8,7 @@ import 'package:multi_split_view/multi_split_view.dart';
 
 import '../features/books/books_screen.dart' show newBook;
 import '../features/library/outline_panel.dart';
+import '../features/library/pgn_drop_region.dart';
 import '../features/settings/setting_rows.dart';
 import '../features/settings/settings_dialog.dart';
 import '../features/tactics/my_games_block.dart';
@@ -26,6 +27,7 @@ import '../workspace/book_chip.dart';
 import '../workspace/copy_name_dialog.dart';
 import '../storage/finds_store.dart';
 import '../workspace/fill_gaps.dart';
+import '../workspace/fill_states.dart';
 import '../workspace/finds_panel.dart';
 import '../workspace/move_field.dart';
 import '../workspace/workspace.dart';
@@ -483,7 +485,13 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
           say: _requests.say,
           child: ListenableBuilder(
             listenable: Listenable.merge([_requests, widget.labs.offered]),
-            builder: (context, _) => _window(_view.screen(_screenKeys)),
+            builder: (context, _) => _requests.mode == Mode.repertoires
+                ? PgnDropRegion(
+                    library: _docs.library,
+                    onOpen: (ref) => unawaited(_requests.open(ref)),
+                    child: _window(_view.screen(_screenKeys)),
+                  )
+                : _window(_view.screen(_screenKeys)),
           ),
         ),
       ),

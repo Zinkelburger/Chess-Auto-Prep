@@ -4,6 +4,8 @@ import 'package:chess_auto_prep/v2/chess/pgn/games_written.dart';
 import 'package:chess_auto_prep/v2/storage/compound_write.dart';
 import 'package:chess_auto_prep/v2/storage/compound_commit.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
+import 'package:chess_auto_prep/v2/storage/training_rows.dart';
+import 'package:path/path.dart' as p;
 import 'package:chess_auto_prep/v2/storage/document_repository.dart';
 import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
@@ -35,6 +37,129 @@ void main() {
     target = await edit('Target');
   });
   tearDown(() => disk.dispose());
+
+  DocumentEdit moving() => DocumentEdit(
+    ref: source.ref,
+    text: source.text,
+    expected: source.expected,
+    scope: source.scope,
+    movedLines: const {'old': 'new'},
+  );
+  File progress() => File(p.join(disk.documents.path, streaksFile));
+  String rows(String path, String id) =>
+      '$streaksHeader\n$path,$id,0,3,1\nother,untouched,1,2,0\n';
+
+  test(
+    'line history follows a move and the whole transaction can be undone',
+    () async {
+      final original = rows(source.ref.path, 'old');
+      await progress().writeAsString(original);
+      final saved =
+          await disk.store.savePair(moving(), target, operationId: 'history')
+              as Saved;
+      expect(await progress().readAsString(), rows(target.ref.path, 'new'));
+      expect(saved.receipt.compound!.training, hasLength(4));
+      final undone = await disk.store.save(
+        source.ref,
+        saved.receipt.before,
+        expected: saved.receipt.committed,
+        scope: RestoredVersion(inverse: saved.receipt.compound),
+      );
+      expect(undone, isA<Saved>());
+      expect(await progress().readAsString(), original);
+    },
+  );
+
+  test(
+    'new training after a move prevents undo from overwriting progress',
+    () async {
+      await progress().writeAsString(rows(source.ref.path, 'old'));
+      final saved =
+          await disk.store.savePair(
+                moving(),
+                target,
+                operationId: 'new-history',
+              )
+              as Saved;
+      final later = rows(
+        target.ref.path,
+        'new',
+      ).replaceFirst(',0,3,1', ',0,4,1');
+      await progress().writeAsString(later);
+      final undone = await disk.store.save(
+        source.ref,
+        saved.receipt.before,
+        expected: saved.receipt.committed,
+        scope: RestoredVersion(inverse: saved.receipt.compound),
+      );
+      expect(undone, isNot(isA<Saved>()));
+      expect(await progress().readAsString(), later);
+      expect(await File(source.ref.path).readAsString(), after);
+    },
+  );
+
+  for (final step in [
+    CompoundWriteStep.document,
+    CompoundWriteStep.secondaryDocument,
+    CompoundWriteStep.training,
+  ]) {
+    test('line history recovers with both PGNs after ${step.name}', () async {
+      await progress().writeAsString(rows(source.ref.path, 'old'));
+      final interrupted = PgnFileStore(
+        documents: disk.documents,
+        support: disk.support,
+        compoundHook: (at) async {
+          if (at == step) throw StateError('interrupted');
+        },
+      );
+      expect(
+        await interrupted.savePair(
+          moving(),
+          target,
+          operationId: 'recover-progress',
+        ),
+        isA<IoFailure>(),
+      );
+      final restarted = PgnFileStore(
+        documents: disk.documents,
+        support: disk.support,
+      );
+      expect(
+        await restarted.savePair(
+          moving(),
+          target,
+          operationId: 'recover-progress',
+        ),
+        isA<Saved>(),
+      );
+      expect(await progress().readAsString(), rows(target.ref.path, 'new'));
+      expect(await File(source.ref.path).readAsString(), after);
+      expect(await File(target.ref.path).readAsString(), after);
+    });
+  }
+
+  test(
+    'malformed or colliding history refuses before either PGN is changed',
+    () async {
+      for (final invalid in [
+        'not a training file',
+        rows(target.ref.path, 'new'),
+      ]) {
+        await progress().writeAsString(invalid);
+        expect(
+          await disk.store.savePair(
+            moving(),
+            target,
+            operationId: 'refuse-history',
+          ),
+          isA<SaveRefused>(),
+        );
+        expect(await progress().readAsString(), invalid);
+        expect(await File(source.ref.path).readAsString(), before);
+        expect(disk.keptTexts(source.ref), isEmpty);
+      }
+    },
+  );
 
   test('one receipt commits and undoes both files with both backups', () async {
     final result = await disk.store.savePair(
@@ -140,8 +265,9 @@ void main() {
         documents: disk.documents,
         support: disk.support,
         compoundHook: (step) async {
-          if (step == CompoundWriteStep.completed)
+          if (step == CompoundWriteStep.completed) {
             throw StateError('lost acknowledgement');
+          }
         },
       );
       expect(

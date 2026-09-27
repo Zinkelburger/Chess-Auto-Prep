@@ -19,8 +19,8 @@ final class DraftNotWritten extends DraftPublication {
 
 /// A search's lines as a new draft chapter beside the one it was run on,
 /// under the first free name: "Chapter (draft)", "Chapter (draft 2)", …
-/// A draft is only ever created, never written over; a failed write leaves
-/// at worst a draft the user can delete, and asking again picks a new name.
+/// A draft is only created. An uncertain acknowledgement retains the exact
+/// path and bytes; retry acknowledges an equal file and never makes a copy.
 final class GeneratedDraft {
   GeneratedDraft({
     required this.documents,
@@ -36,25 +36,69 @@ final class GeneratedDraft {
 
   static const _names = 20;
 
-  Future<DraftPublication> write() async {
-    try {
-      for (var n = 1; n <= _names; n++) {
-        final name = n == 1 ? '$chapter (draft)' : '$chapter (draft $n)';
-        final ref = ChapterRef.at(p.join(folder, '$name.pgn'));
-        switch (await documents.create(ref, textFor(name))) {
-          case Created():
-            return DraftWritten(ref);
-          case Collision():
-            continue;
-          case IoFailure(:final detail):
-            return DraftNotWritten('The draft could not be written: $detail');
-        }
+  int _number = 1;
+  ChapterRef? _target;
+  String? _text;
+  bool _uncertain = false;
+  DraftWritten? _completed;
+  Future<DraftPublication>? _writing;
+
+  Future<DraftPublication> write() => _writing ??= _write()
+      .catchError((Object error) {
+        _uncertain = true;
+        return DraftNotWritten('The draft could not be written: $error');
+      })
+      .whenComplete(() {
+        _writing = null;
+      });
+
+  Future<DraftPublication> _write() async {
+    if (_completed case final done?) return done;
+    for (; _number <= _names; _number++) {
+      final name = _number == 1
+          ? '$chapter (draft)'
+          : '$chapter (draft $_number)';
+      final ref = _target ??= ChapterRef.at(p.join(folder, '$name.pgn'));
+      final text = _text ??= textFor(name);
+      if (_uncertain) {
+        final verified = await _verify(ref, text);
+        if (verified != null) return verified;
       }
-      return const DraftNotWritten(
-        'Too many drafts of this chapter already; delete some first.',
-      );
-    } on Object catch (error) {
-      return DraftNotWritten('The draft could not be written: $error');
+      final result = await documents.create(ref, text);
+      switch (result) {
+        case Created():
+          return _completed = DraftWritten(ref);
+        case Collision():
+          if (_uncertain) {
+            return const DraftNotWritten(
+              'The draft destination changed. Retry to verify it.',
+            );
+          }
+          _target = null;
+          _text = null;
+        case IoFailure(:final detail):
+          _uncertain = true;
+          return DraftNotWritten('The draft could not be written: $detail');
+      }
+    }
+    _number = 1;
+    return const DraftNotWritten(
+      'Too many drafts of this chapter already; delete some first.',
+    );
+  }
+
+  Future<DraftPublication?> _verify(ChapterRef ref, String text) async {
+    switch (await documents.open(ref)) {
+      case Opened(text: final observed):
+        return observed == text
+            ? _completed = DraftWritten(ref)
+            : const DraftNotWritten(
+                'The draft destination contains different words. Nothing was replaced.',
+              );
+      case Unreadable(:final detail):
+        return DraftNotWritten('The draft could not be verified: $detail');
+      case Absent():
+        return null;
     }
   }
 }

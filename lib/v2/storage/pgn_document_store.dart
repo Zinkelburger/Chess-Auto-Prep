@@ -97,12 +97,18 @@ final class DocumentEdit {
     required this.text,
     required this.expected,
     required this.scope,
+    this.movedLines = const {},
+    this.foldedLines = const {},
   });
 
   final DocumentRef ref;
   final String text;
   final Revision expected;
   final EditScope scope;
+
+  /// Source training ids to destination ids, for the primary of a line move.
+  final Map<String, String> movedLines;
+  final Set<String> foldedLines;
 }
 
 sealed class DocumentRead {

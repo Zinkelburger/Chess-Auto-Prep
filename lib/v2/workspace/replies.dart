@@ -201,7 +201,8 @@ final class Replies extends ChangeNotifier {
     for (final MapEntry(key: uci, value: share) in shares.entries) {
       final at = indexOfReply(fen, siblings, uci);
       final played = at >= 0;
-      if (share < shownFrom && !played) continue;
+      final qualifies = !ourMove && reach != null && reach * share >= floor;
+      if (share < shownFrom && !played && !qualifies) continue;
       final move = Move.parse(uci);
       final node = move == null ? null : moveNode(fen, move);
       if (node == null) continue;

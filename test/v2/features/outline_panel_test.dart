@@ -297,7 +297,7 @@ void main() {
     await tester.enterText(find.byType(TextField), 'indian');
     await tester.pumpAndSettle();
     expect(find.text("Queen's"), findsNothing);
-    expect(find.text('Indian'), findsOneWidget);
+    expect(find.text('Indian'), findsNWidgets(2));
 
     await tester.enterText(find.byType(TextField), 'benoni');
     await tester.pumpAndSettle();

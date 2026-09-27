@@ -1,3 +1,4 @@
+import '../chess/generation/evaluation_source.dart';
 import 'dart:async';
 
 import 'package:dartchess/dartchess.dart' show Side;
@@ -17,6 +18,7 @@ import '../ui/listening_state.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
 import 'fill_gaps.dart';
+import 'fill_states.dart';
 import 'finds.dart';
 import 'line_preview.dart';
 
@@ -116,7 +118,9 @@ class _SearchPaneState extends State<SearchPane>
     return value != null && value >= min && value <= max ? value : null;
   }
 
-  Future<void> _search() async {
+  EvaluationSource _source = EvaluationSource.stockfish;
+
+  Future<void> _search({bool resume = false}) async {
     final elo = _number(_elo, Settings.minElo, Settings.maxElo);
     // An empty depth is no depth: the search goes on until it is stopped.
     final unbounded = _depth.text.trim().isEmpty;
@@ -135,9 +139,10 @@ class _SearchPaneState extends State<SearchPane>
     if (s.opponentElo != elo) {
       unawaited(widget.settings.update(s.copyWith(opponentElo: elo)));
     }
-    final refusal = await widget.fill.start(
-      FillRequest(elo: elo, depthPlies: depth),
-    );
+    final request = FillRequest(elo: elo, depthPlies: depth, source: _source);
+    final refusal = resume
+        ? await widget.fill.resume(request)
+        : await widget.fill.start(request);
     if (!mounted || refusal == null) return;
     setState(() => _problem = refusal);
   }
@@ -179,10 +184,54 @@ class _SearchPaneState extends State<SearchPane>
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _form(context),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Space.m),
+              child: DropdownButton<EvaluationSource>(
+                isExpanded: true,
+                value: _source,
+                items: [
+                  for (final source in EvaluationSource.values)
+                    DropdownMenuItem(value: source, child: Text(source.label)),
+                ],
+                onChanged: widget.fill.running
+                    ? null
+                    : (value) {
+                        if (value != null) setState(() => _source = value);
+                      },
+              ),
+            ),
             _status(context),
             const Divider(height: 1),
             Expanded(child: _table(context)),
+            if (widget.fill.treeSaveProblem != null)
+              Padding(
+                padding: const EdgeInsets.all(Space.m),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(widget.fill.treeSaveProblem!),
+                    Wrap(
+                      spacing: Space.s,
+                      children: [
+                        OutlinedButton(
+                          onPressed: () => unawaited(widget.fill.retryTree()),
+                          child: const Text('Retry saving tree'),
+                        ),
+                        TextButton(
+                          onPressed: widget.fill.discardTreeSave,
+                          child: const Text('Discard tree save'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ?_linesRow(context),
+            if (widget.fill.canDiscardDraft)
+              TextButton(
+                onPressed: widget.fill.discardDraftSave,
+                child: const Text('Discard draft save'),
+              ),
           ],
         ),
       ),
@@ -215,15 +264,28 @@ class _SearchPaneState extends State<SearchPane>
             hint: 'Any',
           ),
           const Spacer(),
-          if (running == null)
+          if (running == null) ...[
             Tooltip(
-              message: withKey('Search from the board', 'Ctrl+G'),
+              message:
+                  'Continue a search from this board, including a saved search',
+              child: IconButton(
+                icon: const Icon(Icons.playlist_play),
+                onPressed: fill.canStart
+                    ? () => unawaited(_search(resume: true))
+                    : null,
+              ),
+            ),
+            Tooltip(
+              message: withKey(
+                'Search from the board (pauses after $fillNodeBudget new positions)',
+                'Ctrl+G',
+              ),
               child: FilledButton(
                 onPressed: fill.canStart ? () => unawaited(_search()) : null,
                 child: const Text('Search'),
               ),
-            )
-          else ...[
+            ),
+          ] else ...[
             // A search with a depth ends there by itself.
             if (running.of == null) ...[
               Tooltip(
@@ -266,7 +328,7 @@ class _SearchPaneState extends State<SearchPane>
       _ when _problem != null => (_problem!, true),
       FillIdle() => (
         'Plays every move from here, $forSide, level by level'
-            '${widget.fill.depth == null ? ' until you stop it' : ''}.',
+            '${widget.fill.depth == null ? ' until stopped or the position budget is reached' : ''}.',
         false,
       ),
       FillRunning(
@@ -284,12 +346,18 @@ class _SearchPaneState extends State<SearchPane>
                     '${lastPly == null ? '' : ' · stops after depth $lastPly'}',
           false,
         ),
-      FillDone(:final depth, :final nodes, :final complete) => (
-        '${complete ? 'Searched' : 'Stopped at'} depth $depth $forSide · '
-            '$nodes positions · rated ${found?.request.elo ?? ''}'
-            '${_findsWords()}',
-        false,
-      ),
+      FillDone(
+        :final depth,
+        :final nodes,
+        :final complete,
+        :final budgetReached,
+      ) =>
+        (
+          '${complete ? 'Searched' : 'Stopped at'} depth $depth $forSide · '
+              '$nodes positions · rated ${found?.request.elo ?? ''}'
+              '${budgetReached ? ' · position budget reached' : ''}${complete ? '' : ' · Resume to continue'}${_findsWords()}',
+          false,
+        ),
       FillFailed(:final reason) => (reason, true),
     };
     return Padding(
@@ -436,6 +504,28 @@ class _SearchPaneState extends State<SearchPane>
     );
   }
 
+  Widget _writtenLines(BuildContext context, LinesWritten lines) {
+    final theme = Theme.of(context);
+    final open = widget.onOpenChapter;
+    final count = lines.lines == 1 ? '1 line' : '${lines.lines} lines';
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            '$count in ${lines.draft.name}',
+            style: theme.textTheme.bodySmall,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        if (open != null)
+          OutlinedButton(
+            onPressed: () => open(lines.draft),
+            child: const Text('Open'),
+          ),
+      ],
+    );
+  }
+
   /// Under a finished search on a repertoire chapter: the way to turn it
   /// into lines, or what became of that.
   Widget? _linesRow(BuildContext context) {
@@ -444,24 +534,7 @@ class _SearchPaneState extends State<SearchPane>
     final lines = fill.lines;
     final Widget child;
     if (lines is LinesWritten) {
-      final open = widget.onOpenChapter;
-      final count = lines.lines == 1 ? '1 line' : '${lines.lines} lines';
-      child = Row(
-        children: [
-          Expanded(
-            child: Text(
-              '$count in ${lines.draft.name}',
-              style: theme.textTheme.bodySmall,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (open != null)
-            OutlinedButton(
-              onPressed: () => open(lines.draft),
-              child: const Text('Open'),
-            ),
-        ],
-      );
+      child = _writtenLines(context, lines);
     } else if (fill.canMakeLines || lines is LinesWriting) {
       child = Row(
         children: [

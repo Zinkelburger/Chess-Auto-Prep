@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
-import '../diagnostics/log.dart';
+import '../chess/fen.dart';
 import 'atomic_write.dart';
 import 'chapter_files.dart';
 import 'file_lock.dart';
@@ -20,10 +21,11 @@ typedef TreeKeeper =
       required String runId,
     });
 
+typedef TreeLoader = Future<String?> Function(ChapterRef chapter, Fen root);
+
 /// Search trees in the existing `.cap-generation` layout beside the chapter.
-/// They are derived data: a tree that cannot be kept — the chapter was moved
-/// or deleted meanwhile, the disk is full — is logged and skipped, and never
-/// stops the next search. Writing shares the document lock, so a folder move
+/// Failures are reported to the retained save obligation for exact retry.
+/// Writing shares the document lock, so a folder move
 /// cannot pass between checking the chapter and writing its tree.
 final class GenerationTrees {
   GenerationTrees(this.recovery, {this.afterPublish});
@@ -61,8 +63,9 @@ final class GenerationTrees {
         }
         await _ancestry(root.path, p.dirname(source), create: false);
         if ((await observeFile(source)).status != 0) {
-          log.i('search tree not kept: $source is gone');
-          return;
+          throw const FileSystemException(
+            'The source chapter is no longer available.',
+          );
         }
         await _ancestry(root.path, folder, create: true);
         if (canonicalRecoveryRoot(recovery.documents).path != root.path) {
@@ -75,10 +78,67 @@ final class GenerationTrees {
     );
   }
 
+  /// Most recent run for this exact board. Linked directories are never read.
+  Future<String?> latest(ChapterRef chapter, Fen rootFen) => recovery.run(
+    () async {
+      final configured = p.normalize(recovery.documents.absolute.path);
+      if (!p.isAbsolute(chapter.path) ||
+          p.normalize(chapter.path) != chapter.path ||
+          !p.isWithin(configured, chapter.path)) {
+        throw const FileSystemException('Invalid saved search location.');
+      }
+      final root = recovery.training.documents;
+      final source = p.join(
+        root.path,
+        p.relative(chapter.path, from: configured),
+      );
+      final folder = p.join(
+        p.dirname(source),
+        '.cap-generation',
+        p.basename(source),
+      );
+      if (await FileSystemEntity.type(folder, followLinks: false) ==
+          FileSystemEntityType.notFound) {
+        return null;
+      }
+      await _ancestry(root.path, folder, create: false);
+      final candidates = <({String path, DateTime modified})>[];
+      await for (final entry in Directory(folder).list(followLinks: false)) {
+        if (entry is! Directory || !p.basename(entry.path).startsWith('v2-')) {
+          continue;
+        }
+        final file = p.join(entry.path, 'tree.json');
+        if ((await observeFile(file)).status != 0) continue;
+        candidates.add((
+          path: file,
+          modified: (await File(file).stat()).modified,
+        ));
+      }
+      candidates.sort((a, b) => b.modified.compareTo(a.modified));
+      for (final candidate in candidates) {
+        final text = await recoveryText(candidate.path);
+        if (text == null) continue;
+        if (await _startsAt(text, rootFen.value)) return text;
+      }
+      return null;
+    },
+  );
+
   /// A tree already written for this run is left as it is. Whatever a crash
   /// left at the staging name is removed first — unlinked, never followed.
   Future<void> _publish(String path, List<int> bytes) async {
-    if ((await observeFile(path)).status != 1) return;
+    final observed = await observeFile(path);
+    if (observed.status == 0) {
+      if (await recoveryText(path) != utf8.decode(bytes)) {
+        throw const FileSystemException(
+          'A different tree already occupies this run.',
+        );
+      }
+      return;
+    }
+    if (observed.status != 1) {
+      throw const FileSystemException('The saved tree cannot be verified.');
+    }
     final stage = temporaryPathFor(path);
     if (await FileSystemEntity.type(stage, followLinks: false) !=
         FileSystemEntityType.notFound) {
@@ -109,3 +169,14 @@ final class GenerationTrees {
     }
   }
 }
+
+Future<bool> _startsAt(String text, String fen) => Isolate.run(() {
+  try {
+    final json = jsonDecode(text);
+    return json is Map &&
+        json['tree'] is Map &&
+        (json['tree'] as Map)['fen'] == fen;
+  } on FormatException {
+    return false;
+  }
+});

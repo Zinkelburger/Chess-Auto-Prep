@@ -4,9 +4,9 @@ import 'package:dartchess/dartchess.dart' show Side;
 ///
 /// The defaults are a small search for tests and hand-built trees: four
 /// half-moves ahead, every move within two pawns of the best one. The
-/// Search tab asks for no limit at all by default: every legal move of ours,
+/// Search tab has no horizon by default: every legal move of ours,
 /// every reply the model gives any weight, level by level until the user
-/// stops it (`FillRequest` in `workspace/fill_gaps.dart`). A deeper horizon
+/// stops it or the resource budget pauses it (`FillRequest`). A deeper horizon
 /// costs exponentially more.
 final class SearchConfig {
   const SearchConfig({
@@ -35,8 +35,8 @@ final class SearchConfig {
   final int? lossLimitCp;
 
   /// The most nodes the tree may hold, the root counted among them. Null
-  /// runs to the horizon however large that is. The Search tab sets none;
-  /// the old app's builds do, and their `max_nodes` is read back here.
+  /// runs to the horizon however large that is. The Search tab permits 25,000
+  /// new nodes per user-started batch; resume retains the existing tree.
   ///
   /// An expansion is begun only when every legal move of the position would
   /// still fit, which is what keeps expansions whole: the count is taken

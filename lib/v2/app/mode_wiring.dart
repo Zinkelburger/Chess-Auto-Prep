@@ -38,6 +38,7 @@ DocumentModes wireDocumentModes(
 ) {
   final library = Library(
     files: env.chapterFiles,
+    backupHistory: env.backupHistory,
     pendingWrites: env.pendingWrites,
     catalog: catalog,
     documents: env.store,

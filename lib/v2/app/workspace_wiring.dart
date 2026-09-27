@@ -1,6 +1,9 @@
 import 'dart:async';
 
+import '../chess/generation/evaluation_source.dart';
+
 import '../engines/engine_supervisor.dart';
+import '../net/search_evaluator.dart';
 import '../engines/fixed_depth.dart';
 import '../workspace/repertoire_catalog.dart';
 import '../storage/my_games_files.dart';
@@ -9,6 +12,7 @@ import '../workspace/engine_analysis.dart';
 import '../workspace/explorer.dart';
 import '../workspace/file_filter.dart';
 import '../workspace/fill_gaps.dart';
+import '../workspace/fill_states.dart';
 import '../workspace/finds.dart';
 import '../workspace/game_fetcher.dart';
 import '../workspace/gap_hunt.dart';
@@ -137,6 +141,7 @@ final class WorkspaceWiring {
     documents: _env.store,
     tools: _fillTools,
     keepTree: _env.keepTree,
+    loadTree: _env.loadTree,
     pendingWrites: _env.pendingWrites,
     finds: _finds,
     clock: _env.now,
@@ -153,18 +158,29 @@ final class WorkspaceWiring {
   /// shared, and quitting this one when the run ends costs nothing the pane
   /// has to rebuild.
   Future<FillToolsResult> _fillTools(FillRequest request) async {
-    return switch (await _env.startEngine()) {
-      StartFailed(:final reason) => FillUnavailable(reason),
-      Started(:final engine) => FillReady(
-        evaluator: CachedEvaluator(
-          FixedDepthEvaluator(engine, depth: fillEvalDepth),
-          _env.evalCache(),
-          depth: fillEvalDepth,
-        ),
-        policy: MaiaOpponent(_env.maia, elo: request.elo),
-        release: engine.quit,
-      ),
-    };
+    final started = await _env.startEngine();
+    if (started is StartFailed) return FillUnavailable(started.reason);
+    final engine = (started as Started).engine;
+    final local = CachedEvaluator(
+      FixedDepthEvaluator(engine, depth: fillEvalDepth),
+      _env.evalCache(),
+      depth: fillEvalDepth,
+    );
+    final remote = request.source == EvaluationSource.stockfish
+        ? null
+        : SearchEvaluator(
+            source: request.source,
+            fallback: local,
+            minDepth: fillEvalDepth,
+          );
+    return FillReady(
+      evaluator: remote ?? local,
+      policy: MaiaOpponent(_env.maia, elo: request.elo),
+      release: () async {
+        remote?.close();
+        await engine.quit();
+      },
+    );
   }
 
   /// Starts the engine once the settings are read, and from then on has it

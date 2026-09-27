@@ -165,7 +165,10 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 250));
 
       expect(outline.lines.map((line) => line.name), ['Indian']);
-      expect(outline.chapters.map((chapter) => chapter.name), ['Main']);
+      expect(outline.chapters.map((chapter) => chapter.name), [
+        'Main',
+        'Sidelines',
+      ]);
     },
   );
 

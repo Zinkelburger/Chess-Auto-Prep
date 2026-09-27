@@ -115,6 +115,46 @@ final class ChapterOutline extends ChangeNotifier {
   final _current = ValueNotifier<int?>(null);
   final _currentRows = Selection<int?>();
   bool _disposed = false;
+  final _index = <ChapterRef, List<OutlineLine>>{};
+  int _indexGeneration = 0;
+  bool searching = false;
+  String? searchProblem;
+
+  List<OutlineLine> matchesIn(ChapterRef ref) => ref == _session.source
+      ? lines
+      : [
+          for (final line in _index[ref] ?? const <OutlineLine>[])
+            if (_matches(line.text)) line,
+        ];
+
+  Future<void> _indexChapters() async {
+    final generation = ++_indexGeneration;
+    searchProblem = null;
+    if (_search.typed.trim().isEmpty) {
+      searching = false;
+      return;
+    }
+    searching = true;
+    notifyListeners();
+    for (final ref in repertoire?.chapters ?? const <ChapterRef>[]) {
+      if (_index.containsKey(ref) || ref == _session.source) continue;
+      try {
+        final chapter = await _library.chapterForSearch(ref);
+        if (_disposed || generation != _indexGeneration) return;
+        if (chapter == null) {
+          searchProblem = 'Some chapters could not be searched.';
+          continue;
+        }
+        _index[ref] = _linesOf(chapter);
+      } on Object {
+        if (_disposed || generation != _indexGeneration) return;
+        searchProblem = 'Some chapters could not be searched.';
+      }
+    }
+    if (_disposed || generation != _indexGeneration) return;
+    searching = false;
+    notifyListeners();
+  }
 
   /// What the user has typed, which the field shows at once even though the
   /// list waits a moment before it narrows.
@@ -126,8 +166,9 @@ final class ChapterOutline extends ChangeNotifier {
     final open = _session.source;
     if (open == null) return null;
     for (final listed in _library.repertoires) {
-      if (listed.chapters.any((chapter) => chapter.path == open.path))
+      if (listed.chapters.any((chapter) => chapter.path == open.path)) {
         return listed;
+      }
     }
     return null;
   }
@@ -179,7 +220,10 @@ final class ChapterOutline extends ChangeNotifier {
   }
 
   void _narrowed() {
-    if (!_disposed) notifyListeners();
+    if (!_disposed) {
+      notifyListeners();
+      unawaited(_indexChapters());
+    }
   }
 
   /// Reads the lines again when the chapter on the board is another value,
@@ -202,8 +246,11 @@ final class ChapterOutline extends ChangeNotifier {
       _cursor = _session.cursor;
       _current.value = _lineHolding(_cursor);
     }
+    if (!identical(repertoires, _repertoires)) _index.clear();
+    if (source != null) _index.remove(source);
     _source = source;
     _repertoires = repertoires;
+    unawaited(_indexChapters());
     notifyListeners();
   }
 
@@ -250,10 +297,8 @@ final class ChapterOutline extends ChangeNotifier {
   bool _matches(String lowercased) => _search.matches(lowercased);
 
   /// Whether a chapter the search did not match by name has a line that
-  /// matches. Only the open chapter has lines to look at, so a search shows
-  /// every other chapter by its name alone.
-  bool _hasMatchingLine(ChapterRef ref) =>
-      ref == _session.source && _lines.any((line) => _matches(line.text));
+  /// matches. Closed chapters are indexed on demand after the debounce.
+  bool _hasMatchingLine(ChapterRef ref) => matchesIn(ref).isNotEmpty;
 
   @override
   void dispose() {

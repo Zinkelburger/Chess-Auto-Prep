@@ -200,17 +200,21 @@ class _Status extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Text(
-                _words,
-                style: text.bodySmall,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              child: Tooltip(
+                message:
+                    'Coverage uses the least-covered choice at each of your '
+                    'turns. Gaps include all alternatives; replies below your '
+                    'frequency setting are excluded.',
+                child: Text(
+                  _words,
+                  style: text.bodySmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
             OutlinedButton.icon(
-              onPressed: (gaps.walk?.gaps ?? const []).isEmpty
-                  ? null
-                  : gaps.nextGap,
+              onPressed: gaps.canNextGap ? gaps.nextGap : null,
               icon: const Icon(Icons.skip_next, size: IconSize.action),
               label: const Text('Next gap'),
             ),

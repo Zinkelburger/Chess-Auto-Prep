@@ -7,14 +7,13 @@ import 'package:path/path.dart' as p;
 
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/chapter_edit.dart';
-import '../../chess/pgn/chapter_line.dart';
 import '../../chess/pgn/chapter_sections.dart';
-import '../../chess/pgn/games_written.dart';
 import '../../chess/pgn/line_id_pins.dart';
 import '../../chess/pgn/line_moves.dart';
 import '../../chess/pgn/repertoire_import.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/pending_writes.dart';
+import '../../storage/backup_history.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/training_records.dart' as records;
 import '../../storage/document_ref.dart';
@@ -29,6 +28,7 @@ import '../../workspace/document_saver.dart';
 import '../../workspace/document_session.dart';
 import '../../workspace/session_results.dart';
 import 'file_changes.dart';
+import 'line_transfers.dart';
 import 'library_state.dart';
 
 /// The user's repertoires: the list, the search over it, and the one change
@@ -38,8 +38,8 @@ import 'library_state.dart';
 /// has, and the list is read again after each of them, so what the screen
 /// shows is what the disk holds rather than what this owner believes it did.
 /// Each change reads the file or folder it touches when it runs; one that
-/// fails leaves nothing pending, and asking again is a fresh change against
-/// the disk as it is then.
+/// fails with a confirmed refusal changes nothing. An uncertain cross-file
+/// line transfer retains its immutable command until its retry is resolved.
 ///
 /// Every write goes through the document store, because that is what carries
 /// the training records and the books' references with it: a chapter's
@@ -56,6 +56,7 @@ final class Library extends ChangeNotifier {
     required DocumentSaver saver,
     required DocumentSession session,
     this.pendingWrites,
+    this.backupHistory,
     required PgnFilePicker picker,
     required String root,
     Books? books,
@@ -109,6 +110,14 @@ final class Library extends ChangeNotifier {
   String _query = '';
   bool _busy = false;
   bool _disposed = false;
+  late final _lineTransfers = LineTransfers(
+    _store,
+    _session,
+    pendingWrites ?? PendingWrites(),
+  );
+  bool get hasPendingLineMove => _lineTransfers.pending;
+  Future<LibraryResult> retryLineMove() =>
+      _run('retry line move', _lineTransfers.retry);
 
   LibraryState get state => _state;
 
@@ -180,20 +189,35 @@ final class Library extends ChangeNotifier {
         return LibraryAdded(ChapterRef.at(ref.path), chapters: 1, lines: 0);
       });
 
+  /// Read one chapter for the outline search, without changing the workspace.
+  Future<Chapter?> chapterForSearch(ChapterRef ref) async {
+    final read = await _store.open(ref);
+    if (read is! store.Opened) return null;
+    return sectionView(
+      await readChapter(name: ref.name, text: read.text),
+      ref.section,
+    ).chapter;
+  }
+
   /// The desktop's file dialog, then [importText] on what the file holds,
   /// named after the file. Null when the user closed the dialog without
   /// choosing.
   Future<LibraryResult?> importFile() async {
     final path = await _picker.pickPgn();
     if (path == null || _disposed) return null;
-    return _run('import $path', () {
-      final name = p.basenameWithoutExtension(path);
-      return _importFile(
-        path,
-        name: importedName(name, fallback: importedFallback),
-      );
-    });
+    return importPath(path);
   }
+
+  Future<LibraryResult> importPath(String path) => _run(
+    'import $path',
+    () => _importFile(
+      path,
+      name: importedName(
+        p.basenameWithoutExtension(path),
+        fallback: importedFallback,
+      ),
+    ),
+  );
 
   /// [text] as a new repertoire called [name], or [name] with ` (2)`,
   /// ` (3)`… when that is taken; [_importText] says what
@@ -381,6 +405,7 @@ final class Library extends ChangeNotifier {
   /// One change at a time, then the list is read again: a half-applied change
   /// must be visible, and the store is the only thing that knows what landed.
   final PendingWrites? pendingWrites;
+  final BackupHistory? backupHistory;
 
   Future<LibraryResult> _run(
     String action,
@@ -394,6 +419,9 @@ final class Library extends ChangeNotifier {
     Future<LibraryResult> Function() body,
   ) async {
     if (_busy) return const LibraryBusy();
+    if (hasPendingLineMove && action != 'retry line move') {
+      return const LibraryFailure('Retry the unfinished line move first.');
+    }
     _busy = true;
     notifyListeners();
     LibraryResult result;
@@ -632,13 +660,8 @@ final class Library extends ChangeNotifier {
   /// their own, or folded into the line at [asSidelineOf] there as
   /// variations.
   ///
-  /// Two files, two saves, in the safe order: the lines are written into
-  /// [to] first, against the revision it was read at, and only then taken
-  /// out of the open chapter. A refusal on the way in changes nothing; a
-  /// refusal on the way out leaves the lines in both files and says so,
-  /// which is a duplicate the user can see rather than a loss they cannot.
-  /// Within one chapter — a line dropped on another line of the same file —
-  /// it is one document folded and then trimmed, through the session.
+  /// Cross-file moves publish both PGNs and their training keys in one
+  /// recoverable transaction. Retry and undo retain that same read set.
   Future<LibraryResult> _moveLines({
     required Set<int> games,
     required ChapterRef to,
@@ -671,33 +694,8 @@ final class Library extends ChangeNotifier {
       if (reason != null) return LibraryFailure(reason);
       return _saved();
     }
-    final written = await _writtenInto(to, lines, asSidelineOf);
-    if (written is! LibraryDone) return written;
-    // [moving] names games of the chapter as it was when the move began. The
-    // user may have opened another chapter or edited this one while [to] was
-    // being written, and those games of it are somebody else's lines.
-    if (_disposed ||
-        _session.source != from ||
-        !identical(_session.chapter, chapter)) {
-      return _notTakenOut(
-        to,
-        from,
-        '${from.name} changed while they were written',
-      );
-    }
-    final reason = _session.apply((c) => linesTakenOut(c, games: moving));
-    if (reason != null) return _notTakenOut(to, from, reason);
-    if (await _saved() is LibraryDone) return const LibraryDone();
-    return _notTakenOut(to, from, '${from.name} could not be saved');
+    return _lineTransfers.move(chapter, from, moving, to, asSidelineOf);
   }
-
-  /// The lines went into [to] and are still in [from]: a duplicate the user
-  /// can see, where the other order of the two saves could lose them.
-  LibraryFailure _notTakenOut(ChapterRef to, ChapterRef from, String why) =>
-      LibraryFailure(
-        'the lines were added to ${to.name} but not taken out of '
-        '${from.name}: $why',
-      );
 
   /// One line folded into another of the open chapter, then taken out.
   LibraryResult _foldedHere(Set<int> games, int? host) {
@@ -710,65 +708,6 @@ final class Library extends ChangeNotifier {
     }
     final reason = _session.apply((c) => linesTakenOut(c, games: games));
     return reason == null ? const LibraryDone() : LibraryFailure(reason);
-  }
-
-  /// Puts [lines] into [to] on disk, or answers why it could not.
-  Future<LibraryResult> _writtenInto(
-    ChapterRef to,
-    List<ChapterLine> lines,
-    int? host,
-  ) async {
-    final read = await _store.open(to);
-    if (read is! store.Opened) {
-      return LibraryFailure('${to.name} could not be read');
-    }
-    final file = await readChapter(name: to.fileName, text: read.text);
-    final view = sectionView(file, to.section);
-    // A line arriving as a game of its own still names the chapter it left.
-    // It takes the name [to]'s games carry, or none, so a chapter file does
-    // not turn into a course file holding a chapter named after the source.
-    final arriving = host == null ? _namedAs(view.stamp, lines) : lines;
-    if (arriving == null) {
-      return const LibraryFailure(
-        'the lines could not be given their chapter name',
-      );
-    }
-    var target = view.chapter;
-    var arranged = GamesArranged.of(
-      GamesWritten(),
-      before: target.lines.length,
-    );
-    for (final edit in _editsInto(arriving, host)) {
-      switch (edit(target)) {
-        case ChapterUnchanged():
-          continue;
-        case ChapterEditRefused(:final reason):
-          return LibraryFailure(reason);
-        case ChapterEdited(:final chapter, :final games):
-          target = chapter;
-          arranged = composedArrangement(arranged, games) ?? games;
-      }
-    }
-    // A chapter of a course file goes back into its file.
-    var text = writeChapter(target);
-    if (!view.isWholeFile) {
-      final back = spliced(view, target, arranged);
-      if (back == null) {
-        return const LibraryFailure(
-          'the lines could not be given their chapter name',
-        );
-      }
-      text = writeChapter(back.file);
-      arranged = back.games;
-    }
-    return _savedResult(
-      await _store.save(
-        to,
-        text,
-        expected: read.revision,
-        scope: GamesRearranged(arranged),
-      ),
-    );
   }
 
   /// Makes [edit] to the whole file [ref] is in: through the workspace when
@@ -851,32 +790,6 @@ final class Library extends ChangeNotifier {
       _ => const LibraryFailure('the change is on the board, not in the file'),
     };
   }
-
-  /// The edits that put [lines] into a chapter: one append, or one graft
-  /// per line into the game at [host].
-  List<ChapterEdit Function(Chapter)> _editsInto(
-    List<ChapterLine> lines,
-    int? host,
-  ) => host == null
-      ? [(c) => linesAddedTo(c, lines: lines)]
-      : [
-          for (final line in lines)
-            (c) => lineGraftedInto(c, host: host, line: line),
-        ];
-}
-
-/// [lines] each naming [section] as its chapter, or no chapter when it is
-/// null; null when one of them cannot be given the name.
-List<ChapterLine>? _namedAs(String? section, List<ChapterLine> lines) {
-  final named = <ChapterLine>[];
-  for (final line in lines) {
-    final renamed = sectionOf(line) == section
-        ? line
-        : withSection(line, section);
-    if (renamed == null) return null;
-    named.add(renamed);
-  }
-  return named;
 }
 
 /// A file name for each chapter, from its title, no two alike.

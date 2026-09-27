@@ -1,6 +1,7 @@
 import 'package:dartchess/dartchess.dart' show Move, NormalMove, Side;
 
 import '../chess/fen.dart';
+import '../chess/generation/terminal.dart';
 import '../chess/pgn/game_tree.dart';
 import '../chess/pgn/tree_edit.dart';
 
@@ -53,6 +54,7 @@ final class GapWalk {
     required this.positionsAsked,
     required this.positionsUnanswered,
     this.elsewhere = const {},
+    this.covered = 0,
   });
 
   /// Most reached first.
@@ -74,15 +76,11 @@ final class GapWalk {
   /// transposition into either is not a gap.
   final Map<String, String> elsewhere;
 
-  /// The share of games above the floor that reach a gap, taken off one.
-  ///
-  /// Our own alternatives at one position each carry the full reach, since
-  /// we might play any of them, so a chapter with many sidelines and many
-  /// gaps can sum past one; the floor of zero is the honest reading then.
-  double get covered {
-    final missing = gaps.fold(0.0, (sum, gap) => sum + gap.reach);
-    return (1 - missing).clamp(0.0, 1.0);
-  }
+  /// Coverage against the opponent model, taking the least-covered choice
+  /// at each of our turns. Alternatives are mutually exclusive, so their
+  /// missing mass must never be added. Replies below the floor are excluded.
+  /// Unknown model answers prevent the UI from displaying this estimate.
+  final double covered;
 }
 
 /// The positions at which [tree], played from [side], has a move of ours:
@@ -136,6 +134,7 @@ Future<GapWalk?> walkGaps({
     positionsAsked: walk.asked,
     positionsUnanswered: walk.unanswered,
     elsewhere: elsewhere,
+    covered: walk.coverage[const NodePath.root()] ?? 1,
   );
 }
 
@@ -158,14 +157,18 @@ final class _Walk {
 
   final gaps = <Gap>[];
   final reach = <NodePath, double>{};
+  final coverage = <NodePath, double>{};
   var asked = 0;
   var unanswered = 0;
 
   /// False once overtaken.
   Future<bool> visit(NodePath path, double reached) async {
+    if (overtaken()) return false;
+    coverage[path] = 1;
     if (reached < floor) return true;
     reach[path] = reached;
     final fen = tree.fenAt(path);
+    if (_terminal(path, fen)) return true;
     final children = tree.nodeAt(path)?.children ?? tree.children;
     if (fen.whiteToMove == (side == Side.white)) {
       return _ours(path, reached, children);
@@ -177,11 +180,15 @@ final class _Walk {
     if (kids.isEmpty) {
       if (!elsewhere.containsKey(tree.fenAt(path).position)) {
         gaps.add(DeadEnd(at: path, reach: reached));
+        coverage[path] = 0;
       }
       return true;
     }
     for (var i = 0; i < kids.length; i++) {
-      if (!await visit(path.child(i), reached)) return false;
+      final child = path.child(i);
+      if (!await visit(child, reached)) return false;
+      final covered = coverage[child]!;
+      if (covered < coverage[path]!) coverage[path] = covered;
     }
     return true;
   }
@@ -199,18 +206,36 @@ final class _Walk {
       unanswered++;
       return true;
     }
+    var missing = 0.0;
     for (final MapEntry(key: uci, value: share) in answer.entries) {
       final onward = reached * share;
       if (onward < floor) continue;
       final index = indexOfReply(fen, kids, uci);
       if (index < 0) {
         final gap = _missing(fen, path, uci, onward);
-        if (gap != null) gaps.add(gap);
-      } else if (!await visit(path.child(index), onward)) {
-        return false;
+        if (gap != null) {
+          gaps.add(gap);
+          missing += share;
+        }
+      } else {
+        final child = path.child(index);
+        if (!await visit(child, onward)) return false;
+        missing += share * (1 - coverage[child]!);
       }
     }
+    coverage[path] = (1 - missing).clamp(0.0, 1.0);
     return true;
+  }
+
+  bool _terminal(NodePath path, Fen fen) {
+    final position = positionOf(fen);
+    return position != null &&
+        terminalKind(position, [
+              repetitionKey(tree.rootFen),
+              for (final node in tree.lineTo(path)) repetitionKey(node.fen),
+              if (tree.fenAt(path) != fen) repetitionKey(fen),
+            ]) !=
+            null;
   }
 
   /// The gap the opponent's [uci] at [at] opens, or null when the position
@@ -218,7 +243,10 @@ final class _Walk {
   Gap? _missing(Fen fen, NodePath at, String uci, double reached) {
     final move = Move.parse(uci);
     final node = move == null ? null : moveNode(fen, move);
-    if (node != null && elsewhere.containsKey(node.fen.position)) return null;
+    if (node != null &&
+        (elsewhere.containsKey(node.fen.position) || _terminal(at, node.fen))) {
+      return null;
+    }
     return MissingReply(
       at: at,
       reach: reached,

@@ -70,6 +70,7 @@ String encodeTreeV4(
   List<String> startMoves = const [],
   int? evalDepth,
   int? opponentRating,
+  String? evaluationSource,
 }) {
   final writer = _Writer(ourSide: config.side);
   final tree = writer.write(
@@ -85,6 +86,7 @@ String encodeTreeV4(
     'total_nodes': writer.nodes,
     'max_depth': writer.deepest,
     'build_complete': complete,
+    'v2_evaluation_source': ?evaluationSource,
     if (startMoves.isNotEmpty) 'start_moves': startMoves.join(' '),
     'config': _configJson(config, evalDepth, opponentRating),
     'tree': tree,

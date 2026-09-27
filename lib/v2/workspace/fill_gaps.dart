@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart' show Position, Side;
@@ -9,6 +10,7 @@ import '../chess/fen.dart';
 import '../chess/generation/draft_chapter.dart';
 import '../chess/generation/draft_lines.dart';
 import '../chess/generation/eval.dart';
+import '../chess/generation/evaluation_source.dart';
 import '../chess/generation/search.dart';
 import '../chess/generation/search_config.dart';
 import '../chess/generation/search_node.dart';
@@ -16,6 +18,7 @@ import '../chess/generation/search_result.dart';
 import '../chess/generation/sources.dart';
 import '../chess/generation/traps.dart';
 import '../chess/generation/tree_wire_v4.dart';
+import '../chess/generation/tree_wire_v4_reader.dart';
 import '../chess/pgn/chapter.dart';
 import '../chess/pgn/chapter_heading.dart';
 import '../chess/pgn/game_tree.dart';
@@ -33,154 +36,7 @@ import 'engine_analysis.dart';
 import 'finds.dart';
 import 'generated_draft.dart';
 
-/// What a search is asked for: the opponent's rating and how deep to go.
-///
-/// Nothing else narrows it. Every legal move of ours is played and every
-/// reply the model gives any weight is answered, level by level, so what a
-/// search finds is not decided in advance by a window or a cover rule.
-final class FillRequest {
-  const FillRequest({required this.elo, this.depthPlies});
-
-  /// The rating the opponent's replies are predicted for.
-  final int elo;
-
-  /// How many half-moves past the board the search plays out; null goes on
-  /// until the user stops it.
-  final int? depthPlies;
-}
-
-/// The engine depth every search scores positions at: the old app's
-/// default, and what the shared cache is keyed on.
-const fillEvalDepth = 14;
-
-/// The range a search's depth may be set to, when it is set at all.
-const minFillDepth = 1;
-const maxFillDepth = 64;
-
-/// What a search needs and where it comes from: an engine and the model, or
-/// why there are none.
-sealed class FillToolsResult {
-  const FillToolsResult();
-}
-
-final class FillReady extends FillToolsResult {
-  const FillReady({
-    required this.evaluator,
-    required this.policy,
-    required this.release,
-  });
-
-  final PositionEvaluator evaluator;
-  final OpponentPolicy policy;
-
-  /// Hands the engine back; called once, when the run is over or cancelled.
-  final Future<void> Function() release;
-}
-
-final class FillUnavailable extends FillToolsResult {
-  const FillUnavailable(this.reason);
-
-  /// A sentence for the screen.
-  final String reason;
-}
-
-typedef FillToolsFactory = Future<FillToolsResult> Function(FillRequest);
-
-sealed class FillState {
-  const FillState();
-}
-
-final class FillIdle extends FillState {
-  const FillIdle();
-}
-
-final class FillRunning extends FillState {
-  const FillRunning({
-    required this.nodes,
-    required this.depth,
-    required this.of,
-    this.cancelling = false,
-    this.finishing = false,
-    this.lastPly,
-  });
-
-  final int nodes;
-  final int depth;
-
-  /// The depth asked for; null when the search goes on until stopped.
-  final int? of;
-  final bool cancelling;
-
-  /// The depth the search was asked to stop at once it is done there; null
-  /// until it is.
-  final int? lastPly;
-
-  /// Asked to stop and keep what it has: the expansion under way is
-  /// finished, then the tree as it stands is read.
-  final bool finishing;
-
-  /// Whether a stop has been asked for, either kind.
-  bool get stopping => cancelling || finishing;
-
-  FillRunning copyWith({
-    int? nodes,
-    int? depth,
-    bool? cancelling,
-    bool? finishing,
-    int? lastPly,
-  }) => FillRunning(
-    nodes: nodes ?? this.nodes,
-    depth: depth ?? this.depth,
-    of: of,
-    cancelling: cancelling ?? this.cancelling,
-    finishing: finishing ?? this.finishing,
-    lastPly: lastPly ?? this.lastPly,
-  );
-}
-
-/// The run is over and its tree is in [FillGaps.found]: [depth] half-moves
-/// deep over [nodes] positions, the whole way when [complete].
-final class FillDone extends FillState {
-  const FillDone({
-    required this.nodes,
-    required this.depth,
-    required this.complete,
-  });
-
-  final int nodes;
-  final int depth;
-  final bool complete;
-}
-
-final class FillFailed extends FillState {
-  const FillFailed(this.reason);
-
-  /// A sentence for the screen; the log has the same one.
-  final String reason;
-}
-
-/// What became of turning a chapter's search into lines.
-sealed class LinesState {
-  const LinesState();
-}
-
-final class LinesWriting extends LinesState {
-  const LinesWriting();
-}
-
-/// The lines are in the draft chapter [draft].
-final class LinesWritten extends LinesState {
-  const LinesWritten({required this.draft, required this.lines});
-
-  final ChapterRef draft;
-  final int lines;
-}
-
-final class LinesFailed extends LinesState {
-  const LinesFailed(this.reason);
-
-  final String reason;
-}
+import 'fill_states.dart';
 
 /// The expectimax search from the board: the Search tab.
 ///
@@ -202,6 +58,7 @@ final class FillGaps extends ChangeNotifier {
     required store.PgnDocumentStore documents,
     required FillToolsFactory tools,
     TreeKeeper? keepTree,
+    TreeLoader? loadTree,
     PendingWrites? pendingWrites,
     this.finds,
     DateTime Function() clock = DateTime.now,
@@ -210,6 +67,7 @@ final class FillGaps extends ChangeNotifier {
        _store = documents,
        _tools = tools,
        _keepTree = keepTree,
+       _loadTree = loadTree,
        _pending = pendingWrites ?? PendingWrites(),
        _clock = clock;
 
@@ -218,11 +76,12 @@ final class FillGaps extends ChangeNotifier {
   final store.PgnDocumentStore _store;
   final FillToolsFactory _tools;
   final TreeKeeper? _keepTree;
+  final TreeLoader? _loadTree;
   final DateTime Function() _clock;
 
   /// Lets the way out wait for a tree or draft still being written. A write
-  /// that fails is logged and forgotten: the tree is derived data, and a
-  /// draft that failed says so in the pane and can be made again.
+  /// that fails retains its destination and frozen content until a retry
+  /// succeeds. An uncertain write must never become a second publication.
   final PendingWrites _pending;
 
   /// Where what each stopped run points out is kept: the Positions list.
@@ -231,6 +90,44 @@ final class FillGaps extends ChangeNotifier {
   FillState _state = const FillIdle();
   FillFound? _found;
   LinesState? _lines;
+  GeneratedDraft? _draft;
+  int _draftLines = 0;
+  PendingObligation<DraftPublication>? _draftSave;
+  final _treeResource = Object();
+  String? treeSaveProblem;
+  bool get canRetryTree => _pending.unfinished(_treeResource).isNotEmpty;
+
+  Future<void> retryTree() async {
+    try {
+      await _pending.retry(_treeResource);
+    } on Object catch (error) {
+      log.w('retry search tree', error);
+    }
+    treeSaveProblem = !canRetryTree
+        ? null
+        : 'The search tree still needs saving.';
+    if (!_disposed) notifyListeners();
+  }
+
+  void discardTreeSave() {
+    for (final entry in _pending.unfinished(_treeResource)) {
+      entry.discard();
+    }
+    if (!canRetryTree) treeSaveProblem = null;
+    if (!_disposed) notifyListeners();
+  }
+
+  void discardDraftSave() {
+    if (_draftSave?.discard() != true) return;
+    _draftSave = null;
+    _lines = const LinesFailed(
+      'Draft save abandoned. Any file already written was kept.',
+    );
+    if (!_disposed) notifyListeners();
+  }
+
+  bool get canDiscardDraft => _lines is LinesFailed && _draftSave != null;
+
   Future<void> Function()? _release;
   Future<void>? _releasing;
   bool _active = false;
@@ -275,6 +172,9 @@ final class FillGaps extends ChangeNotifier {
   bool get canStart =>
       !_disposed &&
       !_active &&
+      _draftSave == null &&
+      !canRetryTree &&
+      _lines is! LinesWriting &&
       !running &&
       _session.chapter != null &&
       _session.shownTo == null;
@@ -291,9 +191,13 @@ final class FillGaps extends ChangeNotifier {
 
   /// Starts a run, or answers why it did not: the one sentence the screen
   /// shows. Null when it started.
-  Future<String?> start(FillRequest request) async {
+  Future<String?> start(FillRequest request, {SearchNode? seed}) async {
     if (_disposed) return 'The search owner is closed.';
     if (_active || running) return 'A search is already running.';
+    if (canRetryTree) return 'Finish saving the previous search tree first.';
+    if (_draftSave != null || _lines is LinesWriting) {
+      return 'Finish saving the accepted draft first.';
+    }
     final chapter = _session.chapter;
     final tree = _session.tree;
     if (chapter == null || tree == null) return 'Nothing is on the board.';
@@ -319,10 +223,17 @@ final class FillGaps extends ChangeNotifier {
     _releasing = null;
     _found = null;
     _lines = null;
-    _set(FillRunning(nodes: 1, depth: 0, of: request.depthPlies));
+    _draft = null;
+    _set(
+      FillRunning(
+        nodes: seed == null ? 1 : nodesIn(seed),
+        depth: 0,
+        of: request.depthPlies,
+      ),
+    );
     _analysis.pause(this, 'Paused while searching');
     try {
-      await _run(request, target, root);
+      await _run(request, target, root, seed);
     } on Object catch (error) {
       log.w('search ${target.label}', error);
       _set(
@@ -334,10 +245,54 @@ final class FillGaps extends ChangeNotifier {
     return null;
   }
 
+  /// Continue the last matching tree from this board, including after restart.
+  /// Rating and scoring depth must match; incompatible values cannot be mixed.
+  Future<String?> resume(FillRequest request) async {
+    if (!canStart) return 'Finish the current search or save first.';
+    final source = _session.source;
+    final fen = _session.fen;
+    final previous = _found;
+    SearchNode? seed;
+    if (previous != null &&
+        previous.tree.fen == fen &&
+        previous.side == _session.orientation &&
+        previous.request.elo == request.elo &&
+        previous.request.source == request.source) {
+      seed = previous.tree;
+    } else {
+      final load = _loadTree;
+      if (source == null || load == null) {
+        return 'No saved search is available for this board.';
+      }
+      try {
+        final text = await load(source, fen);
+        if (text == null) {
+          return 'No saved search starts at this board position.';
+        }
+        final decoded = await readSearchSeed(
+          text,
+          request.elo,
+          _session.orientation,
+          request.source,
+        );
+        if (decoded is String) return decoded;
+        seed = decoded as SearchNode;
+      } on Object catch (error) {
+        log.w('resume search', error);
+        return 'The saved search could not be read.';
+      }
+    }
+    if (_session.source != source || _session.fen != fen || !canStart) {
+      return 'The board changed while loading the search.';
+    }
+    return start(request, seed: seed);
+  }
+
   Future<void> _run(
     FillRequest request,
     FillTarget target,
     Position root,
+    SearchNode? seed,
   ) async {
     final tools = await _tools(request);
     switch (tools) {
@@ -360,9 +315,11 @@ final class FillGaps extends ChangeNotifier {
       side: target.side,
       horizonPlies: request.depthPlies,
       lossLimitCp: null,
+      nodeBudget: fillNodeBudget + (seed == null ? 0 : nodesIn(seed)),
     );
     final result = await buildSearchTree(
       root: root,
+      seed: seed,
       config: config,
       evaluator: tools.evaluator,
       policy: tools.policy,
@@ -390,6 +347,8 @@ final class FillGaps extends ChangeNotifier {
       nodes: nodesIn(tree),
       depth: result is SearchComplete ? request.depthPlies ?? reached : reached,
       complete: result is SearchComplete,
+      budgetReached:
+          result is SearchIncomplete && result.reason == StopReason.nodeBudget,
     );
     await _publish(target, request, tree, config, result, done);
   }
@@ -418,19 +377,7 @@ final class FillGaps extends ChangeNotifier {
           case final recording?)
         recording.then<void>((_) {}),
       if (source != null && keep != null)
-        Future.sync(
-          () => keep(
-            source,
-            encodeTreeV4(
-              tree,
-              config,
-              complete: result is SearchComplete,
-              evalDepth: fillEvalDepth,
-              opponentRating: request.elo,
-            ),
-            runId: newCompoundId(),
-          ),
-        ),
+        _saveTree(source, tree, config, result is SearchComplete, request),
     ];
     final work = Future.wait(saving).then<void>(
       (_) {},
@@ -438,6 +385,37 @@ final class FillGaps extends ChangeNotifier {
     );
     _pending.watch(this, work);
     await work;
+  }
+
+  Future<void> _saveTree(
+    ChapterRef source,
+    SearchNode tree,
+    SearchConfig config,
+    bool complete,
+    FillRequest request,
+  ) async {
+    final runId = newCompoundId();
+    final bytes = await encodeSearchTree(
+      tree,
+      config,
+      complete,
+      request.elo,
+      request.source,
+    );
+    final entry = _pending.accept<void>(
+      resource: _treeResource,
+      label: 'Search tree',
+      work: () => _keepTree!(source, bytes, runId: runId),
+      problem: (_) => null,
+    );
+    try {
+      await entry.run();
+      treeSaveProblem = null;
+    } on Object catch (error) {
+      treeSaveProblem = 'The search tree could not be saved. Retry saving it.';
+      log.w('save search tree', error);
+    }
+    if (!_disposed) notifyListeners();
   }
 
   void _show(FillTarget target, FillRequest request, SearchNode tree) {
@@ -476,7 +454,10 @@ final class FillGaps extends ChangeNotifier {
     final (chapter, source) = drafting;
     _lines = const LinesWriting();
     notifyListeners();
-    final work = _writeLines(found, chapter, source);
+    final work = _writeLines(found, chapter, source).catchError((Object error) {
+      log.w('generate repertoire lines', error);
+      return (DraftNotWritten('The draft could not be prepared: $error'), 0);
+    });
     _pending.watch(this, work);
     final (result, lines) = await work;
     if (_disposed) return;
@@ -500,6 +481,11 @@ final class FillGaps extends ChangeNotifier {
     Chapter chapter,
     ChapterRef source,
   ) async {
+    if (_draftSave case final saved?) {
+      final result = await saved.run();
+      if (saved.committed) _draftSave = null;
+      return (result, _draftLines);
+    }
     final heading = readHeading(chapter.preamble);
     final prefix = chapter.tree.lineTo(found.target.cursor);
     final rootFen = chapter.tree.rootFen;
@@ -519,7 +505,7 @@ final class FillGaps extends ChangeNotifier {
         0,
       );
     }
-    final draft = GeneratedDraft(
+    final draft = _draft ??= GeneratedDraft(
       documents: _store,
       folder: p.dirname(source.path),
       chapter: source.name,
@@ -533,7 +519,16 @@ final class FillGaps extends ChangeNotifier {
         created: created,
       ),
     );
-    return (await draft.write(), plan.lines);
+    _draftLines = plan.lines;
+    final entry = _draftSave = _pending.accept<DraftPublication>(
+      resource: draft,
+      label: 'Generated draft',
+      work: draft.write,
+      problem: (result) => result is DraftNotWritten ? result.reason : null,
+    );
+    final result = await entry.run();
+    if (entry.committed) _draftSave = null;
+    return (result, plan.lines);
   }
 
   /// Stops the run where it is and forgets it. The engine is handed back at
@@ -771,3 +766,51 @@ final class MaiaOpponent implements OpponentPolicy {
         MaiaFailed(:final reason) => PolicyUnavailable(reason),
       };
 }
+
+// A top-level closure cannot capture this owner's engine futures.
+Future<String> encodeSearchTree(
+  SearchNode tree,
+  SearchConfig config,
+  bool complete,
+  int elo,
+  EvaluationSource source,
+) => Isolate.run(
+  () => encodeTreeV4(
+    tree,
+    config,
+    complete: complete,
+    evalDepth: fillEvalDepth,
+    opponentRating: elo,
+    evaluationSource: source.name,
+  ),
+);
+
+Future<Object> readSearchSeed(
+  String text,
+  int elo,
+  Side side,
+  EvaluationSource source,
+) => Isolate.run(() {
+  final json = jsonDecode(text) as Map<String, Object?>;
+  if ((json['v2_evaluation_source'] ?? 'stockfish') != source.name) {
+    return 'Choose the evaluation source used by this saved search.';
+  }
+  final config = json['config'];
+  if (config is! Map ||
+      config['maia_elo'] != elo ||
+      config['eval_depth'] != fillEvalDepth) {
+    return 'Use the original opponent rating and evaluation settings to resume.';
+  }
+  final read = decodeTreeV4(text);
+  return switch (read) {
+    TreeDecoded(:final root, :final config)
+        when config.side == side &&
+            config.lossLimitCp == null &&
+            config.replyFloor == 0 &&
+            config.pins.isEmpty =>
+      root,
+    TreeDecoded() => 'The saved search uses different search settings or side.',
+    TreeUnsupported(:final reason) => reason,
+    TreeMalformed(:final detail) => detail,
+  };
+});

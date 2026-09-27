@@ -75,7 +75,7 @@ APPROVED: dict[str, tuple[int, str]] = {
     "lib/v2/storage/training_writes.dart": (2, "v2 old training queue under Support: delete finished receipts and the emptied folder; unfinished records are moved aside"),
     "lib/v2/storage/pgn_file_store.dart": (1, "no filesystem mutation of its own: one call into FileRelocations.delete that the pattern above matches by method name"),
     "lib/v2/storage/chapter_files.dart": (2, "v2 repertoire listing: one mutation takes away a repertoire folder whose chapters have all been deleted, and only when nothing is left in it; the other takes away an import's own dot-prefixed staging folder directly under the root, which the listing never shows, when the import could not finish"),
-    "lib/v2/storage/backups.dart": (2, "v2 kept versions under Support; creates folders, never removes; an unreadable index is renamed aside, not deleted"),
+    "lib/v2/storage/backups.dart": (3, "v2 kept versions under Support; creates folders and sets aside unreadable indexes; explicit retention cleanup removes only archived versions beyond the newest 100 and older than 90 days"),
     "lib/v2/storage/relocation_notes.dart": (1, "v2 notes under Support saying which moves still owe their training rows; the one mutation takes a note away once its rows no longer do"),
     "lib/services/eval/cdb_snapshot_download.dart": (4, "resumable downloaded snapshot"),
     "lib/services/eval/lichess_eval_controller.dart": (4, "resumable downloaded snapshot"),

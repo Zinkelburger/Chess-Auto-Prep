@@ -28,6 +28,7 @@ import '../storage/chapter_files.dart';
 import '../storage/eval_cache.dart';
 import '../storage/finds_store.dart';
 import '../storage/generation_trees.dart';
+import '../storage/backup_history.dart';
 import '../storage/game_store.dart';
 import '../storage/lichess_token.dart';
 import '../storage/master_book.dart';
@@ -102,6 +103,8 @@ final class AppEnvironment {
     required this.stopEngines,
     required this.evalCache,
     required this.keepTree,
+    this.loadTree,
+    this.backupHistory,
     this.finds = FindsStore.inMemory,
     BookStore? books,
     required this.setFullScreen,
@@ -202,6 +205,8 @@ final class AppEnvironment {
       stopEngines: engines.dispose,
       evalCache: () => evalCache.cache,
       keepTree: GenerationTrees(documentsStore.recovery).keep,
+      loadTree: GenerationTrees(documentsStore.recovery).latest,
+      backupHistory: BackupHistory(documentsStore.recovery),
       finds: () => finds.store,
       books: documentsStore.books,
       setFullScreen: _setFullScreen,
@@ -289,6 +294,8 @@ final class AppEnvironment {
 
   /// Keeps a fill's search tree beside its chapter.
   final TreeKeeper keepTree;
+  final TreeLoader? loadTree;
+  final BackupHistory? backupHistory;
 
   /// Puts the window in or out of full screen.
   final Future<void> Function(bool on) setFullScreen;

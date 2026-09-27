@@ -11,7 +11,7 @@ final class CompoundDocument {
   final String after;
 }
 
-/// A retained committed edit: one PGN and books, or exactly two PGNs.
+/// A retained edit: one PGN and books, or two PGNs and their training files.
 /// Every participant belongs to the same guarded inverse and exact retry.
 final class CompoundCommit {
   const CompoundCommit({
@@ -21,13 +21,16 @@ final class CompoundCommit {
     required this.documentAfter,
     required this.booksBefore,
     required this.booksAfter,
-  }) : secondary = null;
+  }) : secondary = null,
+       training = const [];
 
   CompoundCommit.pair({
     required this.id,
     required CompoundDocument primary,
     required CompoundDocument this.secondary,
-  }) : documentPath = primary.path,
+    List<CompoundTraining> training = const [],
+  }) : training = List.unmodifiable(training),
+       documentPath = primary.path,
        documentBefore = primary.before,
        documentAfter = primary.after,
        booksBefore = null,
@@ -40,6 +43,7 @@ final class CompoundCommit {
   final String? booksBefore;
   final String? booksAfter;
   final CompoundDocument? secondary;
+  final List<CompoundTraining> training;
 
   CompoundDocument get primary => CompoundDocument(
     path: documentPath,
@@ -49,4 +53,23 @@ final class CompoundCommit {
 
   /// Primary first: publication order is fixed in the retained manifest.
   List<CompoundDocument> get documents => [primary, ?secondary];
+}
+
+/// Exact snapshots of a training file participating in a line move and undo.
+final class CompoundTraining {
+  const CompoundTraining({
+    required this.name,
+    required this.before,
+    required this.after,
+  });
+  final String name;
+  final String? before;
+  final String? after;
+  CompoundTraining get inverse =>
+      CompoundTraining(name: name, before: after, after: before);
+  Map<String, Object?> toJson() => {
+    'name': name,
+    'before': before,
+    'after': after,
+  };
 }

@@ -67,6 +67,7 @@ Future<SearchResult> buildSearchTree({
   LastPly? lastPly,
   void Function(SearchProgress progress)? onProgress,
   SearchSnapshot? onSnapshot,
+  SearchNode? seed,
 }) => _Search(
   config: config,
   evaluator: evaluator,
@@ -75,7 +76,7 @@ Future<SearchResult> buildSearchTree({
   lastPly: lastPly,
   onProgress: onProgress,
   onSnapshot: onSnapshot,
-).run(root);
+).run(root, seed);
 
 bool _neverCancelled() => false;
 
@@ -161,13 +162,17 @@ final class _Search {
   /// counts them.
   int _nodes = 1;
 
-  Future<SearchResult> run(Position root) async {
+  Future<SearchResult> run(Position root, SearchNode? seed) async {
     final path = SearchPath.root(root);
-    final leaf = await _leaf(path);
+    final leaf = seed == null ? await _leaf(path) : _Scored(seed);
     if (leaf case _Unscored(:final reason)) {
       _stop = _EvaluationFailed(path.fen, reason);
     }
-    final start = leaf is _Scored ? PendingNode(path, leaf.node) : null;
+    final start = seed != null
+        ? _restore(path, seed)
+        : leaf is _Scored
+        ? PendingNode(path, leaf.node)
+        : null;
     if (start != null) await _expandByDepth(start);
     // The engine failing on the root position is the one way a search ends
     // with no tree at all; every other failure still hands back what it had.
@@ -189,6 +194,51 @@ final class _Search {
       ),
       null => SearchComplete(tree!),
     };
+  }
+
+  /// Reuses complete expansions and scores, while rebuilding path history.
+  /// A deeper resume turns old horizon leaves into frontier leaves.
+  PendingNode _restore(SearchPath path, SearchNode saved) {
+    if (saved.fen != path.fen || !saved.evaluated) {
+      throw const FormatException(
+        'Saved search position or score is incomplete.',
+      );
+    }
+    final kind = terminalKind(path.position, path.history);
+    final beyond =
+        (config.horizonPlies != null && path.ply >= config.horizonPlies!) ||
+        path.reach < config.replyFloor;
+    final leaf = kind != null
+        ? _terminal(path, kind)
+        : beyond
+        ? HorizonNode(fen: path.fen, evalForUs: saved.evalForUs)
+        : FrontierNode(fen: path.fen, evalForUs: saved.evalForUs);
+    final pending = PendingNode(path, leaf);
+    if (path.ply > _deepest) _deepest = path.ply;
+    if (kind != null || beyond) return pending;
+    final legal = {
+      for (final move in legalMovesOf(path.position)) move.uci: move,
+    };
+    PendingNode child(MoveRef move, SearchNode node, double share) {
+      final named = legal[move.uci];
+      if (named == null) {
+        throw const FormatException('Saved search contains an illegal move.');
+      }
+      _nodes++;
+      return _restore(_play(path, named, share: share).$2, node);
+    }
+
+    pending.expansion = switch (saved) {
+      OurNode(:final candidates) => OurMoves([
+        for (final c in candidates) (c.move, child(c.move, c.child, 1)),
+      ]),
+      OpponentNode(:final replies) => Replies([
+        for (final r in replies)
+          (r.move, r.probability, child(r.move, r.child, r.probability)),
+      ]),
+      _ => null,
+    };
+    return pending;
   }
 
   /// The node for [path] before anything below it is expanded: a finished
@@ -272,8 +322,17 @@ final class _Search {
   /// shallowly rather than one line seen deeply.
   Future<void> _expandByDepth(PendingNode start) async {
     final queue = Queue<PendingNode>()..add(start);
+    final yielding = Stopwatch()..start();
     while (queue.isNotEmpty && !_stopping()) {
+      if (yielding.elapsedMilliseconds >= 16) {
+        await Future<void>.delayed(Duration.zero);
+        yielding.reset();
+      }
       final pending = queue.removeFirst();
+      if (pending.expansion case final expanded?) {
+        queue.addAll(expanded.children);
+        continue;
+      }
       if (pending.leaf is! FrontierNode) continue;
       // Every node still queued is at least this deep.
       if (lastPly?.call() case final last? when pending.path.ply >= last) {
@@ -464,7 +523,21 @@ final class PendingNode {
   final SearchPath path;
   final SearchNode leaf;
 
-  Expansion? expansion;
+  PendingNode? parent;
+  SearchNode? cached;
+  Expansion? _expansion;
+  Expansion? get expansion => _expansion;
+  set expansion(Expansion? value) {
+    _expansion = value;
+    if (value != null) {
+      for (final child in value.children) {
+        child.parent = this;
+      }
+    }
+    for (PendingNode? node = this; node != null; node = node.parent) {
+      node.cached = null;
+    }
+  }
 }
 
 /// What one expanded node turned into: the moves we may play, or the replies
@@ -495,26 +568,27 @@ final class Replies extends Expansion {
 
 /// Builds the immutable tree out of the finished scaffolding, bottom up. A
 /// node nothing was expanded into stays the leaf it already was.
-SearchNode assembleTree(PendingNode pending) => switch (pending.expansion) {
-  null => pending.leaf,
-  OurMoves(:final admitted) => OurNode.over(
-    fen: pending.leaf.fen,
-    evalForUs: pending.leaf.evalForUs,
-    candidates: [
-      for (final (move, child) in admitted)
-        CandidateMove(move: move, child: assembleTree(child)),
-    ],
-  ),
-  Replies(:final replies) => OpponentNode.over(
-    fen: pending.leaf.fen,
-    evalForUs: pending.leaf.evalForUs,
-    replies: [
-      for (final (move, probability, child) in replies)
-        ReplyMove(
-          move: move,
-          probability: probability,
-          child: assembleTree(child),
-        ),
-    ],
-  ),
-};
+SearchNode assembleTree(PendingNode pending) =>
+    pending.cached ??= switch (pending.expansion) {
+      null => pending.leaf,
+      OurMoves(:final admitted) => OurNode.over(
+        fen: pending.leaf.fen,
+        evalForUs: pending.leaf.evalForUs,
+        candidates: [
+          for (final (move, child) in admitted)
+            CandidateMove(move: move, child: assembleTree(child)),
+        ],
+      ),
+      Replies(:final replies) => OpponentNode.over(
+        fen: pending.leaf.fen,
+        evalForUs: pending.leaf.evalForUs,
+        replies: [
+          for (final (move, probability, child) in replies)
+            ReplyMove(
+              move: move,
+              probability: probability,
+              child: assembleTree(child),
+            ),
+        ],
+      ),
+    };

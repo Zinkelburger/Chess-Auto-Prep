@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:chess_auto_prep/v2/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/v2/chess/generation/eval.dart';
@@ -13,6 +14,7 @@ import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
 import 'package:chess_auto_prep/v2/storage/finds_store.dart';
 import 'package:chess_auto_prep/v2/storage/generation_trees.dart';
 import 'package:chess_auto_prep/v2/workspace/fill_gaps.dart';
+import 'package:chess_auto_prep/v2/workspace/fill_states.dart';
 import 'package:chess_auto_prep/v2/workspace/finds.dart';
 import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:dartchess/dartchess.dart' show Position, Side;
@@ -78,6 +80,7 @@ void main() {
     PositionEvaluator evaluator, {
     OpponentPolicy policy = const ScriptedPolicy({'e8d8': 1}),
     TreeKeeper? keepTree,
+    TreeLoader? loadTree,
     Finds? finds,
     PgnDocumentStore? documents,
     PendingWrites? pending,
@@ -97,6 +100,7 @@ void main() {
             release: release ?? () async => releases++,
           ),
       keepTree: keepTree,
+      loadTree: loadTree,
       pendingWrites: pending,
       finds: finds,
       clock: () => DateTime(2026, 9, 22, 12),
@@ -117,6 +121,56 @@ void main() {
   Map<String, int> e4Best() => {
     afterUci(positionOf(kingAndPawn), 'e2e4').fen: -100,
   };
+
+  test(
+    'a new owner resumes saved work at a greater depth without rescoring it',
+    () async {
+      String? saved;
+      final first = fillWith(
+        ScriptedEvaluator(),
+        keepTree: (_, text, {required runId}) async {
+          saved = text;
+        },
+      );
+      await first.start(const FillRequest(elo: 2200, depthPlies: 1));
+      final prior = first.found!.tree as OurNode;
+      final evaluator = ScriptedEvaluator();
+      final restarted = fillWith(evaluator, loadTree: (_, _) async => saved);
+      expect(
+        await restarted.resume(const FillRequest(elo: 2200, depthPlies: 2)),
+        isNull,
+      );
+      expect(restarted.state, isA<FillDone>());
+      expect(evaluator.asked, isNot(contains(prior.fen.value)));
+      for (final move in prior.candidates) {
+        expect(evaluator.asked, isNot(contains(move.child.fen.value)));
+      }
+      expect(
+        (restarted.found!.tree as OurNode).candidates.first.child,
+        isA<OpponentNode>(),
+      );
+    },
+  );
+
+  test('saved searches refuse a changed opponent rating', () async {
+    String? saved;
+    final first = fillWith(
+      ScriptedEvaluator(),
+      keepTree: (_, text, {required runId}) async {
+        saved = text;
+      },
+    );
+    await first.start(const FillRequest(elo: 2200, depthPlies: 1));
+    final restarted = fillWith(
+      ScriptedEvaluator(),
+      loadTree: (_, _) async => saved,
+    );
+    expect(
+      await restarted.resume(const FillRequest(elo: 1800, depthPlies: 2)),
+      contains('original opponent rating'),
+    );
+    expect(restarted.state, isA<FillIdle>());
+  });
 
   test('throwing tool startup reports failure and resumes analysis', () async {
     final fill = fillWith(
@@ -245,31 +299,36 @@ void main() {
     expect(fixture.store.documents.keys, [fixture.ref], reason: 'no draft');
     expect(fixture.onDisk, chapter, reason: 'the chapter is not written');
     expect(releases, 1);
-    expect(trees.single, contains('"format": "opening_tree"'));
-    expect(trees.single, contains('"eval_depth": 14'));
+    expect((jsonDecode(trees.single) as Map)['format'], 'opening_tree');
+    expect(
+      ((jsonDecode(trees.single) as Map)['config'] as Map)['eval_depth'],
+      14,
+    );
     expect(fill.canMakeLines, isTrue);
   });
 
-  test('a tree that cannot be kept is logged; the search is done and the '
-      'next one starts', () async {
+  test('a failed tree save retains exact bytes and id for retry', () async {
     final pending = PendingWrites();
-    var attempts = 0;
+    final attempts = <(String, String)>[];
+    var fail = true;
     final fill = fillWith(
       ScriptedEvaluator(scores: e4Best()),
       pending: pending,
-      keepTree: (_, _, {required runId}) async {
-        attempts++;
-        throw StateError('disk full');
+      keepTree: (_, text, {required runId}) async {
+        attempts.add((runId, text));
+        if (fail) throw StateError('disk full');
       },
     );
     await fill.start(request);
     expect(fill.state, isA<FillDone>());
-    expect(fill.canMakeLines, isTrue);
-    expect(await pending.settle(), isNull, reason: 'nothing to ask on exit');
-    expect(fill.canStart, isTrue);
-    expect(await fill.start(request), isNull);
-    expect(fill.state, isA<FillDone>());
-    expect(attempts, 2);
+    expect(fill.canRetryTree, isTrue);
+    expect(await pending.settle(), isNotNull);
+    fail = false;
+    await fill.retryTree();
+    expect(attempts, hasLength(2));
+    expect(attempts[0], attempts[1]);
+    expect(fill.canRetryTree, isFalse);
+    expect(await pending.settle(), isNull);
   });
 
   test('accepted draft finishes after owner disposal', () async {
@@ -338,22 +397,19 @@ void main() {
     await running;
   });
 
-  test(
-    'a draft whose write failed is made again under the next name',
-    () async {
-      final documents = _LostCreate(fixture.store);
-      final fill = fillWith(
-        ScriptedEvaluator(scores: e4Best()),
-        documents: documents,
-      );
-      await fill.start(request);
-      await fill.makeLines();
-      expect(fill.lines, isA<LinesFailed>());
-      expect(fill.canMakeLines, isTrue);
-      await fill.makeLines();
-      expect((fill.lines as LinesWritten).draft, draft('Main (draft 2)'));
-    },
-  );
+  test('a lost draft acknowledgement retries its exact destination', () async {
+    final documents = _LostCreate(fixture.store);
+    final fill = fillWith(
+      ScriptedEvaluator(scores: e4Best()),
+      documents: documents,
+    );
+    await fill.start(request);
+    await fill.makeLines();
+    expect(fill.lines, isA<LinesFailed>());
+    expect(fill.canMakeLines, isTrue);
+    await fill.makeLines();
+    expect((fill.lines as LinesWritten).draft, draft());
+  });
 
   test('lines are written only when asked: a draft chapter beside the one '
       'the search started on, its moves carrying their values', () async {
@@ -594,12 +650,11 @@ void main() {
     },
   );
 
-  test('a new search started while lines are written still leaves the '
-      'draft on disk', () async {
+  test('a new search waits for the accepted draft to finish', () async {
     final fill = fillWith(ScriptedEvaluator(scores: e4Best()));
     await fill.start(request);
     final making = fill.makeLines();
-    expect(await fill.start(request), isNull);
+    expect(await fill.start(request), contains('Finish saving'));
     await making;
     expect(fill.state, isA<FillDone>());
     expect(textOf(draft()), contains('// Draft'));

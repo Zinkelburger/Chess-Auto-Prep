@@ -21,13 +21,78 @@ import 'backup_relocation.dart';
 /// history; the old one stays under the old id, and is offered as a deleted
 /// chapter if a later move needs that id.
 ///
-/// Nothing here removes anything. Retention and the restore screen are later
-/// steps.
+/// Cleanup is explicit: it keeps the newest 100 versions and all recent
+/// history, while restoration creates a separate copy for review.
 final class BackupArchive {
   BackupArchive(this.root);
 
   /// The `backups` directory under Support.
   final Directory root;
+
+  Future<List<BackupVersion>> versions(String id) async =>
+      List.unmodifiable((await _readIndex(folderFor(id))).versions.reversed);
+
+  Future<List<int>> readVersion(String id, BackupVersion requested) async {
+    final versions = (await _readIndex(folderFor(id))).versions;
+    final kept = versions
+        .where((v) => v.file == requested.file && v.hash == requested.hash)
+        .firstOrNull;
+    if (kept == null) {
+      throw const FileSystemException(
+        'This version is no longer in the archive.',
+      );
+    }
+    final file = File(p.join(folderFor(id).path, kept.file));
+    if (await FileSystemEntity.type(file.path, followLinks: false) !=
+        FileSystemEntityType.file) {
+      throw const FileSystemException('This version is not a regular file.');
+    }
+    final bytes = versionBytes(await file.readAsBytes());
+    if (sha256.convert(bytes).toString() != kept.hash) {
+      throw const FormatException('The backup checksum does not match.');
+    }
+    return bytes;
+  }
+
+  /// Caller owns the Documents lock. No automatic deletion accompanies a save.
+  Future<int> prune(String id, {required DateTime olderThan}) async {
+    final folder = folderFor(id);
+    final index = await _readIndex(folder);
+    final eligible = index.versions
+        .take((index.versions.length - 100).clamp(0, index.versions.length))
+        .where((v) => v.time.isBefore(olderThan))
+        .toList();
+    final removed = <String>{};
+    for (final version in eligible) {
+      final file = File(p.join(folder.path, version.file));
+      final kind = await FileSystemEntity.type(file.path, followLinks: false);
+      if (kind == FileSystemEntityType.notFound) {
+        removed.add(version.file);
+        continue;
+      }
+      if (kind != FileSystemEntityType.file) continue;
+      await file.delete();
+      removed.add(version.file);
+    }
+    // Keep recorded hashes, timestamps and unknown metadata. Never bless an
+    // altered copy by re-hashing it as part of routine cleanup.
+    if (removed.isNotEmpty) {
+      final listed = index.data['versions']! as List;
+      await replaceFile(
+        p.join(folder.path, _indexName),
+        utf8.encode(
+          jsonEncode({
+            ...index.data,
+            'versions': [
+              for (final entry in listed)
+                if (!removed.contains((entry as Map)['file'])) entry,
+            ],
+          }),
+        ),
+      );
+    }
+    return removed.length;
+  }
 
   /// What a move from [fromId] to [toId] does to kept versions; the move's
   /// journal records it so a restarted move does the same.
@@ -135,6 +200,13 @@ final class BackupArchive {
   /// written again from them. Letting a truncated one stand would instead
   /// fail every later save and delete of that document, for good.
   Future<_BackupIndex> _readIndex(Directory folder) async {
+    final kind = await FileSystemEntity.type(folder.path, followLinks: false);
+    if (kind == FileSystemEntityType.notFound) {
+      return _BackupIndex.rebuilt(const []);
+    }
+    if (kind != FileSystemEntityType.directory) {
+      throw const FileSystemException('The backup archive is not a directory.');
+    }
     final file = File(p.join(folder.path, _indexName));
     try {
       if (!await file.exists()) {

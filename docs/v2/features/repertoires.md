@@ -154,7 +154,7 @@ picker.
 - **Gaps come from Maia only**, offline and the same model the search uses. A gap is a position
   reached at least once in N games (**Cover replies met once in** setting, default 50) at the
   opponent rating with no move of ours. Reach is the product of the opponent's shares from the
-  chapter root; our moves count as certain. Coverage is one minus the reach that ends in gaps. A
+  chapter root; our moves count as certain. Coverage weights opponent replies by their model shares and takes the least-covered alternative at each of our decisions. Mutually exclusive choices never have their gap probabilities added together. Terminal positions are complete. All qualifying gaps remain navigable, including replies below 1% when the cover setting admits them. A
   reply that leads into a position another chapter of the same repertoire answers (or another line
   of this one) is not a gap; its row names that chapter (`Petroff`, or `this chapter`) where `gap`
   would stand (owner, 2026-09-22: "it shows moves missing even when they are present in other
@@ -173,8 +173,7 @@ picker.
   Its lines are read and edited in the same workspace; accepting them is moving them.
 - **Lines move by drag and drop.** Ctrl-click and Shift-click pick lines; dragged onto another
   chapter they become lines of it, dragged onto a line they fold into it as variations; the line
-  menu's `Move to chapter…` does the first by name. The target file is written first, against the
-  revision it was read at, and the lines leave the open chapter only after that write landed.
+  menu's `Move to chapter…` does the first by name. Both PGNs and the four training files publish through one recoverable transaction, against the captured revisions. IDs are pinned and destination collisions remapped. Retry uses the same operation; Ctrl+Z restores both chapters and their training snapshots, refusing if any participant changed. Folding a trained line into a different file is refused; move it onto the chapter as a separate line to preserve its schedule.
 - `Fill gaps from here…` is live (2026-09-22): see `generation.md`, "What was built".
 
 ## Decisions (owner, 2026-09-22)
@@ -187,7 +186,7 @@ picker.
   on the library and a file dropped on the window does the same as `Open PGN file…`. Variations
   become lines and a course of several chapters becomes several chapter files, silently, as the old
   import did. `Create new repertoire` is the one-field name dialog `New chapter` already uses.
-  Built 2026-09-22: a dropped file is left out, since the project carries no drop package; the
+  Native PGN file drops anywhere in the builder use the same import path as the file picker. The
   side is inferred from the tree's shape (the branching side is the opponent, else the side most
   lines end on) when at least eight lines make it plain, and asked otherwise.
 - **The Explorer tab** (`workspace.md`) is where the user looks up what masters and Lichess play
@@ -210,5 +209,12 @@ picker.
   newest first, each with `Restore`. Restoring puts the file back under its name with its
   training rows; when that name has been taken since, the user names it (`Main (restored)`).
   A deleted repertoire is its chapters, so it comes back one chapter at a time.
-- Left for later: training rows do not follow a line that changes chapter; the model's answers are
-  cached in memory only; the trainer must skip draft chapters.
+- Outline search indexes names and moves across closed chapters on demand after the debounce.
+  Matching lines appear under their chapter; opening it keeps the search active. Unreadable
+  chapters are reported rather than silently treated as having no matches.
+- `Version history` under the outline lists prior versions of the whole PGN, with timestamps,
+  sizes and a checksum-verified PGN preview. `Restore as new repertoire` imports the selected
+  version as a separate repertoire for review; current chapters and training history stay intact.
+  Explicit cleanup keeps the newest 100 versions and all versions from the last 90 days,
+  under the same Documents lock as saves and moves. Nothing is pruned automatically.
+- The model's answers remain cached in memory only.

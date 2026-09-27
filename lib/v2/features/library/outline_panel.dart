@@ -11,6 +11,7 @@ import '../../ui/theme.dart';
 import '../../workspace/chapter_commands.dart';
 import '../../workspace/document_session.dart';
 import 'chapter_outline.dart';
+import 'backup_history_dialog.dart';
 import 'library.dart';
 import 'library_messages.dart';
 import 'library_state.dart';
@@ -194,10 +195,26 @@ class _OutlinePanelState extends State<OutlinePanel> {
     );
   }
 
+  Future<void> _history() async {
+    final history = widget.library.backupHistory;
+    final source = widget.session.source;
+    if (history == null || source == null) return;
+    final text = await showBackupHistory(context, history, source);
+    if (text == null || !mounted) return;
+    final result = await announce(
+      context,
+      widget.library.importText(text, name: '${source.name} (restored)'),
+      thing: 'repertoire',
+      name: source.name,
+      failed: 'The archived version could not be restored.',
+    );
+    if (mounted && result is LibraryAdded) widget.onOpen(result.first);
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: widget.outline,
+      listenable: Listenable.merge([widget.outline, widget.library]),
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -206,7 +223,34 @@ class _OutlinePanelState extends State<OutlinePanel> {
             onSearch: widget.outline.search,
             onCreate: widget.outline.repertoire == null ? null : _newChapter,
           ),
+          if (widget.library.hasPendingLineMove)
+            OutlinedButton(
+              onPressed: widget.library.busy
+                  ? null
+                  : () async {
+                      final result = await widget.library.retryLineMove();
+                      if (!context.mounted) return;
+                      await announce(
+                        context,
+                        Future.value(result),
+                        thing: 'line',
+                        name: 'Move',
+                        failed: 'The line move still needs retrying.',
+                      );
+                    },
+              child: const Text('Retry line move'),
+            ),
           Expanded(child: _body(context)),
+          if (widget.library.backupHistory != null &&
+              widget.session.source != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: widget.library.busy ? null : _history,
+                icon: const Icon(Icons.history, size: IconSize.action),
+                label: const Text('Version history'),
+              ),
+            ),
         ],
       ),
     );
@@ -225,6 +269,9 @@ class _OutlinePanelState extends State<OutlinePanel> {
     // A book-sized chapter has thousands of lines, so each row is built when
     // it scrolls into view rather than all of them up front.
     final rows = [
+      if (outline.searching) (_) => const LinearProgressIndicator(),
+      if (outline.searchProblem case final problem?)
+        (_) => OutlineMessage(problem),
       for (final chapter in chapters) ..._chapterRows(outline, chapter),
     ];
     return ListView.builder(
@@ -244,12 +291,38 @@ class _OutlinePanelState extends State<OutlinePanel> {
       // can take them and the open one cannot.
       onDrop: chapter.open ? null : (drag) => _move(drag, chapter.ref),
     );
-    if (!chapter.open) return [row];
+    if (!chapter.open) {
+      return [
+        row,
+        if (outline.query.trim().isNotEmpty)
+          for (final line in outline.matchesIn(chapter.ref))
+            (_) => ListTile(
+              dense: true,
+              title: Text(
+                line.moves,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: line.shared
+                  ? null
+                  : Text(
+                      line.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+              onTap: () => widget.onOpen(chapter.ref),
+            ),
+      ];
+    }
     final lines = outline.lines;
     return [
       row,
       if (lines.isEmpty)
-        (_) => const OutlineMessage('Empty — add lines to fill this chapter.'),
+        (_) => OutlineMessage(
+          outline.query.trim().isEmpty
+              ? 'Empty — add lines to fill this chapter.'
+              : 'No lines match this search.',
+        ),
       for (final line in lines) (_) => _lineRow(line, chapter.ref),
     ];
   }

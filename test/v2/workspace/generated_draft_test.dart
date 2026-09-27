@@ -39,12 +39,31 @@ void main() {
     expect((await store.open(first) as Opened).text, 'lines');
   });
 
-  test('a draft left by a lost acknowledgement is kept; the next try picks '
-      'the next name', () async {
-    final store = ScriptedDocumentStore();
-    store.documents[first] = Opened('earlier', scriptedRevision('earlier'));
-    final draft = command(store, text: (_) => 'lines');
-    expect((await draft.write() as DraftWritten).ref, second);
-    expect((await store.open(first) as Opened).text, 'earlier');
-  });
+  test(
+    'a lost acknowledgement verifies the original path and frozen bytes',
+    () async {
+      final store = ScriptedDocumentStore()
+        ..creates.add(const IoFailure('lost ack'));
+      var textCalls = 0;
+      final draft = command(store, text: (_) => 'lines ${++textCalls}');
+      expect(await draft.write(), isA<DraftNotWritten>());
+      store.documents[first] = Opened('lines 1', scriptedRevision('lines 1'));
+      expect((await draft.write() as DraftWritten).ref, first);
+      expect(store.documents.containsKey(second), isFalse);
+      expect(textCalls, 1);
+    },
+  );
+
+  test(
+    'uncertain destination changed by someone else cannot create a duplicate',
+    () async {
+      final store = ScriptedDocumentStore()
+        ..creates.add(const IoFailure('lost ack'));
+      final draft = command(store, text: (_) => 'lines');
+      await draft.write();
+      store.documents[first] = Opened('external', scriptedRevision('external'));
+      expect(await draft.write(), isA<DraftNotWritten>());
+      expect(store.documents.containsKey(second), isFalse);
+    },
+  );
 }

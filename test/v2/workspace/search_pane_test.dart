@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
 import 'package:chess_auto_prep/v2/workspace/fill_gaps.dart';
+import 'package:chess_auto_prep/v2/workspace/fill_states.dart';
 import 'package:chess_auto_prep/v2/workspace/search_pane.dart';
 import 'package:chessground/chessground.dart' show StaticChessboard;
 import 'package:dartchess/dartchess.dart' show Side;
@@ -80,7 +81,7 @@ void main() {
     ),
   );
 
-  testWidgets('a tree that cannot be saved does not hold the tab back', (
+  testWidgets('a failed tree save offers retry and explicit discard', (
     tester,
   ) async {
     fill.dispose();
@@ -110,7 +111,11 @@ void main() {
     await tester.pump();
     expect(fill.state, isA<FillDone>());
     expect(fill.canMakeLines, isTrue);
-    expect(find.textContaining('Retry'), findsNothing);
+    expect(find.text('Retry saving tree'), findsOneWidget);
+    expect(fill.canStart, isFalse);
+    await tester.tap(find.text('Discard tree save'));
+    await tester.pump();
+    expect(fill.canStart, isTrue);
     expect(published, hasLength(1));
   });
 
@@ -122,7 +127,7 @@ void main() {
     expect(find.widgetWithText(TextField, 'Depth'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'Skip under 1 in'), findsNothing);
     expect(find.widgetWithText(FilledButton, 'Search'), findsOneWidget);
-    expect(find.textContaining('until you stop it'), findsOneWidget);
+    expect(find.textContaining('until stopped'), findsOneWidget);
   });
 
   /// Runs a search two plies deep from the board, on real time.

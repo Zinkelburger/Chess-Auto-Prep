@@ -204,11 +204,11 @@ download or verification pass is silent; nothing under `.cap-generation/` is cle
   `[%expectimax +0.42]` (the centipawn equivalent of the search's expected score) and
   `[%score 53.8%]`; a line's first move carries `[%cumProb 29.3%]` and its game `[CumProb]`.
 - **The tree** is kept as a v4 `tree.json` under `.cap-generation/<chapter>.pgn/v2-<stamp>/`,
-  create-only, for a later run; nothing reads it yet.
+  create-only; the Search tab can resume it from the same board.
 - **The Replies tab** at our move shows each candidate's `[%expectimax]` from the open document or
   `not in tree`; nothing is computed while browsing.
-- Not built: resuming a kept tree, ChessDB as a source, the old planner route, the
-  outline's `Tricks` chip (trick lines are built since the evening, see below).
+- The old planner route and the outline's `Tricks` chip are not part of the current
+  builder. The Search tab resumes kept trees and offers ChessDB as a source; Positions lists finds.
 
 ## Analysis board, traps and the Prep tab (2026-09-22, evening)
 The owner asked for lila's analysis board: search from a line without making or opening a
@@ -270,7 +270,7 @@ are trivial — do not go straight to lines*. Supersedes the two sections above 
   started` when that line is still in the document.
 - **Live.** The search hands the tree out at each new level and every two seconds within one
   (`SearchSnapshot` in `chess/generation/search.dart`), so the first row of values appears as
-  soon as the root's moves are scored. `Stop` keeps what it has; nothing else stops a run.
+  soon as the root's moves are scored. `Stop` keeps what it has; the resource budget also pauses a run.
 - **Lines are asked for.** After a search on a writable repertoire chapter, for the chapter's
   side, the tab's foot offers `Make lines`, which writes the `<chapter> (draft)` chapter as
   before (diversity bar, traps after the lines, what the chapter plays left out) and then says
@@ -286,7 +286,7 @@ Supersedes the Search tab section where they differ.
 
 - **Nothing is pruned.** Every legal move of ours (`SearchConfig.lossLimitCp` null) and every
   reply the model gives any weight (no reply floor); `Skip under 1 in` is gone from the tab.
-  `Depth` is empty by default (`Any`): the search goes level by level until stopped. While it
+  `Depth` is empty by default (`Any`): the search goes level by level until stopped or it reaches its 25,000-new-position budget. Resume adds another batch without pruning earlier work. While it
   runs, `Stop` keeps what it has and `Stop after depth N` lets the level under way finish
   (`LastPly` in `search.dart`, `StopReason.levelDone`). A typed depth still ends there. A
   tree with no horizon or window is written to v4 as `max_depth` 512 and `max_eval_loss_cp`
@@ -294,7 +294,12 @@ Supersedes the Search tab section where they differ.
 - **The cost is real.** At engine depth 14 a run scores about 25 positions a second, so from
   a middlegame depth 2 (~1k positions) takes about a minute, depth 3 (~25k) about fifteen,
   depth 4 hours. Cached scores (`eval_cache.db`) make a repeat run over the same positions
-  quick. Lichess cloud evals or ChessDB as a score source would cut this; not built.
+  quick. The source selector offers Stockfish, ChessDB + Stockfish and Lichess cloud + Stockfish.
+  Remote modes send positions only when selected, serialize requests, limit each run to 1,000
+  lookups and fall back to Stockfish for missing/shallow answers. Rate limits and connection
+  failures stop remote requests for that run. Remote scores never enter the fixed-depth local cache.
+  Protocol references: [ChessDB](https://www.chessdb.cn/cloudbookc_api_en.html) and
+  [Lichess cloud evaluation](https://lichess.org/api#tag/analysis/GET/api/cloud-eval).
 - **Finds.** When a run stops, `findsOf` (`chess/generation/finds.dart`) reads the tree —
   every move of ours followed — for four kinds, at no engine cost: *trap* (a reply played
   ≥ 20% that loses ≥ 50 cp against their best, leaving us level or better and ≥ 50 cp better
@@ -318,7 +323,7 @@ Supersedes the Search tab section where they differ.
   the move list, engine and Search tab read it as any line and it can be played on or saved.
   The Search tab's status says `… · 4 found, listed in Positions (Ctrl+P)`.
 - Owner-facing open items: whether finds from a sharper, deeper search are the right ones;
-  a score source faster than depth-14 Stockfish; whether the column should also list other
+  whether the column should also list other
   result sets (My games mistakes, TWIC scan hits) through the same `FindsPanel` shape.
 
 
@@ -326,14 +331,16 @@ Supersedes the Search tab section where they differ.
 
 A search shows as done the moment it finishes. Its Positions batch and its v4
 tree (`.cap-generation/<chapter>/v2-<run-id>/tree.json`, the existing layout)
-are saved behind it; both are derived data, so a failed save is a log line and
-never holds the Search tab back — the next search starts at once and saves its
-own. A tree whose chapter was moved or deleted mid-search is skipped. A staged
-copy a crash left is removed before the next tree is written. `Make lines`
-writes a new draft chapter under the first free name; if the write fails the
-tab says why and `Make lines` tries again, under the next name if a partial
-draft was left. Closing waits for a save in flight but never asks about one
-that failed.
+are saved behind it. A failed tree save retains the same run ID and frozen bytes, with
+`Retry saving tree` and explicit `Discard tree save` in the tab. A different file at that
+run ID is refused. A missing source chapter is reported, not mistaken for successful
+persistence. Make lines remains available; another search waits for resolution of the save.
+
+`Resume` (beside Search) continues the matching in-memory tree or the most recent saved
+tree starting at the board. Root, side, opponent rating and evaluation source must agree.
+It reuses scores and whole expansions, expands old horizon leaves when asked for more depth,
+and recomputes path histories and backed-up values. Snapshots share unchanged branches,
+work yields between expansion batches, and encoding runs off the UI isolate.
 
 **Make lines** freezes the accepted timestamp and generated text. A confirmed
 initial name collision can choose the next numbered draft. Once creation has an
@@ -344,8 +351,8 @@ follow acknowledgement of the corresponding obligation.
 
 These retained retry payloads live for the application lifetime. Committed
 SQLite findings and native tree/PGN artifacts survive reopening; unfinished
-search computation and uncommitted in-memory payloads are not a restartable job
-spool. Linux native publication is tested; Windows/macOS power-loss guarantees
+unsaved search computation and uncommitted in-memory payloads are not a restartable job
+spool; saved partial trees are resumable. Linux native publication is tested; Windows/macOS power-loss guarantees
 remain limited by their existing file adapters.
 
 Headless Linux verification used a deliberately blocked generation directory:

@@ -66,7 +66,8 @@ void main() {
     await fixture.saver.flush();
     final there = fixture.textAt('/repertoires/KID/Sidelines.pgn')!;
     expect(there, contains('[Event "Catalan"]'));
-    expect(there, endsWith('[Event "Indian"]\n[Result "*"]\n\n1. d4 Nf6 *\n'));
+    expect(there, contains('[LineID '));
+    expect(there, endsWith('1. d4 Nf6 *\n'));
     final here = fixture.textAt('/repertoires/KID/Main.pgn')!;
     expect(here, isNot(contains('Indian')));
     expect(here, contains("[Event \"Queen's\"]"));
@@ -150,10 +151,10 @@ void main() {
     await fixture.saver.flush();
     expect(fixture.textAt('/repertoires/KID/Classical.pgn'), classical);
     expect(fixture.session.chapter!.lines, hasLength(2));
-    // A duplicate the user can see: the lines are in both chapters.
+    // The source changed before publication, so neither file is changed.
     expect(
       fixture.textAt('/repertoires/KID/Sidelines.pgn'),
-      contains('[Event "Indian"]'),
+      isNot(contains('[Event "Indian"]')),
     );
     expect(
       fixture.textAt('/repertoires/KID/Main.pgn'),
