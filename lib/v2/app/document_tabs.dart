@@ -6,6 +6,7 @@ import '../ui/pane_tabs.dart';
 import '../workspace/document_history.dart';
 import '../workspace/document_session.dart';
 import 'workspace_requests.dart';
+import 'mode.dart';
 
 /// Open files and temporary analyses. The session remains the active document;
 /// tabs retain navigation and drafts, while files are reread through its store.
@@ -30,6 +31,7 @@ final class DocumentTabs {
         session.source?.name ??
         (_pages.isEmpty ? 'Analysis' : 'Analysis ${++_analysisCount}'),
     source: session.source,
+    viewedFile: requests.mode == Mode.pgnViewer && session.game != null,
     board: session.isScratch ? session.analysisPage : null,
   )..remember(session);
 
@@ -58,7 +60,9 @@ final class DocumentTabs {
     final side = page.side;
     final draft = page.draft;
     if (page.source case final source?) {
-      final result = await requests.open(source, game: page.game);
+      final result = page.viewedFile
+          ? await requests.openFile(source, game: page.game)
+          : await requests.open(source, game: page.game);
       if (_disposed || result is! RequestDone || session.source != source)
         return;
       if (draft != null) session.restoreDraft(draft);
@@ -103,10 +107,12 @@ final class _DocumentPage {
     required this.title,
     this.source,
     this.board,
+    required this.viewedFile,
   });
   final Object id;
   final String title;
   final ChapterRef? source;
+  final bool viewedFile;
   final KeptBoard? board;
   int? game;
   NodePath cursor = const NodePath.root();

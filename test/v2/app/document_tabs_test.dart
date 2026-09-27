@@ -3,6 +3,9 @@ import 'package:chess_auto_prep/v2/app/mode.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/window_fixture.dart';
+import '../support/viewer_fixture.dart';
+import '../support/scripted_store.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart' as store;
 
 void main() {
   late WindowFixture w;
@@ -91,4 +94,54 @@ void main() {
     expect(w.session.source, benkoMain);
     expect(w.requests.documents.tabs.selected, benkoMain);
   });
+  test(
+    'switching PGN tabs restores the game list as well as the board',
+    () async {
+      final first = collectionRef('First');
+      final second = collectionRef('Second');
+      w.store.documents[first] = store.Opened(
+        threeGameFile,
+        scriptedRevision(threeGameFile),
+      );
+      w.store.documents[second] = store.Opened(
+        threeGameFile,
+        scriptedRevision(threeGameFile),
+      );
+      await w.requests.openFile(first, game: 1);
+      w.session.forward();
+      final cursor = w.session.cursor;
+      await w.requests.openFile(second, game: 2);
+      await w.requests.documents.select(first);
+      expect(w.viewer.file, first);
+      expect(w.viewer.current, 1);
+      expect(w.session.cursor, cursor);
+      await w.requests.documents.select(second);
+      expect(w.viewer.file, second);
+      expect(w.viewer.current, 2);
+    },
+  );
+
+  test(
+    'a parked viewer draft retains its original save precondition',
+    () async {
+      await w.requests.open(kidMain);
+      w.session.holdsEdits = true;
+      w.session.setComment(const NodePath.root(), 'My draft');
+      await w.requests.newAnalysisBoard();
+      final before = (w.store.documents[kidMain] as store.Opened).text;
+      final changed = before.replaceFirst(
+        '[Event ',
+        '[Site "Updated elsewhere"]\n[Event ',
+      );
+      w.store.documents[kidMain] = store.Opened(
+        changed,
+        scriptedRevision(changed),
+      );
+      await w.requests.documents.select(kidMain);
+      w.session.keepHeld();
+      await w.saver.flush();
+      expect((w.store.documents[kidMain] as store.Opened).text, changed);
+      expect(w.saver.settled, isFalse);
+    },
+  );
 }

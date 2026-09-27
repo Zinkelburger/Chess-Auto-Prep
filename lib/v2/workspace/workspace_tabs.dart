@@ -8,7 +8,7 @@ import '../ui/pane_tabs.dart';
 /// compiler then asks for its arm in the card's body; the strip, the keys
 /// and the Actions menu know nothing about which tabs there are.
 enum WorkspaceTab {
-  moves('Moves', pinned: true),
+  moves('Moves'),
   train('Train'),
   replies('Replies'),
   explorer('Explorer'),
@@ -44,6 +44,7 @@ List<PaneTab<WorkspaceTab>> get _documentTabs => [
 PaneTabs<WorkspaceTab> newWorkspaceTabs() => PaneTabs(
   _documentTabs,
   open: const [
+    WorkspaceTab.moves,
     WorkspaceTab.train,
     WorkspaceTab.replies,
     WorkspaceTab.explorer,
@@ -56,7 +57,7 @@ PaneTabs<WorkspaceTab> newWorkspaceTabs() => PaneTabs(
 /// The repertoire's tabs can be shown from the Actions menu.
 PaneTabs<WorkspaceTab> readingTabs() => PaneTabs(
   [WorkspaceTab.moves.tab, WorkspaceTab.explorer.tab],
-  open: const [WorkspaceTab.explorer],
+  open: const [WorkspaceTab.moves, WorkspaceTab.explorer],
 );
 
 /// The card's tabs in the Repertoire trainer: Train first and always

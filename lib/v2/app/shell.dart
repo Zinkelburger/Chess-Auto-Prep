@@ -127,6 +127,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     if (_shown case final left?) _views[left]!.left();
     _shown = mode;
     _views[mode]!.entered();
+    _outlineShown = _wantsOutline;
     _arrange();
   }
 
@@ -223,6 +224,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// whichever mode the user switches to. Hide it during a lesson too: its
   /// line previews would reveal the moves the user is being asked to recall.
   bool get _wantsOutline =>
+      (_requests.mode == Mode.repertoires || _requests.mode == Mode.trainer) &&
       _ws.session.source != null &&
       _ws.session.game == null &&
       _train.lines.board.value == null;

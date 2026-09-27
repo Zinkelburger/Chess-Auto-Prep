@@ -335,7 +335,9 @@ class _TabSlot<K extends Object> extends StatelessWidget {
     title: tab.title,
     selected: tabs.selected == tab.id,
     onTap: () => (onSelect ?? tabs.show)(tab.id),
-    onClose: tab.pinned ? null : () => (onClose ?? tabs.close)(tab.id),
+    onClose: tab.pinned || (tabs.open.length == 1 && onClose == null)
+        ? null
+        : () => (onClose ?? tabs.close)(tab.id),
   );
 }
 
