@@ -38,6 +38,7 @@ final class TournamentView extends ModeView {
               ? const Center(child: Text('Tournament storage is unavailable.'))
               : TournamentsScreen(
                   run: run!,
+                  settings: workspace.settings,
                   position: workspace.session.fen,
                   open: (t, g) => unawaited(_open(t, g)),
                 ),

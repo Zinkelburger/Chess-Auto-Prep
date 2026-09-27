@@ -1,4 +1,5 @@
 import 'config.dart';
+import 'standings.dart';
 
 /// Names and keys are the existing tournament.json protocol. PGNs remain
 /// separate ordinary documents; records address them by schedule order.
@@ -37,36 +38,21 @@ final class Tournament {
   Tournament changed(Map<String, Object?> values) =>
       Tournament({...json, ...values});
 
+  late final List<TournamentStanding> standings = tournamentStandings(this);
+
   late final List<TournamentScore> scores = _scores();
 
   List<TournamentScore> _scores() {
-    final wins = List.filled(config.engines.length, 0);
-    final draws = List.filled(config.engines.length, 0);
-    final losses = List.filled(config.engines.length, 0);
-    for (final game in games) {
-      if (game.white < 0 ||
-          game.black < 0 ||
-          game.white >= wins.length ||
-          game.black >= wins.length)
-        continue;
-      if (game.result == '1-0') {
-        wins[game.white]++;
-        losses[game.black]++;
-      }
-      if (game.result == '0-1') {
-        wins[game.black]++;
-        losses[game.white]++;
-      }
-      if (game.result == '1/2-1/2') {
-        draws[game.white]++;
-        draws[game.black]++;
-      }
-    }
-    final rows = [
-      for (var i = 0; i < wins.length; i++)
-        TournamentScore(config.engines[i].name, wins[i], draws[i], losses[i]),
-    ];
-    return List.unmodifiable(rows);
+    final seeded = [...standings]..sort((a, b) => a.seat.compareTo(b.seat));
+    return List.unmodifiable([
+      for (final row in seeded)
+        TournamentScore(
+          row.name,
+          row.score.wins,
+          row.score.draws,
+          row.score.losses,
+        ),
+    ]);
   }
 }
 

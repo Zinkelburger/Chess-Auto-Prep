@@ -10,6 +10,7 @@ import '../../engines/playing_engine.dart';
 import '../../chess/fen.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/tournaments.dart';
+import '../../storage/tournament_inbox.dart';
 import 'game_runner.dart';
 
 /// App-lifetime tournament work. A failed checkpoint retains the exact save
@@ -20,7 +21,9 @@ final class TournamentRun extends ChangeNotifier {
     required this.launch,
     required this.pending,
     required this.activityChanged,
+    this.onOpenRequest,
   });
+  final void Function()? onOpenRequest;
   final TournamentStore store;
   final TournamentLauncher launch;
   final PendingWrites pending;
@@ -31,6 +34,7 @@ final class TournamentRun extends ChangeNotifier {
   Tournament? _active;
   LiveGame? live;
   String? problem;
+  List<String> historyWarnings = const [];
   String? engineReport;
   bool running = false;
   bool stopping = false;
@@ -46,15 +50,58 @@ final class TournamentRun extends ChangeNotifier {
   bool get canRetry => _save != null;
   String? get activeId => _active?.id;
 
-  Future<void> refresh() async {
+  StreamSubscription<void>? _watch;
+  Timer? _reload;
+  Future<void>? _refreshing;
+  bool _again = false;
+
+  /// Start once at app launch, even if another mode is on screen.
+  Future<void> listen() async {
+    if (_disposed || _watch != null) return;
+    if (store case TournamentNotifications signals) {
+      _watch = signals.changes().listen(
+        (_) {
+          _reload?.cancel();
+          _reload = Timer(
+            const Duration(milliseconds: 600),
+            () => unawaited(refresh()),
+          );
+        },
+        onError: (Object error) {
+          log.w('watch tournaments', error);
+          problem = 'Tournament updates are unavailable. Use Refresh.';
+          _notify();
+        },
+      );
+    }
+    await refresh();
+  }
+
+  Future<void> refresh() {
+    if (_disposed) return Future.value();
+    _again = true;
+    return _refreshing ??= _refreshLoop().whenComplete(
+      () => _refreshing = null,
+    );
+  }
+
+  Future<void> _refreshLoop() async {
+    while (_again && !_disposed) {
+      _again = false;
+      await _readHistory();
+    }
+  }
+
+  Future<void> _readHistory() async {
     final ticket = ++_reading;
     final listed = await store.list();
     final registry = await store.engines();
     if (_disposed || ticket != _reading) return;
     switch (listed) {
-      case TournamentSaved(:final value):
+      case TournamentSaved(:final value, :final warnings):
+        historyWarnings = warnings;
         history = value;
-        if (!running)
+        if (!running && !canRetry)
           selected =
               value.where((t) => t.id == selected?.id).firstOrNull ??
               value.firstOrNull;
@@ -66,6 +113,27 @@ final class TournamentRun extends ChangeNotifier {
         if (!registryBusy) engines = value;
       case TournamentFailed(:final message):
         engineReport = message;
+    }
+    if (store case TournamentNotifications signals) {
+      try {
+        final id = await signals.takeRequest();
+        if (_disposed || ticket != _reading || id == null) {
+          _notify();
+          return;
+        }
+        final found = history.where((t) => t.id == id).firstOrNull;
+        if (found == null) {
+          problem =
+              'No tournament called "$id" under Documents/engine_tournaments.';
+        } else {
+          selected = found;
+        }
+        onOpenRequest?.call();
+      } on Object catch (error) {
+        log.w('open tournament request', error);
+        problem =
+            'The tournament request could not be read. Use Refresh to retry.';
+      }
     }
     _notify();
   }
@@ -343,6 +411,8 @@ final class TournamentRun extends ChangeNotifier {
     stopping = true;
     _disposed = true;
     _reading++;
+    _reload?.cancel();
+    unawaited(_watch?.cancel());
     super.dispose();
   }
 }

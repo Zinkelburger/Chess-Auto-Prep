@@ -8,11 +8,14 @@ import '../../chess/fen.dart';
 import '../../chess/tournament/config.dart';
 import '../../chess/tournament/result.dart';
 import '../../ui/confirm_dialog.dart';
-import '../../ui/search_field.dart';
+import '../../storage/settings_store.dart';
+import '../../storage/tournaments.dart';
 import '../../ui/theme.dart';
 import 'engine_manager.dart';
 import 'setup_dialog.dart';
 import 'tournament_run.dart';
+import 'standings_table.dart';
+import 'history_list.dart';
 
 class TournamentsScreen extends StatefulWidget {
   const TournamentsScreen({
@@ -20,7 +23,9 @@ class TournamentsScreen extends StatefulWidget {
     required this.run,
     required this.position,
     required this.open,
+    required this.settings,
   });
+  final SettingsStore settings;
   final TournamentRun run;
   final Fen position;
   final void Function(Tournament tournament, int game) open;
@@ -29,18 +34,12 @@ class TournamentsScreen extends StatefulWidget {
 }
 
 class _ScreenState extends State<TournamentsScreen> {
-  String _query = '';
-  final _search = TextEditingController();
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
-
+  Tournament? _previewOf;
+  Future<TournamentResult<List<String?>>>? _previews;
   TournamentRun get run => widget.run;
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: run,
+    listenable: Listenable.merge([run, widget.settings]),
     builder: (context, _) => Column(
       children: [
         Padding(
@@ -94,12 +93,17 @@ class _ScreenState extends State<TournamentsScreen> {
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           ),
+        for (final warning in run.historyWarnings)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Space.m),
+            child: SelectableText(warning),
+          ),
         const Divider(height: 1),
         Expanded(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(width: 280, child: _history()),
+              SizedBox(width: 280, child: TournamentHistory(run: run)),
               const VerticalDivider(width: 1),
               Expanded(
                 child: run.selected == null
@@ -112,51 +116,56 @@ class _ScreenState extends State<TournamentsScreen> {
       ],
     ),
   );
-  Widget _history() => Column(
-    children: [
-      Padding(
-        padding: const EdgeInsets.all(Space.s),
-        child: SearchField(
-          controller: _search,
-          hint: 'Search tournaments',
-          onChanged: (value) {
-            if (mounted) setState(() => _query = value.toLowerCase());
-          },
-        ),
+  Widget _details(Tournament t) {
+    final show = widget.settings.value.tournamentFinalPositions;
+    if (!identical(t, _previewOf)) {
+      _previewOf = t;
+      _previews = null;
+    }
+    if (show &&
+        _previews == null &&
+        t.games.isNotEmpty &&
+        run.store is TournamentPreviews)
+      _previews = (run.store as TournamentPreviews).positions(t.id);
+    return FutureBuilder<TournamentResult<List<String?>>>(
+      future: show ? _previews : null,
+      builder: (context, snapshot) => _detailScroll(
+        t,
+        show && snapshot.connectionState == ConnectionState.done
+            ? snapshot.data
+            : null,
       ),
-      Expanded(
-        child: ListView(
-          children: [
-            for (final t in run.history.where(
-              (t) =>
-                  '${t.config.name} ${t.config.engines.map((e) => e.name).join(" ")}'
-                      .toLowerCase()
-                      .contains(_query),
-            ))
-              ListTile(
-                selected: run.selected?.id == t.id,
-                title: Text(t.config.name),
-                subtitle: Text(
-                  '${t.status} · ${t.games.length}/${t.config.gameCount} games',
-                ),
-                onTap: () => run.select(t),
-              ),
-          ],
-        ),
-      ),
-    ],
-  );
-  Widget _details(Tournament t) => CustomScrollView(
+    );
+  }
+
+  Widget _detailScroll(
+    Tournament t,
+    TournamentResult<List<String?>>? positions,
+  ) => CustomScrollView(
     slivers: [
       SliverPadding(
         padding: const EdgeInsets.all(Space.l),
-        sliver: SliverToBoxAdapter(child: _summary(t)),
+        sliver: SliverToBoxAdapter(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _summary(t),
+              if (positions case TournamentFailed(:final message))
+                Text('Final positions unavailable: $message'),
+            ],
+          ),
+        ),
       ),
       SliverPadding(
         padding: const EdgeInsets.symmetric(horizontal: Space.l),
         sliver: SliverList.builder(
           itemCount: t.games.length,
-          itemBuilder: (context, index) => _game(t, t.games[index]),
+          itemBuilder: (context, index) =>
+              _game(t, t.games[index], switch (positions) {
+                TournamentSaved(:final value) when index < value.length =>
+                  value[index],
+                _ => null,
+              }),
         ),
       ),
     ],
@@ -189,6 +198,7 @@ class _ScreenState extends State<TournamentsScreen> {
         ],
       ),
       Text('${t.status} · ${t.games.length}/${t.config.gameCount} games'),
+      if (t.error case final error?) SelectableText(error),
       const SizedBox(height: Space.m),
       if ((run.activeId == t.id ? run.live : null) case final live?) ...[
         Text(
@@ -203,41 +213,55 @@ class _ScreenState extends State<TournamentsScreen> {
         ),
         const SizedBox(height: Space.m),
       ],
-      SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          columns: const [
-            DataColumn(label: Text('Engine')),
-            DataColumn(label: Text('Points'), numeric: true),
-            DataColumn(label: Text('W'), numeric: true),
-            DataColumn(label: Text('D'), numeric: true),
-            DataColumn(label: Text('L'), numeric: true),
-          ],
-          rows: [
-            for (final s in t.scores)
-              DataRow(
-                cells: [
-                  DataCell(Text(s.name)),
-                  DataCell(Text(s.points.toStringAsFixed(1))),
-                  DataCell(Text('${s.wins}')),
-                  DataCell(Text('${s.draws}')),
-                  DataCell(Text('${s.losses}')),
-                ],
-              ),
-          ],
+      TournamentStandingsTable(tournament: t),
+      CheckboxListTile(
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        title: const Text('Show final positions'),
+        value: widget.settings.value.tournamentFinalPositions,
+        onChanged: (value) => unawaited(
+          widget.settings.update(
+            widget.settings.value.copyWith(tournamentFinalPositions: value),
+          ),
         ),
+      ),
+      TextButton.icon(
+        onPressed: t.games.isEmpty ? null : () => widget.open(t, 0),
+        icon: const Icon(Icons.open_in_new),
+        label: const Text('Browse games'),
+      ),
+      SelectableText(
+        run.store.games(t.id).path,
+        style: Theme.of(context).textTheme.bodySmall,
       ),
       const SizedBox(height: Space.l),
     ],
   );
-  Widget _game(Tournament t, TournamentGame g) => ListTile(
-    contentPadding: EdgeInsets.zero,
-    title: Text('${g.index + 1}. ${g.whiteName} — ${g.blackName}'),
-    subtitle: Text(
-      '${g.result} · ${_ending(g.termination)}${g.detail.isEmpty ? "" : " · ${g.detail}"}',
+  Widget _game(Tournament t, TournamentGame g, String? fen) => Padding(
+    padding: const EdgeInsets.only(bottom: Space.s),
+    child: Row(
+      children: [
+        if (fen != null)
+          StaticChessboard(
+            size: 92,
+            orientation: Side.white,
+            fen: fen,
+            settings: BoardTheme.of(context).previewSettings,
+          ),
+        if (fen != null) const SizedBox(width: Space.m),
+        Expanded(
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text('${g.index + 1}. ${g.whiteName} — ${g.blackName}'),
+            subtitle: Text(
+              '${g.result} · ${_ending(g.termination)}${g.detail.isEmpty ? "" : " · ${g.detail}"}',
+            ),
+            trailing: const Icon(Icons.open_in_new),
+            onTap: () => widget.open(t, g.index),
+          ),
+        ),
+      ],
     ),
-    trailing: const Icon(Icons.open_in_new),
-    onTap: () => widget.open(t, g.index),
   );
   Future<void> _new([TournamentConfig? previous]) async {
     final config = await tournamentSetup(

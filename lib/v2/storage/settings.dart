@@ -13,6 +13,7 @@ import '../chess/tactics/puzzle_queue.dart';
 final class Settings {
   const Settings({
     this.boardCoordinates = true,
+    this.tournamentFinalPositions = true,
     this.engineCores = 1,
     this.engineMemoryMb = 128,
     this.engineLines = 3,
@@ -27,6 +28,7 @@ final class Settings {
 
   /// Rank and file letters on the board.
   final bool boardCoordinates;
+  final bool tournamentFinalPositions;
 
   /// Threads the workspace engine may use.
   final int engineCores;
@@ -81,6 +83,7 @@ final class Settings {
 
   Settings copyWith({
     bool? boardCoordinates,
+    bool? tournamentFinalPositions,
     int? engineCores,
     int? engineMemoryMb,
     int? engineLines,
@@ -93,6 +96,8 @@ final class Settings {
     TrainingOptions? training,
   }) => Settings(
     boardCoordinates: boardCoordinates ?? this.boardCoordinates,
+    tournamentFinalPositions:
+        tournamentFinalPositions ?? this.tournamentFinalPositions,
     engineCores: engineCores ?? this.engineCores,
     engineMemoryMb: engineMemoryMb ?? this.engineMemoryMb,
     engineLines: engineLines ?? this.engineLines,
@@ -110,6 +115,7 @@ final class Settings {
   /// read it and the old app's keys never collide with it.
   String toJson() => const JsonEncoder.withIndent('  ').convert({
     'boardCoordinates': boardCoordinates,
+    'tournamentFinalPositions': tournamentFinalPositions,
     'engineCores': engineCores,
     'engineMemoryMb': engineMemoryMb,
     'engineLines': engineLines,
@@ -137,6 +143,10 @@ final class Settings {
 
     return Settings(
       boardCoordinates: pick('boardCoordinates', defaults.boardCoordinates),
+      tournamentFinalPositions: pick(
+        'tournamentFinalPositions',
+        defaults.tournamentFinalPositions,
+      ),
       engineCores: pick('engineCores', defaults.engineCores),
       engineMemoryMb: pick('engineMemoryMb', defaults.engineMemoryMb),
       engineLines: pick('engineLines', defaults.engineLines),
@@ -157,6 +167,7 @@ final class Settings {
   bool operator ==(Object other) =>
       other is Settings &&
       other.boardCoordinates == boardCoordinates &&
+      other.tournamentFinalPositions == tournamentFinalPositions &&
       other.engineCores == engineCores &&
       other.engineMemoryMb == engineMemoryMb &&
       other.engineLines == engineLines &&
@@ -171,6 +182,7 @@ final class Settings {
   @override
   int get hashCode => Object.hash(
     boardCoordinates,
+    tournamentFinalPositions,
     engineCores,
     engineMemoryMb,
     engineLines,

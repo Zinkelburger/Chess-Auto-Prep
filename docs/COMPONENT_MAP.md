@@ -40,6 +40,10 @@ sections below describing old paths are not claims of v2 parity.
 - `v2/features/tournaments/`: app-owned finite engine games, setup, verified
   engine registry, live board, results/history and PGN Viewer handoff. Clock,
   rules and legal-move decisions belong to the runner; widgets make no writes.
+  History watches outside runs and claims open requests, with date groups and
+  opening search. Pure standings include per-opponent W/D/L, SB and optional
+  rating estimates; PGN final-board previews run off the UI thread and the
+  display choice persists. Unknown or damaged runs report visible warnings.
 - `v2/features/study/`: PGN-file import through the shared import/document
   boundary; exclusive snapshot export; guarded file rename with retained retry;
   chapter tags, legal starting FEN and undoable annotation/variation cleanup.
@@ -54,7 +58,9 @@ sections below describing old paths are not claims of v2 parity.
   registry files. A private recovery record carries both PGN and metadata
   preimages/targets, supports lost acknowledgments, and refuses external edits.
   Unfinishable recovery is quarantined whole; unreadable source metadata is a
-  visible failure. Delete uses native no-replace relocation to `.trash`.
+  visible per-run warning. Delete uses native no-replace relocation to `.trash`.
+  `storage/tournament_inbox.dart` watches the root and direct run directories
+  and consumes only its atomically claimed request, preserving newer requests.
 - Tournament checks cover legal play, repetition, move caps, startup failure,
   finite UCI protocol, partial-save recovery, conflicting edits, accepted-write
   retry, closing during creation, and the shared app mode/setup navigation.

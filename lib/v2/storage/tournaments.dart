@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:path/path.dart' as p;
 import 'package:document_file_io/document_file_io.dart';
 
 import '../chess/tournament/config.dart';
 import '../chess/tournament/result.dart';
+import '../chess/tournament/positions.dart';
 import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 import 'document_ref.dart';
@@ -14,19 +16,25 @@ import 'file_lock.dart';
 import 'pgn_document_store.dart';
 import 'recovery_files.dart';
 import 'recovery_quarantine.dart';
+import 'tournament_inbox.dart';
 
 sealed class TournamentResult<T> {
   const TournamentResult();
 }
 
 final class TournamentSaved<T> extends TournamentResult<T> {
-  const TournamentSaved(this.value);
+  const TournamentSaved(this.value, {this.warnings = const []});
   final T value;
+  final List<String> warnings;
 }
 
 final class TournamentFailed<T> extends TournamentResult<T> {
   const TournamentFailed(this.message);
   final String message;
+}
+
+abstract interface class TournamentPreviews {
+  Future<TournamentResult<List<String?>>> positions(String id);
 }
 
 abstract interface class TournamentStore {
@@ -50,7 +58,8 @@ abstract interface class TournamentStore {
 /// PGN and metadata are one recoverable command. The private pending record
 /// keeps both before/after states until the document store and JSON commit.
 /// Replays accept an already-applied participant and refuse unrelated edits.
-final class FileTournaments implements TournamentStore {
+final class FileTournaments
+    implements TournamentStore, TournamentNotifications, TournamentPreviews {
   FileTournaments({
     required Directory root,
     required this.support,
@@ -63,6 +72,23 @@ final class FileTournaments implements TournamentStore {
   final Directory support;
   final PgnDocumentStore documents;
   final Future<void> Function()? afterPgn;
+
+  @override
+  Future<TournamentResult<List<String?>>> positions(String id) =>
+      _guard('read tournament positions', () async {
+        final text = await _pgn(id);
+        return text == null
+            ? <String?>[]
+            : Isolate.run(() => tournamentPositions(text));
+      });
+
+  @override
+  Stream<void> changes() => TournamentInbox(root).changes();
+  @override
+  Future<String?> takeRequest() {
+    _checkRoot();
+    return TournamentInbox(root).takeRequest();
+  }
 
   void _checkRoot() {
     if (canonicalRecoveryRoot(_configuredRoot).path != root.path)
@@ -86,36 +112,45 @@ final class FileTournaments implements TournamentStore {
   String _pending(String id) => p.join(_folder(id), '.v2-pending.json');
 
   @override
-  Future<TournamentResult<List<Tournament>>> list() =>
-      _guard('list tournaments', () async {
-        _checkRoot();
-        if (!await recoveryDirectory(root)) return <Tournament>[];
-        return withDirectoryLock(root, () async {
-          final found = <Tournament>[];
-          await for (final entry in root.list(followLinks: false)) {
-            if (entry is! Directory || p.basename(entry.path).startsWith('.'))
-              continue;
-            final id = p.basename(entry.path);
-            try {
-              await _recover(id);
-              final text = await recoveryText(_metadata(id));
-              if (text == null) continue;
-              final tournament = Tournament(tournamentObject(jsonDecode(text)));
-              if (tournament.id != id)
-                throw const FormatException('Mismatched tournament identity.');
-              found.add(tournament);
-            } on Object catch (error) {
-              log.w('read tournament $id', _reason(error));
-              throw StateError('Cannot read tournament $id: ${_reason(error)}');
-            }
+  Future<TournamentResult<List<Tournament>>> list() async {
+    final warnings = <String>[];
+    final result = await _guard('list tournaments', () async {
+      _checkRoot();
+      if (!await recoveryDirectory(root)) return <Tournament>[];
+      return withDirectoryLock(root, () async {
+        final found = <Tournament>[];
+        await for (final entry in root.list(followLinks: false)) {
+          if (entry is! Directory || p.basename(entry.path).startsWith('.'))
+            continue;
+          final id = p.basename(entry.path);
+          try {
+            await _recover(id);
+            final text = await recoveryText(_metadata(id));
+            if (text == null) continue;
+            final tournament = Tournament(tournamentObject(jsonDecode(text)));
+            if (tournament.id != id)
+              throw const FormatException('Mismatched tournament identity.');
+            found.add(tournament);
+          } on Object catch (error) {
+            log.w('read tournament $id', _reason(error));
+            warnings.add('Cannot read tournament $id: ${_reason(error)}');
           }
-          found.sort(
-            (a, b) =>
-                '${b.json['createdAt']}'.compareTo('${a.json['createdAt']}'),
-          );
-          return found;
-        });
+        }
+        found.sort(
+          (a, b) =>
+              '${b.json['createdAt']}'.compareTo('${a.json['createdAt']}'),
+        );
+        return found;
       });
+    });
+    return switch (result) {
+      TournamentSaved(:final value) => TournamentSaved(
+        value,
+        warnings: List.unmodifiable(warnings),
+      ),
+      TournamentFailed(:final message) => TournamentFailed(message),
+    };
+  }
 
   @override
   Future<TournamentResult<Tournament>> create(Tournament initial) => _guard(

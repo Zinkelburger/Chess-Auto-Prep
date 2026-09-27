@@ -58,6 +58,7 @@ APPROVED: dict[str, tuple[int, str]] = {
         "rename into place, removal of its own leftover .part and of an "
         "hour-old one a killed install left",
     ),
+    "lib/v2/storage/tournament_inbox.dart": (1, "disposable cross-process request: atomically claim the public name; delete only the private claim, never a newer request"),
     "lib/v2/storage/tournaments.dart": (
         1,
         "v2 tournament commit: remove only its own completed PGN/metadata "

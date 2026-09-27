@@ -173,6 +173,7 @@ final class AppParts {
           store: env.tournaments!,
           launch: env.launchTournament!,
           pending: env.pendingWrites,
+          onOpenRequest: () => requests.switchTo(Mode.engineTournament),
           activityChanged: (running) {
             if (running) {
               workspace.analysis.pause(env.tournaments!, 'Engine tournament');
@@ -202,6 +203,7 @@ final class AppParts {
     unawaited(players.directory.load());
     unawaited(training.myGames.load());
     unawaited(account.load());
+    unawaited(tournaments?.listen());
     unawaited(labs.offer(env.bughouse.bundled));
     await _workspace.start();
   }

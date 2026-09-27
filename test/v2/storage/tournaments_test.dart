@@ -41,6 +41,23 @@ void main() {
   });
   tearDown(() => files.dispose());
   test(
+    'one damaged record reports its name without hiding other tournaments',
+    () async {
+      await store.create(initial());
+      final broken = await Directory(p.join(root.path, 'broken')).create();
+      await File(
+        p.join(broken.path, 'tournament.json'),
+      ).writeAsString('{broken');
+      final result = await store.list() as TournamentSaved<List<Tournament>>;
+      expect(result.value.map((t) => t.id), ['test']);
+      expect(result.warnings.single, contains('broken'));
+      expect(
+        await File(p.join(broken.path, 'tournament.json')).readAsString(),
+        '{broken',
+      );
+    },
+  );
+  test(
     'create, save and retry are idempotent; trash retains both files',
     () async {
       final before = initial();

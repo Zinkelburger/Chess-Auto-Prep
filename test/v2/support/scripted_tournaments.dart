@@ -1,9 +1,24 @@
+import 'dart:async';
+import 'package:chess_auto_prep/v2/storage/tournament_inbox.dart';
 import 'package:chess_auto_prep/v2/chess/tournament/config.dart';
 import 'package:chess_auto_prep/v2/chess/tournament/result.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/tournaments.dart';
 
-final class ScriptedTournaments implements TournamentStore {
+final class ScriptedTournaments
+    implements TournamentStore, TournamentNotifications {
+  final updates = StreamController<void>.broadcast();
+  Future<void> dispose() => updates.close();
+  String? request;
+  @override
+  Stream<void> changes() => updates.stream;
+  @override
+  Future<String?> takeRequest() async {
+    final next = request;
+    request = null;
+    return next;
+  }
+
   final records = <String, Tournament>{};
   List<TournamentEngine> registry = [];
   @override

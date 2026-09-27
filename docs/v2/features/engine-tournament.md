@@ -1,7 +1,8 @@
 # Engine tournament
 
 Status: implementation authorized by the owner on 2026-09-27; core workflow built,
-remaining presentation and external-request controls tracked in renewal row 12
+history watching, atomic open requests, crosstables/rating statistics and final-board
+previews built; remaining setup/presentation controls tracked in renewal row 12
 Old code (oracle only): `lib/features/engine_tournament/`, `lib/widgets/crosstable_view.dart`,
 `lib/widgets/match_games_table.dart`
 Plan step: 12
@@ -118,14 +119,14 @@ Auto Prep recovery trash.`; refused while that tournament is running.
 second window fills in without pressing `Refresh` (one reload per 600 ms). Where the directory
 cannot be watched, `Refresh` is the only route.
 **Open request from an agent** — a request file naming a tournament selects it on the next launch
-or immediately if the app is open; it is read and cleared in one step, and ignored after 24 hours.
+or immediately if the app is open; the public file is atomically moved to a private claim before reading, so consuming it cannot delete a newer request; it is ignored after 24 hours. Invalid identities/timestamps are ignored.
 An unknown id says `No tournament called "<id>" under Documents/engine_tournaments.`
 
 ## Data
 - `Documents/engine_tournaments/<slug>/tournament.json` — config snapshot (engines *copied*, not
   referenced, so renaming an engine never rewrites an old crosstable), status, and one record per
   game (round, seats, result, termination, detail, plies, start time, duration). Must survive a
-  round trip; a corrupt file hides one tournament, not the list.
+  round trip; a corrupt file hides one tournament, not the list, and reports its name as a warning.
 - `Documents/engine_tournaments/<slug>/games.pgn` — every game in schedule order, rewritten whole
   after each result so a row's game number is its number in the viewer. Headers: Event, Site, Date,
   Round, White, Black, Result, Opening, TimeControl, Termination, PlyCount, WhiteType/BlackType

@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/v2/chess/tournament/result.dart';
 import 'package:chess_auto_prep/v2/app/mode.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +7,70 @@ import '../support/scripted_tournaments.dart';
 import '../support/window_fixture.dart';
 
 void main() {
+  testWidgets(
+    'open requests select outside work without replacing the workspace document',
+    (tester) async {
+      final store = ScriptedTournaments();
+      addTearDown(store.dispose);
+      Tournament match(String id) => Tournament({
+        'id': id,
+        'config': {
+          'name': id,
+          'engines': [
+            {'name': 'Alpha'},
+            {'name': 'Beta'},
+          ],
+        },
+        'status': 'completed',
+        'games': [
+          {
+            'whiteIndex': 0,
+            'blackIndex': 1,
+            'whiteName': 'Alpha',
+            'blackName': 'Beta',
+            'result': 'whiteWins',
+          },
+        ],
+      });
+      store.records['outside'] = match('outside');
+      store.request = 'outside';
+      final app = WindowFixture(
+        tournaments: store,
+        launchTournament: (_) async => const StartFailed('not launched'),
+      );
+      addTearDown(app.dispose);
+      await app.pumpShell(tester);
+      await app.requests.open(kidMain);
+      final chapter = app.parts.session.chapter;
+      await app.parts.tournaments!.listen();
+      await tester.pumpAndSettle();
+      expect(app.requests.mode, Mode.engineTournament);
+      expect(app.parts.session.chapter, same(chapter));
+      expect(app.parts.tournaments!.selected!.id, 'outside');
+      expect(find.text('vs Alpha'), findsOneWidget);
+      await tester.tap(find.text('Show final positions'));
+      await tester.pumpAndSettle();
+      expect(app.parts.settings.value.tournamentFinalPositions, isFalse);
+      app.requests.switchTo(Mode.study);
+      store.records['new'] = match('new');
+      store.request = 'new';
+      store.updates.add(null);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 601));
+      await tester.pumpAndSettle();
+      expect(app.requests.mode, Mode.engineTournament);
+      expect(app.parts.tournaments!.selected!.id, 'new');
+      expect(app.parts.session.chapter, same(chapter));
+      store.request = 'missing';
+      await app.parts.tournaments!.refresh();
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('No tournament called "missing"'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets(
     'tournament setup opens through app mode without losing the chapter',
     (tester) async {
