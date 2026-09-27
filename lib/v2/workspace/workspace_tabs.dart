@@ -1,7 +1,7 @@
 import '../ui/app_action.dart';
 import '../ui/pane_tabs.dart';
 
-/// The tabs of the reading card: the moves, which are always there, the
+/// The tabs of the reading card: the moves, the
 /// trainer, the opponent's replies, the explorer (the user's own book
 /// among its sources), the search from the board and its values, the puzzle
 /// being solved, and what the user's book says about one of their games. A new thing the card can show is a new value here, and the
@@ -18,12 +18,11 @@ enum WorkspaceTab {
   player('Player openings'),
   playerBook('My book');
 
-  const WorkspaceTab(this.title, {this.pinned = false});
+  const WorkspaceTab(this.title);
 
   final String title;
-  final bool pinned;
 
-  PaneTab<WorkspaceTab> get tab => PaneTab(this, title, pinned: pinned);
+  PaneTab<WorkspaceTab> get tab => PaneTab(this, title);
 }
 
 /// The tabs that mean something with any document on the board; the
@@ -53,8 +52,8 @@ PaneTabs<WorkspaceTab> newWorkspaceTabs() => PaneTabs(
 );
 
 /// The card's tabs as the PGN Viewer and Study start: the moves, the
-/// explorer and Search, where a search from the board is started.
-/// The repertoire's tabs can be shown from the Actions menu.
+/// explorer.
+/// Repertoire operations stay in the builder.
 PaneTabs<WorkspaceTab> readingTabs() => PaneTabs(
   [WorkspaceTab.moves.tab, WorkspaceTab.explorer.tab],
   open: const [WorkspaceTab.moves, WorkspaceTab.explorer],
