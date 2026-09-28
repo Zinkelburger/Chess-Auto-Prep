@@ -342,6 +342,17 @@ It reuses scores and whole expansions, expands old horizon leaves when asked for
 and recomputes path histories and backed-up values. Snapshots share unchanged branches,
 work yields between expansion batches, and encoding runs off the UI isolate.
 
+**Searches from an agent.** The chess-prep MCP server's expectimax tools share this
+folder when given the chapter. `expectimax_run {chapter}` builds with the C
+builder at this tab's settings: engine depth 14, no loss window, pure search,
+the chapter's side, and a root that may be the opponent's move. When the
+build ends it writes `v2-agent-<run id>/tree.json` beside the chapter,
+replacing the file atomically, so Resume at that board opens and continues
+it. `expectimax_resume {chapter}` goes the other way. It copies the newest
+tree here into a new run, with an unlimited horizon replaced by the requested
+one (at most 64). The source tree is never edited. The trees are the only
+shared state; the app and the builder each keep their own evaluation cache.
+
 **Make lines** freezes the accepted timestamp and generated text. A confirmed
 initial name collision can choose the next numbered draft. Once creation has an
 uncertain outcome, **Make lines** retries the same path and bytes; an equal file
