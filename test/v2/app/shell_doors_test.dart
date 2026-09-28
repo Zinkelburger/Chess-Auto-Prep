@@ -139,7 +139,7 @@ void main() {
     expect(w.parts.workspace.inspection!.active, isTrue);
     expect(w.parts.workspace.inspection!.session.currentMove?.san, 'c5');
     expect(find.text('Analysis'), findsWidgets);
-    expect(find.text('Temporary analysis'), findsOneWidget);
+    expect(find.text('Temporary analysis'), findsNothing);
   });
 
   testWidgets(

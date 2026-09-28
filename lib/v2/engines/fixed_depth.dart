@@ -45,7 +45,7 @@ final class FixedDepthEvaluator implements PositionEvaluator {
         '${engine.name} stopped at depth ${verdict.depth} of $depth',
       );
     }
-    return Evaluated(packedCp(verdict.score));
+    return Evaluated(packedCp(verdict.score), depth: verdict.depth);
   }
 }
 

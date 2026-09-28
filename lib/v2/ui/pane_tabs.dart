@@ -162,11 +162,15 @@ class PaneTabStrip<K extends Object> extends StatefulWidget {
     this.onClose,
     this.onAdd,
     this.connected = false,
+    this.label,
+    this.showAdd = true,
   });
 
   final ValueChanged<K>? onSelect;
   final ValueChanged<K>? onClose;
   final VoidCallback? onAdd;
+  final String? label;
+  final bool showAdd;
 
   /// Inner tools join the reading surface; document tabs retain their style.
   final bool connected;
@@ -231,6 +235,14 @@ class _PaneTabStripState<K extends Object> extends State<PaneTabStrip<K>>
       height: paneTabHeight,
       child: Row(
         children: [
+          if (widget.label != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Space.m),
+              child: Text(
+                widget.label!,
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ),
           Flexible(
             child: Listener(
               onPointerSignal: _wheel,
@@ -260,8 +272,9 @@ class _PaneTabStripState<K extends Object> extends State<PaneTabStrip<K>>
               ),
             ),
           ),
-          if (widget.onAdd != null ||
-              tabs.tabs.any((tab) => !tabs.isOpen(tab.id)))
+          if (widget.showAdd &&
+              (widget.onAdd != null ||
+                  tabs.tabs.any((tab) => !tabs.isOpen(tab.id))))
             MenuAnchor(
               menuChildren: [
                 for (final tab in tabs.tabs)
@@ -383,21 +396,14 @@ class _Tab extends StatelessWidget {
             : const EdgeInsets.all(paneTabInset),
         child: Material(
           color: selected
-              ? (connected
-                    ? scheme.surfaceContainerLowest
-                    : scheme.surfaceContainerHigh)
-              : Colors.transparent,
-          shape: connected
-              ? RoundedRectangleBorder(
-                  borderRadius: shape,
-                  side: BorderSide(
-                    color: selected
-                        ? scheme.outlineVariant
-                        : Colors.transparent,
-                  ),
-                )
-              : null,
-          borderRadius: connected ? null : shape,
+              ? scheme.secondaryContainer
+              : scheme.surfaceContainerHigh,
+          shape: RoundedRectangleBorder(
+            borderRadius: shape,
+            side: BorderSide(
+              color: selected ? scheme.primary : scheme.outlineVariant,
+            ),
+          ),
           child: InkWell(
             onTap: onTap,
             borderRadius: shape,
@@ -415,12 +421,10 @@ class _Tab extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontWeight: connected && selected
-                            ? FontWeight.w600
-                            : null,
+                        fontWeight: selected ? FontWeight.w600 : null,
                         color: selected
-                            ? scheme.onSurface
-                            : scheme.onSurfaceVariant,
+                            ? scheme.onSecondaryContainer
+                            : scheme.onSurface,
                       ),
                     ),
                   ),

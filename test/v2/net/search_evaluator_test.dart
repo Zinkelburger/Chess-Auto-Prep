@@ -24,6 +24,21 @@ void main() {
     expect(chessDbScore('unknown'), isNull);
   });
 
+  test('cloud evaluation carries its reported depth', () async {
+    final evaluator = SearchEvaluator(
+      source: EvaluationSource.lichess,
+      fallback: ScriptedEvaluator(),
+      minDepth: 14,
+      client: MockClient(
+        (_) async => http.Response('{"depth":22,"pvs":[{"cp":30}]}', 200),
+      ),
+    );
+    addTearDown(evaluator.close);
+    final answer =
+        await evaluator.evaluate(positionOf(kingAndPawn)) as Evaluated;
+    expect(answer.depth, 22);
+  });
+
   test(
     'a rate limit stops remote requests for the run and falls back',
     () async {

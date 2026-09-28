@@ -77,15 +77,27 @@ final class EvalCache {
 
   /// The score from White's side kept for [fen4], the four-field FEN, when
   /// it was scored at least [minDepth] deep; null otherwise.
-  int? read(String fen4, {required int minDepth}) {
+  int? read(String fen4, {required int minDepth}) =>
+      readVerdict(fen4, minDepth: minDepth)?.cpWhite;
+
+  /// Keep the stored depth alongside the score for result inspection.
+  ({int cpWhite, int depth})? readVerdict(
+    String fen4, {
+    required int minDepth,
+  }) {
     final db = _db;
     if (db == null) return null;
     try {
       final rows = db.select(
-        'SELECT eval_cp_white FROM evals WHERE fen = ? AND depth >= ?',
+        'SELECT eval_cp_white, depth FROM evals WHERE fen = ? AND depth >= ?',
         [fen4, minDepth],
       );
-      return rows.isEmpty ? null : rows.first.columnAt(0) as int;
+      return rows.isEmpty
+          ? null
+          : (
+              cpWhite: rows.first.columnAt(0) as int,
+              depth: rows.first.columnAt(1) as int,
+            );
     } on Object catch (error) {
       log.w('read the eval cache', error);
       return null;

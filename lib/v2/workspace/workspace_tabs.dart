@@ -105,17 +105,17 @@ List<AppAction> tabActions(PaneTabs<WorkspaceTab> tabs) => [
               'Close ${tab.title}',
               () => tabs.close(tab.id),
               shortcut: tabs.selected == tab.id ? 'Ctrl+W' : null,
-              group: 'Panels',
+              group: 'Action Tabs',
             )
           : AppAction(
               'Show ${tab.title}',
               () => tabs.show(tab.id),
-              group: 'Panels',
+              group: 'Action Tabs',
             ),
   AppAction(
     'Next tab',
     tabs.open.length < 2 ? null : tabs.next,
     shortcut: 'Ctrl+Tab',
-    group: 'Panels',
+    group: 'Action Tabs',
   ),
 ];

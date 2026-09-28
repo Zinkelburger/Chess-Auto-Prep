@@ -5,6 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:multi_split_view/multi_split_view.dart';
 
 import '../chess/explorer_answer.dart';
+import '../chess/explorer_choice.dart';
+import 'action_layout.dart';
+import 'action_panes.dart';
+import 'explorer.dart';
 import '../chess/fen.dart';
 import '../storage/chapter_files.dart';
 import '../storage/settings_store.dart';
@@ -70,7 +74,7 @@ final class WorkspaceHooks {
 
   /// Asked to open a game the explorer lists, which is the shell's
   /// business: another mode shows it.
-  final ValueChanged<ExplorerGame>? onExplorerGame;
+  final void Function(ExplorerGame, ExplorerSource, int)? onExplorerGame;
   final Future<bool> Function(BuildContext)? onExplorerLogin;
   final Future<bool> Function(BuildContext)? onDownloadTwic;
 
@@ -125,6 +129,7 @@ class WorkspaceView extends StatelessWidget {
     super.key,
     required this.workspace,
     required this.tabs,
+    this.layout,
     required this.editing,
     required this.moves,
     this.hooks = const WorkspaceHooks(),
@@ -136,6 +141,7 @@ class WorkspaceView extends StatelessWidget {
   /// Which of the card's tabs are open and which is up. The shell owns it,
   /// as it owns [editing]: the keys and the Actions menu turn it too.
   final PaneTabs<WorkspaceTab> tabs;
+  final ActionLayout? layout;
 
   /// Whether the edit strip is open. The shell owns it: the Actions menu
   /// and Ctrl+E turn it, and the strip's Done turns it off.
@@ -207,7 +213,12 @@ class WorkspaceView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            child: _Tabbed(workspace: workspace, tabs: tabs, hooks: hooks),
+            child: _Tabbed(
+              workspace: workspace,
+              tabs: tabs,
+              hooks: hooks,
+              layout: layout,
+            ),
           ),
           EditStrip(
             session: workspace.session,
@@ -280,116 +291,94 @@ enum _Side { board, card }
 /// them, the keys walk them and the Actions menu opens and closes them, so
 /// this only draws what is up. A new thing the card can show is one more
 /// arm of [_body]; a control it owns sits in its own body.
-class _Tabbed extends StatefulWidget {
+class _Tabbed extends StatelessWidget {
   const _Tabbed({
     required this.workspace,
     required this.tabs,
+    this.layout,
     required this.hooks,
   });
 
   final Workspace workspace;
   final PaneTabs<WorkspaceTab> tabs;
+  final ActionLayout? layout;
   final WorkspaceHooks hooks;
 
-  @override
-  State<_Tabbed> createState() => _TabbedState();
-}
-
-class _TabbedState extends State<_Tabbed> {
-  bool _split = true;
-  Workspace get workspace => widget.workspace;
-  PaneTabs<WorkspaceTab> get tabs => widget.tabs;
-  WorkspaceHooks get hooks => widget.hooks;
-
-  Widget _body(BuildContext context, WorkspaceTab tab) => switch (tab) {
-    WorkspaceTab.moves || WorkspaceTab.analysis => MoveTreeView(
-      session: workspace.session,
-      moveMenu: hooks.moveMenu,
-    ),
-    WorkspaceTab.review =>
-      workspace.review == null
-          ? const SizedBox.shrink()
-          : Column(
-              children: [
-                Expanded(
-                  child: MoveTreeView(
-                    session: workspace.session,
-                    moveMenu: hooks.moveMenu,
-                  ),
-                ),
-                const Divider(height: 1),
-                Expanded(
-                  flex: 2,
-                  child: GameReviewPane(review: workspace.review!),
-                ),
-              ],
-            ),
-    WorkspaceTab.train => _supplied(context, tab),
-    WorkspaceTab.replies => RepliesPane(
-      session: workspace.session,
-      replies: workspace.replies,
-      gaps: workspace.gaps,
-    ),
-    // At a puzzle the table would tick the answer, or list it as the only
-    // move with This file, so it goes while the answer is hidden, as the
-    // engine pane does.
-    WorkspaceTab.explorer => _UnlessHidden(
-      session: workspace.session,
-      child: LayoutBuilder(
-        builder: (context, size) => SingleChildScrollView(
-          child: SizedBox(
-            height: max(searchPaneMinHeight, size.maxHeight),
-            child: ExplorerPane(
-              session: workspace.session,
-              explorer: workspace.explorer,
-              games: workspace.games,
-              tree: workspace.tree,
-              books: workspace.books,
-              onOpenGame: hooks.onExplorerGame,
-              onLogIn: hooks.onExplorerLogin,
-              onDownloadTwic: hooks.onDownloadTwic,
-              onOpenPlace: hooks.onOpenPlace,
-              onEditBooks: hooks.onEditBooks,
-            ),
-          ),
+  Widget _body(BuildContext context, WorkspaceTab tab, {Explorer? explorer}) =>
+      switch (tab) {
+        WorkspaceTab.moves || WorkspaceTab.analysis => MoveTreeView(
+          session: workspace.session,
+          moveMenu: hooks.moveMenu,
         ),
-      ),
-    ),
-    WorkspaceTab.search => SearchPane(
-      fill: workspace.fill,
-      session: workspace.session,
-      settings: workspace.settings,
-      onOpenChapter: hooks.onOpenChapter,
-    ),
-    WorkspaceTab.puzzle => _supplied(context, tab),
-    WorkspaceTab.book => _supplied(context, tab),
-    WorkspaceTab.player || WorkspaceTab.playerBook => _supplied(context, tab),
-  };
-
-  Widget _building(BuildContext context) => MultiSplitViewTheme(
-    data: paneTheme(Theme.of(context).colorScheme),
-    child: MultiSplitView(
-      axis: Axis.vertical,
-      initialAreas: [Area(flex: 1), Area(flex: 3)],
-      builder: (context, area) => area.index == 0
-          ? _body(context, WorkspaceTab.moves)
-          : LayoutBuilder(
-              builder: (context, size) => MultiSplitView(
-                axis: size.maxWidth >= builderToolsMinWidth
-                    ? Axis.horizontal
-                    : Axis.vertical,
-                initialAreas: [
-                  Area(flex: size.maxWidth >= builderToolsMinWidth ? 1 : 2),
-                  Area(flex: 1),
-                ],
-                builder: (context, area) => _body(
-                  context,
-                  area.index == 0 ? WorkspaceTab.search : WorkspaceTab.explorer,
+        WorkspaceTab.review =>
+          workspace.review == null
+              ? const SizedBox.shrink()
+              : Column(
+                  children: [
+                    Expanded(
+                      child: MoveTreeView(
+                        session: workspace.session,
+                        moveMenu: hooks.moveMenu,
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Expanded(
+                      flex: 2,
+                      child: GameReviewPane(review: workspace.review!),
+                    ),
+                  ],
+                ),
+        WorkspaceTab.train => _supplied(context, tab),
+        WorkspaceTab.replies => RepliesPane(
+          session: workspace.session,
+          replies: workspace.replies,
+          gaps: workspace.gaps,
+        ),
+        // At a puzzle the table would tick the answer, or list it as the only
+        // move with This file, so it goes while the answer is hidden, as the
+        // engine pane does.
+        WorkspaceTab.explorer => _UnlessHidden(
+          session: workspace.session,
+          child: LayoutBuilder(
+            builder: (context, size) => SingleChildScrollView(
+              child: SizedBox(
+                height: max(searchPaneMinHeight, size.maxHeight),
+                child: ExplorerPane(
+                  session: workspace.session,
+                  explorer: explorer ?? workspace.explorer,
+                  games: workspace.games,
+                  tree: workspace.tree,
+                  books: workspace.books,
+                  onOpenGame: hooks.onExplorerGame == null
+                      ? null
+                      : (game) {
+                          final owner = explorer ?? workspace.explorer;
+                          hooks.onExplorerGame!(
+                            game,
+                            owner.choice.source,
+                            owner.ply,
+                          );
+                        },
+                  onLogIn: hooks.onExplorerLogin,
+                  onDownloadTwic: hooks.onDownloadTwic,
+                  onOpenPlace: hooks.onOpenPlace,
+                  onEditBooks: hooks.onEditBooks,
                 ),
               ),
             ),
-    ),
-  );
+          ),
+        ),
+        WorkspaceTab.search => SearchPane(
+          fill: workspace.fill,
+          session: workspace.session,
+          settings: workspace.settings,
+          onOpenChapter: hooks.onOpenChapter,
+        ),
+        WorkspaceTab.puzzle => _supplied(context, tab),
+        WorkspaceTab.book => _supplied(context, tab),
+        WorkspaceTab.player ||
+        WorkspaceTab.playerBook => _supplied(context, tab),
+      };
 
   /// The tabs that show the document's moves or what follows them.
   static bool _tellsAnswers(WorkspaceTab tab) => switch (tab) {
@@ -407,63 +396,58 @@ class _TabbedState extends State<_Tabbed> {
   Widget _supplied(BuildContext context, WorkspaceTab tab) =>
       hooks.tabBody?.call(context, tab) ?? const SizedBox.shrink();
 
+  Widget _visibleBody(
+    BuildContext context,
+    WorkspaceTab tab, {
+    Explorer? explorer,
+  }) => ValueListenableBuilder<BoardClaim?>(
+    valueListenable: hooks.lesson ?? const _NoClaim(),
+    builder: (context, lesson, _) => lesson != null && _tellsAnswers(tab)
+        ? Padding(
+            padding: const EdgeInsets.all(readingCardInset),
+            child: Text(
+              'Hidden while training',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          )
+        : _body(context, tab, explorer: explorer),
+  );
+
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: tabs,
-      builder: (context, _) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              readingCardInset - Space.m,
-              Space.s,
-              readingCardInset - Space.m,
-              0,
-            ),
-            child: Row(
-              children: [
-                Expanded(child: PaneTabStrip(tabs: tabs, connected: true)),
-                if (hooks.builder)
-                  IconButton(
-                    tooltip: _split
-                        ? 'Show one panel'
-                        : 'Show moves, Explorer and Expectimax together',
-                    icon: Icon(_split ? Icons.tab : Icons.splitscreen),
-                    onPressed: () {
-                      if (mounted) setState(() => _split = !_split);
-                    },
+    final layout = this.layout;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (hooks.header) ReadingHeader(session: workspace.session),
+        Expanded(
+          child: layout != null
+              ? ActionPanes(
+                  layout: layout,
+                  body: (context, index, tab) => _visibleBody(
+                    context,
+                    tab,
+                    explorer: tab == WorkspaceTab.explorer
+                        ? layout.explorer(index)
+                        : null,
                   ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          if (hooks.header) ReadingHeader(session: workspace.session),
-          Expanded(
-            child: ValueListenableBuilder<BoardClaim?>(
-              valueListenable: hooks.lesson ?? const _NoClaim(),
-              builder: (context, lesson, _) =>
-                  lesson != null && _tellsAnswers(tabs.selected)
-                  ? Padding(
-                      padding: const EdgeInsets.all(readingCardInset),
-                      child: Text(
-                        'Hidden while training',
-                        style: Theme.of(context).textTheme.bodySmall,
+                )
+              : ListenableBuilder(
+                  listenable: tabs,
+                  builder: (context, _) => Column(
+                    children: [
+                      PaneTabStrip(
+                        tabs: tabs,
+                        connected: true,
+                        label: 'Action Tabs',
                       ),
-                    )
-                  : hooks.builder &&
-                        _split &&
-                        [
-                          WorkspaceTab.moves,
-                          WorkspaceTab.explorer,
-                          WorkspaceTab.search,
-                        ].contains(tabs.selected)
-                  ? _building(context)
-                  : _body(context, tabs.selected),
-            ),
-          ),
-        ],
-      ),
+                      const Divider(height: 1),
+                      Expanded(child: _visibleBody(context, tabs.selected)),
+                    ],
+                  ),
+                ),
+        ),
+      ],
     );
   }
 }

@@ -25,6 +25,7 @@ class ReadingHeader extends StatelessWidget {
     return ListenableBuilder(
       listenable: session,
       builder: (context, _) {
+        if (session.isScratch) return const SizedBox.shrink();
         final chapter = session.chapter;
         if (chapter == null) {
           return Padding(
@@ -55,7 +56,7 @@ class ReadingHeader extends StatelessWidget {
               ),
               const SizedBox(height: Space.xs),
               Text(
-                session.isScratch ? 'Temporary analysis' : _summary(chapter),
+                _summary(chapter),
                 style: text.bodySmall,
                 textAlign: TextAlign.center,
                 overflow: TextOverflow.ellipsis,

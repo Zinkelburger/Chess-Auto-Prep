@@ -36,6 +36,7 @@ import '../workspace/document_session.dart';
 import '../workspace/game_ordering.dart';
 import '../workspace/move_tree_view.dart' show MoveMenu;
 import '../workspace/workspace.dart';
+import '../workspace/action_layout.dart';
 import '../workspace/workspace_tabs.dart';
 import 'mode.dart';
 import 'database_view.dart';
@@ -73,12 +74,14 @@ typedef ModeMenu = ({
 /// own tabs for the life of the window, so what the user opened in one mode
 /// is still open when they come back to it.
 abstract base class ModeView {
-  ModeView(this.workspace, this.tabs);
+  ModeView(this.workspace, PaneTabs<WorkspaceTab> tabs)
+    : layout = ActionLayout(tabs, workspace.explorer);
 
   final Workspace workspace;
 
   /// The reading card's tabs in this mode: which are open and which is up.
-  final PaneTabs<WorkspaceTab> tabs;
+  final ActionLayout layout;
+  PaneTabs<WorkspaceTab> get tabs => layout.tabs;
 
   /// The left column, with [toggle] — the `«` that hides it — in its corner.
   Widget list(Widget toggle);
@@ -134,7 +137,7 @@ abstract base class ModeView {
   /// the rest. The screen binds [windowKeys] beside its own.
   Widget? screen(Map<ShortcutActivator, VoidCallback> windowKeys) => null;
 
-  void dispose() => tabs.dispose();
+  void dispose() => layout.dispose();
 
   /// What can be done to the document on the board, in every mode that
   /// shows one as a document.

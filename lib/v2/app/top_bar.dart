@@ -279,6 +279,8 @@ class _ActionsMenuState extends State<_ActionsMenu> {
   static const _secondary = {
     'Copy': Icons.content_copy,
     'Panels': Icons.tab_outlined,
+    'Action Tabs': Icons.tab,
+    'Layout': Icons.grid_view,
     'Window': Icons.fullscreen,
   };
 

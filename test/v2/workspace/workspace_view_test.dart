@@ -22,6 +22,7 @@ import 'package:chess_auto_prep/v2/workspace/reading_header.dart';
 import 'package:chess_auto_prep/v2/workspace/replies_pane.dart';
 import 'package:chess_auto_prep/v2/workspace/workspace_keys.dart';
 import 'package:chess_auto_prep/v2/workspace/workspace_tabs.dart';
+import 'package:chess_auto_prep/v2/workspace/action_layout.dart';
 import 'package:chess_auto_prep/v2/workspace/repertoire_shelf.dart';
 import 'package:chess_auto_prep/v2/workspace/repertoire_tree.dart';
 import 'package:chess_auto_prep/v2/workspace/workspace.dart';
@@ -124,7 +125,7 @@ void main() {
     );
   }
 
-  Future<void> pump(WidgetTester tester) async {
+  Future<void> pump(WidgetTester tester, {ActionLayout? layout}) async {
     await tester.binding.setSurfaceSize(const Size(1200, 820));
     await tester.pumpWidget(
       MaterialApp(
@@ -140,7 +141,8 @@ void main() {
             moves: moves,
             child: WorkspaceView(
               workspace: workspace(),
-              tabs: tabs,
+              tabs: layout?.tabs ?? tabs,
+              layout: layout,
               editing: editing,
               moves: moves,
             ),
@@ -251,7 +253,26 @@ void main() {
     expect(session.cursor.isRoot, isTrue);
   });
 
-  testWidgets('tabs stay above the game heading in every reading tab', (
+  testWidgets('four real Explorer panes and Expectimax fit the workspace', (
+    tester,
+  ) async {
+    final layout = ActionLayout(newWorkspaceTabs(), explorer)..arrange(4);
+    addTearDown(layout.dispose);
+    for (var index = 0; index < 4; index++) {
+      layout.pane(index).show(WorkspaceTab.explorer);
+    }
+    await pump(tester, layout: layout);
+    await tester.pumpAndSettle();
+    expect(find.byType(ExplorerPane), findsNWidgets(4));
+    expect(tester.takeException(), isNull);
+    layout.pane(0).show(WorkspaceTab.search);
+    await tester.pumpAndSettle();
+    expect(find.byType(ExplorerPane), findsNWidgets(3));
+    expect(find.text('Engine target: depth 14'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('game heading stays above the Action Tabs in every reading tab', (
     tester,
   ) async {
     await pump(tester);
@@ -263,8 +284,10 @@ void main() {
       tabs.show(tab);
       await tester.pumpAndSettle();
       expect(
-        tester.getBottomLeft(find.byType(PaneTabStrip<WorkspaceTab>)).dy,
-        lessThanOrEqualTo(tester.getTopLeft(find.byType(ReadingHeader)).dy),
+        tester.getBottomLeft(find.byType(ReadingHeader)).dy,
+        lessThanOrEqualTo(
+          tester.getTopLeft(find.byType(PaneTabStrip<WorkspaceTab>)).dy,
+        ),
       );
     }
   });
@@ -429,8 +452,8 @@ void main() {
     analysis.dispose();
     startAnalysis();
     await pump(tester);
-    expect(find.text('Analysis'), findsOneWidget);
-    expect(find.text('Temporary analysis'), findsOneWidget);
+    expect(find.text('Analysis'), findsNothing);
+    expect(find.text('Temporary analysis'), findsNothing);
     expect(find.text('No moves'), findsOneWidget);
   });
 }

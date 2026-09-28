@@ -122,9 +122,10 @@ const paneTabUnderline = 2.0;
 
 /// The Search tab: its number fields, the table's header and rows, and
 /// the columns for how often a reply is played and for the two values.
-const builderToolsMinWidth = 760.0;
+const actionPaneMinWidth = 320.0;
+const searchSettingsWidth = 380.0;
 const reviewGraphHeight = 140.0;
-const searchPaneMinHeight = 220.0;
+const searchPaneMinHeight = 300.0;
 const searchRecoveryMinHeight = 440.0;
 const searchEloWidth = 84.0;
 const searchDepthWidth = 64.0;

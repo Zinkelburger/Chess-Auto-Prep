@@ -54,9 +54,12 @@ sealed class EvaluationResult {
 }
 
 final class Evaluated extends EvaluationResult {
-  const Evaluated(this.eval);
+  const Evaluated(this.eval, {this.depth});
 
   final Eval eval;
+
+  /// Reported engine depth; absent when the source does not supply it.
+  final int? depth;
 }
 
 final class EvaluationUnavailable extends EvaluationResult {

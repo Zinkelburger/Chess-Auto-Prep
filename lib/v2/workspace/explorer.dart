@@ -126,12 +126,14 @@ final class Explorer extends ChangeNotifier {
     required SettingsStore settings,
     required ExplorerDatabases databases,
     this.debounce = const Duration(milliseconds: 250),
+    this.rememberChoice = true,
+    ExplorerChoice? initialChoice,
   }) : _session = session,
        _settings = settings,
        _databases = databases {
-    _choiceNow = _settings.value.explorer;
+    _choiceNow = initialChoice ?? _settings.value.explorer;
     _session.anyChange.addListener(_followTheBoard);
-    _settings.addListener(_followTheSettings);
+    if (rememberChoice) _settings.addListener(_followTheSettings);
     _databases.thisFile.addListener(_followTheLocalGames);
     _databases.myGames.addListener(_followTheLocalGames);
     unawaited(_checkTheBook());
@@ -140,6 +142,17 @@ final class Explorer extends ChangeNotifier {
 
   /// How long the cursor must rest before a database is asked.
   final Duration debounce;
+  final bool rememberChoice;
+
+  /// A second pane shares data access and the board, but owns its filters.
+  Explorer independent() => Explorer(
+    session: _session,
+    settings: _settings,
+    databases: _databases,
+    debounce: debounce,
+    rememberChoice: false,
+    initialChoice: choice,
+  );
 
   /// The deepest ply a database is asked about.
   static const deepestPly = 50;
@@ -201,8 +214,15 @@ final class Explorer extends ChangeNotifier {
   int get ply => plyOf(_session.fen);
 
   /// Changes what is asked; the settings remember it.
-  void choose(ExplorerChoice choice) =>
+  void choose(ExplorerChoice choice) {
+    if (rememberChoice) {
       unawaited(_settings.update(_settings.value.copyWith(explorer: choice)));
+    } else {
+      _choiceNow = choice;
+      _answers.resetEmpties();
+      _followTheSession();
+    }
+  }
 
   /// Asks again, now, whatever the cache holds: the user's `Try again`.
   Future<void> retry() async {

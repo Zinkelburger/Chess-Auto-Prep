@@ -184,7 +184,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   late final _sitting = SittingInView(
     trainer: _train.lines,
     requests: _requests,
-    trainTabOpen: () => _tabs.open.contains(WorkspaceTab.train),
+    trainTabOpen: () => _view.layout.isOpen(WorkspaceTab.train),
   );
   late final _puzzle = PuzzleInView(
     puzzles: _train.puzzles,
@@ -235,8 +235,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     _outlineShown = _wantsOutline;
     _arrange();
     for (final view in _views.values) {
-      view.tabs.addListener(_sitting.check);
-      view.tabs.addListener(_innerTabChanged);
+      view.layout.addListener(_sitting.check);
+      view.layout.addListener(_innerTabChanged);
     }
     _sitting.check();
     _puzzle.check();
@@ -255,7 +255,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     _moves.dispose();
     _claim.dispose();
     for (final view in _views.values) {
-      view.tabs.removeListener(_innerTabChanged);
+      view.layout.removeListener(_innerTabChanged);
       view.dispose();
     }
     _panes.dispose();
@@ -486,7 +486,12 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       ),
   ];
 
-  List<AppAction> _modeActions() => _inspecting
+  List<AppAction> _modeActions() => [
+    if (!_inspecting) ..._view.layout.actions,
+    ..._documentModeActions(),
+  ];
+
+  List<AppAction> _documentModeActions() => _inspecting
       ? [
           ...documentActions(
             session: _boardWorkspace.session,
@@ -661,7 +666,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         actions: _actions,
         // What the entries' enabled states read, heard only while the
         // menu is open: the bar itself shows none of it.
-        actionsChange: Listenable.merge([_view.changes, _editing, _tabs]),
+        actionsChange: Listenable.merge([
+          _view.changes,
+          _editing,
+          _view.layout,
+        ]),
       ),
       const Divider(height: 1),
       if (_requests.status case final status?)
@@ -685,6 +694,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
               child: Column(
                 children: [
                   PaneTabStrip(
+                    label: 'View Tabs',
                     tabs: _requests.documents.tabs,
                     onSelect: (id) => unawaited(_requests.documents.select(id)),
                     onClose: (id) => unawaited(_requests.documents.close(id)),
@@ -728,6 +738,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     _ => WorkspaceView(
       workspace: _boardWorkspace,
       tabs: _tabs,
+      layout: _inspecting ? null : _view.layout,
       editing: _editing,
       moves: _moves,
       hooks: WorkspaceHooks(
@@ -745,12 +756,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         onSaveHeld: _inspecting ? null : _saveHeld,
         onExplorerLogin: widget.onExplorerLogin,
         onDownloadTwic: widget.onDownloadTwic,
-        onExplorerGame: (game) => unawaited(
-          _requests.openExplorerGame(
-            game,
-            source: _ws.explorer.choice.source,
-            ply: _ws.explorer.ply,
-          ),
+        onExplorerGame: (game, source, ply) => unawaited(
+          _requests.openExplorerGame(game, source: source, ply: ply),
         ),
         onOpenChapter: (ref) => unawaited(_requests.readInBuilder(ref, [])),
         // The chapter a book move was found in: in the builder, at the

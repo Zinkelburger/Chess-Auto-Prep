@@ -17,10 +17,16 @@ Position afterUci(Position from, String uci) =>
 /// is Black's move. [asked] records the positions it was given, so a test can
 /// say what the search should not have needed.
 final class ScriptedEvaluator implements PositionEvaluator {
-  ScriptedEvaluator({this.scores = const {}, this.fallback = 0, this.failAt});
+  ScriptedEvaluator({
+    this.scores = const {},
+    this.fallback = 0,
+    this.failAt,
+    this.depth,
+  });
 
   final Map<String, int> scores;
   final int fallback;
+  final int? depth;
 
   /// A position the engine refuses to score.
   final String? failAt;
@@ -34,7 +40,7 @@ final class ScriptedEvaluator implements PositionEvaluator {
     if (fen == failAt) {
       return const EvaluationUnavailable('the scripted engine gave up');
     }
-    return Evaluated(Eval(scores[fen] ?? fallback));
+    return Evaluated(Eval(scores[fen] ?? fallback), depth: depth);
   }
 }
 

@@ -20,15 +20,28 @@ audit and the Findings pane are [checks.md](checks.md).
 
 Builder opens Expectimax, Moves and Explorer, with Expectimax selected. Train and
 Replies remain available from the inner tab menu but are not initially open.
-The split-panel control shows Moves above Expectimax and Explorer; wide cards
-put those tools side by side and narrow cards stack them. Dividers resize each
-panel; the same control returns to one selected tab. The move-note card beneath
-the board is directly editable, including the chapter introduction. It uses the
+The **Action Tabs** layout control offers 1, 2, 3 or 4 fixed panes: one pane,
+two side by side, one on the left and two on the right, or four quadrants.
+Each pane has its own tabs and a menu for choosing a tool. Select a pane before
+using tab keyboard shortcuts; Actions can also select a tool in a named pane.
+Up to four Explorers can use different sources and filters on the shared board.
+Reducing the pane count keeps hidden selections and filters for restoration;
+layouts last for the current app session and are retained per mode.
+The move-note card beneath the board is directly editable, including the chapter introduction. It uses the
 existing commit-on-navigation editor and guarded document saver.
 
 Expectimax has a play button, a compact rating/depth summary and a settings
-dialog. Stockfish is the default; optional database sources live inside that
-dialog. Ctrl+G uses the same selected source, rating and depth. Clicking a result
+dialog. Both Stop and Stop after finishing depth N carry pause icons; Stop
+finishes the current position, while the other finishes the whole search level.
+The opponent rating and search limit are labelled, and the engine target depth
+is displayed separately. Hover an Engine value for its recorded depth (engine,
+cache or Lichess cloud).
+Depth 14 is the engine target; cache/database results may differ. Per-result
+depths remain session metadata: older/resumed tree values and ChessDB results
+without a depth report it as unavailable. Empty searches show a start
+instruction, and scratch boards omit the redundant
+“Temporary analysis” heading. Stockfish is the default; optional database
+sources live inside that dialog. Ctrl+G uses the same selected source, rating and depth. Clicking a result
 while running stops the old search, saves its committed tree, and continues from
 the clicked position using compatible child values. Failed saves block the next
 run and retain Retry/Discard. Navigating again while that save is pending cancels
@@ -37,7 +50,8 @@ not launch work unexpectedly. Make lines remains the direct action below results
 The [interactive search policy](../../ALGORITHM.md#v2-interactive-expectimax)
 keeps broad root coverage and shortlists deeper moves.
 
-Global file tabs include the current mode, such as `Builder · Main` or
+**View Tabs** have a labelled strip and selected tabs use an accent fill and border.
+They include the current mode, such as `Builder · Main` or
 `Viewer · Match`, and restore that mode when selected.
 
 ## Screen

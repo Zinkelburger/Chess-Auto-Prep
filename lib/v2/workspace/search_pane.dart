@@ -186,6 +186,19 @@ class _SearchPaneState extends State<SearchPane>
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _form(context),
+                  Tooltip(
+                    message:
+                        'Engine evaluation target, separate from Expectimax search depth. '
+                        'Cached scores may be deeper; database scores and proven mates may differ. '
+                        'Hover an Engine value for its recorded depth.',
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: Space.m),
+                      child: Text(
+                        'Engine target: depth $fillEvalDepth',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ),
                   _status(context),
                   const Divider(height: 1),
                   Expanded(child: _table(context)),
@@ -247,7 +260,7 @@ class _SearchPaneState extends State<SearchPane>
               },
               icon: const Icon(Icons.tune),
               label: Text(
-                '${widget.settings.value.opponentElo} · ${fill.depth == null ? 'Continuous' : '${fill.depth} plies'}',
+                'Opponent ${widget.settings.value.opponentElo} · ${fill.depth == null ? 'Until stopped' : 'Search depth ${fill.depth}'}',
               ),
             ),
           ),
@@ -280,12 +293,13 @@ class _SearchPaneState extends State<SearchPane>
                 message:
                     'Score every position at this depth, then stop and '
                     'keep the tree',
-                child: OutlinedButton(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.pause),
                   onPressed: running.stopping || running.lastPly != null
                       ? null
                       : fill.finishLevel,
-                  child: Text(
-                    'Stop after depth '
+                  label: Text(
+                    'Stop after finishing depth '
                     '${running.lastPly ?? (running.depth < 1 ? 1 : running.depth)}',
                   ),
                 ),
@@ -293,10 +307,12 @@ class _SearchPaneState extends State<SearchPane>
               const SizedBox(width: Space.s),
             ],
             Tooltip(
-              message: 'Stop now and keep what it found',
-              child: FilledButton(
+              message:
+                  'Finish the current position, then stop and keep the results',
+              child: FilledButton.icon(
+                icon: const Icon(Icons.pause),
                 onPressed: running.stopping ? null : fill.finish,
-                child: const Text('Stop'),
+                label: const Text('Stop'),
               ),
             ),
           ],
@@ -370,7 +386,13 @@ class _SearchPaneState extends State<SearchPane>
 
   Widget _table(BuildContext context) {
     final found = widget.fill.found;
-    if (found == null) return const SizedBox.shrink();
+    if (found == null)
+      return _sentence(
+        context,
+        widget.fill.running
+            ? 'Evaluating the first moves…'
+            : 'Press ▶ Expectimax to evaluate moves from this position.',
+      );
     final session = widget.session;
     final tree = session.tree;
     final node = tree == null
@@ -478,6 +500,7 @@ class _SearchPaneState extends State<SearchPane>
               return _RowView(
                 key: ValueKey(row.move.uci),
                 row: row,
+                engineDepth: widget.fill.engineDepthAt(row.after.fen),
                 side: side,
                 ours: ours,
                 onHover: (anchor) => _hover(row.after, row.move.uci, anchor),
@@ -681,6 +704,7 @@ class _RowView extends StatelessWidget {
   const _RowView({
     super.key,
     required this.row,
+    required this.engineDepth,
     required this.side,
     required this.ours,
     required this.onHover,
@@ -689,6 +713,7 @@ class _RowView extends StatelessWidget {
   });
 
   final _Row row;
+  final int? engineDepth;
 
   /// The side the search played for, whose point of view the values are
   /// kept in; they are shown from White's.
@@ -751,10 +776,15 @@ class _RowView extends StatelessWidget {
                 ),
                 SizedBox(
                   width: searchValueWidth,
-                  child: Text(
-                    _engineText(after.evalForUs, white: white),
-                    style: muted,
-                    textAlign: TextAlign.right,
+                  child: Tooltip(
+                    message: engineDepth == null
+                        ? 'Engine depth unavailable for this saved or database result'
+                        : 'Engine depth $engineDepth',
+                    child: Text(
+                      _engineText(after.evalForUs, white: white),
+                      style: muted,
+                      textAlign: TextAlign.right,
+                    ),
                   ),
                 ),
               ],
@@ -835,7 +865,7 @@ class _SearchSettingsState extends State<_SearchSettings> {
   Widget build(BuildContext context) => AlertDialog(
     title: const Text('Expectimax settings'),
     content: SizedBox(
-      width: builderToolsMinWidth / 2,
+      width: searchSettingsWidth,
       child: SingleChildScrollView(
         child: Wrap(
           spacing: Space.m,

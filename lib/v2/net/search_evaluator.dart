@@ -29,26 +29,26 @@ final class SearchEvaluator implements PositionEvaluator {
   int _requests = 0;
 
   @override
-  Future<EvaluationResult> evaluate(
-    Position position,
-  ) => _answers.putIfAbsent(position.fen, () async {
-    final before = _tail;
-    final gate = Completer<void>();
-    _tail = gate.future;
-    Eval? score;
-    try {
-      await before;
-      if (!_closed && !_offline && _requests < 1000) {
-        score = await _remote(position);
-      }
-    } finally {
-      gate.complete();
-    }
-    if (_closed) return const EvaluationUnavailable('The search was stopped.');
-    return score == null ? evaluationOf(fallback, position) : Evaluated(score);
-  });
+  Future<EvaluationResult> evaluate(Position position) =>
+      _answers.putIfAbsent(position.fen, () async {
+        final before = _tail;
+        final gate = Completer<void>();
+        _tail = gate.future;
+        Evaluated? score;
+        try {
+          await before;
+          if (!_closed && !_offline && _requests < 1000) {
+            score = await _remote(position);
+          }
+        } finally {
+          gate.complete();
+        }
+        if (_closed)
+          return const EvaluationUnavailable('The search was stopped.');
+        return score ?? await evaluationOf(fallback, position);
+      });
 
-  Future<Eval?> _remote(Position position) async {
+  Future<Evaluated?> _remote(Position position) async {
     _requests++;
     final uri = source == EvaluationSource.chessDb
         ? Uri.https('www.chessdb.cn', '/cdb.php', {
@@ -69,13 +69,20 @@ final class SearchEvaluator implements PositionEvaluator {
         _offline = true;
       }
       if (response.statusCode != 200) return null;
-      return source == EvaluationSource.chessDb
+      final score = source == EvaluationSource.chessDb
           ? chessDbScore(response.body)
           : lichessScore(
               response.body,
               whiteToMove: position.turn == Side.white,
               minDepth: minDepth,
             );
+      if (score == null) return null;
+      return Evaluated(
+        score,
+        depth: source == EvaluationSource.lichess
+            ? (jsonDecode(response.body) as Map)['depth'] as int?
+            : null,
+      );
     } on Object {
       _offline = true;
       return null;

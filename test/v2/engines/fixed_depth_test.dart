@@ -28,7 +28,12 @@ void main() {
         ..emit(line(depth: 12, multiPv: 2, score: const Centipawns(99)))
         ..emit(line(depth: 12, score: const Centipawns(30)))
         ..end();
-      expect(await asked, isA<Evaluated>().having((e) => e.eval.cp, 'cp', 30));
+      expect(
+        await asked,
+        isA<Evaluated>()
+            .having((e) => e.eval.cp, 'cp', 30)
+            .having((e) => e.depth, 'depth', 12),
+      );
     },
   );
 
@@ -77,7 +82,12 @@ void main() {
       engine.current
         ..emit(line(depth: 3, score: const MateIn(2)))
         ..end();
-      expect(await mate, isA<Evaluated>().having((e) => e.eval.cp, 'cp', 9998));
+      expect(
+        await mate,
+        isA<Evaluated>()
+            .having((e) => e.eval.cp, 'cp', 9998)
+            .having((e) => e.depth, 'depth', 3),
+      );
 
       final over = evaluator.evaluate(start);
       await pumpEventQueue();
@@ -96,7 +106,9 @@ void main() {
       final answer = await evaluator.evaluate(afterE4);
       expect(
         answer,
-        isA<Evaluated>().having((e) => e.eval, 'eval', const Eval(-35)),
+        isA<Evaluated>()
+            .having((e) => e.eval, 'eval', const Eval(-35))
+            .having((e) => e.depth, 'depth', 14),
       );
       expect(engine.searches, isEmpty);
     });

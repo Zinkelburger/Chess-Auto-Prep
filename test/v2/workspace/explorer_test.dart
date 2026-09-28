@@ -117,6 +117,29 @@ void main() {
 
   ExplorerShown shown() => explorer.state as ExplorerShown;
 
+  test(
+    'independent panes keep filters while sharing board navigation',
+    () async {
+      await start();
+      final second = explorer.independent();
+      addTearDown(second.dispose);
+      second.choose(
+        const ExplorerChoice(source: ExplorerSource.lichess, ratings: {1600}),
+      );
+      await pumpEventQueue();
+      expect(explorer.choice.source, ExplorerSource.masters);
+      expect(settings.value.explorer.source, ExplorerSource.masters);
+      explorer.choose(const ExplorerChoice(source: ExplorerSource.twic));
+      await pumpEventQueue();
+      expect(second.choice.source, ExplorerSource.lichess);
+      expect(second.choice.ratings, {1600});
+      fixture.session.forward();
+      await pumpEventQueue();
+      expect(second.ply, explorer.ply);
+      expect(second.ply, 1);
+    },
+  );
+
   test('the table is the database\'s moves at the board, spelled for the '
       'position, ticked where the chapter plays them', () async {
     await start();

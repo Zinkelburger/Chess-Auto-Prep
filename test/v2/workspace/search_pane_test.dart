@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/v2/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
@@ -44,6 +46,7 @@ void main() {
       documents: fixture.store,
       tools: (_) async => FillReady(
         evaluator: ScriptedEvaluator(
+          depth: 22,
           scores: {
             // e4 is a pawn better than anything else for White; after it,
             // Kf7 is played three games in ten and gives White two pawns.
@@ -119,10 +122,45 @@ void main() {
     expect(published, hasLength(1));
   });
 
+  testWidgets('both pause controls explain when they stop and keep the run', (
+    tester,
+  ) async {
+    fill.dispose();
+    final tools = Completer<FillToolsResult>();
+    fill = FillGaps(
+      session: fixture.session,
+      analysis: analysis,
+      documents: fixture.store,
+      tools: (_) => tools.future,
+    );
+    await pump(tester);
+    final run = fill.start(const FillRequest(elo: 2200));
+    await tester.pump();
+    expect(find.byIcon(Icons.pause), findsNWidgets(2));
+    await tester.tap(find.text('Stop after finishing depth 1'));
+    await tester.pump();
+    expect((fill.state as FillRunning).lastPly, 1);
+    await tester.tap(find.text('Stop'));
+    await tester.pump();
+    expect((fill.state as FillRunning).finishing, isTrue);
+    tools.complete(
+      FillReady(
+        evaluator: ScriptedEvaluator(),
+        policy: const ScriptedPolicy({'e8d8': 1}),
+        release: () async {},
+      ),
+    );
+    await tester.runAsync(() => run);
+    await tester.pump();
+    expect(fill.running, isFalse);
+  });
+
   testWidgets('before a search: its two numbers and one button', (
     tester,
   ) async {
     await pump(tester);
+    expect(find.text('Engine target: depth 14'), findsOneWidget);
+    expect(find.textContaining('Press ▶ Expectimax'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'Opponent'), findsNothing);
     await tester.tap(find.byTooltip('Expectimax settings'));
     await tester.pump();
@@ -191,6 +229,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(fill.depth, 2);
     expect(find.text('Your move'), findsOneWidget);
+    expect(find.byTooltip('Engine depth 22'), findsWidgets);
     expect(find.text('Expectimax'), findsNWidgets(2));
     // Nothing is pruned: a move the engine thinks little of is searched too.
     expect(find.text('e4'), findsOneWidget);

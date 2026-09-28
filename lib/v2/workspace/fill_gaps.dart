@@ -166,6 +166,9 @@ final class FillGaps extends ChangeNotifier {
   /// number, kept for the life of the window. Null, the default, searches
   /// until the user stops it.
   int? depth;
+  final _engineDepths = <String, int>{};
+
+  int? engineDepthAt(Fen fen) => _engineDepths[fen.value];
 
   EvaluationSource source = EvaluationSource.stockfish;
   Completer<void>? _finished;
@@ -267,6 +270,7 @@ final class FillGaps extends ChangeNotifier {
       side: side,
       chapter: drafting ? (chapter, source) : null,
     );
+    _engineDepths.clear();
     _active = true;
     _finished = Completer<void>();
     _releasing = null;
@@ -373,7 +377,7 @@ final class FillGaps extends ChangeNotifier {
       root: root,
       seed: seed,
       config: config,
-      evaluator: tools.evaluator,
+      evaluator: _DepthRecorder(tools.evaluator, _engineDepths),
       policy: tools.policy,
       candidates: tools.candidates,
       isCancelled: () => _stopping,
@@ -788,14 +792,18 @@ final class CachedEvaluator implements PositionEvaluator {
   Future<EvaluationResult> evaluate(Position position) async {
     final fen = Fen(position.fen);
     final white = position.turn == Side.white;
-    final kept = cache.read(fen.position, minDepth: depth);
-    if (kept != null) return Evaluated(Eval(white ? kept : -kept));
+    final kept = cache.readVerdict(fen.position, minDepth: depth);
+    if (kept != null)
+      return Evaluated(
+        Eval(white ? kept.cpWhite : -kept.cpWhite),
+        depth: kept.depth,
+      );
     final answer = await evaluationOf(engine, position);
     if (answer case Evaluated(:final eval)) {
       cache.write(
         fen.position,
         cpWhite: white ? eval.cp : -eval.cp,
-        depth: depth,
+        depth: answer.depth ?? depth,
       );
     }
     return answer;
@@ -871,3 +879,18 @@ Future<Object> readSearchSeed(
     TreeMalformed(:final detail) => detail,
   };
 });
+
+/// Collect only depths actually supplied by the evaluator. This metadata is
+/// session-local: older saved trees do not record individual result depths.
+final class _DepthRecorder implements PositionEvaluator {
+  const _DepthRecorder(this.evaluator, this.depths);
+  final PositionEvaluator evaluator;
+  final Map<String, int> depths;
+
+  @override
+  Future<EvaluationResult> evaluate(Position position) async {
+    final result = await evaluationOf(evaluator, position);
+    if (result case Evaluated(:final depth?)) depths[position.fen] = depth;
+    return result;
+  }
+}
