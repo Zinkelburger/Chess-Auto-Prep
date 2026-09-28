@@ -1,10 +1,21 @@
 # Generation
 
-Status: corrected by the owner (2026-09-21: decisions below; built 2026-09-22 as `Fill gaps from here…`; since 2026-09-23 the Search tab, see the last section)
+Status: corrected by the owner (2026-09-21: decisions below; built 2026-09-22 as `Fill gaps from here…`; since 2026-09-27 the Expectimax tab, see the current workflow and saving sections)
 Old code (oracle only): `lib/features/generate/`, `lib/features/generation/`, `lib/features/planner/`,
 `lib/widgets/generation/`, `lib/widgets/repertoire_generation_tab.dart`, `lib/widgets/layout/jobs_panel.dart`,
 `lib/core/generation_session_controller.dart`, `lib/services/tree_build_service.dart`
 Plan step: 7
+
+## Current interactive workflow (2026-09-27)
+
+The tab is now **Expectimax**, with a play button and settings behind its compact
+rating/depth summary. Builder shows it alongside Moves and Explorer by default;
+Train is optional. Clicking a running result saves the old tree before starting
+from the selected position. See [Builder](builder.md#current-v2-workflow-2026-09-27)
+for the controls and [interactive search policy](../../ALGORITHM.md#v2-interactive-expectimax)
+for the current branching rules. This supersedes the historical exhaustive-search
+and visible source-selector decisions below: deeper nodes shortlist four of our
+moves, and low-probability opponent paths retain their values without expanding.
 
 ## Purpose
 Someone with a chapter open wants lines written into it rather than typed: they point the search at the position
@@ -336,7 +347,7 @@ are saved behind it. A failed tree save retains the same run ID and frozen bytes
 run ID is refused. A missing source chapter is reported, not mistaken for successful
 persistence. Make lines remains available; another search waits for resolution of the save.
 
-`Resume` (beside Search) continues the matching in-memory tree or the most recent saved
+`Resume` (beside Expectimax) continues the matching in-memory tree or the most recent saved
 tree starting at the board. Root, side, opponent rating and evaluation source must agree.
 It reuses scores and whole expansions, expands old horizon leaves when asked for more depth,
 and recomputes path histories and backed-up values. Snapshots share unchanged branches,
@@ -344,14 +355,18 @@ work yields between expansion batches, and encoding runs off the UI isolate.
 
 **Searches from an agent.** The chess-prep MCP server's expectimax tools share this
 folder when given the chapter. `expectimax_run {chapter}` builds with the C
-builder at this tab's settings: engine depth 14, no loss window, pure search,
+builder with engine depth 14, no loss window and exhaustive pure search,
 the chapter's side, and a root that may be the opponent's move. When the
 build ends it writes `v2-agent-<run id>/tree.json` beside the chapter,
 replacing the file atomically, so Resume at that board opens and continues
-it. `expectimax_resume {chapter}` goes the other way. It copies the newest
-tree here into a new run, with an unlimited horizon replaced by the requested
+it. `expectimax_resume {chapter}` can resume exhaustive algorithm-version-3
+trees in the other direction. It copies a compatible tree here into a new run, with an unlimited horizon replaced by the requested
 one (at most 64). The source tree is never edited. The trees are the only
 shared state; the app and the builder each keep their own evaluation cache.
+The interactive app now writes algorithm version 4 for its narrowed candidate
+policy. The exhaustive C/MCP reader refuses these trees rather than treating
+shortlisted branches as complete enumerations; it cannot yet resume them.
+Older exhaustive chapter trees remain readable and resumable in the app.
 
 **Make lines** freezes the accepted timestamp and generated text. A confirmed
 initial name collision can choose the next numbered draft. Once creation has an
