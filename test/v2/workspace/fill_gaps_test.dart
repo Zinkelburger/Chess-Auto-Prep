@@ -152,27 +152,45 @@ void main() {
     },
   );
 
-  test('candidate count and reply coverage govern and survive the saved search', () async {
-    String? saved;
-    final fill = fillWith(ScriptedEvaluator(),
-      keepTree: (_, text, {required runId}) async { saved = text; });
-    const custom = FillRequest(elo: 1800, depthPlies: 3,
-      candidateMoves: 1, replyFloor: 0.02);
-    await fill.start(custom);
-    final root = fill.found!.tree as OurNode;
-    expect(root.candidates.length, greaterThan(1), reason: 'root stays broad');
-    for (final candidate in root.candidates) {
-      for (final reply in (candidate.child as OpponentNode).replies) {
-        expect((reply.child as OurNode).candidates, hasLength(1));
+  test(
+    'candidate count and reply coverage govern and survive the saved search',
+    () async {
+      String? saved;
+      final fill = fillWith(
+        ScriptedEvaluator(),
+        keepTree: (_, text, {required runId}) async {
+          saved = text;
+        },
+      );
+      const custom = FillRequest(
+        elo: 1800,
+        depthPlies: 3,
+        candidateMoves: 1,
+        replyFloor: 0.02,
+      );
+      await fill.start(custom);
+      final root = fill.found!.tree as OurNode;
+      expect(
+        root.candidates.length,
+        greaterThan(1),
+        reason: 'root stays broad',
+      );
+      for (final candidate in root.candidates) {
+        for (final reply in (candidate.child as OpponentNode).replies) {
+          expect((reply.child as OurNode).candidates, hasLength(1));
+        }
       }
-    }
-    final config = (jsonDecode(saved!) as Map)['config'] as Map;
-    expect(config['v2_max_our_moves'], 1);
-    expect(config['v2_reply_floor'], 0.02);
-    final restarted = fillWith(ScriptedEvaluator(), loadTree: (_, _) async => saved);
-    expect(await restarted.resume(custom), isNull);
-    expect(restarted.state, isA<FillDone>());
-  });
+      final config = (jsonDecode(saved!) as Map)['config'] as Map;
+      expect(config['v2_max_our_moves'], 1);
+      expect(config['v2_reply_floor'], 0.02);
+      final restarted = fillWith(
+        ScriptedEvaluator(),
+        loadTree: (_, _) async => saved,
+      );
+      expect(await restarted.resume(custom), isNull);
+      expect(restarted.state, isA<FillDone>());
+    },
+  );
 
   test('saved searches refuse a changed opponent rating', () async {
     String? saved;
