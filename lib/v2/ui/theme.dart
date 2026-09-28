@@ -305,6 +305,7 @@ MultiSplitViewThemeData paneTheme(ColorScheme scheme) =>
 /// Charcoal surfaces with a bright cornflower blue accent, colour kept for meaning.
 const _surface = Color(0xFF1B1B1D);
 const _panel = Color(0xFF242427);
+const _selection = Color(0xFF38383D);
 
 /// The reading card, near black under the moves: the old app's, and what
 /// made its reading pane look the way it did.
@@ -341,11 +342,14 @@ ThemeData darkTheme() {
     secondary: _accent,
     outline: _outline,
     outlineVariant: _outline,
+    surfaceContainerLow: _surface,
+    surfaceContainer: _surface,
+    surfaceContainerHigh: _panel,
     surfaceContainerHighest: _panel,
     surfaceContainerLowest: _reading,
     onSurfaceVariant: _muted,
-    secondaryContainer: _accentFill,
-    onSecondaryContainer: Colors.white,
+    secondaryContainer: _selection,
+    onSecondaryContainer: _text,
   );
   final base = ThemeData(
     colorScheme: scheme,

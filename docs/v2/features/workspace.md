@@ -49,21 +49,25 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   threat, gear, nodes or settings yet. The old app's large headline score was tried and dropped.
   Since 2026-09-23 it sits **under the board**, not above the card's tabs (owner: "ugly above all
   the tabs"). Since 2026-09-27 the engine switch and status stay visible when off; only the PV rows
-  collapse. The same switch turns it back on or retries a failed start, alongside E and
+  collapse. The engine starts off on every app launch. The same switch turns it
+  on or retries a failed start, alongside E and
   Actions ▸ Board ▸ Engine on. A paused engine keeps its switch and status.
   Training boards likewise reserve no empty engine area.)
-- **Tab strip and Replies** (v2, 2026-09-21; browser tabs 2026-09-22; big tabs 2026-09-23) —
-  above the card's heading and controls, `Moves | Train | Replies | Explorer | Search`. Since 2026-09-23
-  the tabs share the strip's width, 40px tall, the one that is up filled (owner: the small
-  underlined tabs were "ugly, small and hard to click"); no `×` is drawn and no control sits at
-  the strip's end. Fixed identities: `Moves` is pinned, a middle click closes, a drag puts a tab
-  in front of another, Ctrl+Tab / Ctrl+Shift+Tab walk them and
-  Ctrl+W closes the one that is up. A closed tab comes back from Actions ▸ Panels ▸ `Show Replies`; the
-  strip stays visible even with only one tab open. Which tabs are open is window state, kept across
-  modes and lost with the window. `Moves` starts up. `Next gap` is an outlined button at the end
-  of the Replies tab's status line. Replies is the Maia-3 table described in `repertoires.md`: share
-  gutter, numbered move, tick or `gap`, a hover board of the position after the move, a click
-  plays it. A new tab is one `PaneTab` in `workspace/workspace_tabs.dart` and one body in the card.
+- **Tab strip and panes** (v2, updated 2026-09-27) — compact, left-aligned tabs
+  with visible close buttons, neutral active surfaces and stronger selected text.
+  Middle-click closes, dragging within a strip reorders, and Ctrl+Tab /
+  Ctrl+Shift+Tab / Ctrl+W navigate and close. The plus menu opens tools and offers
+  Split right / Split below. Right-click a tab to move it to a pane named by its
+  position and current tool, split it, or join panes. Right-click a tool entry in
+  Actions or the plus menu to choose where it opens. During a tab drag, pane bodies
+  show Move here / Split right / Split below docking targets; releasing outside a
+  target cancels. Splits grow from the target pane, up to four panes, with no
+  numbered layout controls. Splitting a lone tab creates another view; otherwise
+  the dragged/context-clicked tab moves out of its source. Empty secondary panes
+  collapse after a move. Closing or joining panes returns their tools to the main
+  pane, and Explorer filters stay independent. Collection Analysis belongs only
+  to the primary pane; pinned mode tabs stay put. Layouts last for the window.
+  Replies retains the Maia-3 table and Next gap described in `repertoires.md`.
 - **Explorer (Database dock)** — sources: Engine evals, ChessDB, Repertoire, Opening explorer,
   Local PGN. Live explorer: Lichess, Masters, TWIC (with a download action when missing), behind a
   collapsed filter summary; Lichess has speed and rating chips (defaults blitz/rapid/classical,
@@ -192,7 +196,7 @@ one king.").
   relative, deepest wins, written 500 ms or 200 entries after a completed non-threat search; the dock
   writes it and never reads it, while generation, bulk review and tactics read it.
 - **Settings** are global across every board: cores, memory, depth, lines, coordinates, piece
-  notation, show legal moves and engine on/off (default on).
+  notation, show legal moves and engine on/off (starts off each app session).
 - **Explorer sources** — Lichess masters and player databases over HTTPS: 100 ms minimum gap, 3
   retries, 60/120/240 s backoff on 429, 250 ms leading-edge debounce, no request past ply 50 or after
   3 empty answers going deeper down one line; cached in memory only (2000 entries, no TTL, no disk). TWIC answers

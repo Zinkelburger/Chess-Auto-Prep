@@ -1,113 +1,71 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../ui/action_context_menu.dart';
+import '../ui/app_action.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
 import 'action_layout.dart';
 import 'workspace_tabs.dart';
 
-/// Preset slots, in reading order. No drag targets or hidden docking rules.
-class ActionPanes extends StatelessWidget {
+/// Docking affordances appear during a drag, leaving the reading area quiet.
+class ActionPanes extends StatefulWidget {
   const ActionPanes({super.key, required this.layout, required this.body});
   final ActionLayout layout;
   final Widget Function(BuildContext, int, WorkspaceTab) body;
 
   @override
+  State<ActionPanes> createState() => _ActionPanesState();
+}
+
+class _ActionPanesState extends State<ActionPanes> {
+  PaneTabDrag<WorkspaceTab>? _drag;
+  ActionLayout get layout => widget.layout;
+
+  void _dragChanged(PaneTabDrag<WorkspaceTab>? drag) {
+    if (!mounted) return;
+    setState(() => _drag = drag);
+  }
+
+  @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: layout,
-    builder: (context, _) => Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(Space.s),
-          child: Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: Space.s,
-            runSpacing: Space.s,
-            children: [
-              Text(
-                'Action Tabs',
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
-              SegmentedButton<int>(
-                showSelectedIcon: false,
-                segments: [
-                  for (var count = 1; count <= 4; count++)
-                    ButtonSegment(
-                      value: count,
-                      label: Text('$count'),
-                      icon: Icon(switch (count) {
-                        1 => Icons.crop_square,
-                        2 => Icons.view_column_outlined,
-                        3 => Icons.space_dashboard_outlined,
-                        _ => Icons.grid_view,
-                      }, size: IconSize.menu),
-                      tooltip: switch (count) {
-                        1 => '1 pane',
-                        2 => '2 panes: side by side',
-                        3 => '3 panes: left and two on the right',
-                        _ => '4 panes: quadrants',
-                      },
-                    ),
-                ],
-                selected: {layout.count},
-                onSelectionChanged: (values) => layout.arrange(values.single),
-              ),
-            ],
-          ),
-        ),
-        Expanded(child: _grid(context)),
-      ],
-    ),
+    builder: (context, _) => _grid(layout.root),
   );
 
-  Widget _grid(BuildContext context) {
-    Widget column(List<int> slots) => Column(
+  Widget _grid(ActionPaneNode node) => switch (node) {
+    ActionPaneLeaf() => _pane(context, node.index),
+    ActionPaneSplit() => Flex(
+      direction: node.direction == PaneSplitDirection.right
+          ? Axis.horizontal
+          : Axis.vertical,
       children: [
-        for (final index in slots) Expanded(child: _pane(context, index)),
+        Expanded(child: _grid(node.first)),
+        Expanded(child: _grid(node.second)),
       ],
-    );
-    return switch (layout.count) {
-      1 => _pane(context, 0),
-      2 => Row(
-        children: [
-          Expanded(child: _pane(context, 0)),
-          Expanded(child: _pane(context, 1)),
-        ],
-      ),
-      3 => Row(
-        children: [
-          Expanded(child: _pane(context, 0)),
-          Expanded(child: column([1, 2])),
-        ],
-      ),
-      _ => Row(
-        children: [
-          Expanded(child: column([0, 2])),
-          Expanded(child: column([1, 3])),
-        ],
-      ),
-    };
-  }
+    ),
+  };
 
   Widget _pane(BuildContext context, int index) {
     final tabs = layout.pane(index);
     final scheme = Theme.of(context).colorScheme;
+    final drag = _drag;
     return Listener(
       onPointerDown: (_) => layout.select(index),
       child: Focus(
         onFocusChange: (focused) {
-          if (focused) layout.select(index);
+          if (mounted && focused) layout.select(index);
         },
         child: Container(
           key: ValueKey('action-pane-$index'),
           margin: const EdgeInsets.all(Space.xs),
           decoration: BoxDecoration(
+            color: scheme.surface,
             border: Border.all(
               color: layout.active == index
-                  ? scheme.primary
+                  ? scheme.onSurfaceVariant.withValues(alpha: 0.55)
                   : scheme.outlineVariant,
             ),
             borderRadius: BorderRadius.circular(paneTabRadius),
@@ -118,15 +76,22 @@ class ActionPanes extends StatelessWidget {
               _paneHeader(context, index),
               const Divider(height: 1),
               Expanded(
-                child: LayoutBuilder(
-                  builder: (context, size) => SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: SizedBox(
-                      width: math.max(actionPaneMinWidth, size.maxWidth),
-                      height: size.maxHeight,
-                      child: body(context, index, tabs.selected),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    LayoutBuilder(
+                      builder: (context, size) => SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(
+                          width: math.max(actionPaneMinWidth, size.maxWidth),
+                          height: size.maxHeight,
+                          child: widget.body(context, index, tabs.selected),
+                        ),
+                      ),
                     ),
-                  ),
+                    if (drag != null && layout.sourceOf(drag.source) != null)
+                      _docking(index, drag),
+                  ],
                 ),
               ),
             ],
@@ -136,54 +101,198 @@ class ActionPanes extends StatelessWidget {
     );
   }
 
+  List<AppAction> _tabActions(int index, WorkspaceTab tab) => [
+    if (!layout.pane(index).tabOf(tab).pinned)
+      ...layout.destinations(tab, from: index),
+    if (!layout.pane(index).tabOf(tab).pinned &&
+        layout.pane(index).open.length > 1)
+      AppAction('Close tab', () => layout.pane(index).close(tab)),
+    if (index != 0) AppAction('Close pane', () => layout.closePane(index)),
+    if (layout.count > 1) AppAction('Join all panes', layout.joinAll),
+  ];
+
   Widget _paneHeader(BuildContext context, int index) {
     final tabs = layout.pane(index);
     final scheme = Theme.of(context).colorScheme;
     return ColoredBox(
-      color: scheme.surfaceContainer,
+      color: scheme.surfaceContainerLow,
       child: Row(
         children: [
-          if (layout.count > 1)
-            SizedBox(
-              width: paneTabCloseSize,
-              child: Center(
-                child: Text(
-                  '${index + 1}',
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
-              ),
-            ),
           Expanded(
             child: PaneTabStrip(
               tabs: tabs,
               connected: true,
               showAdd: false,
-              onSelect: (tab) {
-                layout.select(index);
-                tabs.show(tab);
+              onSelect: (tab) => layout.show(index, tab),
+              onContextMenu: (tab, position) {
+                final actions = _tabActions(index, tab);
+                if (actions.isNotEmpty) {
+                  unawaited(showActionContextMenu(context, position, actions));
+                }
+              },
+              onDragStarted: _dragChanged,
+              onDragEnd: () => _dragChanged(null),
+              onDrop: (drag, before) {
+                final source = layout.sourceOf(drag.source);
+                _dragChanged(null);
+                if (source != null) {
+                  layout.move(source, index, drag.id, before: before);
+                }
               },
             ),
           ),
-          MenuAnchor(
-            menuChildren: [
-              for (final tab in tabs.tabs)
-                MenuItemButton(
-                  onPressed: () {
-                    layout.select(index);
-                    tabs.show(tab.id);
-                  },
-                  child: Text(tab.title),
-                ),
-            ],
-            builder: (context, menu, _) => IconButton(
-              tooltip: layout.count == 1
-                  ? 'Open tab'
-                  : 'Choose Action Tab for pane ${index + 1}',
-              icon: const Icon(Icons.add, size: IconSize.menu),
-              onPressed: menu.isOpen ? menu.close : menu.open,
+          _paneMenu(index),
+        ],
+      ),
+    );
+  }
+
+  Widget _paneMenu(int index) {
+    final tabs = layout.pane(index);
+    return MenuAnchor(
+      menuChildren: [
+        for (final tab in tabs.tabs)
+          GestureDetector(
+            onSecondaryTapUp: (details) => showActionContextMenu(
+              context,
+              details.globalPosition,
+              layout.destinations(tab.id),
+            ),
+            child: MenuItemButton(
+              onPressed: () => layout.show(index, tab.id),
+              child: Text(tab.title),
             ),
           ),
-        ],
+        const Divider(height: 1),
+        MenuItemButton(
+          onPressed: layout.canSplit(tabs.selected)
+              ? () =>
+                    layout.split(index, tabs.selected, PaneSplitDirection.right)
+              : null,
+          leadingIcon: const Icon(
+            Icons.vertical_split_outlined,
+            size: IconSize.menu,
+          ),
+          child: const Text('Split right'),
+        ),
+        MenuItemButton(
+          onPressed: layout.canSplit(tabs.selected)
+              ? () =>
+                    layout.split(index, tabs.selected, PaneSplitDirection.below)
+              : null,
+          leadingIcon: const Icon(
+            Icons.horizontal_split_outlined,
+            size: IconSize.menu,
+          ),
+          child: const Text('Split below'),
+        ),
+        if (index != 0)
+          MenuItemButton(
+            onPressed: () => layout.closePane(index),
+            child: const Text('Close pane'),
+          ),
+        if (layout.count > 1)
+          MenuItemButton(
+            onPressed: layout.joinAll,
+            child: const Text('Join all panes'),
+          ),
+      ],
+      builder: (context, menu, _) => IconButton(
+        tooltip: 'Open tab',
+        icon: const Icon(Icons.add, size: IconSize.menu),
+        onPressed: () {
+          layout.select(index);
+          menu.isOpen ? menu.close() : menu.open();
+        },
+      ),
+    );
+  }
+
+  Widget _docking(int index, PaneTabDrag<WorkspaceTab> drag) {
+    final source = layout.sourceOf(drag.source)!;
+    final canSplit = layout.canSplit(drag.id);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          flex: 3,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                flex: 3,
+                child: _target(
+                  index,
+                  'Move here',
+                  source != index && layout.canPlace(drag.id, index)
+                      ? () => layout.move(source, index, drag.id)
+                      : null,
+                ),
+              ),
+              if (canSplit)
+                Expanded(
+                  flex: 2,
+                  child: _target(
+                    index,
+                    'Split right',
+                    () => layout.split(
+                      index,
+                      drag.id,
+                      PaneSplitDirection.right,
+                      from: source,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (canSplit)
+          Expanded(
+            flex: 1,
+            child: _target(
+              index,
+              'Split below',
+              () => layout.split(
+                index,
+                drag.id,
+                PaneSplitDirection.below,
+                from: source,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _target(int index, String label, VoidCallback? accept) {
+    if (accept == null) return const SizedBox.expand();
+    final scheme = Theme.of(context).colorScheme;
+    return DragTarget<PaneTabDrag<WorkspaceTab>>(
+      key: ValueKey('dock-$index-$label'),
+      onWillAcceptWithDetails: (details) =>
+          identical(details.data, _drag) ||
+          (details.data.source == _drag?.source &&
+              details.data.id == _drag?.id),
+      onAcceptWithDetails: (_) {
+        _dragChanged(null);
+        accept();
+      },
+      builder: (context, candidates, _) => Container(
+        margin: const EdgeInsets.all(Space.xs),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHigh.withValues(
+            alpha: candidates.isEmpty ? 0.86 : 0.98,
+          ),
+          border: Border.all(
+            color: candidates.isEmpty
+                ? scheme.outlineVariant
+                : scheme.onSurface,
+            width: candidates.isEmpty ? 1 : 2,
+          ),
+          borderRadius: BorderRadius.circular(paneTabRadius),
+        ),
+        alignment: Alignment.center,
+        child: Text(label, style: Theme.of(context).textTheme.labelLarge),
       ),
     );
   }

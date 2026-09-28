@@ -8,9 +8,19 @@ import 'package:flutter/widgets.dart';
 /// opened. An action with no [run] is shown but cannot be taken now.
 @immutable
 final class AppAction {
-  const AppAction(this.label, this.run, {this.shortcut, this.group, this.icon});
+  const AppAction(
+    this.label,
+    this.run, {
+    this.shortcut,
+    this.group,
+    this.icon,
+    this.alternatives = const [],
+  });
 
   final String label;
+
+  /// Contextual destinations for actions that open a workspace tool.
+  final List<AppAction> alternatives;
 
   /// Optional familiar symbol; the action keeps its text label.
   final IconData? icon;

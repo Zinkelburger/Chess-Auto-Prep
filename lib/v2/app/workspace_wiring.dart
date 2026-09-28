@@ -202,8 +202,8 @@ final class WorkspaceWiring {
     );
   }
 
-  /// Starts the engine once the settings are read, and from then on has it
-  /// follow them. Taken down first, it starts nothing.
+  /// Applies engine settings without launching analysis. Each app session
+  /// starts off; the workspace switch or E enables it on demand.
   Future<void> start() async {
     if (_disposed) return;
     final s = _env.settings.value;
@@ -211,7 +211,6 @@ final class WorkspaceWiring {
     _analysis.setLines(s.engineLines);
     _inspection.engine.setLines(s.engineLines);
     _env.settings.addListener(_engineSettings);
-    await _analysis.enable();
   }
 
   /// What the engine was last started with, so a settings change that

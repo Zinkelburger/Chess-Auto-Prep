@@ -177,7 +177,7 @@ final class PlayerAnalysisView extends ModeView {
     ),
     ...documentEntries(menu),
     ...menu.board(),
-    ...tabActions(tabs),
+    ...tabActions(tabs, destinations: layout.destinations),
   ];
 }
 

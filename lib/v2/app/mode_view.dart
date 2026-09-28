@@ -182,7 +182,7 @@ abstract base class _DocumentModeView extends ModeView {
     if (this is _LibraryView) ..._repertoire(menu.dialogs),
     ...documentEntries(menu),
     ...menu.board(),
-    ...tabActions(tabs),
+    ...tabActions(tabs, destinations: layout.destinations),
   ];
 
   /// The chapter as a repertoire — its gaps, its side and the fill — or,
@@ -545,7 +545,7 @@ final class MyGamesView extends ModeView {
   List<AppAction> actions(ModeMenu menu) => [
     ...myGamesActions(_training.myGames, onAccounts: menu.dialogs.accounts),
     ...documentEntries(menu),
-    ...tabActions(tabs),
+    ...tabActions(tabs, destinations: layout.destinations),
   ];
 }
 

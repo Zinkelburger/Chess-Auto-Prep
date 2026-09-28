@@ -12,6 +12,7 @@ import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -34,6 +35,30 @@ void main() {
   setUp(() => w = WindowFixture());
   tearDown(() => w.dispose());
   Future<void> pump(WidgetTester tester) => w.pumpShell(tester);
+
+  testWidgets(
+    'Actions tool context menu opens a split without numbered controls',
+    (tester) async {
+      await pump(tester);
+      await tester.tap(find.text('Actions'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(SubmenuButton, 'Action Tabs'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Show Replies'));
+      await tester.tap(
+        find.text('Show Replies'),
+        buttons: kSecondaryMouseButton,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.widgetWithText(PopupMenuItem<VoidCallback>, 'Split below'),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('action-pane-1')), findsOneWidget);
+      expect(find.text('Replies'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('opening a chapter puts it in the workspace', (tester) async {
     await pump(tester);

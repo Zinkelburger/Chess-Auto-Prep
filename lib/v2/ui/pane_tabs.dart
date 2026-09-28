@@ -145,6 +145,14 @@ class PaneTabs<K extends Object> extends ChangeNotifier {
   }
 }
 
+/// Source identity prevents equal tool IDs in different panes from being
+/// mistaken for a reorder within the same strip.
+class PaneTabDrag<K extends Object> {
+  const PaneTabDrag(this.source, this.id);
+  final PaneTabs<K> source;
+  final K id;
+}
+
 /// The row of tabs at the top of a pane: what the pane is showing, and the
 /// other things it could show instead. Labels keep their natural width,
 /// with a visible close button and a quiet fill for the selected tab.
@@ -164,6 +172,10 @@ class PaneTabStrip<K extends Object> extends StatefulWidget {
     this.connected = false,
     this.label,
     this.showAdd = true,
+    this.onContextMenu,
+    this.onDragStarted,
+    this.onDragEnd,
+    this.onDrop,
   });
 
   final ValueChanged<K>? onSelect;
@@ -171,6 +183,10 @@ class PaneTabStrip<K extends Object> extends StatefulWidget {
   final VoidCallback? onAdd;
   final String? label;
   final bool showAdd;
+  final void Function(K, Offset)? onContextMenu;
+  final ValueChanged<PaneTabDrag<K>>? onDragStarted;
+  final VoidCallback? onDragEnd;
+  final void Function(PaneTabDrag<K>, K)? onDrop;
 
   /// Inner tools join the reading surface; document tabs retain their style.
   final bool connected;
@@ -265,6 +281,10 @@ class _PaneTabStripState<K extends Object> extends State<PaneTabStrip<K>>
                           onSelect: widget.onSelect,
                           onClose: widget.onClose,
                           connected: widget.connected,
+                          onContextMenu: widget.onContextMenu,
+                          onDragStarted: widget.onDragStarted,
+                          onDragEnd: widget.onDragEnd,
+                          onDrop: widget.onDrop,
                         ),
                       ),
                   ],
@@ -308,8 +328,16 @@ class _TabSlot<K extends Object> extends StatelessWidget {
     required this.connected,
     this.onSelect,
     this.onClose,
+    this.onContextMenu,
+    this.onDragStarted,
+    this.onDragEnd,
+    this.onDrop,
   });
 
+  final void Function(K, Offset)? onContextMenu;
+  final ValueChanged<PaneTabDrag<K>>? onDragStarted;
+  final VoidCallback? onDragEnd;
+  final void Function(PaneTabDrag<K>, K)? onDrop;
   final ValueChanged<K>? onSelect;
   final ValueChanged<K>? onClose;
 
@@ -320,12 +348,23 @@ class _TabSlot<K extends Object> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return DragTarget<K>(
+    return DragTarget<PaneTabDrag<K>>(
       onWillAcceptWithDetails: (details) =>
-          !tab.pinned && details.data != tab.id,
-      onAcceptWithDetails: (details) => tabs.move(details.data, before: tab.id),
-      builder: (context, candidates, _) => Draggable<K>(
-        data: tab.id,
+          !tab.pinned &&
+          (identical(details.data.source, tabs)
+              ? details.data.id != tab.id
+              : onDrop != null),
+      onAcceptWithDetails: (details) {
+        if (identical(details.data.source, tabs)) {
+          tabs.move(details.data.id, before: tab.id);
+        } else {
+          onDrop?.call(details.data, tab.id);
+        }
+      },
+      builder: (context, candidates, _) => Draggable<PaneTabDrag<K>>(
+        data: PaneTabDrag(tabs, tab.id),
+        onDragStarted: () => onDragStarted?.call(PaneTabDrag(tabs, tab.id)),
+        onDragEnd: (_) => onDragEnd?.call(),
         maxSimultaneousDrags: tab.pinned ? 0 : 1,
         feedback: Material(
           color: scheme.surfaceContainerHigh,
@@ -340,7 +379,7 @@ class _TabSlot<K extends Object> extends StatelessWidget {
           decoration: BoxDecoration(
             border: Border(
               left: BorderSide(
-                color: candidates.isEmpty ? Colors.transparent : scheme.primary,
+                color: candidates.isEmpty ? Colors.transparent : scheme.outline,
                 width: paneTabUnderline,
               ),
             ),
@@ -351,14 +390,19 @@ class _TabSlot<K extends Object> extends StatelessWidget {
     );
   }
 
-  Widget _tab() => _Tab(
-    title: tab.title,
-    connected: connected,
-    selected: tabs.selected == tab.id,
-    onTap: () => (onSelect ?? tabs.show)(tab.id),
-    onClose: tab.pinned || (tabs.open.length == 1 && onClose == null)
+  Widget _tab() => GestureDetector(
+    onSecondaryTapUp: onContextMenu == null
         ? null
-        : () => (onClose ?? tabs.close)(tab.id),
+        : (details) => onContextMenu!(tab.id, details.globalPosition),
+    child: _Tab(
+      title: tab.title,
+      connected: connected,
+      selected: tabs.selected == tab.id,
+      onTap: () => (onSelect ?? tabs.show)(tab.id),
+      onClose: tab.pinned || (tabs.open.length == 1 && onClose == null)
+          ? null
+          : () => (onClose ?? tabs.close)(tab.id),
+    ),
   );
 }
 
@@ -396,12 +440,12 @@ class _Tab extends StatelessWidget {
             : const EdgeInsets.all(paneTabInset),
         child: Material(
           color: selected
-              ? scheme.secondaryContainer
-              : scheme.surfaceContainerHigh,
+              ? scheme.surfaceContainerHigh
+              : scheme.surfaceContainerLow,
           shape: RoundedRectangleBorder(
             borderRadius: shape,
             side: BorderSide(
-              color: selected ? scheme.primary : scheme.outlineVariant,
+              color: selected ? scheme.outline : Colors.transparent,
             ),
           ),
           child: InkWell(
@@ -409,6 +453,8 @@ class _Tab extends StatelessWidget {
             borderRadius: shape,
             splashFactory: NoSplash.splashFactory,
             highlightColor: Colors.transparent,
+            hoverColor: scheme.onSurface.withValues(alpha: 0.06),
+            focusColor: scheme.onSurface.withValues(alpha: 0.10),
             child: Padding(
               padding: const EdgeInsets.only(left: Space.m, right: Space.xs),
               child: Row(
@@ -423,8 +469,8 @@ class _Tab extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         fontWeight: selected ? FontWeight.w600 : null,
                         color: selected
-                            ? scheme.onSecondaryContainer
-                            : scheme.onSurface,
+                            ? scheme.onSurface
+                            : scheme.onSurfaceVariant,
                       ),
                     ),
                   ),

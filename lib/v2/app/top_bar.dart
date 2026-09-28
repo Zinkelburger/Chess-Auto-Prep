@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/app_action.dart';
+import '../ui/action_context_menu.dart';
 import '../ui/theme.dart';
 import 'mode.dart';
 
@@ -223,15 +224,24 @@ class _ActionsMenuState extends State<_ActionsMenu> {
     for (final action in widget.actions()) {
       (groups[action.group ?? 'Actions'] ??= []).add(action);
     }
-    Widget entry(AppAction action) => MenuItemButton(
-      onPressed: action.run,
-      leadingIcon: action.icon == null
+    Widget entry(AppAction action) => GestureDetector(
+      onSecondaryTapUp: action.alternatives.isEmpty
           ? null
-          : Icon(action.icon, size: IconSize.menu),
-      trailingIcon: action.shortcut == null
-          ? null
-          : Text(action.shortcut!, style: text.labelSmall),
-      child: Text(action.label),
+          : (details) => showActionContextMenu(
+              context,
+              details.globalPosition,
+              action.alternatives,
+            ),
+      child: MenuItemButton(
+        onPressed: action.run,
+        leadingIcon: action.icon == null
+            ? null
+            : Icon(action.icon, size: IconSize.menu),
+        trailingIcon: action.shortcut == null
+            ? null
+            : Text(action.shortcut!, style: text.labelSmall),
+        child: Text(action.label),
+      ),
     );
 
     final children = <Widget>[];

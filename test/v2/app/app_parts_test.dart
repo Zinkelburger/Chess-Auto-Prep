@@ -12,8 +12,8 @@ import '../support/scripted_engine.dart';
 import '../support/window_fixture.dart';
 
 /// How the app starts and is kept in step, as [AppParts] wires it: the
-/// settings are read before the engine starts on them, the engine follows
-/// them from then on, and what was read from the repertoire files is read
+/// settings are read while the engine stays off, the engine follows
+/// them when explicitly enabled, and what was read from the repertoire files is read
 /// again only when the files are listed anew.
 void main() {
   late Directory support;
@@ -40,18 +40,27 @@ void main() {
     await support.delete(recursive: true);
   });
 
-  test('the engine starts once, on the cores and lines the settings file '
-      'says', () async {
-    await w.parts.start();
-    expect(launched, [(cores: 3, memoryMb: 128)]);
-    expect(w.analysis.enabled, isTrue);
-    expect(w.analysis.multiPv, 2);
-  });
+  test(
+    'startup leaves the engine off until explicitly enabled, with saved settings',
+    () async {
+      await w.parts.start();
+      expect(launched, isEmpty);
+      expect(w.analysis.enabled, isFalse);
+      expect(w.analysis.multiPv, 2);
+      await w.analysis.enable();
+      expect(launched, [(cores: 3, memoryMb: 128)]);
+      expect(w.analysis.enabled, isTrue);
+      expect(w.analysis.multiPv, 2);
+    },
+  );
 
   test('unreadable settings start the app on the defaults', () async {
     final file = File(p.join(support.path, 'settings.json'));
     await file.writeAsString('not json');
     await w.parts.start();
+    expect(launched, isEmpty);
+    expect(w.analysis.enabled, isFalse);
+    await w.analysis.enable();
     expect(launched, [(cores: Settings.defaults.engineCores, memoryMb: 128)]);
     expect(w.settings.problem, isNull);
   });
@@ -59,6 +68,7 @@ void main() {
   test('new cores or a new table start another engine; more lines do '
       'not', () async {
     await w.parts.start();
+    await w.analysis.enable();
     await w.settings.update(w.settings.value.copyWith(engineLines: 4));
     await pumpEventQueue();
     expect(launched, hasLength(1), reason: 'the same engine is asked');
@@ -72,6 +82,19 @@ void main() {
     await pumpEventQueue();
     expect(launched.last, (cores: 4, memoryMb: 256));
     expect(launched, hasLength(3));
+  });
+
+  test('changing settings while off does not launch the engine', () async {
+    await w.parts.start();
+    await w.settings.update(
+      w.settings.value.copyWith(engineCores: 4, engineLines: 3),
+    );
+    await pumpEventQueue();
+    expect(launched, isEmpty);
+    expect(w.analysis.enabled, isFalse);
+    await w.analysis.enable();
+    expect(launched, [(cores: 4, memoryMb: 128)]);
+    expect(w.analysis.multiPv, 3);
   });
 
   test('a window taken down while the settings are read starts no '

@@ -97,7 +97,10 @@ PaneTabs<WorkspaceTab> bookTabs() => PaneTabs(
 /// The card's tabs as a browser's menu has them: each one that can be
 /// closed is shown or closed by name, and the keys that walk them are
 /// written beside the entries that take them.
-List<AppAction> tabActions(PaneTabs<WorkspaceTab> tabs) => [
+List<AppAction> tabActions(
+  PaneTabs<WorkspaceTab> tabs, {
+  List<AppAction> Function(WorkspaceTab)? destinations,
+}) => [
   for (final tab in tabs.tabs)
     if (!tab.pinned)
       tabs.isOpen(tab.id)
@@ -106,11 +109,13 @@ List<AppAction> tabActions(PaneTabs<WorkspaceTab> tabs) => [
               () => tabs.close(tab.id),
               shortcut: tabs.selected == tab.id ? 'Ctrl+W' : null,
               group: 'Action Tabs',
+              alternatives: destinations?.call(tab.id) ?? const [],
             )
           : AppAction(
               'Show ${tab.title}',
               () => tabs.show(tab.id),
               group: 'Action Tabs',
+              alternatives: destinations?.call(tab.id) ?? const [],
             ),
   AppAction(
     'Next tab',
