@@ -155,29 +155,43 @@ void main() {
     expect(fill.running, isFalse);
   });
 
-  testWidgets('before a search: its two numbers and one button', (
+  testWidgets('settings are editable directly above the search', (
     tester,
   ) async {
     await pump(tester);
     expect(find.text('Engine target: depth 14'), findsOneWidget);
-    expect(find.textContaining('Press ▶ Expectimax'), findsOneWidget);
-    expect(find.widgetWithText(TextField, 'Opponent'), findsNothing);
-    await tester.tap(find.byTooltip('Expectimax settings'));
+    for (final label in [
+      'Maia rating',
+      'Candidates',
+      'Depth',
+      '1 in N games',
+    ]) {
+      expect(find.widgetWithText(TextField, label), findsOneWidget);
+    }
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Maia rating'),
+      '1800',
+    );
+    await tester.enterText(find.widgetWithText(TextField, 'Candidates'), '2');
+    await tester.enterText(
+      find.widgetWithText(TextField, '1 in N games'),
+      '50',
+    );
     await tester.pump();
-    expect(find.widgetWithText(TextField, 'Opponent'), findsOneWidget);
-    expect(find.widgetWithText(TextField, 'Depth'), findsOneWidget);
-    expect(find.widgetWithText(TextField, 'Skip under 1 in'), findsNothing);
-    expect(find.widgetWithText(FilledButton, 'Expectimax'), findsOneWidget);
-    expect(find.textContaining('until stopped'), findsOneWidget);
+    expect(settings.value.opponentElo, 1800);
+    expect(fill.candidateMoves, 2);
+    expect(fill.replyFloor, 0.02);
+    await tester.enterText(find.widgetWithText(TextField, 'Candidates'), '0');
+    await tester.tap(find.widgetWithText(FilledButton, 'Expectimax'));
+    await tester.pump();
+    expect(fill.running, isFalse);
+    expect(find.text('Candidates: 1 to 218'), findsOneWidget);
   });
 
   /// Runs a search two plies deep from the board, on real time.
   Future<void> searched(WidgetTester tester) async {
     await pump(tester);
-    await tester.tap(find.byTooltip('Expectimax settings'));
-    await tester.pump();
     await tester.enterText(find.widgetWithText(TextField, 'Depth'), '2');
-    await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
     await tester.runAsync(() async {
       await tester.tap(find.widgetWithText(FilledButton, 'Expectimax'));
@@ -211,10 +225,7 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    await tester.tap(find.byTooltip('Expectimax settings'));
-    await tester.pump();
     await tester.enterText(find.widgetWithText(TextField, 'Depth'), '2');
-    await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
     await tester.runAsync(() async {
       await tester.tap(find.widgetWithText(FilledButton, 'Expectimax'));
@@ -248,7 +259,10 @@ void main() {
       analysisBoard(side: Side.white, root: Fen.initial),
     );
     await tester.pumpAndSettle();
-    expect(find.text('This position is not in the search.'), findsOneWidget);
+    expect(
+      find.text('No saved results here yet. Start Expectimax from this board.'),
+      findsOneWidget,
+    );
     // Nothing to make lines of on the analysis board.
     expect(find.text('Make lines'), findsNothing);
   });

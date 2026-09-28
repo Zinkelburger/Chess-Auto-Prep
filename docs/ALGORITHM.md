@@ -177,14 +177,18 @@ is fabricated for a single engine line.
 
 The Builder's interactive Expectimax uses a bounded candidate policy rather than
 an exhaustive Pure tree. The first two plies retain every legal move on our side.
-From ply two, Stockfish at depth 14 supplies a MultiPV shortlist of up to four of
-our moves; only those child positions get separate fixed-depth evaluations and
+From ply two, Stockfish at depth 14 supplies a MultiPV shortlist of up to N of
+our moves (default four); only those child positions get separate fixed-depth evaluations and
 recursive expansion. A failed or incomplete shortlist stops with a visible error.
 Callers without a ranking source score all candidates before retaining the best
-four. Other callers retain their existing exhaustive defaults.
+N. Other callers retain their existing exhaustive defaults. The panel exposes
+Maia rating, candidate count, depth in half-moves (blank for no limit), and
+reply coverage directly above the results. Coverage is expressed as one in N
+games, default 100; zero expands every reply. Settings apply to the next search
+and are disabled during a run.
 
-Opponent nodes retain all positive Maia probability mass. Paths below 1% cumulative
-reach stop at their engine estimate instead of expanding further; the remaining
+Opponent nodes retain all positive Maia probability mass. Paths below the configured cumulative
+reach threshold (default 1%) stop at their engine estimate instead of expanding further; the remaining
 replies are not renormalized to pretend the rare replies disappeared. The 25,000
 new-node budget still bounds a batch. This is approximate candidate selection and
 selective depth; an omitted engine candidate might have a better practical score.
@@ -195,3 +199,17 @@ branches and values are retained while new expansions use the shortlist. Narrowe
 trees carry algorithm version 4 so older exhaustive-only app/C/MCP readers refuse
 to resume them under the wrong branching assumptions. Exhaustive exports stay at
 algorithm version 3.
+
+An active search follows board moves, move-list navigation and back/forward.
+Navigation interrupts the old engine, saves its committed expansions, and starts
+from the latest board only after that save finishes. A manual stop or a change
+of document/side cancels the pending restart. Up to 16 previous roots are retained
+in memory, so backing up displays their results immediately and a new search
+reuses compatible values. Chapter searches also keep their existing saved trees
+on disk. A stopped search stays stopped while browsing; Expectimax continues
+from the current board and its retained values. Resume also loads a saved root
+after restarting the app. Rating, evaluation source, candidate count and reply
+coverage must match to reuse an interactive tree. Promoting a deeper shortlist
+into the broad root evaluates its missing legal moves while retaining the work
+below its existing candidates. Engine evaluations continue to use the shared
+persistent cache independently of these in-memory search roots.

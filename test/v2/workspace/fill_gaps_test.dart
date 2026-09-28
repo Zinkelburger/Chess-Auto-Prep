@@ -152,6 +152,28 @@ void main() {
     },
   );
 
+  test('candidate count and reply coverage govern and survive the saved search', () async {
+    String? saved;
+    final fill = fillWith(ScriptedEvaluator(),
+      keepTree: (_, text, {required runId}) async { saved = text; });
+    const custom = FillRequest(elo: 1800, depthPlies: 3,
+      candidateMoves: 1, replyFloor: 0.02);
+    await fill.start(custom);
+    final root = fill.found!.tree as OurNode;
+    expect(root.candidates.length, greaterThan(1), reason: 'root stays broad');
+    for (final candidate in root.candidates) {
+      for (final reply in (candidate.child as OpponentNode).replies) {
+        expect((reply.child as OurNode).candidates, hasLength(1));
+      }
+    }
+    final config = (jsonDecode(saved!) as Map)['config'] as Map;
+    expect(config['v2_max_our_moves'], 1);
+    expect(config['v2_reply_floor'], 0.02);
+    final restarted = fillWith(ScriptedEvaluator(), loadTree: (_, _) async => saved);
+    expect(await restarted.resume(custom), isNull);
+    expect(restarted.state, isA<FillDone>());
+  });
+
   test('saved searches refuse a changed opponent rating', () async {
     String? saved;
     final first = fillWith(
@@ -418,6 +440,89 @@ void main() {
       expect(releases, 2);
     },
   );
+
+  test('back restores an earlier root and reuses its scores', () async {
+    final evaluator = ScriptedEvaluator();
+    final fill = fillWith(evaluator);
+    const shallow = FillRequest(elo: 2200, depthPlies: 1);
+    await fill.start(shallow);
+    final original = fill.found!.tree;
+    fixture.session.playMove('e2e4');
+    await fill.start(shallow);
+    fixture.session.back();
+    expect(fill.nodeAtBoard(), same(original));
+    evaluator.asked.clear();
+    await fill.start(shallow);
+    expect(fill.found!.tree.fen, original.fen);
+    expect(evaluator.asked, isEmpty);
+  });
+
+  test(
+    'rapid board navigation during save follows only the latest root',
+    () async {
+      final gate = Completer<void>();
+      var saves = 0;
+      var starts = 0;
+      final evaluator = ScriptedEvaluator();
+      final fill = fillWith(
+        evaluator,
+        tools: (_) async {
+          starts++;
+          return FillReady(
+            evaluator: evaluator,
+            policy: const ScriptedPolicy({'e8d8': 1}),
+            release: () async {},
+          );
+        },
+        keepTree: (_, _, {required runId}) async {
+          if (++saves == 1) await gate.future;
+        },
+      );
+      var moved = false;
+      fill.addListener(() {
+        if (!moved && fill.running && fill.found != null) {
+          moved = true;
+          fixture.session.playMove('e2e4');
+        }
+      });
+      final run = fill.start(const FillRequest(elo: 2200, depthPlies: 2));
+      while (saves == 0) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      fixture.session.back();
+      expect(fill.nodeAtBoard(), isA<OurNode>());
+      gate.complete();
+      await run;
+      await pumpEventQueue(times: 100);
+      expect(starts, 2);
+      expect(fill.found!.target.sans, isEmpty);
+      expect(fill.running, isFalse);
+    },
+  );
+
+  test('manual stop during navigation prevents an automatic restart', () async {
+    final evaluator = GatedEvaluator();
+    var starts = 0;
+    final fill = fillWith(
+      evaluator,
+      tools: (_) async {
+        starts++;
+        return FillReady(
+          evaluator: evaluator,
+          policy: const ScriptedPolicy({'e8d8': 1}),
+          release: () async {},
+        );
+      },
+    );
+    final run = fill.start(request);
+    await pumpEventQueue();
+    fixture.session.playMove('e2e4');
+    fill.finish();
+    evaluator.release();
+    await run;
+    await pumpEventQueue();
+    expect(starts, 1);
+  });
 
   test('the way out waits for a tree still being written', () async {
     final pending = PendingWrites();

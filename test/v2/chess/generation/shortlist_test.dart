@@ -62,4 +62,42 @@ void main() {
       expect(candidates.calls, 1, reason: 'no shortlist at broad root');
     },
   );
+  test(
+    'promoting a shortlist to the broad root restores missing moves only',
+    () async {
+      final root = positionOf(fen);
+      final narrow = await buildSearchTree(
+        root: root,
+        config: const SearchConfig(
+          side: Side.white,
+          horizonPlies: 1,
+          maxOurMoves: 4,
+          narrowAfterPly: 0,
+        ),
+        evaluator: ScriptedEvaluator(),
+        candidates: Shortlist(),
+        policy: const ScriptedPolicy({}),
+      );
+      final seed = (narrow as SearchComplete).tree as OurNode;
+      final evaluator = ScriptedEvaluator();
+      final broad = await buildSearchTree(
+        root: root,
+        seed: seed,
+        config: const SearchConfig(
+          side: Side.white,
+          horizonPlies: 1,
+          maxOurMoves: 4,
+        ),
+        evaluator: evaluator,
+        candidates: Shortlist(),
+        policy: const ScriptedPolicy({}),
+      );
+      final moves = ((broad as SearchComplete).tree as OurNode).candidates;
+      expect(moves.length, greaterThan(seed.candidates.length));
+      expect(evaluator.asked.length, moves.length - seed.candidates.length);
+      for (final move in seed.candidates) {
+        expect(evaluator.asked, isNot(contains(move.child.fen.value)));
+      }
+    },
+  );
 }

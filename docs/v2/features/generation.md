@@ -8,14 +8,16 @@ Plan step: 7
 
 ## Current interactive workflow (2026-09-27)
 
-The tab is now **Expectimax**, with a play button and settings behind its compact
-rating/depth summary. Builder shows it alongside Moves and Explorer by default;
-Train is optional. Clicking a running result saves the old tree before starting
-from the selected position. See [Builder](builder.md#current-v2-workflow-2026-09-27)
+The tab is now **Expectimax**, with a play button and directly editable
+Maia rating, candidate count, depth and reply-coverage fields. Builder shows it alongside Moves and Explorer by default;
+Train is optional. While searching, all board navigation (including back/forward)
+saves the old tree before continuing from the latest selected position. Previous
+roots remain available for immediate display and reuse; browsing while stopped
+does not restart the engine. See [Builder](builder.md#current-v2-workflow-2026-09-27)
 for the controls and [interactive search policy](../../ALGORITHM.md#v2-interactive-expectimax)
 for the current branching rules. This supersedes the historical exhaustive-search
-and visible source-selector decisions below: deeper nodes shortlist four of our
-moves, and low-probability opponent paths retain their values without expanding.
+and visible source-selector decisions below: deeper nodes shortlist the configured number of our
+moves (default four), and low-probability opponent paths retain their values without expanding.
 
 ## Purpose
 Someone with a chapter open wants lines written into it rather than typed: they point the search at the position
@@ -348,7 +350,8 @@ run ID is refused. A missing source chapter is reported, not mistaken for succes
 persistence. Make lines remains available; another search waits for resolution of the save.
 
 `Resume` (beside Expectimax) continues the matching in-memory tree or the most recent saved
-tree starting at the board. Root, side, opponent rating and evaluation source must agree.
+tree starting at the board. Side, opponent rating, evaluation source, candidate count and reply coverage
+must agree. The in-memory lookup also reuses subtrees and retained earlier roots.
 It reuses scores and whole expansions, expands old horizon leaves when asked for more depth,
 and recomputes path histories and backed-up values. Snapshots share unchanged branches,
 work yields between expansion batches, and encoding runs off the UI isolate.

@@ -26,7 +26,7 @@ import 'line_preview.dart';
 /// The Expectimax panel: the expectimax search from the
 /// board and its values.
 ///
-/// A compact settings summary and the play/stop action head the panel. Under them, for the position on
+/// Editable search settings and the play/stop action head the panel. Under them, for the position on
 /// the board, every move the search looked at with what it is worth
 /// against the modelled opponent (Expectimax) and what the engine alone
 /// says (Engine), both from White's side. At the opponent's move each reply
@@ -64,6 +64,20 @@ class _SearchPaneState extends State<SearchPane>
     with ListeningState<SearchPane> {
   final _preview = ValueNotifier<LinePreview?>(null);
   Timer? _settle;
+  late final _elo = TextEditingController(
+    text: '${widget.settings.value.opponentElo}',
+  );
+  late final _depth = TextEditingController(
+    text: widget.fill.depth?.toString() ?? '',
+  );
+  late final _candidates = TextEditingController(
+    text: '${widget.fill.candidateMoves}',
+  );
+  late final _cover = TextEditingController(
+    text: widget.fill.replyFloor == 0
+        ? '0'
+        : '${(1 / widget.fill.replyFloor).round()}',
+  );
 
   /// Why the last press of Search did nothing: a number out of range or a
   /// refusal. Cleared by the next press.
@@ -102,6 +116,10 @@ class _SearchPaneState extends State<SearchPane>
   void dispose() {
     _settle?.cancel();
     _preview.dispose();
+    _elo.dispose();
+    _depth.dispose();
+    _candidates.dispose();
+    _cover.dispose();
     super.dispose();
   }
 
@@ -109,24 +127,41 @@ class _SearchPaneState extends State<SearchPane>
     elo: widget.settings.value.opponentElo,
     depthPlies: widget.fill.depth,
     source: widget.fill.source,
+    candidateMoves: widget.fill.candidateMoves,
+    replyFloor: widget.fill.replyFloor,
   );
 
-  Future<void> _showSettings() async {
-    final request = await showDialog<FillRequest>(
-      context: context,
-      builder: (_) =>
-          _SearchSettings(initial: _request, running: widget.fill.running),
-    );
-    if (!mounted || request == null || widget.fill.running) return;
-    widget.fill.depth = request.depthPlies;
-    widget.fill.source = request.source;
+  Future<bool> _applySettings() async {
+    final elo = int.tryParse(_elo.text.trim());
+    final depthText = _depth.text.trim();
+    final depth = int.tryParse(depthText);
+    final candidates = int.tryParse(_candidates.text.trim());
+    final cover = int.tryParse(_cover.text.trim());
+    final problem =
+        elo == null || elo < Settings.minElo || elo > Settings.maxElo
+        ? 'Maia rating: ${Settings.minElo} to ${Settings.maxElo}'
+        : depthText.isNotEmpty &&
+              (depth == null || depth < minFillDepth || depth > maxFillDepth)
+        ? 'Depth: $minFillDepth to $maxFillDepth, or empty for no limit'
+        : candidates == null || candidates < 1 || candidates > 218
+        ? 'Candidates: 1 to 218'
+        : cover == null || cover < 0 || cover == 1
+        ? 'Reply coverage: 2 or more games, or 0 for every reply'
+        : null;
+    if (!mounted) return false;
+    setState(() => _problem = problem);
+    if (problem != null) return false;
+    widget.fill.depth = depth;
+    widget.fill.candidateMoves = candidates!;
+    widget.fill.replyFloor = cover == 0 ? 0 : 1 / cover!;
     await widget.settings.update(
-      widget.settings.value.copyWith(opponentElo: request.elo),
+      widget.settings.value.copyWith(opponentElo: elo!),
     );
-    if (mounted) setState(() => _problem = null);
+    return mounted;
   }
 
   Future<void> _search({bool resume = false}) async {
+    if (!await _applySettings()) return;
     final request = _request;
     final refusal = resume
         ? await widget.fill.resume(request)
@@ -241,6 +276,70 @@ class _SearchPaneState extends State<SearchPane>
     );
   }
 
+  List<Widget> _settingsFields() => [
+    _NumberBox(
+      label: 'Maia rating',
+      box: _elo,
+      width: searchEloWidth,
+      enabled: !widget.fill.running,
+      onSubmitted: () => unawaited(_applySettings()),
+      onChanged: () => unawaited(_applySettings()),
+    ),
+    Tooltip(
+      message:
+          'Our best engine candidates from ply 2 onward. All legal moves are considered near the root.',
+      child: _NumberBox(
+        label: 'Candidates',
+        box: _candidates,
+        width: searchEloWidth,
+        enabled: !widget.fill.running,
+        onSubmitted: () => unawaited(_applySettings()),
+        onChanged: () => unawaited(_applySettings()),
+      ),
+    ),
+    Tooltip(
+      message:
+          'Search depth in half-moves from the current board. Empty means no depth limit.',
+      child: _NumberBox(
+        label: 'Depth',
+        box: _depth,
+        width: searchDepthWidth,
+        hint: 'No limit',
+        enabled: !widget.fill.running,
+        onSubmitted: () => unawaited(_applySettings()),
+        onChanged: () => unawaited(_applySettings()),
+      ),
+    ),
+    Tooltip(
+      message:
+          'Expand reply paths met at least once in this many games. Rarer replies keep their engine value. 0 expands every reply.',
+      child: _NumberBox(
+        label: '1 in N games',
+        box: _cover,
+        width: searchEloWidth,
+        enabled: !widget.fill.running,
+        onSubmitted: () => unawaited(_applySettings()),
+        onChanged: () => unawaited(_applySettings()),
+      ),
+    ),
+    PopupMenuButton<EvaluationSource>(
+      tooltip: 'Evaluation source',
+      enabled: !widget.fill.running,
+      initialValue: widget.fill.source,
+      onSelected: (source) {
+        if (mounted) setState(() => widget.fill.source = source);
+      },
+      itemBuilder: (_) => [
+        for (final source in EvaluationSource.values)
+          PopupMenuItem(value: source, child: Text(source.label)),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.all(Space.s),
+        child: Text(widget.fill.source.label),
+      ),
+    ),
+  ];
+
   Widget _form(BuildContext context) {
     final fill = widget.fill;
     final state = fill.state;
@@ -252,18 +351,7 @@ class _SearchPaneState extends State<SearchPane>
         runSpacing: Space.s,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Tooltip(
-            message: 'Expectimax settings',
-            child: TextButton.icon(
-              onPressed: () {
-                unawaited(_showSettings());
-              },
-              icon: const Icon(Icons.tune),
-              label: Text(
-                'Opponent ${widget.settings.value.opponentElo} · ${fill.depth == null ? 'Until stopped' : 'Search depth ${fill.depth}'}',
-              ),
-            ),
-          ),
+          ..._settingsFields(),
           if (running == null) ...[
             Tooltip(
               message:
@@ -331,7 +419,7 @@ class _SearchPaneState extends State<SearchPane>
     final (words, error) = switch (widget.fill.state) {
       _ when _problem != null => (_problem!, true),
       FillIdle() => (
-        'All moves near the root; best 4 deeper · $forSide',
+        'All moves near the root; best ${widget.fill.candidateMoves} deeper · $forSide',
         false,
       ),
       FillRunning(
@@ -393,13 +481,7 @@ class _SearchPaneState extends State<SearchPane>
             ? 'Evaluating the first moves…'
             : 'Press ▶ Expectimax to evaluate moves from this position.',
       );
-    final session = widget.session;
-    final tree = session.tree;
-    final node = tree == null
-        ? null
-        : found.at(tree.rootFen, [
-            for (final move in tree.lineTo(session.cursor)) move.san,
-          ]);
+    final node = widget.fill.nodeAtBoard(request: found.request);
     return switch (node) {
       null => _offTree(context, found),
       OurNode(:final candidates) => _rows(
@@ -462,7 +544,7 @@ class _SearchPaneState extends State<SearchPane>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'This position is not in the search.',
+            'No saved results here yet. Start Expectimax from this board.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           if (canGo) ...[
@@ -623,6 +705,7 @@ class _NumberBox extends StatelessWidget {
     required this.enabled,
     required this.onSubmitted,
     this.hint,
+    this.onChanged,
   });
 
   final String label;
@@ -633,6 +716,7 @@ class _NumberBox extends StatelessWidget {
   final double width;
   final bool enabled;
   final VoidCallback onSubmitted;
+  final VoidCallback? onChanged;
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -651,6 +735,7 @@ class _NumberBox extends StatelessWidget {
             : FloatingLabelBehavior.always,
       ),
       onSubmitted: (_) => onSubmitted(),
+      onChanged: (_) => onChanged?.call(),
     ),
   );
 }
@@ -807,121 +892,4 @@ String _engineText(Eval eval, {required bool white}) {
 String _percent(double share) {
   final percent = (share * 100).round();
   return percent < 1 ? '<1%' : '$percent%';
-}
-
-class _SearchSettings extends StatefulWidget {
-  const _SearchSettings({required this.initial, required this.running});
-  final FillRequest initial;
-  final bool running;
-  @override
-  State<_SearchSettings> createState() => _SearchSettingsState();
-}
-
-class _SearchSettingsState extends State<_SearchSettings> {
-  late final _elo = TextEditingController(text: '${widget.initial.elo}');
-  late final _depth = TextEditingController(
-    text: widget.initial.depthPlies?.toString() ?? '',
-  );
-  var _source = EvaluationSource.stockfish;
-
-  @override
-  void initState() {
-    super.initState();
-    _source = widget.initial.source;
-  }
-
-  String? _problem;
-
-  @override
-  void dispose() {
-    _elo.dispose();
-    _depth.dispose();
-    super.dispose();
-  }
-
-  void _done() {
-    if (!mounted) return;
-    final elo = int.tryParse(_elo.text.trim());
-    final text = _depth.text.trim();
-    final depth = text.isEmpty ? null : int.tryParse(text);
-    final problem =
-        elo == null || elo < Settings.minElo || elo > Settings.maxElo
-        ? 'Rating: ${Settings.minElo} to ${Settings.maxElo}'
-        : text.isNotEmpty &&
-              (depth == null || depth < minFillDepth || depth > maxFillDepth)
-        ? 'Depth: $minFillDepth to $maxFillDepth, or empty for no limit'
-        : null;
-    if (problem != null) {
-      setState(() => _problem = problem);
-      return;
-    }
-    Navigator.pop(
-      context,
-      FillRequest(elo: elo!, depthPlies: depth, source: _source),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Expectimax settings'),
-    content: SizedBox(
-      width: searchSettingsWidth,
-      child: SingleChildScrollView(
-        child: Wrap(
-          spacing: Space.m,
-          runSpacing: Space.m,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            if (_problem case final problem?)
-              Text(
-                problem,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            _NumberBox(
-              label: 'Opponent',
-              box: _elo,
-              width: searchEloWidth,
-              enabled: !widget.running,
-              onSubmitted: _done,
-            ),
-            _NumberBox(
-              label: 'Depth',
-              box: _depth,
-              width: searchDepthWidth,
-              enabled: !widget.running,
-              onSubmitted: _done,
-              hint: 'Any',
-            ),
-            PopupMenuButton<EvaluationSource>(
-              tooltip: 'Evaluation source',
-              enabled: !widget.running,
-              initialValue: _source,
-              onSelected: (source) {
-                if (mounted) setState(() => _source = source);
-              },
-              itemBuilder: (_) => [
-                for (final source in EvaluationSource.values)
-                  PopupMenuItem(value: source, child: Text(source.label)),
-              ],
-              child: Padding(
-                padding: const EdgeInsets.all(Space.s),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(_source.label),
-                    const Icon(Icons.arrow_drop_down),
-                  ],
-                ),
-              ),
-            ),
-            Text(
-              'Depth in half-moves; empty runs until stopped. Rare replies keep their engine value.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
-      ),
-    ),
-    actions: [TextButton(onPressed: _done, child: const Text('Done'))],
-  );
 }

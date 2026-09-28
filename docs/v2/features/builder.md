@@ -30,8 +30,9 @@ layouts last for the current app session and are retained per mode.
 The move-note card beneath the board is directly editable, including the chapter introduction. It uses the
 existing commit-on-navigation editor and guarded document saver.
 
-Expectimax has a play button, a compact rating/depth summary and a settings
-dialog. Both Stop and Stop after finishing depth N carry pause icons; Stop
+Expectimax has a play button and inline text fields for Maia rating, candidate
+count, depth and reply coverage. Candidates limits our moves from ply two onward;
+the root remains broad. Both Stop and Stop after finishing depth N carry pause icons; Stop
 finishes the current position, while the other finishes the whole search level.
 The opponent rating and search limit are labelled, and the engine target depth
 is displayed separately. Hover an Engine value for its recorded depth (engine,
@@ -41,8 +42,9 @@ depths remain session metadata: older/resumed tree values and ChessDB results
 without a depth report it as unavailable. Empty searches show a start
 instruction, and scratch boards omit the redundant
 “Temporary analysis” heading. Stockfish is the default; optional database
-sources live inside that dialog. Ctrl+G uses the same selected source, rating and depth. Clicking a result
-while running stops the old search, saves its committed tree, and continues from
+sources are selected beside the fields. Ctrl+G uses the same selected settings.
+Board navigation while running (results, moves, back/forward) stops the old search,
+saves its committed tree, and continues from
 the clicked position using compatible child values. Failed saves block the next
 run and retain Retry/Discard. Navigating again while that save is pending cancels
 the queued restart. Stopped search rows only navigate, so inspecting results does

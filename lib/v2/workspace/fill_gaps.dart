@@ -69,7 +69,10 @@ final class FillGaps extends ChangeNotifier {
        _keepTree = keepTree,
        _loadTree = loadTree,
        _pending = pendingWrites ?? PendingWrites(),
-       _clock = clock;
+       _clock = clock {
+    _board = _boardNow;
+    _session.anyChange.addListener(_boardChanged);
+  }
 
   final DocumentSession _session;
   final EngineAnalysis _analysis;
@@ -174,48 +177,93 @@ final class FillGaps extends ChangeNotifier {
   Completer<void>? _finished;
   int _followTicket = 0;
 
-  /// Stop and persist the old root before following a clicked result. A later
-  /// click or navigation supersedes this request while saving is in flight.
-  Future<String?> followMove(String uci) async {
-    final ticket = ++_followTicket;
-    final request = _found?.request;
-    final wasRunning = running;
-    final finished = _finished?.future;
-    _session.playMove(uci);
-    final fen = _session.fen;
-    final document = _session.source ?? _session.analysisPage;
-    if (!wasRunning || request == null) return null;
-    finish();
-    // Interrupt a long fixed-depth evaluation; committed expansions survive.
-    _releaseSoon();
-    var navigated = false;
-    void moved() {
-      if (_session.fen != fen ||
-          (_session.source ?? _session.analysisPage) != document)
-        navigated = true;
-    }
+  int candidateMoves = 4;
+  double replyFloor = 0.01;
+  final _history = <FillFound>[];
+  FillRequest? _activeRequest;
+  (Object?, Fen, Side)? _board;
+  (Object?, Fen, Side) get _boardNow => (
+    _session.source ?? _session.analysisPage,
+    _session.fen,
+    _session.orientation,
+  );
+  Future<String?>? _following;
+  bool _retargeting = false;
+  bool _followEnabled = false;
 
-    _session.anyChange.addListener(moved);
-    try {
-      await finished;
-    } finally {
-      _session.anyChange.removeListener(moved);
-    }
-    if (navigated ||
-        _disposed ||
-        ticket != _followTicket ||
-        _session.fen != fen ||
-        (_session.source ?? _session.analysisPage) != document)
-      return null;
-    if (!canStart) return 'Save the previous search before continuing.';
-    final previous = _found;
+  /// Retain previous roots so going back can display and resume their values.
+  void _remember() {
+    final found = _found;
+    if (found == null) return;
+    _history.removeWhere(
+      (old) =>
+          old.tree.fen == found.tree.fen &&
+          old.side == found.side &&
+          old.request.compatibleWith(found.request),
+    );
+    _history.add(found);
+    if (_history.length > 16) _history.removeAt(0);
+  }
+
+  SearchNode? nodeAtBoard({FillRequest? request}) {
     final tree = _session.tree;
-    final seed = previous == null || tree == null
-        ? null
-        : previous.at(tree.rootFen, [
-            for (final move in tree.lineTo(_session.cursor)) move.san,
-          ]);
-    return start(request, seed: seed);
+    if (tree == null) return null;
+    final sans = [for (final move in tree.lineTo(_session.cursor)) move.san];
+    final searches = [if (_found != null) _found!, ..._history.reversed];
+    // Prefer a search rooted here over an older subtree of another root.
+    searches.sort(
+      (a, b) => (b.tree.fen == _session.fen ? 1 : 0).compareTo(
+        a.tree.fen == _session.fen ? 1 : 0,
+      ),
+    );
+    for (final found in searches) {
+      if (found.side != _session.orientation ||
+          (request != null && !found.request.compatibleWith(request)))
+        continue;
+      final node = found.at(tree.rootFen, sans);
+      if (node != null) return node;
+    }
+    return null;
+  }
+
+  void _boardChanged() {
+    final next = _boardNow;
+    if (next == _board) return;
+    final sameDocument = next.$1 == _board?.$1 && next.$3 == _board?.$3;
+    _board = next;
+    final request = _activeRequest;
+    if (!_followEnabled || request == null || (!_active && !_retargeting))
+      return;
+    if (!sameDocument || _session.shownTo != null) {
+      finish();
+      _releaseSoon();
+      return;
+    }
+    if (_state case FillRunning(:final stopping) when stopping && !_retargeting)
+      return;
+    _following = _followBoard(request);
+    unawaited(_following);
+  }
+
+  /// All navigation uses the same stop/save/restart path. Only the latest
+  /// board wins while the previous root is still being saved.
+  Future<String?> _followBoard(FillRequest request) async {
+    final ticket = ++_followTicket;
+    final board = _boardNow;
+    final finished = _finished?.future;
+    _retargeting = true;
+    _finishCurrent();
+    _releaseSoon();
+    await finished;
+    if (_disposed || ticket != _followTicket || board != _boardNow) return null;
+    _retargeting = false;
+    if (!canStart) return 'Save the previous search before continuing.';
+    return start(request);
+  }
+
+  Future<String?> followMove(String uci) async {
+    _session.playMove(uci);
+    return await _following;
   }
 
   /// Whether a search can start now: a position is on the board and not
@@ -270,11 +318,17 @@ final class FillGaps extends ChangeNotifier {
       side: side,
       chapter: drafting ? (chapter, source) : null,
     );
-    _engineDepths.clear();
+    seed ??= nodeAtBoard(request: request);
+    _remember();
+    if (_activeRequest?.source != request.source) _engineDepths.clear();
+    _activeRequest = request;
+    _followEnabled = true;
     _active = true;
     _finished = Completer<void>();
     _releasing = null;
-    _found = null;
+    _found = seed == null
+        ? null
+        : FillFound(target: target, request: request, tree: seed);
     _lines = null;
     _draft = null;
     _set(
@@ -304,15 +358,8 @@ final class FillGaps extends ChangeNotifier {
     if (!canStart) return 'Finish the current search or save first.';
     final source = _session.source;
     final fen = _session.fen;
-    final previous = _found;
-    SearchNode? seed;
-    if (previous != null &&
-        previous.tree.fen == fen &&
-        previous.side == _session.orientation &&
-        previous.request.elo == request.elo &&
-        previous.request.source == request.source) {
-      seed = previous.tree;
-    } else {
+    SearchNode? seed = nodeAtBoard(request: request);
+    if (seed == null) {
       final load = _loadTree;
       if (source == null || load == null) {
         return 'No saved search is available for this board.';
@@ -327,6 +374,8 @@ final class FillGaps extends ChangeNotifier {
           request.elo,
           _session.orientation,
           request.source,
+          candidateMoves: request.candidateMoves,
+          replyFloor: request.replyFloor,
         );
         if (decoded is String) return decoded;
         seed = decoded as SearchNode;
@@ -368,9 +417,9 @@ final class FillGaps extends ChangeNotifier {
       side: target.side,
       horizonPlies: request.depthPlies,
       lossLimitCp: null,
-      maxOurMoves: 4,
+      maxOurMoves: request.candidateMoves,
       narrowAfterPly: 2,
-      replyFloor: 0.01,
+      replyFloor: request.replyFloor,
       nodeBudget: fillNodeBudget + (seed == null ? 0 : nodesIn(seed)),
     );
     final result = await buildSearchTree(
@@ -592,6 +641,9 @@ final class FillGaps extends ChangeNotifier {
   /// once so an evaluation in flight comes back empty rather than being
   /// waited for.
   void cancel() {
+    _followEnabled = false;
+    ++_followTicket;
+    _retargeting = false;
     if (_state case final FillRunning running) {
       _set(running.copyWith(cancelling: true));
       _releaseSoon();
@@ -602,6 +654,13 @@ final class FillGaps extends ChangeNotifier {
   /// found: the search goes level by level, so what it has is every move
   /// to the depth it reached. Nothing to do once a stop is asked for.
   void finish() {
+    _followEnabled = false;
+    ++_followTicket;
+    _retargeting = false;
+    _finishCurrent();
+  }
+
+  void _finishCurrent() {
     if (_state case final FillRunning running when !running.stopping) {
       _set(running.copyWith(finishing: true));
     }
@@ -611,6 +670,7 @@ final class FillGaps extends ChangeNotifier {
   /// search has reached scored, then stops and keeps the tree. Asked again
   /// it changes nothing: the level it named is the one it stops after.
   void finishLevel() {
+    _followEnabled = false;
     if (_state case final FillRunning running
         when !running.stopping && running.lastPly == null) {
       // Before the first expansion is done there is no level to finish but
@@ -676,6 +736,7 @@ final class FillGaps extends ChangeNotifier {
 
   @override
   void dispose() {
+    _session.anyChange.removeListener(_boardChanged);
     _disposed = true;
     _releaseSoon();
     super.dispose();
@@ -851,8 +912,10 @@ Future<Object> readSearchSeed(
   String text,
   int elo,
   Side side,
-  EvaluationSource source,
-) => Isolate.run(() {
+  EvaluationSource source, {
+  int candidateMoves = 4,
+  double replyFloor = 0.01,
+}) => Isolate.run(() {
   final json = jsonDecode(text) as Map<String, Object?>;
   if ((json['v2_evaluation_source'] ?? 'stockfish') != source.name) {
     return 'Choose the evaluation source used by this saved search.';
@@ -869,8 +932,8 @@ Future<Object> readSearchSeed(
         when config.side == side &&
             config.lossLimitCp == null &&
             ((config.replyFloor == 0 && config.maxOurMoves == null) ||
-                (config.replyFloor == 0.01 &&
-                    config.maxOurMoves == 4 &&
+                (config.replyFloor == replyFloor &&
+                    config.maxOurMoves == candidateMoves &&
                     config.narrowAfterPly == 2)) &&
             config.pins.isEmpty =>
       root,

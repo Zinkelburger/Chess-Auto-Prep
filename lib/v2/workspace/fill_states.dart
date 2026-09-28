@@ -11,9 +11,19 @@ final class FillRequest {
     required this.elo,
     this.depthPlies,
     this.source = EvaluationSource.stockfish,
+    this.candidateMoves = 4,
+    this.replyFloor = 0.01,
   });
 
   final EvaluationSource source;
+  final int candidateMoves;
+  final double replyFloor;
+
+  bool compatibleWith(FillRequest other) =>
+      elo == other.elo &&
+      source == other.source &&
+      candidateMoves == other.candidateMoves &&
+      replyFloor == other.replyFloor;
 
   /// The rating the opponent's replies are predicted for.
   final int elo;

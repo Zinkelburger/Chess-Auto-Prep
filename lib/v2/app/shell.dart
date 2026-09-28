@@ -879,6 +879,8 @@ final class SearchDoor {
       FillRequest(
         elo: settings.value.opponentElo,
         depthPlies: fill.depth,
+        candidateMoves: fill.candidateMoves,
+        replyFloor: fill.replyFloor,
         source: fill.source,
       ),
     );

@@ -166,6 +166,8 @@ final class _Search {
   /// counts them.
   int _nodes = 1;
 
+  final _partial = <String, OurNode>{};
+
   Future<SearchResult> run(Position root, SearchNode? seed) async {
     final path = SearchPath.root(root);
     final leaf = seed == null ? await _leaf(path) : _Scored(seed);
@@ -223,6 +225,16 @@ final class _Search {
     final legal = {
       for (final move in legalMovesOf(path.position)) move.uci: move,
     };
+    // A deeper shortlist promoted into the broad root needs its missing
+    // moves restored, while retaining the work below existing candidates.
+    if (saved is OurNode &&
+        config.maxOurMoves != null &&
+        path.ply < config.narrowAfterPly &&
+        !config.pins.containsKey(path.fen.position) &&
+        saved.candidates.length < legal.length) {
+      _partial[path.fen.value] = saved;
+      return pending;
+    }
     PendingNode child(MoveRef move, SearchNode node, double share) {
       final named = legal[move.uci];
       if (named == null) {
@@ -403,8 +415,23 @@ final class _Search {
     }
     if (!_fits(legal.length)) return null;
     final played = [for (final named in legal) _play(path, named)];
-    final pendings = await _leavesOf([for (final (_, child) in played) child]);
-    if (pendings == null || _stopping()) return null;
+    final saved = _partial.remove(path.fen.value);
+    final missing = [
+      for (final (move, child) in played)
+        if (saved?.candidates.any((c) => c.move.uci == move.uci) != true) child,
+    ];
+    final evaluated = await _leavesOf(missing);
+    if (evaluated == null || _stopping()) return null;
+    var index = 0;
+    final pendings = <PendingNode>[];
+    for (final (move, child) in played) {
+      final existing = saved?.candidates
+          .where((c) => c.move.uci == move.uci)
+          .firstOrNull;
+      pendings.add(
+        existing == null ? evaluated[index++] : _restore(child, existing.child),
+      );
+    }
     var admitted = admittedMoves([
       for (final (index, (move, _)) in played.indexed)
         CandidateMove(move: move, child: pendings[index].leaf),
