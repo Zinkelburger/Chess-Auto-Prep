@@ -47,6 +47,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from . import expectimax_chapters as chapters
 from .engine_tournament import documents_dir
 from .paths import REPO_ROOT, data_dir
 from .tools import ToolError
@@ -62,6 +63,9 @@ BUILDER_DIR = REPO_ROOT / "tree_builder"
 BUILDER_BIN = BUILDER_DIR / "bin" / "tree_builder"
 MAIA_MODEL = REPO_ROOT / "assets" / "maia3_simplified.onnx"
 ENGINES_DIR = REPO_ROOT / "assets" / "executables"
+
+#: Runs a chapter build and publishes its tree to the app when it exits.
+SUPERVISOR = Path(__file__).resolve().with_name("expectimax_supervisor.py")
 
 #: `make` on a cold tree_builder is ~40 s; give it room.
 BUILD_TIMEOUT = 900.0
@@ -310,7 +314,10 @@ def prepare_toolchain(rebuild: bool = False) -> dict:
 
 
 def resolve_position(
-    moves: Any = None, fen: str | None = None, color: str | None = None
+    moves: Any = None,
+    fen: str | None = None,
+    color: str | None = None,
+    either_side: bool = False,
 ) -> dict:
     """Turn a move list (and/or FEN) into the FEN the builder wants.
 
@@ -318,7 +325,9 @@ def resolve_position(
     colour is refused rather than guessed at: a line written out to "5... c5"
     ends with White to move, so asking for Black's best move there is almost
     always a request about the position one ply earlier, and only the caller
-    knows which they meant.
+    knows which they meant. A chapter settles it — its heading names the side
+    — so `either_side` lets a chapter build start on the opponent's move, as
+    the app's own search does.
     """
     try:
         import chess
@@ -360,25 +369,27 @@ def resolve_position(
         wanted = color.strip().lower()[:1]
         if wanted not in ("w", "b"):
             raise ToolError('color must be "w" or "b".')
-        if wanted != to_move:
+        if wanted != to_move and not either_side:
             side = "White" if to_move == "w" else "Black"
             other = "Black" if to_move == "w" else "White"
             hint = ""
             if played:
                 hint = (
                     f' Drop the last move ("{played[-1]}") to score {other}\'s '
-                    "options at that point instead."
+                    "options at that point instead, or pass a chapter of that "
+                    "side to build from this position."
                 )
             raise ToolError(
                 f"You asked for {other}'s best move, but after this line it is "
                 f"{side} to move.{hint}"
             )
+        color = wanted
     else:
         color = to_move
 
     return {
         "fen": board.fen(),
-        "color": to_move,
+        "color": color,
         "line": " ".join(played),
         "ply": len(played),
     }
@@ -647,6 +658,8 @@ def root_table(tree_path: Path) -> dict:
             "The root has no candidate moves yet — the build was stopped "
             "before it finished the first ply."
         )
+    if _opponent_to_move(data):
+        return _reply_table(data, root, children)
 
     rows = []
     for child in children:
@@ -690,6 +703,56 @@ def root_table(tree_path: Path) -> dict:
             else None
         ),
         "candidates": rows,
+        "total_nodes": data.get("total_nodes"),
+        "max_ply": data.get("max_depth"),
+        "build_complete": data.get("build_complete"),
+    }
+
+
+def _opponent_to_move(data: dict) -> bool:
+    """Whether the root is the opponent's move: a chapter build started there."""
+    config = data.get("config") or {}
+    fen = (data.get("tree") or {}).get("fen")
+    if not isinstance(fen, str) or not isinstance(config.get("play_as_white"), bool):
+        return False
+    fields = fen.split()
+    return len(fields) > 1 and (fields[1] == "w") != config["play_as_white"]
+
+
+def _reply_table(data: dict, root: dict, children: list) -> dict:
+    """The opponent's replies at the root, likeliest first, with our answers."""
+    rows = []
+    for child in children:
+        answers = [c for c in child.get("children") or [] if c.get("expectimax_value") is not None]
+        chosen = next((c for c in answers if c.get("is_repertoire_move")), None)
+        if chosen is None and answers:
+            chosen = max(answers, key=lambda c: c["expectimax_value"])
+        plies = _leaf_plies(child)
+        rows.append(
+            {
+                "reply": child.get("move_san") or child.get("move_uci"),
+                "probability": child.get("move_probability"),
+                "expectimax": child.get("expectimax_value"),
+                "our_answer": (chosen.get("move_san") or chosen.get("move_uci")) if chosen else None,
+                "nodes": _subtree_size(child),
+                "max_ply": max(plies),
+            }
+        )
+    rows.sort(key=lambda r: -(r["probability"] or 0))
+    return {
+        "root_to_move": "opponent",
+        "best": None,
+        "score_kind": "expected-score estimate",
+        "search_method": "pure",
+        "search_label": "Pure",
+        "result_status": "complete" if data.get("build_complete") else "incomplete: provisional preparation",
+        "root_bounds": [root.get("value_lower", 0), root.get("value_upper", 1)],
+        "root_expectimax": (
+            round(root["expectimax_value"], 4)
+            if root.get("expectimax_value") is not None
+            else None
+        ),
+        "replies": rows,
         "total_nodes": data.get("total_nodes"),
         "max_ply": data.get("max_depth"),
         "build_complete": data.get("build_complete"),
@@ -844,43 +907,98 @@ def register_expectimax_tools(registry: Any) -> None:
             "saves its tree on the way out, so give it a moment and retry."
         )
 
+    def _launch(
+        directory: Path, argv: list[str], chain: dict, state: dict, mode: str
+    ) -> subprocess.Popen:
+        """Start the builder, behind the publishing supervisor for a chapter run."""
+        command = argv
+        if state.get("chapter"):
+            command = [
+                sys.executable,
+                str(SUPERVISOR),
+                str(directory),
+                state["chapter"],
+                state["publish_as"],
+                "--",
+                *argv,
+            ]
+        with (directory / LOG_FILE).open(mode) as log:
+            return subprocess.Popen(  # noqa: S603 - our own tool
+                command,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                cwd=str(BUILDER_DIR),
+                env=chain["env"],
+                start_new_session=True,
+            )
+
+    def _new_run_dir(label: str) -> Path:
+        root = _root()
+        root.mkdir(parents=True, exist_ok=True)
+        directory = root / f"{_slug(label)}-{time.strftime('%Y%m%d-%H%M%S')}"
+        directory.mkdir(parents=True, exist_ok=False)
+        return directory
+
+    def _chapter_info(state: dict, directory: Path) -> dict | None:
+        chapter = state.get("chapter")
+        if not chapter:
+            return None
+        position = state.get("position") or {}
+        settings = state.get("app_settings") or {}
+        return {
+            "chapter": chapter,
+            "tree_published_to": str(
+                chapters.publish_folder(Path(chapter), state["publish_as"])
+                / chapters.TREE_FILE
+            ),
+            "last_publish": chapters.read_publish_record(directory),
+            "open_in_app": chapters.open_in_app(
+                Path(chapter),
+                position.get("line") or "",
+                position.get("color") or "w",
+                int(settings.get("maia_elo") or 2200),
+            ),
+        }
+
     # ── run ────────────────────────────────────────────────────────────────
 
     def expectimax_run(args: dict) -> dict:
+        chapter = None
+        color = args.get("color")
+        if args.get("chapter"):
+            chapter = chapters.resolve_chapter(args["chapter"])
+            side = chapters.chapter_color(chapter)
+            if side and color and str(color).strip().lower()[:1] != side:
+                raise ToolError(
+                    f"{chapter.name} is a {'White' if side == 'w' else 'Black'} "
+                    "chapter; its search is for that side."
+                )
+            color = color or side
+            args = chapters.app_build_args(args)
         position = resolve_position(
-            args.get("moves"), args.get("fen"), args.get("color")
+            args.get("moves"), args.get("fen"), color, either_side=chapter is not None
         )
         chain = prepare_toolchain()
 
-        root = _root()
-        root.mkdir(parents=True, exist_ok=True)
-        label = _slug(args.get("name") or position["line"] or "position")
-        directory = root / f"{label}-{time.strftime('%Y%m%d-%H%M%S')}"
-        directory.mkdir(parents=True, exist_ok=True)
-
+        directory = _new_run_dir(args.get("name") or position["line"] or "position")
         argv = builder_argv(chain, directory / BASE, position, args)
         log_path = directory / LOG_FILE
-        try:
-            with log_path.open("wb") as log:
-                process = subprocess.Popen(  # noqa: S603 - our own tool
-                    argv,
-                    stdout=log,
-                    stderr=subprocess.STDOUT,
-                    stdin=subprocess.DEVNULL,
-                    cwd=str(BUILDER_DIR),
-                    env=chain["env"],
-                    start_new_session=True,
-                )
-        except OSError as e:
-            raise ToolError(f"Could not start the build: {e}") from None
-
         state = {
-            "pid": process.pid,
             "build_argv": argv,
             "position": position,
             "startedAt": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "log": str(log_path),
         }
+        if chapter is not None:
+            state["chapter"] = str(chapter)
+            state["publish_as"] = directory.name
+            state["app_settings"] = {"maia_elo": int(args.get("maia_elo") or 2200)}
+        try:
+            process = _launch(directory, argv, chain, state, "wb")
+        except OSError as e:
+            raise ToolError(f"Could not start the build: {e}") from None
+        state["pid"] = process.pid
         _write_run(directory, state)
 
         return {
@@ -899,6 +1017,7 @@ def register_expectimax_tools(registry: Any) -> None:
             "log": str(log_path),
             "pid": process.pid,
             "toolchain_built_now": chain["built_now"],
+            "app": _chapter_info(state, directory),
             "next": (
                 "The build runs in the background and can take tens of "
                 "minutes. Poll expectimax_status; call expectimax_result when "
@@ -933,10 +1052,26 @@ def register_expectimax_tools(registry: Any) -> None:
             if (directory / f"{BASE}.pgn").is_file()
             else None
         )
+        app = _chapter_info(state, directory)
+        if app is not None:
+            out["app"] = app
         return out
 
     def expectimax_list(args: dict) -> dict:
         limit = int(args.get("limit") or 25)
+        if args.get("chapter"):
+            chapter = chapters.resolve_chapter(args["chapter"])
+            return {
+                "chapter": str(chapter),
+                "side": chapters.chapter_color(chapter),
+                "trees": chapters.saved_trees(chapter)[:limit],
+                "note": (
+                    "Saved searches beside this chapter, newest first: by the "
+                    "app or by expectimax_run/resume. Continue one with "
+                    "expectimax_resume {chapter, moves}; the app's Resume "
+                    "picks the newest one at the board."
+                ),
+            }
         rows = []
         for directory in sorted(
             _dirs(_root()), key=lambda d: d.stat().st_mtime, reverse=True
@@ -953,6 +1088,8 @@ def register_expectimax_tools(registry: Any) -> None:
                 "color": position.get("color"),
                 "started_at": state.get("startedAt"),
             }
+            if state.get("chapter"):
+                row["chapter"] = state["chapter"]
             row.update(_tree_summary(directory))
             rows.append(row)
         return {"runs": rows, "directory": str(_root())}
@@ -988,6 +1125,15 @@ def register_expectimax_tools(registry: Any) -> None:
         else:
             table = _score(directory, state, prepare_toolchain())
             scored = True
+            if state.get("chapter"):
+                record = {"at": time.strftime("%Y-%m-%dT%H:%M:%S"), "scored": True}
+                try:
+                    record["published"] = str(
+                        chapters.publish(tree, Path(state["chapter"]), state["publish_as"])
+                    )
+                except (ToolError, OSError) as e:
+                    record["error"] = str(e)
+                chapters.write_publish_record(directory, record)
         position = state.get("position") or {}
         shortlist = root_engine_shortlist(directory, position.get("fen"))
         if shortlist and len(shortlist) > len(table.get("candidates") or []):
@@ -1002,6 +1148,7 @@ def register_expectimax_tools(registry: Any) -> None:
                 ),
                 "stopped_build": stopped,
                 "scored_now": scored,
+                "app": _chapter_info(state, directory),
                 "pgn": str(directory / f"{BASE}.pgn"),
                 "note": (
                     "expectimax is a practical win probability for the side to "
@@ -1027,7 +1174,79 @@ def register_expectimax_tools(registry: Any) -> None:
         out.update(_tree_summary(directory))
         return out
 
+    def _resume_chapter(args: dict) -> dict:
+        """Continue the chapter's newest saved search — the app's or a run's —
+        as a new run, leaving the tree it started from as it was."""
+        chapter = chapters.resolve_chapter(args["chapter"])
+        position = None
+        if args.get("moves") or args.get("fen"):
+            position = resolve_position(
+                args.get("moves"), args.get("fen"), either_side=True
+            )
+        row = chapters.newest_tree(chapter, position["fen"] if position else None)
+        with open(row["path"], encoding="utf-8") as fh:
+            data = json.load(fh)
+        plies = args.get("plies")
+        doc, settings = chapters.seed_document(
+            data, int(plies) if plies not in (None, "") else None
+        )
+        chain = prepare_toolchain()
+
+        directory = _new_run_dir(args.get("name") or chapter.stem)
+        (directory / f"{BASE}.tree.json").write_text(
+            json.dumps(doc), encoding="utf-8"
+        )
+        line = position["line"] if position else (data.get("start_moves") or "")
+        run_position = {
+            "fen": settings["fen"],
+            "color": settings["color"],
+            "line": line,
+            "ply": position["ply"] if position else None,
+        }
+        argv = builder_argv(
+            chain,
+            directory / BASE,
+            run_position,
+            {
+                "search": "pure",
+                "plies": settings["plies"],
+                "eval_depth": settings["eval_depth"],
+                "max_eval_loss": settings["max_eval_loss"],
+                "maia_elo": settings["maia_elo"],
+                "threads": args.get("threads"),
+                "name": args.get("name"),
+            },
+        )
+        state = {
+            "build_argv": argv,
+            "position": run_position,
+            "startedAt": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "log": str(directory / LOG_FILE),
+            "chapter": str(chapter),
+            "publish_as": directory.name,
+            "seeded_from": row["path"],
+            "app_settings": {"maia_elo": settings["maia_elo"]},
+        }
+        try:
+            process = _launch(directory, argv, chain, state, "wb")
+        except OSError as e:
+            raise ToolError(f"Could not resume the build: {e}") from None
+        state["pid"] = process.pid
+        _write_run(directory, state)
+        return {
+            "id": directory.name,
+            "resumed": True,
+            "from": {k: row[k] for k in ("run", "by", "nodes", "deepest_ply", "horizon")},
+            "pid": process.pid,
+            "plies": settings["plies"],
+            "opponent_rating": settings["maia_elo"],
+            "app": _chapter_info(state, directory),
+            "next": "Poll expectimax_status; expectimax_result for the ranking.",
+        }
+
     def expectimax_resume(args: dict) -> dict:
+        if args.get("chapter") and not args.get("id"):
+            return _resume_chapter(args)
         directory = resolve_id(_root(), args.get("id"))
         state = _read_run(directory)
         if state["running"]:
@@ -1040,18 +1259,8 @@ def register_expectimax_tools(registry: Any) -> None:
         if args.get("threads") is not None:
             argv = argv_with_threads(argv, int(args["threads"]))
 
-        log_path = directory / LOG_FILE
         try:
-            with log_path.open("ab") as log:
-                process = subprocess.Popen(  # noqa: S603 - our own tool
-                    argv,
-                    stdout=log,
-                    stderr=subprocess.STDOUT,
-                    stdin=subprocess.DEVNULL,
-                    cwd=str(BUILDER_DIR),
-                    env=chain["env"],
-                    start_new_session=True,
-                )
+            process = _launch(directory, argv, chain, state, "ab")
         except OSError as e:
             raise ToolError(f"Could not resume the build: {e}") from None
 
@@ -1064,6 +1273,7 @@ def register_expectimax_tools(registry: Any) -> None:
             "resumed": True,
             "pid": process.pid,
             "plies": args.get("plies"),
+            "app": _chapter_info(state, directory),
             "next": "Poll expectimax_status; expectimax_result for the ranking.",
         }
 
@@ -1077,7 +1287,12 @@ def register_expectimax_tools(registry: Any) -> None:
         "every positive-probability opponent reply. Opponent replies come only from Maia; master databases are not used. Values are expected-score estimates, not calibrated "
         "human win rates. Exponential cost: start with 4 plies. Interrupted trees "
         "are incomplete and resumable, not solved answers. Draws are immediately "
-        "claimed at threefold/100 half-moves; repetition history starts at the root.",
+        "claimed at threefold/100 half-moves; repetition history starts at the root. "
+        "With chapter (a repertoire .pgn), the build uses the app's Search-tab "
+        "settings (engine depth 14, every move kept, pure) for the chapter's side, "
+        "may start on the opponent's move, and its tree is published beside the "
+        "chapter when the build stops or finishes, where the app's Resume opens "
+        "and continues it.",
         _obj(
             {
                 "moves": _s(
@@ -1087,8 +1302,16 @@ def register_expectimax_tools(registry: Any) -> None:
                 "fen": _s("Starting position (default: the game start)."),
                 "color": _s(
                     'Side to build for, "w" or "b". Defaults to whoever is to '
-                    "move; passing the other side is refused, because a line "
+                    "move (to the chapter's side with chapter); without a "
+                    "chapter, passing the other side is refused, because a line "
                     "ending on Black's move is White to move."
+                ),
+                "chapter": _s(
+                    "Path of a repertoire chapter .pgn "
+                    "(Documents/repertoires/<repertoire>/<chapter>.pgn) to share "
+                    "the search with the app. Forces engine depth 14, no "
+                    "engine-loss window and pure search; the side comes from "
+                    "the chapter's '// Color:' heading."
                 ),
                 "name": _s("Label for the run and the PGN headers."),
                 "search": _s("pure (default) or fast (rolling is a compatibility alias). Fast commits short-lookahead choices; it is not a full-horizon optimum."),
@@ -1143,8 +1366,14 @@ def register_expectimax_tools(registry: Any) -> None:
     registry._add(
         "expectimax_list",
         "Every saved run, newest first: the line, the side, how big the tree "
-        "got, and whether it is still building.",
-        _obj({"limit": _i("Max rows (default 25).")}),
+        "got, and whether it is still building. With chapter, instead the "
+        "searches saved beside that chapter, the app's and the agent's.",
+        _obj(
+            {
+                "limit": _i("Max rows (default 25)."),
+                "chapter": _s("A repertoire chapter .pgn: list its saved searches."),
+            }
+        ),
         expectimax_list,
     )
 
@@ -1161,12 +1390,22 @@ def register_expectimax_tools(registry: Any) -> None:
         "expectimax_resume",
         "Carry on building a stopped run, optionally with more workers or a greater depth. Every "
         "evaluation already computed is cached, so resuming is much cheaper "
-        "than starting over.",
+        "than starting over. With chapter and no id, continues the newest "
+        "search saved beside that chapter — including one the app ran — as a "
+        "new run with that tree's settings, publishing the result back beside "
+        "the chapter; the tree it started from is not changed.",
         _obj(
             {
                 "id": _s("Run id (default: the most recent)."),
-                "plies": _i("New depth in half-moves (default: as before)."),
+                "plies": _i(
+                    "New depth in half-moves (default: as before; for an app "
+                    "search with no depth limit, the deepest ply it reached)."
+                ),
                 "threads": _i("Parallel Stockfish workers (default: as before)."),
+                "chapter": _s("A repertoire chapter .pgn whose saved search to continue."),
+                "moves": _s("With chapter: the line to the search's root, to pick that search."),
+                "fen": _s("With chapter: the search's root position, to pick that search."),
+                "name": _s("With chapter: label for the new run."),
             }
         ),
         expectimax_resume,

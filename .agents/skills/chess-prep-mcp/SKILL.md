@@ -38,7 +38,7 @@ not yours to fix.
 
 | Family (prefix) | Reads | Writes / starts | Needs python-chess |
 |---|---|---|---|
-| `expectimax_*` — Maia + Stockfish opening-tree builds; `run` → `status` → `result`; `list`, `stop`, `resume` | saved runs in `~/Documents/expectimax_runs/` | **starts a Stockfish build for tens of minutes** | yes |
+| `expectimax_*` — Maia + Stockfish opening-tree builds; `run` → `status` → `result`; `list`, `stop`, `resume`; `chapter` shares a search with the app's Search tab | saved runs in `~/Documents/expectimax_runs/`; a chapter's saved searches | **starts a Stockfish build for tens of minutes** | yes |
 | `tournament_*` — engine-vs-engine matches; `run`, `status`, `list`, `crosstable`, `games`, `game_pgn`, `stop`, `open`, `engines`, `add_engine` | saved tournaments under `~/Documents` (`tournament_list` shows paths) | **starts engines for minutes**; `open` / `open_app` launch the desktop app | no |
 | `master_*` — the app's TWIC master-games database: `status`, `book` (moves from a position with W/D/L and Elo), `game`, `games` (by player) | `~/.local/share/com.example.chess_auto_prep/master_games.db`, read-only | nothing | yes |
 | `my_games_*`, `my_game` — the user's own games database: collections, games at a position, games by player, one game | `app_games.db` beside it, read-only | nothing | no |
@@ -46,13 +46,41 @@ not yours to fix.
 | `pgn_open` / `position` / `walk` / `audit` / `eval` — a repertoire or Chessable course as a FEN-keyed tree: `open` once, then `position`, `walk`, `audit`, `eval` | the PGN you pass | `pgn_eval` and `pgn_audit` **run Stockfish** | yes |
 | `chessdb_query` — chessdb.cn moves from a position, best-first, with reply counts | the network | nothing | yes |
 | `chesscom_*` — find a chess.com account from rating clues ("blitz 2701 on June 13"): `search` → `search_status` → results; `rating_on`, `profile`, `who_plays` (opening line, cache only) | chess.com public API + website leaderboard; archive cache and SQLite index in `~/.local/share/chess-prep/chesscom/` | **`chesscom_search` starts a detached job making up to `max_requests` serial HTTP requests** (default 1500, ~5 min) | no |
-| `chessgames_*` — chessgames.com collections as PGN: `download` → `status`; `stop` | the collection pages, then one game per 22 s; games cached in `~/.local/share/chess-prep/chessgames/games/` | **`chessgames_download` starts a detached job (~22 s per game, so 60 games ≈ 22 min)**; writes one PGN per collection to `~/Documents/chessgames/` | no |
+| `chessgames_*` — chessgames.com collections as PGN: `download` → `status`; `stop` | the collection pages, then one game per 30 s; at most 150 requests a day and none for 24 h after a ban; games cached in `~/.local/share/chess-prep/chessgames/games/` | **`chessgames_download` starts a detached job (~30 s per game, so 60 games ≈ 30 min); a ban ends it with state `banned`**; writes one PGN per collection to `~/Documents/chessgames/` | no |
 | `roster_*`, `identity_*`, `constraint_add`, `pairing_simulate`, `opponents_export`, `uscf_*`, `directory_*` — tournament entry list → identified online accounts → the opponent list Player Analysis imports | bundled directory in `tools/mcp/chess_prep/data/`, US Chess API (`uscf_*`) | `roster.json` / `opponents.json` in `~/.local/share/chess-prep/` | no |
 | `people_*`, `player_lookup`, `master_player_search` — the app's players directory: `people_populate` looks up a whole roster and writes one person each (aliases, USCF/FIDE ID, trusted accounts, a `lookup` block of candidates and next steps) plus the event's group; `player_lookup` does one person without writing; `people_upsert` / `people_confirm` record web finds and user approvals | `Documents/opponents/people.json`, the bundled directory, US Chess API, TWIC and broadcast collections (`Documents/lichess_broadcasts/*/*.db`), chess.com/Lichess profiles | **`Documents/opponents/people.json` and `tournaments/<id>.json` — the app's own files** | no |
 
 Full contracts: `mcp_tools.py describe <tool>`. The design notes behind the
 families are `docs/OPPONENT_PREP.md` (roster pipeline), `docs/ENGINE_TOURNAMENT.md`
 (tournaments, headless and from an agent) and `docs/ALGORITHM.md` (expectimax).
+
+## Sharing an expectimax search with the app
+
+Pass `chapter` (a repertoire chapter file,
+`~/Documents/repertoires/<repertoire>/<chapter>.pgn`) to share a search with
+the v2 app's Search tab, in either direction:
+
+1. `expectimax_run {chapter, moves: "1. e4 g6 2. d4 c6 3. Nc3 d5", plies, threads}`
+   builds for the chapter's side (its `// Color:` heading) with the app's
+   settings: engine depth 14, every move kept, pure search. The root may be
+   the opponent's move (the result is then `replies` with our answers). When
+   the build stops or finishes, its tree is published to
+   `.cap-generation/<chapter>.pgn/v2-agent-<run id>/tree.json`. The result's
+   `app.open_in_app` tells the user what to do next: open the chapter, put
+   the board on the root, set Opponent to the same rating, then Search ▸
+   Resume. A running build is not visible in the app yet; stop it
+   (`expectimax_stop`) to publish what it has.
+2. `expectimax_list {chapter}` lists the searches saved beside the chapter,
+   the app's and the agent's.
+3. `expectimax_resume {chapter, moves, plies}` continues the newest one at
+   that root, including one the app ran, as a new run. The source tree is
+   never edited. An app search without a depth limit continues to its
+   deepest ply unless `plies` asks for more (at most 64).
+
+Evaluations are shared only through the trees; the builder's `tree.db` and
+the app's `eval_cache.db` stay separate. Do not continue the same chapter
+search in the app and the agent at once. Each writes its own tree, and the
+app's Resume picks the newest.
 
 ## Finding and extracting games from a PGN or ZIP
 
