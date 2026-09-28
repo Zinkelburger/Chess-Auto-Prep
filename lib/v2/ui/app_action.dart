@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 /// One thing the user can ask for by name: a menu entry, a palette row and
 /// a key are three ways to the same [run].
@@ -8,9 +8,12 @@ import 'package:flutter/foundation.dart';
 /// opened. An action with no [run] is shown but cannot be taken now.
 @immutable
 final class AppAction {
-  const AppAction(this.label, this.run, {this.shortcut, this.group});
+  const AppAction(this.label, this.run, {this.shortcut, this.group, this.icon});
 
   final String label;
+
+  /// Optional familiar symbol; the action keeps its text label.
+  final IconData? icon;
   final VoidCallback? run;
 
   /// The key, in the words a tooltip uses: `Ctrl+E`, `F`. Null when none.

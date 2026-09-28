@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/board_view.dart';
@@ -16,6 +17,7 @@ void main() {
     Fen fen = Fen.initial,
     Side orientation = Side.white,
     String? lastMove,
+    bool movable = true,
   }) async {
     await tester.binding.setSurfaceSize(const Size(400, 400));
     await tester.pumpWidget(
@@ -25,6 +27,7 @@ void main() {
           fen: fen,
           orientation: orientation,
           lastMove: lastMove,
+          movable: movable,
           onMove: played.add,
         ),
       ),
@@ -45,6 +48,118 @@ void main() {
     final rank = int.parse(square[1]) - 1;
     return Offset(file * 50 + 25, (7 - rank) * 50 + 25);
   }
+
+  // Read the actual hint layer's pixels, including square corners: a dot or
+  // ring would not pass. Pieces are drawn separately above this background.
+  Future<Set<String>> hints(WidgetTester tester) async =>
+      (await tester.runAsync(() async {
+        final painter = tester
+            .widget<CustomPaint>(
+              find.byKey(const ValueKey('legal-move-highlights')),
+            )
+            .foregroundPainter!;
+        final recorder = ui.PictureRecorder();
+        painter.paint(Canvas(recorder), const Size(400, 400));
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(400, 400);
+        final data = (await image.toByteData())!;
+        final squares = <String>{};
+        for (var file = 0; file < 8; file++) {
+          for (var rank = 0; rank < 8; rank++) {
+            final x = file * 50;
+            final y = (7 - rank) * 50;
+            final alpha = data.getUint8(((y + 2) * 400 + x + 2) * 4 + 3);
+            if (alpha == 0) continue;
+            expect(data.getUint8(((y + 25) * 400 + x + 25) * 4 + 3), alpha);
+            expect(data.getUint8(((y + 47) * 400 + x + 47) * 4 + 3), alpha);
+            squares.add('${String.fromCharCode(97 + file)}${rank + 1}');
+          }
+        }
+        image.dispose();
+        picture.dispose();
+        return squares;
+      }))!;
+
+  testWidgets('selection tints whole legal squares and clears on deselection', (
+    tester,
+  ) async {
+    await pump(tester);
+    expect(await hints(tester), isEmpty);
+    await tester.tapAt(at('e2'));
+    await tester.pump();
+    expect(await hints(tester), {'e3', 'e4'});
+    await tester.tapAt(at('g1'));
+    await tester.pump();
+    expect(await hints(tester), {'f3', 'h3'});
+    await tester.tapAt(at('g1'));
+    await tester.pump();
+    expect(await hints(tester), isEmpty);
+  });
+
+  testWidgets(
+    'dragging shows legal squares, never the hovered illegal square',
+    (tester) async {
+      await pump(tester);
+      final gesture = await tester.startGesture(at('g1'));
+      await gesture.moveTo(at('e4'));
+      await tester.pump();
+      expect(await hints(tester), {'f3', 'h3'});
+      expect(
+        tester
+            .widget<Chessboard>(find.byType(Chessboard))
+            .settings
+            .dragTargetKind,
+        DragTargetKind.none,
+      );
+      await gesture.up();
+      await tester.pump();
+      expect(await hints(tester), isEmpty);
+      expect(played, isEmpty);
+    },
+  );
+
+  testWidgets('capture and en passant destinations use the same square tint', (
+    tester,
+  ) async {
+    await pump(tester, fen: const Fen('7k/8/3n4/3pP3/8/8/8/K7 w - - 0 1'));
+    // Use an ordinary capture first, then the same destination en passant.
+    await tester.tapAt(at('e5'));
+    await tester.pump();
+    expect(await hints(tester), {'d6', 'e6'});
+    await pump(tester, fen: const Fen('7k/8/8/3pP3/8/8/8/K7 w - d6 0 1'));
+    expect(await hints(tester), isEmpty);
+    await tester.tapAt(at('e5'));
+    await tester.pump();
+    expect(await hints(tester), {'d6', 'e6'});
+  });
+
+  testWidgets(
+    'pinned pieces have no illegal hints and read-only boards have none',
+    (tester) async {
+      await pump(tester, fen: const Fen('4r2k/8/8/8/8/8/4N3/4K3 w - - 0 1'));
+      await tester.tapAt(at('e2'));
+      await tester.pump();
+      expect(await hints(tester), isEmpty);
+      await pump(tester);
+      await tester.tapAt(at('e2'));
+      await tester.pump();
+      await pump(tester, movable: false);
+      await tester.pumpAndSettle();
+      expect(await hints(tester), isEmpty);
+    },
+  );
+
+  testWidgets('hints follow a flipped board and clear on a new position', (
+    tester,
+  ) async {
+    await pump(tester, orientation: Side.black);
+    await tester.tapAt(at('d7')); // e2 seen from Black
+    await tester.pump();
+    expect(await hints(tester), {'d6', 'd5'});
+    await pump(tester, fen: const Fen('7k/8/8/8/8/8/8/K7 w - - 0 1'));
+    await tester.pumpAndSettle();
+    expect(await hints(tester), isEmpty);
+  });
 
   testWidgets('puts every piece of the start position on the board', (
     tester,

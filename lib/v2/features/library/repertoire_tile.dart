@@ -129,9 +129,24 @@ class _RepertoireRow extends StatelessWidget {
   /// What can be done to the repertoire itself, off while a catalog change
   /// is in flight.
   List<Widget> _actions(BuildContext context) => [
-    rowAction('Rename…', () => _rename(context), busy: library.busy),
-    rowAction('New chapter…', () => _newChapter(context), busy: library.busy),
-    rowAction('Delete…', () => _delete(context), busy: library.busy),
+    rowAction(
+      'Rename…',
+      () => _rename(context),
+      busy: library.busy,
+      icon: Icons.edit_outlined,
+    ),
+    rowAction(
+      'New chapter…',
+      () => _newChapter(context),
+      busy: library.busy,
+      icon: Icons.add,
+    ),
+    rowAction(
+      'Delete…',
+      () => _delete(context),
+      busy: library.busy,
+      icon: Icons.delete_outline,
+    ),
   ];
 
   @override
@@ -277,6 +292,7 @@ class _ChapterRow extends StatelessWidget {
                     'Rename…',
                     () => _rename(context),
                     busy: library.busy,
+                    icon: Icons.edit_outlined,
                   ),
                   rowAction(
                     'Move to…',
@@ -287,6 +303,7 @@ class _ChapterRow extends StatelessWidget {
                     'Delete…',
                     () => _delete(context),
                     busy: library.busy,
+                    icon: Icons.delete_outline,
                   ),
                 ],
               ),

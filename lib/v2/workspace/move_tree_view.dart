@@ -303,15 +303,18 @@ final class _LineBuilder {
         ),
         MenuItemButton(
           onPressed: () => onDeleteFrom(path),
+          leadingIcon: const Icon(Icons.delete_outline, size: IconSize.menu),
           child: const Text('Delete from here'),
         ),
         const Divider(),
         MenuItemButton(
           onPressed: () => _copy(writeLineTo(session.tree!, path)),
+          leadingIcon: const Icon(Icons.content_copy, size: IconSize.menu),
           child: const Text('Copy line PGN'),
         ),
         MenuItemButton(
           onPressed: () => _copy(node.fen.value),
+          leadingIcon: const Icon(Icons.content_copy, size: IconSize.menu),
           child: const Text('Copy FEN'),
         ),
         ...moveMenu(path),

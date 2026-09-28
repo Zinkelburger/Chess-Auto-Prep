@@ -225,6 +225,9 @@ class _ActionsMenuState extends State<_ActionsMenu> {
     }
     Widget entry(AppAction action) => MenuItemButton(
       onPressed: action.run,
+      leadingIcon: action.icon == null
+          ? null
+          : Icon(action.icon, size: IconSize.menu),
       trailingIcon: action.shortcut == null
           ? null
           : Text(action.shortcut!, style: text.labelSmall),

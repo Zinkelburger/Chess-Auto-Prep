@@ -410,17 +410,47 @@ class _Toolbar extends StatelessWidget {
   /// Making and removing whole studies, and taking one away as text. The
   /// two that need a study open are off until one is.
   List<Widget> get _actions => [
-    rowAction('New study…', onNewStudy, busy: busy),
-    rowAction('Import from URL…', onImport, busy: busy),
-    rowAction('Import PGN file…', onImportPgn, busy: busy),
-    rowAction('Rename study…', onRenameStudy, busy: busy || !hasOpenStudy),
-    rowAction('Save study PGN as…', onExportStudy, busy: busy || !hasOpenStudy),
+    rowAction('New study…', onNewStudy, busy: busy, icon: Icons.add),
+    rowAction(
+      'Import from URL…',
+      onImport,
+      busy: busy,
+      icon: Icons.file_open_outlined,
+    ),
+    rowAction(
+      'Import PGN file…',
+      onImportPgn,
+      busy: busy,
+      icon: Icons.file_open_outlined,
+    ),
+    rowAction(
+      'Rename study…',
+      onRenameStudy,
+      busy: busy || !hasOpenStudy,
+      icon: Icons.edit_outlined,
+    ),
+    rowAction(
+      'Save study PGN as…',
+      onExportStudy,
+      busy: busy || !hasOpenStudy,
+      icon: Icons.save_outlined,
+    ),
     if (onRetrySave != null)
       rowAction('Retry study save', onRetrySave!, busy: busy),
     if (onRetryRename != null)
       rowAction('Retry rename', onRetryRename!, busy: busy),
-    rowAction('Copy study PGN', onCopyStudy, busy: busy || !hasOpenStudy),
-    rowAction('Delete study…', onDeleteStudy, busy: busy || !hasOpenStudy),
+    rowAction(
+      'Copy study PGN',
+      onCopyStudy,
+      busy: busy || !hasOpenStudy,
+      icon: Icons.content_copy,
+    ),
+    rowAction(
+      'Delete study…',
+      onDeleteStudy,
+      busy: busy || !hasOpenStudy,
+      icon: Icons.delete_outline,
+    ),
   ];
 
   @override
@@ -549,8 +579,18 @@ class StudyRow extends StatelessWidget {
                   children: [
                     // Only the open study's text is in hand; another one
                     // would have to be read from disk first.
-                    rowAction('Copy study PGN', onCopyPgn, busy: busy || !open),
-                    rowAction('Delete study…', onDelete, busy: busy),
+                    rowAction(
+                      'Copy study PGN',
+                      onCopyPgn,
+                      busy: busy || !open,
+                      icon: Icons.content_copy,
+                    ),
+                    rowAction(
+                      'Delete study…',
+                      onDelete,
+                      busy: busy,
+                      icon: Icons.delete_outline,
+                    ),
                   ],
                 ),
               ],
@@ -619,42 +659,7 @@ class ChapterRow extends StatelessWidget {
                 Expanded(
                   child: Text(chapter.name, overflow: TextOverflow.ellipsis),
                 ),
-                RowActions(
-                  tooltip: 'Chapter actions',
-                  children: [
-                    rowAction('Rename…', actions.rename, busy: busy),
-                    rowAction('PGN tags…', actions.tags, busy: busy),
-                    rowAction(
-                      'Set starting position…',
-                      actions.root,
-                      busy: busy,
-                    ),
-                    rowAction(
-                      'Face White',
-                      () => actions.face(Side.white),
-                      busy: busy || chapter.orientation == Side.white,
-                    ),
-                    rowAction(
-                      'Face Black',
-                      () => actions.face(Side.black),
-                      busy: busy || chapter.orientation == Side.black,
-                    ),
-                    rowAction('Move up', () => actions.move(-1), busy: busy),
-                    rowAction('Move down', () => actions.move(1), busy: busy),
-                    rowAction('Copy chapter PGN', actions.copyPgn, busy: busy),
-                    rowAction(
-                      'Clear comments, glyphs and shapes…',
-                      actions.clearAnnotations,
-                      busy: busy,
-                    ),
-                    rowAction(
-                      'Clear variations…',
-                      actions.clearVariations,
-                      busy: busy,
-                    ),
-                    rowAction('Delete chapter…', actions.remove, busy: busy),
-                  ],
-                ),
+                RowActions(tooltip: 'Chapter actions', children: _menuItems),
               ],
             ),
           ),
@@ -662,6 +667,52 @@ class ChapterRow extends StatelessWidget {
       ),
     );
   }
+
+  List<Widget> get _menuItems => [
+    rowAction('Rename…', actions.rename, busy: busy, icon: Icons.edit_outlined),
+    rowAction('PGN tags…', actions.tags, busy: busy),
+    rowAction('Set starting position…', actions.root, busy: busy),
+    rowAction(
+      'Face White',
+      () => actions.face(Side.white),
+      busy: busy || chapter.orientation == Side.white,
+    ),
+    rowAction(
+      'Face Black',
+      () => actions.face(Side.black),
+      busy: busy || chapter.orientation == Side.black,
+    ),
+    rowAction(
+      'Move up',
+      () => actions.move(-1),
+      busy: busy,
+      icon: Icons.arrow_upward,
+    ),
+    rowAction(
+      'Move down',
+      () => actions.move(1),
+      busy: busy,
+      icon: Icons.arrow_downward,
+    ),
+    rowAction(
+      'Copy chapter PGN',
+      actions.copyPgn,
+      busy: busy,
+      icon: Icons.content_copy,
+    ),
+    rowAction(
+      'Clear comments, glyphs and shapes…',
+      actions.clearAnnotations,
+      busy: busy,
+    ),
+    rowAction('Clear variations…', actions.clearVariations, busy: busy),
+    rowAction(
+      'Delete chapter…',
+      actions.remove,
+      busy: busy,
+      icon: Icons.delete_outline,
+    ),
+  ];
 }
 
 /// Asks for a Lichess study link and answers what the user typed, or null

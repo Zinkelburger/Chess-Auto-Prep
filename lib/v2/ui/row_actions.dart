@@ -42,4 +42,9 @@ MenuItemButton rowAction(
   String label,
   VoidCallback run, {
   required bool busy,
-}) => MenuItemButton(onPressed: busy ? null : run, child: Text(label));
+  IconData? icon,
+}) => MenuItemButton(
+  onPressed: busy ? null : run,
+  leadingIcon: icon == null ? null : Icon(icon, size: IconSize.menu),
+  child: Text(label),
+);

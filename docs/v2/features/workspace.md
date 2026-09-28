@@ -24,8 +24,9 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   square); outside takes a `(board*0.045).clamp(14,22)` margin, and squares under 24px go bare.
 - **Square feedback** — one tint per square, never a border, never a layout change, never over a
   piece. Precedence: selected > explicit hint or hover-from-a-list (blue) > legal destination > last
-  move from/to; destinations show only when "Show legal moves" is on (default **off**). No check
-  highlight, no hover highlight, no premove.
+  move from/to. In v2 (2026-09-27), selecting or dragging a piece always shows its legal
+  destinations as subtle full-square tints beneath pieces, including captures; no dots,
+  rings or drag-hover target. Deselecting or changing position clears the hints. No premove.
 - **Arrows and circles** — right-drag; same square a circle, else an arrow. Green, Shift red, Alt
   blue, Ctrl yellow; the engine's threat arrow is red.
 - **Eval bar** — none in the old app; the only score is the engine gutter. v2 had one for a day and
@@ -239,7 +240,8 @@ Quirks worth a verdict:
 - Promote, make-main-line and delete-a-saved-variation exist only in the editor; a new move at a
   branch point becomes the *last* variation, and no move list sees a transposition.
 - Two comment-committing models disagree on whether blanking deletes.
-- "Show legal moves" is off by default, and with no eval bar the score lives in the engine gutter.
+- Legal destinations appear as full-square tints on selection or drag (owner update,
+  2026-09-27); the score lives in the engine gutter.
 - The explorer shows no average rating or performance though TWIC stores it, and "Comment current
   move" has no key on any of its three screens. Its cache never expiring or reaching disk is
   deliberate — see **Explorer offline** above.

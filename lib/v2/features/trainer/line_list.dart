@@ -370,9 +370,19 @@ class _Header extends StatelessWidget {
     tooltip: 'Training actions',
     children: [
       if (onImport != null)
-        rowAction('Import course PGN…', onImport!, busy: false),
+        rowAction(
+          'Import course PGN…',
+          onImport!,
+          busy: false,
+          icon: Icons.file_open_outlined,
+        ),
       if (onSettings != null)
-        rowAction('Training settings…', onSettings!, busy: false),
+        rowAction(
+          'Training settings…',
+          onSettings!,
+          busy: false,
+          icon: Icons.settings_outlined,
+        ),
       rowAction(
         'Mark every line known',
         () => onChange(
