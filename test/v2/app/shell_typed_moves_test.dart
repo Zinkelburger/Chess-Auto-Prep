@@ -177,6 +177,10 @@ void main() {
     tester,
   ) async {
     await openKid(tester);
+    if (find.text('Train').evaluate().isEmpty) {
+      await tester.tap(find.byTooltip('Open tab'));
+      await tester.pumpAndSettle();
+    }
     await tester.tap(find.text('Train'));
     await tester.pumpAndSettle();
     w.lineTrainer.learn();

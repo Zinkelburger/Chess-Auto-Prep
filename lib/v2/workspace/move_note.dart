@@ -7,6 +7,7 @@ import '../chess/pgn/move_label.dart';
 import '../ui/app_action.dart';
 import '../ui/theme.dart';
 import 'comment_blocks.dart';
+import 'comment_field.dart';
 import 'document_session.dart';
 import 'line_preview.dart';
 
@@ -20,9 +21,16 @@ import 'line_preview.dart';
 /// is given whatever it holds, so stepping through the moves never moves
 /// it; a long note scrolls inside it. With nothing to say there is no card.
 class MoveNote extends StatefulWidget {
-  const MoveNote({super.key, required this.session});
+  const MoveNote({
+    super.key,
+    required this.session,
+    this.editable = false,
+    this.editing,
+  });
 
   final DocumentSession session;
+  final bool editable;
+  final ValueNotifier<bool>? editing;
 
   @override
   State<MoveNote> createState() => _MoveNoteState();
@@ -35,7 +43,7 @@ class _MoveNoteState extends State<MoveNote> with CommentPreviews<MoveNote> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: session.anyChange,
+      listenable: Listenable.merge([session.anyChange, ?widget.editing]),
       builder: (context, _) {
         final tree = session.tree;
         if (tree == null) return const SizedBox.shrink();
@@ -50,7 +58,13 @@ class _MoveNoteState extends State<MoveNote> with CommentPreviews<MoveNote> {
         final upcoming = finding || move != null
             ? null
             : tree.nodeAt(path.mainChild);
-        if (move == null && upcoming == null && notes.isEmpty) {
+        final edit =
+            !finding && (widget.editable || widget.editing?.value == true);
+        if (!edit &&
+            widget.editing == null &&
+            move == null &&
+            upcoming == null &&
+            notes.isEmpty) {
           return const SizedBox.shrink();
         }
         final scheme = Theme.of(context).colorScheme;
@@ -71,22 +85,25 @@ class _MoveNoteState extends State<MoveNote> with CommentPreviews<MoveNote> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (move != null) _MoveRow(move: move),
-                  for (final (comment, at, from) in notes)
-                    _comment(comment, at, from),
-                  if (upcoming != null) ...[
-                    if (notes.isNotEmpty) const SizedBox(height: Space.m),
-                    _MoveRow(
-                      move: upcoming,
-                      upcoming: true,
-                      onTap: session.forward,
-                    ),
-                    for (final (comment, at, from) in _notesAt(
-                      tree,
-                      path.mainChild,
-                      upcoming,
-                    ))
+                  _header(context, move, edit: edit, finding: finding),
+                  if (edit) CommentField(session: session),
+                  if (!edit) ...[
+                    for (final (comment, at, from) in notes)
                       _comment(comment, at, from),
+                    if (upcoming != null) ...[
+                      if (notes.isNotEmpty) const SizedBox(height: Space.m),
+                      _MoveRow(
+                        move: upcoming,
+                        upcoming: true,
+                        onTap: session.forward,
+                      ),
+                      for (final (comment, at, from) in _notesAt(
+                        tree,
+                        path.mainChild,
+                        upcoming,
+                      ))
+                        _comment(comment, at, from),
+                    ],
                   ],
                 ],
               ),
@@ -96,6 +113,27 @@ class _MoveNoteState extends State<MoveNote> with CommentPreviews<MoveNote> {
       },
     );
   }
+
+  Widget _header(
+    BuildContext context,
+    MoveNode? move, {
+    required bool edit,
+    required bool finding,
+  }) => Row(
+    children: [
+      Expanded(
+        child: move != null
+            ? _MoveRow(move: move)
+            : Text('Notes', style: Theme.of(context).textTheme.labelLarge),
+      ),
+      if (!widget.editable && widget.editing != null && !finding)
+        IconButton(
+          tooltip: withKey(edit ? 'Done editing' : 'Edit notes', 'Ctrl+E'),
+          icon: Icon(edit ? Icons.check : Icons.edit_outlined),
+          onPressed: () => widget.editing!.value = !widget.editing!.value,
+        ),
+    ],
+  );
 
   Widget _comment(String comment, Fen at, NodePath from) => CommentBlocks(
     comment: comment,

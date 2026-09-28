@@ -123,19 +123,26 @@ void main() {
     tester,
   ) async {
     await pump(tester);
+    expect(find.widgetWithText(TextField, 'Opponent'), findsNothing);
+    await tester.tap(find.byTooltip('Expectimax settings'));
+    await tester.pump();
     expect(find.widgetWithText(TextField, 'Opponent'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'Depth'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'Skip under 1 in'), findsNothing);
-    expect(find.widgetWithText(FilledButton, 'Search'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Expectimax'), findsOneWidget);
     expect(find.textContaining('until stopped'), findsOneWidget);
   });
 
   /// Runs a search two plies deep from the board, on real time.
   Future<void> searched(WidgetTester tester) async {
     await pump(tester);
+    await tester.tap(find.byTooltip('Expectimax settings'));
+    await tester.pump();
     await tester.enterText(find.widgetWithText(TextField, 'Depth'), '2');
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
     await tester.runAsync(() async {
-      await tester.tap(find.widgetWithText(FilledButton, 'Search'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Expectimax'));
       while (!fill.running) {
         await Future<void>.delayed(Duration.zero);
       }
@@ -166,9 +173,13 @@ void main() {
     tester,
   ) async {
     await pump(tester);
+    await tester.tap(find.byTooltip('Expectimax settings'));
+    await tester.pump();
     await tester.enterText(find.widgetWithText(TextField, 'Depth'), '2');
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
     await tester.runAsync(() async {
-      await tester.tap(find.widgetWithText(FilledButton, 'Search'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Expectimax'));
       // Let the run finish on real time.
       while (!fill.running) {
         await Future<void>.delayed(Duration.zero);
@@ -180,7 +191,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(fill.depth, 2);
     expect(find.text('Your move'), findsOneWidget);
-    expect(find.text('Expectimax'), findsOneWidget);
+    expect(find.text('Expectimax'), findsNWidgets(2));
     // Nothing is pruned: a move the engine thinks little of is searched too.
     expect(find.text('e4'), findsOneWidget);
     expect(find.text('e3'), findsOneWidget);

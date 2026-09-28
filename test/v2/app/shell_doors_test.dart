@@ -79,7 +79,7 @@ void main() {
     // The viewer's own empty list offers the file dialog too.
     expect(find.text('Open PGN file…'), findsAtLeastNWidgets(1));
     expect(find.text('Paste PGN'), findsNothing);
-    expect(find.text('Close file'), findsOneWidget);
+    expect(find.text('Close file'), findsNothing);
   });
 
   testWidgets('Ctrl+V in the builder makes a repertoire of the clipboard and '
@@ -232,6 +232,7 @@ void main() {
     await tester.ensureVisible(find.text('Explorer'));
     await tester.tap(find.text('Explorer'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.textContaining('Carlsen, M'));
     await tester.tap(find.textContaining('Carlsen, M'));
     await tester.pumpAndSettle();
 
@@ -259,6 +260,7 @@ void main() {
     await tester.ensureVisible(find.text('Explorer'));
     await tester.tap(find.text('Explorer'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.textContaining('Carlsen, M'));
     await tester.tap(find.textContaining('Carlsen, M'));
     await tester.pumpAndSettle();
     expect(find.text('Could not fetch that game.'), findsOneWidget);

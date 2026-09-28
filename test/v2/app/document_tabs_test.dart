@@ -66,6 +66,18 @@ void main() {
     },
   );
 
+  test('file tabs show and restore their selected mode', () async {
+    await w.requests.open(kidMain);
+    expect(w.requests.documents.tabs.tabOf(kidMain).title, 'Builder · Main');
+    w.requests.switchTo(Mode.pgnViewer);
+    expect(w.requests.documents.tabs.tabOf(kidMain).title, 'Viewer · Main');
+    await w.requests.open(benkoMain);
+    w.requests.switchTo(Mode.repertoires);
+    await w.requests.documents.select(kidMain);
+    expect(w.requests.mode, Mode.pgnViewer);
+    expect(w.requests.documents.tabs.tabOf(kidMain).title, 'Viewer · Main');
+  });
+
   test('a viewer draft survives visiting an analysis tab', () async {
     w.requests.switchTo(Mode.pgnViewer);
     await w.requests.open(kidMain);

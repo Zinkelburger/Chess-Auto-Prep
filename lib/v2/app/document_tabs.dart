@@ -14,8 +14,9 @@ final class DocumentTabs {
   DocumentTabs({required this.session, required this.requests}) {
     final page = _page();
     _pages[page.id] = page;
-    tabs = PaneTabs([PaneTab(page.id, page.title)]);
+    tabs = PaneTabs([PaneTab(page.id, _title(page))]);
     session.anyChange.addListener(_follow);
+    requests.addListener(_follow);
   }
 
   final DocumentSession session;
@@ -30,10 +31,19 @@ final class DocumentTabs {
     title:
         session.source?.name ??
         (_pages.isEmpty ? 'Analysis' : 'Analysis ${++_analysisCount}'),
+    mode: requests.mode,
     source: session.source,
     viewedFile: requests.mode == Mode.pgnViewer && session.game != null,
     board: session.isScratch ? session.analysisPage : null,
   )..remember(session);
+
+  String _title(_DocumentPage page) =>
+      '${switch (page.mode) {
+        Mode.repertoires => 'Builder',
+        Mode.pgnViewer => 'Viewer',
+        Mode.trainer => 'Trainer',
+        final mode => mode.label,
+      }} · ${page.title}';
 
   void _follow() {
     if (_disposed) return;
@@ -41,9 +51,12 @@ final class DocumentTabs {
     final known = _pages[id];
     final page = known ?? _page();
     page.remember(session);
+    page.mode = requests.mode;
     _pages[id] = page;
-    if (!tabs.isOpen(id) || tabs.selected != id) {
-      tabs.add(PaneTab(id, page.title));
+    if (!tabs.isOpen(id) ||
+        tabs.selected != id ||
+        tabs.tabOf(id).title != _title(page)) {
+      tabs.add(PaneTab(id, _title(page)));
     }
   }
 
@@ -56,6 +69,7 @@ final class DocumentTabs {
     final page = _pages[id];
     if (page == null) return;
     // Capture before the read notifies and updates the active page.
+    final mode = page.mode;
     final cursor = page.cursor;
     final side = page.side;
     final draft = page.draft;
@@ -70,6 +84,7 @@ final class DocumentTabs {
       final result = await requests.analysisBoard(page: board);
       if (_disposed || result is! RequestDone) return;
     }
+    requests.switchTo(mode);
     session.goTo(cursor);
     if (session.orientation != side) session.flip();
   }
@@ -97,6 +112,7 @@ final class DocumentTabs {
   void dispose() {
     _disposed = true;
     session.anyChange.removeListener(_follow);
+    requests.removeListener(_follow);
     tabs.dispose();
   }
 }
@@ -105,12 +121,14 @@ final class _DocumentPage {
   _DocumentPage({
     required this.id,
     required this.title,
+    required this.mode,
     this.source,
     this.board,
     required this.viewedFile,
   });
   final Object id;
   final String title;
+  Mode mode;
   final ChapterRef? source;
   final bool viewedFile;
   final KeptBoard? board;

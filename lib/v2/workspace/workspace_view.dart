@@ -21,6 +21,7 @@ import 'engine_analysis.dart';
 import 'explorer_pane.dart';
 import 'game_counter.dart';
 import 'game_ordering.dart';
+import 'game_review_pane.dart';
 import 'move_field.dart';
 import 'move_note.dart';
 import 'move_tree_view.dart';
@@ -38,6 +39,8 @@ import 'workspace_tabs.dart';
 final class WorkspaceHooks {
   const WorkspaceHooks({
     this.header = true,
+    this.builder = false,
+    this.noteEditing = false,
     this.gameCounter = true,
     this.gameOrdering,
     this.moveMenu,
@@ -98,6 +101,8 @@ final class WorkspaceHooks {
   /// the file's game counter under it. Tactics has neither: the puzzle says
   /// whose game it was and the list is how to get to another.
   final bool header;
+  final bool builder;
+  final bool noteEditing;
   final bool gameCounter;
   final GameOrdering? gameOrdering;
 
@@ -161,6 +166,8 @@ class WorkspaceView extends StatelessWidget {
       builder: (context, claim, _) => claim == null
           ? _BoardAndCounter(
               session: workspace.session,
+              noteEditable: hooks.builder,
+              editing: hooks.noteEditing ? editing : null,
               settings: workspace.settings,
               analysis: workspace.analysis,
               onMove: hooks.onBoardMove ?? workspace.session.playMove,
@@ -207,6 +214,7 @@ class WorkspaceView extends StatelessWidget {
             saver: workspace.saver,
             editing: editing,
             onSave: hooks.onSaveHeld,
+            commentInNote: hooks.noteEditing,
           ),
           // While part of the game is hidden the arrows would walk into it.
           _UnlessHidden(
@@ -272,7 +280,7 @@ enum _Side { board, card }
 /// them, the keys walk them and the Actions menu opens and closes them, so
 /// this only draws what is up. A new thing the card can show is one more
 /// arm of [_body]; a control it owns sits in its own body.
-class _Tabbed extends StatelessWidget {
+class _Tabbed extends StatefulWidget {
   const _Tabbed({
     required this.workspace,
     required this.tabs,
@@ -283,11 +291,39 @@ class _Tabbed extends StatelessWidget {
   final PaneTabs<WorkspaceTab> tabs;
   final WorkspaceHooks hooks;
 
+  @override
+  State<_Tabbed> createState() => _TabbedState();
+}
+
+class _TabbedState extends State<_Tabbed> {
+  bool _split = true;
+  Workspace get workspace => widget.workspace;
+  PaneTabs<WorkspaceTab> get tabs => widget.tabs;
+  WorkspaceHooks get hooks => widget.hooks;
+
   Widget _body(BuildContext context, WorkspaceTab tab) => switch (tab) {
     WorkspaceTab.moves || WorkspaceTab.analysis => MoveTreeView(
       session: workspace.session,
       moveMenu: hooks.moveMenu,
     ),
+    WorkspaceTab.review =>
+      workspace.review == null
+          ? const SizedBox.shrink()
+          : Column(
+              children: [
+                Expanded(
+                  child: MoveTreeView(
+                    session: workspace.session,
+                    moveMenu: hooks.moveMenu,
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  flex: 2,
+                  child: GameReviewPane(review: workspace.review!),
+                ),
+              ],
+            ),
     WorkspaceTab.train => _supplied(context, tab),
     WorkspaceTab.replies => RepliesPane(
       session: workspace.session,
@@ -299,17 +335,24 @@ class _Tabbed extends StatelessWidget {
     // engine pane does.
     WorkspaceTab.explorer => _UnlessHidden(
       session: workspace.session,
-      child: ExplorerPane(
-        session: workspace.session,
-        explorer: workspace.explorer,
-        games: workspace.games,
-        tree: workspace.tree,
-        books: workspace.books,
-        onOpenGame: hooks.onExplorerGame,
-        onLogIn: hooks.onExplorerLogin,
-        onDownloadTwic: hooks.onDownloadTwic,
-        onOpenPlace: hooks.onOpenPlace,
-        onEditBooks: hooks.onEditBooks,
+      child: LayoutBuilder(
+        builder: (context, size) => SingleChildScrollView(
+          child: SizedBox(
+            height: max(searchPaneMinHeight, size.maxHeight),
+            child: ExplorerPane(
+              session: workspace.session,
+              explorer: workspace.explorer,
+              games: workspace.games,
+              tree: workspace.tree,
+              books: workspace.books,
+              onOpenGame: hooks.onExplorerGame,
+              onLogIn: hooks.onExplorerLogin,
+              onDownloadTwic: hooks.onDownloadTwic,
+              onOpenPlace: hooks.onOpenPlace,
+              onEditBooks: hooks.onEditBooks,
+            ),
+          ),
+        ),
       ),
     ),
     WorkspaceTab.search => SearchPane(
@@ -323,10 +366,36 @@ class _Tabbed extends StatelessWidget {
     WorkspaceTab.player || WorkspaceTab.playerBook => _supplied(context, tab),
   };
 
+  Widget _building(BuildContext context) => MultiSplitViewTheme(
+    data: paneTheme(Theme.of(context).colorScheme),
+    child: MultiSplitView(
+      axis: Axis.vertical,
+      initialAreas: [Area(flex: 1), Area(flex: 3)],
+      builder: (context, area) => area.index == 0
+          ? _body(context, WorkspaceTab.moves)
+          : LayoutBuilder(
+              builder: (context, size) => MultiSplitView(
+                axis: size.maxWidth >= builderToolsMinWidth
+                    ? Axis.horizontal
+                    : Axis.vertical,
+                initialAreas: [
+                  Area(flex: size.maxWidth >= builderToolsMinWidth ? 1 : 2),
+                  Area(flex: 1),
+                ],
+                builder: (context, area) => _body(
+                  context,
+                  area.index == 0 ? WorkspaceTab.search : WorkspaceTab.explorer,
+                ),
+              ),
+            ),
+    ),
+  );
+
   /// The tabs that show the document's moves or what follows them.
   static bool _tellsAnswers(WorkspaceTab tab) => switch (tab) {
     WorkspaceTab.moves ||
     WorkspaceTab.analysis ||
+    WorkspaceTab.review ||
     WorkspaceTab.replies ||
     WorkspaceTab.explorer ||
     WorkspaceTab.search ||
@@ -352,7 +421,21 @@ class _Tabbed extends StatelessWidget {
               readingCardInset - Space.m,
               0,
             ),
-            child: PaneTabStrip(tabs: tabs, connected: true),
+            child: Row(
+              children: [
+                Expanded(child: PaneTabStrip(tabs: tabs, connected: true)),
+                if (hooks.builder)
+                  IconButton(
+                    tooltip: _split
+                        ? 'Show one panel'
+                        : 'Show moves, Explorer and Expectimax together',
+                    icon: Icon(_split ? Icons.tab : Icons.splitscreen),
+                    onPressed: () {
+                      if (mounted) setState(() => _split = !_split);
+                    },
+                  ),
+              ],
+            ),
           ),
           const Divider(height: 1),
           if (hooks.header) ReadingHeader(session: workspace.session),
@@ -368,6 +451,14 @@ class _Tabbed extends StatelessWidget {
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     )
+                  : hooks.builder &&
+                        _split &&
+                        [
+                          WorkspaceTab.moves,
+                          WorkspaceTab.explorer,
+                          WorkspaceTab.search,
+                        ].contains(tabs.selected)
+                  ? _building(context)
                   : _body(context, tabs.selected),
             ),
           ),
@@ -406,11 +497,15 @@ class _BoardAndCounter extends StatefulWidget {
     required this.moves,
     required this.engine,
     required this.analysis,
+    this.noteEditable = false,
+    this.editing,
   });
 
   final DocumentSession session;
   final SettingsStore settings;
   final EngineAnalysis analysis;
+  final bool noteEditable;
+  final ValueNotifier<bool>? editing;
 
   /// Where a move made on the board or typed into the field goes.
   final ValueChanged<String> onMove;
@@ -456,12 +551,16 @@ class _BoardAndCounterState extends State<_BoardAndCounter>
     final session = widget.session;
     final settings = widget.settings;
     final onMove = widget.onMove;
-    final moves = widget.moves;
-    final counter = widget.counter;
     return LayoutBuilder(
       builder: (context, constraints) {
         final room = navRowHeight + Space.s + _engineRoom;
-        final side = min(constraints.maxWidth, constraints.maxHeight - room);
+        final noteRoom = widget.editing != null || widget.noteEditable
+            ? moveNoteMinHeight + Space.s
+            : 0.0;
+        final side = min(
+          constraints.maxWidth,
+          max(0.0, constraints.maxHeight - room - noteRoom),
+        );
         final below = constraints.maxHeight - side - room - Space.s;
         return Align(
           alignment: Alignment.topCenter,
@@ -486,37 +585,17 @@ class _BoardAndCounterState extends State<_BoardAndCounter>
                   height: _engineRoom,
                   child: SingleChildScrollView(child: widget.engine),
                 ),
-                SizedBox(
-                  height: navRowHeight,
-                  child: Row(
-                    children: [
-                      ListenableBuilder(
-                        listenable: session.anyChange,
-                        builder: (context, _) => _Typed(
-                          moves: moves,
-                          fen: session.boardFen,
-                          onMove: session.commentLine.value == null
-                              ? onMove
-                              : null,
-                        ),
-                      ),
-                      Expanded(
-                        child: counter
-                            ? GameCounter(
-                                session: session,
-                                ordering: widget.ordering,
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ],
-                  ),
-                ),
+                _navigation(),
                 if (below >= moveNoteMinHeight) ...[
                   const SizedBox(height: Space.s),
                   SizedBox(
                     width: side,
                     height: below,
-                    child: MoveNote(session: session),
+                    child: MoveNote(
+                      session: session,
+                      editable: widget.noteEditable,
+                      editing: widget.editing,
+                    ),
                   ),
                 ],
               ],
@@ -526,6 +605,29 @@ class _BoardAndCounterState extends State<_BoardAndCounter>
       },
     );
   }
+
+  Widget _navigation() => SizedBox(
+    height: navRowHeight,
+    child: Row(
+      children: [
+        ListenableBuilder(
+          listenable: widget.session.anyChange,
+          builder: (context, _) => _Typed(
+            moves: widget.moves,
+            fen: widget.session.boardFen,
+            onMove: widget.session.commentLine.value == null
+                ? widget.onMove
+                : null,
+          ),
+        ),
+        Expanded(
+          child: widget.counter
+              ? GameCounter(session: widget.session, ordering: widget.ordering)
+              : const SizedBox.shrink(),
+        ),
+      ],
+    ),
+  );
 }
 
 /// The board while another owner holds it: its position and the move

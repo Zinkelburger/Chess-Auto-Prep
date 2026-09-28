@@ -31,9 +31,11 @@ class EditStrip extends StatefulWidget {
     required this.saver,
     required this.editing,
     this.onSave,
+    this.commentInNote = false,
   });
 
   final DocumentSession session;
+  final bool commentInNote;
   final DocumentSaver saver;
   final ValueNotifier<bool> editing;
 
@@ -159,7 +161,8 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
                 const SizedBox(height: Space.s),
                 _Glyphs(session: widget.session),
                 const SizedBox(height: Space.s),
-                CommentField(session: widget.session),
+                if (!widget.commentInNote)
+                  CommentField(session: widget.session),
               ],
             ],
           ),

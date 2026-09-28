@@ -2,6 +2,7 @@ import 'package:dartchess/dartchess.dart' show Position;
 
 import '../chess/fen.dart';
 import '../chess/generation/eval.dart';
+import '../chess/generation/legal_moves.dart';
 import '../chess/generation/sources.dart';
 import 'engine.dart';
 import 'engine_line.dart';
@@ -45,6 +46,39 @@ final class FixedDepthEvaluator implements PositionEvaluator {
       );
     }
     return Evaluated(packedCp(verdict.score));
+  }
+}
+
+/// MultiPV ranks the deeper moves in a single engine search, avoiding a
+/// separate fixed-depth search for every legal child before choosing four.
+final class FixedDepthCandidates implements CandidateSource {
+  const FixedDepthCandidates(this.engine, {required this.depth});
+  final Engine engine;
+  final int depth;
+
+  @override
+  Future<List<String>?> candidates(Position position, int count) async {
+    final search = engine.analyse(
+      Fen(position.fen),
+      multiPv: count,
+      depth: depth,
+    );
+    final lines = <int, EngineLine>{};
+    await for (final line in search.lines) {
+      lines[line.multiPv] = line;
+    }
+    final settled =
+        lines.values
+            .where(
+              (line) =>
+                  line.pv.isNotEmpty &&
+                  (line.depth >= depth || line.score is MateIn),
+            )
+            .toList()
+          ..sort((a, b) => a.multiPv.compareTo(b.multiPv));
+    final legalCount = legalMovesOf(position).length;
+    if (settled.length < (legalCount < count ? legalCount : count)) return null;
+    return settled.take(count).map((line) => line.pv.first).toList();
   }
 }
 

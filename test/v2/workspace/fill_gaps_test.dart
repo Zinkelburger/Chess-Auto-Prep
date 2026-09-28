@@ -376,6 +376,49 @@ void main() {
     expect(shown.first, isA<OurNode>(), reason: 'the root was answered first');
   });
 
+  test(
+    'clicking a running result saves old values before searching the new board',
+    () async {
+      final saved = <String>[];
+      final gate = Completer<void>();
+      final fill = fillWith(
+        ScriptedEvaluator(),
+        keepTree: (_, text, {required runId}) async {
+          saved.add(text);
+          if (saved.length == 1) await gate.future;
+        },
+      );
+      Future<String?>? following;
+      void follow() {
+        if (fill.running && fill.found?.tree is OurNode && following == null) {
+          // Set the latch before the navigation notifies listeners again.
+          following = Future.value();
+          following = fill.followMove('e2e4');
+        }
+      }
+
+      fill.addListener(follow);
+      final first = fill.start(const FillRequest(elo: 2200, depthPlies: 2));
+      while (saved.isEmpty) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(fixture.session.currentMove?.san, 'e4');
+      expect(releases, 1);
+      expect(
+        fill.found!.target.sans,
+        isEmpty,
+        reason: 'old search still owns the save',
+      );
+      gate.complete();
+      await first;
+      await following;
+      fill.removeListener(follow);
+      expect(fill.found!.target.sans, ['e4']);
+      expect(saved.length, 2);
+      expect(releases, 2);
+    },
+  );
+
   test('the way out waits for a tree still being written', () async {
     final pending = PendingWrites();
     final release = Completer<void>();

@@ -172,3 +172,26 @@ separate direct Stockfish PV request. Only the searched position receives that
 engine score; its continuation is saved as independent UCI PV metadata (never inserted into
 Maia policy children), and no expected score
 is fabricated for a single engine line.
+
+## V2 interactive Expectimax
+
+The Builder's interactive Expectimax uses a bounded candidate policy rather than
+an exhaustive Pure tree. The first two plies retain every legal move on our side.
+From ply two, Stockfish at depth 14 supplies a MultiPV shortlist of up to four of
+our moves; only those child positions get separate fixed-depth evaluations and
+recursive expansion. A failed or incomplete shortlist stops with a visible error.
+Callers without a ranking source score all candidates before retaining the best
+four. Other callers retain their existing exhaustive defaults.
+
+Opponent nodes retain all positive Maia probability mass. Paths below 1% cumulative
+reach stop at their engine estimate instead of expanding further; the remaining
+replies are not renormalized to pretend the rare replies disappeared. The 25,000
+new-node budget still bounds a batch. This is approximate candidate selection and
+selective depth; an omitted engine candidate might have a better practical score.
+Saved v4 configuration records `v2_max_our_moves`, `v2_narrow_after_ply` and
+`v2_reply_floor`; resumed interactive runs require matching settings. Existing exhaustive trees
+(including MCP-built chapter searches) can seed an interactive run; their completed
+branches and values are retained while new expansions use the shortlist. Narrowed
+trees carry algorithm version 4 so older exhaustive-only app/C/MCP readers refuse
+to resume them under the wrong branching assumptions. Exhaustive exports stay at
+algorithm version 3.

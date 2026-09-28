@@ -109,6 +109,7 @@ void main() {
       expect(find.text('Try again'), findsOneWidget);
       app.lichess.throwing = null;
       app.lichess.answer = (_) => const ExplorerFetched(ExplorerAnswer.empty);
+      await tester.ensureVisible(find.text('Try again'));
       await tester.tap(find.text('Try again'));
       await tester.pumpAndSettle();
       expect(

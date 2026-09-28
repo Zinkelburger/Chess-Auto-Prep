@@ -122,7 +122,11 @@ void main() {
     await ctrl(tester, LogicalKeyboardKey.keyE);
     expect(find.byType(CommentField), findsOneWidget);
     await key(tester, LogicalKeyboardKey.escape);
-    expect(find.byType(CommentField), findsNothing);
+    expect(
+      find.byType(CommentField),
+      findsOneWidget,
+      reason: 'Builder notes remain directly editable',
+    );
     expect(w.fullScreenAsked, isEmpty, reason: 'one thing at a time');
   });
 

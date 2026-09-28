@@ -14,6 +14,12 @@ abstract interface class PositionEvaluator {
   Future<EvaluationResult> evaluate(Position position);
 }
 
+/// A ranked engine shortlist at one of our deeper positions. Null means the
+/// engine could not complete the requested fixed-depth ranking.
+abstract interface class CandidateSource {
+  Future<List<String>?> candidates(Position position, int count);
+}
+
 /// The engine's answer about [position], with a throw counted as one.
 ///
 /// An adapter sits on a process, a socket or a decoder, and those fail in

@@ -63,6 +63,7 @@ Future<SearchResult> buildSearchTree({
   required SearchConfig config,
   required PositionEvaluator evaluator,
   required OpponentPolicy policy,
+  CandidateSource? candidates,
   CancelSignal isCancelled = _neverCancelled,
   LastPly? lastPly,
   void Function(SearchProgress progress)? onProgress,
@@ -72,6 +73,7 @@ Future<SearchResult> buildSearchTree({
   config: config,
   evaluator: evaluator,
   policy: policy,
+  candidates: candidates,
   isCancelled: isCancelled,
   lastPly: lastPly,
   onProgress: onProgress,
@@ -135,6 +137,7 @@ final class _Search {
     required this.config,
     required this.evaluator,
     required this.policy,
+    required this.candidates,
     required this.isCancelled,
     required this.lastPly,
     required this.onProgress,
@@ -144,6 +147,7 @@ final class _Search {
   final SearchConfig config;
   final PositionEvaluator evaluator;
   final OpponentPolicy policy;
+  final CandidateSource? candidates;
   final CancelSignal isCancelled;
   final LastPly? lastPly;
   final void Function(SearchProgress progress)? onProgress;
@@ -278,6 +282,7 @@ final class _Search {
   /// reports the first of the two, every time.
   Future<List<PendingNode>?> _leavesOf(List<SearchPath> paths) async {
     final leaves = await Future.wait(paths.map(_leaf));
+    if (_stopping()) return null;
     final pendings = <PendingNode>[];
     for (final (index, leaf) in leaves.indexed) {
       if (leaf case _Unscored(:final reason)) {
@@ -364,15 +369,51 @@ final class _Search {
   /// nothing is attached and the node stays a frontier node instead of half
   /// an enumeration.
   Future<Expansion?> _ourMoves(SearchPath path) async {
-    final legal = _pinnedOrAll(path, legalMovesOf(path.position));
+    var legal = _pinnedOrAll(path, legalMovesOf(path.position));
+    final limit = config.maxOurMoves;
+    final shortlist = candidates;
+    if (shortlist != null &&
+        limit != null &&
+        path.ply >= config.narrowAfterPly &&
+        !config.pins.containsKey(path.fen.position) &&
+        legal.length > limit) {
+      List<String>? ranked;
+      try {
+        ranked = await shortlist.candidates(path.position, limit);
+      } catch (error) {
+        if (!_stopping()) _stop = _EvaluationFailed(path.fen, '$error');
+        return null;
+      }
+      if (_stopping()) return null;
+      final selected = legal
+          .where(
+            (move) =>
+                ranked?.any((uci) => uci == move.uci || uci == move.move.uci) ==
+                true,
+          )
+          .toList();
+      if (selected.length != limit) {
+        _stop = _EvaluationFailed(
+          path.fen,
+          'The engine could not rank the candidate moves.',
+        );
+        return null;
+      }
+      legal = selected;
+    }
     if (!_fits(legal.length)) return null;
     final played = [for (final named in legal) _play(path, named)];
     final pendings = await _leavesOf([for (final (_, child) in played) child]);
     if (pendings == null || _stopping()) return null;
-    final admitted = admittedMoves([
+    var admitted = admittedMoves([
       for (final (index, (move, _)) in played.indexed)
         CandidateMove(move: move, child: pendings[index].leaf),
     ], lossLimitCp: config.lossLimitCp);
+    if (config.maxOurMoves case final count?
+        when path.ply >= config.narrowAfterPly) {
+      admitted.sort((a, b) => b.evalForUs.cp.compareTo(a.evalForUs.cp));
+      admitted = admitted.take(count).toList();
+    }
     // Moves are told apart by their name, never by the identity of the
     // candidate the window handed back.
     final kept = {for (final candidate in admitted) candidate.move.uci};

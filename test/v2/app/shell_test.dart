@@ -54,6 +54,10 @@ void main() {
       await tester.tap(inLibrary(find.text('Main')).last);
       await tester.pumpAndSettle();
       expect(find.byType(OutlinePanel), findsOneWidget);
+      if (find.text('Train').evaluate().isEmpty) {
+        await tester.tap(find.byTooltip('Open tab'));
+        await tester.pumpAndSettle();
+      }
       await tester.tap(find.text('Train'));
       await tester.pumpAndSettle();
       w.lineTrainer.learn();
@@ -73,6 +77,9 @@ void main() {
     await pump(tester);
     await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Open tab'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Train'));
     w.lineTrainer.show();
     await tester.pumpAndSettle();
     w.lineTrainer.learn();
@@ -95,6 +102,10 @@ void main() {
     await pump(tester);
     await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
+    if (find.text('Train').evaluate().isEmpty) {
+      await tester.tap(find.byTooltip('Open tab'));
+      await tester.pumpAndSettle();
+    }
     await tester.tap(find.text('Train'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'the tab fits');
@@ -243,9 +254,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(w.session.game, 1);
     expect(find.text('Ding, Liren – Giri, Anish'), findsWidgets);
-    await tester.tap(find.text('Actions'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Close file'));
+    await w.requests.documents.close(w.requests.documents.tabs.selected);
     await tester.pumpAndSettle();
     expect(w.session.source, isNull);
     expect(find.text('Recent files'), findsOneWidget);
@@ -298,6 +307,10 @@ void main() {
     await pump(tester);
     await tester.tap(inLibrary(find.text('Main')).last);
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Open tab'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Replies'));
+    await tester.pumpAndSettle();
     expect(find.text('Replies'), findsOneWidget);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
@@ -327,7 +340,7 @@ void main() {
       await tester.tap(find.text('Actions'));
       await tester.pumpAndSettle();
       final entry = tester.widget<MenuItemButton>(
-        find.widgetWithText(MenuItemButton, 'Search from here'),
+        find.widgetWithText(MenuItemButton, 'Expectimax from here'),
       );
       expect(entry.onPressed, isNotNull);
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
@@ -405,6 +418,10 @@ void main() {
     await pump(tester);
     await tester.tap(inLibrary(find.text('Main')).last);
     await tester.pumpAndSettle();
+    if (find.text('Train').evaluate().isEmpty) {
+      await tester.tap(find.byTooltip('Open tab'));
+      await tester.pumpAndSettle();
+    }
     await tester.tap(find.text('Train'));
     await tester.pumpAndSettle();
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);

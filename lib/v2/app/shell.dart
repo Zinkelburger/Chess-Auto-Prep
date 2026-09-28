@@ -470,18 +470,20 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// Everything the Actions menu offers now, in the mode on screen.
   List<AppAction> _actions() => [
     ..._modeActions(),
-    AppAction(
-      _listShown && _positionsShown ? 'Back to the list' : 'Positions',
-      _togglePositions,
-      shortcut: 'Ctrl+P',
-      group: 'Panels',
-    ),
-    AppAction(
-      widget.fullScreen.on ? 'Leave full screen' : 'Full screen',
-      widget.fullScreen.toggle,
-      shortcut: 'F11',
-      group: 'Window',
-    ),
+    if (_view is! ViewerView)
+      AppAction(
+        _listShown && _positionsShown ? 'Back to the list' : 'Positions',
+        _togglePositions,
+        shortcut: 'Ctrl+P',
+        group: 'Panels',
+      ),
+    if (_view is! ViewerView)
+      AppAction(
+        widget.fullScreen.on ? 'Leave full screen' : 'Full screen',
+        widget.fullScreen.toggle,
+        shortcut: 'F11',
+        group: 'Window',
+      ),
   ];
 
   List<AppAction> _modeActions() => _inspecting
@@ -729,6 +731,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       editing: _editing,
       moves: _moves,
       hooks: WorkspaceHooks(
+        builder: _view is RepertoiresView,
+        noteEditing: _view is RepertoiresView || _view is ViewerView,
         header: _view.header,
         gameCounter: !_inspecting && _view.gameCounter,
         gameOrdering: _view.gameOrdering,
@@ -865,7 +869,11 @@ final class SearchDoor {
     if (!tabs.tabs.any((tab) => tab.id == WorkspaceTab.search)) return;
     tabs.show(WorkspaceTab.search);
     final refusal = await fill.start(
-      FillRequest(elo: settings.value.opponentElo, depthPlies: fill.depth),
+      FillRequest(
+        elo: settings.value.opponentElo,
+        depthPlies: fill.depth,
+        source: fill.source,
+      ),
     );
     if (refusal != null) requests.say(refusal);
   }

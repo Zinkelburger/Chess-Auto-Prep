@@ -167,6 +167,54 @@ final class FillGaps extends ChangeNotifier {
   /// until the user stops it.
   int? depth;
 
+  EvaluationSource source = EvaluationSource.stockfish;
+  Completer<void>? _finished;
+  int _followTicket = 0;
+
+  /// Stop and persist the old root before following a clicked result. A later
+  /// click or navigation supersedes this request while saving is in flight.
+  Future<String?> followMove(String uci) async {
+    final ticket = ++_followTicket;
+    final request = _found?.request;
+    final wasRunning = running;
+    final finished = _finished?.future;
+    _session.playMove(uci);
+    final fen = _session.fen;
+    final document = _session.source ?? _session.analysisPage;
+    if (!wasRunning || request == null) return null;
+    finish();
+    // Interrupt a long fixed-depth evaluation; committed expansions survive.
+    _releaseSoon();
+    var navigated = false;
+    void moved() {
+      if (_session.fen != fen ||
+          (_session.source ?? _session.analysisPage) != document)
+        navigated = true;
+    }
+
+    _session.anyChange.addListener(moved);
+    try {
+      await finished;
+    } finally {
+      _session.anyChange.removeListener(moved);
+    }
+    if (navigated ||
+        _disposed ||
+        ticket != _followTicket ||
+        _session.fen != fen ||
+        (_session.source ?? _session.analysisPage) != document)
+      return null;
+    if (!canStart) return 'Save the previous search before continuing.';
+    final previous = _found;
+    final tree = _session.tree;
+    final seed = previous == null || tree == null
+        ? null
+        : previous.at(tree.rootFen, [
+            for (final move in tree.lineTo(_session.cursor)) move.san,
+          ]);
+    return start(request, seed: seed);
+  }
+
   /// Whether a search can start now: a position is on the board and not
   /// hidden, and no search is running.
   bool get canStart =>
@@ -220,6 +268,7 @@ final class FillGaps extends ChangeNotifier {
       chapter: drafting ? (chapter, source) : null,
     );
     _active = true;
+    _finished = Completer<void>();
     _releasing = null;
     _found = null;
     _lines = null;
@@ -315,6 +364,9 @@ final class FillGaps extends ChangeNotifier {
       side: target.side,
       horizonPlies: request.depthPlies,
       lossLimitCp: null,
+      maxOurMoves: 4,
+      narrowAfterPly: 2,
+      replyFloor: 0.01,
       nodeBudget: fillNodeBudget + (seed == null ? 0 : nodesIn(seed)),
     );
     final result = await buildSearchTree(
@@ -323,6 +375,7 @@ final class FillGaps extends ChangeNotifier {
       config: config,
       evaluator: tools.evaluator,
       policy: tools.policy,
+      candidates: tools.candidates,
       isCancelled: () => _stopping,
       lastPly: () => switch (_state) {
         FillRunning(:final lastPly) => lastPly,
@@ -594,6 +647,7 @@ final class FillGaps extends ChangeNotifier {
       );
     } finally {
       _active = false;
+      _finished?.complete();
       _analysis.resume(this);
       if (!_disposed) notifyListeners();
     }
@@ -806,7 +860,10 @@ Future<Object> readSearchSeed(
     TreeDecoded(:final root, :final config)
         when config.side == side &&
             config.lossLimitCp == null &&
-            config.replyFloor == 0 &&
+            ((config.replyFloor == 0 && config.maxOurMoves == null) ||
+                (config.replyFloor == 0.01 &&
+                    config.maxOurMoves == 4 &&
+                    config.narrowAfterPly == 2)) &&
             config.pins.isEmpty =>
       root,
     TreeDecoded() => 'The saved search uses different search settings or side.',

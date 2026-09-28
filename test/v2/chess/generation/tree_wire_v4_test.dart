@@ -50,6 +50,24 @@ Map<String, Object?> _asJson(String text) =>
     jsonDecode(text) as Map<String, Object?>;
 
 void main() {
+  test('shortlisted searches preserve their distinct resume policy', () async {
+    const config = SearchConfig(
+      side: Side.white,
+      horizonPlies: 1,
+      maxOurMoves: 4,
+      replyFloor: 0.01,
+    );
+    final tree = await _treeFrom(_kingAndPawn, config: config);
+    final encoded = encodeTreeV4(tree, config, complete: true);
+    final snapshot = _asJson(encoded)['config'] as Map<String, Object?>;
+    expect(snapshot['algorithm_version'], shortlistedAlgorithmVersion);
+    final decoded = decodedTree(encoded);
+    expect(decoded.config.maxOurMoves, 4);
+    expect(decoded.config.narrowAfterPly, 2);
+    expect(decoded.config.replyFloor, 0.01);
+    expectSameTree(decoded.root, tree);
+  });
+
   test('a finished tree comes back the tree that went out', () async {
     const config = SearchConfig(side: Side.white, horizonPlies: 3);
     final tree = await _treeFrom(_kingAndPawn, config: config);

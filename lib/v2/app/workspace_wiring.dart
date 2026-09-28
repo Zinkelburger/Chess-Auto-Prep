@@ -22,6 +22,7 @@ import '../workspace/replies.dart';
 import '../workspace/repertoire_shelf.dart';
 import '../workspace/repertoire_tree.dart';
 import '../workspace/workspace.dart';
+import '../workspace/game_review.dart';
 import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
 import 'environment.dart';
@@ -60,6 +61,7 @@ final class WorkspaceWiring {
   late final workspace = Workspace(
     session: _session,
     inspection: _inspection,
+    review: _review,
     saver: _saver,
     settings: _env.settings,
     analysis: _analysis,
@@ -80,6 +82,12 @@ final class WorkspaceWiring {
     _env.startEngine,
     multiPv: _env.settings.value.engineLines,
     elsewhere: _tree.board,
+  );
+
+  late final _review = GameReview(
+    session: _session,
+    analysis: _analysis,
+    launch: _env.startEngine,
   );
 
   late final _inspection = CollectionAnalysis(
@@ -185,6 +193,7 @@ final class WorkspaceWiring {
           );
     return FillReady(
       evaluator: remote ?? local,
+      candidates: FixedDepthCandidates(engine, depth: fillEvalDepth),
       policy: MaiaOpponent(_env.maia, elo: request.elo),
       release: () async {
         remote?.close();
@@ -259,6 +268,7 @@ final class WorkspaceWiring {
     _catalog.removeListener(_filesChanged);
     _fill.dispose();
     _finds.dispose();
+    _review.dispose();
     _inspection.dispose();
     _analysis.dispose();
     _replies.dispose();

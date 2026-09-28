@@ -4,9 +4,8 @@ import 'package:dartchess/dartchess.dart' show Side;
 ///
 /// The defaults are a small search for tests and hand-built trees: four
 /// half-moves ahead, every move within two pawns of the best one. The
-/// Search tab has no horizon by default: every legal move of ours,
-/// every reply the model gives any weight, level by level until the user
-/// stops it or the resource budget pauses it (`FillRequest`). A deeper horizon
+/// Builder uses an explicit shortlist and rare-reply cutoff with no horizon
+/// by default, until stopped or paused by its resource budget. A deeper horizon
 /// costs exponentially more.
 final class SearchConfig {
   const SearchConfig({
@@ -16,12 +15,19 @@ final class SearchConfig {
     this.nodeBudget,
     this.pins = const {},
     this.replyFloor = 0,
+    this.maxOurMoves,
+    this.narrowAfterPly = 2,
   });
 
   /// The side the repertoire is for. Our nodes are the ones where this side
   /// is to move, wherever in the tree they fall, and every value in the tree
   /// is an expected score for it.
   final Side side;
+
+  /// Retain only the strongest engine candidates after the broad root.
+  /// Null keeps the exhaustive search used by other callers.
+  final int? maxOurMoves;
+  final int narrowAfterPly;
 
   /// How many half-moves from the root the search plays out before it stops
   /// and lets the engine value the position instead. Null has no horizon:

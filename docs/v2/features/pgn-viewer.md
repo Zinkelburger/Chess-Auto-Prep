@@ -278,7 +278,7 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
   Choosing another game returns to Moves. File tabs retain their appearance;
   inner tabs have square lower edges and join the reading card.
 - Flip board stays in Actions; no duplicated top-bar buttons. The viewer opens
-  with Moves and Explorer, omits repertoire actions and the chapter-editing
+  with Moves, Explorer and Game review, omits repertoire actions and the chapter-editing
   sidebar, and only offers Save/Discard after edits exist. The outer strip's
   plus opens an independent empty scratch document.
 
@@ -310,3 +310,27 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
   PGN export. It snapshots complete visible games, in the selected sort order,
   including their comments and variations. It is disabled during filtering,
   after a filtering failure, or with no results. Source files are unchanged.
+
+## Current review and editing controls (2026-09-27)
+
+The visible **Game review** tab keeps movetext above an **Analyze game** button,
+clickable evaluation graph and position list. A depth-14 Stockfish pass evaluates
+the main line, adds `[%eval]` values, conservative loss glyphs (50/100/200 cp for
+inaccuracy/mistake/blunder) and up to eight plies of the suggested alternative at
+classified moves. Existing comments, clocks, glyphs and variations are retained.
+The graph also reads evaluations already stored in a PGN. Values are White's
+perspective; they are engine assessments, not calibrated win probabilities.
+
+Review is one undoable Viewer edit, held for Save/Discard. It never writes the
+source automatically. Stop, an edit, another game or another document cancels the
+run and rejects late results. A failed or cancelled run leaves the game unchanged;
+partial progress is not published. Review currently covers the main line at fixed
+depth 14; it does not recursively review existing variations.
+
+The note beneath the board has a pencil for editing in place (Ctrl+E); Builder
+uses the same editor open by default. The Viewer Actions menu omits duplicate
+open/close, panel controls, full-screen controls, Edit and Save a copy entries.
+File selection stays in the collection area, panel selection in the tab strip,
+and export stays with filtering as well as its explicit export command. Recovery
+and Save dialogs still offer Save a copy when needed. Independent scratch
+**Analysis** remains distinct from whole-game review.

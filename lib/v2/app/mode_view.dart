@@ -188,7 +188,7 @@ abstract base class _DocumentModeView extends ModeView {
     final session = workspace.session;
     return [
       AppAction(
-        'Search from here',
+        'Expectimax from here',
         workspace.fill.canStart ? dialogs.search : null,
         shortcut: 'Ctrl+G',
         group: 'Repertoire',
@@ -310,7 +310,16 @@ final class ViewerView extends _DocumentModeView {
   List<AppAction> actions(ModeMenu menu) {
     final autoplay = _modes.autoplay;
     return [
-      ...super.actions(menu),
+      ...super
+          .actions(menu)
+          .where(
+            (action) =>
+                action.group != 'File' &&
+                action.group != 'Panels' &&
+                action.label != 'Edit' &&
+                action.label != 'Done editing' &&
+                action.label != 'Save a copy…',
+          ),
       AppAction(
         autoplay.playing ? 'Stop playing' : 'Play through',
         workspace.session.chapter == null ? null : autoplay.toggle,

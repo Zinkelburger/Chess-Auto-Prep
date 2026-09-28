@@ -4,9 +4,8 @@ import '../storage/chapter_files.dart';
 
 /// What a search is asked for: the opponent's rating and how deep to go.
 ///
-/// Nothing else narrows it. Every legal move of ours is played and every
-/// reply the model gives any weight is answered, level by level, so what a
-/// search finds is not decided in advance by a window or a cover rule.
+/// Interactive searches keep broad root coverage and a deeper engine shortlist.
+/// The owner supplies the shared branching and rare-reply settings.
 final class FillRequest {
   const FillRequest({
     required this.elo,
@@ -28,7 +27,7 @@ final class FillRequest {
 /// default, and what the shared cache is keyed on.
 const fillEvalDepth = 14;
 
-/// One user-started search adds at most this many positions, without pruning.
+/// One user-started search adds at most this many positions, under the interactive branching policy.
 const fillNodeBudget = 25000;
 
 /// The range a search's depth may be set to, when it is set at all.
@@ -45,11 +44,13 @@ final class FillReady extends FillToolsResult {
   const FillReady({
     required this.evaluator,
     required this.policy,
+    this.candidates,
     required this.release,
   });
 
   final PositionEvaluator evaluator;
   final OpponentPolicy policy;
+  final CandidateSource? candidates;
 
   /// Hands the engine back; called once, when the run is over or cancelled.
   final Future<void> Function() release;

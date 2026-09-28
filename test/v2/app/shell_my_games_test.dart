@@ -43,7 +43,7 @@ void main() {
     await w.pumpShell(tester);
     await tester.tap(find.text('Repertoire builder'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('My games'));
+    await tester.tap(find.text('My games').hitTestable());
     await tester.pumpAndSettle();
   }
 

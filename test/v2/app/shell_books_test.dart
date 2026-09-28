@@ -24,7 +24,7 @@ void main() {
   Future<void> toMode(WidgetTester tester, String label) async {
     await tester.tap(find.text(w.requests.mode.label).first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text(label).last);
+    await tester.tap(find.text(label).hitTestable());
     await tester.pumpAndSettle();
   }
 

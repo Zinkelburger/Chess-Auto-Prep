@@ -10,10 +10,11 @@ import '../ui/pane_tabs.dart';
 enum WorkspaceTab {
   moves('Moves'),
   analysis('Analysis'),
+  review('Game review'),
   train('Train'),
   replies('Replies'),
   explorer('Explorer'),
-  search('Search'),
+  search('Expectimax'),
   puzzle('Puzzle'),
   book('Book'),
   player('Player openings'),
@@ -37,19 +38,11 @@ List<PaneTab<WorkspaceTab>> get _documentTabs => [
       tab.tab,
 ];
 
-/// The card's tabs as the Repertoire builder starts: all of the document's
-/// open, moves up. Training, the replies and the explorer are what a
-/// repertoire is for, so they are there from the start and closed by
-/// whoever is only reading.
+/// Builder starts with its building tools. Training remains opt-in.
 PaneTabs<WorkspaceTab> newWorkspaceTabs() => PaneTabs(
   _documentTabs,
-  open: const [
-    WorkspaceTab.moves,
-    WorkspaceTab.train,
-    WorkspaceTab.replies,
-    WorkspaceTab.explorer,
-    WorkspaceTab.search,
-  ],
+  open: const [WorkspaceTab.moves, WorkspaceTab.explorer, WorkspaceTab.search],
+  selected: WorkspaceTab.search,
 );
 
 /// The card's tabs as the PGN Viewer and Study start: the moves, the
@@ -60,8 +53,9 @@ PaneTabs<WorkspaceTab> readingTabs() => PaneTabs(
     WorkspaceTab.moves.tab,
     WorkspaceTab.explorer.tab,
     WorkspaceTab.analysis.tab,
+    WorkspaceTab.review.tab,
   ],
-  open: const [WorkspaceTab.moves, WorkspaceTab.explorer],
+  open: const [WorkspaceTab.moves, WorkspaceTab.explorer, WorkspaceTab.review],
 );
 
 /// The card's tabs in the Repertoire trainer: Train first and always

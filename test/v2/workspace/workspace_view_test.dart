@@ -157,7 +157,7 @@ void main() {
     saver = fixture.saver;
     editing = ValueNotifier(false);
     moves = MoveEntry();
-    tabs = newWorkspaceTabs();
+    tabs = newWorkspaceTabs()..show(WorkspaceTab.moves);
     settings = SettingsStore();
     startAnalysis();
   });
@@ -367,6 +367,16 @@ void main() {
 
   testWidgets('Ctrl+Tab walks the tabs, Ctrl+W closes the one that is up '
       'and the strip goes with it', (tester) async {
+    tabs = PaneTabs(
+      tabs.tabs,
+      open: const [
+        WorkspaceTab.moves,
+        WorkspaceTab.train,
+        WorkspaceTab.replies,
+        WorkspaceTab.explorer,
+        WorkspaceTab.search,
+      ],
+    );
     await pump(tester);
     expect(find.text('Moves'), findsOneWidget);
     expect(find.text('Replies'), findsOneWidget);

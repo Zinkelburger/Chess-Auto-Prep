@@ -40,6 +40,10 @@ const int treeWireVersion = 4;
 /// positions differently and shared values between paths.
 const int pureAlgorithmVersion = 3;
 
+/// Distinguishes engine-shortlisted trees so exhaustive-only readers refuse
+/// to resume them as though every legal candidate had already been expanded.
+const int shortlistedAlgorithmVersion = 4;
+
 /// What a search with no horizon writes as its `max_depth`.
 const int unboundedDepthWire = 512;
 
@@ -107,7 +111,9 @@ Map<String, Object?> _configJson(
   int? evalDepth,
   int? opponentRating,
 ) => <String, Object?>{
-  'algorithm_version': pureAlgorithmVersion,
+  'algorithm_version': config.maxOurMoves == null
+      ? pureAlgorithmVersion
+      : shortlistedAlgorithmVersion,
   'search_algorithm': 'pure',
   'build_mode': 'stockfishExpectimax',
   'opponent_book_source': 'none',
@@ -121,6 +127,9 @@ Map<String, Object?> _configJson(
   'max_depth': config.horizonPlies ?? unboundedDepthWire,
   'max_eval_loss_cp': config.lossLimitCp ?? unboundedLossWire,
   'max_nodes': ?config.nodeBudget,
+  'v2_max_our_moves': ?config.maxOurMoves,
+  if (config.maxOurMoves != null) 'v2_narrow_after_ply': config.narrowAfterPly,
+  if (config.replyFloor != 0) 'v2_reply_floor': config.replyFloor,
   'eval_depth': ?evalDepth,
   'maia_elo': ?opponentRating,
 };

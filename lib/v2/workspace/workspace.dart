@@ -1,5 +1,6 @@
 import '../storage/settings_store.dart';
 import 'books.dart';
+import 'game_review.dart';
 import 'collection_analysis.dart';
 import 'document_saver.dart';
 import 'document_session.dart';
@@ -26,6 +27,7 @@ final class Workspace {
   const Workspace({
     required this.session,
     this.inspection,
+    this.review,
     required this.saver,
     required this.settings,
     required this.analysis,
@@ -42,6 +44,7 @@ final class Workspace {
   });
 
   final DocumentSession session;
+  final GameReview? review;
   final CollectionAnalysis? inspection;
 
   /// The same workspace while the collection's scratch tab owns the board.

@@ -48,7 +48,9 @@ class _FindsPanelState extends State<FindsPanel> {
   @override
   void initState() {
     super.initState();
-    widget.finds.load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.finds.load();
+    });
   }
 
   @override
@@ -123,7 +125,7 @@ class _FindsPanelState extends State<FindsPanel> {
         padding: const EdgeInsets.all(Space.l),
         child: Text(
           finds.all.isEmpty
-              ? 'Nothing found yet. Run a search from the Search tab; '
+              ? 'Nothing found yet. Run a search from the Expectimax tab; '
                     'what it points out is listed here.'
               : 'None of these kinds.',
           style: Theme.of(context).textTheme.bodyMedium,

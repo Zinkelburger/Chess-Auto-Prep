@@ -16,6 +16,30 @@ file holding exactly what the screen showed, and training progress still pointin
 Generating lines (builds, planner, Jobs pane) is [generation.md](generation.md); holes, coverage, the
 audit and the Findings pane are [checks.md](checks.md).
 
+## Current v2 workflow (2026-09-27)
+
+Builder opens Expectimax, Moves and Explorer, with Expectimax selected. Train and
+Replies remain available from the inner tab menu but are not initially open.
+The split-panel control shows Moves above Expectimax and Explorer; wide cards
+put those tools side by side and narrow cards stack them. Dividers resize each
+panel; the same control returns to one selected tab. The move-note card beneath
+the board is directly editable, including the chapter introduction. It uses the
+existing commit-on-navigation editor and guarded document saver.
+
+Expectimax has a play button, a compact rating/depth summary and a settings
+dialog. Stockfish is the default; optional database sources live inside that
+dialog. Ctrl+G uses the same selected source, rating and depth. Clicking a result
+while running stops the old search, saves its committed tree, and continues from
+the clicked position using compatible child values. Failed saves block the next
+run and retain Retry/Discard. Navigating again while that save is pending cancels
+the queued restart. Stopped search rows only navigate, so inspecting results does
+not launch work unexpectedly. Make lines remains the direct action below results.
+The [interactive search policy](../../ALGORITHM.md#v2-interactive-expectimax)
+keeps broad root coverage and shortlists deeper moves.
+
+Global file tabs include the current mode, such as `Builder · Main` or
+`Viewer · Match`, and restore that mode when selected.
+
 ## Screen
 Reached from the mode menu (`Build` → `Repertoire builder`), from the Repertoires library by opening a
 repertoire (its first chapter), from the Trainer's "Explore this position" (a line id plus a move

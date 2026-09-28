@@ -414,7 +414,9 @@ String? unsupportedTreeReason(
   // beside it is a label that some writers leave off.
   final algorithm = config['algorithm_version'];
   if (tree['history_aware'] != true ||
-      (algorithm != null && algorithm != pureAlgorithmVersion)) {
+      (algorithm != null &&
+          algorithm != pureAlgorithmVersion &&
+          algorithm != shortlistedAlgorithmVersion)) {
     return 'this tree was built by the older heuristic search, which valued '
         'positions differently and shared values between paths; build it '
         'again to open it here';
@@ -464,6 +466,9 @@ SearchConfig configFromSnapshot(Map<String, Object?> config) {
       _intOr(config['max_eval_loss_cp'], defaults.lossLimitCp),
       unboundedLossWire,
     ),
+    maxOurMoves: _intOr(config['v2_max_our_moves'], null),
+    narrowAfterPly: _intOr(config['v2_narrow_after_ply'], 2)!,
+    replyFloor: (config['v2_reply_floor'] as num?)?.toDouble() ?? 0,
     nodeBudget: budget is num && budget.isFinite && budget > 0
         ? budget.toInt()
         : null,
