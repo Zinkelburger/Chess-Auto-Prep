@@ -70,8 +70,13 @@ have different remaining horizons, half-move clocks, or repetition histories;
 Pure never borrows their backed-up values or merges their policies by FEN.
 Starting a new search from an old Pure subtree rebuilds it with the new history.
 
-Checkmate and stalemate are exact terminals. Insufficient material is detected
-by the chess rules implementation. The model assumes both players immediately
+Checkmate and stalemate are exact terminals. A terminal's value is chess, not
+an estimate, but it still carries the score an engine would report there, so
+the engine-loss window and the tie-break rank it against ordinary moves on one
+scale: a checkmate is ±10000 from the mated side, which is what Stockfish's
+`mate 0` packs to, and every draw is 0. Both builders write that score in
+rather than asking the engine about a finished game. Insufficient material is
+detected by the chess rules implementation. The model assumes both players immediately
 claim a draw at the third occurrence or 100 half-moves, with checkmate taking
 precedence. Repetition keys include side to move, castling rights, and legal
 en-passant availability. History before the supplied root is unknown.
@@ -167,3 +172,46 @@ separate direct Stockfish PV request. Only the searched position receives that
 engine score; its continuation is saved as independent UCI PV metadata (never inserted into
 Maia policy children), and no expected score
 is fabricated for a single engine line.
+
+## V2 interactive Expectimax
+
+The Builder's interactive Expectimax uses a bounded candidate policy rather than
+an exhaustive Pure tree. From the root down, Stockfish at depth 14 supplies a
+MultiPV shortlist of our moves: Root moves (default four) for our first move,
+at the root or under each first reply, and Candidates (default four) after it.
+Only those child positions get separate fixed-depth evaluations and recursive
+expansion. A failed or incomplete shortlist stops with a visible error.
+Callers without a ranking source score all candidates before retaining the best
+N. Other callers retain their existing exhaustive defaults. The panel exposes
+Maia rating, root moves, candidate count, depth in half-moves (blank for no limit), and
+reply coverage directly above the results. Coverage is expressed as one in N
+games, default 100; zero expands every reply. Settings apply to the next search
+and are disabled during a run.
+
+Opponent nodes retain all positive Maia probability mass. Paths below the configured cumulative
+reach threshold (default 1%) stop at their engine estimate instead of expanding further; the remaining
+replies are not renormalized to pretend the rare replies disappeared. The 25,000
+new-node budget still bounds a batch. This is approximate candidate selection and
+selective depth; an omitted engine candidate might have a better practical score.
+Saved v4 configuration records `v2_max_our_moves`, `v2_root_moves` and
+`v2_reply_floor`; resumed interactive runs require matching settings. Existing exhaustive trees
+(including MCP-built chapter searches) can seed an interactive run; their completed
+branches and values are retained while new expansions use the shortlist. Narrowed
+trees carry algorithm version 4 so older exhaustive-only app/C/MCP readers refuse
+to resume them under the wrong branching assumptions. Exhaustive exports stay at
+algorithm version 3.
+
+An active search follows board moves, move-list navigation and back/forward.
+Navigation interrupts the old engine, saves its committed expansions, and starts
+from the latest board only after that save finishes. A manual stop or a change
+of document/side cancels the pending restart. Up to 16 previous roots are retained
+in memory, so backing up displays their results immediately and a new search
+reuses compatible values. Chapter searches also keep their existing saved trees
+on disk. A stopped search stays stopped while browsing; Expectimax continues
+from the current board and its retained values. Resume also loads a saved root
+after restarting the app. Rating, evaluation source, candidate count and reply
+coverage must match to reuse an interactive tree. Interactive trees saved before
+the root was shortlisted (no `v2_root_moves`) are refused; start a new search.
+Raising Root moves, or starting from a deeper node of an earlier search, evaluates
+only the root moves that are missing and keeps the work below the others. Engine evaluations continue to use the shared
+persistent cache independently of these in-memory search roots.

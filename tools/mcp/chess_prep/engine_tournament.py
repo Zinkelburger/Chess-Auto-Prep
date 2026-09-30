@@ -139,7 +139,8 @@ def _summary(directory: Path, data: dict) -> dict:
         "engines": engines,
         "start_fen": config.get("startFen"),
         "opening": config.get("openingLabel") or None,
-        "time_control": _time_control_label(config.get("timeControl") or {}),
+        "time_control": data.get("timeLabel")
+        or _time_control_label(config.get("timeControl") or {}),
         "games_played": len(games),
         "games_total": per_pairing * pairings,
         "directory": str(directory),
@@ -150,21 +151,38 @@ def _summary(directory: Path, data: dict) -> dict:
 
 
 def _time_control_label(tc: dict) -> str:
-    kind = tc.get("kind")
-    if kind == "movetime":
-        return f"{(tc.get('movetimeMs') or 0) / 1000:g}s/move"
+    """The time control in words for a `tournament.json` written before the
+    app kept its own label there (`timeLabel`, which the summary reads
+    first): the app's `describeTime` (lib/chess/tournament/config.dart),
+    with the same defaults a run plays by, without the preset's name the app
+    puts in front (`Blitz · 60 s + 0.6 s`).
+    """
+
+    def number(key: str, fallback: int) -> int:
+        value = tc.get(key)
+        return int(value) if isinstance(value, (int, float)) else fallback
+
+    def seconds(ms: int) -> str:
+        return f"{ms // 1000}" if ms % 1000 == 0 else f"{ms / 1000}"
+
+    def count(n: int) -> str:
+        if n % 1_000_000 == 0:
+            return f"{n // 1_000_000}M"
+        return f"{n // 1000}k" if n % 1000 == 0 else f"{n}"
+
+    kind = tc.get("kind") or "movetime"
     if kind == "incremental":
-        base = (tc.get("baseMs") or 0) / 1000
-        inc = (tc.get("incrementMs") or 0) / 1000
-        period = tc.get("movesPerSession")
-        head = f"{period}/" if period else ""
-        tail = f"+{inc:g}s" if inc else ""
-        return f"{head}{base:g}s{tail}"
+        moves = number("movesPerSession", 0)
+        head = f"{moves} moves in " if moves > 0 else ""
+        return (
+            f"{head}{seconds(number('baseMs', 60000))} s + "
+            f"{seconds(number('incrementMs', 600))} s"
+        )
     if kind == "fixedDepth":
-        return f"depth {tc.get('depth')}"
+        return f"Depth {number('depth', 12)}"
     if kind == "fixedNodes":
-        return f"{tc.get('nodes')} nodes"
-    return "unknown"
+        return f"{count(number('nodes', 1_000_000))} nodes"
+    return f"{seconds(number('movetimeMs', 2000))} s / move"
 
 
 def resolve_id(root: Path, wanted: str | None) -> Path:
@@ -778,7 +796,6 @@ def register_engine_tournament_tools(registry: Any) -> None:
             "name": name,
             "path": path,
             "reports_itself_as": report.get("name"),
-            "author": report.get("author"),
             "sample_move": report.get("sampleMove"),
             "registry": str(registry_path),
             "note": (

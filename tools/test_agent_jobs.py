@@ -92,6 +92,11 @@ class JobTests(unittest.TestCase):
             self.assertTrue(Path(first['BUGHOUSE_DB_HOME']).is_relative_to(first['XDG_DATA_HOME']))
             self.assertEqual(first.get('HOME'), os.environ.get('HOME'))
             self.assertEqual(first['CHESS_AUTO_PREP_NEW_INSTANCE'], '1')
+            choice = Path(first['XDG_DATA_HOME']) / 'chess_auto_prep/desktop-integration-choice'
+            self.assertEqual(choice.read_text(), 'no')
+            choice.write_text('yes')
+            jobs.profile_env(Path(directory) / 'first')
+            self.assertEqual(choice.read_text(), 'yes')
             docs = subprocess.check_output(['xdg-user-dir', 'DOCUMENTS'], env=first, text=True).strip()
             self.assertTrue(docs.startswith(directory))
             self.assertTrue(Path(docs).is_dir())
@@ -143,7 +148,7 @@ class JobTests(unittest.TestCase):
             spawn.return_value.returncode = 0
             for headless in (False, True):
                 self.assertEqual(jobs.run(argparse.Namespace(
-                    headless=headless, wait_seconds=10, command=['true'])), 0)
+                    headless=headless, offline=False, wait_seconds=10, command=['true'])), 0)
                 command = spawn.call_args.args[0]
                 unit = command[command.index('--unit') + 1]
                 self.assertEqual(f'RuntimeDirectory={unit}' in command, headless)

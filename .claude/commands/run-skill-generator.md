@@ -9,8 +9,8 @@ do not assume an installation is active in the current session.
 
 Read `docs/agents/README.md` for instruction ownership and the relevant guide
 for the skill's domain. Keep trigger descriptions precise and supporting
-material on demand. Track skill files in git and keep both `.agents/skills/`
-and `.claude/skills/` entrypoints aligned. Use stdlib Python/plain bash for
+material on demand. Edit `.claude/skills/`, track it in git and run
+`python3 scripts/sync_agent_rules.py` to mirror it to `.agents/skills/`. Use stdlib Python/plain bash for
 helpers so running a skill does not require installing dependencies.
 
 Compose existing app-driver and MCP skills instead of duplicating launchers

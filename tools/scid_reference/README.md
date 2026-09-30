@@ -1,7 +1,7 @@
 # Scid reference harness
 
-Two tiny C++ programs that link **Scid's own codec** so the Dart writer in
-`lib/services/scid/` can be checked against ground truth rather than against a
+Two tiny C++ programs that link **Scid's own codec** so a Dart writer (the old app's
+`lib/services/scid/`, and any future v2 export) can be checked against ground truth rather than against a
 reading of the format docs.
 
 - `refgen.cpp` — PGN → `.si4`/`.sg4`/`.sn4` or `.si5`/`.sg5`/`.sn5`.

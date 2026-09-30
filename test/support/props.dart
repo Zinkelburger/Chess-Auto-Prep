@@ -1,16 +1,21 @@
-/// A small, seeded property-testing kit: `forAll` plus the generators the PGN
-/// layer needs.
+/// A small, seeded property-testing kit: `forAll` and `forAllAsync` plus the
+/// generators the PGN layer needs.
 ///
 /// Property tests assert *laws* (`parse(serialize(x)) == x`) instead of
 /// pinning today's output, so they keep their meaning across a refactor. The
 /// price is that a failure arrives as a random value, which is why this kit
 /// is deterministic (same seed ⇒ same values, on every machine — the PRNG is
 /// ours, not `dart:math`'s) and shrinks a failure toward a minimal
-/// counterexample before reporting it, with the seed attached.
+/// counterexample before reporting it, with the seed attached. Values that
+/// once failed go in `regressions:` and run first from then on.
+/// `CAP_PROP_RUNS` and `CAP_PROP_SEED` soak or replay without an edit.
 ///
 /// No new dependencies: `dartchess` (already a dependency) plays the random
 /// legal moves, `flutter_test` declares the test.
 library;
+
+import 'dart:async';
+import 'dart:io';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -88,7 +93,7 @@ class Generator<T> {
 Generator<int> ints(int min, int max) => Generator(
   (r) => r.between(min, max),
   shrinker: (v) sync* {
-    if (v == min) return;
+    if (v <= min || v > max) return;
     yield min;
     if (v > min + 1) yield min + (v - min) ~/ 2;
     yield v - 1;
@@ -118,52 +123,221 @@ Generator<List<T>> listOf<T>(Generator<T> item, {int min = 0, int max = 6}) =>
       },
     );
 
+/// Values from one of [alternatives], each equally likely. See [frequency]
+/// for how the result shrinks.
+Generator<T> oneOf<T>(List<Generator<T>> alternatives) =>
+    frequency([for (final g in alternatives) (1, g)]);
+
+/// Values from one of [weighted]'s generators, picked in proportion to its
+/// weight.
+///
+/// A value does not remember which generator made it, so shrinking offers
+/// every alternative's candidates in the order given — put the simplest
+/// first. A candidate from another alternative is kept only if the property
+/// still fails on it.
+Generator<T> frequency<T>(List<(int, Generator<T>)> weighted) {
+  final total = weighted.fold(0, (sum, e) => sum + e.$1);
+  if (total <= 0 || weighted.any((e) => e.$1 < 0)) {
+    throw ArgumentError.value(weighted, 'weighted', 'needs positive weights');
+  }
+  return Generator(
+    (r) {
+      var n = r.nextInt(total);
+      for (final (weight, gen) in weighted) {
+        if (n < weight) return gen.sample(r);
+        n -= weight;
+      }
+      throw StateError('weights changed while sampling');
+    },
+    shrinker: (v) sync* {
+      for (final (_, gen) in weighted) {
+        yield* gen.shrink(v);
+      }
+    },
+  );
+}
+
 // ---------------------------------------------------------------------------
 // The runner
 // ---------------------------------------------------------------------------
+
+/// Runs per property when neither `runs:` nor `CAP_PROP_RUNS` says otherwise.
+const int defaultPropRuns = 200;
+
+/// The first case seed when neither `seed:` nor `CAP_PROP_SEED` says
+/// otherwise.
+const int defaultPropSeed = 0x0C4E55;
 
 /// Declare a test that runs [body] over [runs] generated values.
 ///
 /// On the first failure the input is shrunk toward a minimal counterexample
 /// and both the seed and the shrunk value are reported, so the failure can be
-/// replayed with `forAll(..., seed: <printed>)`.
+/// replayed with `seed: <printed>`. See [checkProperty] for
+/// [regressions], [regressionSeeds] and the environment overrides.
 void forAll<T>(
   String description,
   Generator<T> gen,
   void Function(T value) body, {
-  int runs = 200,
-  int seed = 0x0C4E55,
+  int? runs,
+  int? seed,
+  List<T> regressions = const [],
+  List<int> regressionSeeds = const [],
+  Object? skip,
+  Timeout? timeout,
 }) {
-  test(description, () {
-    for (var i = 0; i < runs; i++) {
-      final caseSeed = seed + i;
-      final value = gen.sample(Rand(caseSeed));
-      final failure = _run(body, value);
-      if (failure == null) continue;
-      final minimal = _minimize(gen, value, body);
-      final minimalFailure = _run(body, minimal) ?? failure;
-      fail(
-        'Property failed: $description\n'
-        '  seed:       $seed (case $i, caseSeed $caseSeed)\n'
-        '  replay:     forAll(..., seed: $caseSeed, runs: 1)\n'
-        '  generated:  ${_show(value)}\n'
-        '  shrunk to:  ${_show(minimal)}\n'
-        '  failure:    $minimalFailure',
-      );
-    }
-  });
+  test(
+    description,
+    () => checkProperty(
+      description,
+      gen,
+      body,
+      runs: runs,
+      seed: seed,
+      regressions: regressions,
+      regressionSeeds: regressionSeeds,
+    ),
+    skip: skip,
+    timeout: timeout,
+  );
 }
 
-Object? _run<T>(void Function(T) body, T value) {
+/// [forAll] for a body that returns a future: each case, and each shrink
+/// candidate, is awaited before the next one starts, so cases never overlap.
+void forAllAsync<T>(
+  String description,
+  Generator<T> gen,
+  Future<void> Function(T value) body, {
+  int? runs,
+  int? seed,
+  List<T> regressions = const [],
+  List<int> regressionSeeds = const [],
+  Object? skip,
+  Timeout? timeout,
+}) {
+  test(
+    description,
+    () => checkProperty(
+      description,
+      gen,
+      body,
+      runs: runs,
+      seed: seed,
+      regressions: regressions,
+      regressionSeeds: regressionSeeds,
+    ),
+    skip: skip,
+    timeout: timeout,
+  );
+}
+
+/// The check [forAll] and [forAllAsync] declare, without declaring a test.
+///
+/// [regressions] are literal values that once failed, and [regressionSeeds]
+/// case seeds copied from earlier failure reports. Both run before the random
+/// cases on every run, so each bug found stays a permanent case.
+///
+/// `CAP_PROP_RUNS` and `CAP_PROP_SEED` in [environment] (the process
+/// environment by default) win over [runs] and [seed], so a whole file can be
+/// soaked, or one printed case replayed, without editing it. The same seed
+/// gives the same values on any machine: [Rand] is ours, not `dart:math`'s.
+Future<void> checkProperty<T>(
+  String description,
+  Generator<T> gen,
+  FutureOr<void> Function(T value) body, {
+  int? runs,
+  int? seed,
+  List<T> regressions = const [],
+  List<int> regressionSeeds = const [],
+  Map<String, String>? environment,
+}) async {
+  final env = environment ?? Platform.environment;
+  final runCount = _envInt(env, 'CAP_PROP_RUNS') ?? runs ?? defaultPropRuns;
+  final baseSeed = _envInt(env, 'CAP_PROP_SEED') ?? seed ?? defaultPropSeed;
+
+  for (var i = 0; i < regressions.length; i++) {
+    await _check(
+      description,
+      gen,
+      body,
+      regressions[i],
+      '  regression: $i of regressions: (runs first on every run)\n',
+    );
+  }
+  for (final caseSeed in regressionSeeds) {
+    await _check(
+      description,
+      gen,
+      body,
+      gen.sample(Rand(caseSeed)),
+      '  seed:       $caseSeed (in regressionSeeds:)\n'
+      '${_replay(description, caseSeed)}',
+    );
+  }
+  for (var i = 0; i < runCount; i++) {
+    final caseSeed = baseSeed + i;
+    await _check(
+      description,
+      gen,
+      body,
+      gen.sample(Rand(caseSeed)),
+      '  seed:       $baseSeed (case $i, caseSeed $caseSeed)\n'
+      '${_replay(description, caseSeed)}'
+      '  keep it:    regressionSeeds: [$caseSeed]\n',
+    );
+  }
+}
+
+int? _envInt(Map<String, String> env, String name) {
+  final text = env[name];
+  if (text == null || text.trim().isEmpty) return null;
+  final value = int.tryParse(text.trim());
+  if (value == null) {
+    throw ArgumentError.value(text, name, 'must be a whole number');
+  }
+  return value;
+}
+
+// The environment override applies to every property in the process, so the
+// replay line names the one test it matches.
+String _replay(String description, int caseSeed) =>
+    '  replay:     seed: $caseSeed, runs: 1\n'
+    '              or CAP_PROP_SEED=$caseSeed CAP_PROP_RUNS=1 with\n'
+    '              --plain-name "$description"\n';
+
+Future<void> _check<T>(
+  String description,
+  Generator<T> gen,
+  FutureOr<void> Function(T) body,
+  T value,
+  String origin,
+) async {
+  final failure = await _run(body, value);
+  if (failure == null) return;
+  final minimal = await _minimize(gen, value, body);
+  final minimalFailure = await _run(body, minimal) ?? failure;
+  fail(
+    'Property failed: $description\n'
+    '$origin'
+    '  generated:  ${_show(value)}\n'
+    '  shrunk to:  ${_show(minimal)}\n'
+    '  failure:    $minimalFailure',
+  );
+}
+
+Future<Object?> _run<T>(FutureOr<void> Function(T) body, T value) async {
   try {
-    body(value);
+    await body(value);
     return null;
   } catch (e) {
     return e;
   }
 }
 
-T _minimize<T>(Generator<T> gen, T failing, void Function(T) body) {
+Future<T> _minimize<T>(
+  Generator<T> gen,
+  T failing,
+  FutureOr<void> Function(T) body,
+) async {
   var best = failing;
   var budget = 400;
   var improved = true;
@@ -171,7 +345,7 @@ T _minimize<T>(Generator<T> gen, T failing, void Function(T) body) {
     improved = false;
     for (final candidate in gen.shrink(best)) {
       if (--budget <= 0) break;
-      if (_run(body, candidate) != null) {
+      if (await _run(body, candidate) != null) {
         best = candidate;
         improved = true;
         break;
@@ -191,27 +365,18 @@ String _show(Object? value) {
 // ---------------------------------------------------------------------------
 
 /// Every legal move of [pos], promotions expanded to all four pieces.
-List<Move> legalMovesOf(Position pos) {
-  final moves = <Move>[];
-  for (final entry in pos.legalMoves.entries) {
-    final from = entry.key;
-    final isPawn = pos.board.roleAt(from) == Role.pawn;
-    for (final to in entry.value.squares) {
-      if (isPawn && (to >= 56 || to < 8)) {
-        for (final role in const [
-          Role.queen,
-          Role.rook,
-          Role.bishop,
-          Role.knight,
-        ]) {
-          moves.add(NormalMove(from: from, to: to, promotion: role));
-        }
-      } else {
-        moves.add(NormalMove(from: from, to: to));
-      }
-    }
-  }
-  return moves;
+List<Move> legalMovesOf(Position pos) => [
+  for (final entry in pos.legalMoves.entries)
+    for (final to in entry.value.squares) ..._movesTo(pos, entry.key, to),
+];
+
+List<Move> _movesTo(Position pos, Square from, Square to) {
+  final promotes = pos.board.roleAt(from) == Role.pawn && (to >= 56 || to < 8);
+  if (!promotes) return [NormalMove(from: from, to: to)];
+  return [
+    for (final role in const [Role.queen, Role.rook, Role.bishop, Role.knight])
+      NormalMove(from: from, to: to, promotion: role),
+  ];
 }
 
 /// [plies] random legal moves from [start], as SAN. Stops early at mate or a

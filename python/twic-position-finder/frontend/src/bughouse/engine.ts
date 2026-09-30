@@ -1,3 +1,6 @@
+import type { Analysis, EngineAction, EngineReply, JointMove } from './types';
+export type { JointMove } from './types';
+
 /** Payload of the worker's `search` action: one node-budgeted Hivemind search. */
 export interface NodeSearchPayload {
   dual_fen: string;
@@ -10,8 +13,6 @@ export interface NodeSearchPayload {
   movetime_ms?: number;
 }
 
-export interface JointMove { A: string; B: string; uci: string }
-
 /** Raw `search` result. q is in [-1, 1] from `team`'s side; mate is in plies. */
 export interface NodeSearchResult {
   q: number;
@@ -22,24 +23,27 @@ export interface NodeSearchResult {
   /** Native UCI pv tokens, e.g. "(d2d4,pass)", "(P@f7,e2e4)". */
   pv: string[];
   lines: { best: JointMove }[];
+  /** Each board's moves the search expanded, most visited first; sitting left out. */
+  moves: { board: 'A' | 'B'; uci: string; prior: number; visits: number }[];
 }
 
 /** One browser worker owns both Hivemind WASM and ONNX inference. No API. */
 export class BrowserEngine {
   private worker: Worker | null = null;
   private serial = 0;
-  private pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
+  private pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void; partial?: (analysis: Analysis) => void }>();
 
   constructor(private progress: (message: string) => void) {}
 
-  request<T>(action: string, payload: object): Promise<T> {
+  request<T>(action: EngineAction, payload: object, partial?: (analysis: Analysis) => void): Promise<T> {
     if (!this.worker) {
       this.worker = new Worker(new URL('./engine.worker.ts', import.meta.url), { type: 'module' });
-      this.worker.onmessage = ({ data }) => {
+      this.worker.onmessage = ({ data }: MessageEvent<EngineReply>) => {
         if (data.progress) { this.progress(data.progress); return; }
-        const pending = this.pending.get(data.id);
+        const pending = data.id === undefined ? undefined : this.pending.get(data.id);
         if (!pending) return;
-        this.pending.delete(data.id);
+        if (data.partial) { pending.partial?.(data.partial); return; }
+        this.pending.delete(data.id!);
         if (data.error) pending.reject(new Error(data.error));
         else pending.resolve(data.result);
       };
@@ -50,7 +54,7 @@ export class BrowserEngine {
     }
     const id = ++this.serial;
     return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve: (value) => resolve(value as T), reject });
+      this.pending.set(id, { resolve: (value) => resolve(value as T), reject, partial });
       this.worker!.postMessage({ id, action, payload });
     });
   }

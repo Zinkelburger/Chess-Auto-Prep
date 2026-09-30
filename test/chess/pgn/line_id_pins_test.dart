@@ -1,0 +1,177 @@
+import 'package:chess_auto_prep/chess/pgn/chapter.dart';
+import 'package:chess_auto_prep/chess/pgn/chapter_edit.dart';
+import 'package:chess_auto_prep/chess/pgn/games_written.dart';
+import 'package:chess_auto_prep/chess/pgn/line_edits.dart';
+import 'package:chess_auto_prep/chess/pgn/line_id_pins.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+/// Two short lines with no id headers, trained under ids worked out from
+/// their moves and their places — short enough that the place is part of
+/// the id, which the 22 characters of a long line's id never reach — and
+/// one that names its own.
+const _chapter = '''
+// Color: White
+
+[Event "Ruy"]
+
+1. e4 e5 2. Nf3 *
+
+[Event "Italian"]
+
+1. e4 c5 *
+
+[Event "Scotch"]
+[LineID "scotch"]
+
+1. d4 *
+''';
+
+void main() {
+  final chapter = parseChapter(name: 'Open games', text: _chapter);
+  final ids = trainedIds(chapter.lines);
+
+  ({Chapter chapter, GamesArranged games}) pinned(ChapterEdit edit) {
+    final edited = edit as ChapterEdited;
+    return withIdsPinned(chapter, edited.chapter, edited.games);
+  }
+
+  test('a game moved up by a delete keeps the id it was trained under', () {
+    final after = pinned(lineDeleted(chapter, game: 0));
+    expect(trainedIds(after.chapter.lines), [ids[1], 'scotch']);
+    expect(after.chapter.lines.first.lineId, ids[1]);
+    expect(after.games.rewritten, {1}, reason: 'the pinned game is written');
+    expect(writeChapter(after.chapter), contains('[LineID "${ids[1]}"]'));
+  });
+
+  test('a line given another move keeps the id it was trained under', () {
+    final longer = parseChapter(
+      name: 'Open games',
+      text: _chapter.replaceFirst('2. Nf3 *', '2. Nf3 Nc6 *'),
+    );
+    final after = withIdsPinned(
+      chapter,
+      longer,
+      GamesArranged(order: [0, 1, 2], rewritten: {0}, before: 3),
+    );
+    expect(trainedIds(after.chapter.lines), ids);
+    expect(after.chapter.lines.first.lineId, ids[0]);
+    expect(after.chapter.lines[1].text, chapter.lines[1].text);
+    expect(after.games.rewritten, {0});
+  });
+
+  test('a game moved up under a banner keeps the old app\'s id', () {
+    // The old app reads the banner as a game of its own, so A is its game 1
+    // and B its game 2; the id B is pinned with must be that one.
+    final banner = parseChapter(
+      name: 'Banner',
+      text:
+          '// Color: White\nRepertoire by GM X\n\n'
+          '[Event "A"]\n\n1. e4 e5 *\n\n[Event "B"]\n\n1. d4 d5 *\n',
+    );
+    final edited = lineDeleted(banner, game: 0) as ChapterEdited;
+    final after = withIdsPinned(banner, edited.chapter, edited.games);
+    expect(after.chapter.lines.single.lineId, 'line_ZDQgZDV8Mg');
+  });
+
+  test('a renamed line keeps its bytes: its id does not change', () {
+    final edited = renamedLine(chapter, game: 0, name: 'Spanish');
+    final after = pinned(edited);
+    expect(after.chapter, same((edited as ChapterEdited).chapter));
+  });
+
+  test('a game that already names its id is left alone', () {
+    final after = pinned(lineDeleted(chapter, game: 1));
+    expect(after.chapter.lines.last.text, chapter.lines.last.text);
+    expect(after.games.rewritten, isEmpty);
+  });
+
+  test('a viewer file is not pinned', () {
+    final study = parseChapter(name: 'Study', text: _chapter, game: 0);
+    final edited = lineDeleted(study, game: 1) as ChapterEdited;
+    final after = withIdsPinned(study, edited.chapter, edited.games);
+    expect(identical(after.chapter, edited.chapter), isTrue);
+  });
+
+  test('an id header is added after the last tag, moves untouched', () {
+    final line = chapter.lines.first;
+    final written = withIdHeader(line, 'x')!;
+    expect(written.text, startsWith('[Event "Ruy"]\n[LineID "x"]\n'));
+    expect(movesOf(written), movesOf(line));
+  });
+
+  test('an id header goes on a line with a blank line between its tags', () {
+    const game = '[Event "Spaced"]\n\n[Result "*"]\n\n1. d4 *';
+    final line = parseChapter(name: 'Spaced', text: game).lines.single;
+    final written = withIdHeader(line, 'x')!;
+    expect(
+      written.text,
+      '[Event "Spaced"]\n[Result "*"]\n[LineID "x"]\n\n1. d4 *',
+    );
+    expect(movesOf(written), '1. d4 *');
+  });
+
+  test('an id header goes on a line whose tags are indented', () {
+    const game = '  [Event "Indented"]\n  [Result "*"]\n\n1. d4 *';
+    final line = parseChapter(name: 'Indented', text: game).lines.single;
+    expect(movesOf(line), '1. d4 *');
+    expect(withIdHeader(line, 'x')?.lineId, 'x');
+  });
+
+  test('a game moved up keeps its id though its tags have space between', () {
+    const spaced = '''
+// Color: White
+
+[Event "Ruy"]
+
+1. e4 e5 2. Nf3 *
+
+[Event "Italian"]
+
+[Result "*"]
+
+1. e4 c5 *
+''';
+    final before = parseChapter(name: 'Spaced', text: spaced);
+    final ids = trainedIds(before.lines);
+    final edited = lineDeleted(before, game: 0) as ChapterEdited;
+    final after = withIdsPinned(before, edited.chapter, edited.games);
+    expect(after.chapter.lines.single.lineId, ids[1]);
+    expect(trainedIds(after.chapter.lines), [ids[1]]);
+    expect(movesOf(after.chapter.lines.single), '1. e4 c5 *');
+    expect(after.games.rewritten, {1});
+  });
+
+  test('a long line keeps its id wherever it goes, so it is not pinned', () {
+    final long = parseChapter(
+      name: 'Open games',
+      text: _chapter.replaceFirst('1. e4 c5 *', '1. e4 c5 2. Nf3 d6 3. d4 *'),
+    );
+    final edited = lineDeleted(long, game: 0) as ChapterEdited;
+    final after = withIdsPinned(long, edited.chapter, edited.games);
+    expect(after.chapter, same(edited.chapter));
+  });
+  test(
+    'a game with an illegal move moved down is pinned the old app\'s id',
+    () {
+      // Its id hashes every move token, as the old app's does, and is short
+      // enough to hold its place.
+      const typo = '[Event "Typo"]\n\n1. e4 e5 2. Bb4 *';
+      const other = '[Event "Other"]\n\n1. d4 *';
+      final before = parseChapter(name: 'Typo', text: '$typo\n\n$other\n');
+      final moved = parseChapter(name: 'Typo', text: '$other\n\n$typo\n');
+      final after = withIdsPinned(
+        before,
+        moved,
+        GamesArranged(order: [1, 0], before: 2),
+      );
+      const id = 'line_ZTQgZTUgQmI0fDA';
+      expect(after.chapter.lines.last.lineId, id);
+      expect(writeChapter(after.chapter), contains('[LineID "$id"]'));
+      final written = parseChapter(
+        name: 'Typo',
+        text: writeChapter(after.chapter),
+      );
+      expect(trainedIds(written.lines).last, id);
+    },
+  );
+}

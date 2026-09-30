@@ -1,0 +1,570 @@
+import 'dart:convert';
+import 'dart:isolate';
+
+import 'package:dartchess/dartchess.dart' show Chess, Position, Setup, Side;
+
+import '../fen.dart';
+import 'eval.dart';
+import 'search_config.dart';
+import 'search_node.dart';
+import 'sources.dart';
+import 'terminal.dart';
+import 'tree_wire_v4.dart';
+
+/// What [decodeTreeV4] made of a file.
+sealed class TreeReadResult {
+  const TreeReadResult();
+}
+
+final class TreeDecoded extends TreeReadResult {
+  const TreeDecoded({
+    required this.root,
+    required this.config,
+    required this.complete,
+  });
+
+  final SearchNode root;
+  final SearchConfig config;
+
+  /// The document's `build_complete`: whether the search that wrote it
+  /// reached the horizon everywhere.
+  final bool complete;
+}
+
+/// A tree this search cannot value: an older format, or one of the other
+/// algorithms the old app has. [reason] is plain English for the user.
+final class TreeUnsupported extends TreeReadResult {
+  const TreeUnsupported(this.reason);
+
+  final String reason;
+}
+
+/// The file is not a tree, or a node in it is missing something every node
+/// must have. [detail] says which.
+final class TreeMalformed extends TreeReadResult {
+  const TreeMalformed(this.detail);
+
+  final String detail;
+}
+
+/// Reads a v4 document, whether the old Dart app or the C builder wrote it.
+///
+/// Nothing derived is believed: `value_lower`, `value_upper`,
+/// `expectimax_value` and `cumulative_probability` are all recomputed from
+/// the shape of the tree, because two sources for one fact is how the two
+/// disagree. What the file alone can say — the moves, the positions, the
+/// evaluations, the opponent's shares and which nodes were expanded — is what
+/// is read.
+TreeReadResult decodeTreeV4(String json) {
+  Object? parsed;
+  try {
+    parsed = jsonDecode(json);
+  } on FormatException catch (error) {
+    return TreeMalformed('the file is not JSON: ${error.message}');
+  }
+  if (parsed is! Map<String, Object?>) {
+    return const TreeMalformed('the file is not a JSON object');
+  }
+  if (parsed['format'] != treeWireFormat) {
+    return const TreeMalformed('the file is not a saved opening tree');
+  }
+  final tree = parsed['tree'];
+  if (tree is! Map<String, Object?>) {
+    return const TreeMalformed('the file has no tree in it');
+  }
+  final snapshot = parsed['config'];
+  final config = snapshot is Map<String, Object?>
+      ? snapshot
+      : const <String, Object?>{};
+  final unsupported = unsupportedTreeReason(parsed['version'], config, tree);
+  if (unsupported != null) return TreeUnsupported(unsupported);
+  return _readTree(tree, configFromSnapshot(config), parsed['build_complete']);
+}
+
+TreeReadResult _readTree(
+  Map<String, Object?> tree,
+  SearchConfig config,
+  Object? complete,
+) {
+  final reader = _Reader(
+    ourSide: config.side,
+    horizonPlies: config.horizonPlies ?? unboundedDepthWire,
+  );
+  final root = reader.read(tree, 0);
+  if (root == null) {
+    return reader.refusal ?? const TreeMalformed('the tree could not be read');
+  }
+  return TreeDecoded(
+    root: root,
+    config: config,
+    // A file written before builds could be interrupted carries no such key,
+    // and every tree in one of those was finished.
+    complete: complete is bool ? complete : true,
+  );
+}
+
+/// Deeper than any saved build goes, and shallow enough that reading a node
+/// per level cannot exhaust the stack. A document nested past it is not a
+/// tree that was searched but one that was generated at this reader.
+const int _plyLimit = 512;
+
+/// Rebuilds the tree, one node at a time, and remembers the first thing that
+/// stopped it. A node that cannot be read stops the whole document: half a
+/// tree is a different tree, and the caller asked for this one.
+final class _Reader {
+  _Reader({required this.ourSide, required this.horizonPlies});
+
+  final Side ourSide;
+
+  /// Where the search stopped playing and let the engine value the position.
+  /// A childless node flagged `explored` is a horizon leaf wherever it is;
+  /// one without the flag — every file written before horizon leaves carried
+  /// it — is one only this deep, and an unexpanded node above it.
+  final int horizonPlies;
+
+  /// The first thing that stopped the read, and what the caller is told.
+  TreeReadResult? refusal;
+
+  /// The node [json] describes, or null when the document cannot be read.
+  ///
+  /// A node may carry no evaluation at all. The old builder attaches a
+  /// position's whole set of replies before any of them is evaluated, so
+  /// every tree a pause, a cancellation or a node budget left behind ends in
+  /// nodes that were reached but never scored. That is unfinished work rather
+  /// than a broken file: such a node is read as the frontier it is, at the
+  /// neutral score the old app's own backup gives it, with the whole [0, 1]
+  /// interval still open below it.
+  SearchNode? read(Map<String, Object?> json, int depth) {
+    if (depth > _plyLimit) {
+      _fail(
+        'the tree goes deeper than $_plyLimit plies, which no search '
+        'reaches; the file nests further than it can mean',
+      );
+      return null;
+    }
+    final text = json['fen'];
+    if (text is! String || text.isEmpty) {
+      // The C builder can be told to leave positions out to save space. That
+      // is a smaller file, not a broken one, but every rule here works from
+      // the position: which side is to move, whether the game ended and why.
+      _refuse(
+        const TreeUnsupported(
+          'this tree was saved without positions, and the positions are what '
+          'it has to be read from; build it again to open it here',
+        ),
+      );
+      return null;
+    }
+    final fen = Fen(text);
+    final position = _positionOf(fen);
+    if (position == null) {
+      _fail('a node at depth $depth has "$text" for a position');
+      return null;
+    }
+    // Whose turn it is comes from the position itself. The file's
+    // `is_white_to_move` restates it, and a writer derives it from the FEN.
+    final ourTurn = fen.whiteToMove == (ourSide == Side.white);
+    final cp = json['engine_eval_cp'];
+    // JSON can spell a number no double holds, and `1e999` reads as
+    // infinity: a score, not a missing one, and not one to believe.
+    if (cp is num && !cp.isFinite) {
+      _fail(
+        'the node at ${fen.value} is scored $cp, which is not a number of '
+        'centipawns',
+      );
+      return null;
+    }
+    // The file reports from the side to move; the search works from ours. A
+    // node with no score at all keeps none, so it goes back out unscored.
+    final evalForUs = cp is num
+        ? Eval(ourTurn ? cp.toInt() : -cp.toInt())
+        : null;
+    final children = json['children'];
+    final terminal = json['terminal_value'];
+    if (terminal is num) {
+      return _terminal(
+        terminal.toDouble(),
+        fen,
+        position,
+        evalForUs,
+        ourTurn: ourTurn,
+        expanded: children is List && children.isNotEmpty,
+      );
+    }
+    if (children is! List || children.isEmpty) {
+      return _leaf(
+        fen,
+        evalForUs,
+        depth: depth,
+        explored: json['explored'] == true,
+      );
+    }
+    final edges = _edges(children, depth);
+    if (edges == null) return null;
+    return _branch(fen, evalForUs, edges, ourTurn: ourTurn);
+  }
+
+  /// A childless node. One the file says was [explored] is settled where it
+  /// stands, scored or not: a mainline book ends a line wherever ChessDB
+  /// knows no more, sometimes after a reply it never scored. Otherwise only
+  /// an evaluated one at the horizon is settled: an unevaluated node is where
+  /// the build stopped, whatever depth it stopped at, so its value stays
+  /// provisional and it stays unscored, which is how it is written out again.
+  SearchNode _leaf(
+    Fen fen,
+    Eval? evalForUs, {
+    required int depth,
+    required bool explored,
+  }) => explored || (evalForUs != null && depth >= horizonPlies)
+      ? HorizonNode(fen: fen, evalForUs: evalForUs)
+      : FrontierNode(fen: fen, evalForUs: evalForUs);
+
+  /// A node the file says the game ended at.
+  ///
+  /// A finished game is worth a win, a draw or a loss and nothing between,
+  /// and a checkmate is always a loss for whoever is to move in it. A value
+  /// that says otherwise is not a tree this reader can value, and it is worth
+  /// more to the user as a named position than as a number nobody checked.
+  ///
+  /// A node that both ends the game and has moves after it states two
+  /// incompatible things, and no node here can hold both: a finished game
+  /// offers no moves, so the subtree would have to go, and the value the
+  /// file recorded would have to go with it if the moves stayed. The reader
+  /// names the node instead of choosing one of them for the user.
+  SearchNode? _terminal(
+    double value,
+    Fen fen,
+    Position position,
+    Eval? evalForUs, {
+    required bool ourTurn,
+    required bool expanded,
+  }) {
+    if (expanded) {
+      _fail(
+        'the node at ${fen.value} both ends the game and has moves after it',
+      );
+      return null;
+    }
+    if (value != 0 && value != 0.5 && value != 1) {
+      _fail(
+        'the node at ${fen.value} ends the game worth $value, which is '
+        'neither a win, a draw nor a loss',
+      );
+      return null;
+    }
+    final kind = _terminalReason(value, fen, position);
+    if (kind == TerminalKind.checkmate && (value == 0) != ourTurn) {
+      _fail(
+        'the node at ${fen.value} is a checkmate worth $value, which is '
+        'not what the side to move there gets',
+      );
+      return null;
+    }
+    return TerminalNode(
+      fen: fen,
+      evalForUs: evalForUs,
+      kind: kind,
+      ourTurn: ourTurn,
+    );
+  }
+
+  SearchNode? _branch(
+    Fen fen,
+    Eval? evalForUs,
+    List<_Edge> edges, {
+    required bool ourTurn,
+  }) {
+    if (ourTurn) {
+      return OurNode.over(
+        fen: fen,
+        evalForUs: evalForUs,
+        candidates: [
+          for (final edge in edges)
+            CandidateMove(move: edge.move, child: edge.child),
+        ],
+      );
+    }
+    final shares = _sharesOf(edges, fen);
+    if (shares == null) return null;
+    return OpponentNode.over(
+      fen: fen,
+      evalForUs: evalForUs,
+      replies: [
+        for (final edge in edges)
+          ReplyMove(
+            move: edge.move,
+            probability: shares[edge.move.uci]!,
+            child: edge.child,
+          ),
+      ],
+    );
+  }
+
+  /// What each reply in [edges] is worth as a share of this node, or null
+  /// when they cannot be made into shares at all.
+  ///
+  /// `move_probability` is what the opponent model gave the reply when it was
+  /// written, and a file's numbers need not add up to a whole move: a writer
+  /// rounds them, a mode that keeps only part of the policy never had the
+  /// rest, and a reply that was dropped takes its share with it. An opponent
+  /// node is an average over its replies, so the shares are normalised over
+  /// the replies the node actually has — by [Policy.sharesOver], the same
+  /// normalising the search does when it first asks the model, so a tree read
+  /// here and a tree built here weigh a position the one way. Shares that
+  /// already make a whole move, to the tolerance the search itself holds
+  /// them to, come back untouched: dividing them by a sum that is one only
+  /// to within rounding would change their last digits, and a tree read and
+  /// saved again would not be the file it was.
+  Map<String, double>? _sharesOf(List<_Edge> edges, Fen fen) {
+    final stored = <String, double>{};
+    for (final edge in edges) {
+      if (stored.containsKey(edge.move.uci)) {
+        _fail('the node at ${fen.value} plays ${edge.move.san} twice');
+        return null;
+      }
+      stored[edge.move.uci] = edge.probability;
+    }
+    final mass = stored.values.fold(0.0, (sum, share) => sum + share);
+    if (stored.values.every((share) => share.isFinite && share > 0) &&
+        (mass - 1).abs() < 1e-9) {
+      return stored;
+    }
+    final shares = Policy(stored).sharesOver(stored.keys);
+    if (shares == null) {
+      _fail('the replies of the node at ${fen.value} share no weight at all');
+      return null;
+    }
+    if (shares.length != stored.length) {
+      _fail(
+        'a reply of the node at ${fen.value} was saved with no weight, '
+        'and a node cannot be averaged over a move nobody plays',
+      );
+      return null;
+    }
+    return shares;
+  }
+
+  List<_Edge>? _edges(List<Object?> children, int depth) {
+    final edges = <_Edge>[];
+    for (final entry in children) {
+      if (entry is! Map<String, Object?>) {
+        _fail('a child of the node at depth $depth is not an object');
+        return null;
+      }
+      final uci = entry['move_uci'];
+      final san = entry['move_san'];
+      if (uci is! String || san is! String) {
+        _fail('a child at depth ${depth + 1} does not name its move');
+        return null;
+      }
+      final child = read(entry, depth + 1);
+      if (child == null) return null;
+      final share = entry['move_probability'];
+      edges.add(
+        _Edge(
+          move: MoveRef(uci: uci, san: san),
+          // Every reader of this format has read a missing share as certainty
+          // since version one.
+          probability: share is num ? share.toDouble() : 1,
+          child: child,
+        ),
+      );
+    }
+    return edges;
+  }
+
+  /// The format records what a finished game was worth but not why it
+  /// finished. Three of the four draws are visible in the position itself; a
+  /// repetition is the one that is not, so a drawn position showing no other
+  /// reason is one.
+  TerminalKind _terminalReason(double value, Fen fen, Position position) {
+    if (value != 0.5) return TerminalKind.checkmate;
+    final kind = terminalKind(position, [repetitionKey(fen)]);
+    return kind == null || kind == TerminalKind.checkmate
+        ? TerminalKind.repetition
+        : kind;
+  }
+
+  void _fail(String detail) => _refuse(TreeMalformed(detail));
+
+  void _refuse(TreeReadResult result) => refusal ??= result;
+}
+
+final class _Edge {
+  const _Edge({
+    required this.move,
+    required this.probability,
+    required this.child,
+  });
+
+  final MoveRef move;
+  final double probability;
+  final SearchNode child;
+}
+
+/// The board [fen] describes, or null when it does not describe one. A file
+/// written by a builder holds real positions; a hand-made or truncated one
+/// need not, and that is a fact about the file rather than a crash.
+Position? _positionOf(Fen fen) {
+  try {
+    return Chess.fromSetup(Setup.parseFen(fen.value));
+  } catch (_) {
+    // Any complaint from the parser means the same thing: not a position.
+    return null;
+  }
+}
+
+// What a saved tree's configuration snapshot says: whether this search can
+// read the document at all, and the settings it was built with.
+//
+// The snapshot is a flat map of some seventy keys, most of them belonging to
+// modes this search does not have. Reading it is its own job, and a separate
+// one from rebuilding the tree: it decides, before a single node is read,
+// whether the file in hand is a tree this search could have built.
+
+/// Why this search cannot read the tree, or null when it can.
+String? unsupportedTreeReason(
+  Object? version,
+  Map<String, Object?> config,
+  Map<String, Object?> tree,
+) {
+  if (version is! num ||
+      !version.isFinite ||
+      version.toInt() != treeWireVersion) {
+    return 'this tree was saved in format version ${version ?? 'unknown'}, '
+        'and only version $treeWireVersion can be read';
+  }
+  // The flag on the root is what tells the two searches apart, and it is what
+  // the old app itself checks before resuming a build; the version number
+  // beside it is a label that some writers leave off.
+  final algorithm = config['algorithm_version'];
+  if (tree['history_aware'] != true ||
+      (algorithm != null &&
+          algorithm != pureAlgorithmVersion &&
+          algorithm != shortlistedAlgorithmVersion)) {
+    return 'this tree was built by the older heuristic search, which valued '
+        'positions differently and shared values between paths; build it '
+        'again to open it here';
+  }
+  final search = config['search_algorithm'];
+  if (search != null && search != 'pure') {
+    return 'this tree was built by the $search search, which this reader '
+        'does not have';
+  }
+  // Bounded builds keep a node's moves rather than all of them: our moves
+  // are not the ones the loss window admits, and the opponent's shares stop
+  // short of one on purpose. Both look exactly like a complete expansion in
+  // the file, so a tree read as one would be quietly wrong everywhere.
+  if (config['bounded_database'] == true) {
+    return 'this tree was built by the bounded database mode, which keeps '
+        'only some of each position\'s moves; build it again to open it here';
+  }
+  // Which side the repertoire is for decides the sign of every evaluation in
+  // the file, and the horizon decides which leaves are finished. Guessing
+  // either would turn a wrong file into a plausible tree: one read for the
+  // wrong colour prefers the moves it should reject, and one read at the
+  // wrong horizon reports an unfinished build as settled.
+  if (config['play_as_white'] is! bool) {
+    return 'this tree does not say which side it was built for';
+  }
+  final depth = config['max_depth'];
+  if (depth is! num || !depth.isFinite) {
+    return 'this tree does not say how deep it was built';
+  }
+  return null;
+}
+
+/// The search the document says it was built by. The side and the horizon are
+/// already known to be there; the rest default, because the C builder and the
+/// old app each leave out what their mode does not use.
+SearchConfig configFromSnapshot(Map<String, Object?> config) {
+  final side = config['play_as_white'] == true ? Side.white : Side.black;
+  final defaults = SearchConfig(side: side);
+  final budget = config['max_nodes'];
+  return SearchConfig(
+    side: side,
+    horizonPlies: _limit(
+      _intOr(config['max_depth'], defaults.horizonPlies),
+      unboundedDepthWire,
+    ),
+    lossLimitCp: _limit(
+      _intOr(config['max_eval_loss_cp'], defaults.lossLimitCp),
+      unboundedLossWire,
+    ),
+    maxOurMoves: _intOr(config['v2_max_our_moves'], null),
+    rootMoves: _intOr(config['v2_root_moves'], null),
+    replyFloor: _replyFloor(config['v2_reply_floor']),
+    nodeBudget: budget is num && budget.isFinite && budget > 0
+        ? budget.toInt()
+        : null,
+  );
+}
+
+/// [value] as a whole number, or [fallback] when it is not a number or is
+/// one no int holds.
+int? _intOr(Object? value, int? fallback) =>
+    value is num && value.isFinite ? value.toInt() : fallback;
+
+/// [value] as a share of the games that start at the root, or 0 — expand
+/// everything — when it is not one.
+double _replyFloor(Object? value) =>
+    value is num && value.isFinite && value >= 0 && value <= 1
+    ? value.toDouble()
+    : 0;
+
+/// [value], or null — no limit — when it is the number a search with none
+/// writes.
+int? _limit(int? value, int unbounded) =>
+    value != null && value >= unbounded ? null : value;
+
+/// The saved tree [text] as the seed of a search that goes on from it, read
+/// on another isolate; or why it cannot be one — a sentence for the screen.
+///
+/// A seed must have been built with the same [evaluationSource],
+/// [opponentRating] and [evalDepth], for [side], with no loss window and
+/// no pins: a tree built otherwise holds values this search would not have
+/// given, and mixing the two would change what the tree means. A finished
+/// exhaustive tree (an MCP chapter search) seeds a run; a shortlisted one
+/// must have shortlisted as this one does, [candidateMoves] of ours and
+/// replies down to [replyFloor].
+Future<Object> readSearchSeed(
+  String text, {
+  required int opponentRating,
+  required Side side,
+  required String evaluationSource,
+  required int evalDepth,
+  int candidateMoves = 4,
+  double replyFloor = 0.01,
+}) => Isolate.run(() {
+  Object? json;
+  try {
+    json = jsonDecode(text);
+  } on FormatException {
+    // decodeTreeV4 below says what is wrong with it.
+  }
+  if (json is Map<String, Object?>) {
+    if ((json['v2_evaluation_source'] ?? 'stockfish') != evaluationSource) {
+      return 'Choose the evaluation source used by this saved search.';
+    }
+    final config = json['config'];
+    if (config is! Map ||
+        config['maia_elo'] != opponentRating ||
+        config['eval_depth'] != evalDepth) {
+      return 'Use the original opponent rating and evaluation settings to resume.';
+    }
+  }
+  return switch (decodeTreeV4(text)) {
+    TreeDecoded(:final root, :final config)
+        when config.side == side &&
+            config.lossLimitCp == null &&
+            ((config.replyFloor == 0 && config.maxOurMoves == null) ||
+                (config.rootMoves != null &&
+                    config.replyFloor == replyFloor &&
+                    config.maxOurMoves == candidateMoves)) &&
+            config.pins.isEmpty =>
+      root,
+    TreeDecoded() => 'The saved search uses different search settings or side.',
+    TreeUnsupported(:final reason) => reason,
+    TreeMalformed(:final detail) => detail,
+  };
+});

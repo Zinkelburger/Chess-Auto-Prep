@@ -3,6 +3,9 @@
 Flutter desktop app for Linux, Windows and macOS: chess preparation,
 repertoires, training, player analysis and studies.
 
+V2 is the only app: `lib/main.dart`, production under `lib/`, tests under
+`test/`. V1 and backward-compatibility parity are retired (owner, 2026-09-30).
+
 ## Local-first workflow
 
 - The user's working checkout on local `main` is where completed changes belong.
@@ -11,6 +14,8 @@ repertoires, training, player analysis and studies.
 - Edit/test in an isolated task worktree, then automatically integrate into
   local `main` with `python3 scripts/agent_integrate.py` from the task worktree.
   A pushed task branch alone is not completion: report when it is visible on main.
+  Integration then deletes the task worktree and branch (local and origin);
+  pass `--keep` only when more work in that worktree is planned.
 - `origin/backup/local-main` is the automatic development backup.
   `origin/main` is the published version: update it only when the user asks to
   publish/release. Never use a plain `git push` from local main.
@@ -45,7 +50,9 @@ repertoires, training, player analysis and studies.
 - For visible changes, use the `run-chess-auto-prep` skill and inspect a
   screenshot from the headless app. Stop your preview before testing its tree.
 - GitHub CI runs only through the `v*` release-tag workflow; branch pushes,
-  backup pushes and PRs do not trigger it. Releases require passing tests,
+  backup pushes and PRs do not trigger it. The one exception is pushing the
+  `windows-check` branch on purpose: it builds and tries the Windows setup on
+  Server 2022 and 2025 and publishes nothing. Releases require passing tests,
   offline-tool, integration and engine gates. Use focused local checks during
   development; a full local suite before each commit is not required.
 - Before stopping, waiting for later or reporting completion, commit all

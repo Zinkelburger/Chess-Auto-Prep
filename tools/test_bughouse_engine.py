@@ -56,11 +56,12 @@ NETWORK = "hivemind.onnx"
 # guarantees it.
 BESIDE_THE_ENGINE = {"hivemind_ort.dll", "libonnxruntime.so.1", "libonnxruntime.dylib"}
 
-# Deployed beside the engine by BughouseBundle.installWindowsRuntime, copied
-# from the app's own directory where windows/CMakeLists.txt puts them. Named
-# here so the audit can say "covered, but only because the app copies it" --
-# the day that copy is dropped, this list is what the audit is measured
-# against and the Dart test in test/features/bughouse/ is what fails.
+# Deployed beside the engine by HivemindInstall (lib/engines/
+# hivemind_install.dart), copied from the app's own directory where
+# windows/CMakeLists.txt puts them. Named here so the audit can say "covered,
+# but only because the app copies it" -- the day that copy is dropped, this
+# list is what the audit is measured against and the Dart test in
+# test/engines/hivemind_install_test.dart is what fails.
 WINDOWS_APP_DEPLOYED_PREFIXES = ("msvcp140", "vcruntime140", "concrt140")
 
 # Present on a clean Windows 10/11. The Universal CRT (api-ms-win-crt-*) is
@@ -74,15 +75,6 @@ WINDOWS_SYSTEM_DLLS = {
     "psapi.dll", "rpcrt4.dll", "setupapi.dll", "shell32.dll", "shlwapi.dll",
     "user32.dll", "userenv.dll", "version.dll", "winmm.dll", "ws2_32.dll",
     "wldap32.dll",
-}
-
-# The KnownDLLs list Windows maps from System32 before it searches anywhere,
-# so no directory earlier in the search order can shadow one of these. Every
-# other system DLL can be, which is what makes it worth diagnosing.
-WINDOWS_KNOWN_DLLS = {
-    "advapi32.dll", "combase.dll", "crypt32.dll", "gdi32.dll", "kernel32.dll",
-    "kernelbase.dll", "ntdll.dll", "ole32.dll", "oleaut32.dll", "psapi.dll",
-    "rpcrt4.dll", "shell32.dll", "shlwapi.dll", "user32.dll", "ws2_32.dll",
 }
 
 # Present on any glibc Linux desktop the app supports.
@@ -183,29 +175,8 @@ def version_tuple(tag: str) -> tuple[int, ...]:
 
 # --------------------------------------------------------------------- deps
 
-BUNDLE_DART = REPO_ROOT / "lib/features/bughouse/services/bughouse_bundle.dart"
-LOADER_DART = REPO_ROOT / "lib/features/bughouse/services/windows_loader_check.dart"
+INSTALL_DART = REPO_ROOT / "lib/engines/hivemind_install.dart"
 CMAKE_WINDOWS = REPO_ROOT / "windows/CMakeLists.txt"
-
-
-def require_diagnosable(dll: str) -> None:
-    """Check the app can still say which file went wrong when this one does.
-
-    `WindowsLoaderCheck` walks the loader's search order and reads each
-    candidate's PE header, which is how a user finds out that the 32-bit
-    MSVCP140.dll some other toolchain left on their PATH is what stopped the
-    engine. It can only report a library it knows to look for, so a new
-    external import that nobody adds to that list is a new failure that reports
-    itself as silence.
-    """
-    listed = LOADER_DART.read_text().lower()
-    if f"'{dll.lower()}'" not in listed:
-        fail(
-            f"{dll} is resolved by search, so it can be shadowed, but "
-            f"{LOADER_DART.relative_to(REPO_ROOT)} does not list it in "
-            "engineDependencies — a machine where it goes wrong would get no "
-            "diagnosis at all."
-        )
 
 
 def require_app_deploys(dll: str) -> None:
@@ -213,19 +184,19 @@ def require_app_deploys(dll: str) -> None:
 
     Two halves have to hold, in two languages, and neither compiler can see the
     other: windows/CMakeLists.txt deploys the Visual C++ runtime beside
-    chess_auto_prep.exe, and BughouseBundle copies it on from there into the
+    chess_auto_prep.exe, and HivemindInstall copies it on from there into the
     engine's own directory, because a child process resolves its imports
     against its own directory and not its parent's. Drop either half and the
     engine dies before `main` on any machine without the redistributable --
     silently, with no stderr, which is exactly the bug this file exists for.
     """
     prefix = next(p for p in WINDOWS_APP_DEPLOYED_PREFIXES if dll.startswith(p))
-    dart = (BUNDLE_DART.parent / 'bughouse_windows_runtime.dart').read_text().lower()
+    dart = INSTALL_DART.read_text().lower()
     if f"'{prefix}" not in dart and f'"{prefix}' not in dart:
         fail(
             f"{dll} has to be copied beside the engine, but "
-            f"{BUNDLE_DART.relative_to(REPO_ROOT)} does not mention '{prefix}'. "
-            "See BughouseWindowsRuntime.ensureInstalled."
+            f"{INSTALL_DART.relative_to(REPO_ROOT)} does not mention '{prefix}'. "
+            "See _isRuntimeDll there."
         )
     if "InstallRequiredSystemLibraries" not in CMAKE_WINDOWS.read_text() or "package_bughouse_runtime.py" not in CMAKE_WINDOWS.read_text():
         fail(
@@ -261,19 +232,10 @@ def audit_target(name: str, workdir: Path) -> list[str]:
                 low = dll.lower()
                 if low.startswith("api-ms-win-"):
                     continue
-                if low in WINDOWS_SYSTEM_DLLS:
-                    # KnownDLLs can only ever come from System32; the rest of
-                    # System32 can be shadowed by an earlier directory, so the
-                    # app has to be able to name them.
-                    if low not in WINDOWS_KNOWN_DLLS:
-                        require_diagnosable(dll)
-                    continue
-                if low in deployed:
-                    require_diagnosable(dll)
+                if low in WINDOWS_SYSTEM_DLLS or low in deployed:
                     continue
                 if low.startswith(WINDOWS_APP_DEPLOYED_PREFIXES):
                     require_app_deploys(low)
-                    require_diagnosable(dll)
                     notes.append(
                         f"{path.name} needs {dll} — not part of Windows, "
                         "covered only because the app copies it beside the engine"
@@ -356,7 +318,7 @@ def cmd_deps(args) -> int:
 # ---------------------------------------------------------------------- run
 
 def install_like_the_app(target: Path) -> tuple[Path, Path]:
-    """Extract the host engine, runtime and network the way BughouseBundle does.
+    """Extract the host engine, runtime and network the way HivemindInstall does.
 
     Same three files, same names, same size check against manifest.json, so a
     manifest that does not describe what actually ships fails here rather than

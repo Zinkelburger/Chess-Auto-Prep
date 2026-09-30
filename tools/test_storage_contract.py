@@ -23,13 +23,15 @@ class StorageIdentityTest(unittest.TestCase):
             self.assertNotIn(location, installer.lower())
 
     def test_legacy_document_layout_remains_addressable(self):
-        paths = (ROOT / 'lib/services/storage/app_paths.dart').read_text()
+        # The folders every app version has kept under Documents, named where
+        # the app wires its stores, under the directories path_provider gives.
+        wiring = (ROOT / 'lib/app/environment.dart').read_text()
         for name in ['repertoires', 'analysis_games', 'pgn_collections', 'games_library',
                      'tactics_sets', 'studies', 'engine_tournaments', 'opponents']:
-            self.assertIn(f"= '{name}';", paths)
-        self.assertIn('return getApplicationDocumentsDirectory();', paths)
-        self.assertIn('return getApplicationSupportDirectory();', paths)
-
+            self.assertIn(f"documents.path, '{name}'", wiring)
+        entry = (ROOT / 'lib/main.dart').read_text()
+        self.assertIn('await getApplicationDocumentsDirectory()', entry)
+        self.assertIn('await getApplicationSupportDirectory()', entry)
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,0 +1,659 @@
+{
+ "collection": "lichess-official",
+ "months": {
+  "2020-01": {
+   "read": 952,
+   "kept": 949,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 1,
+   "duplicate": 2
+  },
+  "2020-02": {
+   "read": 1236,
+   "kept": 1188,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 48,
+   "duplicate": 0
+  },
+  "2020-03": {
+   "read": 196,
+   "kept": 193,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 3,
+   "duplicate": 0
+  },
+  "2020-04": {
+   "read": 79,
+   "kept": 79,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 0,
+   "duplicate": 0
+  },
+  "2020-05": {
+   "read": 554,
+   "kept": 486,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 28,
+   "duplicate": 40
+  },
+  "2020-06": {
+   "read": 382,
+   "kept": 314,
+   "variant": 18,
+   "engine": 0,
+   "no_moves": 50,
+   "duplicate": 0
+  },
+  "2020-07": {
+   "read": 468,
+   "kept": 409,
+   "variant": 51,
+   "engine": 0,
+   "no_moves": 7,
+   "duplicate": 1
+  },
+  "2020-08": {
+   "read": 319,
+   "kept": 203,
+   "variant": 116,
+   "engine": 0,
+   "no_moves": 0,
+   "duplicate": 0
+  },
+  "2020-09": {
+   "read": 543,
+   "kept": 490,
+   "variant": 45,
+   "engine": 0,
+   "no_moves": 6,
+   "duplicate": 2
+  },
+  "2020-10": {
+   "read": 730,
+   "kept": 721,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 6,
+   "duplicate": 3
+  },
+  "2020-11": {
+   "read": 488,
+   "kept": 297,
+   "variant": 178,
+   "engine": 0,
+   "no_moves": 8,
+   "duplicate": 5
+  },
+  "2020-12": {
+   "read": 1789,
+   "kept": 1507,
+   "variant": 169,
+   "engine": 0,
+   "no_moves": 20,
+   "duplicate": 93
+  },
+  "2021-01": {
+   "read": 908,
+   "kept": 755,
+   "variant": 24,
+   "engine": 0,
+   "no_moves": 85,
+   "duplicate": 44
+  },
+  "2021-02": {
+   "read": 492,
+   "kept": 299,
+   "variant": 192,
+   "engine": 0,
+   "no_moves": 0,
+   "duplicate": 1
+  },
+  "2021-03": {
+   "read": 875,
+   "kept": 666,
+   "variant": 200,
+   "engine": 0,
+   "no_moves": 0,
+   "duplicate": 9
+  },
+  "2021-04": {
+   "read": 926,
+   "kept": 456,
+   "variant": 125,
+   "engine": 0,
+   "no_moves": 315,
+   "duplicate": 30
+  },
+  "2021-05": {
+   "read": 4752,
+   "kept": 3898,
+   "variant": 352,
+   "engine": 0,
+   "no_moves": 371,
+   "duplicate": 131
+  },
+  "2021-06": {
+   "read": 6629,
+   "kept": 4918,
+   "variant": 346,
+   "engine": 0,
+   "no_moves": 1337,
+   "duplicate": 28
+  },
+  "2021-07": {
+   "read": 12899,
+   "kept": 7898,
+   "variant": 104,
+   "engine": 0,
+   "no_moves": 4863,
+   "duplicate": 34
+  },
+  "2021-08": {
+   "read": 21478,
+   "kept": 13098,
+   "variant": 287,
+   "engine": 0,
+   "no_moves": 1681,
+   "duplicate": 6412
+  },
+  "2021-09": {
+   "read": 9896,
+   "kept": 1921,
+   "variant": 326,
+   "engine": 0,
+   "no_moves": 623,
+   "duplicate": 7026
+  },
+  "2021-10": {
+   "read": 10930,
+   "kept": 4288,
+   "variant": 139,
+   "engine": 0,
+   "no_moves": 1505,
+   "duplicate": 4998
+  },
+  "2021-11": {
+   "read": 12226,
+   "kept": 6885,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 1141,
+   "duplicate": 4200
+  },
+  "2021-12": {
+   "read": 10334,
+   "kept": 1892,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 1193,
+   "duplicate": 7249
+  },
+  "2022-01": {
+   "read": 2889,
+   "kept": 643,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 51,
+   "duplicate": 2195
+  },
+  "2022-02": {
+   "read": 3698,
+   "kept": 712,
+   "variant": 152,
+   "engine": 0,
+   "no_moves": 59,
+   "duplicate": 2775
+  },
+  "2022-03": {
+   "read": 4709,
+   "kept": 958,
+   "variant": 186,
+   "engine": 0,
+   "no_moves": 498,
+   "duplicate": 3067
+  },
+  "2022-04": {
+   "read": 7149,
+   "kept": 1795,
+   "variant": 211,
+   "engine": 0,
+   "no_moves": 738,
+   "duplicate": 4405
+  },
+  "2022-05": {
+   "read": 5695,
+   "kept": 1859,
+   "variant": 154,
+   "engine": 0,
+   "no_moves": 77,
+   "duplicate": 3605
+  },
+  "2022-06": {
+   "read": 7588,
+   "kept": 2930,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 977,
+   "duplicate": 3681
+  },
+  "2022-07": {
+   "read": 15810,
+   "kept": 3399,
+   "variant": 150,
+   "engine": 0,
+   "no_moves": 1758,
+   "duplicate": 10503
+  },
+  "2022-08": {
+   "read": 19030,
+   "kept": 4337,
+   "variant": 71,
+   "engine": 0,
+   "no_moves": 1347,
+   "duplicate": 13275
+  },
+  "2022-09": {
+   "read": 7522,
+   "kept": 1642,
+   "variant": 1072,
+   "engine": 0,
+   "no_moves": 269,
+   "duplicate": 4539
+  },
+  "2022-10": {
+   "read": 9138,
+   "kept": 2322,
+   "variant": 308,
+   "engine": 0,
+   "no_moves": 1166,
+   "duplicate": 5342
+  },
+  "2022-11": {
+   "read": 4664,
+   "kept": 898,
+   "variant": 83,
+   "engine": 0,
+   "no_moves": 783,
+   "duplicate": 2900
+  },
+  "2022-12": {
+   "read": 15158,
+   "kept": 2478,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 730,
+   "duplicate": 11950
+  },
+  "2023-01": {
+   "read": 6673,
+   "kept": 1264,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 1800,
+   "duplicate": 3609
+  },
+  "2023-02": {
+   "read": 7132,
+   "kept": 1372,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 936,
+   "duplicate": 4824
+  },
+  "2023-03": {
+   "read": 6849,
+   "kept": 1991,
+   "variant": 1,
+   "engine": 0,
+   "no_moves": 250,
+   "duplicate": 4607
+  },
+  "2023-04": {
+   "read": 10889,
+   "kept": 3380,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 1744,
+   "duplicate": 5765
+  },
+  "2023-05": {
+   "read": 8655,
+   "kept": 2642,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 1185,
+   "duplicate": 4828
+  },
+  "2023-06": {
+   "read": 18415,
+   "kept": 7970,
+   "variant": 8,
+   "engine": 0,
+   "no_moves": 2139,
+   "duplicate": 8298
+  },
+  "2023-07": {
+   "read": 25568,
+   "kept": 10953,
+   "variant": 4,
+   "engine": 0,
+   "no_moves": 3246,
+   "duplicate": 11365
+  },
+  "2023-08": {
+   "read": 14820,
+   "kept": 3244,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 1652,
+   "duplicate": 9924
+  },
+  "2023-09": {
+   "read": 12132,
+   "kept": 5210,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 844,
+   "duplicate": 6078
+  },
+  "2023-10": {
+   "read": 18013,
+   "kept": 7745,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 2208,
+   "duplicate": 8060
+  },
+  "2023-11": {
+   "read": 12397,
+   "kept": 3516,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 390,
+   "duplicate": 8491
+  },
+  "2023-12": {
+   "read": 17783,
+   "kept": 4463,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 939,
+   "duplicate": 12381
+  },
+  "2024-01": {
+   "read": 14421,
+   "kept": 6878,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 1045,
+   "duplicate": 6498
+  },
+  "2024-02": {
+   "read": 12767,
+   "kept": 5455,
+   "variant": 1231,
+   "engine": 0,
+   "no_moves": 1380,
+   "duplicate": 4701
+  },
+  "2024-03": {
+   "read": 17381,
+   "kept": 8913,
+   "variant": 10,
+   "engine": 0,
+   "no_moves": 787,
+   "duplicate": 7671
+  },
+  "2024-04": {
+   "read": 14523,
+   "kept": 8403,
+   "variant": 56,
+   "engine": 0,
+   "no_moves": 1270,
+   "duplicate": 4794
+  },
+  "2024-05": {
+   "read": 22611,
+   "kept": 12506,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 1216,
+   "duplicate": 8889
+  },
+  "2024-06": {
+   "read": 23580,
+   "kept": 11882,
+   "variant": 2,
+   "engine": 0,
+   "no_moves": 1875,
+   "duplicate": 9821
+  },
+  "2024-07": {
+   "read": 32778,
+   "kept": 16811,
+   "variant": 261,
+   "engine": 0,
+   "no_moves": 1678,
+   "duplicate": 14028
+  },
+  "2024-08": {
+   "read": 33225,
+   "kept": 15657,
+   "variant": 0,
+   "engine": 0,
+   "no_moves": 387,
+   "duplicate": 17181
+  },
+  "2024-09": {
+   "read": 21737,
+   "kept": 7718,
+   "variant": 8,
+   "engine": 484,
+   "no_moves": 1476,
+   "duplicate": 12051
+  },
+  "2024-10": {
+   "read": 19322,
+   "kept": 8480,
+   "variant": 2,
+   "engine": 508,
+   "no_moves": 601,
+   "duplicate": 9731
+  },
+  "2024-11": {
+   "read": 19447,
+   "kept": 9212,
+   "variant": 5,
+   "engine": 580,
+   "no_moves": 461,
+   "duplicate": 9189
+  },
+  "2024-12": {
+   "read": 30573,
+   "kept": 14640,
+   "variant": 609,
+   "engine": 360,
+   "no_moves": 1534,
+   "duplicate": 13430
+  },
+  "2025-01": {
+   "read": 22851,
+   "kept": 11184,
+   "variant": 9,
+   "engine": 0,
+   "no_moves": 5233,
+   "duplicate": 6425
+  },
+  "2025-02": {
+   "read": 18834,
+   "kept": 9354,
+   "variant": 629,
+   "engine": 0,
+   "no_moves": 2238,
+   "duplicate": 6613
+  },
+  "2025-03": {
+   "read": 16525,
+   "kept": 8026,
+   "variant": 238,
+   "engine": 0,
+   "no_moves": 1079,
+   "duplicate": 7182
+  },
+  "2025-04": {
+   "read": 26464,
+   "kept": 14063,
+   "variant": 791,
+   "engine": 251,
+   "no_moves": 1216,
+   "duplicate": 10143
+  },
+  "2025-05": {
+   "read": 23738,
+   "kept": 10859,
+   "variant": 170,
+   "engine": 643,
+   "no_moves": 979,
+   "duplicate": 11087
+  },
+  "2025-06": {
+   "read": 30185,
+   "kept": 16507,
+   "variant": 1,
+   "engine": 510,
+   "no_moves": 1340,
+   "duplicate": 11827
+  },
+  "2025-07": {
+   "read": 38308,
+   "kept": 20414,
+   "variant": 535,
+   "engine": 602,
+   "no_moves": 1327,
+   "duplicate": 15430
+  },
+  "2025-08": {
+   "read": 45335,
+   "kept": 26366,
+   "variant": 465,
+   "engine": 275,
+   "no_moves": 1003,
+   "duplicate": 17226
+  },
+  "2025-09": {
+   "read": 28536,
+   "kept": 15013,
+   "variant": 212,
+   "engine": 0,
+   "no_moves": 2477,
+   "duplicate": 10834
+  },
+  "2025-10": {
+   "read": 29670,
+   "kept": 14474,
+   "variant": 626,
+   "engine": 0,
+   "no_moves": 1075,
+   "duplicate": 13495
+  },
+  "2025-11": {
+   "read": 25753,
+   "kept": 13428,
+   "variant": 0,
+   "engine": 201,
+   "no_moves": 767,
+   "duplicate": 11357
+  },
+  "2025-12": {
+   "read": 35892,
+   "kept": 18604,
+   "variant": 66,
+   "engine": 674,
+   "no_moves": 1724,
+   "duplicate": 14824
+  },
+  "2026-01": {
+   "read": 25362,
+   "kept": 15709,
+   "variant": 0,
+   "engine": 390,
+   "no_moves": 1377,
+   "duplicate": 7886
+  },
+  "2026-02": {
+   "read": 19752,
+   "kept": 12840,
+   "variant": 136,
+   "engine": 576,
+   "no_moves": 900,
+   "duplicate": 5300
+  },
+  "2026-03": {
+   "read": 27662,
+   "kept": 16551,
+   "variant": 261,
+   "engine": 247,
+   "no_moves": 2188,
+   "duplicate": 8415
+  },
+  "2026-04": {
+   "read": 32165,
+   "kept": 17708,
+   "variant": 730,
+   "engine": 100,
+   "no_moves": 3458,
+   "duplicate": 10169
+  },
+  "2026-05": {
+   "read": 37447,
+   "kept": 24954,
+   "variant": 604,
+   "engine": 0,
+   "no_moves": 2258,
+   "duplicate": 9631
+  },
+  "2026-06": {
+   "read": 36996,
+   "kept": 18592,
+   "variant": 0,
+   "engine": 318,
+   "no_moves": 1473,
+   "duplicate": 16613
+  },
+  "2026-07": {
+   "read": 40038,
+   "kept": 24786,
+   "variant": 571,
+   "engine": 300,
+   "no_moves": 2124,
+   "duplicate": 12257
+  },
+  "2026-08": {
+   "read": 48940,
+   "kept": 28680,
+   "variant": 329,
+   "engine": 0,
+   "no_moves": 1105,
+   "duplicate": 18826
+  }
+ },
+ "totals": {
+  "read": 1235275,
+  "kept": 596200,
+  "variant": 13629,
+  "engine": 7019,
+  "no_moves": 88128,
+  "duplicate": 530299
+ },
+ "built_at": "2026-09-23T16:06:02",
+ "dedupe_against": [
+  "master_games.db",
+  "massachusetts.db",
+  "us-community.db"
+ ]
+}

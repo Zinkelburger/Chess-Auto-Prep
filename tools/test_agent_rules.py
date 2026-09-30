@@ -15,6 +15,7 @@ class AgentRulesTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        subprocess.run(['git', 'init', '-q', str(self.root)], check=True)
         (self.root / 'scripts').mkdir()
         shutil.copy2(ROOT / 'scripts/sync_agent_rules.py', self.root / 'scripts')
         shutil.copy2(ROOT / 'AGENTS.md', self.root)

@@ -1,9 +1,11 @@
 """The opponent list — the one file the app reads from this tooling.
 
-Player Analysis imports it (Player Analysis → Import opponents), downloads
-each opponent's games from every account listed, and shows them as ordinary
-players in the picker. Keep the shape stable: the Dart parser lives in
-`lib/services/opponent_list.dart` and both sides agree on ``FORMAT``.
+The app's Players & prep mode reads it (Paste players → paste the file's
+contents): each row becomes a player record with its accounts, rating and
+the advisory fields kept, ready for Player analysis to download its games.
+Keep the shape stable: the Dart parser is `readPlayerList` in
+`lib/chess/players/player.dart`, which takes the ``opponents`` list, and
+`test/features/players/player_analysis_test.dart` pins this shape.
 
     {
       "format": "chess-auto-prep/opponents@1",

@@ -7,7 +7,7 @@
 # shape: same arguments, same staged layout (/opt/chess-auto-prep plus a
 # /usr/bin symlink), so the shared desktop entry works unchanged and .pgn
 # files open here too. Run it after `flutter build linux --release` and the
-# libcdbdirect dependency-bundling step in release.yml.
+# Flutter release build.
 #
 # No %post scriptlets: Fedora ships file triggers on /usr/share/applications
 # and /usr/share/icons/hicolor that refresh the desktop and icon caches, the
@@ -49,11 +49,8 @@ install -m644 "$ROOT/linux/$APP_ID.png" \
 install -m644 "$ROOT/packaging/flatpak/$APP_ID.metainfo.xml" \
   "$STAGE/usr/share/metainfo/"
 
-# AutoReqProv is off on purpose. The bundle carries its own boost_fiber, TBB,
-# jemalloc and snappy next to libcdbdirect.so (see the $ORIGIN rpath step in
-# release.yml); letting rpm scan them would generate Requires for Debian-built
-# sonames that no Fedora repo provides, and the package would refuse to
-# install. The four lines below are the real, host-supplied dependencies.
+# The Flutter/engine bundle carries private runtime libraries. Avoid deriving
+# Fedora requirements from the build host's sonames; list host dependencies below.
 cat > "$TOP/chess-auto-prep.spec" <<SPEC
 %global debug_package %{nil}
 %global __os_install_post %{nil}

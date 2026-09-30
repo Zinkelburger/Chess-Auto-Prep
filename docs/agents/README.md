@@ -51,8 +51,8 @@ Local integration and delayed publication are defined in [git.md](git.md);
 Do not copy canonical policy into commands or skills. Keep their trigger
 metadata and task steps; link to shared requirements. Add mechanical checks
 when a recurring failure can be detected reliably, rather than adding another
-paragraph for every incident. Skill entrypoints currently exist in both
-`.agents/skills/` and `.claude/skills/`; keep matching skills aligned.
+paragraph for every incident. Edit skills in `.claude/skills/`; the generator
+mirrors them to `.agents/skills/` for Codex, and `--check` rejects drift.
 
 ## Sources
 

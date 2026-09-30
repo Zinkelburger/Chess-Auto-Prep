@@ -1,0 +1,368 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:ui' show AppExitResponse;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../diagnostics/log.dart';
+import '../features/settings/lichess_login_dialog.dart';
+import '../features/databases/twic_download_dialog.dart';
+import '../features/settings/setting_rows.dart';
+import '../features/settings/update_prompt.dart';
+import '../ui/move_notation.dart';
+import '../ui/theme.dart';
+import '../workspace/copy_name_dialog.dart';
+import '../workspace/document_session.dart';
+import '../workspace/session_results.dart';
+import 'app_parts.dart';
+import 'environment.dart';
+import 'exit_guard.dart';
+import 'shell.dart';
+import 'window_close.dart';
+import 'window_input.dart';
+import 'native_file_requests.dart';
+import '../storage/chapter_files.dart';
+import '../storage/diagnostic_report.dart';
+
+/// The app on this machine: [AppParts] over the native environment, the
+/// window's dialogs, and the way out.
+class ChessAutoPrepV2 extends StatefulWidget {
+  const ChessAutoPrepV2({
+    super.key,
+    required this.documents,
+    required this.support,
+    required this.logFolder,
+    required this.closeLog,
+    this.cache,
+  });
+
+  /// The user's Documents directory; repertoires live under it.
+  final Directory documents;
+
+  /// Where downloaded updates wait to be installed; without it the app
+  /// does not update itself.
+  final Directory? cache;
+
+  /// The app's own folder, where the engine is installed and the settings
+  /// are kept.
+  final Directory support;
+
+  /// Where the log file is, for the settings page to open.
+  final Directory logFolder;
+
+  /// Flushes and closes the log file `main` opened. Called on the way
+  /// out, after the engines, so their last words reach the file.
+  final Future<void> Function() closeLog;
+
+  @override
+  State<ChessAutoPrepV2> createState() => _ChessAutoPrepV2State();
+}
+
+class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
+  /// The dialogs are raised over the app, not over this widget, which sits
+  /// above the navigator that shows them.
+  final _navigator = GlobalKey<NavigatorState>();
+
+  late final _parts = AppParts(
+    AppEnvironment.native(
+      documents: widget.documents,
+      support: widget.support,
+      cache: widget.cache,
+    ),
+    question: DraftDialog(_navigator),
+    input: DialogInput(_navigator),
+    copyOnLeave: _copyOnLeave,
+  );
+
+  late final _quit = AppExit(
+    guard: _parts.exit,
+    navigatorKey: _navigator,
+    prepare: _parts.prepareToClose,
+    onCancelled: _parts.resumeAfterClose,
+    stopEngines: _parts.env.stopEngines,
+    closeLog: widget.closeLog,
+  );
+  late final AppLifecycleListener _lifecycle;
+  late final _windowClose = WindowClose(_quit.leave);
+  late final _desktopFiles = NativeFileRequests(
+    open: (path) async {
+      if (!_quit.closing.value) {
+        await _parts.requests.openFile(ChapterRef.at(path));
+      }
+    },
+  );
+
+  /// Writes the words on screen beside the original, under a name the user
+  /// gives, and answers what came of it; null when they gave none. The
+  /// question on the way out points at this because it is the one way out
+  /// that keeps them.
+  ///
+  /// The copy does not take the session over: the user answered this while
+  /// going somewhere else, and the document they are going to is the one
+  /// they asked for.
+  Future<CopyResult?> _copyOnLeave(DocumentSession session) async {
+    final context = _navigator.currentContext;
+    if (context == null) return null;
+    final name = await showCopyNameDialog(
+      context,
+      session.chapter?.name ?? 'Chapter',
+    );
+    if (name == null) return null;
+    return session.copyAside(name);
+  }
+
+  List<SettingGroup> _settingRows() => settingGroups(
+    store: _parts.settings,
+    coresAvailable: Platform.numberOfProcessors,
+    account: _parts.account,
+    openLogFolder: () => unawaited(openFolder(widget.logFolder)),
+    openLicences: _openLicences,
+    version: _version,
+    copyDiagnostics: () => unawaited(_copyDiagnostics()),
+    diagnostics: _diagnostics.value,
+    updates: _parts.updates,
+  );
+
+  /// The installed version, for Settings ▸ App and the licences; null
+  /// until [AppUpdates.start] has read it, and when it cannot be.
+  String? get _version => switch (_parts.updates?.version) {
+    final version? when version.isNotEmpty => version,
+    _ => null,
+  };
+
+  void _openLicences() {
+    final context = _navigator.currentContext;
+    if (context == null) return;
+    showLicensePage(
+      context: context,
+      applicationName: 'Chess Auto Prep',
+      applicationVersion: _version,
+    );
+  }
+
+  final _diagnostics = ValueNotifier(DiagnosticCopyState.idle);
+  late final _settingsAlso = Listenable.merge([
+    _parts.account,
+    _diagnostics,
+    ?_parts.updates,
+  ]);
+
+  Future<void> _copyDiagnostics() async {
+    if (_diagnostics.value == DiagnosticCopyState.copying) return;
+    _diagnostics.value = DiagnosticCopyState.copying;
+    try {
+      final report = await DiagnosticReport(widget.logFolder).read();
+      if (!mounted) return;
+      await Clipboard.setData(ClipboardData(text: report));
+      if (mounted) _diagnostics.value = DiagnosticCopyState.copied;
+    } catch (error) {
+      log.w('Copy diagnostics', error);
+      if (mounted) _diagnostics.value = DiagnosticCopyState.failed;
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(
+      onExitRequested: _quit.leave,
+      onInactive: _parts.windowLeft,
+      onHide: _parts.windowLeft,
+    );
+    unawaited(_windowClose.attach());
+    unawaited(_start());
+  }
+
+  bool _ready = false;
+
+  /// Settings never hold the window back: a file that cannot be read is
+  /// moved aside and the defaults are used, so starting always ends here.
+  Future<void> _start() async {
+    await _parts.start();
+    if (!mounted) return;
+    setState(() => _ready = true);
+    await _desktopFiles.start();
+  }
+
+  @override
+  void dispose() {
+    _desktopFiles.dispose();
+    _windowClose.detach();
+    _lifecycle.dispose();
+    _quit.closing.dispose();
+    _diagnostics.dispose();
+    _parts.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Chess Auto Prep',
+      navigatorKey: _navigator,
+      theme: darkTheme(),
+      debugShowCheckedModeBanner: false,
+      // Above the navigator, so dialogs write moves the chosen way too.
+      builder: (context, child) => ListenableBuilder(
+        listenable: _parts.settings,
+        builder: (context, _) => MoveNotation(
+          figurines: _parts.settings.value.figurines,
+          child: child!,
+        ),
+      ),
+      home: ValueListenableBuilder<bool>(
+        valueListenable: _quit.closing,
+        builder: (context, closing, child) => AbsorbPointer(
+          absorbing: closing,
+          child: ExcludeFocus(excluding: closing, child: child!),
+        ),
+        child: !_ready
+            ? _startup()
+            : _withUpdatePrompt(
+                Shell(
+                  requests: _parts.requests,
+                  workspace: _parts.workspace,
+                  documents: _parts.documents,
+                  training: _parts.training,
+                  labs: _parts.labs,
+                  players: _parts.players,
+                  databases: _parts.databases,
+                  tournaments: _parts.tournaments,
+                  fullScreen: _parts.fullScreen,
+                  settingRows: _settingRows,
+                  settingsAlso: _settingsAlso,
+                  onDownloadTwic: _downloadTwic,
+                  onExplorerLogin: (context) =>
+                      showLichessLogin(context, _parts.account),
+                ),
+              ),
+      ),
+    );
+  }
+
+  /// The shell, with the new-version question over it when the app updates.
+  Widget _withUpdatePrompt(Widget shell) => switch (_parts.updates) {
+    final updates? => UpdatePrompt(
+      updates: updates,
+      navigator: _navigator,
+      child: shell,
+    ),
+    null => shell,
+  };
+
+  Future<bool> _downloadTwic(BuildContext context) async {
+    if (!_parts.databases.offersDownload) return false;
+    await showTwicDownload(context, _parts.databases);
+    await _parts.databases.refresh();
+    return _parts.env.masterBook.available();
+  }
+
+  Widget _startup() =>
+      const Scaffold(body: Center(child: CircularProgressIndicator()));
+}
+
+/// The way out of the app: what the user typed reaches the disk — or they
+/// say to close without it — then the engines are quit, the polite path
+/// where a killed app relies on the pipes instead, and the log is closed
+/// last so their final words are in it.
+///
+/// The window can be asked to close again while the first answer is still
+/// being worked out: a second click on the close button, or one made while
+/// the question about the unsaved words is up. Every request gets that one
+/// answer, so the engines are never stopped under a dialog and the log is
+/// never closed twice. A request that ended with the window staying open is
+/// forgotten, so the next click asks again.
+final class AppExit {
+  AppExit({
+    required ExitGuard guard,
+    this.navigatorKey,
+    this.prepare,
+    this.onCancelled,
+    required Future<void> Function() stopEngines,
+    required Future<void> Function() closeLog,
+  }) : _guard = guard,
+       _stopEngines = stopEngines,
+       _closeLog = closeLog;
+
+  final void Function()? prepare;
+  final void Function()? onCancelled;
+  final GlobalKey<NavigatorState>? navigatorKey;
+  final closing = ValueNotifier(false);
+  final ExitGuard _guard;
+  final Future<void> Function() _stopEngines;
+  final Future<void> Function() _closeLog;
+
+  /// The answer being worked out for a close that was asked for already.
+  Future<AppExitResponse>? _leaving;
+
+  /// Whether the window may close, with the engines and the log shut when
+  /// it may.
+  Future<AppExitResponse> leave() => _leaving ??= _leaveOnce().whenComplete(() {
+    if (!closing.value) _leaving = null;
+  });
+
+  Future<AppExitResponse> _leaveOnce() async {
+    final focus = FocusManager.instance.primaryFocus;
+    focus?.unfocus();
+    closing.value = true;
+    _guard.cancelNavigation();
+    final barrier = _blockInput();
+    var exited = false;
+    try {
+      prepare?.call();
+      if (!await _draftIsSettled()) return AppExitResponse.cancel;
+      await _stopEngines();
+      log.i('exit');
+      await _closeLog();
+      exited = true;
+      return AppExitResponse.exit;
+    } finally {
+      if (!exited) {
+        if (barrier?.isActive ?? false) {
+          barrier!.navigator?.removeRoute(barrier);
+        }
+        closing.value = false;
+        onCancelled?.call();
+        if (focus?.context != null && focus!.canRequestFocus) {
+          focus.requestFocus();
+        }
+      }
+    }
+  }
+
+  /// Cover existing routes too, including an open settings or name dialog.
+  /// The exit decision is pushed above this route and remains interactive.
+  /// Removing this exact route on cancellation preserves the underlying draft.
+  RawDialogRoute<void>? _blockInput() {
+    final navigator = navigatorKey?.currentState;
+    if (navigator == null) return null;
+    final barrier = RawDialogRoute<void>(
+      barrierDismissible: false,
+      barrierColor: null,
+      transitionDuration: Duration.zero,
+      requestFocus: true,
+      traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
+      pageBuilder: (context, animation, secondaryAnimation) => PopScope(
+        canPop: false,
+        child: Focus(
+          autofocus: true,
+          onKeyEvent: (_, _) => KeyEventResult.handled,
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    unawaited(navigator.push(barrier));
+    return barrier;
+  }
+
+  /// Words in a field the user never left are committed the way clicking
+  /// elsewhere commits them, by taking the focus away; the focus change is
+  /// applied in a microtask, so the edit is only made a turn later. Then the
+  /// file is waited for, because the window closes next — but not for ever,
+  /// which is [ExitGuard]'s job.
+  Future<bool> _draftIsSettled() async {
+    await Future<void>.delayed(Duration.zero);
+    return _guard.mayClose();
+  }
+}

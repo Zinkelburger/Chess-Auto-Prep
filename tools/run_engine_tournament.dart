@@ -1,9 +1,10 @@
-/// Headless driver for the Engine Tournament feature.
+/// Headless driver for the Engine tournament mode.
 ///
-/// Runs the *same* services the app runs (`EngineTournamentRunner`,
-/// `EngineGameRunner`, `TournamentStore`) without a Flutter engine, and
-/// writes into the same `Documents/engine_tournaments/` tree, so a match
-/// started here shows up in the app's Engine Tournament screen next launch.
+/// Runs the same code the app runs — `TournamentGameRunner` for each game,
+/// `FileTournaments` for `tournament.json` + `games.pgn`, the
+/// `EngineSupervisor` for every engine process — without a Flutter engine,
+/// and writes into the same `Documents/engine_tournaments/` tree, so a match
+/// started here shows up in the app's Engine tournament mode.
 ///
 ///   dart run tools/run_engine_tournament.dart \
 ///     --name "Stockfish self-match" \
@@ -12,299 +13,427 @@
 ///
 /// Engines default to the bundled Stockfish playing itself. Add
 /// `--engine "Name=/path/to/binary"` (repeatable) for anything else.
+/// `tools/mcp/chess_prep/engine_tournament.py` drives this file; its
+/// arguments, the `TOURNAMENT {json}` handshake line and the `--show` /
+/// `--verify` JSON are that module's contract.
 library;
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chess_auto_prep/constants/chess_constants.dart';
-import 'package:chess_auto_prep/features/engine_tournament/models/adjudication_rules.dart';
-import 'package:chess_auto_prep/features/engine_tournament/models/engine_spec.dart';
-import 'package:chess_auto_prep/features/engine_tournament/models/stored_tournament.dart';
-import 'package:chess_auto_prep/features/engine_tournament/models/time_control.dart';
-import 'package:chess_auto_prep/features/engine_tournament/models/tournament_config.dart';
-import 'package:chess_auto_prep/services/crosstable_builder.dart';
-import 'package:chess_auto_prep/features/engine_tournament/services/engine_registry.dart';
-import 'package:chess_auto_prep/features/engine_tournament/services/engine_tournament_runner.dart';
-import 'package:chess_auto_prep/features/engine_tournament/services/engine_verification.dart';
-import 'package:chess_auto_prep/features/engine_tournament/services/tournament_store.dart';
+import 'package:chess_auto_prep/chess/fen.dart';
+import 'package:chess_auto_prep/chess/tournament/config.dart';
+import 'package:chess_auto_prep/chess/tournament/result.dart';
+import 'package:chess_auto_prep/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/engines/stockfish_install.dart';
+import 'package:chess_auto_prep/engines/tournament_launch.dart';
+import 'package:chess_auto_prep/engines/uci_process.dart' show EngineTranscript;
+import 'package:chess_auto_prep/features/tournaments/engine_check.dart';
+import 'package:chess_auto_prep/features/tournaments/game_runner.dart';
+import 'package:chess_auto_prep/features/tournaments/schedule.dart';
+import 'package:chess_auto_prep/storage/pgn_file_store.dart';
+import 'package:chess_auto_prep/storage/tournaments.dart';
 import 'package:path/path.dart' as p;
 
-Future<int> main(List<String> argv) async {
+Future<void> main(List<String> argv) async {
   final args = _Args.parse(argv);
+  final engines = EngineSupervisor();
+  try {
+    exitCode = await _run(args, engines);
+  } finally {
+    await engines.dispose();
+  }
+}
+
+Future<int> _run(_Args args, EngineSupervisor engines) async {
   if (args.help) {
     stdout.writeln(_usage);
     return 0;
   }
-
-  // `--verify <path>` is the engine-manager check, headless: the MCP tools
-  // use it to vet a binary before writing it into engines.json, and it runs
-  // nothing else.
-  final verifyPath = args.verify;
-  if (verifyPath != null) {
-    final report = await verifyUciEngine(verifyPath);
-    stdout.writeln(
-      jsonEncode({
-        'ok': report.ok,
-        'path': verifyPath,
-        'message': report.message,
-        'name': report.name,
-        'author': report.author,
-        'sampleMove': report.sampleMove,
-        'options': report.options.map((o) => o.name).toList(),
-        'transcript': report.transcript.take(12).toList(),
-      }),
-    );
-    return report.ok ? 0 : 3;
-  }
-
+  final documents = _documentsDirectory();
   final root = Directory(
-    args.root ?? p.join(_documentsDirectory(), kEngineTournamentsDirectoryName),
+    args.root ?? p.join(documents, 'engine_tournaments'),
+  ).absolute;
+  // The app's support folder only beside the app's own documents: its
+  // recovery records name paths there. Elsewhere the run keeps its own.
+  final support = Directory(
+    args.support ??
+        (p.equals(root.parent.path, documents)
+            ? _appSupportDirectory()
+            : p.join(root.path, '.support')),
+  );
+  // The app's launcher. The bundled Stockfish is installed from the
+  // repository's assets, so it is found when run from the repository root.
+  final stockfish = StockfishInstall(
+    supportDirectory: support,
+    readAsset: (asset) async {
+      final file = File(asset);
+      return await file.exists() ? await file.readAsBytes() : null;
+    },
+  );
+  Future<EngineStart> launch(
+    TournamentEngine spec,
+    EngineTranscript transcript,
+  ) => launchTournamentEngine(
+    spec,
+    transcript,
+    stockfish: stockfish,
+    engines: engines,
   );
 
-  // `--show <id>` prints one saved tournament's crosstable, rendered and as
-  // JSON. It exists so the MCP tools never have to re-implement the standings
-  // maths in another language — there is one implementation of Elo, SB and
-  // LOS, and this is how everything else reaches it.
-  final showId = args.show;
-  if (showId != null) {
-    final store = TournamentStore(root);
-    final tournament = await store.load(showId);
-    if (tournament == null) {
+  // `--verify <path>` vets a binary before the MCP tools write it into
+  // engines.json, and runs nothing else.
+  if (args.verify case final path?) {
+    final report = await _verify(
+      launch,
+      TournamentEngine({'name': p.basename(path), 'executablePath': path}),
+    );
+    stdout.writeln(jsonEncode({'path': path, ...report}));
+    return report['ok'] == true ? 0 : 3;
+  }
+
+  final store = FileTournaments(
+    root: root,
+    support: support,
+    documents: PgnFileStore(documents: root.parent, support: support),
+  );
+
+  // `--show <id>` prints one saved tournament as JSON, so the MCP tools
+  // quote the standings the app computes rather than their own.
+  if (args.show case final id?) {
+    final listed = await store.list();
+    final found = switch (listed) {
+      TournamentSaved(:final value) =>
+        value.where((t) => t.id == id).firstOrNull,
+      TournamentFailed() => null,
+    };
+    if (found == null) {
       stdout.writeln(
         jsonEncode({
           'ok': false,
-          'error': 'No tournament "$showId" in ${root.path}',
+          'error': switch (listed) {
+            TournamentFailed(:final message) => message,
+            _ => 'No tournament "$id" in ${root.path}',
+          },
         }),
       );
       return 4;
     }
-    stdout.writeln(jsonEncode(_showPayload(tournament)));
+    stdout.writeln(jsonEncode(_showPayload(found, store)));
     return 0;
   }
 
-  // ── Engines ──────────────────────────────────────────────────────────────
-  final specs = <EngineSpec>[];
-  final paths = <String, String>{};
-  if (args.engines.isEmpty) {
-    final stockfish = args.stockfish ?? _findBundledStockfish();
-    if (stockfish == null) {
-      stderr.writeln(
-        'Could not find the app\'s Stockfish. Launch the app once so it '
-        'extracts the binary, or pass --stockfish <path>.',
-      );
-      return 2;
-    }
-    for (var i = 0; i < 2; i++) {
-      final spec = EngineSpec(
-        id: 'stockfish-${i + 1}',
-        name: 'Stockfish ${String.fromCharCode(65 + i)}',
-        executablePath: stockfish,
-      );
-      specs.add(spec);
-      paths[spec.id] = stockfish;
-    }
-  } else {
-    for (final entry in args.engines) {
-      final split = entry.indexOf('=');
-      final name = split < 0 ? p.basename(entry) : entry.substring(0, split);
-      final path = split < 0 ? entry : entry.substring(split + 1);
-      final spec = EngineSpec(
-        id: newEngineId(),
-        name: name,
-        executablePath: path,
-      );
-      specs.add(spec);
-      paths[spec.id] = path;
-    }
+  final config = TournamentConfig({
+    'name': args.name,
+    'startFen': args.fen ?? Fen.initial.value,
+    'openingLabel': args.opening,
+    'engines': [for (final e in _engines(args)) e.json],
+    'timeControl': args.timeControl,
+    'gamesPerPairing': args.games,
+    'concurrency': args.concurrency,
+    'alternateColors': true,
+    'adjudication': <String, Object?>{},
+  });
+  if (config.problem case final problem?) {
+    stderr.writeln(problem);
+    return 2;
   }
 
-  stdout.writeln('Verifying ${specs.length} engine(s)…');
-  final verifiedPaths = <String>{};
-  for (final spec in specs) {
-    final path = paths[spec.id]!;
-    if (!verifiedPaths.add(path)) continue;
-    final report = await verifyUciEngine(path);
+  stdout.writeln('Verifying ${config.engines.length} engine(s)…');
+  final checked = <String>{};
+  for (final spec in config.engines) {
+    if (!checked.add(spec.executable ?? '')) continue;
+    final report = await _verify(launch, spec);
     stdout.writeln(
-      '  ${report.ok ? "ok" : "FAIL"}  $path\n'
-      '        ${report.ok ? "${report.name} — played ${report.sampleMove}" : report.message}',
+      '  ${report['ok'] == true ? 'ok' : 'FAIL'}  ${spec.name}: '
+      '${report['message']}',
     );
-    if (!report.ok) return 3;
+    if (report['ok'] != true) return 3;
   }
 
-  // ── Config ───────────────────────────────────────────────────────────────
-  final config = TournamentConfig(
-    name: args.name,
-    engines: specs,
-    startFen: args.fen ?? kStandardStartFen,
-    openingLabel: args.opening,
-    timeControl: args.timeControl,
-    gamesPerPairing: args.games,
-    concurrency: args.concurrency,
-    adjudication: const AdjudicationRules(),
+  final now = DateTime.now().toUtc();
+  final created = await store.create(
+    Tournament({
+      'version': 1,
+      'id': 'match-${now.microsecondsSinceEpoch}',
+      'createdAt': now.toIso8601String(),
+      'status': 'pending',
+      'config': config.json,
+      'games': <Object>[],
+    }),
   );
-
-  final store = TournamentStore(root);
-  final tournament = await store.create(config);
+  if (created case TournamentFailed(:final message)) {
+    stderr.writeln('Could not create the tournament: $message');
+    return 1;
+  }
+  final tournament = (created as TournamentSaved<Tournament>).value;
+  final directory = p.join(root.path, tournament.id);
 
   // One machine-readable line as soon as the directory exists, before any
-  // engine thinks. A caller that launched this detached — the MCP
-  // `tournament_run` tool — has no other way to learn the id it allocated.
+  // engine thinks: a detached caller has no other way to learn the id.
   stdout.writeln(
-    'TOURNAMENT ${jsonEncode({'id': tournament.id, 'directory': tournament.directoryPath, 'pgn': tournament.pgnPath, 'metadata': store.metadataPathFor(tournament.id), 'totalGames': config.totalGames, 'timeControl': config.timeControl.label, 'startFen': config.startFen})}',
+    'TOURNAMENT ${jsonEncode({'id': tournament.id, 'directory': directory, 'pgn': store.games(tournament.id).path, 'metadata': p.join(directory, 'tournament.json'), 'totalGames': config.gameCount, 'timeControl': config.timeLabel, 'startFen': config.root.value})}',
   );
   stdout
     ..writeln('')
-    ..writeln('Tournament "${config.name}" → ${tournament.directoryPath}')
-    ..writeln('  position   ${config.startFen}')
-    ..writeln('  control    ${config.timeControl.label}')
-    ..writeln('  games      ${config.totalGames}')
+    ..writeln('Tournament "${config.name}" → $directory')
+    ..writeln('  position    ${config.root.value}')
+    ..writeln('  control     ${config.timeLabel}')
+    ..writeln('  games       ${config.gameCount}')
     ..writeln('  concurrency ${config.concurrency}')
     ..writeln('');
 
-  final runner = EngineTournamentRunner(
-    store: store,
-    resolveExecutable: (spec) async =>
-        spec.executablePath ?? paths[spec.id] ?? '',
-    onLog: (message) => stdout.writeln('  $message'),
-  );
-
-  // Ctrl-C stops cleanly rather than orphaning engine processes. The
-  // subscription is cancelled below: a live signal listener keeps the VM's
-  // event loop alive and the process would never exit.
+  final match = _Match(store, tournament, TournamentSchedule(config, launch));
+  // Ctrl-C (and the MCP tournament_stop) finish the games in flight, so the
+  // PGN stays whole. The listener is cancelled below: a live signal
+  // subscription keeps the VM alive.
   final interrupts = ProcessSignal.sigint.watch().listen((_) {
-    stdout.writeln('\nStopping after the current game…');
-    runner.cancel();
+    stdout.writeln('\nStopping after the games in flight…');
+    match.stopping = true;
   });
-
-  final finished = await runner.run(tournament);
+  final problem = await match.play();
   await interrupts.cancel();
 
-  stdout.writeln('');
-  stdout.writeln(_renderCrosstable(finished.config, finished.games));
+  final finished = match.saved;
   stdout
     ..writeln('')
-    ..writeln('Status: ${finished.status.name}')
-    ..writeln('PGN:    ${finished.pgnPath}')
-    ..writeln('Meta:   ${store.metadataPathFor(finished.id)}');
-  if (finished.error != null) stderr.writeln('Error: ${finished.error}');
-  return finished.error == null ? 0 : 1;
+    ..writeln(_renderCrosstable(finished))
+    ..writeln('')
+    ..writeln('Status: ${finished.status}')
+    ..writeln('PGN:    ${store.games(finished.id).path}')
+    ..writeln('Meta:   ${p.join(directory, 'tournament.json')}');
+  if (problem != null) stderr.writeln('Error: $problem');
+  return problem == null ? 0 : 1;
+}
+
+/// The app's saving in `TournamentRun`, without the retry UI: a failed
+/// checkpoint stops the run and is reported, and the saved files keep every
+/// game committed before it.
+final class _Match {
+  _Match(this.store, this.saved, this.games);
+  final FileTournaments store;
+  final TournamentSchedule games;
+  Tournament saved;
+  String? _pgn;
+  bool stopping = false;
+  String? _problem;
+
+  Future<String?> play() async {
+    final total = saved.config.gameCount;
+    await games.play(
+      stopping: () => stopping,
+      afterGame: (pairing, game) {
+        stdout.writeln(
+          '  game ${pairing.index + 1}/$total  '
+          '${game.record.whiteName} - ${game.record.blackName}  '
+          '${game.record.result}  ${game.record.termination}',
+        );
+        return _checkpoint();
+      },
+    );
+    if (_problem == null) {
+      await _persist(
+        saved.changed({
+          'status': stopping ? 'stopped' : 'completed',
+          'finishedAt': DateTime.now().toUtc().toIso8601String(),
+        }),
+        _pgn ?? '',
+      );
+    }
+    return _problem;
+  }
+
+  Future<void> _checkpoint() async {
+    if (_problem != null) return;
+    final (:records, :pgn) = games.finished;
+    await _persist(saved.changed({'status': 'running', 'games': records}), pgn);
+  }
+
+  Future<void> _persist(Tournament after, String pgn) async {
+    final result = await store.save(saved, after, pgn, expectedPgn: _pgn);
+    switch (result) {
+      case TournamentSaved(:final value):
+        saved = value;
+        _pgn = pgn;
+      case TournamentFailed(:final message):
+        _problem = 'The tournament was not saved: $message';
+        stopping = true;
+    }
+  }
+}
+
+/// The engine check the app runs before registering an engine, as the
+/// JSON `engine_tournament.py` reads.
+Future<Map<String, Object?>> _verify(
+  TournamentLauncher launch,
+  TournamentEngine spec,
+) async => switch (await checkTournamentEngine(launch, spec)) {
+  EngineVerified(:final name, :final move) => {
+    'ok': true,
+    'message': '$name: UCI ready; played $move.',
+    'name': name,
+    'sampleMove': move,
+  },
+  EngineRejected(:final reason, :final output) => {
+    'ok': false,
+    'message': reason,
+    'transcript': output,
+  },
+};
+
+List<TournamentEngine> _engines(_Args args) {
+  if (args.engines.isEmpty) {
+    return [
+      for (final name in ['Stockfish A', 'Stockfish B'])
+        TournamentEngine({
+          ...TournamentEngine.bundled(name).json,
+          if (args.stockfish != null) 'executablePath': args.stockfish,
+        }),
+    ];
+  }
+  final stamp = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
+  return [
+    for (final (i, entry) in args.engines.indexed)
+      TournamentEngine({
+        'id': 'engine-$stamp-$i',
+        'name': entry.contains('=')
+            ? entry.substring(0, entry.indexOf('='))
+            : p.basename(entry),
+        'executablePath': entry.contains('=')
+            ? entry.substring(entry.indexOf('=') + 1)
+            : entry,
+        'hashMb': 128,
+        'threads': 1,
+        'ponder': false,
+      }),
+  ];
 }
 
 /// Everything `--show` reports about one tournament.
-Map<String, dynamic> _showPayload(StoredTournament tournament) {
-  final config = tournament.config;
-  final table = buildCrosstable([
-    for (final e in config.engines) e.name,
-  ], tournament.games);
+Map<String, Object?> _showPayload(Tournament t, FileTournaments store) {
+  final config = t.config;
+  final standings = t.standings;
+  final byName = {for (final row in standings) row.seat: row.name};
   return {
     'ok': true,
-    'id': tournament.id,
+    'id': t.id,
     'name': config.name,
-    'status': tournament.status.name,
-    'createdAt': tournament.createdAt.toIso8601String(),
-    'finishedAt': tournament.finishedAt?.toIso8601String(),
-    'error': tournament.error,
-    'startFen': config.startFen,
-    'opening': config.openingLabel,
-    'timeControl': config.timeControl.label,
-    'format': config.format.name,
+    'status': t.status,
+    'createdAt': t.json['createdAt'],
+    'finishedAt': t.json['finishedAt'],
+    'error': t.error,
+    'startFen': config.root.value,
+    'opening': config.json['openingLabel'] ?? '',
+    'timeControl': config.timeLabel,
+    'format': config.json['format'] ?? 'roundRobin',
     'concurrency': config.concurrency,
-    'gamesPlayed': tournament.gamesPlayed,
-    'gamesTotal': tournament.gamesTotal,
-    'directory': tournament.directoryPath,
-    'pgn': tournament.pgnPath,
-    'engines': config.engines.map((e) => e.name).toList(),
+    'gamesPlayed': t.games.length,
+    'gamesTotal': config.gameCount,
+    'directory': p.dirname(store.games(t.id).path),
+    'pgn': store.games(t.id).path,
+    'engines': [for (final e in config.engines) e.name],
     'standings': [
-      for (final row in table.standings)
+      for (final (i, row) in standings.indexed)
         {
-          'rank': row.rank,
-          'engineIndex': row.engineIndex,
+          'rank': i + 1,
+          'engineIndex': row.seat,
           'name': row.name,
-          'points': row.points,
-          'played': row.played,
-          'wins': row.wins,
-          'draws': row.draws,
-          'losses': row.losses,
-          'score': row.scoreLabel,
-          'scorePercent': row.scoreFraction * 100,
-          'drawPercent': row.drawFraction * 100,
+          'points': row.score.points,
+          'played': row.score.played,
+          'wins': row.score.wins,
+          'draws': row.score.draws,
+          'losses': row.score.losses,
+          'score': row.score.label,
+          'scorePercent': _percent(row.score.points, row.score.played),
+          'drawPercent': _percent(row.score.draws, row.score.played),
           'sonnebornBerger': row.sonnebornBerger,
-          'eloDiff': row.eloDiff,
-          'eloMargin': row.eloMargin,
-          'likelihoodOfSuperiority': row.likelihoodOfSuperiority * 100,
+          'eloDiff': row.score.elo,
+          'eloMargin': row.score.margin,
+          'likelihoodOfSuperiority': row.score.superiority * 100,
         },
     ],
     'headToHead': {
-      for (final row in table.standings)
+      for (final row in standings)
         row.name: {
-          for (final other in table.standings)
-            if (table.cell(row.engineIndex, other.engineIndex) case final cell?)
-              other.name: {
+          for (final (opponent, cell) in row.opponents.indexed)
+            if (opponent != row.seat && cell.played > 0)
+              byName[opponent]!: {
                 'points': cell.points,
                 'played': cell.played,
-                'results': cell.results.join(),
+                'results': _results(t, row.seat, opponent),
               },
         },
     },
     'games': [
-      for (final game in tournament.games)
+      for (final game in t.games)
         {
-          'number': game.gameNumber,
-          'round': game.round,
+          'number': game.index + 1,
+          'round': game.json['round'],
           'white': game.whiteName,
           'black': game.blackName,
-          'result': game.result.pgnToken,
-          'termination': game.termination.label,
+          'result': game.result,
+          'termination': game.termination,
           'detail': game.detail,
-          'plies': game.plies,
-          'seconds': game.durationMs / 1000,
+          'plies': game.json['plies'],
+          'seconds': ((game.json['durationMs'] as num?) ?? 0) / 1000,
         },
     ],
-    'text': _renderCrosstable(config, tournament.games),
+    'text': _renderCrosstable(t),
   };
 }
 
-String _renderCrosstable(TournamentConfig config, List games) {
-  final table = buildCrosstable([
-    for (final e in config.engines) e.name,
-  ], games.cast());
+double _percent(num part, int whole) => whole == 0 ? 0 : part / whole * 100;
+
+/// `1`, `=` and `0` per game from [seat]'s side, in schedule order.
+String _results(Tournament t, int seat, int opponent) => [
+  for (final game in t.games)
+    if ({game.white, game.black}.containsAll([seat, opponent]))
+      switch ((game.result, game.white == seat)) {
+        ('1/2-1/2', _) => '=',
+        ('1-0', true) || ('0-1', false) => '1',
+        ('1-0', false) || ('0-1', true) => '0',
+        _ => '*',
+      },
+].join();
+
+String _renderCrosstable(Tournament t) {
+  final standings = t.standings;
   final buffer = StringBuffer()
     ..writeln('Crosstable')
     ..writeln('=' * 78);
-  final nameWidth = table.standings
-      .map((r) => r.name.length)
-      .fold<int>(6, (a, b) => a > b ? a : b);
-  buffer.writeln(
-    '${"#".padLeft(2)}  ${"Engine".padRight(nameWidth)}  '
-    '${"Score".padLeft(8)}  ${"W".padLeft(3)} ${"D".padLeft(3)} ${"L".padLeft(3)}  '
-    '${"Draw%".padLeft(6)}  ${"Elo".padLeft(14)}  ${"LOS".padLeft(6)}  SB',
+  final width = standings.fold(
+    6,
+    (a, r) => r.name.length > a ? r.name.length : a,
   );
-  for (final row in table.standings) {
-    final elo = row.eloDiff == null
+  buffer.writeln(
+    '${'#'.padLeft(2)}  ${'Engine'.padRight(width)}  '
+    '${'Score'.padLeft(8)}  ${'W'.padLeft(3)} ${'D'.padLeft(3)} ${'L'.padLeft(3)}  '
+    '${'Draw%'.padLeft(6)}  ${'Elo'.padLeft(14)}  ${'LOS'.padLeft(6)}  SB',
+  );
+  for (final (i, row) in standings.indexed) {
+    final s = row.score;
+    final elo = s.elo == null
         ? '—'
-        : '${row.eloDiff! >= 0 ? '+' : ''}${row.eloDiff!.toStringAsFixed(0)}'
-              '${row.eloMargin == null ? '' : ' ±${row.eloMargin!.toStringAsFixed(0)}'}';
+        : '${s.elo! >= 0 ? '+' : ''}${s.elo!.toStringAsFixed(0)}'
+              '${s.margin == null ? '' : ' ±${s.margin!.toStringAsFixed(0)}'}';
     buffer.writeln(
-      '${row.rank.toString().padLeft(2)}  ${row.name.padRight(nameWidth)}  '
-      '${row.scoreLabel.padLeft(8)}  ${row.wins.toString().padLeft(3)} '
-      '${row.draws.toString().padLeft(3)} ${row.losses.toString().padLeft(3)}  '
-      '${(row.drawFraction * 100).toStringAsFixed(0).padLeft(5)}%  '
+      '${'${i + 1}'.padLeft(2)}  ${row.name.padRight(width)}  '
+      '${s.label.padLeft(8)}  ${'${s.wins}'.padLeft(3)} '
+      '${'${s.draws}'.padLeft(3)} ${'${s.losses}'.padLeft(3)}  '
+      '${_percent(s.draws, s.played).toStringAsFixed(0).padLeft(5)}%  '
       '${elo.padLeft(14)}  '
-      '${(row.likelihoodOfSuperiority * 100).toStringAsFixed(1).padLeft(5)}%  '
+      '${(s.superiority * 100).toStringAsFixed(1).padLeft(5)}%  '
       '${row.sonnebornBerger.toStringAsFixed(2)}',
     );
   }
   buffer.writeln('');
-  for (final row in table.standings) {
-    for (final other in table.standings) {
-      final cell = table.cell(row.engineIndex, other.engineIndex);
-      if (cell == null) continue;
+  for (final row in standings) {
+    for (final (opponent, cell) in row.opponents.indexed) {
+      if (opponent == row.seat || cell.played == 0) continue;
       buffer.writeln(
-        '  ${row.name} vs ${other.name}: '
-        '${cell.points.toStringAsFixed(1)}/${cell.played}  '
-        '${cell.results.join()}',
+        '  ${row.name} vs ${t.config.engines[opponent].name}: '
+        '${cell.label}  ${_results(t, row.seat, opponent)}',
       );
     }
   }
@@ -312,36 +441,27 @@ String _renderCrosstable(TournamentConfig config, List games) {
 }
 
 String _documentsDirectory() {
-  final home = Platform.environment['HOME'] ?? Directory.current.path;
+  final home =
+      Platform.environment['HOME'] ??
+      Platform.environment['USERPROFILE'] ??
+      Directory.current.path;
   final xdg = Platform.environment['XDG_DOCUMENTS_DIR'];
-  if (xdg != null && xdg.isNotEmpty) return xdg;
-  return p.join(home, 'Documents');
+  return xdg != null && xdg.isNotEmpty ? xdg : p.join(home, 'Documents');
 }
 
-/// The engine the app extracted on first launch, wherever path_provider put
-/// its support directory on this machine.
-String? _findBundledStockfish() {
-  final home = Platform.environment['HOME'];
-  if (home == null) return null;
-  final name = Platform.isWindows
-      ? 'stockfish-windows.exe'
-      : Platform.isMacOS
-      ? 'stockfish-macos'
-      : 'stockfish-linux';
-  final roots = [
-    p.join(home, '.local', 'share'),
-    p.join(home, 'Library', 'Application Support'),
-  ];
-  for (final rootPath in roots) {
-    final root = Directory(rootPath);
-    if (!root.existsSync()) continue;
-    for (final entity in root.listSync(followLinks: false)) {
-      if (entity is! Directory) continue;
-      final candidate = File(p.join(entity.path, name));
-      if (candidate.existsSync()) return candidate.path;
-    }
-  }
-  return null;
+/// Where path_provider puts the app's support folder (the Python tools'
+/// `master_db_path` mirrors the same rule).
+String _appSupportDirectory() {
+  final env = Platform.environment;
+  final home = env['HOME'] ?? env['USERPROFILE'] ?? Directory.current.path;
+  final base = Platform.isMacOS
+      ? p.join(home, 'Library', 'Application Support')
+      : Platform.isWindows
+      ? env['APPDATA'] ?? p.join(home, 'AppData', 'Roaming')
+      : (env['XDG_DATA_HOME']?.isNotEmpty ?? false)
+      ? env['XDG_DATA_HOME']!
+      : p.join(home, '.local', 'share');
+  return p.join(base, 'com.example.chess_auto_prep');
 }
 
 const _usage = '''
@@ -357,9 +477,11 @@ Run an engine-vs-engine tournament headlessly.
   --concurrency <n>    Games in flight at once (default 1)
   --engine <Name=path> A UCI engine (repeatable; default: bundled Stockfish
                        playing itself)
-  --stockfish <path>   Override the bundled-Stockfish lookup
+  --stockfish <path>   Use this binary instead of the bundled Stockfish
   --root <dir>         Tournaments directory (default
                        ~/Documents/engine_tournaments)
+  --support <dir>      Support folder for recovery records (default: the
+                       app's, or <root>/.support for another --root)
   --verify <path>      Check one binary is a working UCI engine and print the
                        report as JSON; runs nothing else
   --show <id>          Print a saved tournament (crosstable, standings, games)
@@ -367,119 +489,81 @@ Run an engine-vs-engine tournament headlessly.
   -h, --help
 ''';
 
-class _Args {
-  _Args({
-    required this.name,
-    required this.fen,
-    required this.opening,
-    required this.games,
-    required this.concurrency,
-    required this.timeControl,
-    required this.engines,
-    required this.stockfish,
-    required this.root,
-    required this.verify,
-    required this.show,
-    required this.help,
-  });
-
-  final String name;
-  final String? fen;
-  final String opening;
-  final int games;
-  final int concurrency;
-  final TimeControl timeControl;
-  final List<String> engines;
-  final String? stockfish;
-  final String? root;
-
-  /// `--verify <path>`: check one binary and print the report as JSON.
-  final String? verify;
-
-  /// `--show <id>`: print one saved tournament as JSON and exit.
-  final String? show;
-
-  final bool help;
+final class _Args {
+  String name = 'Engine match';
+  String? fen;
+  String opening = '';
+  int games = 10;
+  int concurrency = 1;
+  Map<String, Object?> timeControl = {'kind': 'movetime', 'movetimeMs': 2000};
+  final engines = <String>[];
+  String? stockfish;
+  String? root;
+  String? support;
+  String? verify;
+  String? show;
+  bool help = false;
 
   static _Args parse(List<String> argv) {
-    var name = 'Engine match';
-    String? fen;
-    var opening = '';
-    var games = 10;
-    var concurrency = 1;
-    var timeControl = const TimeControl.perMove(2000);
-    final engines = <String>[];
-    String? stockfish;
-    String? root;
-    String? verify;
-    String? show;
-    var help = false;
-
+    final args = _Args();
     for (var i = 0; i < argv.length; i++) {
       String next() => i + 1 < argv.length ? argv[++i] : '';
       switch (argv[i]) {
         case '--name':
-          name = next();
+          args.name = next();
         case '--fen':
-          fen = next();
+          args.fen = next();
         case '--opening':
-          opening = next();
+          args.opening = next();
         case '--games':
-          games = int.tryParse(next()) ?? games;
+          args.games = int.tryParse(next()) ?? args.games;
         case '--concurrency':
-          concurrency = int.tryParse(next()) ?? concurrency;
+          args.concurrency = int.tryParse(next()) ?? args.concurrency;
         case '--movetime':
-          timeControl = TimeControl.perMove(int.tryParse(next()) ?? 2000);
+          args.timeControl = {
+            'kind': 'movetime',
+            'movetimeMs': int.tryParse(next()) ?? 2000,
+          };
         case '--depth':
-          timeControl = TimeControl.fixedDepth(int.tryParse(next()) ?? 12);
+          args.timeControl = {
+            'kind': 'fixedDepth',
+            'depth': int.tryParse(next()) ?? 12,
+          };
         case '--tc':
-          timeControl = _parseTc(next()) ?? timeControl;
+          args.timeControl = _parseTc(next()) ?? args.timeControl;
         case '--engine':
-          engines.add(next());
+          args.engines.add(next());
         case '--stockfish':
-          stockfish = next();
+          args.stockfish = next();
         case '--root':
-          root = next();
+          args.root = next();
+        case '--support':
+          args.support = next();
         case '--verify':
-          verify = next();
+          args.verify = next();
         case '--show':
-          show = next();
-        case '-h':
-        case '--help':
-          help = true;
+          args.show = next();
+        case '-h' || '--help':
+          args.help = true;
       }
     }
-    return _Args(
-      name: name,
-      fen: fen,
-      opening: opening,
-      games: games,
-      concurrency: concurrency,
-      timeControl: timeControl,
-      engines: engines,
-      stockfish: stockfish,
-      root: root,
-      verify: verify,
-      show: show,
-      help: help,
-    );
+    return args;
   }
 
   /// `60+0.6` / `40/60+0.6` / `120`, in seconds — cutechess's spelling.
-  static TimeControl? _parseTc(String text) {
+  static Map<String, Object?>? _parseTc(String text) {
     final match = RegExp(
       r'^(?:(\d+)/)?([\d.]+)(?:\+([\d.]+))?$',
     ).firstMatch(text.trim());
-    if (match == null) return null;
-    final base = double.tryParse(match.group(2)!);
-    if (base == null) return null;
-    return TimeControl.clock(
-      baseMs: (base * 1000).round(),
-      incrementMs: ((double.tryParse(match.group(3) ?? '0') ?? 0) * 1000)
+    final base = double.tryParse(match?.group(2) ?? '');
+    if (match == null || base == null) return null;
+    return {
+      'kind': 'incremental',
+      'baseMs': (base * 1000).round(),
+      'incrementMs': ((double.tryParse(match.group(3) ?? '0') ?? 0) * 1000)
           .round(),
-      movesPerSession: match.group(1) == null
-          ? null
-          : int.tryParse(match.group(1)!),
-    );
+      if (int.tryParse(match.group(1) ?? '') case final period? when period > 0)
+        'movesPerSession': period,
+    };
   }
 }

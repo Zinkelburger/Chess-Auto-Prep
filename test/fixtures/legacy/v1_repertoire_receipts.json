@@ -1,0 +1,453 @@
+{
+  "move-prepared": {
+    "Documents": {
+      "directory": true
+    },
+    "Documents/repertoires": {
+      "directory": true
+    },
+    "Documents/repertoires/Before": {
+      "directory": true
+    },
+    "Documents/repertoires/Before/Main.pgn": {
+      "text": "1. e4 *"
+    },
+    "Support": {
+      "directory": true
+    },
+    "Support/repertoire-mutations": {
+      "directory": true
+    },
+    "Support/repertoire-mutations/1790627078376120-aaef7c8c.json": {
+      "text": "{\"version\":1,\"id\":\"1790627078376120-aaef7c8c\",\"from\":\"{profile}/Documents/repertoires/Before\",\"to\":\"{profile}/Documents/repertoires/After\",\"identity\":\"54:0:3795811\",\"state\":\"pending\",\"kind\":\"move\"}"
+    }
+  },
+  "move-moved": {
+    "Documents": {
+      "directory": true
+    },
+    "Documents/repertoires": {
+      "directory": true
+    },
+    "Documents/repertoires/After": {
+      "directory": true
+    },
+    "Documents/repertoires/After/Main.pgn": {
+      "text": "1. e4 *"
+    },
+    "Support": {
+      "directory": true
+    },
+    "Support/repertoire-mutations": {
+      "directory": true
+    },
+    "Support/repertoire-mutations/1790627078410742-2767aaba.json": {
+      "text": "{\"version\":1,\"id\":\"1790627078410742-2767aaba\",\"from\":\"{profile}/Documents/repertoires/Before\",\"to\":\"{profile}/Documents/repertoires/After\",\"identity\":\"54:0:3795825\",\"state\":\"pending\",\"kind\":\"move\"}"
+    }
+  },
+  "move-referencesUpdated": {
+    "Documents": {
+      "directory": true
+    },
+    "Documents/repertoires": {
+      "directory": true
+    },
+    "Documents/repertoires/After": {
+      "directory": true
+    },
+    "Documents/repertoires/After/Main.pgn": {
+      "text": "1. e4 *"
+    },
+    "Support": {
+      "directory": true
+    },
+    "Support/repertoire-mutations": {
+      "directory": true
+    },
+    "Support/repertoire-mutations/1790627078435761-f5094f30.json": {
+      "text": "{\"version\":1,\"id\":\"1790627078435761-f5094f30\",\"from\":\"{profile}/Documents/repertoires/Before\",\"to\":\"{profile}/Documents/repertoires/After\",\"identity\":\"54:0:3795839\",\"state\":\"pending\",\"kind\":\"move\"}"
+    }
+  },
+  "move-completed": {
+    "Documents": {
+      "directory": true
+    },
+    "Documents/repertoires": {
+      "directory": true
+    },
+    "Documents/repertoires/After": {
+      "directory": true
+    },
+    "Documents/repertoires/After/Main.pgn": {
+      "text": "1. e4 *"
+    },
+    "Support": {
+      "directory": true
+    },
+    "Support/repertoire-mutations": {
+      "directory": true
+    },
+    "Support/repertoire-mutations/1790627078464109-6041bbda.json": {
+      "text": "{\"version\":1,\"id\":\"1790627078464109-6041bbda\",\"from\":\"{profile}/Documents/repertoires/Before\",\"to\":\"{profile}/Documents/repertoires/After\",\"identity\":\"54:0:3795853\",\"state\":\"completed\",\"kind\":\"move\"}"
+    }
+  },
+  "moved": {
+    "Documents": {
+      "directory": true
+    },
+    "Documents/repertoires": {
+      "directory": true
+    },
+    "Documents/repertoires/After": {
+      "directory": true
+    },
+    "Documents/repertoires/After/Main.pgn": {
+      "text": "1. e4 *"
+    },
+    "Support": {
+      "directory": true
+    },
+    "Support/repertoire-mutations": {
+      "directory": true
+    },
+    "Support/repertoire-mutations/1790627078499230-12c1e12e.json": {
+      "text": "{\"version\":1,\"id\":\"1790627078499230-12c1e12e\",\"from\":\"{profile}/Documents/repertoires/Before\",\"to\":\"{profile}/Documents/repertoires/After\",\"identity\":\"54:0:3795869\",\"state\":\"completed\",\"kind\":\"move\"}"
+    }
+  },
+  "published": {
+    "Documents": {
+      "directory": true
+    },
+    "Documents/repertoires": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078523628-edd1094b": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078523628-edd1094b/publication.json": {
+      "text": "{\"version\":1,\"id\":\"1790627078523628-edd1094b\",\"name\":\"Course\",\"identity\":\"54:0:3795890\",\"state\":\"completed\",\"files\":{\"Main.pgn\":{\"identity\":\"54:0:3795896\",\"digest\":\"1a695afa2f623d016fd45389557701cebdcb90aa4e2fa8b9194c947c516fcfcd\"}}}"
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078523628-edd1094b/source.pgn": {
+      "text": "1. e4 *"
+    },
+    "Documents/repertoires/Course": {
+      "directory": true
+    },
+    "Documents/repertoires/Course/Main.pgn": {
+      "text": "1. e4 *"
+    },
+    "Support": {
+      "directory": true
+    }
+  },
+  "moved-and-published": {
+    "Documents": {
+      "directory": true
+    },
+    "Documents/repertoires": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078661121-de64feef": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078661121-de64feef/publication.json": {
+      "text": "{\"version\":1,\"id\":\"1790627078661121-de64feef\",\"name\":\"Course\",\"identity\":\"54:0:3795925\",\"state\":\"completed\",\"files\":{\"Main.pgn\":{\"identity\":\"54:0:3795931\",\"digest\":\"1a695afa2f623d016fd45389557701cebdcb90aa4e2fa8b9194c947c516fcfcd\"}}}"
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078661121-de64feef/source.pgn": {
+      "text": "1. e4 *"
+    },
+    "Documents/repertoires/After": {
+      "directory": true
+    },
+    "Documents/repertoires/After/Main.pgn": {
+      "text": "1. e4 *"
+    },
+    "Documents/repertoires/Course": {
+      "directory": true
+    },
+    "Documents/repertoires/Course/Main.pgn": {
+      "text": "1. e4 *"
+    },
+    "Support": {
+      "directory": true
+    },
+    "Support/repertoire-mutations": {
+      "directory": true
+    },
+    "Support/repertoire-mutations/1790627078637225-a97ab849.json": {
+      "text": "{\"version\":1,\"id\":\"1790627078637225-a97ab849\",\"from\":\"{profile}/Documents/repertoires/Before\",\"to\":\"{profile}/Documents/repertoires/After\",\"identity\":\"54:0:3795908\",\"state\":\"completed\",\"kind\":\"move\"}"
+    }
+  },
+  "move-cancelled": {
+    "Documents": {
+      "directory": true
+    },
+    "Documents/repertoires": {
+      "directory": true
+    },
+    "Documents/repertoires/Before": {
+      "directory": true
+    },
+    "Documents/repertoires/Before/Main.pgn": {
+      "text": "1. e4 *"
+    },
+    "Support": {
+      "directory": true
+    },
+    "Support/repertoire-mutations": {
+      "directory": true
+    },
+    "Support/repertoire-mutations/1790627078760711-c03a036c.json": {
+      "text": "{\"version\":1,\"id\":\"1790627078760711-c03a036c\",\"from\":\"{profile}/Documents/repertoires/Before\",\"to\":\"{profile}/Documents/repertoires/After\",\"identity\":\"54:0:3795945\",\"state\":\"cancelled\",\"kind\":\"move\"}"
+    }
+  },
+  "publish-chapterWritten": {
+    "Documents": {
+      "directory": true
+    },
+    "Documents/repertoires": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078805965-fdd14beb": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078805965-fdd14beb/payload": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078805965-fdd14beb/payload/Main.pgn": {
+      "text": "1. e4 *"
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078805965-fdd14beb/source.pgn": {
+      "text": "1. e4 *"
+    },
+    "Support": {
+      "directory": true
+    }
+  },
+  "publish-staged": {
+    "Documents": {
+      "directory": true
+    },
+    "Documents/repertoires": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078841434-2933da6f": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078841434-2933da6f/payload": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078841434-2933da6f/payload/Main.pgn": {
+      "text": "1. e4 *"
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078841434-2933da6f/publication.json": {
+      "text": "{\"version\":1,\"id\":\"1790627078841434-2933da6f\",\"name\":\"Course\",\"identity\":\"54:0:3795984\",\"state\":\"staged\",\"files\":{\"Main.pgn\":{\"identity\":\"54:0:3795990\",\"digest\":\"1a695afa2f623d016fd45389557701cebdcb90aa4e2fa8b9194c947c516fcfcd\"}}}"
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078841434-2933da6f/source.pgn": {
+      "text": "1. e4 *"
+    },
+    "Support": {
+      "directory": true
+    }
+  },
+  "publish-prepared": {
+    "Documents": {
+      "directory": true
+    },
+    "Documents/repertoires": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078881089-4838a578": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078881089-4838a578/payload": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078881089-4838a578/payload/Main.pgn": {
+      "text": "1. e4 *"
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078881089-4838a578/publication.json": {
+      "text": "{\"version\":1,\"id\":\"1790627078881089-4838a578\",\"name\":\"Course\",\"identity\":\"54:0:3796002\",\"state\":\"pending\",\"files\":{\"Main.pgn\":{\"identity\":\"54:0:3796008\",\"digest\":\"1a695afa2f623d016fd45389557701cebdcb90aa4e2fa8b9194c947c516fcfcd\"}}}"
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078881089-4838a578/source.pgn": {
+      "text": "1. e4 *"
+    },
+    "Support": {
+      "directory": true
+    }
+  },
+  "publish-installed": {
+    "Documents": {
+      "directory": true
+    },
+    "Documents/repertoires": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078952749-b2a53f3": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078952749-b2a53f3/publication.json": {
+      "text": "{\"version\":1,\"id\":\"1790627078952749-b2a53f3\",\"name\":\"Course\",\"identity\":\"54:0:3796025\",\"state\":\"pending\",\"files\":{\"Main.pgn\":{\"identity\":\"54:0:3796031\",\"digest\":\"1a695afa2f623d016fd45389557701cebdcb90aa4e2fa8b9194c947c516fcfcd\"}}}"
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627078952749-b2a53f3/source.pgn": {
+      "text": "1. e4 *"
+    },
+    "Documents/repertoires/Course": {
+      "directory": true
+    },
+    "Documents/repertoires/Course/Main.pgn": {
+      "text": "1. e4 *"
+    },
+    "Support": {
+      "directory": true
+    }
+  },
+  "publish-completed": {
+    "Documents": {
+      "directory": true
+    },
+    "Documents/repertoires": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627079025380-765be855": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627079025380-765be855/publication.json": {
+      "text": "{\"version\":1,\"id\":\"1790627079025380-765be855\",\"name\":\"Course\",\"identity\":\"54:0:3796046\",\"state\":\"completed\",\"files\":{\"Main.pgn\":{\"identity\":\"54:0:3796052\",\"digest\":\"1a695afa2f623d016fd45389557701cebdcb90aa4e2fa8b9194c947c516fcfcd\"}}}"
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627079025380-765be855/source.pgn": {
+      "text": "1. e4 *"
+    },
+    "Documents/repertoires/Course": {
+      "directory": true
+    },
+    "Documents/repertoires/Course/Main.pgn": {
+      "text": "1. e4 *"
+    },
+    "Support": {
+      "directory": true
+    }
+  },
+  "publish-cancelled": {
+    "Documents": {
+      "directory": true
+    },
+    "Documents/repertoires": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627079114898-22454ef5": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627079114898-22454ef5/payload": {
+      "directory": true
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627079114898-22454ef5/payload/Main.pgn": {
+      "text": "1. e4 *"
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627079114898-22454ef5/publication.json": {
+      "text": "{\"version\":1,\"id\":\"1790627079114898-22454ef5\",\"name\":\"Course\",\"identity\":\"54:0:3796069\",\"state\":\"cancelled\",\"files\":{\"Main.pgn\":{\"identity\":\"54:0:3796075\",\"digest\":\"1a695afa2f623d016fd45389557701cebdcb90aa4e2fa8b9194c947c516fcfcd\"}}}"
+    },
+    "Documents/repertoires/.cap-repertoire-publications/1790627079114898-22454ef5/source.pgn": {
+      "text": "1. e4 *"
+    },
+    "Support": {
+      "directory": true
+    }
+  },
+  "trash-deleted": {
+    "Documents": {
+      "directory": true
+    },
+    "Documents/repertoires": {
+      "directory": true
+    },
+    "Support": {
+      "directory": true
+    },
+    "Support/repertoire-mutations": {
+      "directory": true
+    },
+    "Support/repertoire-mutations/1790627079242043-669e357a.json": {
+      "text": "{\"version\":1,\"id\":\"1790627079242043-669e357a\",\"from\":\"{profile}/Documents/repertoires/Deleted\",\"to\":\"{profile}/Support/trash/1790627079242043-669e357a\",\"identity\":\"54:0:3796088\",\"state\":\"completed\",\"kind\":\"trash\"}"
+    },
+    "Support/trash": {
+      "directory": true
+    },
+    "Support/trash/1790627079242043-669e357a": {
+      "directory": true
+    }
+  },
+  "trash-restored": {
+    "Documents": {
+      "directory": true
+    },
+    "Documents/repertoires": {
+      "directory": true
+    },
+    "Documents/repertoires/Deleted": {
+      "directory": true
+    },
+    "Support": {
+      "directory": true
+    },
+    "Support/repertoire-mutations": {
+      "directory": true
+    },
+    "Support/repertoire-mutations/1790627079330398-5e76befa.json": {
+      "text": "{\"version\":1,\"id\":\"1790627079330398-5e76befa\",\"from\":\"{profile}/Documents/repertoires/Deleted\",\"to\":\"{profile}/Support/trash/1790627079330398-5e76befa\",\"identity\":\"54:0:3796107\",\"state\":\"completed\",\"kind\":\"trash\"}"
+    },
+    "Support/repertoire-mutations/1790627079412392-a2ec030b.json": {
+      "text": "{\"version\":1,\"id\":\"1790627079412392-a2ec030b\",\"from\":\"{profile}/Support/trash/1790627079330398-5e76befa\",\"to\":\"{profile}/Documents/repertoires/Deleted\",\"identity\":\"54:0:3796107\",\"state\":\"completed\",\"kind\":\"restore\",\"recoveryId\":\"1790627079330398-5e76befa\"}"
+    },
+    "Support/trash": {
+      "directory": true
+    }
+  },
+  "move-landed-at-kill": {
+    "Documents": {
+      "directory": true
+    },
+    "Documents/repertoires": {
+      "directory": true
+    },
+    "Documents/repertoires/New": {
+      "directory": true
+    },
+    "Documents/repertoires/New/Main.pgn": {
+      "text": "1. e4 *"
+    },
+    "Support": {
+      "directory": true
+    },
+    "Support/repertoire-mutations": {
+      "directory": true
+    },
+    "Support/repertoire-mutations/1790627079440568-cd6e010e.json": {
+      "text": "{\"version\":1,\"id\":\"1790627079440568-cd6e010e\",\"from\":\"{profile}/Documents/repertoires/Old\",\"to\":\"{profile}/Documents/repertoires/New\",\"identity\":\"54:0:3796135\",\"state\":\"pending\",\"kind\":\"move\"}"
+    }
+  }
+}

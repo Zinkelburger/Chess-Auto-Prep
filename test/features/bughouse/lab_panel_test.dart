@@ -1,0 +1,189 @@
+import 'package:chess_auto_prep/chess/bughouse/table.dart';
+import 'package:chess_auto_prep/features/bughouse/archive_moves.dart';
+import 'package:chess_auto_prep/features/bughouse/bughouse_lab.dart';
+import 'package:chess_auto_prep/features/bughouse/lab_panel.dart';
+import 'package:chess_auto_prep/features/bughouse/table_boards.dart';
+import 'package:chess_auto_prep/ui/app_keys.dart';
+import 'package:chessground/chessground.dart';
+import 'package:chess_auto_prep/features/bughouse/table_search.dart';
+import 'package:chess_auto_prep/storage/bughouse_books.dart';
+import 'package:chess_auto_prep/ui/theme.dart';
+import 'package:dartchess/dartchess.dart' show Side;
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/scripted_bughouse.dart';
+
+FicsMove _move(BoardNumber board, Side mover, String san, int games) => (
+  board: board,
+  mover: mover,
+  san: san,
+  games: games,
+  abWins: games ~/ 2,
+  cdWins: games ~/ 3,
+  draws: 0,
+  unknown: 0,
+  averageElo: null,
+);
+
+void main() {
+  late BughouseLab lab;
+  late ScriptedBughouse outside;
+  late TableSearch search;
+  late ArchiveMoves archive;
+
+  setUp(() {
+    lab = BughouseLab();
+    outside = ScriptedBughouse();
+    archive = ArchiveMoves(lab: lab, book: outside.archive);
+  });
+
+  tearDown(() {
+    archive.dispose();
+    search.dispose();
+    lab.dispose();
+  });
+
+  Future<void> pump(WidgetTester tester) async {
+    search = TableSearch(
+      lab: lab,
+      book: outside.book,
+      startEngine: () => outside.outside.launch(cores: 2),
+      depth: (ownNodes: 50, childNodes: 20),
+      passes: const [Duration(seconds: 1)],
+    );
+    tester.view.physicalSize = const Size(700, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: Scaffold(
+          body: LabPanel(lab: lab, search: search, archive: archive),
+        ),
+      ),
+    );
+    search.open();
+    await archive.open();
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('only the clock and the engine switch ask anything', (
+    tester,
+  ) async {
+    await pump(tester);
+    expect(find.text('Time'), findsOneWidget);
+    expect(find.byType(Switch), findsOneWidget);
+    for (final gone in [
+      'Our team',
+      'Must move on',
+      'Search',
+      'Analyze',
+      'Flip boards',
+      'New game',
+      'FICS archive',
+    ]) {
+      expect(find.text(gone), findsNothing, reason: gone);
+    }
+  });
+
+  testWidgets('the switch shows a column for each seat', (tester) async {
+    await pump(tester);
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    final lines = find.byType(EngineLinesBlock);
+    for (final seat in ['A', 'B', 'C', 'D']) {
+      expect(
+        find.descendant(of: lines, matching: find.text(seat)),
+        findsOneWidget,
+        reason: seat,
+      );
+    }
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(lines, findsNothing);
+  });
+
+  testWidgets('a failed analysis save is visible and retry keeps its scores', (
+    tester,
+  ) async {
+    outside.book.saving = (_) async => const HivemindSaveFailed('disk full');
+    await pump(tester);
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(search.analysisSave, isA<AnalysisSaveFailed>());
+    expect(find.text('Analysis not saved: disk full'), findsOneWidget);
+    expect((search.scores as ScoresSearched).finished, isTrue);
+    expect(find.text('Analysis saved'), findsNothing);
+    final questions = outside.engine.asked.length;
+    outside.book.saving = null;
+    await tester.tap(find.text('Retry save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Analysis saved'), findsOneWidget);
+    expect(find.text('Retry save'), findsNothing);
+    expect(outside.engine.asked.length, questions);
+    expect(outside.book.saved.single.moves, hasLength(40));
+  });
+
+  testWidgets('the FICS archive lists each board’s moves below its board', (
+    tester,
+  ) async {
+    outside.archive
+      ..present = true
+      ..positions[TablePosition.initial.bookKey] = (
+        games: 900,
+        moves: [
+          _move(BoardNumber.one, Side.white, 'e4', 500),
+          _move(BoardNumber.two, Side.white, 'd4', 300),
+        ],
+      );
+    await pump(tester);
+    expect(find.text('A e4'), findsNothing);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: Scaffold(
+          body: TableBoards(lab: lab, boardSize: 300, archive: archive),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final one = tester.getTopLeft(find.text('A e4'));
+    expect(
+      one.dy,
+      greaterThan(tester.getBottomLeft(find.byType(Chessboard).first).dy),
+    );
+    final two = tester.getTopLeft(find.text('D d4'));
+    // Side by side, each under its own board's column.
+    expect(two.dx, greaterThan(one.dx + 200));
+    expect(two.dy, one.dy);
+    expect(find.text('FICS games · 900'), findsNWidgets(2));
+  });
+
+  testWidgets('each board’s step buttons name the keys that step it', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: Scaffold(
+          body: TableBoards(lab: lab, boardSize: 300, archive: archive),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    for (final tip in [
+      AppKey.firstMove.tip('First move'),
+      AppKey.stepBack.tip('Back'),
+      AppKey.stepForward.tip('Forward'),
+      AppKey.lastMove.tip('Last move'),
+    ]) {
+      expect(
+        find.byTooltip(RegExp('^${RegExp.escape(tip)}, ')),
+        findsNWidgets(2),
+      );
+    }
+    expect(AppKey.firstMove.tip('First move'), 'First move (Home)');
+  });
+}

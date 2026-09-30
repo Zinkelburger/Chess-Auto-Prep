@@ -14,7 +14,17 @@ $ready = Join-Path $stateDir 'helper-ready'
 $lock = $null
 $exitCode = 0
 try {
-    $lock = [System.IO.File]::Open((Join-Path (Split-Path -Parent $stateDir) 'install.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
+    # The app asks whether a helper runs by opening the lock for a moment, so
+    # retry briefly rather than fail on a handle held only by that question.
+    $lockPath = Join-Path (Split-Path -Parent $stateDir) 'install.lock'
+    for ($attempt = 1; !$lock; $attempt++) {
+        try {
+            $lock = [System.IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None')
+        } catch [System.IO.IOException] {
+            if ($attempt -ge 20) { throw }
+            Start-Sleep -Milliseconds 500
+        }
+    }
     # Readiness is published only after capturing the old process handle.
     $app = Get-Process -Id $config.processId -ErrorAction SilentlyContinue
     Set-Content -LiteralPath $ready -Value 'ready'

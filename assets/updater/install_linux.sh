@@ -10,8 +10,10 @@ armed=$6
 state_dir=$(dirname "$armed")
 exec >>"$state_dir/install.log" 2>&1
 # Serialize helpers for this installation, including helpers from another app.
+# The app asks whether a helper runs by taking the lock for a moment, so wait
+# briefly rather than give up on a lock held only by that question.
 exec 9>"$(dirname "$state_dir")/install.lock"
-flock -n 9 || exit 1
+flock -w 10 9 || exit 1
 finish() {
   result=$?
   if test "$result" -ne 0; then

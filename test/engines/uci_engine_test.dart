@@ -1,0 +1,478 @@
+import 'dart:async';
+
+import 'package:chess_auto_prep/chess/fen.dart';
+import 'package:chess_auto_prep/engines/engine.dart';
+import 'package:chess_auto_prep/engines/playing_engine.dart';
+import 'package:chess_auto_prep/engines/engine_line.dart';
+import 'package:chess_auto_prep/engines/uci_engine.dart';
+import 'package:chess_auto_prep/engines/uci_process.dart';
+import 'package:fake_async/fake_async.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+/// The far end of the pipe, played by the test.
+final class FakeProcess implements UciProcess {
+  final sent = <String>[];
+  final _out = StreamController<String>();
+  bool killed = false;
+  bool _gone = false;
+
+  /// Whether the pipe closes the moment the kill lands. A real process's
+  /// exit is only seen once what it printed before has been read.
+  bool pipeClosesOnKill = true;
+
+  @override
+  int get pid => 4242;
+
+  @override
+  Stream<String> get lines => _out.stream;
+
+  @override
+  void send(String line) => sent.add(line);
+
+  @override
+  Future<void> kill() async {
+    killed = true;
+    if (pipeClosesOnKill) exit(137);
+  }
+
+  void say(String line) => _out.add(line);
+
+  /// The process goes. [code] is what a real one would report: 139 for a
+  /// crash, 137 for the kill above.
+  void exit(int code) {
+    if (_gone) return;
+    _gone = true;
+    unawaited(_out.close());
+  }
+
+  void answerHandshake() {
+    say('id name Fake 9');
+    say('uciok');
+    say('readyok');
+  }
+}
+
+void main() {
+  const after1e4 = Fen(
+    'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+  );
+
+  Future<(UciEngine, FakeProcess)> started() async {
+    final process = FakeProcess();
+    final starting = UciEngine.start(process, options: {'Hash': '16'});
+    await pumpEventQueue();
+    process.answerHandshake();
+    return (await starting, process);
+  }
+
+  test(
+    'finite play sends history and returns bestmove rather than the PV',
+    () async {
+      final (engine, process) = await started();
+      final search = engine.play(Fen.initial, [
+        'e2e4',
+        'e7e5',
+      ], const MoveBudget(milliseconds: 25));
+      final lines = search.analysis.lines.toList();
+      await pumpEventQueue();
+      expect(
+        process.sent,
+        contains('position fen ${Fen.initial.value} moves e2e4 e7e5'),
+      );
+      expect(process.sent, contains('go movetime 25'));
+      process.say('info depth 4 score cp 10 pv g1f3');
+      process.say('bestmove f1c4 ponder g8f6');
+      expect(await search.bestMove, 'f1c4');
+      expect((await lines).single.pv, ['g1f3']);
+      process.exit(0);
+    },
+  );
+
+  test('play that exits without bestmove does not substitute a PV', () async {
+    final (engine, process) = await started();
+    final search = engine.play(
+      Fen.initial,
+      const [],
+      const MoveBudget(depth: 2),
+    );
+    final lines = search.analysis.lines.toList();
+
+    await pumpEventQueue();
+    process.say('info depth 1 score cp 20 pv e2e4');
+    process.exit(1);
+    expect(await search.bestMove, isNull);
+    expect((await lines).single.pv, ['e2e4']);
+  });
+
+  test('handshakes, applies options and takes the name', () async {
+    final (engine, process) = await started();
+    expect(process.sent, ['uci', 'setoption name Hash value 16', 'isready']);
+    expect(engine.name, 'Fake 9');
+  });
+
+  test('a search sends the position and receives its lines', () async {
+    final (engine, process) = await started();
+    final search = engine.analyse(Fen.initial, multiPv: 2);
+    final lines = <EngineLine>[];
+    search.lines.listen(lines.add);
+    await pumpEventQueue();
+    expect(process.sent.sublist(3), [
+      'setoption name MultiPV value 2',
+      'position fen ${Fen.initial.value}',
+      'go infinite',
+    ]);
+    process.say('info depth 5 multipv 1 score cp 20 pv e2e4');
+    process.say('info depth 5 multipv 2 score cp 15 pv d2d4');
+    await pumpEventQueue();
+    expect(lines.map((l) => l.pv.single), ['e2e4', 'd2d4']);
+  });
+
+  test(
+    'a new search waits for the old bestmove, and old lines stay old',
+    () async {
+      final (engine, process) = await started();
+      final first = engine.analyse(Fen.initial, multiPv: 1);
+      final firstLines = <EngineLine>[];
+      var firstDone = false;
+      first.lines.listen(firstLines.add, onDone: () => firstDone = true);
+      await pumpEventQueue();
+      final second = engine.analyse(after1e4, multiPv: 1);
+      final secondLines = <EngineLine>[];
+      second.lines.listen(secondLines.add);
+      await pumpEventQueue();
+      expect(process.sent.last, 'stop');
+      // The engine is still finishing the first search.
+      process.say('info depth 30 score cp 40 pv e2e4');
+      await pumpEventQueue();
+      expect(firstLines, hasLength(1));
+      expect(secondLines, isEmpty);
+      expect(process.sent.last, 'stop', reason: 'no go before bestmove');
+      process.say('bestmove e2e4');
+      await pumpEventQueue();
+      expect(firstDone, isTrue);
+      expect(process.sent.last, 'go infinite');
+      expect(process.sent, contains('position fen ${after1e4.value}'));
+      process.say('info depth 1 score cp -30 pv e7e5');
+      await pumpEventQueue();
+      expect(secondLines.single.pv, ['e7e5']);
+      expect(firstLines, hasLength(1));
+    },
+  );
+
+  test('a fixed-depth search sends go depth and ends on its own; a search '
+      'queued behind it waits rather than stopping it', () async {
+    final (engine, process) = await started();
+    final fixed = engine.analyse(Fen.initial, multiPv: 1, depth: 12);
+    var fixedDone = false;
+    fixed.lines.listen(null, onDone: () => fixedDone = true);
+    await pumpEventQueue();
+    expect(process.sent.last, 'go depth 12');
+    final next = engine.analyse(after1e4, multiPv: 1);
+    next.lines.listen(null);
+    await pumpEventQueue();
+    expect(process.sent, isNot(contains('stop')));
+    expect(process.sent.last, 'go depth 12', reason: 'still waiting');
+    process.say('info depth 12 score cp 20 pv e2e4');
+    process.say('bestmove e2e4');
+    await pumpEventQueue();
+    expect(fixedDone, isTrue);
+    expect(process.sent.last, 'go infinite');
+  });
+
+  test('stopping a queued search cancels it without a go', () async {
+    final (engine, process) = await started();
+    engine.analyse(Fen.initial, multiPv: 1);
+    await pumpEventQueue();
+    final queued = engine.analyse(after1e4, multiPv: 1);
+    var done = false;
+    queued.lines.listen(null, onDone: () => done = true);
+    await queued.stop();
+    process.say('bestmove e2e4');
+    await pumpEventQueue();
+    expect(done, isTrue);
+    expect(process.sent.where((l) => l == 'go infinite'), hasLength(1));
+  });
+
+  test('stop completes when the engine says bestmove', () async {
+    final (engine, process) = await started();
+    final search = engine.analyse(Fen.initial, multiPv: 1);
+    await pumpEventQueue();
+    var stopped = false;
+    unawaited(search.stop().then((_) => stopped = true));
+    unawaited(search.stop()); // asking twice sends one stop
+    await pumpEventQueue();
+    expect(stopped, isFalse);
+    expect(process.sent.where((l) => l == 'stop'), hasLength(1));
+    process.say('bestmove e2e4');
+    await pumpEventQueue();
+    expect(stopped, isTrue);
+  });
+
+  test('quit waits for the exit, then kills', () {
+    fakeAsync((async) {
+      final process = FakeProcess();
+      final starting = UciEngine.start(process);
+      async.flushMicrotasks();
+      process.answerHandshake();
+      async.flushMicrotasks();
+      late UciEngine engine;
+      unawaited(starting.then((e) => engine = e));
+      async.flushMicrotasks();
+      var gone = false;
+      unawaited(engine.quit().then((_) => gone = true));
+      async.elapse(const Duration(seconds: 1));
+      expect(process.sent.last, 'quit');
+      expect(gone, isFalse);
+      async.elapse(const Duration(seconds: 2));
+      expect(process.killed, isTrue);
+      expect(gone, isTrue);
+    });
+  });
+
+  test('an engine that never answers stop is killed, not waited on', () {
+    fakeAsync((async) {
+      final process = FakeProcess();
+      final starting = UciEngine.start(process);
+      async.flushMicrotasks();
+      process.answerHandshake();
+      async.flushMicrotasks();
+      late UciEngine engine;
+      unawaited(starting.then((e) => engine = e));
+      async.flushMicrotasks();
+
+      final first = engine.analyse(Fen.initial, multiPv: 1);
+      var firstDone = false;
+      first.lines.listen(null, onDone: () => firstDone = true);
+      async.flushMicrotasks();
+      final second = engine.analyse(after1e4, multiPv: 1);
+      var secondDone = false;
+      second.lines.listen(null, onDone: () => secondDone = true);
+      async.flushMicrotasks();
+      expect(process.sent.last, 'stop');
+
+      // The engine says nothing at all: no `bestmove`, no exit.
+      async.elapse(const Duration(seconds: 30));
+      async.flushMicrotasks();
+
+      expect(process.killed, isTrue, reason: 'the pane cannot wait for ever');
+      expect(firstDone, isTrue);
+      expect(secondDone, isTrue);
+      expect(
+        process.sent,
+        isNot(contains('position fen ${after1e4.value}')),
+        reason: 'nothing is asked of an engine that has gone',
+      );
+    });
+  });
+
+  test('a killed engine is asked nothing more, and what it printed before '
+      'the kill reaches no later search', () {
+    fakeAsync((async) {
+      const afterE5 = Fen(
+        'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+      );
+      final process = FakeProcess()..pipeClosesOnKill = false;
+      final starting = UciEngine.start(process);
+      async.flushMicrotasks();
+      process.answerHandshake();
+      async.flushMicrotasks();
+      late UciEngine engine;
+      unawaited(starting.then((e) => engine = e));
+      async.flushMicrotasks();
+
+      engine.analyse(Fen.initial, multiPv: 1).lines.listen(null);
+      async.flushMicrotasks();
+      engine.analyse(after1e4, multiPv: 1).lines.listen(null);
+      final third = engine.analyse(afterE5, multiPv: 1);
+      final thirdLines = <EngineLine>[];
+      var thirdDone = false;
+      third.lines.listen(thirdLines.add, onDone: () => thirdDone = true);
+      async.flushMicrotasks();
+
+      // No answer to stop: the engine is killed, but its pipe is still
+      // draining what it printed before.
+      async.elapse(const Duration(seconds: 30));
+      expect(process.killed, isTrue);
+      process.say('info depth 30 score cp 40 pv e2e4');
+      process.say('bestmove e2e4');
+      async.flushMicrotasks();
+
+      expect(thirdDone, isTrue);
+      expect(thirdLines, isEmpty);
+      expect(
+        process.sent.where((line) => line.startsWith('go ')),
+        hasLength(1),
+        reason: 'only the first search was ever started',
+      );
+
+      EngineExit? why;
+      unawaited(engine.exited.then((exit) => why = exit));
+      process.exit(137);
+      async.flushMicrotasks();
+      expect(why, EngineExit.unresponsive);
+    });
+  });
+
+  test('an engine that exits mid-handshake fails to start', () async {
+    final process = FakeProcess();
+    final starting = UciEngine.start(process);
+    await pumpEventQueue();
+    process.exit(1);
+    await expectLater(starting, throwsA(isA<EngineFailure>()));
+  });
+
+  test('an engine that dies ends its search and reports exit', () async {
+    final (engine, process) = await started();
+    final search = engine.analyse(Fen.initial, multiPv: 1);
+    var done = false;
+    search.lines.listen(null, onDone: () => done = true);
+    await pumpEventQueue();
+    process.exit(139);
+    await engine.exited;
+    await pumpEventQueue();
+    expect(done, isTrue);
+  });
+  test('the first silent finite search fails at its own deadline', () {
+    fakeAsync((clock) {
+      final (engine, process) = _readyIn(clock);
+      final errors = <Object>[];
+      var done = false;
+      EngineExit? exited;
+      unawaited(engine.exited.then((why) => exited = why));
+      engine
+          .analyse(Fen.initial, multiPv: 1, depth: 15)
+          .lines
+          .listen(null, onError: errors.add, onDone: () => done = true);
+      clock.flushMicrotasks();
+      clock.elapse(const Duration(seconds: 61));
+      expect(process.killed, isTrue);
+      expect(done, isTrue);
+      expect(errors.single, isA<EngineFailure>());
+      expect(exited, EngineExit.unresponsive);
+      expect(
+        process.sent.where((line) => line.startsWith('go ')),
+        hasLength(1),
+      );
+    });
+  });
+
+  test('default finite budget permits a healthy search beyond one minute', () {
+    fakeAsync((clock) {
+      final (engine, process) = _readyIn(
+        clock,
+        patience: UciEngine.defaultFinitePatience,
+      );
+      var done = false;
+      engine
+          .analyse(Fen.initial, multiPv: 1, depth: 60)
+          .lines
+          .listen(null, onDone: () => done = true);
+      clock.flushMicrotasks();
+      clock.elapse(const Duration(minutes: 2));
+      expect(process.killed, isFalse);
+      expect(done, isFalse);
+      process.say('bestmove e2e4');
+      clock.flushMicrotasks();
+      expect(done, isTrue);
+      process.exit(0);
+      clock.flushMicrotasks();
+    });
+  });
+
+  test('partial finite results without bestmove still end as a failure', () {
+    fakeAsync((clock) {
+      final (engine, process) = _readyIn(clock);
+      final lines = <EngineLine>[];
+      final errors = <Object>[];
+      engine
+          .analyse(Fen.initial, multiPv: 1, depth: 15)
+          .lines
+          .listen(lines.add, onError: errors.add);
+      clock.flushMicrotasks();
+      process.say('info depth 15 score cp 20 pv e2e4');
+      clock.flushMicrotasks();
+      expect(lines.single.depth, 15);
+      clock.elapse(const Duration(seconds: 61));
+      expect(errors.single, isA<EngineFailure>());
+      expect(process.killed, isTrue);
+    });
+  });
+
+  test('a later request does not postpone the running finite deadline', () {
+    fakeAsync((clock) {
+      final (engine, process) = _readyIn(clock);
+      engine
+          .analyse(Fen.initial, multiPv: 1, depth: 15)
+          .lines
+          .listen(null, onError: (Object _) {});
+      clock.flushMicrotasks();
+      clock.elapse(const Duration(seconds: 50));
+      var nextDone = false;
+      engine
+          .analyse(after1e4, multiPv: 1)
+          .lines
+          .listen(null, onDone: () => nextDone = true);
+      clock.flushMicrotasks();
+      clock.elapse(const Duration(seconds: 11));
+      expect(process.killed, isTrue);
+      expect(nextDone, isTrue);
+      expect(process.sent, isNot(contains('position fen ${after1e4.value}')));
+    });
+  });
+
+  test(
+    'continuous analysis has no finite deadline but explicit stop is bounded',
+    () {
+      fakeAsync((clock) {
+        final (engine, process) = _readyIn(clock);
+        final search = engine.analyse(Fen.initial, multiPv: 1);
+        search.lines.listen(null);
+        clock.flushMicrotasks();
+        clock.elapse(const Duration(minutes: 2));
+        expect(process.killed, isFalse);
+        var stopped = false;
+        unawaited(search.stop().then((_) => stopped = true));
+        clock.flushMicrotasks();
+        clock.elapse(const Duration(seconds: 6));
+        expect(stopped, isTrue);
+        expect(process.killed, isTrue);
+      });
+    },
+  );
+
+  test('a completed finite deadline cannot kill a later continuous search', () {
+    fakeAsync((clock) {
+      final (engine, process) = _readyIn(clock);
+      engine.analyse(Fen.initial, multiPv: 1, depth: 15).lines.listen(null);
+      clock.flushMicrotasks();
+      clock.elapse(const Duration(seconds: 10));
+      process.say('bestmove e2e4');
+      clock.flushMicrotasks();
+      engine.analyse(after1e4, multiPv: 1).lines.listen(null);
+      clock.flushMicrotasks();
+      clock.elapse(const Duration(minutes: 2));
+      expect(process.killed, isFalse);
+      expect(process.sent.last, 'go infinite');
+      process.exit(0);
+      clock.flushMicrotasks();
+    });
+  });
+}
+
+(UciEngine, FakeProcess) _readyIn(
+  FakeAsync clock, {
+  Duration patience = const Duration(minutes: 1),
+}) {
+  final process = FakeProcess();
+  late UciEngine engine;
+  unawaited(
+    UciEngine.start(
+      process,
+      finitePatience: patience,
+    ).then((started) => engine = started),
+  );
+  clock.flushMicrotasks();
+  process.answerHandshake();
+  clock.flushMicrotasks();
+  return (engine, process);
+}

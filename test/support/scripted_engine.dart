@@ -1,162 +1,94 @@
-/// A scripted Stockfish stand-in for services that talk to [StockfishPool].
-///
-/// The hole hunt, the trick hunt and the engine-weakness finder all reach the
-/// engine through `StockfishPool.instance`, so a unit test drives them by
-/// injecting an [EvalWorker] built on one of these ([StockfishPool
-/// .addWorkerForTest]) instead of spawning a real binary.
-///
-/// It speaks just enough UCI for [EvalWorker]: `isready` → `readyok`, and a
-/// `go` answered with the script registered for the position last sent by
-/// `position fen …`.
-///
-/// **Scores are side-to-move relative, exactly as Stockfish reports them.**
-/// That is the point of the double: `runDiscovery` White-normalises using the
-/// `isWhiteToMove` flag its *caller* passes, so a service that passes the
-/// wrong flag flips the sign of everything downstream — and a script written
-/// in White-relative cp would hide it.
-library;
-
 import 'dart:async';
 
-import 'package:chess_auto_prep/services/engine/engine_connection.dart';
-import 'package:chess_auto_prep/services/engine/engine_interrupt.dart';
-import 'package:chess_auto_prep/utils/fen_utils.dart';
+import 'package:chess_auto_prep/chess/fen.dart';
+import 'package:chess_auto_prep/engines/engine.dart';
+import 'package:chess_auto_prep/engines/engine_line.dart';
 
-/// One scripted engine line: a score (side-to-move relative) and a PV.
-class ScriptLine {
-  /// Centipawns, side-to-move relative. Null when [mate] is set.
-  final int? cp;
+/// An engine whose lines the test writes. Each `analyse` ends the previous
+/// search, as the real one does.
+final class ScriptedEngine implements Engine {
+  final searches = <ScriptedSearch>[];
+  final _exited = Completer<EngineExit>();
+  bool quitCalled = false;
 
-  /// Mate distance, side-to-move relative (positive = side to move mates).
-  final int? mate;
+  @override
+  String get name => 'Scripted 1';
 
-  /// Principal variation in UCI. The first move is the line's move.
-  final List<String> pv;
+  ScriptedSearch get current => searches.last;
 
-  final int depth;
+  @override
+  Search analyse(Fen fen, {required int multiPv, int? depth}) {
+    final search = ScriptedSearch(fen: fen, multiPv: multiPv, depth: depth);
+    searches.add(search);
+    return search.search;
+  }
 
-  const ScriptLine.cp(int this.cp, {this.pv = const [], this.depth = 20})
-    : mate = null;
+  @override
+  Future<EngineExit> get exited => _exited.future;
 
-  const ScriptLine.mate(int this.mate, {this.pv = const [], this.depth = 20})
-    : cp = null;
+  @override
+  Future<void> quit() async {
+    quitCalled = true;
+    _end(EngineExit.ended);
+  }
 
-  String _score() => mate != null ? 'mate $mate' : 'cp $cp';
+  /// The process dies on its own.
+  void crash() => _end(EngineExit.ended);
 
-  String infoLine({int? pvNumber}) {
-    final multipv = pvNumber == null ? '' : ' multipv $pvNumber';
-    final line = pv.isEmpty ? '' : ' pv ${pv.join(' ')}';
-    return 'info depth $depth$multipv score ${_score()} nodes 4242 nps 4242'
-        '$line';
+  /// The engine stops answering and is killed for it, the way a real one is
+  /// when it never says `bestmove`.
+  void wedge() => _end(EngineExit.unresponsive);
+
+  void _end(EngineExit exit) {
+    searches.lastOrNull?.end();
+    if (!_exited.isCompleted) _exited.complete(exit);
   }
 }
 
-class ScriptedEngine implements EngineConnection {
-  final _stdout = StreamController<String>.broadcast();
+/// A search whose `stop` only marks it; the test ends it with [end], the
+/// way a real engine ends one with `bestmove`, so late lines can be sent.
+final class ScriptedSearch {
+  ScriptedSearch({required this.fen, required this.multiPv, this.depth});
+
+  final Fen fen;
+  final int multiPv;
+
+  /// The depth the search was asked to run to, or null for an open one.
+  final int? depth;
+  final _lines = StreamController<EngineLine>();
   final _done = Completer<void>();
+  bool stopped = false;
 
-  /// MultiPV script per position, keyed by [normalizeFen]. Best line first —
-  /// the order Stockfish reports and the services rely on.
-  final Map<String, List<ScriptLine>> discovery = {};
+  late final search = Search(
+    lines: _lines.stream,
+    stop: () {
+      stopped = true;
+      return _done.future;
+    },
+  );
 
-  /// Single-PV script per position, keyed by [normalizeFen].
-  final Map<String, ScriptLine> evals = {};
+  bool get ended => _done.isCompleted;
 
-  /// Every UCI command the worker sent, in order.
-  final List<String> commands = [];
+  void emit(EngineLine line) => _lines.add(line);
 
-  /// Positions handed to a MultiPV search, in order (full FENs).
-  final List<String> discoverySearches = [];
-
-  /// Positions handed to a single-PV search, in order (full FENs).
-  final List<String> evalSearches = [];
-
-  /// Called once a search has been launched on [fen], before the scripted
-  /// answer arrives. Tests use it to abort the search (`worker.stop()`) the
-  /// way a cancel does in production.
-  ///
-  /// It runs on a microtask rather than inside `sendCommand`, because a real
-  /// engine cannot call back into the worker mid-`sendCommand`: doing so
-  /// re-enters `evaluateFen` between its `go` and its `return completer
-  /// .future`, and the completer `stop()` just cleared is gone by the time
-  /// that line runs.
-  void Function(String fen)? onGo;
-
-  bool disposed = false;
-
-  int _multiPv = 1;
-  String _fen = '';
-
-  @override
-  Stream<String> get stdout => _stdout.stream;
-
-  @override
-  Future<void> get done => _done.future;
-
-  @override
-  Future<void> waitForReady() async {}
-
-  @override
-  void sendCommand(String command) {
-    commands.add(command);
-
-    if (command == 'isready') {
-      scheduleMicrotask(() {
-        if (!_stdout.isClosed) _stdout.add('readyok');
-      });
-      return;
-    }
-    if (command.startsWith('setoption name MultiPV value ')) {
-      _multiPv = int.tryParse(command.split(' ').last) ?? 1;
-      return;
-    }
-    if (command.startsWith('position fen ')) {
-      _fen = command.substring('position fen '.length).trim();
-      return;
-    }
-    if (!command.startsWith('go ')) return;
-
-    // A MultiPV setting above 1 is what distinguishes a discovery search from
-    // a plain eval: `runDiscovery` sets it before searching and resets it to
-    // 1 afterwards, and `evaluateFen` never touches it.
-    final isDiscovery = _multiPv > 1;
-    final fen = _fen;
-    (isDiscovery ? discoverySearches : evalSearches).add(fen);
-    final hook = onGo;
-    if (hook != null) scheduleMicrotask(() => hook(fen));
-
-    final key = normalizeFen(fen);
-    scheduleMicrotask(() {
-      if (_stdout.isClosed) return;
-      if (isDiscovery) {
-        final lines = discovery[key] ?? const <ScriptLine>[];
-        for (var i = 0; i < lines.length; i++) {
-          _stdout.add(lines[i].infoLine(pvNumber: i + 1));
-        }
-        _stdout.add(_bestmove(lines.isEmpty ? null : lines.first));
-      } else {
-        final line = evals[key];
-        if (line != null) _stdout.add(line.infoLine());
-        _stdout.add(_bestmove(line));
-      }
-    });
+  /// Ends the search with [error] on its lines, the way a real engine's
+  /// fixed-depth search ends when it runs past its deadline.
+  void fail(Object error) {
+    if (ended) return;
+    _lines.addError(error);
+    end();
   }
 
-  static String _bestmove(ScriptLine? line) => line == null || line.pv.isEmpty
-      ? 'bestmove (none)'
-      : 'bestmove ${line.pv.first}';
-
-  /// Kill the engine process the way an unexpected exit does.
-  void crash() {
-    if (!_done.isCompleted) _done.complete();
-    if (!_stdout.isClosed) {
-      _stdout.addError(EngineProcessExitedError(1));
-    }
-  }
-
-  @override
-  void dispose() {
-    disposed = true;
-    unawaited(_stdout.close());
+  void end() {
+    if (ended) return;
+    _done.complete();
+    unawaited(_lines.close());
   }
 }
+
+EngineLine line({
+  int multiPv = 1,
+  int depth = 10,
+  Score score = const Centipawns(0),
+  List<String> pv = const ['g1f3'],
+}) => EngineLine(multiPv: multiPv, depth: depth, score: score, pv: pv);

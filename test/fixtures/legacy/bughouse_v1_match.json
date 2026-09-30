@@ -1,0 +1,77 @@
+{
+  "id": "e4-d5",
+  "toJson": {
+    "version": 1,
+    "id": "e4-d5",
+    "createdAt": "2026-09-04T12:00:00.000",
+    "finishedAt": "2026-09-04T12:10:00.000",
+    "status": "completed",
+    "config": {
+      "name": "e4 d5",
+      "startDualFen": "rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR[] w KQkq - 0 2|rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1",
+      "openingLabel": "1. e4 d5",
+      "participants": [
+        {
+          "name": "Hivemind A",
+          "budget": {
+            "nodes": 800
+          }
+        },
+        {
+          "name": "Hivemind B",
+          "budget": {
+            "movetimeMs": 1000
+          }
+        }
+      ],
+      "games": 2,
+      "alternateSeats": true,
+      "timeStance": "ahead",
+      "maxPlies": 240,
+      "hashMb": 256,
+      "batchSize": 8,
+      "variety": {
+        "plies": 8,
+        "window": 0.05,
+        "lines": 3
+      },
+      "seed": 12345
+    },
+    "games": [
+      {
+        "number": 1,
+        "whiteIndex": 0,
+        "blackIndex": 1,
+        "whiteName": "Hivemind A",
+        "blackName": "Hivemind B",
+        "result": "whiteWins",
+        "termination": "checkmate",
+        "detail": "board 1",
+        "moves": [
+          "1e4d5",
+          "2d2d4",
+          "1d8d5"
+        ],
+        "startedAt": "2026-09-04T12:00:01.000",
+        "durationMs": 5000
+      },
+      {
+        "number": 2,
+        "whiteIndex": 1,
+        "blackIndex": 0,
+        "whiteName": "Hivemind B",
+        "blackName": "Hivemind A",
+        "result": "draw",
+        "termination": "maxMoves",
+        "detail": "",
+        "moves": [
+          "2e2e4"
+        ],
+        "startedAt": "2026-09-04T12:05:00.000",
+        "durationMs": 100
+      }
+    ]
+  },
+  "match.json": "{\n  \"version\": 1,\n  \"id\": \"e4-d5\",\n  \"createdAt\": \"2026-09-04T12:00:00.000\",\n  \"finishedAt\": \"2026-09-04T12:10:00.000\",\n  \"status\": \"completed\",\n  \"config\": {\n    \"name\": \"e4 d5\",\n    \"startDualFen\": \"rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR[] w KQkq - 0 2|rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1\",\n    \"openingLabel\": \"1. e4 d5\",\n    \"participants\": [\n      {\n        \"name\": \"Hivemind A\",\n        \"budget\": {\n          \"nodes\": 800\n        }\n      },\n      {\n        \"name\": \"Hivemind B\",\n        \"budget\": {\n          \"movetimeMs\": 1000\n        }\n      }\n    ],\n    \"games\": 2,\n    \"alternateSeats\": true,\n    \"timeStance\": \"ahead\",\n    \"maxPlies\": 240,\n    \"hashMb\": 256,\n    \"batchSize\": 8,\n    \"variety\": {\n      \"plies\": 8,\n      \"window\": 0.05,\n      \"lines\": 3\n    },\n    \"seed\": 12345\n  },\n  \"games\": [\n    {\n      \"number\": 1,\n      \"whiteIndex\": 0,\n      \"blackIndex\": 1,\n      \"whiteName\": \"Hivemind A\",\n      \"blackName\": \"Hivemind B\",\n      \"result\": \"whiteWins\",\n      \"termination\": \"checkmate\",\n      \"detail\": \"board 1\",\n      \"moves\": [\n        \"1e4d5\",\n        \"2d2d4\",\n        \"1d8d5\"\n      ],\n      \"startedAt\": \"2026-09-04T12:00:01.000\",\n      \"durationMs\": 5000\n    },\n    {\n      \"number\": 2,\n      \"whiteIndex\": 1,\n      \"blackIndex\": 0,\n      \"whiteName\": \"Hivemind B\",\n      \"blackName\": \"Hivemind A\",\n      \"result\": \"draw\",\n      \"termination\": \"maxMoves\",\n      \"detail\": \"\",\n      \"moves\": [\n        \"2e2e4\"\n      ],\n      \"startedAt\": \"2026-09-04T12:05:00.000\",\n      \"durationMs\": 100\n    }\n  ]\n}",
+  "games.bpgn": "[Event \"e4 d5\"]\n[Site \"Chess Auto Prep\"]\n[Date \"2026.09.04\"]\n[Round \"1\"]\n[WhiteA \"Hivemind A\"]\n[BlackA \"Hivemind B\"]\n[WhiteB \"Hivemind B\"]\n[BlackB \"Hivemind A\"]\n[Result \"1-0\"]\n[Termination \"normal\"]\n[Opening \"1. e4 d5\"]\n[SetUpDualFEN \"rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR[] w KQkq - 0 2|rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1\"]\n\n2A. exd5 1B. d4 2a. Qxd5\n1-0\n\n[Event \"e4 d5\"]\n[Site \"Chess Auto Prep\"]\n[Date \"2026.09.04\"]\n[Round \"2\"]\n[WhiteA \"Hivemind B\"]\n[BlackA \"Hivemind A\"]\n[WhiteB \"Hivemind A\"]\n[BlackB \"Hivemind B\"]\n[Result \"1/2-1/2\"]\n[Termination \"adjudication\"]\n[Opening \"1. e4 d5\"]\n[SetUpDualFEN \"rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR[] w KQkq - 0 2|rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1\"]\n\n1B. e4\n1/2-1/2\n\n"
+}

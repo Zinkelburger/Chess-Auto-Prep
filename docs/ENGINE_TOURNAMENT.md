@@ -144,18 +144,22 @@ dart run tools/run_engine_tournament.dart --show <tournament-id>
 
 `--engine "Name=/path/to/binary"` (repeatable) replaces the default of the
 bundled Stockfish playing itself. `--tc 60+0.6` takes a clock instead of a
-fixed think time. Ctrl-C stops after the game in flight.
+fixed think time. Ctrl-C stops after the games in flight. `--root` elsewhere
+than `Documents/engine_tournaments` keeps its recovery records in
+`<root>/.support` instead of the app's support folder (`--support` overrides).
 
 ## Where the code lives
 
 | | |
 |---|---|
-| `lib/features/engine_tournament/` | Models, the arbiter, the runner, the store, the crosstable, the screen |
+| `lib/chess/tournament/` | Config, schedule, results and standings (Elo, SB, LOS) |
+| `lib/features/tournaments/game_runner.dart` | One game: engines, clocks, the arbiter, the PGN |
+| `lib/storage/tournaments.dart` | `tournament.json` + `games.pgn` as one recoverable save |
 | `tools/run_engine_tournament.dart` | The headless entry point; also `--verify` and `--show` |
 | `tools/mcp/chess_prep/engine_tournament.py` | The MCP tools |
 
-The core is Flutter-free `dart:io` on purpose — that is what lets one
-implementation serve the app, the terminal, and an agent.
+Those three are Flutter-free `dart:io` on purpose — that is what lets one
+implementation serve the app, the terminal (`dart run`), and an agent.
 
 [scid]: https://scidvspc.sourceforge.net/doc/Tourney.htm
 [cutechess]: https://github.com/cutechess/cutechess/blob/master/docs/cutechess-cli.6

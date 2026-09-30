@@ -13,41 +13,41 @@ dependencies:
   flutter:
     sdk: flutter
 
+  intl: ^0.20.2
+
   # Chess functionality
   dartchess: ^0.13.1
+  chessground: ^10.2.0
+  multi_split_view: ^3.6.2
 
   # UI and state management
-  cupertino_icons: ^1.0.6
-  provider: ^6.1.1
+  collection: ^1.19.1
+
+  document_file_io:
+    path: packages/document_file_io
 
   # File handling and HTTP
-  file_picker: ^12.3.0
+  file_picker: ^13.1.0
   http: ^1.1.2
   crypto: ^3.0.6  # SHA-256 for Lichess OAuth PKCE
   path_provider: ^2.1.6
-  path_provider_linux: ^2.2.2
-  flutter_svg: ^2.0.9
   csv: ^8.0.0
-  share_plus: ^13.3.0
 
   shared_preferences: ^2.5.3
-  stockfish: ^1.7.1
+  shared_preferences_platform_interface: ^2.4.2
   onnxruntime: ^1.4.1
   ffi: ^2.1.0
 
   # Persistent eval cache (desktop: Linux / macOS / Windows).
-  sqflite_common_ffi: ^2.4.2+1
   sqlite3: ^3.6.0
   # TWIC master-games download (zip per weekly issue).
   archive: ^4.2.0
-  cdbdirect_flutter_libs:
-    path: packages/cdbdirect_flutter_libs
   path: ^1.9.0
   url_launcher: ^6.3.2
-  fl_chart: ^1.2.0
   window_manager: ^0.5.2
   package_info_plus: ^10.2.1
   pub_semver: ^2.2.1
+  desktop_drop: ^0.8.4
 
 dev_dependencies:
   flutter_test:
@@ -57,8 +57,6 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
   fake_async: ^1.3.1
-  path_provider_platform_interface: ^2.1.3
-  plugin_platform_interface: ^2.1.8
 
 flutter:
   uses-material-design: true
@@ -66,16 +64,15 @@ flutter:
   assets:
     - assets/updater/
     - assets/images/
-    - assets/pieces/
     - assets/maia3_simplified.onnx
     - assets/data/all_moves_maia3.json
-    - assets/data/all_moves_maia3_reversed.json
     - assets/executables/
     - assets/bughouse/
-    - assets/icons/
     - assets/licenses/
+    - assets/fonts/LICENSE-Inter.txt
+    - assets/fonts/LICENSE-SourceCodePro.txt
+    - assets/fonts/LICENSE-NotoSansSymbols2.txt
     - tools/assets.lock.json
-    - assets/pgn_collections/
     - assets/data/openings/
 
   # Bundled so every desktop renders the same face: with no fonts here Flutter

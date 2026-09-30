@@ -221,7 +221,7 @@ adds no new UI surface.
    the remaining half of "download once, share across 3 features." (Deferred —
    touches two unrelated, working features; do with the app running.)
 4. ~~Lichess fetcher unverified~~ **DONE: both fetchers verified against live
-   APIs** via `tools/verify_games_fetch.dart` — Chess.com (hikaru, 434 games)
+   APIs** (via a since-removed `tools/verify_games_fetch.dart`) — Chess.com (hikaru, 434 games)
    and Lichess (DrNykterstein, 20 games) parse, classify speeds, parse dates,
    and filter correctly. **Audit/engine/comment-on-draft** and the **Extend
    faucet** remain unwired (deferred enhancements, not blockers).

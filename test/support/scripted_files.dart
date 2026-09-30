@@ -1,0 +1,158 @@
+import 'dart:async';
+
+import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/game_store.dart';
+import 'package:chess_auto_prep/storage/book_snapshot.dart';
+import 'package:chess_auto_prep/storage/training_snapshot.dart';
+import 'package:chess_auto_prep/storage/document_ref.dart';
+
+/// A repertoire listing the test writes, whose timing the test controls:
+/// every call waits until the test releases it.
+final class ScriptedFiles implements ChapterFiles {
+  ScriptedFiles({
+    this.listing = const Repertoires([]),
+    this.deletedListing = const DeletedChapters([]),
+    this.isEmpty,
+  });
+
+  RepertoireListing listing;
+
+  /// What the recovery folders hold.
+  DeletedListing deletedListing;
+
+  /// Whether a folder has nothing left in it, which the real listing answers
+  /// from the disk the store just wrote to. Without it every folder counts as
+  /// empty, so a test that asserts a folder went has to say so itself.
+  final bool Function(String folder)? isEmpty;
+
+  /// With this set, every call waits until the test releases it.
+  bool hold = false;
+
+  /// The folders that were actually taken away, in order.
+  final removed = <String>[];
+
+  final _pending = <Completer<void>>[];
+
+  int get pendingCalls => _pending.length;
+
+  /// Lets the oldest waiting call answer.
+  void releaseNext() => _pending.removeAt(0).complete();
+
+  /// Lets the newest waiting call answer, ahead of older ones.
+  void releaseLast() => _pending.removeLast().complete();
+
+  void releaseAll() {
+    while (_pending.isNotEmpty) {
+      releaseNext();
+    }
+  }
+
+  /// How many times the listing has been read, so a test can say that
+  /// nothing read it again.
+  var listings = 0;
+
+  @override
+  Future<RepertoireListing> list() async {
+    listings++;
+    await _wait();
+    return listing;
+  }
+
+  /// Explicit substitute for the native whole-readset validation boundary.
+  /// Tests may hold it independently from listing/PGN reads.
+  Future<RepertoireValidation> Function(Repertoires?, Map<String, Revision>)?
+  validateWith;
+
+  final additionalValidations = <Map<String, Revision?>>[];
+  final profileValidations =
+      <({BookSource? book, TrainingReadSet? training})>[];
+
+  @override
+  Future<RepertoireValidation> validate(
+    Repertoires? snapshot, {
+    required Map<String, Revision> observed,
+    Map<String, Revision?> additional = const {},
+    BookSource? book,
+    TrainingReadSet? training,
+    StoredGamesSource? archive,
+  }) async {
+    additionalValidations.add(Map.unmodifiable(additional));
+    profileValidations.add((book: book, training: training));
+    return validateWith == null
+        ? ((snapshot == null || _sameMembership(snapshot))
+              ? const RepertoireCurrent()
+              : const RepertoireChanged())
+        : validateWith!(snapshot, observed);
+  }
+
+  @override
+  Future<DeletedListing> deleted() async {
+    await _wait();
+    return deletedListing;
+  }
+
+  @override
+  Future<void> removeIfEmpty(String folder) async {
+    if (isEmpty?.call(folder) ?? true) removed.add(folder);
+  }
+
+  /// The staging folders an import took away, in order.
+  final stagingRemoved = <String>[];
+
+  @override
+  Future<void> removeStaging(String folder) async {
+    stagingRemoved.add(folder);
+  }
+
+  /// What a removal of an unused chapter does, answering whether the file
+  /// is gone. Without it nothing is removed and the answer is false.
+  bool Function(DocumentRef ref, Revision created)? removeUnusedWith;
+
+  /// The unused chapters asked to be taken away, in order.
+  final unusedRemoved = <String>[];
+
+  @override
+  Future<bool> removeUnused(DocumentRef ref, Revision created) async {
+    unusedRemoved.add(ref.path);
+    return removeUnusedWith?.call(ref, created) ?? false;
+  }
+
+  bool _sameMembership(Repertoires snapshot) {
+    if (snapshot.boundaries == null) return identical(snapshot, listing);
+    final current = listing;
+    if (current is! Repertoires) return false;
+    final selected = current.within(snapshot.boundaries!);
+    final expected = {
+      for (final folder in snapshot.folders) ...folder.chapters,
+    };
+    final actual = {for (final folder in selected.folders) ...folder.chapters};
+    return selected.unreadable.isEmpty &&
+        actual.length == expected.length &&
+        actual.every(expected.contains);
+  }
+
+  Future<void> _wait() {
+    if (!hold) return Future<void>.value();
+    final completer = Completer<void>();
+    _pending.add(completer);
+    return completer.future;
+  }
+}
+
+ChapterRef ref(String repertoire, String name) => ChapterRef(
+  repertoire: repertoire,
+  name: name,
+  path: '/repertoires/$repertoire/$name.pgn',
+);
+
+/// A repertoire folder holding [names], modified now.
+RepertoireFolder folder(
+  String name,
+  List<String> names, {
+  DateTime? modified,
+}) => RepertoireFolder(
+  name: name,
+  path: '/repertoires/$name',
+  modified: modified ?? DateTime.now(),
+  chapters: [for (final chapter in names) ref(name, chapter)],
+);

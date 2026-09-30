@@ -1,0 +1,414 @@
+import 'dart:convert';
+
+import 'package:chess_auto_prep/chess/generation/search_node.dart';
+import 'package:chess_auto_prep/chess/generation/tree_wire_v4_reader.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'wire_documents.dart';
+
+// What the reader makes of a document this codec did not write: the old Dart
+// app's, the C builder's, one from a mode this search does not have, and one
+// that is simply wrong. A file it cannot value has to say so — the one thing
+// it may never do is answer with a tree that is not the saved one.
+void main() {
+  test('a tree from the heuristic search is refused, not read', () {
+    final result = decodeTreeV4(
+      wireDocument(tree: {...oneNode}..remove('history_aware')),
+    );
+
+    expect(result, isA<TreeUnsupported>());
+    expect((result as TreeUnsupported).reason, contains('heuristic'));
+  });
+
+  test('a tree from an older format is refused', () {
+    final result = decodeTreeV4(wireDocument(version: 3));
+
+    expect(result, isA<TreeUnsupported>());
+    expect((result as TreeUnsupported).reason, contains('version 3'));
+  });
+
+  test('a tree from the rolling search is refused', () {
+    final result = decodeTreeV4(
+      wireDocument(
+        config: const {'algorithm_version': 3, 'search_algorithm': 'rolling'},
+      ),
+    );
+
+    expect(result, isA<TreeUnsupported>());
+    expect((result as TreeUnsupported).reason, contains('rolling'));
+  });
+
+  test('a tree from the bounded database mode is refused', () {
+    final result = decodeTreeV4(
+      wireDocument(
+        config: const {
+          'algorithm_version': 3,
+          'search_algorithm': 'pure',
+          'play_as_white': true,
+          'max_depth': 4,
+          'bounded_database': true,
+        },
+      ),
+    );
+
+    expect(result, isA<TreeUnsupported>());
+    expect((result as TreeUnsupported).reason, contains('bounded database'));
+  });
+
+  test('text that is not a saved tree is malformed, never an exception', () {
+    expect(decodeTreeV4('not json at all'), isA<TreeMalformed>());
+    expect(decodeTreeV4('[1, 2, 3]'), isA<TreeMalformed>());
+    expect(decodeTreeV4('{"format": "pgn"}'), isA<TreeMalformed>());
+    expect(
+      decodeTreeV4(jsonEncode({'format': 'opening_tree', 'version': 4})),
+      isA<TreeMalformed>(),
+    );
+  });
+
+  test('a number too big for any double is refused or malformed, never an '
+      'exception', () {
+    // Valid JSON, and Dart reads it as infinity.
+    String huge(String key, String document) =>
+        document.replaceFirst(RegExp('"$key":[^,}]+'), '"$key":1e999');
+    final withBudget = wireDocument(
+      config: const {
+        'algorithm_version': 3,
+        'search_algorithm': 'pure',
+        'play_as_white': true,
+        'max_depth': 4,
+        'max_eval_loss_cp': 200,
+        'max_nodes': 50,
+      },
+    );
+
+    expect(
+      decodeTreeV4(huge('engine_eval_cp', wireDocument())),
+      isA<TreeMalformed>(),
+    );
+    expect(
+      decodeTreeV4(huge('version', wireDocument())),
+      isA<TreeUnsupported>(),
+    );
+    expect(
+      decodeTreeV4(huge('max_depth', wireDocument())),
+      isA<TreeUnsupported>(),
+    );
+    final fellBack = decodedTree(huge('max_eval_loss_cp', wireDocument()));
+    expect(fellBack.config.lossLimitCp, 200, reason: 'as if it were missing');
+    expect(
+      decodedTree(huge('max_nodes', withBudget)).config.nodeBudget,
+      isNull,
+    );
+  });
+
+  test('a node the build never evaluated is a frontier, not a failure', () {
+    // The old builder attaches a position's replies before evaluating them,
+    // so this is what a pause or a node budget leaves behind.
+    final decoded = decodedTree(
+      wireDocument(tree: {...oneNode}..remove('engine_eval_cp')),
+    );
+
+    expect(decoded.root, isA<FrontierNode>());
+    expect(decoded.root.evalForUs.cp, 0, reason: 'neutral, not a guess');
+    expect(decoded.root.valuation.value, 0.5);
+    expect(decoded.root.valuation.isExact, isFalse);
+  });
+
+  test('an unevaluated node at the horizon is unfinished, not settled', () {
+    final decoded = decodedTree(
+      wireDocument(
+        config: const {
+          'algorithm_version': 3,
+          'play_as_white': true,
+          'max_depth': 0,
+        },
+        tree: {...oneNode}..remove('engine_eval_cp'),
+      ),
+    );
+
+    expect(decoded.root, isA<FrontierNode>());
+    expect(decoded.root.valuation.isExact, isFalse);
+  });
+
+  test('a scored leaf above the horizon is a frontier unless the file says '
+      'it was explored', () {
+    // Files written before horizon leaves carried the flag say nothing, and
+    // read exactly as they always have.
+    expect(decodedTree(wireDocument()).root, isA<FrontierNode>());
+
+    final explored = decodedTree(
+      wireDocument(tree: {...oneNode, 'explored': true}),
+    ).root;
+    expect(explored, isA<HorizonNode>(), reason: 'a line that ends there');
+    expect(explored.evalForUs.cp, 20);
+    expect(explored.valuation.isExact, isTrue);
+
+    final unscored = decodedTree(
+      wireDocument(
+        tree: {...oneNode, 'explored': true}..remove('engine_eval_cp'),
+      ),
+    ).root;
+    expect(unscored, isA<HorizonNode>());
+    expect(unscored.evaluated, isFalse);
+  });
+
+  test('a tree saved without its positions is refused', () {
+    final result = decodeTreeV4(
+      wireDocument(tree: {...oneNode}..remove('fen')),
+    );
+
+    expect(result, isA<TreeUnsupported>());
+    expect(
+      (result as TreeUnsupported).reason,
+      contains('without positions'),
+      reason: 'the C builder can be told to leave them out',
+    );
+  });
+
+  test('a node whose FEN is no position is malformed', () {
+    final result = decodeTreeV4(wireDocument(tree: {...oneNode, 'fen': '42'}));
+
+    expect((result as TreeMalformed).detail, contains('"42"'));
+  });
+
+  test('the side to move comes from the FEN, not is_white_to_move', () {
+    final read = decodeTreeV4(
+      wireDocument(tree: {...oneNode, 'is_white_to_move': false}),
+    );
+
+    expect((read as TreeDecoded).root.evalForUs.cp, 20);
+  });
+
+  test('a tree that does not say which side it is for is refused', () {
+    final result = decodeTreeV4(
+      wireDocument(
+        config: const {
+          'algorithm_version': 3,
+          'search_algorithm': 'pure',
+          'max_depth': 4,
+        },
+      ),
+    );
+
+    expect(result, isA<TreeUnsupported>());
+    expect((result as TreeUnsupported).reason, contains('which side'));
+  });
+
+  test('a tree that does not say how deep it is is refused', () {
+    final result = decodeTreeV4(
+      wireDocument(
+        config: const {
+          'algorithm_version': 3,
+          'search_algorithm': 'pure',
+          'play_as_white': true,
+        },
+      ),
+    );
+
+    expect(result, isA<TreeUnsupported>());
+    expect((result as TreeUnsupported).reason, contains('how deep'));
+  });
+
+  test('a game that ended worth something impossible is malformed', () {
+    final result = decodeTreeV4(
+      wireDocument(tree: {...oneNode, 'terminal_value': 0.3}),
+    );
+
+    expect((result as TreeMalformed).detail, contains('neither a win'));
+  });
+
+  test('a mate worth the wrong side\'s result is malformed', () {
+    // 0 is our loss, and we only lose a mate we are to move in. Here the
+    // opponent is.
+    final result = decodeTreeV4(
+      wireDocument(
+        tree: {
+          ...oneNode,
+          'fen': afterE4,
+          'is_white_to_move': false,
+          'terminal_value': 0.0,
+        },
+      ),
+    );
+
+    expect((result as TreeMalformed).detail, contains('checkmate worth 0.0'));
+    expect(result.detail, contains(afterE4), reason: 'which node it was');
+  });
+
+  test('a tree nested deeper than any search goes is malformed', () {
+    var node = <String, Object?>{
+      ...oneNode,
+      'move_uci': 'e2e4',
+      'move_san': 'e4',
+    };
+    for (var depth = 0; depth < 600; depth++) {
+      node = <String, Object?>{
+        ...oneNode,
+        'move_uci': 'e2e4',
+        'move_san': 'e4',
+        'children': [node],
+      };
+    }
+
+    final result = decodeTreeV4(wireDocument(tree: node));
+
+    expect((result as TreeMalformed).detail, contains('deeper than 512'));
+  });
+
+  test('moves survive a node that says it was never explored', () {
+    // Expansions are atomic, so a node with children has all of them; the
+    // flag only says whether the search went on below.
+    final decoded = decodedTree(
+      wireDocument(
+        tree: {
+          ...oneNode,
+          'explored': false,
+          'children': [
+            {
+              ...oneNode,
+              'id': 2,
+              'depth': 1,
+              'move_uci': 'e2e4',
+              'move_san': 'e4',
+              'fen': afterE4,
+              'is_white_to_move': false,
+            },
+          ],
+        },
+      ),
+    );
+
+    final root = decoded.root as OurNode;
+    expect(root.candidates.single.move.uci, 'e2e4');
+    expect(root.candidates.single.child.fen.value, afterE4);
+  });
+
+  test('a node that both ends the game and continues is malformed', () {
+    final result = decodeTreeV4(
+      wireDocument(
+        tree: {
+          ...oneNode,
+          'terminal_value': 0.5,
+          'children': [
+            {
+              ...oneNode,
+              'id': 2,
+              'depth': 1,
+              'move_uci': 'e2e4',
+              'move_san': 'e4',
+              'fen': afterE4,
+            },
+          ],
+        },
+      ),
+    );
+
+    expect(result, isA<TreeMalformed>());
+    expect((result as TreeMalformed).detail, contains('both ends the game'));
+    expect(result.detail, contains(startPosition), reason: 'which node it was');
+  });
+
+  test('a child that does not name its move is malformed', () {
+    final result = decodeTreeV4(
+      wireDocument(
+        tree: {
+          ...oneNode,
+          'children': [
+            {...oneNode, 'id': 2, 'depth': 1},
+          ],
+        },
+      ),
+    );
+
+    expect((result as TreeMalformed).detail, contains('name its move'));
+  });
+
+  test('replies that add up to less than a move are read as shares', () {
+    // What the file records is what the model gave each reply when it was
+    // written. An opponent node is an average over the replies it has, so
+    // three quarters of a move spread over two of them is still all of what
+    // this node can do.
+    final decoded = decodedTree(
+      wireDocument(
+        tree: {
+          ...oneNode,
+          'children': [
+            {
+              ...oneNode,
+              'id': 2,
+              'depth': 1,
+              'move_uci': 'e2e4',
+              'move_san': 'e4',
+              'fen': afterE4,
+              'is_white_to_move': false,
+              'children': [_reply('e7e5', 0.5, 3), _reply('c7c5', 0.25, 4)],
+            },
+          ],
+        },
+      ),
+    );
+
+    final opponent = (decoded.root as OurNode).chosen.child as OpponentNode;
+    final shares = {
+      for (final reply in opponent.replies) reply.move.uci: reply.probability,
+    };
+    expect(shares['e7e5']! + shares['c7c5']!, closeTo(1, 1e-12));
+    expect(shares['e7e5'], closeTo(2 / 3, 1e-12));
+    expect(shares['c7c5'], closeTo(1 / 3, 1e-12));
+  });
+
+  test('shares that already make a whole move are left alone', () {
+    final decoded = decodedTree(
+      wireDocument(
+        tree: {
+          ...oneNode,
+          'children': [
+            {
+              ...oneNode,
+              'id': 2,
+              'depth': 1,
+              'move_uci': 'e2e4',
+              'move_san': 'e4',
+              'fen': afterE4,
+              'is_white_to_move': false,
+              'children': [_reply('e7e5', 2 / 3, 3), _reply('c7c5', 1 / 3, 4)],
+            },
+          ],
+        },
+      ),
+    );
+
+    final opponent = (decoded.root as OurNode).chosen.child as OpponentNode;
+    expect(
+      opponent.replies.map((reply) => reply.probability),
+      unorderedEquals(<double>[2 / 3, 1 / 3]),
+      reason: 'exactly: the file carries the doubles themselves',
+    );
+  });
+
+  test('a reply saved with no weight at all is malformed', () {
+    final result = decodeTreeV4(
+      wireDocument(
+        tree: {
+          ...oneNode,
+          'fen': afterE4,
+          'is_white_to_move': false,
+          'children': [_reply('e7e5', 1, 2), _reply('c7c5', 0, 3)],
+        },
+      ),
+    );
+
+    expect((result as TreeMalformed).detail, contains('no weight'));
+  });
+}
+
+/// One reply of an opponent node, at the share the file gives it.
+Map<String, Object?> _reply(String uci, double probability, int id) =>
+    <String, Object?>{
+      ...oneNode,
+      'id': id,
+      'depth': 2,
+      'move_uci': uci,
+      'move_san': uci,
+      'move_probability': probability,
+    };

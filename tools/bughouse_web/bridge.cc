@@ -4,6 +4,7 @@
 #include "Fairy-Stockfish/src/piece.h"
 #include "Fairy-Stockfish/src/bitboard.h"
 #include <emscripten.h>
+#include <algorithm>
 #include <cctype>
 #include <numeric>
 #include <stdexcept>
@@ -168,6 +169,40 @@ std::string pv_json(const Board& start_board, const std::shared_ptr<Node>& root,
     return out + "]";
 }
 
+// Each board's own moves among the root's expanded joint actions, with that
+// board's policy prior and the visits of every joint action containing it,
+// most visited first. A sitting board is left out. BughouseDB spends its
+// per-move searches on the first few of each board.
+std::string board_moves_json(Board& board, const std::shared_ptr<Node>& root,
+                             const std::vector<int>& visits) {
+    struct Entry { int which; Move move; float prior; int visits; };
+    std::vector<Entry> entries;
+    for (size_t i = 0; i < visits.size(); i++) {
+        const JointActionCandidate action = root->get_joint_action(static_cast<int>(i));
+        const Move moves[2] = {action.moveA, action.moveB};
+        const float priors[2] = {action.priorA, action.priorB};
+        for (int which = 0; which < 2; which++) {
+            if (moves[which] == MOVE_NONE) continue;
+            auto found = std::find_if(entries.begin(), entries.end(), [&](const Entry& e) {
+                return e.which == which && e.move == moves[which];
+            });
+            if (found == entries.end()) entries.push_back({which, moves[which], priors[which], visits[i]});
+            else found->visits += visits[i];
+        }
+    }
+    std::stable_sort(entries.begin(), entries.end(), [](const Entry& a, const Entry& b) {
+        return a.visits != b.visits ? a.visits > b.visits : a.prior > b.prior;
+    });
+    std::string out = "[";
+    for (size_t i = 0; i < entries.size(); i++) {
+        if (i) out += ',';
+        const Entry& e = entries[i];
+        out += "{\"board\":" + quote(e.which ? "B" : "A") + ",\"uci\":" + quote(move_uci(board, e.which, e.move))
+            + ",\"prior\":" + std::to_string(e.prior) + ",\"visits\":" + std::to_string(e.visits) + "}";
+    }
+    return out + "]";
+}
+
 // One bounded MCTS search. bh_search keeps its exact stopping rule and output;
 // bh_search_nodes (detailed) adds a node budget, a root-aware q and a PV.
 std::string run_search(const char* fen, int team, int timeAdvantage, int required,
@@ -222,7 +257,9 @@ std::string run_search(const char* fen, int team, int timeAdvantage, int require
         if (i) out += ',';
         out += "{\"best\":" + joint_json(*board, root->get_joint_action(order[i])) + '}';
     }
-    return out + "]}";
+    out += ']';
+    if (detailed) out += ",\"moves\":" + board_moves_json(*board, root, visits);
+    return out + '}';
 }
 }
 

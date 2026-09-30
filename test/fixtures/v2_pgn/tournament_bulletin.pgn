@@ -1,0 +1,23 @@
+[Event "TWIC Open"]
+[Site "Gibraltar ENG"]
+[Date "2026.01.24"]
+[Round "5"]
+[White "Short, N"]
+[Black "Adams, M"]
+[Result "1/2-1/2"]
+[WhiteElo "2648"]
+[BlackElo "2694"]
+[ECO "C67"]
+
+1.e4 e5 2.Nf3 Nc6 3.Bb5 Nf6 4.O-O Nxe4 5.Re1 Nd6 6.Nxe5 Be7 7.Bf1 Nxe5 8.Rxe5 O-O 1/2-1/2
+
+[Event "TWIC Open"]
+[Site "Gibraltar ENG"]
+[Date "2026.01.25"]
+[Round "6"]
+[White "Adams, M"]
+[Black "Short, N"]
+[Result "0-1"]
+[ECO "B12"]
+
+1.e4 c6 2.d4 d5 3.e5 Bf5 4.Nf3 e6 5.Be2 c5 6.Be3 Qb6 7.Nc3 Nc6 0-1

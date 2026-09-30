@@ -1,6 +1,6 @@
 # Flatpak manifest. Packages the already-built Flutter release bundle from
 # build/linux/x64/release/bundle, so run `flutter build linux --release`
-# (plus the CI dependency-bundling step for libcdbdirect) before building:
+# before building:
 #
 #   flatpak-builder --user --force-clean --repo=flatpak-repo flatpak-build \
 #       packaging/flatpak/com.example.chess_auto_prep.yml

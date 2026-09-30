@@ -1,0 +1,88 @@
+import 'package:chess_auto_prep/chess/explorer_answer.dart';
+import 'package:chess_auto_prep/chess/explorer_choice.dart';
+import 'package:chess_auto_prep/chess/fen.dart';
+import 'package:chess_auto_prep/net/lichess_explorer.dart';
+import 'package:chess_auto_prep/storage/master_book.dart';
+import 'package:chess_auto_prep/workspace/explorer.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../support/scripted_explorer.dart';
+
+void main() {
+  late ScriptedExplorerApi lichess;
+  late ScriptedBook book;
+  late ScriptedLocalGames thisFile;
+  late ScriptedLocalGames myGames;
+  late ExplorerDatabases databases;
+
+  ExplorerDatabases over(ScriptedBook book) => ExplorerDatabases(
+    lichess: lichess,
+    book: book,
+    thisFile: thisFile,
+    myGames: myGames,
+  );
+
+  setUp(() {
+    lichess = ScriptedExplorerApi();
+    book = ScriptedBook(present: true);
+    thisFile = ScriptedLocalGames();
+    myGames = ScriptedLocalGames();
+    databases = over(book);
+  });
+
+  test('TWIC is asked on this machine, the others over the network', () async {
+    const twic = ExplorerChoice(
+      source: ExplorerSource.twic,
+      classicalOnly: true,
+    );
+    final (fromBook, _, _) = await databases.ask(Fen.initial, twic);
+    expect(fromBook, same(startAnswer));
+    expect(book.asked.single, (Fen.initial, true));
+    expect(lichess.asked, isEmpty);
+    await databases.ask(Fen.initial, ExplorerChoice.defaults);
+    expect(lichess.asked, hasLength(1));
+  });
+
+  test('a missing book and an unreachable network each say so', () async {
+    book = ScriptedBook(answer: (_, _) => const BookAbsent());
+    lichess.answer = (_) =>
+        const ExplorerNotFetched(ExplorerProblem.unreachable);
+    databases = over(book);
+    final (_, noBook, _) = await databases.ask(
+      Fen.initial,
+      const ExplorerChoice(source: ExplorerSource.twic),
+    );
+    expect(
+      noBook,
+      'Download the TWIC database to explore master games offline.',
+    );
+    final (_, offline, _) = await databases.ask(
+      Fen.initial,
+      ExplorerChoice.defaults,
+    );
+    expect(offline, ExplorerProblem.unreachable.sentence);
+    databases = over(ScriptedBook(present: true));
+    final (_, offlineWithBook, _) = await databases.ask(
+      Fen.initial,
+      ExplorerChoice.defaults,
+    );
+    expect(offlineWithBook, endsWith('TWIC works offline.'));
+  });
+
+  test('a game My games lists is its kept PGN; one of This file is not '
+      'fetched', () async {
+    myGames.pgns['lichess_abcd1234'] = '[Event "Mine"]\n\n1. e4 1-0\n';
+    const game = ExplorerGame(
+      id: 'lichess_abcd1234',
+      white: 'Me',
+      black: 'You',
+      result: '1-0',
+    );
+    expect(
+      await databases.gamePgn(game, ExplorerSource.myGames),
+      startsWith('[Event "Mine"]'),
+    );
+    expect(await databases.gamePgn(game, ExplorerSource.thisFile), isNull);
+    expect(lichess.gamesAsked, isEmpty);
+  });
+}

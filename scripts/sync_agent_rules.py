@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Generate thin native rule references; --check verifies without writing."""
+"""Generate thin native rule references and mirror skills; --check verifies without writing."""
 import argparse
 from pathlib import Path
+import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -10,10 +11,10 @@ ROOT = Path(__file__).resolve().parent.parent
 SCOPES = {
     'dart': ('Dart code conventions', ('**/*.dart',)),
     'ui': ('Flutter UI conventions', (
-        'lib/widgets/**/*.dart', 'lib/screens/**/*.dart',
-        'lib/features/*/widgets/**/*.dart', 'lib/theme/**/*.dart',
-        'test/widgets/**/*.dart', 'test/screens/**/*.dart',
-        'test/features/*/widgets/**/*.dart',
+        'lib/ui/**/*.dart', 'lib/workspace/**/*.dart',
+        'lib/features/**/*.dart', 'lib/app/**/*.dart',
+        'test/ui/**/*.dart', 'test/workspace/**/*.dart',
+        'test/features/**/*.dart', 'test/app/**/*.dart',
         'integration_test/**/*.dart',
     )),
     'documentation': ('App documentation changes', ('docs/**/*.md',)),
@@ -43,6 +44,23 @@ def adapters():
     return result
 
 
+def skill_mirrors():
+    """`.claude/skills/` is canonical; Codex reads the same files from `.agents/skills/`."""
+    tracked = subprocess.run(
+        ['git', 'ls-files', '.claude/skills', '.agents/skills'],
+        cwd=ROOT, capture_output=True, text=True, check=True,
+    ).stdout.split()
+    sources = {p.removeprefix('.claude/') for p in tracked if p.startswith('.claude/')}
+    mirrors = {p.removeprefix('.agents/') for p in tracked if p.startswith('.agents/')}
+    result = {}
+    for relative in sorted(sources):
+        source = ROOT / '.claude' / relative
+        if source.is_file():
+            result[f'.agents/{relative}'] = source.read_bytes()
+    stale = sorted(f'.agents/{p}' for p in mirrors - sources)
+    return result, stale
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true')
@@ -56,6 +74,18 @@ def main():
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(expected)
+    mirrors, stale = skill_mirrors()
+    for relative, expected in mirrors.items():
+        path = ROOT / relative
+        if args.check:
+            if not path.is_file() or path.read_bytes() != expected:
+                errors.append(f'{relative}: differs from .claude/; run python3 scripts/sync_agent_rules.py')
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(expected)
+            path.chmod((ROOT / '.claude' / relative.removeprefix('.agents/')).stat().st_mode)
+    for relative in stale:
+        errors.append(f'{relative}: no .claude/ source; move it there or delete it')
     # Never silently delete a hand-edited retired rule.
     for relative in RETIRED:
         if (ROOT / relative).exists():
@@ -72,7 +102,7 @@ def main():
         print(error, file=sys.stderr)
     if errors:
         return 1
-    print('Agent rule references and root size: OK')
+    print('Agent rule references, skill mirrors and root size: OK')
     return 0
 
 

@@ -1,0 +1,4 @@
+# The Windows engine's build inputs are hashed byte for byte against
+# tools/bughouse_windows/build.json. A Windows checkout would otherwise turn
+# their LF into CRLF and every Windows build would call the engine stale.
+tools/bughouse_windows/** -text

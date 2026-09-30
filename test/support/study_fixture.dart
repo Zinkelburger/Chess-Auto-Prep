@@ -1,0 +1,173 @@
+import 'package:chess_auto_prep/storage/pgn_file_picker.dart';
+import 'package:chess_auto_prep/storage/pgn_file_import.dart';
+import 'package:chess_auto_prep/storage/pgn_export.dart';
+import 'package:chess_auto_prep/storage/player_files.dart';
+import 'package:chess_auto_prep/storage/pending_writes.dart';
+import 'package:chess_auto_prep/features/study/studies.dart';
+import 'package:chess_auto_prep/net/lichess_studies.dart';
+import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/storage/study_files.dart';
+import 'package:chess_auto_prep/workspace/document_saver.dart';
+import 'package:chess_auto_prep/workspace/document_session.dart';
+
+import 'scripted_store.dart';
+
+/// Where the studies live in these tests.
+const studiesRoot = '/studies';
+
+ChapterRef studyRef(String name) => ChapterRef(
+  repertoire: 'studies',
+  name: name,
+  path: '$studiesRoot/$name.pgn',
+);
+
+/// A studies listing the test writes.
+final class ScriptedStudyFiles implements StudyFiles {
+  ScriptedStudyFiles([this.listing = const StudiesListed([])]);
+
+  StudyListing listing;
+
+  var listings = 0;
+
+  @override
+  Future<StudyListing> list() async {
+    listings++;
+    return listing;
+  }
+}
+
+/// A Lichess client the test writes the answers for. Nothing here reaches
+/// the network.
+final class ScriptedLichess implements LichessStudies {
+  ScriptedLichess(this.answer);
+
+  StudyFetch answer;
+
+  /// Every link that was asked for, in order.
+  final asked = <LichessStudyLink>[];
+
+  @override
+  Future<StudyFetch> fetch(LichessStudyLink link) async {
+    asked.add(link);
+    return answer;
+  }
+}
+
+/// A study file with two chapters, in the Lichess export format.
+const twoChapterStudy = '''
+[Event "Endgames: Rook endings"]
+[Result "*"]
+[StudyName "Endgames"]
+[ChapterName "Rook endings"]
+[Orientation "white"]
+
+1. e4 e5 2. Nf3 *
+
+[Event "Endgames: Pawn endings"]
+[Result "*"]
+[StudyName "Endgames"]
+[ChapterName "Pawn endings"]
+[Orientation "black"]
+
+1. d4 d5 *
+''';
+
+/// A study with three named chapters, for the tests about which one stays
+/// on the board when the others move.
+const threeChapterStudy = '''
+[Event "Openings: Alpha"]
+[StudyName "Openings"]
+[ChapterName "Alpha"]
+
+1. e4 *
+
+[Event "Openings: Beta"]
+[StudyName "Openings"]
+[ChapterName "Beta"]
+
+1. d4 *
+
+[Event "Openings: Gamma"]
+[StudyName "Openings"]
+[ChapterName "Gamma"]
+
+1. c4 *
+''';
+
+/// Everything a study test needs: a scripted store holding [text] under
+/// [name], a session over it and the owner that lists it.
+final class StudyFixture {
+  StudyFixture._({
+    required this.store,
+    required this.saver,
+    required this.session,
+    required this.studies,
+    required this.files,
+    required this.lichess,
+    required this.ref,
+  });
+
+  final ScriptedDocumentStore store;
+  final DocumentSaver saver;
+  final DocumentSession session;
+  final Studies studies;
+  final ScriptedStudyFiles files;
+  final ScriptedLichess lichess;
+  final ChapterRef ref;
+
+  String get onDisk => switch (store.documents[ref]) {
+    Opened(:final text) => text,
+    _ => '',
+  };
+
+  void dispose() {
+    studies.dispose();
+    session.dispose();
+    saver.dispose();
+  }
+}
+
+Future<StudyFixture> openStudy(
+  String text, {
+  String name = 'Endgames',
+  int chapter = 0,
+  PgnFilePicker? picker,
+  PgnFileImport? importer,
+  PgnExport? exporter,
+  PlayerStore? linkedPlayers,
+  PendingWrites? pending,
+  StudyFetch fetch = const StudyNotFetched(StudyFetchProblem.unreachable),
+}) async {
+  final ref = studyRef(name);
+  final store = ScriptedDocumentStore()
+    ..documents[ref] = Opened(text, scriptedRevision(text));
+  final saver = DocumentSaver(store, delay: Duration.zero);
+  final session = DocumentSession(store, saver);
+  final files = ScriptedStudyFiles(StudiesListed([ref]));
+  final lichess = ScriptedLichess(fetch);
+  final studies = Studies(
+    picker: picker,
+    importer: importer,
+    exporter: exporter,
+    linkedPlayers: linkedPlayers,
+    pendingWrites: pending,
+    files: files,
+    documents: store,
+    session: session,
+    saver: saver,
+    lichess: lichess,
+    root: studiesRoot,
+  );
+  await studies.refresh();
+  await session.open(ref, game: chapter);
+  return StudyFixture._(
+    store: store,
+    saver: saver,
+    session: session,
+    studies: studies,
+    files: files,
+    lichess: lichess,
+    ref: ref,
+  );
+}

@@ -20,6 +20,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -543,6 +544,199 @@ class EngineShortlistTest(unittest.TestCase):
             self.assertIsNone(ex.root_engine_shortlist(Path(tmp), None))
 
 
+# The Gurgenidze move order, ending on Black's 3...d5 with White to move.
+GURGENIDZE = "1. e4 g6 2. d4 c6 3. Nc3 d5"
+GURGENIDZE_FEN = "rnbqkbnr/pp2pp1p/2p3p1/3p4/3PP3/2N5/PPP2PPP/R1BQKBNR w KQkq - 0 4"
+
+
+def _saved(fen: str, *, white: bool = False, horizon: int = 512, deepest: int = 2,
+           source: str | None = "stockfish", elo: int = 2200) -> dict:
+    """A saved search as the app writes one."""
+    doc = {
+        "format": "opening_tree",
+        "version": 4,
+        "total_nodes": 3,
+        "max_depth": deepest,
+        "build_complete": False,
+        "config": {
+            "algorithm_version": 3,
+            "search_algorithm": "pure",
+            "play_as_white": white,
+            "max_depth": horizon,
+            "max_eval_loss_cp": 100000,
+            "eval_depth": 14,
+            "maia_elo": elo,
+        },
+        "tree": {"fen": fen, "history_aware": True, "children": []},
+    }
+    if source is not None:
+        doc["v2_evaluation_source"] = source
+    return doc
+
+
+class ChapterTest(unittest.TestCase):
+    """Sharing a search with the app: where its trees live and what it resumes."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        folder = Path(self.dir.name) / "repertoires" / "Gurgenidze"
+        folder.mkdir(parents=True)
+        self.chapter = folder / "Main.pgn"
+        self.chapter.write_text(
+            "// Color: Black\n// Gurgenidze\n\n[Event \"x\"]\n\n1. e4 g6 *\n",
+            encoding="utf-8",
+        )
+
+    def tearDown(self):
+        self.dir.cleanup()
+
+    def _keep(self, run: str, doc: dict, mtime: float) -> Path:
+        folder = ex.chapters.trees_dir(self.chapter) / run
+        folder.mkdir(parents=True)
+        path = folder / "tree.json"
+        path.write_text(json.dumps(doc), encoding="utf-8")
+        os.utime(path, (mtime, mtime))
+        return path
+
+    def test_the_chapter_heading_names_the_side(self):
+        self.assertEqual(ex.chapters.chapter_color(self.chapter), "b")
+        self.chapter.write_text("[Event \"x\"]\n// Color: White\n", encoding="utf-8")
+        self.assertIsNone(ex.chapters.chapter_color(self.chapter))
+
+    def test_a_chapter_must_be_an_existing_pgn(self):
+        self.assertEqual(ex.chapters.resolve_chapter(str(self.chapter)), self.chapter)
+        with self.assertRaises(ToolError):
+            ex.chapters.resolve_chapter(str(self.chapter.with_name("Other.pgn")))
+        with self.assertRaises(ToolError):
+            ex.chapters.resolve_chapter(str(self.chapter.parent))
+
+    def test_a_chapter_search_uses_the_apps_settings(self):
+        args = ex.chapters.app_build_args({"plies": 6, "maia_elo": 1900})
+        self.assertEqual(args["eval_depth"], 14)
+        self.assertEqual(args["max_eval_loss"], 100000)
+        self.assertEqual(args["search"], "pure")
+        self.assertEqual(args["maia_elo"], 1900)
+        for bad in ({"eval_depth": 16}, {"max_eval_loss": 40}, {"search": "fast"}):
+            with self.assertRaises(ToolError):
+                ex.chapters.app_build_args(bad)
+
+    def test_a_chapter_build_may_start_on_the_opponents_move(self):
+        with self.assertRaises(ToolError):
+            ex.resolve_position(GURGENIDZE, color="b")
+        pos = ex.resolve_position(GURGENIDZE, color="b", either_side=True)
+        self.assertEqual(pos["fen"], GURGENIDZE_FEN)
+        self.assertEqual(pos["color"], "b")
+
+    def test_saved_trees_are_newest_first_and_say_who_ran_them(self):
+        self._keep("v2-1790553402926608-51ad4c8f", _saved(GURGENIDZE_FEN), 1000)
+        self._keep("v2-agent-main-20260927", _saved(GURGENIDZE_FEN, horizon=3), 2000)
+        rows = ex.chapters.saved_trees(self.chapter)
+        self.assertEqual([r["by"] for r in rows], ["agent", "app"])
+        self.assertEqual(rows[0]["horizon"], 3)
+        self.assertIsNone(rows[1]["horizon"])
+
+    def test_the_newest_tree_at_a_position_is_the_one_the_app_resumes(self):
+        self._keep("v2-a", _saved(GURGENIDZE_FEN), 1000)
+        self._keep("v2-b", _saved(LONDON_FEN), 2000)
+        self.assertEqual(ex.chapters.newest_tree(self.chapter, GURGENIDZE_FEN)["run"], "v2-a")
+        self.assertEqual(ex.chapters.newest_tree(self.chapter)["run"], "v2-b")
+        with self.assertRaises(ToolError):
+            ex.chapters.newest_tree(self.chapter, "8/8/8/8/8/8/8/K1k5 w - - 0 1")
+
+    def test_an_unlimited_app_search_resumes_at_the_asked_horizon(self):
+        doc, settings = ex.chapters.seed_document(_saved(GURGENIDZE_FEN, deepest=3), None)
+        self.assertEqual(settings["plies"], 3)
+        self.assertEqual(doc["config"]["max_depth"], 3)
+        self.assertNotIn("v2_evaluation_source", doc)
+        self.assertEqual(settings["color"], "b")
+        self.assertEqual(settings["fen"], GURGENIDZE_FEN)
+        doc, settings = ex.chapters.seed_document(_saved(GURGENIDZE_FEN, deepest=3), 6)
+        self.assertEqual(doc["config"]["max_depth"], 6)
+
+    def test_a_horizon_never_shrinks_or_passes_the_builders_limit(self):
+        with self.assertRaises(ToolError):
+            ex.chapters.seed_document(_saved(GURGENIDZE_FEN, deepest=3), 2)
+        with self.assertRaises(ToolError):
+            ex.chapters.seed_document(_saved(GURGENIDZE_FEN, horizon=8), 6)
+        with self.assertRaises(ToolError):
+            ex.chapters.seed_document(_saved(GURGENIDZE_FEN), 65)
+
+    def test_only_stockfish_pure_searches_are_continued(self):
+        with self.assertRaises(ToolError):
+            ex.chapters.seed_document(_saved(GURGENIDZE_FEN, source="chessdb"), None)
+        legacy = _saved(GURGENIDZE_FEN)
+        legacy["tree"]["history_aware"] = False
+        with self.assertRaises(ToolError):
+            ex.chapters.seed_document(legacy, None)
+        # A tree the builder wrote names no source: it is Stockfish.
+        ex.chapters.seed_document(_saved(GURGENIDZE_FEN, source=None), None)
+
+    def test_publishing_puts_the_tree_where_the_app_looks(self):
+        tree = Path(self.dir.name) / "tree.tree.json"
+        tree.write_text(json.dumps(_saved(GURGENIDZE_FEN, horizon=2)), encoding="utf-8")
+        target = ex.chapters.publish(tree, self.chapter, "d5-20260927")
+        self.assertEqual(
+            target,
+            self.chapter.parent / ".cap-generation" / "Main.pgn" / "v2-agent-d5-20260927" / "tree.json",
+        )
+        self.assertEqual(json.loads(target.read_text())["tree"]["fen"], GURGENIDZE_FEN)
+        self.assertEqual([p.name for p in target.parent.iterdir()], ["tree.json"])
+        tree.write_text("{ half a tree", encoding="utf-8")
+        with self.assertRaises(ToolError):
+            ex.chapters.publish(tree, self.chapter, "d5-20260927")
+        self.assertEqual(json.loads(target.read_text())["tree"]["fen"], GURGENIDZE_FEN)
+
+    def test_the_supervisor_publishes_when_the_builder_exits(self):
+        run = Path(self.dir.name) / "run"
+        run.mkdir()
+        base = run / "tree"
+        fake = Path(self.dir.name) / "builder.py"
+        fake.write_text(
+            "import json, sys\n"
+            f"json.dump({_saved(GURGENIDZE_FEN, horizon=2)!r}, open(sys.argv[1] + '.tree.json', 'w'))\n",
+            encoding="utf-8",
+        )
+        import subprocess
+        done = subprocess.run(
+            [sys.executable, str(ex.SUPERVISOR), str(run), str(self.chapter), "run-1",
+             "--", sys.executable, str(fake), str(base)],
+            capture_output=True, text=True, timeout=60,
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        record = ex.chapters.read_publish_record(run)
+        self.assertEqual(record["exit_code"], 0)
+        self.assertTrue(Path(record["published"]).is_file())
+        self.assertEqual(ex.chapters.newest_tree(self.chapter)["by"], "agent")
+
+
+class ReplyTableTest(unittest.TestCase):
+    """A chapter build started on the opponent's move ranks their replies."""
+
+    def test_replies_come_likeliest_first_with_our_answers(self):
+        def reply(move, prob, value, answers):
+            node = _node(move, value, 0, answers)
+            node["move_probability"] = prob
+            return node
+
+        answer = _node("Bg7", 0.47, 0)
+        answer["is_repertoire_move"] = True
+        doc = _tree([
+            reply("exd5", 0.1, 0.47, [_node("cxd5", 0.47, 0)]),
+            reply("e5", 0.4, 0.43, [_node("f6", 0.43, 0), _node("Bf5", 0.40, 0)]),
+            reply("Nf3", 0.3, 0.46, [_node("dxe4", 0.44, 0), answer]),
+        ])
+        doc["config"] = {"play_as_white": False}
+        doc["tree"]["fen"] = GURGENIDZE_FEN
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "tree.tree.json"
+            path.write_text(json.dumps(doc), encoding="utf-8")
+            table = ex.root_table(path)
+        self.assertEqual(table["root_to_move"], "opponent")
+        self.assertIsNone(table["best"])
+        self.assertEqual([r["reply"] for r in table["replies"]], ["e5", "Nf3", "exd5"])
+        self.assertEqual([r["our_answer"] for r in table["replies"]], ["f6", "Bg7", "cxd5"])
+
+
 class OnnxLinkTest(unittest.TestCase):
     """A builder without ONNX Runtime ignores --maia-model and builds the
     wrong tree, so it has to be caught before a run, not after."""
@@ -553,6 +747,85 @@ class OnnxLinkTest(unittest.TestCase):
 
     def test_a_missing_binary_does_not_raise(self):
         ex._links_onnxruntime(Path("/nonexistent/builder"), dict(os.environ))
+
+
+class BuilderFreshnessTest(unittest.TestCase):
+    """A binary compiled before the C sources changed must be rebuilt: the
+    old one rejects flags this module now passes and exits with its usage."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        root = Path(self.dir.name)
+        (root / "src").mkdir()
+        (root / "bin").mkdir()
+        self.source = root / "src" / "main.c"
+        self.source.write_text("int main(void) { return 0; }\n")
+        self.binary = root / "bin" / "tree_builder"
+        self.binary.write_text("")
+        patches = [
+            mock.patch.object(ex, "BUILDER_DIR", root),
+            mock.patch.object(ex, "BUILDER_BIN", self.binary),
+        ]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def tearDown(self):
+        self.dir.cleanup()
+
+    def test_a_newer_source_means_rebuild(self):
+        os.utime(self.binary, (1_000, 1_000))
+        os.utime(self.source, (2_000, 2_000))
+        self.assertTrue(ex._builder_outdated())
+
+    def test_a_binary_newer_than_every_source_is_kept(self):
+        os.utime(self.source, (1_000, 1_000))
+        os.utime(self.binary, (2_000, 2_000))
+        self.assertFalse(ex._builder_outdated())
+
+    def test_a_missing_binary_means_build(self):
+        self.binary.unlink()
+        self.assertTrue(ex._builder_outdated())
+
+
+class StartupFailureTest(unittest.TestCase):
+    """A build that exits at once is an error now, not a 'started' run."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        root = Path(self.dir.name)
+        os.environ["CHESS_PREP_EXPECTIMAX_DIR"] = str(root / "runs")
+        self.builder = root / "tree_builder"
+        self.builder.write_text(
+            "#!/bin/sh\n"
+            "echo \"$0: unrecognized option '--search'\"\n"
+            "echo Usage: tree_builder [options] name\n"
+            "echo Examples: tree_builder -c w repertoire\n"
+            "exit 2\n"
+        )
+        self.builder.chmod(0o755)
+        chain = {
+            "builder": self.builder,
+            "stockfish": root / "stockfish",
+            "maia_model": root / "maia.onnx",
+            "lib": root,
+            "env": dict(os.environ),
+            "built_now": False,
+        }
+        patch = mock.patch.object(ex, "prepare_toolchain", return_value=chain)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def tearDown(self):
+        os.environ.pop("CHESS_PREP_EXPECTIMAX_DIR", None)
+        self.dir.cleanup()
+
+    def test_the_error_line_is_reported(self):
+        with self.assertRaises(ToolError) as caught:
+            Registry().call("expectimax_run", {"moves": LONDON, "plies": 2})
+        message = str(caught.exception)
+        self.assertIn("exited at once", message)
+        self.assertIn("unrecognized option '--search'", message)
 
 
 if __name__ == "__main__":

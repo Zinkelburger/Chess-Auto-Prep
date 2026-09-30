@@ -1,0 +1,50 @@
+[
+  {
+    "wins": 7,
+    "draws": 4,
+    "losses": 3,
+    "elo": 102.1090020413225,
+    "margin": 174.34844849101276,
+    "superiority": 0.8970483258507129
+  },
+  {
+    "wins": 60,
+    "draws": 20,
+    "losses": 20,
+    "elo": 147.19071411783773,
+    "margin": 66.01338123644335,
+    "superiority": 0.9999961244428102
+  },
+  {
+    "wins": 1,
+    "draws": 0,
+    "losses": 1,
+    "elo": 0.0,
+    "margin": 3599.9999927264034,
+    "superiority": 0.5000000005
+  },
+  {
+    "wins": 4,
+    "draws": 3,
+    "losses": 21,
+    "elo": -244.72793144684744,
+    "margin": 174.1525375314219,
+    "superiority": 0.00033698083789746036
+  },
+  {
+    "wins": 0,
+    "draws": 7,
+    "losses": 0,
+    "elo": 0.0,
+    "margin": 0.0,
+    "superiority": 0.5
+  },
+  {
+    "wins": 6,
+    "draws": 0,
+    "losses": 0,
+    "elo": null,
+    "margin": null,
+    "superiority": 0.9928470566825187
+  }
+]

@@ -1,0 +1,888 @@
+[
+  {
+    "text": "   Repertoire by GM X\n1. d4 d5 2. c4 *\n1. f3 g6 b3 *\n\n ﻿[Event \"c:\\\\games\"]\n1.Nc3 $2 {Black holds; the ending is drawn White is slightly better ⩲} ( 1. Nh3\n{½ → ∞ ♞ and a private glyph } 1... h5 2. a3 c5 {[%eval} {0.42] [%clk 0:12:03]}\n3. Nf4 ;\nc4 ( 3... a5 {the plan: c4-c5, then Nd5 a  double  space  paragraph} 4. g4 ( 4.\nc3 4...Qb6 ( { padded } 4... d6 ) ) Nf6 ) 4.b3 {}\n{[%pv h3,a5,h4,e5,a4,Ra6] [%eval #-9,18] [%clk 0:45:19] } Qb6 ) ( 1.f4 $4 $31\n{braces} {{ inside are text} 1... d6 2.Nc3 {[%cumProb}\n{84.148%] [%pv b3] a  double  space  paragraph Не лучший ход} Bh3\n{[%eval #3,18]} 3. Nd5 ( 3. f5 { [%pv a3] [%eval -19.08] [%eval -18.77] }\n3...Nc6 $13 4. Nd5 b5 { [%eval #9] [%csl Ye4,Gd5] [%emt 0:00:23] } ( 4...f6 $16\n{100% winning} ) ( 4...g5 $164 ) ) a6 {Best by test} ( {A plain note.} 3...b6\n4. d4 ( 4. Nf6+ 4.gxf6? {[%cumProb 67.296%] see (a) and [b] below} ( 4... Nxf6\n$53 {a; semicolon} ) ) Kd7 ) 4.Kf2 {A plain note.} Qdd7 $141 {½}\n{→ ∞ ♞ and a private glyph } ( 4... Bhc8 ) ( {100% winning Best by test} 4. f5\n{ [%csl Ye4,Gd5][%eval #13]Не лучший ходa  double  space  paragraph } ) ) Nf6\n2.Nh3 $92 $207 {} ( {[%clk} {0:31:17] [%csl Ye4,Gd5]} 2.Nf3 2... Ne4\n{A plain note.} 3.Nd5 {Mixed prose [%cal Ge2e4,Rd7d5] and more} Nc6 $13 4. g4\n{½ → ∞ ♞ and a private glyph } ( {[%pv h3,b5,a4]} 4.a3? $141\n{Mixed prose [%cal Ge2e4,Rd7d5] and more} 4... Nb8 ) g5 ) b6 3. b3 Ne4 4. Ng5 (\n4.d4 $132 4... Nxf2\n{[%maiaProbability 0.801] [%maiaProbability 0.892] a  double  space  paragraph}\n) ( 4. Bb2 $132 {} 4... Ng3! ) d5 ( 4... Nxc3\n;half a bracket ] and a percent 46.4%\n) ( 4...Nexf2 ) *\n\n[Event \"c:\\\\games\"]\n[LineID \"line_f05b98144a4549ee45af40\"]\n1. Nc3? ;Black holds; the ending is drawn White is slightly better ⩲\n( 1. Nh3 {½ → ∞ ♞ and a private glyph } 1. h5 2. a3 c5\n;[%eval 0.42] [%clk 0:12:03]\n3. Nf4 ;\nc4 ( 3. a5 {the} {plan: c4-c5, then Nd5 a  double  space  paragraph} 4. g4 (\n4.c3 4... Qb6 ( { padded } 4... d6 ) ) Nf6 ) 4. b3\n{ [%pv h3,a5,h4,e5,a4,Ra6] [%eval #-9,18] [%clk 0:45:19] } Qb6 ) ( 1. f4?? $31\n{braces} {{ inside are text} 1...d6 2.Nc3\n{[%cumProb 84.148%] [%pv b3] a  double  space  paragraph Не лучший ход} Bh3\n{[%eval #3,18]} 3. Nd5 ( 3.f5 { [%pv a3] [%eval -19.08] [%eval -18.77] } 3.Nc6\n$13 4.Nd5 b5 { [%eval #9] [%csl Ye4,Gd5] [%emt 0:00:23] } ( 4... f6 $16\n{100% winning} ) ( 4... g5 $164 ) ) a6 {Best by test} ( ;A plain note.\n3... b6 4. d4 ( 4. Nf6+ 4... gxf6? {[%cumProb} {67.296%] see (a) and [b] below}\n( 4... Nxf6 $53 {a; semicolon} ) ) Kd7 ) 4. Kf2 {A} {plain note.} Qdd7 $141\n{½ → ∞ ♞ and a private glyph } ( 4... Bhc8 ) ( {100% winning Best by test} 4...\nf5 { [%csl Ye4,Gd5][%eval #13]Не лучший ходa  double  space  paragraph } ) )\nNf6 2. Nh3 $92 $207 {} ( {[%clk 0:31:17] [%csl Ye4,Gd5]} 2. Nf3 2. Ne4\n{A plain note.} 3.Nd5 {Mixed prose [%cal Ge2e4,Rd7d5] and more} Nc6 $13 4. g4\n{½ → ∞ ♞ and a private glyph } ( {[%pv h3,b5,a4]} 4.a3 $2 $141\n{Mixed prose [%cal Ge2e4,Rd7d5] and more} 4... Nb8 ) g5 ) b6 3. b3 Ne4 4. Ng5 (\n4. d4 $132 4... Nxf2\n;[%maiaProbability 0.801] [%maiaProbability 0.892] a  double  space  paragraph\n) ( 4.Bb2 $132 {} 4... Ng3! ) d5 ( 4... Nxc3\n;half a bracket ] and a percent 46.4%\n) ( 4...Nexf2 ) * \n\n[Event \"a {b\"]\n[LineID \"line_f05b98144a4549ee45af40\"]\n[Annotator \"a \\\"q\\\" b\\\\c\"]\n[ChapterName \"Najdorf 6.Bg5\"]\n[FEN \"4k3/1P6/8/8/8/8/6p1/4K3 w - - 0 1\"] {Не лучший ход a  double  space  paragraph [%eval 9.79,31]} 1. Kd2 $196 $4\n{100% winning [%eval -13.88] [%cal Gd4e5,Rf1c4] [%clk 0:03:06]} ( 1.Ke2\n{half a bracket ] and a percent 46.4%} 1... Ke7\n{[%eval #10,48] [%clk 0:46:24] [%eval -13.92]} 2. Ke1\n{half a bracket ] and a percent 46.4%} ( 2. Ke2f3 $13 {} 2... g1N+ $232 $146\n{a; semicolon} 3. Kfe3 ) Kf7 $102 ;[%csl Ye4,Gd5]\n( 2... Kd8 $6 3.Kd1 $232 ( 3. b8=N ) ( 3. Kf2 {}\n{[%emt 0:00:51] [%eval #-1,13] [%emt 0:00:31] see (a) and [b] below Black holds; the ending is drawn }\n) ) 3. b8=N ) Kd7 {not} {a cut either\n[Event\t\"tabbed\"]} 2. b8B ( 2.Kd1\n{[%csl Ye4,Gd5] [%csl Ye4,Gd5] [%csl Ye4,Gd5]} 2... Kd6\n;half a bracket ] and a percent 46.4%\n3. b8=R ) Kc6 {} 3. Bc7 {[%cumProb 89.315%] [%cumProb 30.538%] [%emt 0:00:36]}\n( 3. Bf4 $77 ) 1/2-1/2 \n\n[Event \"a {b\"]\n[LineID \"line_f05b98144a4549ee45af40\"]\n ﻿[Annotator \"a \\\"q\\\" b\\\\c\"]\n[ChapterName \"Najdorf 6.Bg5\"]\n[FEN \"4k3/1P6/8/8/8/8/6p1/4K3 w - - 0 1\"] {Не лучший ход a  double  space  paragraph [%eval 9.79,31]} 1. Kd2 $196 $4\n{100% winning [%eval -13.88] [%cal Gd4e5,Rf1c4] [%clk 0:03:06]} ( 1. Ke2\n{half a bracket ] and a percent 46.4%} 1...Ke7\n;[%eval #10,48] [%clk 0:46:24] [%eval -13.92]\n2. Ke1 {half a bracket ] and a percent 46.4%} ( 2. Ke2f3 $13 {} 2... g1N+ $232\n$146 {a; semicolon} 3. Kfe3 ) Kf7 $102 {[%csl Ye4,Gd5]} ( 2... Kd8 $6 3. Kd1\n$232 ( 3. b8=N ) ( 3.Kf2\n{ [%emt 0:00:51] [%eval #-1,13] [%emt 0:00:31] see (a) and [b] below Black holds; the ending is drawn }\n) ) 3. b8=N ) Kd7 {not a cut either\n[Event\t\"tabbed\"]} 2.b8B ( 2.Kd1\n;[%csl Ye4,Gd5] [%csl Ye4,Gd5] [%csl Ye4,Gd5]\n2...Kd6 {half a bracket ] and a percent 46.4%} 3. b8=R ) Kc6 ;\n3.Bc7 {[%cumProb 89.315%] [%cumProb 30.538%] [%emt 0:00:36]} ( 3. Bf4 $77 )\n1/2-1/2\n\n",
+    "places": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "ids": [
+      "line_ZDQgZDUgYzQgZjMgZzYgYj",
+      "line_TmMzIE5mNiBOaDMgYjYgYj",
+      "line_f05b98144a4549ee45af40",
+      "line_47e5746c1e46a8d1a283d2",
+      "line_cc9af0c80bb6156f8cf354"
+    ],
+    "excused": []
+  },
+  {
+    "text": "1. b4 Na6 Bb2 *\r\n{ quoting\r\n[Event \"x\"] in a banner }\r\n\r\n[Event \"½ → ∞\"] [White \"A. Player\"]\r\n[Round\t\"1\"]\r\n[Black \"B. Player\"]\r\n\r\n1.e4 { [%eval 5.12] } h5 2.h4\r\n$46 $146\r\n{!? — a practical try} * \r\n\r\n",
+    "places": [
+      2
+    ],
+    "ids": [
+      "line_YjQgTmE2IEJiMnww",
+      null,
+      "line_ZTQgaDUgaDR8Mg"
+    ],
+    "excused": []
+  },
+  {
+    "text": "{ quoting\n[Event \"x\"] in a banner }\n{ A banner\nover two lines }\n\n[Event \"back\\\\slash\"]\n[Round   \"1\"]\n\n1. Nf3 ;A plain note.\n% an escaped line 9. Qxf7#\nc6 2. Nh4 { padded } ( 2. Nc3\n{A} {plain note.} 2... a5 {}\n3.e3 3... Ra7\n{a  double  space  paragraphWhite is slightly better ⩲[%emt 0:00:26]}\n) ( {Не}\n{лучший ход Black holds; the ending is drawn [%emt 0:00:52] [%pv Nf3,f6,Ne5,c5,Ng4] [%csl Ye4,Gd5]}\n2. c3 $16 $146 {} 2. Nf6\n3.Nfh4! Nf6g4!\n;Mixed prose [%cal Ge2e4,Rd7d5] and more\n) 2... d5 3. a3 $36 $132\n{ White is slightly better ⩲[%maiaProbability 0.533][%csl Ye4,Gd5] }\n( 3. g4\n{White is slightly better ⩲Black holds; the ending is drawn}\n3.Na6 ) Qa5\n{[%eval 0.42] [%clk 0:12:03]}\n0-1\n",
+    "places": [
+      1
+    ],
+    "ids": [
+      null,
+      "line_TmYzIGM2IE5oNCBkNSBhMy"
+    ],
+    "excused": []
+  },
+  {
+    "text": "﻿{ an indented\n  [Event \"y\"] quote }\n\n  [Event \"½ → ∞\"]\n[LineID \"shared-id\"]\n[SetUp \"1\"]\n[FEN \"4k3/1P6/8/8/8/8/6p1/4K3 w - - 0 1\"]\n1. Kd1 ;A plain note.\n1...g1=N\n{see (a) and [b] below Black holds; the ending is drawn [%csl Ye4,Gd5]}\n2. Kc2 $132 $4 Nh3 $13 $50 {} 3.Kd2 {[%clk}\n{0:53:03] [%emt 0:00:17]} Kf7?? 4. b8=B\n;!? — a practical try\n( 4. Kd1 {} 4... Kf8 ) ( 4. Ke2 {a}\n{ double  space  paragraph100% winning} 4... Ng5\n{ a  double  space  paragraph a  double  space  paragraph [%csl Ye4,Gd5] [%maiaProbability 0.540] }\n( 4... Ke6 ) ) Kf6 $188\n{half a bracket ] and a percent 46.4%} 1-0\n\t\n",
+    "places": [
+      1
+    ],
+    "ids": [
+      null,
+      "shared-id"
+    ],
+    "excused": []
+  },
+  {
+    "text": "1. h4 b5 d4 g5 *\r\n{ quoting\r\n[Event \"x\"] in a banner }\r\n% exported by a tool\r\n\r\n[Event \"the \\\"real\\\" one\"]\r\n[Annotator \"a \\\"q\\\" b\\\\c\"]\r\n[ChapterName \"\"]\r\n\r\n{Не лучший ход!? — a practical try[%maiaProbability 0.137]} 0-1\r\n\r\n\r\n",
+    "places": [
+      2
+    ],
+    "ids": [
+      "line_aDQgYjUgZDQgZzV8MA",
+      null,
+      null
+    ],
+    "excused": []
+  },
+  {
+    "text": "{ quoting\n[Event \"x\"] in a banner }\n﻿; a marked note\n{ an indented\n  [Event \"y\"] quote }\n\n[Event \"a {b\"]\t\n[LineID \"shared-id\"]\n[White \"A. Player\"]\n[Round   \"1\"]\n[Round   \"1\"]\t\n[SM2Interval \"B90\"]\n[SetUp \"1\"]\n﻿[FEN \"rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3\"]\n[White \"A. Player\"]\t\n\n3. exf6 $71 $2 ( 3.Ne2 {½ → ∞ ♞ and a private glyph } 3...c6 ) ( {a; semicolon} 3. Qg4 3... Nba6 ) a5 $224\n\n\n[Event \" \"]\n[Black \"B. Player\"]\n[Date \"2026.09.??\"]\n\t[FEN \"rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3\"]\n[LineID \"a-second-id\"]\n3.Ba6 $2 Nc6 ;mid-line [Event \"quote\"] is text\n( 3.Nh6 { padded } 4.Bd3 $6 $198 {[%eval 0.42] [%clk 0:12:03]} Kf7 ;[%eval #-19] White is slightly better ⩲ Kasparov–Karpov, Linares 1993\n( 4... g6 5.b4 {A} {plain note.} ) ( 4...e6 {White is slightly better ⩲ the plan: c4-c5, then Nd5 [%cumProb 24.305%]} 5.a4 ) 5.Qd1h5+ $3 ( 5. Nh3 {[%eval 0.42] [%clk 0:12:03]} ) ( {a; semicolon} 5. Be2 ) ) ( 3... Qd7 $196 {a; semicolon} 4. Be2 c5 ( 4...Qdd8 {} 5. Bf3! $13 {braces { inside are text} ) 5.Bed3 { padded } ) 4. c3 d4 ;half a bracket ] and a percent 46.4%\n( 4... h6 $132 5.Qg4 ) 5.h3 {the plan: c4-c5, then Nd5 [%emt 0:00:23]} * \n\n[Event \"back\\\\slash\"]\n[ChapterName \"Sicilian\"] [Annotator \"a \\\"q\\\" b\\\\c\"]\n[SetUp \"1\"]\n[FEN \"r3k2r/8/8/8/8/8/6b1/R3K2R w KQkq - 0 1\"]\n[LineID \"a-second-id\"]\n\n1. Rhh7 $6 $203 {a;} {semicolon} Rxh7 $253 $55 {an indented\n  [Event \"quote\"]\nends here} 2. Kf2 Re7 $16 3. Ra6 {a  double  space  paragraph [%pv b4,h6,e4] [%clk 0:01:58]} Bc6 {[%csl Ye4,Gd5] [%cumProb 98.990%] White is slightly better ⩲} *\n\t\n[Event \"c:\\\\games\"]\n[Round   \"1\"]\n[Round   \"1\"]\n\n;A plain note.\n1. h4? 1...a6 {Mixed prose [%cal Ge2e4,Rd7d5] and more} *\n\t\n",
+    "places": [
+      2,
+      3,
+      4,
+      6
+    ],
+    "ids": [
+      null,
+      null,
+      "shared-id",
+      "a-second-id",
+      "line_8398f932c220e80cd0e0fd",
+      "line_S2YyIFJlNyBSYTYgQmM2fD",
+      "line_aDQgYTZ8Ng"
+    ],
+    "excused": [
+      2
+    ]
+  },
+  {
+    "text": "\t[Event \"back\\\\slash\"]\n[SetUp \"1\"]\n[FEN \"rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\"]\t\n\n{see (a) and [b] below !? — a practical try [%maiaProbability 0.001] [%csl Ye4,Gd5] [%cumProb 57.164%]}\n1...c5 2.b3 {Best by test} h5 {}\n{[%pv f3,d6,Nh3,f6] [%emt 0:00:41] [%eval -3.08] White is slightly better ⩲ White is slightly better ⩲ }\n3. a4 Qb6 {braces { inside are text} 0-1\n\t\n[Event \"back\\\\slash\"]\n[SetUp \"1\"]\n[FEN \"rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\"]\t\n\n{see}\n{(a) and [b] below !? — a practical try [%maiaProbability 0.001] [%csl Ye4,Gd5] [%cumProb 57.164%]}\n1... c5 2.b3 {Best by test} h5 {}\n{[%pv f3,d6,Nh3,f6] [%emt 0:00:41] [%eval -3.08] White is slightly better ⩲ White is slightly better ⩲ }\n3. a4 Qb6 {braces { inside are text} 0-1\n[Event \"back\\\\slash\"]\n[SetUp \"1\"]\n[FEN \"rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\"]\t\n\n;see (a) and [b] below !? — a practical try [%maiaProbability 0.001] [%csl Ye4,Gd5] [%cumProb 57.164%]\n1... c5 2.b3 {Best by test} h5 {}\n{[%pv f3,d6,Nh3,f6] [%emt 0:00:41] [%eval -3.08] White is slightly better ⩲ White is slightly better ⩲ }\n3. a4 Qb6 ;braces { inside are text\n0-1\n[Event \"back\\\\slash\"]\n[SetUp \"1\"]\n[FEN \"rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\"]\t\n\n{see}\n{(a) and [b] below !? — a practical try [%maiaProbability 0.001] [%csl Ye4,Gd5] [%cumProb 57.164%]}\n1... c5 2. b3 ;Best by test\nh5 {}\n{[%pv f3,d6,Nh3,f6] [%emt 0:00:41] [%eval -3.08] White is slightly better ⩲ White is slightly better ⩲ }\n3.a4 Qb6 ;braces { inside are text\n0-1\n\n",
+    "places": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "ids": [
+      "line_YzUgYjMgaDUgYTQgUWI2fD",
+      "line_fd5b45ea36b5a44e3a9380",
+      "line_fdf38e6f516c3a9d53e509",
+      "line_bc88228179621b92415d12"
+    ],
+    "excused": []
+  },
+  {
+    "text": "{ an indented\r\n  [Event \"y\"] quote }\r\n{ quoting\r\n[Event \"x\"] in a banner }\r\n// Repertoire\r\n\r\n[Event \"back\\\\slash\"]\r\n[Annotator \"a \\\"q\\\" b\\\\c\"]\r\n[X-Custom+Tag \"v\"]\r\n[LineId \" spaced \"]\r\n\r\n{½ → ∞ ♞ and a private glyph } 1. b3\r\n{[%csl Ye4,Gd5] [%eval 17.81] [%eval #-7,13] !? — a practical try Black holds; the ending is drawn}\r\nNc6 2. g3 {A plain note.} Ne5 $104 ( 2...b6 {[%eval} {0.42] [%clk 0:12:03]} ) * \r\n\r\n[Event \"back\\\\slash\"]\r\n[LineID \"shared-id\"]\r\n[Annotator \"a \\\"q\\\" b\\\\c\"]\r\n[X-Custom+Tag \"v\"]\r\n[LineId \" spaced \"]\r\n\r\n{½ → ∞ ♞ and a private glyph } 1.b3\r\n;[%csl Ye4,Gd5] [%eval 17.81] [%eval #-7,13] !? — a practical try Black holds; the ending is drawn\r\nNc6 2. g3 {A plain note.} Ne5 $104 ( 2...b6 {[%eval 0.42] [%clk 0:12:03]} ) *\r\n\r\n\r\n ﻿[Event \"c:\\\\games\"]\r\n[ChapterName \"\"] \r\n[CumProb \"v\"]\r\n[SetUp \"1\"]\r\n[FEN \"rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3\"] [SetUp \"1\"]\r\n \r\n;\r\n3.exf6 ( 3. d3?! {White}\r\n{is slightly better ⩲!? — a practical try[%eval #-20,36][%clk 0:36:09]} 3...\r\nBe6 4.h4 $84 Bf7 $132 {A plain note.} ( 4... a5 $146 $69 5.a3 $146 ( 5. Qh5+ 5.\r\nKd7 6. Qe8+\r\n{White is slightly better ⩲ [%clk 0:15:25] [%csl Ye4,Gd5] [%cumProb 10.801%]} (\r\n6.Qh5e2 ) ) Kd7 6.f4 ) 5. b3 5... c6 6. Qd2 $2 ( 6. c3\r\n{Kasparov–Karpov, Linares 1993 a  double  space  paragraph} ) ( 6.g4 ) ) ( 3.\r\nNa3 3. Nh6 {Mixed prose [%cal Ge2e4,Rd7d5] and more} 4. Bd3 {[%clk 0:14:47]} a5\r\n5. Ba6 ( {100% winning} 5. g3 $29 $132 5...g6 6. f4\r\n;100% winning [%csl Ye4,Gd5] [%clk 0:13:50] [%clk 0:04:56]\r\n) ( 5. Rb1 $13 ;\r\n5... Qd6 6. Bc4 ;[%cumProb 98.181%]\r\n) g5 {} 6. Nb1 $69 $14 {Mixed} {prose [%cal Ge2e4,Rd7d5] and more} ) Bf5\r\n{an indented\r\n  [Event \"quote\"]\r\nends here} 4. Bb5+ (\r\n{ [%eval #-20] [%cal Gd4e5,Rf1c4] Black holds; the ending is drawn } 4.c4\r\n{line} {one\r\nline two} 4...Bd7 {[%pv d3,h6,Be3]} 5. a4 $13 { padded } ( 5. fxe7\r\n5... Bc6 6. exd8=Q+ {A plain note.} ) ( 5.Nbc3 {[%eval 0.42] [%clk 0:12:03]}\r\n5... g5 {a;} {semicolon} 6.b4 {a; semicolon} ) 5... Bg4 6.d4\r\n{half a bracket ] and a percent 46.4%} ) Ke8f7 ( 4...Nc6 5.b4 (\r\n{ Kasparov–Karpov, Linares 1993 [%eval #-9,58] } 5. Bb5e2 5...h6 6.Bc4 ) (\r\n{[%emt 0:00:19][%csl Ye4,Gd5]see (a) and [b] below} 5. Qdg4\r\n;Не лучший ход [%eval 11.57] [%csl Ye4,Gd5] [%eval #15]\r\n5. g5 {} ( {line one\r\nline two} 5. a5 ;\r\n6. Bxc6+ {[%pv h3,Nc6,a4,Nb4,d4] [%cumProb 22.987%]} ) ( 5... d4\r\n{½ → ∞ ♞ and a private glyph } 6. Qh5+\r\n{[%eval #-4,39][%maiaProbability 0.030][%cal Gd4e5,Rf1c4]} ) 6.Qf3 {[%cal}\r\n{Gd4e5,Rf1c4]} ( 6. Qh3\r\n{ [%emt 0:00:55] [%eval #9] [%clk 0:30:01] see (a) and [b] below } ) ) Qb8\r\n{half a bracket ] and a percent 46.4%} ( 5.h5\r\n{[%emt 0:00:32] [%clk 0:52:37] [%pv c4,f6,Nh3] the plan: c4-c5, then Nd5} 6.\r\nQf3 $126\r\n;Black holds; the ending is drawn [%maiaProbability 0.979] [%csl Ye4,Gd5] [%maiaProbability 0.423]\r\n( 6. Qxh5+!! $2 ) ( 6. fxe7 ) ) 6. Bb5f1\r\n{Mixed prose [%cal Ge2e4,Rd7d5] and more} ) ( 4... Bd7\r\n{the plan: c4-c5, then Nd5} 5. b4 {braces { inside are text} exf6 $188 {A}\r\n{plain note.} 6.g4 {half a bracket ] and a percent 46.4%} ) 5.h3\r\n{½ → ∞ ♞ and a private glyph } Qd7 {} ( {half}\r\n{a bracket ] and a percent 46.4%} 5... e6 {½ → ∞ ♞ and a private glyph } 6.\r\nfxg7 $65 $51 { padded } ) ( 5... b6 {A plain note.} 6. Qde2\r\n{braces { inside are text} ( 6.Ne2 ) ) 6.b3\r\n{[%cumProb 33.087%] [%maiaProbability 0.006] [%clk 0:08:16] White is slightly better ⩲}\r\n0-1\r\n[Event \"back\\\\slash\"]\r\n[Black \"B. Player\"]\r\n[Round   \"1\"]\r\n\r\n1. b3 (\r\n{[%cumProb 38.148%] [%pv e4,a5,Ne2,b6,f4,Na6] [%clk 0:37:20] Best by test} 1.c3\r\n1... c5 2. a3 {A plain note.} ) ( 1. a4 {braces { inside are text} 1... a6 $250\r\n( 1... h6 ;[%eval #13] [%cumProb 47.695%] [%eval #-20,3]\r\n2. b3 ;[%csl Ye4,Gd5] a  double  space  paragraph see (a) and [b] below\r\n) 2.a5 ) a5 { a  double  space  paragraph Не лучший ход } 2. f3 {} (\r\n{Не лучший ходsee (a) and [b] below[%emt 0:00:42][%cal Gd4e5,Rf1c4][%pv Nc3,c6,g3]}\r\n2. Nc3\r\n{Black holds; the ending is drawn White is slightly better ⩲ [%maiaProbability 0.367]}\r\n) ( 2.g4! ) 1-0\r\n\t\r\n",
+    "places": [
+      2,
+      3,
+      4,
+      6
+    ],
+    "ids": [
+      null,
+      null,
+      "spaced",
+      "shared-id",
+      "line_ZXhmNiBCZjV8NA",
+      "line_QmI1KyBLZThmNyBoMyBRZD",
+      "line_YjMgYTUgZjN8Ng"
+    ],
+    "excused": [
+      2
+    ]
+  },
+  {
+    "text": "{ an indented\n  [Event \"y\"] quote }\n// Color: Black\n1. a4 h5 c4 d5 *\n\n[Event \" \"]\n[LineID \"shared-id\"]\n[Site \"https://lichess.org/study/abc\"]\n[FEN \"rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3\"]\n\n1/2-1/2\n\t\n[Event \"a {b\"]\n[LineID \"shared-id\"]\n[White \"A. Player\"]\n[Annotator \"a \\\"q\\\" b\\\\c\"]\n[ChapterName \"Najdorf 6.Bg5\"]\t\n[Round   \"1\"]\n[FEN \"r3k2r/8/8/8/8/8/6b1/R3K2R w KQkq - 0 1\"]\t\n\n1.Rh6 $5\n{Black holds; the ending is drawn [%cal Gd4e5,Rf1c4] [%pv g4] [%emt 0:00:48]}\nRa7 $106 2. Rhh2 {[%cal}\n{Gd4e5,Rf1c4][%maiaProbability 0.168]!? — a practical try} ( 2. Re6+ 2... Kd8\n3. Ra1a2 {A plain note.} Kc8?? 4. Ra5\n{ see (a) and [b] below [%eval 16.55,47] [%eval 0.81,59] [%csl Ye4,Gd5] } Rd7 (\n4... Rd8 {} {White is slightly better ⩲ 100% winning } ) ) Rg7!?\n{A plain note.} ( 2... Rf7 $3 3. Raa4\n{see (a) and [b] below [%emt 0:00:44] [%maiaProbability 0.806]} 3...Kd8 4. Rh5\nBb7 ( 4. Kd8d7 ;[%eval #14,12] [%maiaProbability 0.587]\n) ) 3. Rc1 Kd8!! 4. Rc1c3 {a; semicolon} Rgg5\n{Black holds; the ending is drawn Black holds; the ending is drawn} 1-0\n\t\n﻿[Event \"a {b\"]\n[LineID \"line_b4500d591b2f22a892099d\"]\n[White \"A. Player\"]\n[Annotator \"a \\\"q\\\" b\\\\c\"]\n[ChapterName \"Najdorf 6.Bg5\"]\t\n[Round   \"1\"]\n\t[FEN \"r3k2r/8/8/8/8/8/6b1/R3K2R w KQkq - 0 1\"]\t\n\n1. Rh6!?\n{Black holds; the ending is drawn [%cal Gd4e5,Rf1c4] [%pv g4] [%emt 0:00:48]}\nRa7 $106 2. Rhh2\n{[%cal Gd4e5,Rf1c4][%maiaProbability 0.168]!? — a practical try} ( 2. Re6+ 2...\nKd8 3. Ra1a2 {A plain note.} Kc8?? 4.Ra5\n{ see (a) and [b] below [%eval 16.55,47] [%eval 0.81,59] [%csl Ye4,Gd5] } Rd7 (\n4. Rd8 {} {White is slightly better ⩲ 100% winning } ) ) Rg7!? {A plain note.}\n( 2... Rf7 $3 3. Raa4 {see}\n{(a) and [b] below [%emt 0:00:44] [%maiaProbability 0.806]} Kd8 4.Rh5 Bb7 ( 4.\nKd8d7 {[%eval #14,12] [%maiaProbability 0.587]} ) ) 3. Rc1 Kd8!! 4. Rc1c3\n;a; semicolon\nRgg5 {Black holds; the ending is drawn Black holds; the ending is drawn} 1-0\n\n\n[Event \"a {b\"]\n[LineID \"shared-id\"]\n[White \"A. Player\"]\n[Annotator \"a \\\"q\\\" b\\\\c\"]\n[ChapterName \"Najdorf 6.Bg5\"]\t\n[Round   \"1\"]\n[FEN \"r3k2r/8/8/8/8/8/6b1/R3K2R w KQkq - 0 1\"]\t\n\n1.Rh6!? {Black}\n{holds; the ending is drawn [%cal Gd4e5,Rf1c4] [%pv g4] [%emt 0:00:48]} Ra7\n$106 2.Rhh2 {[%cal Gd4e5,Rf1c4][%maiaProbability 0.168]!? — a practical try} (\n2. Re6+ 2...Kd8 3.Ra1a2 {A plain note.} 3... Kc8?? 4. Ra5\n{ see (a) and [b] below [%eval 16.55,47] [%eval 0.81,59] [%csl Ye4,Gd5] } Rd7 (\n4... Rd8 { White is slightly better ⩲ 100% winning } ) ) Rg7!? {A}\n{plain note.} ( 2... Rf7 $3 3.Raa4\n{see (a) and [b] below [%emt 0:00:44] [%maiaProbability 0.806]} Kd8 4. Rh5 Bb7\n( 4... Kd8d7 {[%eval} {#14,12] [%maiaProbability 0.587]} ) ) 3.Rc1 Kd8!!\n4.Rc1c3 {a; semicolon} Rgg5\n{Black holds; the ending is drawn Black holds; the ending is drawn} 1-0\n\n",
+    "places": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "ids": [
+      "line_YTQgaDUgYzQgZDV8MA",
+      null,
+      "shared-id",
+      "line_b4500d591b2f22a892099d",
+      "line_99c7cb415fd1fc04c85e65"
+    ],
+    "excused": []
+  },
+  {
+    "text": "1. e3 e5 b3 a6 *\n\n[Event \"Line 1\"]\n[ChapterName \"Najdorf 6.Bg5\"]\t\n[Result \"1-0\"]\n \n1. b3 $209 $146 {not}\n{a cut\n[EventDate \"2026.09.29\"]}\n( 1. f3 1... d6 2. Kf2\n{ [%clk 0:20:51] [%eval -18.42] }\nh6 3.h3\n{braces { inside are text} g5\n4. e3\n{braces { inside are text} )\nNa6 {a}\n{ double  space  paragraph White is slightly better ⩲ [%emt 0:00:27]}\n( {Best by test} 1... Nc6\n{a; semicolon} 2.Nc3 $138 2...\nb5 {[%csl Ye4,Gd5]} 3.e3 f5\n{½ → ∞ ♞ and a private glyph }\n4. g3 {A plain note.} (\n;half a bracket ] and a percent 46.4%\n4.Nce2 ) ) 2. e3\n{ [%maiaProbability 0.646] [%eval #-20] Black holds; the ending is drawn the plan: c4-c5, then Nd5 }\ne5 ;\n3. d4 ( 3. c3 3... b5 $239\n{½ → ∞ ♞ and a private glyph }\n4. Qe2 ) ( 3.g4 3... c6\n{line one\nline two} 4. Nh3 )\nNe7\n{[%clk 0:49:27] Black holds; the ending is drawn Не лучший ход}\n( 3... Qf6\n;Не лучший ход [%pv f3,a5,d3,c5]\n4.Nh3!! $1 ) ( 3...d6 4.Bb5+ )\n4.h4\n{Mixed prose [%cal Ge2e4,Rd7d5] and more}\n0-1\n\t\n",
+    "places": [
+      1
+    ],
+    "ids": [
+      "line_ZTMgZTUgYjMgYTZ8MA",
+      "line_YjMgTmE2IGUzIGU1IGQ0IE"
+    ],
+    "excused": []
+  },
+  {
+    "text": "﻿[Event \" \"]\r\n[Black \"B. Player\"]\r\n[Black \"B. Player\"]\t\r\n \r\n;[%csl Ye4,Gd5] [%emt 0:00:52] Best by test White is slightly better ⩲\r\n*\r\n\r\n",
+    "places": [
+      0
+    ],
+    "ids": [
+      null
+    ],
+    "excused": []
+  },
+  {
+    "text": "{ A one-line banner }\n﻿; a marked note\nMy Repertoire\n\n[Event \"the \\\"real\\\" one\"]\n[LineID \"shared-id\"]\n\n1. a3 $132 $2 { [%pv b4,c5] [%maiaProbability 0.212] a  double  space  paragraph White is slightly better ⩲ } ( 1.Nf3 {½ → ∞ ♞ and a private glyph } 1... f5 $14 $188 { padded } 2. g4 h6 3. Nf3e5 {[%emt 0:00:01][%eval 1.31]} d6 {½ → ∞ ♞ and a private glyph } ( 3... b6 ;[%emt 0:00:50]\n4.a3 ;Best by test 100% winning\n) ( 3... c6 {the plan: c4-c5, then Nd5 a  double  space  paragraph [%clk 0:14:12] [%cal Gd4e5,Rf1c4]} 4. b4 $190 ) 4. f3!? ) 1... a5 ( {½} {→ ∞ ♞ and a private glyph } 1...h6 {a; semicolon} 2.Nc3 d5 $6 3. Nh3 f5 $2 $132 {[%eval 11.62]} 4.Ne4 ) 2. b3 c5 {[%cal Gd4e5,Rf1c4] [%csl Ye4,Gd5] [%cumProb 9.974%]} 3.b4 $1 {[%cumProb 64.284%][%csl Ye4,Gd5][%emt 0:00:38]!? — a practical try!? — a practical try} 3...Qc7 ;a  double  space  paragraph [%emt 0:00:07] [%csl Ye4,Gd5]\n4.c4 *\n",
+    "places": [
+      1
+    ],
+    "ids": [
+      null,
+      "shared-id"
+    ],
+    "excused": []
+  },
+  {
+    "text": "﻿﻿[Event \"back\\\\slash\"]\r\n[Black \"B. Player\"]\r\n[White \"A. Player\"]\t\r\n \r\n1.d3 {a} {marked\r\n﻿[Event \"quote\"]} ( 1. a3 $159 1... e6 2.\r\nd4\r\n{ Black holds; the ending is drawn [%emt 0:00:52] [%cal Gd4e5,Rf1c4] [%cumProb 10.336%] }\r\n) ( 1. Nf3 1...h6 2. h4 {}\r\n{[%clk 0:04:14] [%eval 4.49] a  double  space  paragraph } )\r\na6 {} ( 1...h5 2.b4 {} {Best by test [%eval #11,26] } (\r\n{[%maiaProbability}\r\n{0.229] [%cal Gd4e5,Rf1c4] White is slightly better ⩲} 2. b3\r\n{ padded } ) ( 2. Nc3 $146 $62 ) ) ( { padded } 1... Nc6\r\n{ padded } 2. Nf3 $146 $5 ) 2. Nc3 $146\r\n;White is slightly better ⩲ [%eval #19] [%cumProb 20.625%]\r\n( 2. h4\r\n{!? — a practical try [%eval #8] [%pv c4,g5,Nh3,Bg7] [%emt 0:00:48]}\r\n) 1/2-1/2\r\n\t\r\n",
+    "places": [
+      0
+    ],
+    "ids": [
+      "line_ZDN8MA",
+      "line_YTYgTmMzfDE"
+    ],
+    "excused": [
+      0
+    ]
+  },
+  {
+    "text": "// Repertoire\r\n\r\n[Event \"back\\\\slash\"]\r\n[Result \"1-0\"]\r\n[Site \"https://lichess.org/study/abc\"]\r\n[SetUp \"1\"] [FEN \"r3k2r/8/8/8/8/8/6b1/R3K2R w KQkq - 0 1\"]\r\n[LineID \"a-second-id\"]\r\n\r\n1. Ra5 ( 1. Rxh8+ {half a bracket ] and a percent 46.4%} 1... Ke7 $170 2. Rh3 ) Bd5 2. Rb5 $98 $132 ( 2.Ra6 ) 0-1\r\n\t\r\n ﻿[Event \"½ → ∞\"]\t\r\n[LineID \"shared-id\"]\r\n[LineId \" spaced \"]\r\n[White \"A. Player\"]\r\n[Round   \"1\"]\r\n[White \"A. Player\"]\r\n\r\n{½ → ∞ ♞ and a private glyph } 1.c3 ( ;A plain note.\r\n1. b3 1... h5 {[%maiaProbability 0.891] [%emt 0:00:26] [%pv f4,a5]} 2. b4 ;Black holds; the ending is drawn100% winning\r\ng5 $13 3. a4 { [%eval -7.83][%maiaProbability 0.206] } ( ;A plain note.\r\n3. Ng1h3 ) ) ( { padded } 1.Na3 1... e5 2.h3 ( 2. c3 $16 2... Be7 $13 $132 ;A plain note.\r\n3. Na3b1 $146 { [%eval #3,40][%clk 0:36:30] } ) 2...Qdf6 ;\r\n3. e4 $3 {Best by test} ) h5 ( 1...a6 { Kasparov–Karpov, Linares 1993 [%pv g3] [%csl Ye4,Gd5] [%eval #-8,51] } 2. Qb3 b6 $3 $83 { [%maiaProbability 0.795] Не лучший ход !? — a practical try } 3.Qa4 {!? — a practical try} ) ( {Mixed} {prose [%cal Ge2e4,Rd7d5] and more} 1...g5 $65 2. Nf3 Na6 3. c4 { Best by test see (a) and [b] below [%cumProb 71.896%] } ) 2. Qd1c2 c6 $16 $176 {½ → ∞ ♞ and a private glyph } 3. Qh7\r\n\t\r\n[Event \"Line 1\"]\r\n[LineID \"shared-id\"]\r\n﻿[Round\t\"1\"]\r\n1.Nc3 {a marked\r\n﻿[Event \"quote\"]} g5 2. d4 d6 ;\r\n3. e4 Nd7 $233 $155 {braces { inside are text} 0-1\r\n\r\n\r\n[Event \"the \\\"real\\\" one\"]\r\n[LineID \"shared-id\"]\r\n[Black \"B. Player\"] \r\n[Site \"https://lichess.org/study/abc\"]\r\n[Site \"https://lichess.org/study/abc\"]\r\n[SetUp \"1\"]\r\n[FEN \"r3k2r/8/8/8/8/8/6b1/R3K2R w KQkq - 0 1\"] {braces { inside are text} 1. Kd1 ;braces { inside are text\r\nRb8 2.Rh2?? $72 1/2-1/2\r\n\r\n",
+    "places": [
+      0,
+      1,
+      2,
+      4
+    ],
+    "ids": [
+      "a-second-id",
+      "shared-id",
+      "line_f036888ef627aedfc84719",
+      "line_ZzUgZDQgZDYgZTQgTmQ3fD",
+      "line_f5de7c86b3597d811bf1e8"
+    ],
+    "excused": [
+      2
+    ]
+  },
+  {
+    "text": "[Event \" \"]\n[Date \"2026.09.??\"]\n[ChapterName \"Najdorf 6.Bg5\"]\n[FEN \"rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3\"]\n\n{a} {marked\n﻿[Event \"quote\"]}\n\t\n[Event \"½ → ∞\"]\n[LineID \"shared-id\"]\n[LineId \"k-9f2\"]\n[Site \"https://lichess.org/study/abc\"]\t\n \n1/2-1/2\n\t\n ﻿[Event \"back\\\\slash\"]\n[Round\t\"1\"] \n[Date \"2026.09.??\"]\n[White \"A. Player\"]\n[FEN \"r3k2r/8/8/8/8/8/6b1/R3K2R w KQkq - 0 1\"]\t\n\n{a marked\n﻿[Event \"quote\"]} 1. Rd1 {a;} {semicolon} ( 1. Kd1\n1... Bb7!! $4 2. Kc1 (\n{!? — a practical try [%emt 0:00:54] [%csl Ye4,Gd5]} 2.Rxh8+\n) ) ( 1. Rh2 ;braces { inside are text\n1.Bh3 {A} {plain note.} ( 1...Rg8 2.Ke2 $14\n;[%eval -11.57,25]\n) ( {[%clk 0:25:31] [%emt 0:00:47]} 1... Ked7 $253 {line}\n{one\nline two} 2.O-O-O+ ( 2. Rxa8 $96 ) ( 2. Kd2 $3 $40\n{ the plan: c4-c5, then Nd5 a  double  space  paragraph [%csl Ye4,Gd5] }\n) ) 2. Rhd2 ;[%csl Ye4,Gd5]\n) 1... O-O\n{Kasparov–Karpov, Linares 1993 [%eval #-11,52] [%eval #-19]}\n( {A} {plain note.} 1... Kf8 $16 2.Rb1 $172 ) ( 1... Ra7\n{ padded } 2. Kef2 $5 $58 ) 2.Rc1 * \n\n  [Event \"Line 1\"]\n[SetUp \"1\"]\n[FEN \"rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3\"]\n[LineID \"a-second-id\"]\n3. exf6 e.p. {half a bracket ] and a percent 46.4%}\n% an escaped line 9. Qxf7#\na6 $153 { padded } 4. Nh3 {Не} {лучший ход} g6 {[%emt}\n{0:00:04] [%emt 0:00:00]} 5. f4!! $131\n{[%eval #9] [%clk 0:55:48] Best by test} Bg7 $2 (\n{ White is slightly better ⩲ [%maiaProbability 0.638] }\n5...Qdd6 {half} {a bracket ] and a percent 46.4%} 6. b3 (\n{ [%pv h3,e6,g3,Be7]Best by test } 6. Qf3\n{half a bracket ] and a percent 46.4%} ) ( 6. a3\n{braces { inside are text} ) ) 6. a3 $132 {[%clk 0:18:41]}\n0-1\n\t\n",
+    "places": [
+      0,
+      2,
+      3,
+      5
+    ],
+    "ids": [
+      null,
+      null,
+      null,
+      null,
+      "line_UmQxIE8tTyBSYzF8NA",
+      "a-second-id"
+    ],
+    "excused": [
+      0,
+      2
+    ]
+  },
+  {
+    "text": "﻿  [Event \"a {b\"]\n[Site \"https://lichess.org/study/abc\"]\n[Annotator \"a \\\"q\\\" b\\\\c\"]\n[White \"A. Player\"]\n[Site \"https://lichess.org/study/abc\"] [Site \"https://lichess.org/study/abc\"] \n\n1.Nf3 {A plain note.} ( 1. b4 1... g6 ( 1...a6 $27 {braces { inside are text} 2.Ba3 {[%eval 0.42] [%clk 0:12:03]} e5 {half a bracket ] and a percent 46.4%} ) ( 1... b6 {[%eval 0.42] [%clk 0:12:03]} 2. Nc3 $104 {braces { inside are text} ( 2.c3 {[%eval -5.18,2]Best by test} 2... g6 ;Best by test Black holds; the ending is drawn [%pv a3,a6,c3,b6,f3,a5]\n) ( 2.e3 {[%pv Nc3,Na6,d4,h6] see (a) and [b] below} 2... Nh6 ) a6 ) 2. c4 {Mixed prose [%cal Ge2e4,Rd7d5] and more} b5 {braces { inside are text} ) ( 1.d3 {A plain note.} 1... d6 2. b4 Bh3? {[%cumProb 81.328%] a  double  space  paragraph the plan: c4-c5, then Nd5} ) h6 ;[%cumProb 70.676%] [%clk 0:19:39] [%clk 0:40:43] Black holds; the ending is drawn\n2. Ne5 ;[%emt 0:00:27] [%eval #-4] [%eval #-2]\nc5\n\n[Event \"back\\\\slash\"]\t\n[Result \"*\"]\t\n[Site \"https://lichess.org/study/abc\"]\n[LineID \"abc123\"] [Result \"*\"]\n1. e4 {a; semicolon} Ngh6 $50 ( 1... c6 $3 $3 2. Qe2 {Mixed prose [%cal Ge2e4,Rd7d5] and more} ( 2. Bfb5 {} ) ) ( 1. f5 $13 $132 {100% winning the plan: c4-c5, then Nd5 [%clk 0:10:48] [%cal Gd4e5,Rf1c4] [%csl Ye4,Gd5]} 2. Be2 ) 2. Be2 { padded } *\n\t\n[Event \"½ → ∞\"]\n[LineID \"line_ZTQgTmdoNiBCZTJ8Mw\"]\n[White \"A. Player\"]\n[Date \"2026.09.??\"]\n[Date \"2026.09.??\"]\n[Date \"2026.09.??\"]\n1.Nc3 f6 2. Nf3 $206 $14 {[%maiaProbability 0.904] [%pv b3,h5,d3,e5] [%emt 0:00:41] !? — a practical try} h6 {} 3.g3 {a; semicolon} e6 ( 3...g6 ) ( 3. Nc6 ) 1/2-1/2 \n\n[Event \"c:\\\\games\"] [Site \"https://lichess.org/study/abc\"]\n[Opening_ECO \"v\"]\n[LineID \" spaced \"]\n[Guid \" spaced \"] \n[Guid \" spaced \"]\n\n{a marked\n﻿[Event \"quote\"]} 1.Nb1a3 $14 $146 g6 ( { padded } 1... g5 {} {padded } 2. Nc4 $6 $14 { [%eval -7.65] Не лучший ход Не лучший ход } ( 2.d4 {[%clk 0:35:16] [%eval #-9] Best by test Best by test} 2... a5 3.d5 e5 $13 $229 {100% winning [%cumProb 97.623%] [%emt 0:00:51]} 4. dxe6 e.p. 4... Ngh6 {braces { inside are text} ) ( {Kasparov–Karpov,} {Linares 1993} 2.g4 2... f6! ( 2. h6 {[%cumProb 60.868%] [%pv g3,a5,f3,Ra7,a3] White is slightly better ⩲ a  double  space  paragraph} 3.c3 {100% winning Kasparov–Karpov, Linares 1993 [%csl Ye4,Gd5]} ( {½} {→ ∞ ♞ and a private glyph } 3.Nh3 $100 $16 {line one\nline two} 3...h5 ;[%clk 0:25:32] [%eval 1.67] [%pv g3]\n4. gxh5 g4 ( ;[%eval 0.42] [%clk 0:12:03]\n4...c5 ;\n) ( 4...Bh6 ;see (a) and [b] below [%cumProb 93.928%]\n) ) ( {braces { inside are text} 3.Nb5 3...Nf6 {Kasparov–Karpov, Linares 1993 White is slightly better ⩲ [%pv g4] [%emt 0:00:56] [%cumProb 30.381%]} 4.h4 $14 ;a; semicolon\nRg8 { padded } ) Nc6 4. Ng1h3 e5 ) 3. Rb1 {} 3... a5 $146 4.h3 { see (a) and [b] below[%pv c3,a5,e4,b6][%cal Gd4e5,Rf1c4] } e5 $4 {} {[%csl Ye4,Gd5] [%emt 0:00:46] Не лучший ход } ( 4... Bg7 {A plain note.} ) ( 4... b5 {Не лучший ход} ) ) Nbc6 $3 {braces { inside are text} 3. g4! $4 {} 3...h5 $13 {a;} {semicolon} 4.Bh3 { [%pv h3] [%pv e3,c5] [%eval #-2] a  double  space  paragraph } ( 4.Nf3 {a; semicolon} 4...a6 { padded } ( {braces { inside are text} 4...e6 $146 $1 {[%eval} {#15,4] [%pv e3,Na6] see (a) and [b] below White is slightly better ⩲} ) ( {braces { inside are text} 4. b6 ) ) ( 4. a3!? { [%eval -19.28,34] [%emt 0:00:23] [%csl Ye4,Gd5] the plan: c4-c5, then Nd5 } 4...Bf8h6 ) 4... Ne5 ( 4...b5 {} ) ( {a; semicolon} 4... a5 $13 $14 {} ) ) 2. g3 c6 3.h4 {a  double  space  paragraph} h6 { Kasparov–Karpov, Linares 1993[%emt 0:00:36] } 4. Rh3 $146 Rh7 * \n\n",
+    "places": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "ids": [
+      "line_TmYzIGg2IE5lNSBjNXww",
+      "abc123",
+      "line_ZTQgTmdoNiBCZTJ8Mw",
+      null,
+      "line_TmIxYTMgZzYgZzMgYzYgaD"
+    ],
+    "excused": [
+      3
+    ]
+  },
+  {
+    "text": "﻿[Event \"½ → ∞\"]\n[Annotator \"a \\\"q\\\" b\\\\c\"]\n[Result \"*\"]\n[Result \"*\"]\n[SetUp \"1\"]\n[FEN \"r3k2r/8/8/8/8/8/6b1/R3K2R w KQkq - 0 1\"]\n\n{[%cumProb}\n{24.618%] [%maiaProbability 0.439] Best by test !? — a practical try}\n1.Ra2 {} ( 1.Rc1 $13 1... Bxh1 $223 $241\n{½ → ∞ ♞ and a private glyph } ) Rg8 \n\n[Event \"½ → ∞\"]\n[Annotator \"a \\\"q\\\" b\\\\c\"]\n[Result \"*\"]\n[Result \"*\"]\n﻿[SetUp \"1\"]\n[FEN \"r3k2r/8/8/8/8/8/6b1/R3K2R w KQkq - 0 1\"]\n[LineID \"a-second-id\"]\n\n{[%cumProb 24.618%] [%maiaProbability 0.439] Best by test !? — a practical try}\n1. Ra2 {} ( 1.Rc1 $13 1... Bxh1 $223 $241\n{½ → ∞ ♞ and a private glyph } ) 1...Rg8\n\n\n[Event \"Line 1\"]\n[LineID \"line_UmEyIFJnOHwy\"]\n  [Date \"2026.09.??\"]\n[Annotator \"a \\\"q\\\" b\\\\c\"] [ChapterName \"\"]\n\n{[%pv c3,Nh6,Qb3,Ng4,Qc4] [%eval -6.81] [%csl Ye4,Gd5] White is slightly better ⩲}\n1. b4 {} c5 $4 { padded } 2. Nc3 $14 {Mixed}\n{prose [%cal Ge2e4,Rd7d5] and more} b6 3. Nb1 Nf6\n{a; semicolon} 1/2-1/2\n[Event \"½ → ∞\"]\n[SetUp \"1\"] [FEN \"rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3\"]\n[SetUp \"1\"]\n \n{not a cut\n[EventDate \"2026.09.29\"]} 1-0\n\n",
+    "places": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "ids": [
+      "line_UmEyIFJnOHww",
+      "a-second-id",
+      "line_UmEyIFJnOHwy",
+      null
+    ],
+    "excused": []
+  },
+  {
+    "text": "// Repertoire\n// Color: Black\n\n[Event \"a {b\"]\n\n1. c3 $41 $5 {an indented\n  [Event \"quote\"]\nends here} e6 1/2-1/2\n\t\n",
+    "places": [
+      0
+    ],
+    "ids": [
+      "line_YzN8MA",
+      "line_ZTZ8MQ"
+    ],
+    "excused": [
+      0
+    ]
+  },
+  {
+    "text": "﻿1. h4 d5 *\n% exported by a tool\n1. b4 b6 e3 Nc6 *\n\n[Event \"½ → ∞\"]\n[SetUp \"1\"]\n[FEN \"rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\"]\n \n1... a6 {Kasparov–Karpov, Linares 1993} ( 1... e5 ;\n2.Qh5 {braces { inside are text} ( 2.Qg4 $13 {} 2. Nc6 3. g3 ( 3.Qg5 3... Nb8 4.Qe7+ {line one\nline two} ( {a} { double  space  paragraph [%csl Ye4,Gd5] [%emt 0:00:49]} 4. Qf4 ) ) ( 3.Ne2 { padded } 3... Na5!! $4 4.Qe6+ ) g5 4. b4? $132 ) ( ;\n2. g3 {braces { inside are text} 2... Nc6 $171 $13 3.Nh3 ( 3. Bf1h3 3... f6!? $14 ( 3... Kee7 $41 {Mixed} {prose [%cal Ge2e4,Rd7d5] and more} 4. Qf3 ;\n) ( {½} {→ ∞ ♞ and a private glyph } 3. a5 4. Qe2 $6 $110 {see (a) and [b] below[%eval 2.75,43][%emt 0:00:23]} ) 4. Bhf5?! {} {[%maiaProbability 0.972] Не лучший ход !? — a practical try } ) Qd8g5 {} {[%eval -5.45] [%cal Gd4e5,Rf1c4] White is slightly better ⩲ 100% winning } ( 3... Qh4 ;[%cal Gd4e5,Rf1c4] [%clk 0:11:57]\n4. Ng1 $2 $13 {½ → ∞ ♞ and a private glyph } ) 4. a3 ;half a bracket ] and a percent 46.4%\n) Bb4 { Best by test the plan: c4-c5, then Nd5 [%pv d4,a6,h4,f5] } 3.Qh4 ( 3. Nc3 {[%clk 0:09:20] [%eval #-6] [%cal Gd4e5,Rf1c4]} 3...Ba3 $5 $6 {[%cal Gd4e5,Rf1c4] Kasparov–Karpov, Linares 1993} ( {line one\nline two} 3...a5 {the plan: c4-c5, then Nd5 [%cumProb 26.243%] [%pv Na3,c6,h3,Nh6]} 4. Qh6 ) 4. h4 ) h6! {[%maiaProbability} {0.414] !? — a practical try Не лучший ход} 4. f3 ;[%cumProb 91.025%] [%pv a4,b6] [%clk 0:02:31] Best by test\n) ( {} {see (a) and [b] below Black holds; the ending is drawn [%maiaProbability 0.350] [%pv d4,Nh6,Nh3] [%eval #12,44] } 1... b6 { [%csl Ye4,Gd5] [%maiaProbability 0.192] Не лучший ход White is slightly better ⩲ } 2.b4 {} f6 ( ;[%eval 0.42] [%clk 0:12:03]\n2.c5 3.a3 $187 $151 e5 {[%clk 0:36:45]} ( 3. g5!! $219 {braces { inside are text} 4.b5 ) 4. Bb2 ) ( {Mixed prose [%cal Ge2e4,Rd7d5] and more} 2... c6 3. d3 {} c5? ( 3... h6 {} 4.d4 {} ) ( {see} {(a) and [b] below} 3...g6 $121 $181 4.Na3 ) 4. g3 $190 {½ → ∞ ♞ and a private glyph } ) 3. Ba6 d5 {Mixed prose [%cal Ge2e4,Rd7d5] and more} 4. g4 ( 4. b5 $16 ) ) 2. Ng1h3 {[%eval -6.04] [%eval -18.42] [%csl Ye4,Gd5] see (a) and [b] below} 2... f5 3. Rg1 {} ( 3. a3 {White is slightly better ⩲ !? — a practical try [%cumProb 74.140%]} 3. Ra7 4. Ng1 ( {line} {one\nline two} 4. e5 ) ) a5 {[%cal Gd4e5,Rf1c4]Best by test} 4. g4 $224 1-0\n\n",
+    "places": [
+      1
+    ],
+    "ids": [
+      "line_aDQgZDUgYjQgYjYgZTMgTm",
+      "line_YTYgTmcxaDMgZjUgUmcxIG"
+    ],
+    "excused": []
+  },
+  {
+    "text": "﻿   Repertoire by GM X\n1. e3 h5 *\n   Repertoire by GM X\n\n﻿[Event \"½ → ∞\"]\n[Date \"2026.09.??\"] [Date \"2026.09.??\"] \n \n1. a4 {half a bracket ] and a percent 46.4%}\n% an escaped line 9. Qxf7#\nh6 {Best by test [%cal Gd4e5,Rf1c4] [%cumProb 55.112%]} ( 1...e6 {} {[%maiaProbability 0.930] } 2. f3 ;Mixed prose [%cal Ge2e4,Rd7d5] and more\nb5 {A plain note.} ( 2... Qd8g5?? 3.b3 d6 $14 $4 {A plain note.} ( 3... f5 $6 4. Kf2 $24 $192 c6 $33 ) 4. Ba3 Qb5 $2 ) ( 2... Be7 3.b3 {Mixed prose [%cal Ge2e4,Rd7d5] and more} g5 $199 { !? — a practical try !? — a practical try [%csl Ye4,Gd5] } ( {} 3... a6 {line one\nline two} 4.h4 h5 ) 4. b4 {} f5 { a  double  space  paragraph White is slightly better ⩲ } ) 3.b4 $59 ( 3. Nh3 ;Best by testBest by test[%eval #-1][%eval #-20,18][%cal Gd4e5,Rf1c4]\n3...Nh6 4.g4! $1 {½ → ∞ ♞ and a private glyph } ( {[%maiaProbability 0.993] [%csl Ye4,Gd5] [%cal Gd4e5,Rf1c4]} 4. Ng5 {[%eval #-20,56][%cumProb 36.194%]} 4... Bfe7 ) f6 ) ( {[%clk 0:03:21] [%eval 17.91,14] [%eval 8.09]} 3. h3 $209 $4 {[%eval 0.42] [%clk 0:12:03]} 3... Qdg5 { White is slightly better ⩲ } 4.Na3 {[%cumProb} {43.863%] [%emt 0:00:51] [%csl Ye4,Gd5] Black holds; the ending is drawn a  double  space  paragraph} ( 4. c4 $1 $146 4...h6 {[%pv Na3,e5,f3,Bxa3,g4] [%eval -4.69,57] [%pv Nh3,b6,Nf4,h6]} ) ( 4. Ra2 ;[%eval 0.42] [%clk 0:12:03]\n4... Nc6 ( 4. Qc5 {[%eval 10.67][%maiaProbability 0.465]a  double  space  paragraphBest by test} ) ) Bf8b4 $132 $141 {Не лучший ход!? — a practical try} ) Ba6 {Mixed prose [%cal Ge2e4,Rd7d5] and more} 4. g3 ( 4. Nc3? 4. c5 $148 $41 {100% winning see (a) and [b] below [%emt 0:00:17] [%pv e3,Nf6,e4,b5,f4] [%cumProb 6.352%]} ) ( 4. d3 4...c5!? $2 {Kasparov–Karpov, Linares 1993 [%csl Ye4,Gd5]} ) d6 ) ( 1...f5 {} {[%eval #6] [%clk 0:02:07] Не лучший ход a  double  space  paragraph } 2. d4 $210 $5 ( 2.b4 {Mixed prose [%cal Ge2e4,Rd7d5] and more} 2. g5 ( 2... d5 3.d3 ( 3. h4 { [%csl Ye4,Gd5] } 3... c6 {[%csl Ye4,Gd5] Best by test} 4. g3 { padded } ( 4.Ra2 $13 4... Nb8d7 {[%clk 0:49:20][%cumProb 40.769%][%clk 0:24:26]} ) f4 ) Nf6 $3 {[%eval} {0.42] [%clk 0:12:03]} ( {½ → ∞ ♞ and a private glyph } 3... Qd7 {see (a) and [b] below Best by test} 4.Ba3 {a; semicolon} b5 $5 ) ( 3...c6 ;braces { inside are text\n4. d4 {A plain note.} Qb6 { Best by test a  double  space  paragraph [%maiaProbability 0.966] } ) 4. Bg5 {Mixed prose [%cal Ge2e4,Rd7d5] and more} Kd7 $48 $146 ) ( 2... h6 {} 3. Ng1f3 $132 $16 ( 3. Ba3 {see (a) and [b] below} 3. Nc6 $16 $5 { a  double  space  paragraph[%eval 11.65] } 4. h3 e6 ( 4...g6 {half} {a bracket ] and a percent 46.4%} ) ) ( 3. Bb2 { padded } 3... a6 ;\n4. Ra2 $3 $132 ;\n( 4. Bba3 4... d6 ) ( { Kasparov–Karpov, Linares 1993 } 4. g3 4... d5 {[%csl Ye4,Gd5] [%csl Ye4,Gd5] [%clk 0:54:06]} ) c5 $108 $1 {A plain note.} ) 3... Rh7 4.Nb1c3 ( {[%emt} {0:00:54] [%pv b3] [%cal Gd4e5,Rf1c4]} 4.Rg1 $13 $2 {[%cal Gd4e5,Rf1c4] Best by test Kasparov–Karpov, Linares 1993} 4...Rh8 {line one\nline two} ) ( 4. g3 4... b6 ( {[%eval 0.42] [%clk 0:12:03]} 4... Nf6 $145 ) ( 4... d6 ) ) e5 { padded } ) 3.Ra2 $192 {[%emt} {0:00:31] [%maiaProbability 0.300] [%emt 0:00:06] White is slightly better ⩲ see (a) and [b] below} ( {100%} {winning [%eval 11.71] [%pv h3] [%clk 0:18:27]} 3.Nc3 3... f4 4. Nb5 {Mixed} {prose [%cal Ge2e4,Rd7d5] and more} Nf6 {half a bracket ] and a percent 46.4%} ) ( ;[%eval 0.42] [%clk 0:12:03]\n3. d4 {½ → ∞ ♞ and a private glyph } 3...Kf7 $16 {[%clk 0:05:58]} ( 3... f4 4. Ked2 Bfh6 ;[%eval 0.42] [%clk 0:12:03]\n) ( { Best by test [%clk 0:07:49] } 3... h5 {line one\nline two} 4. g3 h4 {line one\nline two} ( 4... Kf7 ) ( 4... Nf6 ) ) 4.g3 Bg7?? ) 3... Ng8h6 {line} {one\nline two} 4.c3 { padded } b6 ( {a;} {semicolon} 4... c6 { [%maiaProbability 0.700] [%pv g4,e6,b4,Ne7,Ba3,c5] [%eval -8.78,11] Kasparov–Karpov, Linares 1993 Black holds; the ending is drawn } ) ( 4. c5 ) ) f4 3. Nf3 {Mixed prose [%cal Ge2e4,Rd7d5] and more} ( 3. Qd3 3... Nb8a6 ( {[%csl Ye4,Gd5] [%cal Gd4e5,Rf1c4] [%cumProb 50.081%] a  double  space  paragraph} 3... g5 ;[%eval 0.42] [%clk 0:12:03]\n4. Qc4 {[%eval 0.42] [%clk 0:12:03]} Bg7 ;A plain note.\n) 4. c4 {a; semicolon} g6 ( 4... Nf6 $217 $8 { [%eval -12.79] [%cal Gd4e5,Rf1c4] Не лучший ход } ) ( 4... Kf7 ) ) Ngh6 { [%csl Ye4,Gd5] [%pv a4] } ( {} 3...g5 4. Ne5 $2 {half a bracket ] and a percent 46.4%} h5 ;\n) ( 3... Nc6 4. Be3 Nf6 ) 4. a5 ( {a; semicolon} 4. Nh4 $125 ;[%pv b4,Nf6,g4,e5]\n4... a6 ( 4... a5 {Mixed prose [%cal Ge2e4,Rd7d5] and more} ) ) 4... Nh6g4 ) 2.Nf3 ( 2.Ng1h3 {Mixed prose [%cal Ge2e4,Rd7d5] and more} 2... Rhh7 ( 2... b5 $103 3. d4 h5 {} 4.Ng1 ( 4. Qdd2 {[%eval 0.42] [%clk 0:12:03]} 4... Nh6 ) c6 ( 4...d6 {Mixed prose [%cal Ge2e4,Rd7d5] and more} ) ) 3. c4 $71 $68 g6 4.b3 ( {a  double  space  paragraph} 4.g4 4... Na6 {Black} {holds; the ending is drawn [%cal Gd4e5,Rf1c4]} ( 4...f6 ;half a bracket ] and a percent 46.4%\n) ( ;Mixed prose [%cal Ge2e4,Rd7d5] and more\n4... e5 {Best by test} ) ) f6 {braces { inside are text} ( 4... Na6 ) ( 4... b5 $135 $6 ) ) ( 2. c4 2... Rh7 {Mixed prose [%cal Ge2e4,Rd7d5] and more} 3. b3 {[%eval} {-6.06,51] [%eval #6,30]} 3... Nc6 {[%cumProb 79.207%] [%maiaProbability 0.347]} 4. g4 Ncd4 $3 $146 {braces { inside are text} ) Nc6 {[%pv} {a4,Nf6,d3] [%cumProb 74.191%] [%cumProb 14.189%]} 3. Rg1?! {[%eval 0.42] [%clk 0:12:03]} Rb8 ;[%maiaProbability 0.896][%pv a3][%emt 0:00:19]a  double  space  paragraph\n4. Nd4 a5 {[%maiaProbability 0.564] [%emt 0:00:43] [%emt 0:00:35] White is slightly better ⩲ see (a) and [b] below} ( 4...Nc6a5 $132 ) * \n\n",
+    "places": [
+      1
+    ],
+    "ids": [
+      "line_ZTMgaDV8MA",
+      "line_YTQgaDYgTmYzIE5jNiBSZz"
+    ],
+    "excused": []
+  },
+  {
+    "text": "\t// an indented comment\n\n[Event \" \"]\n[Opening_ECO \"12.5%\"]\n[Result \"1-0\"]\n[FEN \"rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3\"]\n \n3. Bd3!? g6 ;mid-line [Event \"quote\"] is text\n4. Be2 b6 5. Ba6 $11 $154 b5 6. Ba6xc8!? $14 {Kasparov–Karpov, Linares 1993 [%eval #-5] [%emt 0:00:53] [%maiaProbability 0.170]} 0-1\n\n\n",
+    "places": [
+      0
+    ],
+    "ids": [
+      "line_QmQzIGc2IEJlMiBiNiBCYT"
+    ],
+    "excused": []
+  },
+  {
+    "text": "{ quoting\n[Event \"x\"] in a banner }\n   Repertoire by GM X\n{ A banner\nover two lines }\n\n[Event \"a {b\"]\n[SM2Interval \"B90\"]\n[SM2Interval \"B90\"]\t\n\n1. f3 1... g6\n{not a cut either\n[Event\t\"tabbed\"]}\n2.Na3 d6?! 3. d3 $146 $16\n{half a bracket ] and a percent 46.4%}\n( 3. b3 $16 $14 ) ( 3.f4 ) \n\n  [Event \"a {b\"]\n[Black \"B. Player\"]\n[LineId \"abc123\"]\n[Site \"https://lichess.org/study/abc\"]\n[SetUp \"1\"]\n[FEN \"rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3\"] 3. exf6 e.p. Bcf5\n;half a bracket ] and a percent 46.4%\n( 3. g6 4. Nc3 ;a; semicolon\n( 4.Qf3 $92 {!?}\n{— a practical tryKasparov–Karpov, Linares 1993[%pv e4,e5,d3,Qf6,Bg5,Qh6]}\n4. Ke8f7\n;Mixed prose [%cal Ge2e4,Rd7d5] and more\n( 4. Be6?? 5. Qe4\n{Kasparov–Karpov, Linares 1993 [%eval 6.77] [%clk 0:18:51] [%eval 17.67]}\n) ( 4... exf6\n{Mixed prose [%cal Ge2e4,Rd7d5] and more}\n5. Nba3 $1\n;Mixed prose [%cal Ge2e4,Rd7d5] and more\n) 5. Nc3 ) (\n;[%maiaProbability 0.418] [%clk 0:29:23] [%pv g3,g5,f3,Nc6,h4] White is slightly better ⩲ Kasparov–Karpov, Linares 1993\n4. d4\n{[%pv Nc3,g6,g4,d6,Nd5,Bg7] [%eval #15]}\n4... Kd7 {a; semicolon} 5.\nBfc4 {[%cumProb 67.586%]} )\nQd6 {line one\nline two} ( 4...\nc6\n{Mixed prose [%cal Ge2e4,Rd7d5] and more}\n5.g4\n;[%clk 0:24:38] [%cumProb 20.417%]\n) ( 4... Bg7\n;[%eval 0.42] [%clk 0:12:03]\n5.Nce2\n;[%eval #8,5] [%clk 0:35:29] [%maiaProbability 0.938] see (a) and [b] below Не лучший ход\n) 5. Ne4 { padded } ) 4. Bb5+\nNc6 $5 {a; semicolon} 5.f7+\n1/2-1/2 \n\n[Event \"back\\\\slash\"]\n[Site \"https://lichess.org/study/abc\"]\n[LineID \"abc123\"]\n[Result \"1/2-1/2\"]\n\n1.f3\n{Kasparov–Karpov, Linares 1993[%maiaProbability 0.626][%emt 0:00:21]}\na5 $1\n{Mixed prose [%cal Ge2e4,Rd7d5] and more}\n2. h4 { padded } b6 {} 3.a3!!\n$2 {}\n{[%eval 2.14] [%eval #9] [%cal Gd4e5,Rf1c4] Black holds; the ending is drawn White is slightly better ⩲ }\nNa6 $18\n{braces { inside are text} 0-1 \n\n﻿[Event \"Line 1\"] [ChapterName \" \"]\n[Date \"2026.09.??\"] \n[Black \"B. Player\"]\n[Date \"2026.09.??\"]\n\n1.e3 Ng8f6 0-1 \n\n",
+    "places": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "ids": [
+      null,
+      "line_ZjMgZzYgTmEzIGQ2IGQzfD",
+      "abc123",
+      "line_f42446117de52200eb7be0",
+      "line_ZTMgTmc4ZjZ8NA"
+    ],
+    "excused": []
+  },
+  {
+    "text": "[Event \"a {b\"]\n[LineID \"abc123\"]\n[Site \"https://lichess.org/study/abc\"]\n[Site \"https://lichess.org/study/abc\"] \n[ChapterName \"Najdorf 6.Bg5\"]\n\n\n1.e4 {see\n[Event \"the game below\"] first} g6 2. Bc4 1/2-1/2\n\n\t[Event \"back\\\\slash\"]\n[Black \"B. Player\"]\n[LineID \"a-second-id\"]\n\n{an indented\n  [Event \"quote\"]\nends here} 1.f3 $68 $4 (\n{[%cumProb 74.475%] [%pv g3,d5,f3,Nd7] [%clk 0:04:10] a  double  space  paragraph}\n1. g4 { Не лучший ход } 1... Na6 2. e3 e6 3.b4 {} e5 4.\nBcb2!! $237 {100%}\n{winning Black holds; the ending is drawn [%maiaProbability 0.795] [%eval 3.02,47] [%pv e4]}\n) h6 2. e3\n{ [%emt 0:00:34][%cal Gd4e5,Rf1c4][%csl Ye4,Gd5]Best by test }\n( 2. b4 2... c5 $13 $112 {a;} {semicolon} 3. a4 { padded }\n3...d6 4. Nc3\n{ [%cumProb 58.511%] Black holds; the ending is drawn Best by test }\n) ( {} 2. Nh3 {[%eval 14.16]} 2... a5 3.d3 $4 $13 ( ;\n3.a4 {[%cumProb 85.924%] [%clk 0:57:58]} 3... Nf6 {} (\n{½ → ∞ ♞ and a private glyph } 3... b5 4. d3 ) 4. Nf2\n{100% winning !? — a practical try [%cumProb 60.902%]} ) e6\n( 3... Nbc6 {braces { inside are text} 4. Nf4 {½}\n{→ ∞ ♞ and a private glyph } ( 4. a4\n{braces { inside are text} ) ) 4. a4 ) b6 3.d3 $4 ( 3. Ba6\n$3 $65 3...Bb7 ;\n( 3... Rh7 4.Qe2 ) 4. Nc3 ) d5\n{ [%eval #-20,3] [%maiaProbability 0.613] } ( 3...g6 4. Bd2\n) 4.c4 ( {[%eval 0.42] [%clk 0:12:03]} 4. b3 ) 1/2-1/2\n\t\n[Event \"back\\\\slash\"]\n[Black \"B. Player\"]\n[LineID \"a-second-id\"]\n\n{an indented\n  [Event \"quote\"]\nends here} 1.f3 $68 $4 (\n{[%cumProb 74.475%] [%pv g3,d5,f3,Nd7] [%clk 0:04:10] a  double  space  paragraph}\n1. g4 { Не лучший ход } 1... Na6 2. e3 e6 3.b4 {} e5 4. Bcb2\n$3 $237\n{100% winning Black holds; the ending is drawn [%maiaProbability 0.795] [%eval 3.02,47] [%pv e4]}\n) h6 2. e3\n{ [%emt 0:00:34][%cal Gd4e5,Rf1c4][%csl Ye4,Gd5]Best by test }\n( 2. b4 2... c5 $13 $112 {a; semicolon} 3. a4 { padded }\n3...d6 4. Nc3\n{ [%cumProb 58.511%] Black holds; the ending is drawn Best by test }\n) ( {} 2. Nh3 {[%eval} {14.16]} 2...a5 3. d3?? $13 ( ;\n3. a4 {[%cumProb 85.924%] [%clk 0:57:58]} 3... Nf6 {} ( {½}\n{→ ∞ ♞ and a private glyph } 3... b5 4. d3 ) 4.Nf2\n;100% winning !? — a practical try [%cumProb 60.902%]\n) e6 ( 3...Nbc6 {braces { inside are text} 4. Nf4\n{½ → ∞ ♞ and a private glyph } ( 4. a4\n;braces { inside are text\n) ) 4.a4 ) b6 3. d3 $4 ( 3.Ba6!! $65 3.Bb7 {} ( 3...Rh7\n4.Qe2 ) 4.Nc3 ) d5\n{ [%eval #-20,3] [%maiaProbability 0.613] } ( 3...g6 4. Bd2\n) 4. c4 ( {[%eval} {0.42] [%clk 0:12:03]} 4. b3 ) 1/2-1/2\n﻿[Event \"a {b\"]\n[LineID \"shared-id\"]\n[X-Custom+Tag \"3\"]\n \n1. f3 a6\n;[%pv Na3]100% winningBlack holds; the ending is drawn\n( {Black holds; the ending is drawn Best by test} 1... b5\n2.Na3! $13 {a;} {semicolon} ( 2.c4\n{Mixed prose [%cal Ge2e4,Rd7d5] and more} ) ( 2. Kf2 $14 $4\n{[%clk 0:52:04] Не лучший ход} ) ) (\n{[%maiaProbability 0.534] [%cumProb 87.882%] Не лучший ход}\n1... g5 2.Nc3\n{Black holds; the ending is drawn see (a) and [b] below} (\n2. b4 {line one\nline two} ) ( {half}\n{a bracket ] and a percent 46.4%} 2. h3\n{[%eval 3.05,3][%pv a4,d6,b3,Nc6,a5,h6][%clk 0:52:44]see (a) and [b] belowНе лучший ход}\n) ) 2. h3 {a; semicolon} *\n\t\n",
+    "places": [
+      0,
+      2,
+      4,
+      6
+    ],
+    "ids": [
+      "abc123",
+      "line_ZzYgQmM0fDE",
+      null,
+      "line_ZjMgaDYgZTMgYjYgZDMgZD",
+      null,
+      "line_9ea8d87a8237fad0448f4c",
+      "shared-id"
+    ],
+    "excused": [
+      0,
+      1,
+      2
+    ]
+  },
+  {
+    "text": "﻿﻿; a marked note\n{ an indented\n  [Event \"y\"] quote }\n{ A banner\nover two lines }\n\n[Event \"the \\\"real\\\" one\"]\n[LineID \"shared-id\"]\n[LineId \" spaced \"]\n[CumProb \"B90\"]\n[Site \"https://lichess.org/study/abc\"]\n[ChapterName \"Najdorf 6.Bg5\"]\n\n{} 1. Nh3 {[%cumProb 51.710%]} Nf6 {[%maiaProbability 0.166] [%eval #12] Black holds; the ending is drawn a  double  space  paragraph} 2. d3 {½ → ∞ ♞ and a private glyph } Nd5 {a; semicolon} 3.f4 { padded } a6 { [%eval #-14,27] the plan: c4-c5, then Nd5 Best by test } 4. Kf2 { padded } f5 0-1\n\n[Event \"½ → ∞\"]\n[LineID \"shared-id\"]\n[Result \"*\"]\n[FEN \"rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3\"]\n \n* \n\n[Event \"the \\\"real\\\" one\"]\n[LineID \"shared-id\"]\n[LineId \" spaced \"]\n[CumProb \"B90\"]\n[Site \"https://lichess.org/study/abc\"]\n[ChapterName \"Najdorf 6.Bg5\"]\n\n{} 1. Nh3 {[%cumProb 51.710%]} Nf6 {[%maiaProbability 0.166] [%eval #12] Black holds; the ending is drawn a  double  space  paragraph} 2. d3 {½ → ∞ ♞ and a private glyph } Nd5 {a; semicolon} 3.f4 { padded } a6 { [%eval #-14,27] the plan: c4-c5, then Nd5 Best by test } 4. Kf2 { padded } f5 0-1\n[Event \"the \\\"real\\\" one\"]\n[Annotator \"a \\\"q\\\" b\\\\c\"]\n[Black \"B. Player\"]\t\n[FEN \"rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3\"]\n \n*\n",
+    "places": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "ids": [
+      null,
+      "shared-id",
+      null,
+      "line_ccdd5a7e0347fd41de7960",
+      null
+    ],
+    "excused": []
+  },
+  {
+    "text": "[Event \"½ → ∞\"]\r\n[Opening_ECO \"v\"]\r\n[Opening_ECO \"v\"]\r\n[LineID \"a-second-id\"]\r\n\r\n{see\r\n[Event \"the game below\"] first} 1. a4\r\n% an escaped line 9. Qxf7#\r\nNgf6 {[%emt 0:00:10] Black holds; the ending is drawn} 2.Nh3 h5 $216 $102 3. a5 ( 3. f4 {[%eval -3.46] [%maiaProbability 0.591] [%clk 0:00:47]} 3... Nd5 $211 ) b5 ;half a bracket ] and a percent 46.4%\r\n1-0 \r\n\r\n ﻿[Event \"½ → ∞\"]\r\n[Opening_ECO \"v\"]\r\n[Opening_ECO \"v\"]\r\n[LineID \"a-second-id\"]\r\n\r\n{see\r\n[Even} { \"the game below\"] first} 1.a4\r\n% an escaped line 9. Qxf7#\r\nNgf6 ;[%emt 0:00:10] Black holds; the ending is drawn\r\n2. Nh3 2...h5 $216 $102 3. a5 ( 3. f4 ;[%eval -3.46] [%maiaProbability 0.591] [%clk 0:00:47]\r\n3...Nd5 $211 ) b5 ;half a bracket ] and a percent 46.4%\r\n1-0\r\n\r\n[Event \"½ → ∞\"] [LineID \"a-second-id\"]\r\n[Result \"1-0\"] \r\n* \r\n\r\n[Event \"Line 1\"]\r\n[LineID \"line_f903aad3a82ad6b4c5508f\"]\r\n[X-Custom+Tag \"3\"]\r\n[Result \"1/2-1/2\"] [White \"A. Player\"]\r\n[White \"A. Player\"] \r\n1. Nf3 {Best by test 100% winning} d5 $5 {½ → ∞ ♞ and a private glyph } 2. a4 {a; semicolon} c5?? $16 3. h4 {a; semicolon} g5 4. e3 {Mixed prose [%cal Ge2e4,Rd7d5] and more} g4 0-1 \r\n\r\n",
+    "places": [
+      0,
+      2,
+      3,
+      4
+    ],
+    "ids": [
+      null,
+      "line_YTQgTmdmNiBOaDMgaDUgYT",
+      "a-second-id",
+      null,
+      "line_f903aad3a82ad6b4c5508f"
+    ],
+    "excused": [
+      0,
+      1
+    ]
+  },
+  {
+    "text": "1. Nh3 h5 f3 e6 *\n\t// an indented comment\n\n  [Event \"the \\\"real\\\" one\"]\n[Result \"1-0\"]\n[Round   \"1\"]\n[Round   \"1\"]\n\n1. d4 a6 $65 $132 {braces { inside are text} 2. Bch6 e5\n{Black holds; the ending is drawn} 3.f3 gxh6 $146 *\n\n",
+    "places": [
+      1
+    ],
+    "ids": [
+      "line_TmgzIGg1IGYzIGU2fDA",
+      "line_ZDQgYTYgQmNoNiBlNSBmMy"
+    ],
+    "excused": []
+  },
+  {
+    "text": "{ quoting\n[Event \"x\"] in a banner }\n// Color: Black\n   Repertoire by GM X\n\n[Event \"the \\\"real\\\" one\"] \n\n\n{[%clk 0:40:01] [%cumProb 54.296%] the plan: c4-c5, then Nd5} 0-1\n\t\n",
+    "places": [
+      1
+    ],
+    "ids": [
+      null,
+      null
+    ],
+    "excused": []
+  },
+  {
+    "text": "﻿\t// an indented comment\r\n1. d4 d5 2. c4 *\r\n\r\n[Event \"½ → ∞\"]\r\n[LineID \"shared-id\"]\r\n[Annotator \"a \\\"q\\\" b\\\\c\"] [Annotator \"a \\\"q\\\" b\\\\c\"]\r\n*\r\n\r\n",
+    "places": [
+      1
+    ],
+    "ids": [
+      "line_ZDQgZDUgYzR8MA",
+      null
+    ],
+    "excused": []
+  },
+  {
+    "text": "{ an indented\r\n  [Event \"y\"] quote }\r\n1. h3 Na6 f3 b5 *\r\n\r\n[Event \"½ → ∞\"]\r\n[Annotator \"a \\\"q\\\" b\\\\c\"]\r\n[Black \"B. Player\"] [Result \"1/2-1/2\"]\r\n[Site \"https://lichess.org/study/abc\"]\r\n ﻿[LineID \"\"]\r\n\r\n1.h4 $5 $5 ( ;\r\n1. g3 {a; semicolon} ) 0-1\r\n\t\r\n",
+    "places": [
+      1
+    ],
+    "ids": [
+      "line_aDMgTmE2IGYzIGI1fDA",
+      "line_aDR8MQ"
+    ],
+    "excused": []
+  },
+  {
+    "text": "﻿1. g4 Nh6 b3 d6 *\r\n; a note on the file\r\n\r\n[Event \"Line 1\"]\r\n[Result \"1/2-1/2\"]\r\n\t[Result \"1-0\"]\r\n[LineID \"\"]\r\n\r\n;braces { inside are text\r\n1.c4?! ;Mixed prose [%cal Ge2e4,Rd7d5] and more\r\n1...b6 {an indented\r\n  [Event \"quote\"]\r\nends here} 2.b4 Bb7 $252 3. d3 1-0\r\n\r\n\r\n[Event \"Line 1\"]\r\n[LineID \"line_c933790f612ceff8d5e741\"]\r\n[Result \"1/2-1/2\"]\r\n ﻿\t[Result \"1-0\"]\r\n\r\n{braces} {{ inside are text} 1. c4 $6 {Mixed prose [%cal Ge2e4,Rd7d5] and more} b6 {an indented\r\n  [Event \"quote\"]\r\nends here} 2. b4 Bb7 $252 3. d3 1-0\r\n\r\n[Event \"a {b\"]\r\n[SM2Interval \"12.5%\"]\r\n[White \"A. Player\"] [X-Custom+Tag \"3\"]\t\r\n[ChapterName \"Najdorf 6.Bg5\"]\r\n\r\n1. g3 $14 $146 {a; semicolon} 1/2-1/2\r\n\t\r\n[Event \"the \\\"real\\\" one\"]\r\n1.e3 ( 1. h4 $14 $82 1...Nba6?? $103 {Mixed prose [%cal Ge2e4,Rd7d5] and more} 2.b3 { !? — a practical try [%eval #-15,41] } Nb8 $14 $146 3. f4 $16 $4 {Kasparov–Karpov, Linares 1993 [%pv h4] [%cumProb 89.812%]} e6 {braces} {{ inside are text} ) h6 2.Qe2 {[%cumProb} {36.054%][%pv g4,d6,b4,Bxg4,e4,g5][%eval -0.29]Не лучший ход} f5 $13 {[%maiaProbability 0.142]the plan: c4-c5, then Nd5} ( 2... g5 {!?} {— a practical try} 3. Na3 {braces { inside are text} ( {} {[%cal Gd4e5,Rf1c4] [%eval 16.82,33] [%csl Ye4,Gd5] } 3. Qd1 {100% winning [%csl Ye4,Gd5]} 3. a5 ) 3... a5 {Black holds; the ending is drawn !? — a practical try [%eval #3,51] [%eval #-11] [%eval #0,11]} ) 3. Qb5! ( 3. Qf3 {see} {(a) and [b] below White is slightly better ⩲ [%pv Na3,e6,d3,c6,Bg5] [%cumProb 63.425%] [%clk 0:24:32]} 3... h5 $170 $80 ;\r\n) Nf6 {[%clk 0:17:12] [%maiaProbability 0.299] [%cumProb 84.394%] Kasparov–Karpov, Linares 1993}\r\n\r\n\r\n",
+    "places": [
+      1,
+      3,
+      5,
+      6
+    ],
+    "ids": [
+      "line_ZzQgTmg2IGIzIGQ2fDA",
+      "line_YzQgYjZ8MQ",
+      "line_YjQgQmI3IGQzfDI",
+      "line_c933790f612ceff8d5e741",
+      "line_YjQgQmI3IGQzfDQ",
+      "line_ZzN8NQ",
+      "line_ZTMgaDYgUWUyIGY1IFFiNS"
+    ],
+    "excused": [
+      0,
+      1
+    ]
+  },
+  {
+    "text": "﻿; a marked note\n// Color: Black\n﻿; a marked note\n\n[Event \"the \\\"real\\\" one\"]\n[ChapterName \"Najdorf 6.Bg5\"]\n[SetUp \"1\"]\n[FEN \"rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3\"]\n\n3. g3 $255 $98 ( 3. e6?! $132\n3. a5 {Best by test} 4.b3 $6\n{[%pv b4,g5] [%cal Gd4e5,Rf1c4] [%eval 18.58] !? — a practical try}\nh5\n{[%cumProb 66.447%] see (a) and [b] below !? — a practical try}\n) c5 $196 $43\n{[%eval 0.42] [%clk 0:12:03]}\n4. Nf3 $146 h6 {} {padded }\n1-0\n[Event \"c:\\\\games\"]\n[Annotator \"a \\\"q\\\" b\\\\c\"]\n[Annotator \"a \\\"q\\\" b\\\\c\"]\n[Result \"1-0\"]\n  [FEN \"7k/5Q2/6K1/8/8/8/8/8 b - - 0 1\"]\n{not}\n{a cut\n[EventDate \"2026.09.29\"]}\n1-0\n[Event \"½ → ∞\"]\n[White \"A. Player\"]\n[Date \"2026.09.??\"]\n[Guid \"abc123\"]\n[SetUp \"1\"]\n[FEN \"r3k2r/8/8/8/8/8/6b1/R3K2R w KQkq - 0 1\"]\n[LineID \"a-second-id\"]\n\n1. Rxa8+ $132 $198 Bxa8 ( 1...\nKe7!!\n;[%clk 0:02:29] [%eval #-2,48] the plan: c4-c5, then Nd5\n2. Rh7+ $166 Ke6?! ;\n3. Ra5 ( 3. Ra2 {[%eval}\n{0.42] [%clk 0:12:03]} ) (\n{Mixed prose [%cal Ge2e4,Rd7d5] and more}\n3. Rhxh8 ) ) ( 1... Kd7 2.Ra5\n{Mixed prose [%cal Ge2e4,Rd7d5] and more}\nRg8 3. Kd1 $57 $132 ) 2. Kf1\n$209\n{ [%csl Ye4,Gd5]the plan: c4-c5, then Nd5White is slightly better ⩲ }\n( 2.Rh4 2... Rh5 3. Kd1 ) (\n;[%eval 0.42] [%clk 0:12:03]\n2.Rf1 2... Rh1\n{ [%cal Gd4e5,Rf1c4] [%emt 0:00:30] }\n( 2... Bh1 {}\n{[%emt 0:00:29] [%csl Ye4,Gd5] [%eval 2.30,55] }\n3. Ke2 ( 3.Rf5 ) ) 3.Kf2 {½}\n{→ ∞ ♞ and a private glyph } )\nKf8 (\n{ [%csl Ye4,Gd5] [%pv b3,f5,Nc3] }\n2... Rh4 3.Rh1g1\n;[%eval 0.42] [%clk 0:12:03]\n( 3. Rhh3\n{[%cumProb 94.796%] [%csl Ye4,Gd5] [%emt 0:00:52]}\n) ) ( {the}\n{plan: c4-c5, then Nd5 [%pv Na3]}\n2. Rh7 3. Rh3\n{ [%csl Ye4,Gd5] [%clk 0:53:46] [%eval #4] Kasparov–Karpov, Linares 1993 Kasparov–Karpov, Linares 1993 }\n) 3.Kf1e1 1/2-1/2 \n\n[Event \"c:\\\\games\"]\n[Result \"1/2-1/2\"]\n\n1.Nc3 $33 $16\n{Best by test Kasparov–Karpov, Linares 1993 [%csl Ye4,Gd5] [%clk 0:28:10] [%eval #-8]}\nNf6 $4\n;[%eval 0.42] [%clk 0:12:03]\n2. a4\n{Не лучший ход Black holds; the ending is drawn}\n( 2.d4 $6 {line one\nline two}\n2...a6 ( 2... e6 ) ) h6 $151\n$16\n{Mixed prose [%cal Ge2e4,Rd7d5] and more}\n*\n\n",
+    "places": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "ids": [
+      "line_ZzMgYzUgTmYzIGg2fDA",
+      null,
+      "a-second-id",
+      "line_TmMzIE5mNiBhNCBoNnwz"
+    ],
+    "excused": []
+  },
+  {
+    "text": "; a note on the file\r\n\r\n[Event \"Line 1\"]\r\n[Annotator \"a \\\"q\\\" b\\\\c\"]\r\n[Date \"2026.09.??\"]\r\n\r\n{[%cal} {Gd4e5,Rf1c4]} 1/2-1/2\r\n﻿[Event \"Line 1\"]\r\n[Annotator \"a \\\"q\\\" b\\\\c\"]\r\n[Date \"2026.09.??\"]\r\n\r\n;[%cal Gd4e5,Rf1c4]\r\n1/2-1/2\r\n[Event \" \"]\r\n[ChapterName \"Sicilian\"]\r\n\r\n\r\n{[%eval -2.11,28] [%emt 0:00:45] Не лучший ход} 1.g3 $138 {a  double  space  paragraph 100% winning} e5 2. Bh3 ;[%eval #8] [%emt 0:00:04] [%clk 0:37:00] Black holds; the ending is drawn Best by test\r\nd6 $6 $1 ( 2... b5 {} 3. f3 { [%clk 0:58:17] [%cumProb 19.880%] [%pv h4,h6,Nh3,h5,f4,e6] } Bb7 4. f4 e4 {Kasparov–Karpov, Linares 1993 Kasparov–Karpov, Linares 1993} ( { Best by testBlack holds; the ending is drawn } 4... c5 {[%cal Gd4e5,Rf1c4]} ) ) ( {½} {→ ∞ ♞ and a private glyph } 2... Bfe7 $16 $14 3. Bg2 ;\r\n( 3. Bg4?! ;Mixed prose [%cal Ge2e4,Rd7d5] and more\r\n3. Bb4 {[%csl} {Ye4,Gd5]} 4.e3 {} {Best by test } d5 {Black holds; the ending is drawn Не лучший ход} ( 4...h6 {Не} {лучший ход Black holds; the ending is drawn [%pv h4,f5,a3]} ) ) ( 3. b4 3... d5 {½ → ∞ ♞ and a private glyph } 4. Bcb2 Bf8 {[%eval #7] [%eval -9.80,37] [%csl Ye4,Gd5] !? — a practical try 100% winning} ) Bh4 ( 3... Ke8f8 4. Bgf1 ( 4. Bf3 4...e4 ( 4. a5 {[%eval} {12.19,6] [%cumProb 13.351%] [%maiaProbability 0.453]} ) ( 4... Ba3 $146 ) ) ( {braces { inside are text} 4. Na3 {½} {→ ∞ ♞ and a private glyph } 4...e4 ( 4... b6 {White is slightly better ⩲ Не лучший ход [%csl Ye4,Gd5] [%clk 0:12:00] [%pv g3,d6,Bg2,Nd7,b4]} ) ( 4... Bg5 $146 $251 ) ) g6 ) 4.a3 $167 $21 {[%eval -5.15] Не лучший ход} f5 ) 3.b3 {A plain note.} Nf6 $146 ( 3...b5 $230 $1 {[%eval 0.42] [%clk 0:12:03]} 4. g4 ( 4. Bf1 {a; semicolon} 4...h6 {braces { inside are text} ) Qh4 $14 $2 ) 4.Bg4 $5 $113 {½ → ∞ ♞ and a private glyph } a5 ( { Black holds; the ending is drawn } 4... b6 $4 $147 {Best}\r\n{by test !? — a practical try} ) ( 4. Rg8 ) *\r\n\t\r\n",
+    "places": [
+      0,
+      1,
+      2
+    ],
+    "ids": [
+      null,
+      null,
+      "line_ZzMgZTUgQmgzIGQ2IGIzIE"
+    ],
+    "excused": []
+  },
+  {
+    "text": "// Color: Black\r\n{ A one-line banner }\r\n   Repertoire by GM X\r\n\r\n ﻿[Event \"back\\\\slash\"]\r\n[LineID \"shared-id\"]\r\n[White \"A. Player\"]\r\n[Annotator \"a \\\"q\\\" b\\\\c\"]\r\n[Opening_ECO \"12.5%\"]\r\n[FEN \"7k/5Q2/6K1/8/8/8/8/8 b - - 0 1\"]\r\n{[%eval 0.42] [%clk 0:12:03]} 1-0\r\n\r\n[Event \"the \\\"real\\\" one\"]\r\n[Guid \"k-9f2\"]\r\n[ChapterName \"\"]\r\n\r\n{White} {is slightly better ⩲} 1. h3 ( 1. g4? $5 1... Nc6\r\n{[%csl Ye4,Gd5] 100% winning} 2. Na3 ( 2. a4 {line one\r\nline two} ) ( 2.h4 $69\r\n$13 ) ) h5 $219 {an indented\r\n  [Event \"quote\"]\r\nends here} ( 1... Nf6\r\n{ padded } 2.g4\r\n{[%cumProb 92.572%] [%maiaProbability 0.377] Kasparov–Karpov, Linares 1993} (\r\n;[%cumProb 70.138%] [%csl Ye4,Gd5] White is slightly better ⩲ White is slightly better ⩲\r\n2. f3 $18 $1 ) ( 2.Nf3 {} {padded } ) ) 2. g4 $5 0-1\r\n\r\n\r\n[Event \"back\\\\slash\"]\r\n[Round\t\"1\"]\r\n[White \"A. Player\"]\r\n[Annotator \"a \\\"q\\\" b\\\\c\"]\r\n[ChapterName \" \"]\r\n\r\n\r\n1. Nf3 {}\r\n\r\n",
+    "places": [
+      1,
+      2,
+      4
+    ],
+    "ids": [
+      null,
+      null,
+      "k-9f2",
+      "line_ZzR8Mw",
+      "line_TmYzfDQ"
+    ],
+    "excused": [
+      1
+    ]
+  },
+  {
+    "text": "[Event \"½ → ∞\"]\n[LineID \"shared-id\"]\n[SM2Interval \"12.5%\"] [ChapterName \"Najdorf 6.Bg5\"]\n[ChapterName \"Sicilian\"]\n[White \"A. Player\"]\t\n\n1.g3 {[%emt 0:00:27] see (a) and [b] below} 1-0\n\n[Event \"c:\\\\games\"]\n[ChapterName \"\"]\n[Result \"*\"]\t\n[White \"A. Player\"]\n[SetUp \"1\"]\t\n[FEN \"rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\"]\n \n{ [%emt 0:00:42] [%eval #-18,17] [%cal Gd4e5,Rf1c4] } *\n\n\n",
+    "places": [
+      0,
+      1
+    ],
+    "ids": [
+      "shared-id",
+      null
+    ],
+    "excused": []
+  },
+  {
+    "text": "{ A one-line banner }\n﻿; a marked note\n{ quoting\n[Event \"x\"] in a banner }\n\n  [Event \" \"] [LineID \"shared-id\"]\n[Annotator \"a \\\"q\\\" b\\\\c\"]\n[Round   \"1\"]\n\n\n1. f4 {an indented\n  [Event \"quote\"]\nends here} d6 0-1\n[Event \"½ → ∞\"]\n﻿[Round   \"1\"]\n[Round   \"1\"]\n[Black \"B. Player\"]\n[SM2Interval \"v\"] 1.f4 1... a6 $214 ;White is slightly better ⩲ White is slightly better ⩲ [%cal Gd4e5,Rf1c4]\n2. a3 $20 {[%eval} {-1.45] [%csl Ye4,Gd5]} g6 $182 $59 ( 2...Nh6 $107 3. Kf2 {braces} {{ inside are text} g6 4. e4 {Best by testthe plan: c4-c5, then Nd5[%eval #-10,38][%csl Ye4,Gd5][%eval #15,56]} b5 ) ( 2... c6 {A plain note.} 3. Nc3 $5 ;a; semicolon\nb6 4.Ra2 $146 {[%eval 1.04][%cumProb 56.373%]} d6 {line one\nline two} ) 3. Ra2 {A} {plain note.} 3...e5 $228 $3 {[%cal Gd4e5,Rf1c4] [%cumProb 7.855%]} 4. Kf2 {[%eval -2.03] [%emt 0:00:54]} Bh6 {braces { inside are text} *\n\t\n",
+    "places": [
+      1,
+      3
+    ],
+    "ids": [
+      null,
+      "shared-id",
+      "line_ZDZ8Mg",
+      "line_ZjQgYTYgYTMgZzYgUmEyIG"
+    ],
+    "excused": [
+      0
+    ]
+  },
+  {
+    "text": "{ quoting\r\n[Event \"x\"] in a banner }\r\n\r\n﻿[Event \"c:\\\\games\"]\r\n[LineID \"shared-id\"]\r\n[Round\t\"1\"]\r\n1.a4 ( {White is slightly better ⩲ [%eval -9.60] [%emt 0:00:43]} 1.b3 {a}\r\n{ double  space  paragraph White is slightly better ⩲ [%eval 1.90]} ) *\r\n ﻿[Event \"½ → ∞\"]\r\n[LineID \"abc123\"]\r\n[Date \"2026.09.??\"]\t\r\n[White \"A. Player\"]\r\n[SetUp \"1\"]\r\n[FEN \"rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3\"]\r\n\r\n\r\n1-0\r\n\r\n",
+    "places": [
+      1,
+      2
+    ],
+    "ids": [
+      null,
+      "shared-id",
+      null
+    ],
+    "excused": []
+  },
+  {
+    "text": "﻿; a note on the file\n\n  [Event \"Line 1\"]\n[X-Custom+Tag \"12.5%\"]\t\n[X-Custom+Tag \"B90\"]\n[FEN \"r3k2r/8/8/8/8/8/6b1/R3K2R w KQkq - 0 1\"]\n{[%csl Ye4,Gd5]} 1. Ke2 {[%cumProb 3.638%] [%cal Gd4e5,Rf1c4] [%maiaProbability 0.101] Best by test see (a) and [b] below} Ra5 $2 $5 ( 1...Rh7 $5 $3 {[%pv b4,Nh6,Nh3,c6] [%csl Ye4,Gd5] [%cal Gd4e5,Rf1c4] !? — a practical try} 2. Ke3 ( 2. Rhxh7 $188 $146 {[%eval} {0.42] [%clk 0:12:03]} 2... Kd8 $146 $199 3.Rh7h4!! $14 Ra6 ( 3... Ra7 {[%clk 0:16:34] [%emt 0:00:43] [%csl Ye4,Gd5] White is slightly better ⩲} ) ( 3...Ra3 {[%emt 0:00:09] !? — a practical try the plan: c4-c5, then Nd5} ) ) ( 2. Rhb1 {[%cumProb 40.671%]} 2. Ke8d8 3. Ke3 Bf3 $208 $132 { [%clk 0:20:12] [%emt 0:00:18] } ) Raa6 {100% winning 100% winning} 3. Rhh5 {} Ked8 {Best by test Не лучший ход [%emt 0:00:43] [%cumProb 29.775%]} ) ( {[%emt 0:00:09] [%clk 0:03:30] [%emt 0:00:38] White is slightly better ⩲ !? — a practical try} 1. Ra8a2+ $2 $113 ;\n2. Ke1 {[%eval -3.14,20] [%maiaProbability 0.246]} ( 2. Ke3 {½} {→ ∞ ♞ and a private glyph } 2...Rxh1 ;[%cal Gd4e5,Rf1c4] [%clk 0:33:14] [%eval -19.91,27] Kasparov–Karpov, Linares 1993\n3. Kf4 {½} {→ ∞ ♞ and a private glyph } Rh7 ;[%eval 0.42] [%clk 0:12:03]\n) ( 2. Kd1 2... Rh5 ( 2... O-O $249 { padded } 3. Rg1 {[%emt 0:00:28] [%maiaProbability 0.149] [%pv g3,d6] Best by test} ( 3.Rh1h5 3... Rd2+ ( 3...Bh3 {the} {plan: c4-c5, then Nd5 White is slightly better ⩲} ) ( 3... Bf3+ $173 ;Mixed prose [%cal Ge2e4,Rd7d5] and more\n) ) Ra4 {[%eval 0.42] [%clk 0:12:03]} ) 3.Rh3 ;Mixed prose [%cal Ge2e4,Rd7d5] and more\nRaa8 ;braces { inside are text\n( 3...Bg2c6 {Не лучший ход[%emt 0:00:31]} ) ) Ra6 ( 2... Bf1 3. Rh5 Rd2 ) ( 2... Ra3 $17 3. Rxh8+!! ( {½ → ∞ ♞ and a private glyph } 3. Rh2 { White is slightly better ⩲Kasparov–Karpov, Linares 1993[%emt 0:00:49][%eval -16.99] } 3... Rxh2 $16 {!? — a practical try [%cumProb 97.246%] [%pv Nh3,b6,a3] [%clk 0:52:13]} ( 3.Rh5 ) ) ( 3.Rhh7 { [%clk 0:02:22] [%emt 0:00:15] [%cumProb 57.608%] } 3... Kf8 {} ( 3... Rg3 {} ) ( {half} {a bracket ] and a percent 46.4%} 3. Bf3 $30 $2 ) ) Kf7 $14 $239 ) 3.Rh2 Ra6a2 ;A plain note.\n) 2. Rac1 Rh3 { padded } 3. Rhd1 Rh6 {[%emt 0:00:08] [%emt 0:00:18]}\n\n\n[Event \"Line 1\"]\n[ChapterName \"Najdorf 6.Bg5\"] [Site \"https://lichess.org/study/abc\"]\n[Annotator \"a \\\"q\\\" b\\\\c\"]\n\n1.Na3 ( 1.g3!! {} 1...c5 $146 $243 {half a bracket ] and a percent 46.4%} 2.Bfh3 {line one\nline two} Nh6 {the} {plan: c4-c5, then Nd5} ( 2... b6!! $207 {a; semicolon} 3. c4 Nba6 {[%maiaProbability 0.551] [%emt 0:00:15]} 4. Bg4 ;see (a) and [b] below Best by test\n) ( 2... e6 {Kasparov–Karpov, Linares 1993 Kasparov–Karpov, Linares 1993} 3.Nc3 {Kasparov–Karpov, Linares 1993 [%eval -16.50,43] [%csl Ye4,Gd5] [%eval 8.14,35]} ( 3. Kf1 3...Qc7 ( 3...h6 { padded } 4.Bf5 {½} {→ ∞ ♞ and a private glyph } ) 4. a4 {braces { inside are text} ) ( 3. a3 {line} {one\nline two} 3...Nba6 ( {line one\nline two} 3... c4 ;\n4.b3 ;[%eval #20] [%maiaProbability 0.866] [%eval -8.17,16] 100% winning White is slightly better ⩲\n( 4. d4 {half a bracket ] and a percent 46.4%} ) ) ( 3. Qf6 {see (a) and [b] below 100% winning} 4.d4 {[%maiaProbability 0.905] a  double  space  paragraph} ) 4. c3 ) Bd6 4. b3 {} ( ;[%clk 0:26:21] [%eval -18.82]\n4.Nb5 ) ) 3. g4 Qa5 {braces { inside are text} 4. Kf1 ) ( 1. Nh3 ;[%eval 0.42] [%clk 0:12:03]\n1... d6 $14 $61 {[%eval -12.19,59]see (a) and [b] below100% winning} 2. b3 {½ → ∞ ♞ and a private glyph } a5 ( {[%cumProb 87.431%] [%eval #-20]} 2. Nc6 {Black holds; the ending is drawn !? — a practical try [%eval 16.66] [%eval #16] [%clk 0:09:34]} 3. Nf4 Qd7 4.h4 {line one\nline two} ) ( 2. g5 {½ → ∞ ♞ and a private glyph } 3.d3 Bc8xh3 $2 $14 ;[%clk 0:50:30] [%cumProb 71.806%] [%clk 0:09:11]\n4. Bc1xg5 ) 3. d3 $16 $14 {[%cal} {Gd4e5,Rf1c4] [%cal Gd4e5,Rf1c4] Black holds; the ending is drawn the plan: c4-c5, then Nd5} Bd7 { [%pv g4,h6,g5,hxg5,c3] } ( 3... Bxh3 $132 $115 4. Nd2 ;braces { inside are text\n) 4.f4 ) h6 {Best} {by test !? — a practical try} 2.e3 ;[%eval 0.42] [%clk 0:12:03]\na6! $3 {see} {(a) and [b] below Не лучший ход [%pv d4,h6] [%pv g4,d5,b3]} 3. Qde2 {[%eval 4.42] [%cal Gd4e5,Rf1c4] [%csl Ye4,Gd5] 100% winning Kasparov–Karpov, Linares 1993} b6 $132 {} ( 3...a5 ;[%pv c4,c6,e3] [%eval -16.72,7] Best by test\n4. Kd1 {a; semicolon} ) 4. Qf3 1-0\n\n",
+    "places": [
+      0,
+      1
+    ],
+    "ids": [
+      "line_S2UyIFJhNSBSYWMxIFJoMy",
+      "line_TmEzIGg2IGUzIGE2IFFkZT"
+    ],
+    "excused": []
+  },
+  {
+    "text": "﻿[Event \"back\\\\slash\"] [SetUp \"1\"]\r\n[FEN \"rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3\"] [SetUp \"1\"]\r\n\r\n;a; semicolon\r\n*\r\n\t[Event \"½ → ∞\"]\r\n[LineID \"shared-id\"]\r\n[Round   \"1\"]\t\r\n[Opening_ECO \"B90\"] [FEN \"r3k2r/8/8/8/8/8/6b1/R3K2R w KQkq - 0 1\"]\r\n \r\n1. Rb1 { [%cumProb 14.227%] } Rh6 {mid-line}\r\n{[Event \"quote\"] is text} 2. Rh2\r\n{ White is slightly better ⩲ Kasparov–Karpov, Linares 1993 [%cumProb 69.338%] }\r\nRc8 ;[%maiaProbability 0.088]\r\n3. Rh5 ( 3. Kf2 { 100% winning } 3... Rg6\r\n;!? — a practical try see (a) and [b] below [%maiaProbability 0.225] [%eval -3.37]\r\n) Rc1+ {a; semicolon} *\r\n\t\t[Event \"½ → ∞\"]\r\n[LineID \"shared-id\"]\r\n[Round   \"1\"]\t\r\n[Opening_ECO \"B90\"] [FEN \"r3k2r/8/8/8/8/8/6b1/R3K2R w KQkq - 0 1\"]\r\n \r\n1. Rb1 { [%cumProb 14.227%] } Rh6 {mid-line}\r\n{[Event \"quote\"] is text} 2. Rh2\r\n{ White is slightly better ⩲ Kasparov–Karpov, Linares 1993 [%cumProb 69.338%] }\r\nRc8 {[%maiaProbability 0.088]} 3. Rh5 ( 3.Kf2\r\n{ 100% winning } 3... Rg6\r\n{!? — a practical try see (a) and [b] below [%maiaProbability 0.225] [%eval -3.37]}\r\n) Rc1+ ;a; semicolon\r\n*\r\n\t\r\n",
+    "places": [
+      0,
+      1,
+      2
+    ],
+    "ids": [
+      null,
+      "shared-id",
+      "line_3a72b02088290ecc6c3f52"
+    ],
+    "excused": []
+  },
+  {
+    "text": "   Repertoire by GM X\r\n﻿; a marked note\r\n\r\n ﻿[Event \"½ → ∞\"]\r\n[LineID \"shared-id\"]\r\n[Guid \"k-9f2\"] [Date \"2026.09.??\"]\r\n[Date \"2026.09.??\"]\r\n\r\n{ padded } 1. Na3? {see\r\n[Event \"the game below\"] first} 1-0\r\n\r\n\r\n[Event \"½ → ∞\"]\r\n[LineID \"line_cc28ddea567e5c9cff0748\"]\r\n[X-Custom+Tag \"v\"]\r\n[ChapterName \"Najdorf 6.Bg5\"] \r\n[Guid \"abc123\"] [FEN \"7k/5Q2/6K1/8/8/8/8/8 b - - 0 1\"]\r\n\r\n\r\n*\r\n\r\n[Event \"c:\\\\games\"]\r\n[Annotator \"a \\\"q\\\" b\\\\c\"]\r\n ﻿[Site \"https://lichess.org/study/abc\"] [White \"A. Player\"]\r\n[Site \"https://lichess.org/study/abc\"]\r\n \r\n*\r\n\r\n\r\n",
+    "places": [
+      1,
+      3,
+      4
+    ],
+    "ids": [
+      null,
+      "shared-id",
+      null,
+      null,
+      null
+    ],
+    "excused": [
+      0
+    ]
+  },
+  {
+    "text": "{ an indented\n  [Event \"y\"] quote }\n\n[Event \"the \\\"real\\\" one\"]\n[LineID \"shared-id\"]\n[Annotator \"a \\\"q\\\" b\\\\c\"]\n\n\n{see\n[Event \"the game below\"] first}\n1.Nh3 {half}\n{a bracket ] and a percent 46.4%}\n1... h5\n{[%csl Ye4,Gd5] [%cal Gd4e5,Rf1c4] [%cal Gd4e5,Rf1c4] see (a) and [b] below}\n2. g4 {A plain note.} a5 $16\n$13 ( 2...e5 3. Ng5 c6 ) 3.\nNg5\n;[%pv Nc3,d6] [%csl Ye4,Gd5] [%emt 0:00:47] the plan: c4-c5, then Nd5\n3... f6 $132 0-1\n\t\n[Event \"back\\\\slash\"]\n[Date \"2026.09.??\"]\n[Result \"1/2-1/2\"]\n[Annotator \"a \\\"q\\\" b\\\\c\"] \n\n1. f4\n{braces { inside are text} a5\n{Mixed prose [%cal Ge2e4,Rd7d5] and more}\n2. Ngf3 *\n\t\n[Event \"back\\\\slash\"]\n[Date \"2026.09.??\"]\n  [Result \"1/2-1/2\"]\n[Annotator \"a \\\"q\\\" b\\\\c\"] \n\n1. f4\n{braces { inside are text} a5\n{Mixed}\n{prose [%cal Ge2e4,Rd7d5] and more}\n2.Ngf3 *\n\n",
+    "places": [
+      1,
+      3,
+      4
+    ],
+    "ids": [
+      null,
+      null,
+      "line_TmgzIGg1IGc0IGE1IE5nNS",
+      "line_ZjQgYTUgTmdmM3wz",
+      "line_ZjQgYTUgTmdmM3w0"
+    ],
+    "excused": [
+      0
+    ]
+  },
+  {
+    "text": "  [Event \"c:\\\\games\"]\r\n﻿[Annotator \"a \\\"q\\\" b\\\\c\"]\r\n\r\n1.Na3 ( {the plan: c4-c5, then Nd5 the plan: c4-c5, then Nd5} 1.a3 1... f5 2.\r\ng3 $188 $2\r\n{[%eval #-15] [%eval -1.55,6] [%maiaProbability 0.846] Black holds; the ending is drawn 100% winning}\r\nc5 3.c3 {a;} {semicolon} f4 $2\r\n;[%eval 8.19,16] [%csl Ye4,Gd5] [%cal Gd4e5,Rf1c4] Kasparov–Karpov, Linares 1993\r\n4. Qc2\r\n{[%eval -14.34] a  double  space  paragraph Black holds; the ending is drawn}\r\n4...g6 ) ( 1. d3!? 1. f5 2. e4 2... e5 (\r\n{[%pv h3,g5,f4,a5][%cal Gd4e5,Rf1c4][%pv e4,e6,Ba6,f5,g3]} 2...e6\r\n{[%eval #8,11]} 3. Nh3 ( 3. a3\r\n{[%csl Ye4,Gd5] [%cumProb 53.148%] [%csl Ye4,Gd5] see (a) and [b] below} 3...\r\na6 {Mixed prose [%cal Ge2e4,Rd7d5] and more} ( 3... d6 4. f4?! Qh4+ (\r\n{A plain note.} 4... Nbd7 {[%cal} {Gd4e5,Rf1c4]} ) ) 4. Nc3 4... Bc5 ) c6\r\n{ Kasparov–Karpov, Linares 1993 [%eval 10.09,45] [%maiaProbability 0.460] } 4.\r\ng3 {[%csl Ye4,Gd5] 100% winning} Qa5+ {} (\r\n{Best by test Kasparov–Karpov, Linares 1993 [%csl Ye4,Gd5] [%emt 0:00:48] [%csl Ye4,Gd5]}\r\n4... Qde7 {Kasparov–Karpov, Linares 1993 !? — a practical try} ) ) ( 2... Nh6\r\n3.Bcxh6 {Kasparov–Karpov, Linares 1993} g5 {a;} {semicolon} 4. Qf3\r\n{a; semicolon} g4\r\n{Black holds; the ending is drawn Best by test [%maiaProbability 0.643] [%csl Ye4,Gd5]}\r\n) 3. Bf4 {[%cal Gd4e5,Rf1c4] [%maiaProbability 0.754] Best by test} Bc5\r\n{[%maiaProbability 0.558] [%csl Ye4,Gd5]} 4. Qd2 fxe4\r\n{the plan: c4-c5, then Nd5} ) e6 2. h3 b6 $4 $2 (\r\n{half a bracket ] and a percent 46.4%} 2...g5 $83 3.f4 {[%clk 0:54:20]} a5 (\r\n3... Ne7 4. Nf3 f5 {line one\r\nline two} ) 4.Nf3 c5 {line one\r\nline two} ) (\r\n2...e5 3. Ra1b1 $180 $60 g6 $146 4. d4!! $14 f5 ) 3. Ng1f3 f5 4. Nc4 {}\r\n{[%clk 0:36:43] [%cal Gd4e5,Rf1c4] [%pv g4,Nh6,d4,Ng8,Bd2] a  double  space  paragraph Kasparov–Karpov, Linares 1993 }\r\nBc8b7 {Mixed prose [%cal Ge2e4,Rd7d5] and more} *\r\n\r\n[Event \"a {b\"]\r\n[LineID \"shared-id\"]\r\n[SM2Interval \"12.5%\"]\r\n\r\n{} 1. e3 {a marked\r\n﻿[Event \"quote\"]} a6 2. Qg4\r\n{[%cal Gd4e5,Rf1c4] [%cumProb 0.132%]} c5\r\n\t\r\n[Event \"c:\\\\games\"]\t\r\n[Date \"2026.09.??\"]\r\n[Black \"B. Player\"] 1.e3 {100%}\r\n{winning White is slightly better ⩲ [%pv f4,a6,g3,Ra7] [%csl Ye4,Gd5] [%eval #9,39]}\r\nNba6 {half a bracket ] and a percent 46.4%} 2. h3\r\n{ !? — a practical try !? — a practical try [%clk 0:42:44] [%eval -8.85,43] [%eval 0.81] }\r\n2... g5 {} 3. e4 { Best by test } b5 $135 4.Bd3 {A plain note.} *\r\n\t\r\n",
+    "places": [
+      0,
+      1,
+      3
+    ],
+    "ids": [
+      "line_TmEzIGU2IGgzIGI2IE5nMW",
+      "shared-id",
+      "line_YTYgUWc0IGM1fDI",
+      "line_ZTMgTmJhNiBoMyBnNSBlNC"
+    ],
+    "excused": [
+      1
+    ]
+  },
+  {
+    "text": "   Repertoire by GM X\n\n[Event \"the \\\"real\\\" one\"]\n[White \"A. Player\"]\t\n\n\n{not a cut either\n[Event\t\"tabbed\"]} 1. a4 $14 g5 *\n[Event \" \"]\n[Black \"B. Player\"]\n[Site \"https://lichess.org/study/abc\"]\n[Date \"2026.09.??\"]\n[Date \"2026.09.??\"]\n\n1. f4 $38 b5 {½ → ∞ ♞ and a private glyph } 2.Nc3 * \n\n",
+    "places": [
+      1,
+      2
+    ],
+    "ids": [
+      null,
+      "line_YTQgZzV8MQ",
+      "line_ZjQgYjUgTmMzfDI"
+    ],
+    "excused": []
+  },
+  {
+    "text": "% exported by a tool\nMy Repertoire\n// Color: Black\n\n[Event \"c:\\\\games\"] \n[Annotator \"a \\\"q\\\" b\\\\c\"]\n[Round\t\"1\"]\n[ChapterName \"Najdorf 6.Bg5\"]\n[Result \"1/2-1/2\"] [FEN \"rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3\"]\n{} 3. Ngf3\n{Mixed prose [%cal Ge2e4,Rd7d5] and more}\nNf6 ( 3... Nh6\n{!? — a practical tryWhite is slightly better ⩲}\n4. Nd4 $141 g6 5.e6\n{A plain note.} c5 $199 ;\n6. Be2 $240 $6 a6 {[%eval}\n{0.42] [%clk 0:12:03]} ) (\n3... Nd7 4.c4 $14 $13\n{100% winning} Ngf6 5.Bd3 (\n{a;} {semicolon} 5. h3 $14\n{braces} {{ inside are text}\n5... Ng4 {½}\n{→ ∞ ♞ and a private glyph }\n6.Na3 Ndf6 { padded } ) ( 5.\nQdc2 {} 5... Nb8\n;a  double  space  paragraph White is slightly better ⩲ [%pv g4,d6,f3] [%emt 0:00:21] [%emt 0:00:27]\n6. d3 ( 6.Kd1 $12 $4\n{½ → ∞ ♞ and a private glyph }\n6... Nbd7\n{Mixed prose [%cal Ge2e4,Rd7d5] and more}\n( {the plan: c4-c5, then Nd5}\n6. c5 $32 ;\n) ) Qd8d6 {}\n{a  double  space  paragraph }\n) Rh8g8 ( 5... b5\n{[%maiaProbability 0.989] [%cal Gd4e5,Rf1c4]}\n6.exf6\n{half a bracket ] and a percent 46.4%}\nc6 ( 6... h6\n{a  double  space  paragraph Best by test}\n) ( { padded } 6... Bb7\n{[%eval}\n{#8] [%eval #19,20] [%cumProb 30.189%] Kasparov–Karpov, Linares 1993 !? — a practical try}\n) ) 6. Nh4 Rh8 $3 $1\n;Mixed prose [%cal Ge2e4,Rd7d5] and more\n( {} 6... d4 ) ) 4. c3\n{a  double  space  paragraph [%csl Ye4,Gd5]}\nRg8 5. d4 $14 $63\n{A plain note.} f4\n;braces { inside are text\n6. a3\n;[%eval 0.42] [%clk 0:12:03]\nBc8g4 {a; semicolon}\n\t[Event \"c:\\\\games\"] \n[Annotator \"a \\\"q\\\" b\\\\c\"]\n[Round\t\"1\"]\n[ChapterName \"Najdorf 6.Bg5\"]\n[Result \"1/2-1/2\"] [FEN \"rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3\"]\n{} 3.Ngf3\n;Mixed prose [%cal Ge2e4,Rd7d5] and more\nNf6 ( 3... Nh6\n;!? — a practical tryWhite is slightly better ⩲\n4.Nd4 $141 g6 5.e6\n{A plain note.} c5 $199 ;\n6. Be2 $240 $6 a6 {[%eval}\n{0.42] [%clk 0:12:03]} ) (\n3... Nd7 4.c4 $14 $13\n{100% winning} Ngf6 5.Bd3 (\n;a; semicolon\n5. h3 $14\n;braces { inside are text\n5... Ng4\n{½ → ∞ ♞ and a private glyph }\n6.Na3 Ndf6 { padded } ) ( 5.\nQdc2 {} 5... Nb8\n{a  double  space  paragraph White is slightly better ⩲ [%pv g4,d6,f3] [%emt 0:00:21] [%emt 0:00:27]}\n6.d3 ( 6. Kd1 $12 $4\n{½ → ∞ ♞ and a private glyph }\n6... Nbd7\n{Mixed prose [%cal Ge2e4,Rd7d5] and more}\n( {the plan: c4-c5, then Nd5}\n6... c5 $32 {} ) ) Qd8d6 {}\n{a  double  space  paragraph }\n) Rh8g8 ( 5. b5\n{[%maiaProbability 0.989] [%cal Gd4e5,Rf1c4]}\n6. exf6\n{half a bracket ] and a percent 46.4%}\nc6 ( 6. h6\n{a  double  space  paragraph Best by test}\n) ( { padded } 6... Bb7\n{[%eval #8] [%eval #19,20] [%cumProb 30.189%] Kasparov–Karpov, Linares 1993 !? — a practical try}\n) ) 6.Nh4 Rh8 $3 $1\n;Mixed prose [%cal Ge2e4,Rd7d5] and more\n( ;\n6...d4 ) ) 4. c3\n{a  double  space  paragraph [%csl Ye4,Gd5]}\nRg8 5. d4 $14 $63\n;A plain note.\nf4 {braces { inside are text}\n6. a3\n{[%eval 0.42] [%clk 0:12:03]}\nBc8g4 {a; semicolon}\n\n\n",
+    "places": [
+      1,
+      2
+    ],
+    "ids": [
+      null,
+      "line_TmdmMyBOZjYgYzMgUmc4IG",
+      "line_aead63b5282aad545acbde"
+    ],
+    "excused": []
+  },
+  {
+    "text": "[Event \"Line 1\"]\r\n\r\n\r\n1.Na3 {line} {one\r\nline two}\r\n% an escaped line 9. Qxf7#\r\ng6 {see} {(a) and [b] below [%maiaProbability 0.063] [%eval #-8] [%emt 0:00:10]} ( 1... h5 2. h4 ) ( 1... Na6 {braces { inside are text} 2. g3 $182 ;[%eval 0.42] [%clk 0:12:03]\r\n) 2.c4 $16 {} 1/2-1/2\r\n\t\r\n[Event \"Line 1\"]\r\n[LineID \"a-second-id\"]\r\n\r\n\r\n1.Na3 {line one\r\nline two}\r\n% an escaped line 9. Qxf7#\r\ng6 ;see (a) and [b] below [%maiaProbability 0.063] [%eval #-8] [%emt 0:00:10]\r\n( 1... h5 2. h4 ) ( 1... Na6 {braces { inside are text} 2. g3 $182 ;[%eval 0.42] [%clk 0:12:03]\r\n) 2.c4 $16 {} 1/2-1/2\r\n\r\n\r\n",
+    "places": [
+      0,
+      1
+    ],
+    "ids": [
+      "line_TmEzIGc2IGM0fDA",
+      "a-second-id"
+    ],
+    "excused": []
+  },
+  {
+    "text": "\t// an indented comment\r\n{ an indented\r\n  [Event \"y\"] quote }\r\n1. Nf3 a6 *\r\n\r\n[Event \"the \\\"real\\\" one\"]\r\n[LineID \"shared-id\"]\r\n[Site \"https://lichess.org/study/abc\"]\r\n1. Ngh3!! $132 {½ → ∞ ♞ and a private glyph } b5 { padded }\r\n2. a4 {} Nbc6\r\n\t\r\n[Event \"Line 1\"]\r\n[LineID \"line_TmdoMyBiNSBhNCBOYmM2fD\"]\r\n[White \"A. Player\"]\r\n1. Na3 g6 { the plan: c4-c5, then Nd5 100% winning } 2.d3 c6\r\n3. e4 c5 {line one\r\nline two} *\r\n\r\n",
+    "places": [
+      1,
+      2
+    ],
+    "ids": [
+      "line_TmYzIGE2fDA",
+      "shared-id",
+      "line_TmdoMyBiNSBhNCBOYmM2fD"
+    ],
+    "excused": []
+  },
+  {
+    "text": "{ A one-line banner }\n{ A one-line banner }\n\n[Event \"the \\\"real\\\" one\"]\t\n[White \"A. Player\"]\n\n1.Na3 ( 1. g4 {half} {a bracket ] and a percent 46.4%} 1...h5 {[%csl Ye4,Gd5] [%eval #18]} ( 1... a5 2. h4 Nh6 $62 {[%cumProb} {79.047%][%csl Ye4,Gd5]Best by test} 3. Rh2 {line one\nline two} f5 $5 ;[%csl Ye4,Gd5]\n4. gxf5 $239 $152 {[%eval 0.42] [%clk 0:12:03]} ) 2. b4 Rh7 ( 2... h4 {Mixed prose [%cal Ge2e4,Rd7d5] and more} 3. e3 $14 $122 {line one\nline two} ( 3. a4 {[%emt 0:00:26] [%eval 11.10,11] Kasparov–Karpov, Linares 1993} 3...g6 {} 4.e3 ( { [%csl Ye4,Gd5] [%cal Gd4e5,Rf1c4] [%cumProb 56.517%] Kasparov–Karpov, Linares 1993 } 4. Nba3 $13 ) ( 4. c3 $146 ) ) Rh6 $114 $180 4. Nf3 {line one\nline two} ) ( 2... f6 {[%cumProb 65.443%] [%maiaProbability 0.339] [%pv b4,f6,f4]} 3. a4 {A plain note.} Nc6 {A plain note.} ( 3. d5 $5 {Mixed prose [%cal Ge2e4,Rd7d5] and more} 4. Bh3 $4 $113 { [%emt 0:00:43][%maiaProbability 0.111] } ) 4.h3 $30 $146 {the} {plan: c4-c5, then Nd5100% winning} ) 3. g5 ;[%csl Ye4,Gd5] [%clk 0:09:05] [%pv b4,b6,Nc3,h5] White is slightly better ⩲ a  double  space  paragraph\nc5 4. g6 ) ( 1. b4 $16 1...b5 $146 $234 ;A plain note.\n2. Nc3 $169 $6 {[%csl} {Ye4,Gd5] [%emt 0:00:13] [%emt 0:00:31]} ( 2. Na3 { [%cumProb 42.787%] 100% winning } 2. c5 {Mixed prose [%cal Ge2e4,Rd7d5] and more} 3. f4 d6 $81 $157 {a; semicolon} 4.Na3c4!? ) Nba6 3.Nd5 $151 {[%cumProb 68.964%][%cumProb 99.443%][%pv b3,f6,Ba3]a  double  space  paragraph!? — a practical try} ( 3. h3 {[%eval} {#-18] [%maiaProbability 0.306] [%emt 0:00:42] White is slightly better ⩲} 3... d5 {[%clk 0:36:17] [%csl Ye4,Gd5]} 4. h4 ) ( ;a; semicolon\n3. g4 $211 $207 {line one\nline two} 3...Nh6 { padded } 4.e3 $163 ) g5 $108 $14 { !? — a practical try [%cumProb 55.499%] } ( 3... Nf6 4. h3 ) 4. a3 ) b5 ( 1... g6 $2 {} 2.Ngh3 { Kasparov–Karpov, Linares 1993[%pv e4,Na6,Ne2][%eval #-8] } ( 2.e4 {see (a) and [b] below Kasparov–Karpov, Linares 1993} 2... Nc6 $13 $14 3. Nb5 $60 {a; semicolon} Bh6 ( 3...a5 {[%cumProb 67.252%] [%cal Gd4e5,Rf1c4]} 4. d4 ( { see (a) and [b] belowWhite is slightly better ⩲[%eval #3,51] } 4.h3 {a;} {semicolon} ) ( 4.b4 ) ) 4. g4 {half} {a bracket ] and a percent 46.4%} ( 4. Ke2 ) ) g5 3. Nc4!? $13 b5 4. d4 {[%cal Gd4e5,Rf1c4] Не лучший ход Best by test} ) ( 1... h6 2. h4 {Mixed} {prose [%cal Ge2e4,Rd7d5] and more} 2... Na6 3.b3 h5 $146 $238 4. c3 {Mixed prose [%cal Ge2e4,Rd7d5] and more} ) 2.Nf3 d5 $243 $122 {} {Best by test !? — a practical try [%eval -5.94] [%maiaProbability 0.674] [%maiaProbability 0.170] } ( 2... Bb7 3. Nb1 $123 $96 {[%maiaProbability 0.000] [%eval #4,41] see (a) and [b] below} 3... e5 $33\n{A plain note.} 4.g4 {} ) 3. e4 { !? — a practical try } a5 4.c4 {[%maiaProbability 0.614] [%eval #3]}\n\n\n ﻿[Event \"the \\\"real\\\" one\"]\t\n[White \"A. Player\"]\n\n1. Na3 ( 1. g4 {half a bracket ] and a percent 46.4%} 1. h5 ;[%csl Ye4,Gd5] [%eval #18]\n( 1... a5 2. h4 Nh6 $62 {[%cumProb 79.047%][%csl Ye4,Gd5]Best by test} 3. Rh2 {line one\nline two} f5 $5 {[%csl Ye4,Gd5]} 4. gxf5 $239 $152 {[%eval 0.42] [%clk 0:12:03]} ) 2.b4 Rh7 ( 2... h4 {Mixed} {prose [%cal Ge2e4,Rd7d5] and more} 3.e3 $14 $122 {line one\nline two} ( 3. a4 {[%emt 0:00:26] [%eval 11.10,11] Kasparov–Karpov, Linares 1993} 3... g6 {} 4. e3 ( {} {[%csl Ye4,Gd5] [%cal Gd4e5,Rf1c4] [%cumProb 56.517%] Kasparov–Karpov, Linares 1993 } 4. Nba3 $13 ) ( 4.c3 $146 ) ) Rh6 $114 $180 4. Nf3 {line one\nline two} ) ( 2... f6 {[%cumProb 65.443%] [%maiaProbability 0.339] [%pv b4,f6,f4]} 3.a4 {A plain note.} Nc6 {A plain note.} ( 3... d5 $5 {Mixed} {prose [%cal Ge2e4,Rd7d5] and more} 4. Bh3 $4 $113 { [%emt 0:00:43][%maiaProbability 0.111] } ) 4. h3 $30 $146 {the} {plan: c4-c5, then Nd5100% winning} ) 3.g5 {[%csl} {Ye4,Gd5] [%clk 0:09:05] [%pv b4,b6,Nc3,h5] White is slightly better ⩲ a  double  space  paragraph} c5 4. g6 ) ( 1.b4 $16 1... b5 $146 $234 {A plain note.} 2. Nc3 $169 $6\n{[%csl Ye4,Gd5] [%emt 0:00:13] [%emt 0:00:31]} ( 2. Na3 { [%cumProb 42.787%] 100% winning } 2... c5 ;Mixed prose [%cal Ge2e4,Rd7d5] and more\n3. f4 d6 $81 $157 {a; semicolon} 4. Na3c4!? ) Nba6 3. Nd5 $151 {[%cumProb 68.964%][%cumProb 99.443%][%pv b3,f6,Ba3]a  double  space  paragraph!? — a practical try} ( 3.h3 {[%eval} {#-18] [%maiaProbability 0.306] [%emt 0:00:42] White is slightly better ⩲} 3...d5 {[%clk 0:36:17] [%csl Ye4,Gd5]} 4. h4 ) ( {a; semicolon} 3. g4 $211 $207 {line one\nline two} 3... Nh6 {} {padded } 4. e3 $163 ) g5 $108 $14 { !? — a practical try [%cumProb 55.499%] } ( 3... Nf6 4.h3 ) 4. a3 ) b5 ( 1... g6? {} 2. Ngh3 { Kasparov–Karpov, Linares 1993[%pv e4,Na6,Ne2][%eval #-8] } ( 2. e4 ;see (a) and [b] below Kasparov–Karpov, Linares 1993\n2... Nc6 $13 $14 3.Nb5 $60 {a;} {semicolon} Bh6 ( 3... a5 {[%cumProb 67.252%] [%cal Gd4e5,Rf1c4]} 4. d4 ( { see (a) and [b] belowWhite is slightly better ⩲[%eval #3,51] } 4.h3 ;a; semicolon\n) ( 4.b4 ) ) 4.g4 {half a bracket ] and a percent 46.4%} ( 4.Ke2 ) ) g5 3. Nc4!? $13 b5 4. d4 {[%cal Gd4e5,Rf1c4] Не лучший ход Best by test} ) ( 1. h6 2. h4 {Mixed prose [%cal Ge2e4,Rd7d5] and more} Na6 3.b3 h5 $146 $238 4. c3 {Mixed prose [%cal Ge2e4,Rd7d5] and more} ) 2.Nf3 d5 $243 $122 { Best by test !? — a practical try [%eval -5.94] [%maiaProbability 0.674] [%maiaProbability 0.170] } ( 2... Bb7 3.Nb1 $123 $96 {[%maiaProbability} {0.000] [%eval #4,41] see (a) and [b] below} e5 $33 {A} {plain note.} 4. g4 {} ) 3.e4 { !? — a practical try } a5 4. c4 ;[%maiaProbability 0.614] [%eval #3]\n\n\n\n[Event \"c:\\\\games\"]\n[Site \"https://lichess.org/study/abc\"]\n[Site \"https://lichess.org/study/abc\"]\n[LineID \"a-second-id\"]\n\n1.Nba3 {} ( ;see (a) and [b] below\n1. Nh3 {A} {plain note.} 1...h5 ) ( {!?} {— a practical try} 1.b3 1... d5 ) e6 {a marked\n﻿[Event \"quote\"]} *\n\n",
+    "places": [
+      0,
+      1,
+      2
+    ],
+    "ids": [
+      "line_TmEzIGI1IE5mMyBkNSBlNC",
+      "line_fe6e21057f6b6809c1056d",
+      "a-second-id",
+      null
+    ],
+    "excused": [
+      2
+    ]
+  },
+  {
+    "text": "{ A one-line banner }\n% exported by a tool\n\n[Event \"the \\\"real\\\" one\"] \n[Round\t\"1\"] [Black \"B. Player\"] [X-Custom+Tag \"3\"]\n[ChapterName \"\"]\n[Date \"2026.09.??\"]\n\n\n1. h3 { [%cumProb 76.168%] }\n% an escaped line 9. Qxf7#\nNh6 {mid-line [Event \"quote\"] is text} 2. c3 $132 $242 *\n\t\n\t[Event \"c:\\\\games\"]\n[LineID \"line_94ba0be743f92eef4ebaf2\"]\n[FEN \"4k3/1P6/8/8/8/8/6p1/4K3 w - - 0 1\"]\n[FEN \"4k3/1P6/8/8/8/8/6p1/4K3 w - - 0 1\"] 1. b8=R+ *\n\n[Event \" \"]\t\n[LineID \"shared-id\"]\n[SM2Interval \"v\"]\n[ChapterName \" \"]\n\n;[%clk 0:25:47] [%csl Ye4,Gd5] a  double  space  paragraph\n1. a3 * \n\n",
+    "places": [
+      0,
+      1,
+      2
+    ],
+    "ids": [
+      "line_aDMgTmg2IGMzfDA",
+      "line_94ba0be743f92eef4ebaf2",
+      "shared-id"
+    ],
+    "excused": []
+  },
+  {
+    "text": "My Repertoire\r\n{ A banner\r\nover two lines }\r\n\r\n[Event \"a {b\"]\r\n[Result \"1-0\"]\r\n[SetUp \"1\"]\r\n[FEN \"r3k2r/8/8/8/8/8/6b1/R3K2R w KQkq - 0 1\"]\r\n\r\n1.Ked1 Rhh4 $5 $14 {[%eval 0.42] [%clk 0:12:03]} 0-1 \r\n\r\n ﻿[Event \"the \\\"real\\\" one\"]\r\n[Date \"2026.09.??\"]\r\n[Result \"1/2-1/2\"]\r\n[FEN \"rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\"]\r\n\r\n\r\n1... g6 2. Bc4 { padded }\r\n\r\n\r\n ﻿[Event \"the \\\"real\\\" one\"]\r\n[Date \"2026.09.??\"]\r\n[Result \"1/2-1/2\"]\r\n[FEN \"rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\"]\r\n\r\n\r\n1...g6 2. Bc4 { padded }\r\n",
+    "places": [
+      1,
+      2,
+      3
+    ],
+    "ids": [
+      null,
+      "line_S2VkMSBSaGg0fDE",
+      "line_ZzYgQmM0fDI",
+      "line_ZzYgQmM0fDM"
+    ],
+    "excused": []
+  },
+  {
+    "text": "1. Na3 e6 h3 *\n{ A one-line banner }\n{ A banner\nover two lines }\n\n[Event \"c:\\\\games\"]\n[LineId \"k-9f2\"]\n[LineID \" spaced \"]\n[Date \"2026.09.??\"]\n[White \"A. Player\"]\n \n1. d4 {not a cut either\n[Event\t\"tabbed\"]} Nc6 2. c4 $16 f6\n3. g3 {A plain note.} 1-0 \n\n[Event \"c:\\\\games\"]\n[LineId \"k-9f2\"]\n[LineID \" spaced \"]\n[Date \"2026.09.??\"]\n[White \"A. Player\"]\n \n1. d4 {not a cut either\n[Event\t\"tabbed\"]} Nc6 2. c4 $16 f6\n3. g3 {A plain note.} 1-0\n\t\n\t[Event \"c:\\\\games\"]\n﻿[LineId \"k-9f2\"]\n[LineID \" spaced \"]\n[Date \"2026.09.??\"]\n[White \"A. Player\"]\n \n1. d4 {not a cut either\n[Event\t\"tabbed\"]} Nc6 2.c4 $16 f6 3.\ng3 ;A plain note.\n1-0\n\t\n",
+    "places": [
+      1,
+      2,
+      3
+    ],
+    "ids": [
+      "line_TmEzIGU2IGgzfDA",
+      "spaced",
+      "line_3e938d0fce527b84668ce3",
+      "line_8017a408a6e7ea70d425f9"
+    ],
+    "excused": []
+  },
+  {
+    "text": "﻿; a marked note\r\n{ A one-line banner }\r\n\r\n[Event \"the \\\"real\\\" one\"]\r\n[SetUp \"1\"] \r\n[FEN \"r3k2r/8/8/8/8/8/6b1/R3K2R w KQkq - 0 1\"]\r\n\r\n\r\n{[%maiaProbability 0.932] [%eval 1.48,31] [%emt 0:00:22]} 1. Kf2 {a marked\r\n﻿[Event \"quote\"]} ( 1. Raa4 {½ → ∞ ♞ and a private glyph } 1... Bf3 {a; semicolon} ( 1.Rd8 {Mixed prose [%cal Ge2e4,Rd7d5] and more} 2.Rah4 { the plan: c4-c5, then Nd5 [%eval #-11,50] } ( 2. Rh1h2 {[%pv c3,a5,h3,a4,Qxa4,e5][%maiaProbability 0.475][%maiaProbability 0.790]Kasparov–Karpov, Linares 1993!? — a practical try} 2.O-O ;braces { inside are text\r\n( 2... Bf1 {half a bracket ] and a percent 46.4%} 3. Rhc2 Rd4 ) ( 2... Rh4 { the plan: c4-c5, then Nd5 Kasparov–Karpov, Linares 1993 } 3. Ra4a3 $188 $4 3... Bf3 {100% winning !? — a practical try} ( 3...Rc4 $16 {a; semicolon} ) ) 3. Re4 Rd4 ) ( 2. Ra2 {[%eval} {#7] [%eval #18,57] [%cal Gd4e5,Rf1c4] see (a) and [b] below} 2...Kf8 { padded } 3. Rh1xh8+ {½} {→ ∞ ♞ and a private glyph } ( 3. Ra7 3... Rd6 $117 ) Kg7 { Не лучший ход [%eval 19.11] [%cumProb 87.618%] [%cal Gd4e5,Rf1c4] } ) 2...Bf3 {[%eval 0.42] [%clk 0:12:03]} ( {braces { inside are text} 2... Ke7 { padded } 3. Kf2 {[%cal Gd4e5,Rf1c4] [%maiaProbability 0.320] [%csl Ye4,Gd5]} Rc8 ) 3.Kf1 {a; semicolon} ( 3. Kf2 3...Ke8e7 {} ( 3...Rh6 ;[%emt 0:00:36] [%cumProb 67.424%] Black holds; the ending is drawn a  double  space  paragraph\r\n) ( 3...Bb7 { padded } ) ) ( 3. R4h3 { Kasparov–Karpov, Linares 1993 } 3... Bh5 ( {[%eval 0.42] [%clk 0:12:03]} 3... Kf7 {½ → ∞ ♞ and a private glyph } ) ) Bxh1 ( {[%eval #-13,15][%eval #-9][%emt 0:00:14]White is slightly better ⩲a  double  space  paragraph} 3...Rc8 ) ( {a;} {semicolon} 3. Rh5 {[%eval -5.34] [%pv Nh3,h5,c4,e6]} ) ) ( 1... Bb7 2. Rh3?? $169 ( 2.Rh6 2... Bf3 $177 $6 3.Re6+ ( 3. Rg4 $13 ;Kasparov–Karpov, Linares 1993\r\n3... O-O-O {} ) ( 3. Rh6f6 {[%eval 0.42] [%clk 0:12:03]} 3... Rh5 ) Ke8d8 $6 $14 ) ( 2. Ra1 { padded } 2... Bc8 3.Kd1 ;[%clk 0:38:57]\r\nRg8?! {Black} {holds; the ending is drawn} ( 3...Ra2 {line} {one\r\nline two} ) ( 3... Bb7 ) ) Kd8 {} 3. Rh5 {[%csl Ye4,Gd5] see (a) and [b] below Не лучший ход} Rh8xh5 {A plain note.} ) 2. O-O Ra7 3. Ra3 ;\r\nRh1+ ( 3... Rh2 $39 $13 { padded } ) ) 1... Ra2+ 2.Rxa2 ;\r\nBa8 3.Rh7 {100% winning a  double  space  paragraph [%emt 0:00:10] [%cal Gd4e5,Rf1c4]} Rhf8+ ;[%eval 18.03] [%eval #-9,20] [%csl Ye4,Gd5] Best by test\r\n*\r\n\r\n\r\n[Event \"back\\\\slash\"]\r\n[LineID \"shared-id\"]\r\n[ChapterName \"Sicilian\"]\r\n[LineId \"k-9f2\"]\r\n[Site \"https://lichess.org/study/abc\"] \r\n[White \"A. Player\"]\r\n[Guid \"k-9f2\"]\r\n[FEN \"rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3\"] 1-0\r\n",
+    "places": [
+      0,
+      2
+    ],
+    "ids": [
+      "line_S2YyfDA",
+      "line_UmEyKyBSeGEyIEJhOCBSaD",
+      null
+    ],
+    "excused": [
+      0
+    ]
+  },
+  {
+    "text": "\t// an indented comment\r\n// Repertoire\r\n\r\n[Event \"½ → ∞\"]\r\n[Black \"B. Player\"]\r\n[Opening_ECO \"v\"]\r\n[White \"A. Player\"]\t\r\n\r\n1.h3 d6 {not a cut\r\n[EventDate \"2026.09.29\"]} ( 1... g6 2.\r\nNc3 { padded } f6 $212 { padded } ) 2. c4 {} a5 { padded }\r\n1-0 \r\n\r\n[Event \"Line 1\"]\r\n\r\n1. d3 c5\r\n{[%csl Ye4,Gd5] Kasparov–Karpov, Linares 1993 Black holds; the ending is drawn}\r\n2. Bg5 $231 $132 {Mixed prose [%cal Ge2e4,Rd7d5] and more}\r\ng6 {half a bracket ] and a percent 46.4%} 1-0 \r\n\r\n",
+    "places": [
+      0,
+      1
+    ],
+    "ids": [
+      "line_aDMgZDYgYzQgYTV8MA",
+      "line_ZDMgYzUgQmc1IGc2fDE"
+    ],
+    "excused": []
+  },
+  {
+    "text": "; a note on the file\n% exported by a tool\n; a note on the file\n\n[Event \"c:\\\\games\"]\n[Date \"2026.09.??\"] \n[Site \"https://lichess.org/study/abc\"]\t\n[Date \"2026.09.??\"]\n[SetUp \"1\"] \n[FEN \"rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\"]\n[Site \"https://lichess.org/study/abc\"]\t\n\n\n1...e5 $146 $132 {½ → ∞ ♞ and a private glyph } 2. g4 ( 2. Qh5 {[%csl Ye4,Gd5] [%clk 0:14:57] [%cumProb 95.445%] Black holds; the ending is drawn 100% winning} 2...a6 ) Qd8g5! $6 ( {a;} {semicolon} 2...c5!! $163 ) ( 2... Be7 ) 0-1\n\t\n[Event \"c:\\\\games\"]\n[LineID \"line_0b6254f0bceda358a049b3\"]\n[Date \"2026.09.??\"] \n[Site \"https://lichess.org/study/abc\"]\t\n[Date \"2026.09.??\"]\n[SetUp \"1\"] \n[FEN \"rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\"]\n[Site \"https://lichess.org/study/abc\"]\t\n\n\n1... e5 $146 $132 {½ → ∞ ♞ and a private glyph } 2.g4 ( 2. Qh5 {[%csl Ye4,Gd5] [%clk 0:14:57] [%cumProb 95.445%] Black holds; the ending is drawn 100% winning} 2... a6 ) Qd8g5 $1 $6 ( {a; semicolon} 2...c5!! $163 ) ( 2...Be7 ) 0-1\n",
+    "places": [
+      0,
+      1
+    ],
+    "ids": [
+      "line_ZTUgZzQgUWQ4ZzV8MA",
+      "line_0b6254f0bceda358a049b3"
+    ],
+    "excused": []
+  },
+  {
+    "text": "﻿{ an indented\n  [Event \"y\"] quote }\n\n[Event \"the \\\"real\\\" one\"] \n[ChapterName \"\"]\n[ChapterName \" \"]\n\n1.d3 ;A plain note.\n( {Не лучший ход} 1.Na3 $14 1...a6 $3 2. Nc4 ) Nb8c6 ( 1...\nd5 { padded } 2. h4\n{[%csl Ye4,Gd5] [%pv c4,b6] Не лучший ход} ) 2. f4\n{ [%eval 14.53,42] Не лучший ход } *\n\n[Event \"the \\\"real\\\" one\"] \n[ChapterName \"\"]\n[ChapterName \" \"]\n[LineID \"a-second-id\"]\n\n1.d3 {A} {plain note.} ( {Не лучший ход} 1. Na3 $14 1...\na6!! 2. Nc4 ) Nb8c6 ( 1... d5 { padded } 2. h4 {[%csl}\n{Ye4,Gd5] [%pv c4,b6] Не лучший ход} ) 2. f4\n{ [%eval 14.53,42] Не лучший ход } *\n\t\n",
+    "places": [
+      1,
+      2
+    ],
+    "ids": [
+      null,
+      "line_ZDMgTmI4YzYgZjR8MQ",
+      "a-second-id"
+    ],
+    "excused": []
+  },
+  {
+    "text": "﻿[Event \"the \\\"real\\\" one\"]\r\n[White \"A. Player\"] [Result \"*\"]\r\n[ChapterName \"Sicilian\"]\r\n\r\n1. f4 $13 f6 $6 $1 {half a bracket ] and a percent 46.4%} 2. g3 $116 {line} {one\r\nline two} ( 2.e4?? 2... c6 3. b3 {100% winning [%maiaProbability 0.954] [%cal Gd4e5,Rf1c4]} ) ( { [%emt 0:00:12] Не лучший ход } 2.e3 $16 $3 2...c6 3. g3 $132 $69 {A plain note.} ( 3. Bd3 ) ( 3. h3 ) ) Nh6 $140 ;[%cumProb 73.156%] [%pv e4,g5,Qf3,h6,c3] [%maiaProbability 0.675] !? — a practical try\r\n3. Ng1h3 ;[%emt 0:00:05] [%pv Nc3,c6,Rb1,h6,h4,Qc7]\r\n1/2-1/2\r\n\r\n\r\n[Event \"Line 1\"]\r\n[LineID \"shared-id\"]\r\n[White \"A. Player\"]\r\n[ChapterName \"Sicilian\"]\r\n[SM2Interval \"B90\"]\r\n[Round\t\"1\"]\r\n[White \"A. Player\"]\r\n1. h4?! {!?} {— a practical try White is slightly better ⩲ [%eval #2,16] [%eval -19.61]} g6 ( 1. a5 2. g4 $146 $1 ;the plan: c4-c5, then Nd5\r\n( 2.e4 ) ) ( {} {padded } 1... Nc6 {A plain note.} 2. f4 {the plan: c4-c5, then Nd5} ) 2. h5 * \r\n\r\n ﻿[Event \"Line 1\"]\r\n  [LineID \"shared-id\"]\r\n[White \"A. Player\"]\r\n[ChapterName \"Sicilian\"]\r\n[SM2Interval \"B90\"]\r\n[Round\t\"1\"]\r\n[White \"A. Player\"]\r\n1.h4 $6 {!? — a practical try White is slightly better ⩲ [%eval #2,16] [%eval -19.61]} g6 ( 1...a5 2. g4 $146 $1 {the plan: c4-c5, then Nd5} ( 2. e4 ) ) ( {} {padded } 1... Nc6 {A plain note.} 2. f4 {the} {plan: c4-c5, then Nd5} ) 2.h5 *\r\n\t\r\n",
+    "places": [
+      0,
+      1,
+      2
+    ],
+    "ids": [
+      "line_ZjQgZjYgZzMgTmg2IE5nMW",
+      "shared-id",
+      "line_a468b029cf1854faed9ef9"
+    ],
+    "excused": []
+  },
+  {
+    "text": "﻿My Repertoire\r\n// Color: Black\r\n\r\n ﻿[Event \"½ → ∞\"]\r\n[LineID \"shared-id\"]\r\n[Site \"https://lichess.org/study/abc\"]\r\n[SM2Interval \"v\"]\r\n[Annotator \"a \\\"q\\\" b\\\\c\"]\r\n[ChapterName \"\"] {half a bracket ] and a percent 46.4%} 1. Nc3 {[%eval 0.42] [%clk 0:12:03]}\r\n% an escaped line 9. Qxf7#\r\na6?! ( 1. e5 {[%eval #0] [%cumProb 69.345%] Kasparov–Karpov, Linares 1993 Kasparov–Karpov, Linares 1993} 2.g4 a6 3. g5 ) 2. h4 $225 $4 {Mixed prose [%cal Ge2e4,Rd7d5] and more} b5 {Mixed prose [%cal Ge2e4,Rd7d5] and more} ( { Не лучший ход [%csl Ye4,Gd5] [%eval 17.63] [%eval 19.19] } 2...c6 {line one\r\nline two} 3. Rhh3 {½ → ∞ ♞ and a private glyph } ) ( 2... f5 {half a bracket ] and a percent 46.4%} 3. g3 {!? — a practical try} ) 3. e3\r\n\t\r\n ﻿[Event \"½ → ∞\"]\r\n[LineID \"shared-id\"]\r\n[Site \"https://lichess.org/study/abc\"]\r\n[SM2Interval \"v\"]\r\n[Annotator \"a \\\"q\\\" b\\\\c\"]\r\n[ChapterName \"\"] {half a bracket ] and a percent 46.4%} 1. Nc3 {[%eval 0.42] [%clk 0:12:03]}\r\n% an escaped line 9. Qxf7#\r\na6 $6 ( 1... e5 {[%eval #0] [%cumProb 69.345%] Kasparov–Karpov, Linares 1993 Kasparov–Karpov, Linares 1993} 2.g4 a6 3. g5 ) 2. h4 $225 $4 {Mixed prose [%cal Ge2e4,Rd7d5] and more} b5 {Mixed prose [%cal Ge2e4,Rd7d5] and more} ( {} {Не лучший ход [%csl Ye4,Gd5] [%eval 17.63] [%eval 19.19] } 2... c6 {line one\r\nline two} 3. Rhh3 {½} {→ ∞ ♞ and a private glyph } ) ( 2. f5 {half a bracket ] and a percent 46.4%} 3. g3 {!?} {— a practical try} ) 3. e3\r\n[Event \"a {b\"]\r\n[LineID \"shared-id\"]\r\n[Result \"1/2-1/2\"] \r\n[Result \"*\"]\r\n[FEN \"r3k2r/8/8/8/8/8/6b1/R3K2R w KQkq - 0 1\"]\r\n\r\n\r\n1. Rh4!! {Mixed prose [%cal Ge2e4,Rd7d5] and more} ( 1.Ra7 {a  double  space  paragraph} 1. Bb7 2. Rh5 Rb8 3. Re5+ { [%eval 2.52] [%clk 0:00:47] see (a) and [b] below 100% winning } Kd7 { a  double  space  paragraph[%pv d3,e6,Bh6,Be7][%cumProb 36.236%] } ) Rf8 {Mixed prose [%cal Ge2e4,Rd7d5] and more} 2. Rd1 Rf8h8 ;a  double  space  paragraph[%clk 0:01:30][%maiaProbability 0.673]\r\n3. Rdd4 {Best by test a  double  space  paragraph} Rh5 1/2-1/2\r\n\t\r\n",
+    "places": [
+      1,
+      2,
+      3
+    ],
+    "ids": [
+      null,
+      "shared-id",
+      "line_d841272c49f43f537ba3ff",
+      "line_baaceeb33aa2536a91a373"
+    ],
+    "excused": []
+  },
+  {
+    "text": "   Repertoire by GM X\n{ A one-line banner }\n\n\t[Event \"back\\\\slash\"]\n[LineID \"shared-id\"]\n[Annotator \"a \\\"q\\\" b\\\\c\"]\n[Site \"https://lichess.org/study/abc\"]\n[Annotator \"a \\\"q\\\" b\\\\c\"]\n\n1. d4 $119 $44 ( 1. Nf3 $46 $109 1. Nba6 ( 1. g5\n{ a  double  space  paragraphWhite is slightly better ⩲[%eval #6] } 2. Ng1 a6 (\n2... e6 3. h4 {} g4 ) ( 2... d5 3. b3 Kd7 $180 $128\n{a  double  space  paragraph[%emt 0:00:08][%eval #-10,28][%maiaProbability 0.529]}\n) 3.c3 Ng8f6 {line one\nline two} ) 2. a3 {a; semicolon} g6 ( 2... e5\n{line one\nline two} 3. Ra2 $206\n{[%csl Ye4,Gd5][%cal Gd4e5,Rf1c4][%emt 0:00:16]the plan: c4-c5, then Nd5Kasparov–Karpov, Linares 1993}\nQf6 ) 3. Nh4 f5 {Best by test [%csl Ye4,Gd5] [%emt 0:00:21] [%emt 0:00:17]} (\n3...g5?! $6 ) ) ( 1. d3 {[%eval -0.09,34] [%csl Ye4,Gd5]} 1... g6\n;100% winning !? — a practical try\n2.e3 {Mixed} {prose [%cal Ge2e4,Rd7d5] and more} ( {half}\n{a bracket ] and a percent 46.4%} 2. a4 {line one\nline two} 2... h6 3.Ng1h3 ;\nb6 ) e5 {[%csl Ye4,Gd5] [%eval -12.86] [%cumProb 92.672%]} 3. Qd1f3\n;a; semicolon\nh5 ( 3... Nh6 ) ) Nf6 {[%csl Ye4,Gd5] [%emt 0:00:03]} 2.f3 $146 $2 h5 3.Bg5\n{ padded } a6 { padded } *\n\n\n[Event \"c:\\\\games\"]\n[Round\t\"1\"]\n[ChapterName \"Najdorf 6.Bg5\"]\n[Date \"2026.09.??\"]\t\n[LineID \"\"]\n \n1. h4 (\n{[%eval -2.45][%eval #12,42]the plan: c4-c5, then Nd5!? — a practical try} 1.\nf3 ) 1-0\n\n[Event \"back\\\\slash\"]\n[LineID \"shared-id\"]\n[Annotator \"a \\\"q\\\" b\\\\c\"]\n[Site \"https://lichess.org/study/abc\"]\n\t[Annotator \"a \\\"q\\\" b\\\\c\"]\n\n1. d4 $119 $44 ( 1.Nf3 $46 $109 1... Nba6 ( 1...g5 {}\n{a  double  space  paragraphWhite is slightly better ⩲[%eval #6] } 2.Ng1 a6 (\n2... e6 3.h4 {} g4 ) ( 2...d5 3. b3 Kd7 $180 $128\n{a  double  space  paragraph[%emt 0:00:08][%eval #-10,28][%maiaProbability 0.529]}\n) 3. c3 Ng8f6 {line one\nline two} ) 2.a3 ;a; semicolon\ng6 ( 2. e5 {line one\nline two} 3. Ra2 $206\n;[%csl Ye4,Gd5][%cal Gd4e5,Rf1c4][%emt 0:00:16]the plan: c4-c5, then Nd5Kasparov–Karpov, Linares 1993\nQf6 ) 3. Nh4 f5 {Best by test [%csl Ye4,Gd5] [%emt 0:00:21] [%emt 0:00:17]} (\n3. g5?! $6 ) ) ( 1. d3 {[%eval -0.09,34] [%csl Ye4,Gd5]} 1... g6\n;100% winning !? — a practical try\n2. e3 {Mixed prose [%cal Ge2e4,Rd7d5] and more} (\n{half a bracket ] and a percent 46.4%} 2. a4 {line one\nline two} 2... h6\n3.Ng1h3 {} b6 ) e5 {[%csl Ye4,Gd5] [%eval -12.86] [%cumProb 92.672%]} 3. Qd1f3\n;a; semicolon\nh5 ( 3... Nh6 ) ) Nf6 {[%csl Ye4,Gd5] [%emt 0:00:03]} 2. f3 $146 $2 h5 3. Bg5\n{ padded } a6 { padded } * \n\n",
+    "places": [
+      1,
+      2,
+      3
+    ],
+    "ids": [
+      null,
+      "shared-id",
+      "line_aDR8Mg",
+      "line_af5985ffb8ce28af74f502"
+    ],
+    "excused": []
+  },
+  {
+    "text": "\t// an indented comment\r\n% exported by a tool\r\n// Color: Black\r\n\r\n[Event \"back\\\\slash\"]\r\n[LineID \"shared-id\"]\r\n[ChapterName \" \"]\r\n[FEN \"4k3/1P6/8/8/8/8/6p1/4K3 w - - 0 1\"]\r\n[FEN \"4k3/1P6/8/8/8/8/6p1/4K3 w - - 0 1\"]\r\n\r\n1.b8=R+ $165 {not a cut\r\n[EventDate \"2026.09.29\"]} Kf7 {Kasparov–Karpov, Linares 1993 [%eval -16.33,59]} 2. Ke2 {!? — a practical try [%clk 0:16:07]} g1=N+ {[%emt 0:00:35]} 3. Ke2d3 { [%pv f4,b6,h3,Nh6] [%cumProb 3.768%] } 3... Ne2 $102 ( 3... Nf3 ) 1/2-1/2\r\n\r\n[Event \"a {b\"]\r\n[Annotator \"a \\\"q\\\" b\\\\c\"]\r\n[Site \"https://lichess.org/study/abc\"]\r\n[LineId \" spaced \"]\r\n\r\n\r\n{a marked\r\n﻿[Event \"quote\"]} 1-0\r\n\r\n  [Event \"c:\\\\games\"]\r\n[LineID \"line_7936afe1035f164e419f5b\"]\r\n[White \"A. Player\"] {Best by test [%eval 4.53,25] [%clk 0:37:50] [%emt 0:00:13]} 1. d3 {the} {plan: c4-c5, then Nd5[%eval #-4]} ( 1. h3 1...f6!! 2. h4 $54 $16 Nc6 {} ( {} {padded } 2...Kf7 ;Не лучший ход a  double  space  paragraph\r\n) ( 2...Na6 ) ) Nh6 ( 1... a5 { [%eval 13.87,2] [%eval 17.22,1] [%eval #-20] } 2. h3 $108 $13 {Mixed prose [%cal Ge2e4,Rd7d5] and more} ( 2. f4 2...Ngh6 ) Nf6 {White is slightly better ⩲ Kasparov–Karpov, Linares 1993} ) 2. Bg5 d5 {[%emt} {0:00:53] a  double  space  paragraph} 0-1\r\n\r\n",
+    "places": [
+      0,
+      1,
+      3
+    ],
+    "ids": [
+      "shared-id",
+      null,
+      null,
+      "line_7936afe1035f164e419f5b"
+    ],
+    "excused": [
+      1
+    ]
+  },
+  {
+    "text": "[Event \"c:\\\\games\"] \r\n[LineID \"shared-id\"]\r\n[SetUp \"1\"]\r\n[FEN \"rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3\"]\r\n\r\n3. Na3 {see\r\n[Event \"the game below\"] first} a6 4.b3 f4 {[%maiaProbability 0.942] [%maiaProbability 0.811] a  double  space  paragraph} 5. Nf3 {[%maiaProbability 0.610]} h6? ( 5... Qd6 6. c3 Qb6 {} {[%emt 0:00:52] } ( 6. Bg4 {A plain note.} ) ( 6... g5 ) ) 6. g4 {[%eval 0.42] [%clk 0:12:03]} c6\r\n\r\n[Event \"c:\\\\games\"]\r\n[Result \"1/2-1/2\"]\r\n[Black \"B. Player\"]\r\n[Round\t\"1\"]\r\n[Black \"B. Player\"] {a marked\r\n﻿[Event \"quote\"]} 1. b3 h5 ;A plain note.\r\n2. Bc1a3 {Black holds; the ending is drawn [%maiaProbability 0.568] [%eval #-9]} c6 3. Nh3 {[%eval} {-7.40,53]} Qd8a5 {braces { inside are text} ( 3...e6 { [%cal Gd4e5,Rf1c4] [%csl Ye4,Gd5] [%csl Ye4,Gd5] White is slightly better ⩲ the plan: c4-c5, then Nd5 } ) *\r\n",
+    "places": [
+      0,
+      2
+    ],
+    "ids": [
+      "shared-id",
+      "line_YTYgYjMgZjQgTmYzIGg2IG",
+      null,
+      "line_YjMgaDUgQmMxYTMgYzYgTm"
+    ],
+    "excused": [
+      0,
+      1
+    ]
+  },
+  {
+    "text": "1. d4 d5 2. c4 *\r\n\t// an indented comment\r\n\r\n[Event \"c:\\\\games\"]\r\n[LineID \"shared-id\"]\r\n[Opening_ECO \"B90\"] \r\n[Annotator \"a \\\"q\\\" b\\\\c\"]\r\n[SetUp \"1\"] [FEN \"r3k2r/8/8/8/8/8/6b1/R3K2R w KQkq - 0 1\"]\r\n1.Rh2 ( 1.Rd1 1... Bc6 2. Rh4 Ra3 $1 ( 2... Bd7 3.Kf1 {[%eval 0.42] [%clk 0:12:03]} Bc8 ;[%emt 0:00:36] [%emt 0:00:35] [%cumProb 75.877%]\r\n4.Ra4 {Mixed prose [%cal Ge2e4,Rd7d5] and more} ) 3. Rd3 Rxd3 {[%eval 14.90,42] [%eval 10.86] [%cal Gd4e5,Rf1c4]} 4. Rb4 {a  double  space  paragraph [%maiaProbability 0.688]} ( 4. Rf4 ) ( 4.Rh1 ) ) ( 1. Rh4 {see (a) and [b] below} 1... Rf8 $146 {[%clk 0:23:38] [%emt 0:00:12] [%csl Ye4,Gd5]} ( 1... Bg2h1 $14 $146 {the plan: c4-c5, then Nd5 [%pv c3,Nh6,a4,f5] [%maiaProbability 0.594] [%maiaProbability 0.494]} 2. Kef1 Rxa1+ {see (a) and [b] below see (a) and [b] below [%eval #6] [%cal Gd4e5,Rf1c4]} 3. Kfe2 Rh7 { [%eval #-11,16] [%maiaProbability 0.006] } 4. Rh6 ) 2. Rf4 Ra6 $175 {[%cumProb 21.837%] the plan: c4-c5, then Nd5} 3. Rh4! $4 Ra5 4. Rg4 {braces { inside are text} ( 4.Rb4 ) ( {line one\r\nline two} 4. O-O-O ) ) Bc6 { White is slightly better ⩲ 100% winning } 2. Rh2f2 {½ → ∞ ♞ and a private glyph } Bh1 {[%emt 0:00:07][%maiaProbability 0.234][%cal Gd4e5,Rf1c4]Best by test} 3. Rh2 Rh6 ( 3... Rh3 $14 $5 4.Rhc2 {Black holds; the ending is drawn a  double  space  paragraph} ) ( 3...\r\nRac8 ;half a bracket ] and a percent 46.4%\r\n4. Rf2 ) 4. Ra1a3 *\r\n  [Event \" \"]\r\n[LineID \"line_eec0114b090bb881ea0769\"]\r\n[SM2Interval \"B90\"]\r\n[Date \"2026.09.??\"] 1. h3 Nh6 2.f3 $158 $13 g5 3. h4 d6 {A plain note.} 4. e4 { Black holds; the ending is drawn Black holds; the ending is drawn } 1/2-1/2\r\n\r\n\r\n",
+    "places": [
+      1,
+      2
+    ],
+    "ids": [
+      "line_ZDQgZDUgYzR8MA",
+      "shared-id",
+      "line_eec0114b090bb881ea0769"
+    ],
+    "excused": []
+  },
+  {
+    "text": "[Event \"the \\\"real\\\" one\"]\r\n[LineID \"shared-id\"]\r\n[Site \"https://lichess.org/study/abc\"]\r\n \r\n{an indented\r\n  [Event \"quote\"]\r\nends here} 1. g4 e6??\r\n{Best by test} *\r\n\r\n\r\n ﻿[Event \"the \\\"real\\\" one\"]\r\n[X-Custom+Tag \"v\"]\r\n﻿[X-Custom+Tag \"12.5%\"] [White \"A. Player\"]\r\n\r\n1. Nh3 {see\r\n[Event \"the game below\"] first} a5 ( 1. d6\r\n{[%clk 0:01:46] [%maiaProbability 0.576] the plan: c4-c5, then Nd5}\r\n2.f4 $146 g6 { Не лучший ход [%eval -19.88,5] } 3.b4 {[%emt}\r\n{0:00:34] [%eval 5.66,7] [%clk 0:54:12]} ) 2.e3 ( { padded }\r\n2. c3\r\n{Kasparov–Karpov, Linares 1993 [%cal Gd4e5,Rf1c4] [%pv b4]}\r\n2... Nc6 3.e4 ) ( { Не лучший ход } 2. Na3 ;\r\n2...d5 {the}\r\n{plan: c4-c5, then Nd5 [%clk 0:42:02] [%eval -1.34]} 3. g3\r\n$208 {} ( 3. Nf4 {half a bracket ] and a percent 46.4%} ) (\r\n3. c3 $100 $14\r\n{see (a) and [b] below White is slightly better ⩲ [%cal Gd4e5,Rf1c4] [%cumProb 66.520%] [%eval #-15]}\r\n) ) 2...h6 ;braces { inside are text\r\n3. g4 *\r\n\r\n",
+    "places": [
+      0,
+      2
+    ],
+    "ids": [
+      null,
+      "line_ZzQgZTZ8MQ",
+      "line_TmgzfDI",
+      "line_YTUgZTMgaDYgZzR8Mw"
+    ],
+    "excused": [
+      0,
+      1
+    ]
+  }
+]

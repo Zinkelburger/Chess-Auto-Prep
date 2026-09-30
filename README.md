@@ -1,5 +1,8 @@
 # Chess Auto Prep
 
+The renewal app (v2) is now the only implementation: run `lib/main.dart`.
+V1 source has been retired; existing Documents and Support files stay in place.
+
 A desktop chess app for building and practicing opening repertoires, reviewing
 PGN games, analyzing positions, and training tactics. Runs on Windows, Linux,
 and macOS. Stockfish and Maia are included.
@@ -34,3 +37,27 @@ You can also install a newer version from the release page. Keep backups of
 important work before upgrading.
 
 [Technical documentation](docs/COMPONENT_MAP.md) · [License: AGPL-3.0](LICENSE)
+
+## Development and release checks
+
+[.fvmrc](.fvmrc) pins Flutter for every workflow and the local Dart checks.
+Use that SDK (or set `FLUTTER=/path/to/flutter/bin/flutter`).
+`scripts/ci.sh lint` checks formatting without changing files;
+`scripts/ci.sh format` is the separate command that applies formatting.
+`scripts/ci.sh full` also checks formatting without applying fixes.
+
+Before tagging, commit the final release candidate and run
+`scripts/ci.sh preflight` in its clean checkout. This runs the same SDK,
+dependency, formatting, analysis and unit/widget gates as release CI. It records
+the commit and rejects uncommitted/untracked files or a changed HEAD at the end.
+Inspect `build/quality-gates/summary.md` and the per-gate logs on failure;
+GitHub retains these in `flutter-quality-results`, including formatting failures.
+Tag only that validated commit, matching the version in `pubspec.yaml`; after a
+failed release, use a new version and tag rather than moving an existing tag.
+
+Preflight covers the shared Dart job. The release still requires the separate
+offline-tool, desktop integration, engine, installer and platform build gates.
+Publication accepts only the four named build artifacts, verifies all eight
+nonempty downloads, and generates `SHA256SUMS` for precisely those downloads.
+Diagnostic artifacts stay in Actions. Only the publication job has write access;
+actions are pinned to commits and Dependabot proposes weekly updates.

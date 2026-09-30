@@ -75,10 +75,14 @@ def main() -> int:
     release = (redist.REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
     )
-    assert "runs-on: windows-2022" in release
-    assert "Get-AuthenticodeSignature" in release
-    assert "FileVersionRaw" in release
-    assert "--windows-runtime-from" in release
+    assert "uses: ./.github/workflows/windows-build.yml" in release
+    windows = (redist.REPO_ROOT / ".github" / "workflows" / "windows-build.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "runs-on: windows-2022" in windows
+    assert "Get-AuthenticodeSignature" in windows
+    assert "FileVersionRaw" in windows
+    assert "--windows-runtime-from" in windows
 
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)

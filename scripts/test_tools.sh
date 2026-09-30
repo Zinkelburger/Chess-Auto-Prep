@@ -6,6 +6,7 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$ROOT"
 
 TESTS=(
+  scripts/test_release_pipeline.py
   tools/test_app_updates.py
   tools/test_storage_contract.py
   tools/test_agent_jobs.py
@@ -19,6 +20,7 @@ TESTS=(
   tools/test_windows_ort_bundle.py
   tools/mcp/test_chess_prep.py
   tools/mcp/test_opening_tree.py
+  tools/mcp/test_pgn_collection.py
   tools/mcp/test_expectimax.py
   tools/mcp/test_engine_tournament.py
   tools/mcp/test_master_games.py

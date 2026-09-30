@@ -1,4 +1,5 @@
-# Runs the local quality gates, Linux boot and native Windows update contracts.
+# Runs the local quality gates, the v2 desktop contracts (which boot the built
+# app on Linux, Windows and macOS) and native Windows update contracts.
 
 name: CI
 
@@ -7,10 +8,13 @@ on:
   workflow_call:
 
 jobs:
+  v2-desktop:
+    uses: ./.github/workflows/desktop-contracts.yml
+
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Check release tag matches the embedded application version
         if: startsWith(github.ref, 'refs/tags/v')
@@ -28,9 +32,9 @@ jobs:
       # Pinned so the formatter can't drift between stable releases and
       # start flagging files that are clean locally. Bump deliberately,
       # re-running `dart format` in the same commit if output changes.
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
-          flutter-version: 3.47.2
+          flutter-version-file: .fvmrc
           channel: stable
           cache: true
 
@@ -39,34 +43,23 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build clang libgtk-3-dev pkg-config
 
-      - run: flutter pub get
+      - name: Validate the committed release candidate
+        run: python3 scripts/dart_checks.py preflight --flutter flutter
 
-      - name: Check Dart formatting
-        run: dart format --set-exit-if-changed lib test integration_test
-
-      # Errors and warnings fail the job; info-level hints (e.g. avoid_print) do not.
-      - name: Analyze (lib + test)
-        run: flutter analyze lib test integration_test --no-fatal-infos
-
-      - name: Run unit and widget tests
-        run: |
-          set -o pipefail
-          flutter test --reporter expanded 2>&1 | tee test-results.log
-
-      - name: Preserve test failure details
-        if: failure()
-        uses: actions/upload-artifact@v7
+      - name: Preserve quality gate diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: flutter-test-results
-          path: test-results.log
-          if-no-files-found: ignore
+          name: flutter-quality-results
+          path: build/quality-gates/
+          if-no-files-found: warn
 
   tools:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.12'
 
@@ -82,9 +75,9 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.12'
 
@@ -97,41 +90,28 @@ jobs:
 
       - name: Preserve Windows updater diagnostics
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: windows-updater-diagnostics
           path: ${{ runner.temp }}/updater-diagnostics
           if-no-files-found: warn
 
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
-          flutter-version: 3.47.2
+          flutter-version-file: .fvmrc
           channel: stable
           cache: true
 
       - run: flutter pub get
 
       - name: Test Windows updater and storage upgrade contracts
-        run: flutter test test/features/updates test/services/storage/upgrade_contract_test.dart
-
-  integration-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: 3.47.2
-          channel: stable
-          cache: true
-
-      - name: Install Linux desktop and display dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build clang libgtk-3-dev pkg-config xvfb
-
-      - run: flutter pub get
-
-      - name: Run integration tests (headless)
-        timeout-minutes: 5
-        run: xvfb-run flutter test integration_test/app_test.dart -d linux
+        run: >-
+          flutter test
+          test/net/github_releases_test.dart
+          test/features/settings/update_offer_test.dart
+          test/features/settings/app_updates_test.dart
+          test/features/settings/update_prompt_test.dart
+          test/storage/update_files_test.dart
+          test/storage/update_install_test.dart
+          test/storage/game_store_test.dart
+          test/storage/master_games_import_test.dart

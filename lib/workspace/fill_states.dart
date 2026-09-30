@@ -1,0 +1,238 @@
+import '../chess/fen.dart';
+import '../chess/generation/evaluation_source.dart';
+import '../chess/generation/mainline_book.dart';
+import '../chess/generation/sources.dart';
+import '../net/chessdb_moves.dart';
+import '../storage/chapter_files.dart';
+
+/// What a search builds: expectimax against the human model, or ChessDB's
+/// objectively best book (`chess/generation/mainline_book.dart`).
+enum SearchMethod {
+  practical('Maia practical'),
+  mainline('ChessDB mainline');
+
+  const SearchMethod(this.label);
+  final String label;
+}
+
+/// What a search is asked for: the opponent's rating and how deep to go.
+///
+/// Interactive searches use the engine shortlist from the root down. A
+/// different [rootMoves] still reuses a search: raising it adds only the new
+/// root moves. The owner supplies the shared branching and rare-reply settings.
+final class FillRequest {
+  const FillRequest({
+    required this.elo,
+    this.depthPlies,
+    this.source = EvaluationSource.stockfish,
+    this.rootMoves = 4,
+    this.candidateMoves = 4,
+    this.replyFloor = 0.01,
+    this.method = SearchMethod.practical,
+  });
+
+  final SearchMethod method;
+  final EvaluationSource source;
+
+  /// Our moves kept for the first move of the search.
+  final int rootMoves;
+
+  /// Our moves kept at every later move of ours.
+  final int candidateMoves;
+  final double replyFloor;
+
+  bool compatibleWith(FillRequest other) =>
+      method == other.method &&
+      elo == other.elo &&
+      source == other.source &&
+      candidateMoves == other.candidateMoves &&
+      replyFloor == other.replyFloor;
+
+  /// The rating the opponent's replies are predicted for.
+  final int elo;
+
+  /// How many half-moves past the board the search plays out; null goes on
+  /// until the user stops it. The mainline book branches on the
+  /// opponent's choices this far and runs on past it.
+  final int? depthPlies;
+
+  /// What a saved tree names as its evaluation source, so a resume never
+  /// mixes a book into an expectimax search or one source into another.
+  String get treeSource =>
+      method == SearchMethod.mainline ? 'chessDbMainline' : source.name;
+
+  /// The rating a saved tree records: none for the book, which asks no
+  /// model.
+  int get treeRating => method == SearchMethod.mainline ? 0 : elo;
+}
+
+/// The engine depth every search scores positions at: the old app's
+/// default, and what the shared cache is keyed on.
+const fillEvalDepth = 14;
+
+/// One user-started search adds at most this many positions, under the interactive branching policy.
+const fillNodeBudget = 25000;
+
+/// The range a search's depth may be set to, when it is set at all.
+const minFillDepth = 1;
+const maxFillDepth = 64;
+
+/// What a search needs and where it comes from: an engine and the model, or
+/// why there are none.
+sealed class FillToolsResult {
+  const FillToolsResult();
+}
+
+final class FillReady extends FillToolsResult {
+  const FillReady({
+    required this.evaluator,
+    required this.policy,
+    this.candidates,
+    this.continuations,
+    required this.release,
+  });
+
+  final PositionEvaluator evaluator;
+  final OpponentPolicy policy;
+  final CandidateSource? candidates;
+
+  /// The engine with nothing in front of it, whose answers carry its best
+  /// line: what a drafted line the search stopped mid-fight is continued
+  /// with when the run itself did not score its last position (the cache
+  /// keeps scores, not lines). Null where no engine is behind the tools.
+  final PositionEvaluator? continuations;
+
+  /// Hands the engine back; called once, when the run is over or cancelled.
+  final Future<void> Function() release;
+}
+
+/// What the mainline book is built from: ChessDB's moves, for this run,
+/// and the replies masters played ([practiceAt], most played first); none
+/// there, and the book is ChessDB's mainline alone.
+final class BookReady extends FillToolsResult {
+  const BookReady({required this.chessDb, required this.practiceAt});
+
+  final ChessDbMoves chessDb;
+  final Future<List<PlayedMove>> Function(Fen fen) practiceAt;
+
+  /// Ends the run's ChessDB lookups; called once, when the run is over.
+  Future<void> release() async => chessDb.close();
+}
+
+final class FillUnavailable extends FillToolsResult {
+  const FillUnavailable(this.reason);
+
+  /// A sentence for the screen.
+  final String reason;
+}
+
+typedef FillToolsFactory = Future<FillToolsResult> Function(FillRequest);
+
+sealed class FillState {
+  const FillState();
+}
+
+final class FillIdle extends FillState {
+  const FillIdle();
+}
+
+final class FillRunning extends FillState {
+  const FillRunning({
+    required this.nodes,
+    required this.depth,
+    required this.of,
+    this.cancelling = false,
+    this.finishing = false,
+    this.lastPly,
+  });
+
+  final int nodes;
+  final int depth;
+
+  /// The depth asked for; null when the search goes on until stopped.
+  final int? of;
+  final bool cancelling;
+
+  /// The depth the search was asked to stop at once it is done there; null
+  /// until it is.
+  final int? lastPly;
+
+  /// Asked to stop and keep what it has: the expansion under way is
+  /// finished, then the tree as it stands is read.
+  final bool finishing;
+
+  /// Whether a stop has been asked for, either kind.
+  bool get stopping => cancelling || finishing;
+
+  FillRunning copyWith({
+    int? nodes,
+    int? depth,
+    bool? cancelling,
+    bool? finishing,
+    int? lastPly,
+  }) => FillRunning(
+    nodes: nodes ?? this.nodes,
+    depth: depth ?? this.depth,
+    of: of,
+    cancelling: cancelling ?? this.cancelling,
+    finishing: finishing ?? this.finishing,
+    lastPly: lastPly ?? this.lastPly,
+  );
+}
+
+/// The run is over and its tree is in `FillGaps.found`: [depth] half-moves
+/// deep over [nodes] positions, the whole way when [complete].
+/// [budgetReached], [sourceLost] and [stoppedBy] say why it stopped short:
+/// the position budget, ChessDB no longer answering the mainline book, or
+/// the engine or the model giving up on one position.
+final class FillDone extends FillState {
+  const FillDone({
+    required this.nodes,
+    required this.depth,
+    required this.complete,
+    this.budgetReached = false,
+    this.sourceLost = false,
+    this.stoppedBy,
+  });
+
+  final int nodes;
+  final int depth;
+  final bool complete;
+  final bool budgetReached;
+  final bool sourceLost;
+
+  /// A few words for the status line when the engine or the model could not
+  /// answer one position; the position and the reason go to the log. The
+  /// tree above it is kept.
+  final String? stoppedBy;
+}
+
+final class FillFailed extends FillState {
+  const FillFailed(this.reason);
+
+  /// A sentence for the screen; the log has the same one.
+  final String reason;
+}
+
+/// What became of turning a chapter's search into lines.
+sealed class LinesState {
+  const LinesState();
+}
+
+final class LinesWriting extends LinesState {
+  const LinesWriting();
+}
+
+/// The lines are in the draft chapter [draft].
+final class LinesWritten extends LinesState {
+  const LinesWritten({required this.draft, required this.lines});
+
+  final ChapterRef draft;
+  final int lines;
+}
+
+final class LinesFailed extends LinesState {
+  const LinesFailed(this.reason);
+
+  final String reason;
+}

@@ -32,8 +32,16 @@ claude mcp add chess-prep -- python3 /abs/path/to/tools/mcp/chess_prep/__main__.
 | `identity_confirm` | Promote a proposal to usable — the human-in-the-loop step |
 | `constraint_add` | Two entrants who must never be paired |
 | `pairing_simulate` | Monte Carlo → P(face) per entrant, by colour and round |
-| `opponents_export` | Write `opponents.json` for Player Analysis |
+| `opponents_export` | Write `opponents.json` for Players & prep → Paste players |
 | `roster_export` | The field as CSV, provenance included |
+| `player_lookup` | One person through every source in a fixed order; status, accounts, scored candidates, OTB identity, next steps. Writes nothing |
+| `people_populate` | The whole roster into the app's players directory, plus a group for the event |
+| `people_list` / `people_get` | Read the players directory (aliases, IDs, accounts, lookup status) |
+| `people_upsert` | Add or merge one person; web finds go in as candidates with evidence |
+| `people_confirm` | Promote an approved candidate to an account the app downloads from |
+| `master_player_search` | A player in the master-games database under any spelling, grouped by FIDE ID |
+| `pgn_collection_open` / `pgn_games_search` | Snapshot a PGN/ZIP and select played games by player, metadata, exact move order or transposed position |
+| `pgn_selection_report` / `pgn_game_get` / `pgn_selection_export` | Evidence-backed counts/continuations, complete game retrieval and verified export of the same selection |
 | `pgn_open` | Load a PGN (course/repertoire/games) as a FEN-keyed opening tree |
 | `pgn_position` | Book moves at a FEN, plus one-ply transpositions into book |
 | `pgn_walk` | Ply-by-ply: in-book / transposition / novelty, with replies |
@@ -69,6 +77,54 @@ The tournament tools need the Flutter SDK's `dart` on PATH (or
 `CHESS_PREP_DART`), because they run the app's own tournament code rather than
 a second copy of it. See [ENGINE_TOURNAMENT.md](ENGINE_TOURNAMENT.md).
 
+### PGN game collections
+
+`pgn_collection.py` owns immutable PGN snapshots and game IDs;
+`pgn_selection.py` searches, reports and exports them;
+`pgn_collection_tools.py` registers their MCP contracts. This pipeline is for
+played games, while `pgn_open` and its opening graph serve repertoires/courses.
+
+```text
+pgn_collection_open {path: "/…/Karpov.zip"}  → collection_id
+pgn_games_search {collection_id, player: "Karpov", color: "white",
+  moves: "1.e4 c6 2.d4 d5 3.Nd2 dxe4 4.Nxe4 Bf5", match: "position"} → selection_id
+pgn_selection_report {selection_id, depth: 8}
+pgn_game_get {game_id: "<id from search/report>"}
+pgn_selection_export {selection_id, path: "/…/Karpov_Bf5.pgn", sort: "date_asc"}
+```
+
+The position search includes Nc3/Nd2 transpositions and ignores move clocks;
+turn, castling rights and legal en passant remain part of position identity.
+`match: "prefix"` instead requires the same initial position and move order.
+A `selection_id` can replace `collection_id` in a new search to narrow the
+existing set while preserving its matching ply when no new position is given.
+Each source record counts once, from its first mainline match. Analysis
+variations and repeated visits never inflate statistics. Duplicate candidates
+(same headers, start and mainline) are reported and retained. Results use the
+matched player's side, otherwise White, and unknown results are excluded from
+the score denominator. Full-date filters exclude incomplete dates; year
+filters accept known years. Event strings are never inferred time controls.
+Reports include supporting and exception game IDs with explicit evidence and
+node limits; continuation prefixes overlap across depths.
+
+Snapshots live under `CHESS_PREP_PGN_DIR` (default
+`~/.local/share/chess-prep/pgn-collections/`) and survive server restarts and
+one-shot helper calls. IDs fingerprint source content/provenance, decoding,
+parser version and format version. Reopening a changed source produces a new
+snapshot; earlier selections remain reproducible. Source files and app DBs
+are never modified. PGN/ZIP inputs are bounded to 32 MiB compressed and
+uncompressed; ZIP members are read in memory, never extracted to their names.
+Multiple PGNs require an explicit member. UTF-8 is tried first, then labelled
+CP1252/Latin-1 heuristics; `encoding` overrides detection. Parser-reported
+invalid games are excluded and counted, with bounded error details.
+
+Export keeps headers, comments, NAGs and variations by default, reparses the
+rendered PGN and verifies selected headers/mainlines/count and retained
+annotations before atomically publishing it. Existing output requires
+`overwrite: true`; source/cache paths cannot be export targets. IDs are returned
+in export order. Pagination never changes the selection or its totals.
+Offline regression tests: `tools/mcp/test_pgn_collection.py`.
+
 ### PGN opening tree
 
 Positions are keyed by a 4-field FEN (en passant only when a capture is legal),
@@ -96,6 +152,60 @@ chessdb_query {moves: "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. d4 exd4 5. e5 Ng4 6. O-
 
 `pgn_eval` and the mistake half of `pgn_audit` need a Stockfish binary (`STOCKFISH` or on `PATH`); `chessdb_query` and the reply-gap half of `pgn_audit` need only the network.
 Chessable `Z0` dummy mainlines are promoted the same way as in the app.
+
+### Filling the players directory
+
+The agent's hand-off is the app's own directory, `Documents/opponents/`
+(`people.json` and `tournaments/<id>.json`), so nobody types the field in:
+
+```
+roster_import    {text: "<pasted entry list>", event_name: "Fall Open"}
+roster_update    {player_id: "13433622", aliases: ["Denis Shmeliov"]}
+people_populate  {}                     # → summary: account / candidates / otb_only / not_found
+people_upsert    {name: "Shea Winter", candidates: [{site: "lichess", username: "…", evidence: "<quote>"}]}
+people_confirm   {person_id, site: "chesscom", username: "…"}   # only after the user says yes
+```
+
+`player_lookup` (and so `people_populate`) asks, in order: the players
+directory already on disk; the bundled USCF → chess.com directory; the US
+Chess API, whose spelling of the name (`Will Schiminger`) becomes an alias and
+which says whether the player was ever online-rated; over-the-board games
+under every spelling in the TWIC master-games database and in each broadcast
+collection (`Documents/lichess_broadcasts/<name>/<name>.db`, regional events
+TWIC never carries — see [BROADCAST_GAMES.md](BROADCAST_GAMES.md)), counted
+per source; and a probe of about eight usernames built from
+each spelling on chess.com and Lichess (one Lichess request covers them all).
+
+**Spellings.** A person row carries `aliases`, and every search takes all of
+them. Names match when the surnames are within an edit cap (none under five
+letters, so Zhou is never Zhu; one to seven letters; two from eight, so
+Shmelov finds Shmeliov) and the given names agree: exactly, closely
+(`Denys`/`Denis`), or by an initial when one side only has an initial
+(`Shmeliov,D`). Two-part names are also read surname-first (`Zhou
+Jianchao`), and then the given name must agree in full. TWIC rows are grouped
+by FIDE ID, which catches every later spelling. In each database the
+best-graded names whose latest Elo is within 300 of the known rating are
+taken as the person unless they carry two different FIDE IDs (then the rows
+are listed as ambiguous); well-matched names with no FIDE ID fold into the
+one that has it, since one broadcaster may omit the ID another sent. Across
+databases, TWIC's FIDE ID wins, and a collection whose pick carries a
+different ID is reported under `conflicts` rather than counted.
+
+**Trust.** `chesscom` and `lichess` on a person are the accounts the app
+downloads games from. Only the directory's USCF-event match, an account the
+user confirmed on the roster, or `people_confirm` writes them. A probed
+username counts only when its profile's real name, title or listed rating
+agrees; closed accounts and bare handle matches are listed as rejected. Those
+finds, and anything found by web search, wait in the row's `lookup` block
+(`status`, `confirmed`, `candidates` with evidence, `otb`, `next_steps`) until
+the user approves one. Several accounts per person are normal; each confirm
+adds one. A merge fills blanks and unions lists; it never replaces a name,
+rating, note or account the user typed (a different name becomes an alias).
+
+The app keeps `aliases`, `fide_id` and any key it does not model
+(`PersonRecord.extra`) when it saves. It loads the directory once per run, so
+restart it to see new rows, and do not edit players in an app that was open
+during the write: its next save would replace the file.
 
 ### Finding a chess.com account from rating clues
 

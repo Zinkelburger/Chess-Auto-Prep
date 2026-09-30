@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Tests for the engine-tournament MCP tools.
 
-Zero dependencies (unittest only) and no engines: everything here works on a
-fabricated tournament directory, because the parts that need a real engine
-live in Dart and are tested there. What is tested here is what this layer
-actually owns — finding the tournament you meant, reading what is on disk,
-the request file the app watches, and the registry write.
+Zero dependencies (unittest only) and no real engines: most of this works on
+a fabricated tournament directory, because the chess lives in Dart and is
+tested there. What is tested here is what this layer owns — finding the
+tournament you meant, reading what is on disk, the request file the app
+watches, and the registry write — plus that the Dart tool it shells out to
+still compiles and answers `--verify` (skipped without a Dart SDK).
 
 Run:
     python tools/mcp/test_engine_tournament.py
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -157,7 +159,7 @@ class Reading(TournamentDirCase):
         self.assertEqual(status["games_total"], 4)
         self.assertEqual(status["results"], {"blackWins": 2, "draw": 1})
         self.assertEqual(status["terminations"], {"resignAdjudication": 3})
-        self.assertEqual(status["time_control"], "2s/move")
+        self.assertEqual(status["time_control"], "2 s / move")
         self.assertEqual(status["start_fen"], FEN)
         self.assertFalse(status["running"])
 
@@ -181,16 +183,31 @@ class Reading(TournamentDirCase):
             self.registry.call("tournament_game_pgn", {"number": 9})
         self.assertIn("2", str(caught.exception))
 
+    def test_the_time_label_is_the_one_the_app_wrote(self):
+        self.write("match")
+        path = self.root / "match" / "tournament.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["timeLabel"] = "Bullet · 2 s / move"
+        path.write_text(json.dumps(data), encoding="utf-8")
+        status = self.registry.call("tournament_status", {})
+        self.assertEqual(status["time_control"], "Bullet · 2 s / move")
+        listed = self.registry.call("tournament_list", {})
+        self.assertEqual(listed["tournaments"][0]["time_control"], "Bullet · 2 s / move")
+
     def test_time_control_labels_match_the_app(self):
+        # For files written before the app kept `timeLabel`; the expectations
+        # in test/chess/tournament/time_label_test.dart.
+        # The expectations in test/chess/tournament/time_label_test.dart.
+        self.assertEqual(et._time_control_label({}), "2 s / move")
         self.assertEqual(
-            et._time_control_label({"kind": "movetime", "movetimeMs": 2000}),
-            "2s/move",
+            et._time_control_label({"kind": "movetime", "movetimeMs": 1500}),
+            "1.5 s / move",
         )
         self.assertEqual(
             et._time_control_label(
-                {"kind": "incremental", "baseMs": 60000, "incrementMs": 600}
+                {"kind": "incremental", "baseMs": 10000, "incrementMs": 100}
             ),
-            "60s+0.6s",
+            "10 s + 0.1 s",
         )
         self.assertEqual(
             et._time_control_label(
@@ -201,10 +218,14 @@ class Reading(TournamentDirCase):
                     "movesPerSession": 40,
                 }
             ),
-            "40/600s+10s",
+            "40 moves in 600 s + 10 s",
         )
         self.assertEqual(
-            et._time_control_label({"kind": "fixedDepth", "depth": 12}), "depth 12"
+            et._time_control_label({"kind": "fixedNodes", "nodes": 1000000}),
+            "1M nodes",
+        )
+        self.assertEqual(
+            et._time_control_label({"kind": "fixedDepth", "depth": 12}), "Depth 12"
         )
 
 
@@ -288,7 +309,7 @@ class Engines(TournamentDirCase):
 
     def test_a_verified_binary_is_added_once(self):
         def fake(argv, timeout):  # noqa: ANN001 - test double
-            return {"ok": True, "name": "Toy 1.0", "author": "n", "sampleMove": "e4"}
+            return {"ok": True, "name": "Toy 1.0", "sampleMove": "e4"}
 
         original = et._dart_json
         et._dart_json = fake
@@ -307,6 +328,66 @@ class Engines(TournamentDirCase):
         )
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0]["executablePath"], "/bin/toy")
+
+
+_FAKE_ENGINE = """#!/bin/sh
+while read line; do
+  case "$line" in
+    uci) echo "id name Fake 1.0"; echo uciok;;
+    isready) echo readyok;;
+    go*) echo "bestmove e2e4";;
+    quit) exit 0;;
+  esac
+done
+"""
+
+
+class TheDartTool(unittest.TestCase):
+    """The tool every tournament tool shells out to, run for real: it once
+    stopped compiling when the app's launcher changed, and nothing here
+    noticed because every other test fakes `_dart_json`."""
+
+    def setUp(self) -> None:
+        try:
+            self.dart = et.dart_executable()
+        except ToolError:
+            self.skipTest("no Dart SDK")
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.dir = Path(self._tmp.name)
+
+    def test_the_tool_has_no_analysis_errors(self):
+        completed = subprocess.run(
+            [self.dart, "analyze", str(et.runner_script())],
+            capture_output=True,
+            text=True,
+            timeout=600,
+            cwd=str(et.REPO_ROOT),
+        )
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+
+    @unittest.skipIf(os.name == "nt", "the fake engines are shell scripts")
+    def test_verify_accepts_an_engine_and_rejects_a_program_that_is_not(self):
+        def engine(name: str, text: str) -> str:
+            path = self.dir / name
+            path.write_text(text, encoding="utf-8")
+            path.chmod(0o755)
+            return str(path)
+
+        good = et._dart_json(
+            ["--verify", engine("good", _FAKE_ENGINE)], timeout=600
+        )
+        self.assertTrue(good["ok"], good)
+        self.assertEqual(good["name"], "Fake 1.0")
+        self.assertEqual(good["sampleMove"], "e2e4")
+
+        bad = et._dart_json(
+            ["--verify", engine("bad", "#!/bin/sh\necho 'usage: bad'\nexit 3\n")],
+            timeout=600,
+        )
+        self.assertFalse(bad["ok"])
+        self.assertIn("crashed while starting", bad["message"])
+        self.assertEqual(bad["transcript"], ["usage: bad"])
 
 
 class Stopping(TournamentDirCase):

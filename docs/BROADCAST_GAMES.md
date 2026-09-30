@@ -36,6 +36,18 @@ weekend tournament the scoresheet is the only copy.
   `GET /api/broadcast/by/<user>` (paged). The Massachusetts Chess Association
   broadcasts as `falstan`; the owner name is in the broadcast page's embedded
   JSON (`communityOwner`).
+- Neither the website search (`/broadcast/search`) nor the monthly calendar
+  (`/broadcast/calendar/YYYY/M`) lists community broadcasts either; the
+  calendar is the official ones only. The monthly downloads on
+  `database.lichess.org` (about 1.2M broadcast games since 2023) are official
+  only too: July 2025 has the World Open but not the community-broadcast
+  US Open run in the same month.
+- Operators worth following besides `falstan`: `jsr12345` runs the DGT
+  boards for Mid-Atlantic events (World Open, Washington International,
+  Cherry Blossom, Colonial and Skyline Opens — these official) and for US
+  Chess nationals, the US Open, Chess for Cure and George Washington Open
+  (community). The owner of any broadcast is `ownerId` in its page's
+  embedded JSON.
 - Any tour is downloadable as one PGN, no login:
   `GET /api/broadcast/<tourId>.pgn`. `GET /api/broadcast/<tourId>` gives the
   rounds and whether they are finished.
@@ -74,6 +86,7 @@ weekend tournament the scoresheet is the only copy.
 |---|---|
 | `tools/lichess_broadcasts.py` | `by USER`, `tour ID...`, `search QUERY`, `status`. Writes a collection: `tours/<tourId>.pgn` per broadcast, `manifest.json`, and the merged `<collection>.pgn`. Zero dependencies |
 | `tools/chesscom_events.py` | `search QUERY`, `event SLUG...`, `status`. Same collection layout; `tours/chesscom-<slug>.pgn`. Contains the stdlib RFC 6455 + Socket.IO client |
+| `tools/lichess_broadcast_archive.py` | `fetch`, `build`, `status`. Every official Lichess broadcast from the monthly downloads, minus variants, engine games and anything TWIC or another collection already holds; builds the collection `lichess-official`. Needs `zstd` |
 | `tools/master_import_pgn.dart` | Runs the app's TWIC importer on PGN files to build a master-format database (`games` + position `book`). Runs under `flutter test` because the PGN parser depends on Flutter foundation |
 
 Collections live under `Documents/lichess_broadcasts/<collection>/` by
@@ -87,6 +100,14 @@ arrives from Lichess and chess.com with different URLs, name orders and even
 dates (one site stamps the round, the other the broadcast), so no tag the
 broadcaster set is trusted. When both sites have a game the copy with more
 information is kept, which is the chess.com one with clocks.
+
+The merged PGN writes each player one way: per order-free name key, the
+comma form some source used (`Wu, Felix`), else the name turned
+surname-first (`Emma Linyue Zhang` → `Zhang, Emma Linyue`). Lichess
+broadcasters often write `First Last` where chess.com and TWIC write
+`Last, First`, which listed the same player twice. Real respellings
+(`Shmelov, Denys` / `Shmeliov, Denis`) are different keys and stay as
+written; the player lookup joins them.
 
 Tests: `tools/test_lichess_broadcasts.py`, `tools/test_chesscom_events.py`
 (both offline; the websocket client is exercised against a scripted fake).
@@ -118,11 +139,78 @@ MASTER_IMPORT_ARGS="$HOME/Documents/lichess_broadcasts/massachusetts/massachuset
 The MCP reopens a cached handle when the database file is replaced, so a
 rebuild is picked up without restarting the server (fixed alongside this work).
 
+`player_lookup` and `people_populate` search every collection database
+(`Documents/lichess_broadcasts/<name>/<name>.db`; override the root with
+`CHESS_PREP_BROADCASTS_DIR`) alongside TWIC, and report the games per source
+under `otb.sources` — see [OPPONENT_PREP.md](OPPONENT_PREP.md#filling-the-players-directory).
+
+## The official archive and US community broadcasts
+
+`Documents/lichess_broadcasts/lichess-official/` holds every official Lichess
+broadcast since January 2020 that is not already in TWIC or another
+collection:
+
+```
+python3 tools/lichess_broadcast_archive.py fetch     # cached in ~/.cache/chess-prep/lichess-broadcast-db/
+python3 tools/lichess_broadcast_archive.py build     # months/<YYYY-MM>.pgn, manifest.json, lichess-official.db
+```
+
+The first build (23 September 2026, months 2020-01 to 2026-08) read
+1,235,275 games and kept 596,200: 530,299 were already in TWIC, a curated
+collection or an earlier month, 88,128 had no moves, 13,629 were Chess960
+and 7,019 were engine games. The 80 downloads are 693 MB; the kept month
+files 605 MB.
+
+The downloads carry no `Date` tag, so the game's `UTCDate` stands in, and a
+Lichess URL in `Site` becomes `?`. A game counts as already held when its
+full move list and result match one in TWIC, a curated collection or an
+earlier month and White shares a name part with it (`Zhou Jianchao`,
+`Zhou, Jianchao`), so a lookup never counts a game twice. Build the curated
+collections first: `build` reads whatever `*/<name>.db` exist beside it.
+Re-run both commands monthly; `build` refilters every cached month from
+scratch.
+
+A compressed copy is committed so the archive survives losing both the
+Documents copy and the download cache:
+
+```
+python3 tools/lichess_broadcast_archive.py export    # after build: xz months into scripts/data/broadcasts/lichess-official/
+python3 tools/lichess_broadcast_archive.py restore   # unpack that copy and rebuild lichess-official.db
+```
+
+The copy is one `months/<YYYY-MM>.pgn.xz` per month (about 100 MB in all,
+no file near GitHub's limits), the manifest and a README carrying the
+CC BY-SA 4.0 attribution the Lichess broadcast database requires. `export`
+recompresses only months whose PGN changed; `restore` needs only the
+standard library.
+
+Community broadcasts are not in the downloads. `us-community` collects the
+operators found so far:
+
+```
+python3 tools/lichess_broadcasts.py by jsr12345 --community-only --collection us-community
+MASTER_IMPORT_ARGS="$HOME/Documents/lichess_broadcasts/us-community/us-community.db \
+  $HOME/Documents/lichess_broadcasts/us-community/us-community.pgn" \
+  scripts/ci.sh test tools/master_import_pgn.dart
+```
+
+`--community-only` skips an owner's official broadcasts, which the archive
+already has. As of 23 September 2026 it holds `jsr12345`'s 28 community
+broadcasts, 2,400 unique games: the US Open 2025 (main event and
+invitationals), the National High School, Middle School, Elementary and K-12
+Grade championships 2024-2026, SuperNationals VIII, the Cherry Blossom
+Classic 2023, Maryland Action/Blitz 2024, the George Washington Open 2026 and
+more. A few are operator tests (`test`, `CB Test Tournament1`, `MCA Tnmt
+Test`); they relay real boards and are kept. The 126th U.S. Open (August
+2026) broadcast has no games. The committed copy is `scripts/data/broadcasts/us-community/`.
+
 ## The Massachusetts collection
 
 `scripts/data/broadcasts/massachusetts/` holds everything found for the state
-as of 9 September 2026: 94 games fetched from seven broadcasts, 75 unique
-games after merging.
+as of 23 September 2026: 94 games fetched from eight broadcasts, 75 unique
+games after merging. The eighth, `falstan`'s 2026 Masters vs Challengers
+Invitational (tour `2QchhP2O`, 11 October 2026), has no games yet; re-run
+step 2 after it.
 
 | Event | Where | Source | Games |
 |---|---|---|---|
@@ -135,7 +223,9 @@ games after merging.
 chess.com also lists a Massachusetts Girls Championship 2026 and a New
 England Blitz 2025, both with empty game lists. Searches for Boylston,
 Harvard, MIT, Worcester and the other New England states found nothing on
-either site. To grow the collection, add a broadcaster account or tour id on
+either site; a second pass on 23 September 2026 (MetroWest, Wachusett,
+Marlborough, Bay State, Greater Boston, Northeast Open, Eastern and
+Continental Class, Spiegel) found nothing new either. To grow the collection, add a broadcaster account or tour id on
 Lichess, or an event slug on chess.com, and re-run step 2.
 
 The database file itself is generated and not committed; step 3 rebuilds it

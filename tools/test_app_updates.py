@@ -87,6 +87,22 @@ class LinuxUpdateTest(unittest.TestCase):
                 app.wait()
         self.assertEqual((self.app / 'personal.pgn').read_text(), 'user annotation')
 
+    def test_a_brief_lock_probe_does_not_stop_a_starting_helper(self):
+        # The app asks whether a helper runs by taking the lock for a moment
+        # (flock -n LOCK true). A helper starting then waits for it.
+        self.bundle()
+        lock = self.root / 'updates' / 'install.lock'
+        with subprocess.Popen(['flock', str(lock), 'sleep', '0.5']) as probe:
+            for _ in range(100):
+                if subprocess.run(['flock', '-n', str(lock), 'true']).returncode:
+                    break
+                time.sleep(.01)
+            with self.launch() as helper:
+                self.assertEqual(helper.wait(timeout=15), 0)
+            probe.wait()
+        self.wait_file(self.app / 'restarted')
+        self.assertFalse((self.root / 'updates' / 'last-error.txt').exists())
+
     def test_corruption_rejected_before_any_replacement(self):
         self.bundle()
         with self.launch(digest='0' * 64) as helper:
@@ -278,6 +294,21 @@ class WindowsUpdateTest(unittest.TestCase):
         self.assertTrue((self.state / 'arguments.txt').exists(), self.diagnostics())
         self.assertFalse((self.app.parent / 'restarted.txt').exists())
         self.assertFalse(self.armed.exists())
+
+    def test_a_brief_lock_probe_does_not_stop_a_starting_helper(self):
+        # The app asks whether a helper runs by opening the lock for a
+        # moment. A helper starting then retries instead of failing.
+        lock = self.state.parent / 'install.lock'
+        probe = subprocess.Popen([sys.executable, '-c',
+            'import sys, time; f = open(sys.argv[1], "a"); '
+            'print("held", flush=True); time.sleep(1)', str(lock)],
+            stdout=subprocess.PIPE, text=True)
+        self.addCleanup(self.stop_process, probe)
+        self.assertEqual(probe.stdout.readline().strip(), 'held')
+        helper = self.launch()
+        self.finish(helper)
+        self.assertTrue((self.state / 'arguments.txt').exists(), self.diagnostics())
+        self.assertFalse((self.state.parent / 'last-error.txt').exists(), self.diagnostics())
 
     def test_cancelled_request_does_not_launch_installer(self):
         self.armed.unlink()

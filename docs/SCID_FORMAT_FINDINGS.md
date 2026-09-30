@@ -272,7 +272,8 @@ porting `stored.cpp`'s data; the accelerator is worth having on *our* side
 - `scid_namebase.dart` — the append-only `varint(len*8+type)` name file.
 - `scid_writer.dart` — the three files, written to temporaries and renamed
   together so an interrupted export leaves no half-database.
-- `tools/scid_export.dart` — `dart run tools/scid_export.dart in.pgn out_dir`.
+- The command-line `tools/scid_export.dart` was removed with the old app's
+  code; a v2 Scid export is deferred.
 
 ### How it is verified
 

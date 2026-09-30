@@ -527,8 +527,6 @@ if DEBUG:
 @app.post("/api/bughousedb/ticket")
 @limiter.limit("20/minute", key_func=bughousedb.client_ip)
 def bughousedb_ticket(req: bughousedb.TicketRequest, request: Request):
-    if TURNSTILE_SECRET and not verify_turnstile(req.cf_turnstile_token, _client_ip(request)):
-        raise HTTPException(400, "CAPTCHA verification failed. Please try again.")
     conn = bughousedb.connect()
     try:
         return bughousedb.issue_ticket(conn, req.fen, bughousedb.contributor_of(request))

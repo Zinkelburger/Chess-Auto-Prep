@@ -451,6 +451,64 @@ class TestPruningKeepsTotals(unittest.TestCase):
             tmp.cleanup()
 
 
+class SnapshotTests(unittest.TestCase):
+    def test_wal_backup_roundtrip_and_corruption(self):
+        import sqlite3
+        import json
+        from bughouse_db import snapshot
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            live = root / "live"
+            live.mkdir()
+            connections = []
+            try:
+                for name in snapshot.NAMES:
+                    con = sqlite3.connect(live / name)
+                    connections.append(con)
+                    con.execute("PRAGMA journal_mode=WAL")
+                    con.execute("CREATE TABLE sample(value TEXT)")
+                    con.execute("INSERT INTO sample VALUES('committed in WAL')")
+                    con.commit()
+                backup = root / "backup"
+                with mock.patch.object(snapshot, "CHUNK", 64):
+                    snapshot.export(live, backup)
+                snapshot.restore(backup, root / "restored")
+                for name in snapshot.NAMES:
+                    con = sqlite3.connect(root / "restored" / name)
+                    self.assertEqual(con.execute("SELECT value FROM sample").fetchone()[0], "committed in WAL")
+                    con.close()
+                with self.assertRaises(ValueError):
+                    snapshot.restore(backup, root / "restored")
+                manifest = json.loads((backup / "manifest.json").read_text())
+                part = backup / manifest["databases"][0]["chunks"][0]["name"]
+                part.write_bytes(b"damaged")
+                with self.assertRaisesRegex(ValueError, "Checksum mismatch"):
+                    snapshot.restore(backup, root / "corrupt")
+                self.assertFalse((root / "corrupt" / snapshot.NAMES[0]).exists())
+            finally:
+                for con in connections:
+                    con.close()
+
+    def test_provenance_preserves_legacy_before_replacement(self):
+        import json
+        from bughouse_db import hivemind_book as hb, provenance
+        with tempfile.TemporaryDirectory() as tmp:
+            con = hb.open_db(Path(tmp) / "book.db")
+            con.execute("INSERT INTO position VALUES(1,'fen','',0,0,'done',1500,200,1,'old date')")
+            con.execute("INSERT INTO move VALUES(1,'A:e4','A','e2e4','even',0.2,NULL,'A e4',2)")
+            provenance.preserve_legacy(con, 1)
+            con.execute("UPDATE move SET score=0.4")
+            provenance.snapshot(con, 1, "even", {"engine_name": "new build", "nodes": 3000, "child_nodes": 400})
+            provenance.preserve_legacy(con, 1)
+            rows = con.execute("SELECT provenance,moves FROM analysis_history").fetchall()
+            self.assertEqual(len(rows), 2)
+            old = next(row for row in rows if "Unknown" in row[0])
+            self.assertEqual(json.loads(old[1])[0]["score"], 0.2)
+            current = con.execute("SELECT provenance FROM current_analysis JOIN analysis_history USING(id)").fetchone()
+            self.assertEqual(json.loads(current[0])["nodes"], 3000)
+            con.close()
+
+
 if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).resolve().parent / "mcp"))
     unittest.main(verbosity=2)

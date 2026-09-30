@@ -3,8 +3,8 @@
 // and the "Pieces outstanding" line under them. Place it inside a <form>:
 // "Set position" submits it. src/bughouse/boards.ts drives it;
 // `prefix` keeps each page's element ids apart.
-interface Props { prefix: string }
-const { prefix } = Astro.props;
+interface Props { prefix: string; accessible?: boolean }
+const { prefix, accessible = false } = Astro.props;
 const STEPS = [
   { id: 'first', label: 'First move (Home)', path: 'M6 5v14M19 5l-9 7 9 7z' },
   { id: 'prev', label: 'Back (←)', path: 'M16 5l-9 7 9 7z' },
@@ -19,9 +19,11 @@ const HELP = 'Reserves: P N B R Q, e.g. 2N Q. Outstanding = pieces not on a boar
 <div class="bb-boards">
   {(['A', 'B'] as const).map((name, i) => (
     <section id={`${prefix}-panel-${name}`} class="bb-board-panel" aria-label={`Board ${i + 1}`}>
+      {accessible && <h2 class="bb-board-title">Board {i + 1}</h2>}
       <div id={`${prefix}-player-top-${name}`} class="bb-player"></div>
       <div class="bb-board-wrap">
-        <div id={`${prefix}-board-${name}`} class="bb-board" role="group" aria-label={`Board ${i + 1}`}></div>
+        <div id={`${prefix}-board-${name}`} class="bb-board" role="group" aria-label={`Board ${i + 1}`} aria-describedby={accessible ? `${prefix}-description-${name}` : undefined}></div>
+        {accessible && <p id={`${prefix}-description-${name}`} class="visually-hidden"></p>}
       </div>
       <div id={`${prefix}-player-bottom-${name}`} class="bb-player"></div>
       <ol id={`${prefix}-history-${name}`} class="bb-history" aria-label={`Moves on board ${i + 1}`}></ol>

@@ -4,7 +4,7 @@
 #   packaging/deb/build_deb.sh <version> [bundle-dir] [output-dir]
 #
 # Run after `flutter build linux --release` (and, for a release, the
-# libcdbdirect dependency-bundling step in release.yml). The bundle goes to
+# release build). The bundle goes to
 # /opt/chess-auto-prep with a /usr/bin symlink, so the shared desktop entry
 # (linux/com.example.chess_auto_prep.desktop, Exec=chess_auto_prep %f) works
 # unchanged and .pgn files open here. dpkg's desktop-file and icon triggers
