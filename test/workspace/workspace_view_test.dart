@@ -128,6 +128,7 @@ void main() {
       finds: Finds(store: FindsStore.inMemory),
       myGamesTree: ScriptedLocalGames(),
       openings: OpeningNames(() async => const []),
+      coresAvailable: 4,
     );
   }
 
@@ -347,6 +348,22 @@ void main() {
     );
     await tester.tap(find.byTooltip('Turn engine off (E)'));
     await tester.pumpAndSettle();
+    expect(tester.getTopLeft(field).dy, offAt);
+  });
+
+  testWidgets('the engine gear makes room for its settings while it is open', (
+    tester,
+  ) async {
+    await pump(tester);
+    final field = find.byTooltip('Type a move (/)');
+    final offAt = tester.getTopLeft(field).dy;
+    await tester.tap(find.byTooltip('Engine settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('CPU cores'), findsOneWidget);
+    expect(tester.getTopLeft(field).dy - offAt, engineRowHeight * 3);
+    await tester.tap(find.byTooltip('Show lines'));
+    await tester.pumpAndSettle();
+    expect(find.text('CPU cores'), findsNothing);
     expect(tester.getTopLeft(field).dy, offAt);
   });
 

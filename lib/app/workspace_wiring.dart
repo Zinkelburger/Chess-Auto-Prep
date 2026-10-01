@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import '../chess/generation/evaluation_source.dart';
 
@@ -87,6 +88,7 @@ final class WorkspaceWiring {
     finds: _finds,
     myGamesTree: _myGamesTree,
     openings: _openings,
+    coresAvailable: Platform.numberOfProcessors,
   );
 
   late final _openings = OpeningNames(_env.openingBook);

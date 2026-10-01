@@ -450,10 +450,26 @@ ThemeData darkTheme() {
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
     ),
+    sliderTheme: _slider,
     // The snackbar is pale, and the default action colour is paler still.
     extensions: const [_board],
   );
 }
+
+/// A slider sits in a row as tall as an engine line: a thin grey track,
+/// a light round thumb, no tick marks and no bubble, since the row writes
+/// its value beside it.
+final _slider = SliderThemeData(
+  trackHeight: 2,
+  activeTrackColor: _muted,
+  inactiveTrackColor: _outline,
+  thumbColor: _text,
+  overlayColor: const Color(0x14E6E6E8),
+  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+  overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+  tickMarkShape: SliderTickMarkShape.noTickMark,
+  showValueIndicator: ShowValueIndicator.never,
+);
 
 /// Button words are medium weight at the body size: thin words in a thin
 /// outline are what made the old buttons look switched off.

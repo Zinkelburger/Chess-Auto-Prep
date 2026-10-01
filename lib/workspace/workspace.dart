@@ -49,6 +49,7 @@ final class Workspace {
     required this.finds,
     required this.myGamesTree,
     required this.openings,
+    required this.coresAvailable,
   });
 
   final DocumentSession session;
@@ -84,6 +85,7 @@ final class Workspace {
           finds: finds,
           myGamesTree: myGamesTree,
           openings: openings,
+          coresAvailable: coresAvailable,
         );
   final DocumentSaver saver;
   final SettingsStore settings;
@@ -116,4 +118,7 @@ final class Workspace {
 
   /// The bundled opening names: the reading header's and the explorer's.
   final OpeningNames openings;
+
+  /// The cores this computer has: the most the engine pane offers.
+  final int coresAvailable;
 }

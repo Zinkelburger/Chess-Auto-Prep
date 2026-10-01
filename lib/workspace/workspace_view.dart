@@ -190,12 +190,14 @@ class WorkspaceView extends StatelessWidget {
               // While part of the game is hidden — a puzzle's answer — the
               // engine would read it out, so it is not shown until the
               // answer is found or shown.
-              engine: _UnlessHidden(
+              engine: (settingsOpen) => _UnlessHidden(
                 session: workspace.session,
                 child: EnginePane(
                   session: workspace.session,
                   analysis: workspace.analysis,
                   settings: workspace.settings,
+                  settingsOpen: settingsOpen,
+                  coresAvailable: workspace.coresAvailable,
                   onMove: hooks.onEngineMove,
                 ),
               ),
@@ -508,8 +510,9 @@ class _BoardAndCounter extends StatefulWidget {
   final GameOrdering? ordering;
   final MoveEntry moves;
 
-  /// The engine's lines, under the counter.
-  final Widget engine;
+  /// The engine's lines, under the counter, or its settings while the
+  /// notifier it is given says so.
+  final Widget Function(ValueNotifier<bool> settingsOpen) engine;
 
   @override
   State<_BoardAndCounter> createState() => _BoardAndCounterState();
@@ -519,18 +522,30 @@ class _BoardAndCounterState extends State<_BoardAndCounter>
     with ListeningState<_BoardAndCounter> {
   double _engineRoom = 0;
 
+  /// Whether the engine shows its settings in place of its lines: here,
+  /// because the room the pane is given depends on it.
+  final _engineSettings = ValueNotifier(false);
+
   @override
   void initState() {
     super.initState();
     _engineRoom = _room();
   }
 
-  double _room() =>
-      widget.session.shownTo == null ? enginePaneHeight(widget.analysis) : 0;
+  @override
+  void dispose() {
+    stopListening();
+    _engineSettings.dispose();
+    super.dispose();
+  }
+
+  double _room() => widget.session.shownTo == null
+      ? enginePaneHeight(widget.analysis, settingsOpen: _engineSettings.value)
+      : 0;
 
   @override
   Listenable listenableOf(_BoardAndCounter widget) =>
-      Listenable.merge([widget.session, widget.analysis]);
+      Listenable.merge([widget.session, widget.analysis, _engineSettings]);
 
   @override
   void changed() {
@@ -592,7 +607,9 @@ class _BoardAndCounterState extends State<_BoardAndCounter>
                 const SizedBox(height: Space.s),
                 SizedBox(
                   height: _engineRoom,
-                  child: SingleChildScrollView(child: widget.engine),
+                  child: SingleChildScrollView(
+                    child: widget.engine(_engineSettings),
+                  ),
                 ),
                 _navigation(),
                 if (below >= moveNoteMinHeight) ...[

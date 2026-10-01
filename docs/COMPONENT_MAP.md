@@ -70,6 +70,9 @@ Bughouse mode is offered when its engine assets are present.
   screen, Hivemind analysis, archive/book reads and saved matches.
 - Settings includes accounts, engine/training controls, diagnostics, shortcuts,
   licenses and verified update downloads/install-on-close.
+  The engine pane's gear swaps its lines in place for Lines, CPU cores and
+  Memory sliders; both views write the same settings, which the workspace
+  wiring applies to the running engine.
 
 Unported conveniences remain in the feature specs/backlog; the presence of a
 mode is not a claim of every historical v1 control being reproduced.
