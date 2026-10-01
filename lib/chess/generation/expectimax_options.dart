@@ -10,6 +10,25 @@ enum SearchMethod {
   final String label;
 }
 
+/// Where the search learns which replies the opponent plays and how often:
+/// the Maia model, or the games of a database.
+enum ReplySource {
+  maia('Maia'),
+
+  /// Lichess's masters database: titled players, over the board. Online.
+  masters('Lichess masters'),
+
+  /// Lichess's own games, at the speeds and ratings the Explorer tab asks
+  /// for. Online.
+  lichess('Lichess players'),
+
+  /// The master games on this machine.
+  twic('TWIC games');
+
+  const ReplySource(this.label);
+  final String label;
+}
+
 /// How the next search from the board is set: chosen on the Expectimax
 /// tab or in Settings, and kept between launches.
 final class ExpectimaxOptions {
@@ -21,6 +40,9 @@ final class ExpectimaxOptions {
     this.rareOnceIn = 100,
     this.evalDepth = defaultEvalDepth,
     this.source = EvaluationSource.stockfish,
+    this.replies = ReplySource.maia,
+    this.maiaFallback = true,
+    this.fallbackUnder = 10,
   });
 
   final SearchMethod method;
@@ -43,6 +65,15 @@ final class ExpectimaxOptions {
   final int evalDepth;
   final EvaluationSource source;
 
+  /// Where the opponent's replies come from.
+  final ReplySource replies;
+
+  /// Whether a position the database has fewer than [fallbackUnder] games
+  /// at is answered by Maia instead. Without it the database answers
+  /// wherever it has a game, and the search stops where it has none.
+  final bool maiaFallback;
+  final int fallbackUnder;
+
   static const defaults = ExpectimaxOptions();
 
   /// The range a search's depth may be set to, when it is set at all.
@@ -61,6 +92,9 @@ final class ExpectimaxOptions {
   /// One game in two is not rare; past this nothing is.
   static const maxRareOnceIn = 100000;
 
+  /// The most games a database may be asked for before it is believed.
+  static const maxFallbackUnder = 100000;
+
   /// The share of games under which a reply path is left unsearched.
   double get replyFloor => rareOnceIn == 0 ? 0 : 1 / rareOnceIn;
 
@@ -71,6 +105,9 @@ final class ExpectimaxOptions {
     int? rareOnceIn,
     int? evalDepth,
     EvaluationSource? source,
+    ReplySource? replies,
+    bool? maiaFallback,
+    int? fallbackUnder,
   }) => ExpectimaxOptions(
     method: method ?? this.method,
     depth: depth,
@@ -79,6 +116,9 @@ final class ExpectimaxOptions {
     rareOnceIn: rareOnceIn ?? this.rareOnceIn,
     evalDepth: evalDepth ?? this.evalDepth,
     source: source ?? this.source,
+    replies: replies ?? this.replies,
+    maiaFallback: maiaFallback ?? this.maiaFallback,
+    fallbackUnder: fallbackUnder ?? this.fallbackUnder,
   );
 
   /// These options with [depth], which may be none.
@@ -90,6 +130,9 @@ final class ExpectimaxOptions {
     rareOnceIn: rareOnceIn,
     evalDepth: evalDepth,
     source: source,
+    replies: replies,
+    maiaFallback: maiaFallback,
+    fallbackUnder: fallbackUnder,
   );
 
   Map<String, Object?> toJson() => {
@@ -100,6 +143,9 @@ final class ExpectimaxOptions {
     'rareOnceIn': rareOnceIn,
     'evalDepth': evalDepth,
     'source': source.name,
+    'replies': replies.name,
+    'maiaFallback': maiaFallback,
+    'fallbackUnder': fallbackUnder,
   };
 
   /// Reads [value]; a field that is missing, of the wrong type or out of
@@ -136,6 +182,17 @@ final class ExpectimaxOptions {
       source:
           EvaluationSource.values.asNameMap()[value['source']] ??
           defaults.source,
+      replies:
+          ReplySource.values.asNameMap()[value['replies']] ?? defaults.replies,
+      maiaFallback: value['maiaFallback'] is bool
+          ? value['maiaFallback'] as bool
+          : defaults.maiaFallback,
+      fallbackUnder: number(
+        'fallbackUnder',
+        defaults.fallbackUnder,
+        1,
+        maxFallbackUnder,
+      ),
     );
   }
 
@@ -148,7 +205,10 @@ final class ExpectimaxOptions {
       candidateMoves == other.candidateMoves &&
       rareOnceIn == other.rareOnceIn &&
       evalDepth == other.evalDepth &&
-      source == other.source;
+      source == other.source &&
+      replies == other.replies &&
+      maiaFallback == other.maiaFallback &&
+      fallbackUnder == other.fallbackUnder;
 
   @override
   int get hashCode => Object.hash(
@@ -159,5 +219,8 @@ final class ExpectimaxOptions {
     rareOnceIn,
     evalDepth,
     source,
+    replies,
+    maiaFallback,
+    fallbackUnder,
   );
 }

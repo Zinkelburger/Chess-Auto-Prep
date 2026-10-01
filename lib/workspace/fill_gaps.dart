@@ -476,7 +476,10 @@ final class FillGaps extends ChangeNotifier {
       _set(const FillIdle());
       return;
     }
-    final (tree, stoppedBy, why) = _treeOf(result);
+    final (tree, stoppedBy, why) = _treeOf(
+      result,
+      database: request.replies != ReplySource.maia,
+    );
     if (tree == null) {
       _failed('search ${target.label}', why!);
       return;
@@ -660,6 +663,7 @@ final class FillGaps extends ChangeNotifier {
       evalDepth: request.evalDepth,
       opponentRating: request.treeRating,
       evaluationSource: request.treeSource,
+      replySource: request.replyKey,
     );
     final entry = _pending.accept<void>(
       resource: _treeResource,
@@ -696,22 +700,26 @@ final class FillGaps extends ChangeNotifier {
   /// The tree [result] holds, whole or cut short, and, when the engine or
   /// the model stopped it, a few words for the status line and the full
   /// reason with the position for the log. The tree is null only when the
-  /// board itself could not be scored.
-  (SearchNode?, String?, String?) _treeOf(SearchResult result) =>
-      switch (result) {
-        SearchComplete(:final tree) ||
-        SearchIncomplete(:final tree) => (tree, null, null),
-        PolicyMissing(:final fen, :final reason, :final tree) => (
-          tree,
-          'the opponent model could not answer',
-          'The opponent model could not answer at ${fen.value}: $reason',
-        ),
-        EvaluationFailed(:final fen, :final reason, :final tree) => (
-          tree,
-          'the engine could not score a position',
-          'The engine could not score ${fen.value}: $reason',
-        ),
-      };
+  /// board itself could not be scored. A [database] of games says why in a
+  /// sentence the user can act on (log in, no connection, no games here),
+  /// so that is what the status line says.
+  (SearchNode?, String?, String?) _treeOf(
+    SearchResult result, {
+    bool database = false,
+  }) => switch (result) {
+    SearchComplete(:final tree) ||
+    SearchIncomplete(:final tree) => (tree, null, null),
+    PolicyMissing(:final fen, :final reason, :final tree) => (
+      tree,
+      database ? reason : 'the opponent model could not answer',
+      'The opponent model could not answer at ${fen.value}: $reason',
+    ),
+    EvaluationFailed(:final fen, :final reason, :final tree) => (
+      tree,
+      'the engine could not score a position',
+      'The engine could not score ${fen.value}: $reason',
+    ),
+  };
 
   /// Writes the last run's best lines, and the traps on them, into a draft
   /// chapter beside the one it was started on. The chapter is read as it

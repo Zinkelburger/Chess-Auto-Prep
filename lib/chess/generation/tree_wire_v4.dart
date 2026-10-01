@@ -76,6 +76,7 @@ String encodeTreeV4(
   int? evalDepth,
   int? opponentRating,
   String? evaluationSource,
+  String replySource = maiaReplySource,
 }) {
   final writer = _Writer(ourSide: config.side);
   final tree = writer.write(
@@ -92,8 +93,14 @@ String encodeTreeV4(
     'max_depth': writer.deepest,
     'build_complete': complete,
     'v2_evaluation_source': ?evaluationSource,
+    if (replySource != maiaReplySource) 'v2_reply_source': replySource,
     if (startMoves.isNotEmpty) 'start_moves': startMoves.join(' '),
-    'config': _configJson(config, evalDepth, opponentRating),
+    'config': _configJson(
+      config,
+      evalDepth,
+      opponentRating,
+      maiaOnly: replySource == maiaReplySource,
+    ),
     'tree': tree,
   });
 }
@@ -107,6 +114,7 @@ Future<String> encodeSearchTree(
   required int evalDepth,
   required int opponentRating,
   required String evaluationSource,
+  String replySource = maiaReplySource,
 }) => Isolate.run(
   () => encodeTreeV4(
     tree,
@@ -115,14 +123,19 @@ Future<String> encodeSearchTree(
     evalDepth: evalDepth,
     opponentRating: opponentRating,
     evaluationSource: evaluationSource,
+    replySource: replySource,
   ),
 );
+
+/// What a tree's replies are from when it does not say: the Maia model
+/// alone, as every tree was before a database could be the opponent.
+const maiaReplySource = 'maia';
 
 /// The flat snapshot the old app restores a build's settings from.
 ///
 /// The constants are what this search is: pure expectimax against a Maia
-/// policy alone, with no opening book and no master games behind the
-/// opponent's replies. The old app's own snapshot has some seventy further
+/// policy alone unless [maiaOnly] says a database of games answered for the
+/// opponent, which `v2_reply_source` then names. The old app's own snapshot has some seventy further
 /// keys, for modes this search does not have; every one of them defaults when
 /// it is absent, so they are left out rather than invented. The two the
 /// caller may know, [evalDepth] and [opponentRating], are written when it
@@ -130,8 +143,9 @@ Future<String> encodeSearchTree(
 Map<String, Object?> _configJson(
   SearchConfig config,
   int? evalDepth,
-  int? opponentRating,
-) => <String, Object?>{
+  int? opponentRating, {
+  bool maiaOnly = true,
+}) => <String, Object?>{
   'algorithm_version': config.maxOurMoves == null
       ? pureAlgorithmVersion
       : shortlistedAlgorithmVersion,
@@ -139,7 +153,7 @@ Map<String, Object?> _configJson(
   'build_mode': 'stockfishExpectimax',
   'opponent_book_source': 'none',
   'use_master_games': false,
-  'maia_only': true,
+  'maia_only': maiaOnly,
   'maia_policy_version': 1,
   'play_as_white': config.side == Side.white,
   // A search with no horizon or no window is written with numbers no build

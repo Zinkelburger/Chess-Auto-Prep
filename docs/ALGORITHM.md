@@ -200,6 +200,26 @@ the other side's column is how far a human on the move is expected to drift
 from best play. The board's tree alone drives status, Positions and drafted
 lines; the second stops with it unless the first ran its whole depth.
 
+**Where the replies come from** (2026-10-01) is the bar's `Replies from`
+choice: Maia (the default), Lichess masters, Lichess players at the speeds and
+ratings the Explorer tab is set to, or the TWIC games on this machine
+(`DatabaseOpponent` in `workspace/search_opponents.dart`). A database answers a
+position with each legal reply weighted by its games (`playedPolicy`); a move
+not legal there takes no weight and the two spellings of castling are one move.
+With `Fall back to Maia under N games` ticked (the default, N = 10), a position
+where the database has fewer than N games is answered by Maia instead. One
+position has one source: the two are never blended, and whichever answers is
+turned into shares of one over the legal moves (`Policy.sharesOver`) before the
+cut below renormalizes what is kept, so every opponent position's replies sum
+to one whatever scale its source counted in. Unticked, the database answers
+wherever it has a game and the run stops where it has none. A database that
+cannot be asked (no login, no connection, a rate limit, no TWIC import) stops
+the run with its own sentence on the status line and keeps the tree; it never
+turns into a Maia search. A saved tree records the choice
+(`v2_reply_source`, such as `masters+maia<10` or
+`lichess:Blitz,Rapid:2200,2500`; absent means Maia), and Resume only continues
+a tree whose source, narrowing and fallback match.
+
 Opponent nodes keep Maia's likeliest replies until they cover 90% of its
 distribution, at most five, and renormalize the kept shares to sum to one
 (`fillReplyMass`, `fillMaxReplies`). Maia's softmax gives every legal move some

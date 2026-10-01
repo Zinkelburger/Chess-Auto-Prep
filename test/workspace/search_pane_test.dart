@@ -206,7 +206,11 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    expect(find.byType(TextField), findsOneWidget, reason: 'the depth');
+    expect(
+      find.byType(TextField),
+      findsNWidgets(2),
+      reason: 'the depth and where the replies are from',
+    );
     expect(find.text('Maia 2200 · best 4, then 4'), findsOne);
     await tester.tap(find.byTooltip('Expectimax settings'));
     await tester.pump();
@@ -298,6 +302,38 @@ void main() {
     await tester.runAsync(() => run);
     await tester.pump();
     expect(find.text('Pause the search to change these.'), findsNothing);
+  });
+
+  testWidgets('Replies from is typed on the bar; a database brings the Maia '
+      'fallback row, and Maia\'s rating goes when Maia is never asked', (
+    tester,
+  ) async {
+    await pump(tester);
+    final replies = find.widgetWithText(TextField, 'Replies from');
+    expect(tester.widget<TextField>(replies).controller!.text, 'Maia');
+    await tester.enterText(replies, 'twic');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(settings.value.expectimax.replies, ReplySource.twic);
+    expect(FillRequest.of(settings.value).replyKey, 'twic+maia<10');
+    expect(
+      find.text('Maia 2200 under 10 games · best 4, then 4'),
+      findsOneWidget,
+    );
+    await tester.tap(find.byTooltip('Expectimax settings'));
+    await tester.pump();
+    expect(find.text('Fall back to Maia under'), findsOneWidget);
+    expect(find.text('Maia rating'), findsOneWidget);
+    await tester.enterText(box('Fall back to Maia under'), '25');
+    await tester.pump();
+    expect(FillRequest.of(settings.value).fallbackUnder, 25);
+    await tester.tap(find.byType(Checkbox));
+    await tester.pump();
+    expect(settings.value.expectimax.maiaFallback, isFalse);
+    expect(FillRequest.of(settings.value).fallbackUnder, isNull);
+    expect(FillRequest.of(settings.value).replyKey, 'twic');
+    expect(find.text('Maia rating'), findsNothing);
+    expect(find.text('best 4, then 4'), findsOneWidget);
   });
 
   testWidgets('the bar fits a pane at its narrowest', (tester) async {

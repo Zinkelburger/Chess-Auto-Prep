@@ -240,7 +240,12 @@ final class WorkspaceWiring {
     return FillReady(
       evaluator: remote ?? local,
       candidates: FixedDepthCandidates(engine, depth: request.evalDepth),
-      policy: MaiaOpponent(_env.maia, elo: request.elo),
+      policy: opponentFor(
+        request,
+        maia: _env.maia,
+        explorer: _env.lichessExplorer,
+        book: _env.masterBook,
+      ),
       continuations: FixedDepthEvaluator(engine, depth: request.evalDepth),
       release: () async {
         remote?.close();

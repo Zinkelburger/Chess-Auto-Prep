@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/chess/generation/expectimax_options.dart';
 import 'package:chess_auto_prep/features/settings/lichess_account.dart';
 import 'package:chess_auto_prep/features/settings/setting_rows.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
@@ -54,6 +55,13 @@ void main() {
     expect(store.value.expectimax.depth, 6);
     expect(store.value.expectimax.candidateMoves, 3);
     expect(store.value.expectimax.replyFloor, 0);
+    (rows.firstWhere((row) => row.label == 'Replies from').control
+            as ChoiceSetting<ReplySource>)
+        .onChanged(ReplySource.twic);
+    number('Fall back to Maia under').onChanged(25);
+    expect(store.value.expectimax.replies, ReplySource.twic);
+    expect(store.value.expectimax.fallbackUnder, 25);
+    expect(store.value.expectimax.maiaFallback, isTrue, reason: 'the default');
     number('Depth').onChanged(0);
     expect(store.value.expectimax.depth, isNull, reason: '0 is no limit');
   });
