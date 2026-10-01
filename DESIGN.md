@@ -247,7 +247,7 @@ active pane's a brighter grey. Dividers between panes are 1px lines with a
 
 ### Do:
 - **Do** keep every gap on the 4 / 8 / 12 / 16 / 24 scale and every size in `lib/ui/theme.dart`.
-- **Do** reuse the controls in `lib/ui/` (search_field, choice_field, number_field, name_dialog, confirm_dialog, row_actions, pane_tabs, selection, app_action).
+- **Do** reuse the controls in `lib/ui/` (search_field, choice_field, number_field, field_row, check_row, toggle_chip, name_dialog, confirm_dialog, row_actions, pane_tabs, selection, app_action). A stepper or choice sits in a `field_row` that names it; a set of on/off choices is `toggle_chip`s, which never grow a tick.
 - **Do** write labels and tooltips behaviour-first: the first sentence says what the control does; the binding comes from `ui/app_keys.dart`.
 - **Do** follow Lichess conventions for the board, arrows, explorer and engine lines.
 - **Do** give feedback lines, rows and panes fixed heights so nothing jumps.
