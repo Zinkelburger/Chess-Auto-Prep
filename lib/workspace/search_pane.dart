@@ -7,11 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../chess/fen.dart';
-import '../chess/generation/draft_lines.dart' show expectimaxText;
-import '../chess/generation/eval.dart';
 import '../chess/generation/mainline_book.dart' show MainlineConfig;
 import '../chess/generation/search_node.dart';
-import '../engines/engine_line.dart' show Centipawns;
 import '../storage/chapter_files.dart';
 import '../storage/settings.dart';
 import '../storage/settings_store.dart';
@@ -22,16 +19,19 @@ import 'fill_gaps.dart';
 import 'fill_states.dart';
 import 'finds.dart';
 import 'line_preview.dart';
+import 'search_table.dart';
 import '../ui/app_keys.dart';
-import '../ui/move_notation.dart';
 
 /// The Expectimax panel: the expectimax search from the
 /// board and its values.
 ///
 /// Editable search settings and the play/stop action head the panel. Under them, for the position on
-/// the board, every move the search looked at with what it is worth
-/// against the modelled opponent (Expectimax) and what the engine alone
-/// says (Engine), both from White's side. At the opponent's move each reply
+/// the board, every move the search looked at with what it is worth when
+/// White is the prepared side and Black replies as the model predicts
+/// (White), what it is worth the other way round (Black), and what the
+/// engine alone says (Engine), all from White's side: a move whose value
+/// for the other side sits well off the engine's is one the side playing
+/// it is expected to go wrong after. Each move the model was asked about
 /// also says how often it is played, and a reply that throws away half a
 /// pawn or more against their best is marked `?`: a trap. The table follows
 /// the board and fills in while the search runs. Clicking a row plays the
@@ -182,15 +182,11 @@ class _SearchPaneState extends State<SearchPane>
     setState(() => _problem = refusal);
   }
 
-  void _hover(SearchNode after, String uci, Offset anchor) {
+  void _hover(Fen after, String uci, Offset anchor) {
     _settle?.cancel();
     _settle = Timer(previewDelay, () {
       if (!mounted) return;
-      _preview.value = LinePreview(
-        fen: after.fen,
-        lastMove: uci,
-        anchor: anchor,
-      );
+      _preview.value = LinePreview(fen: after, lastMove: uci, anchor: anchor);
     });
   }
 
@@ -547,51 +543,36 @@ class _SearchPaneState extends State<SearchPane>
             ? 'Evaluating the first moves…'
             : 'Press ▶ Expectimax to evaluate moves from this position.',
       );
-    final node = widget.fill.nodeAtBoard(request: found.request);
-    return switch (node) {
+    final side = widget.session.orientation;
+    final mine = widget.fill.nodeAtBoard(request: found.request);
+    final other = widget.fill.nodeAtBoard(
+      request: found.request,
+      side: side.opposite,
+    );
+    final rows = searchRows(side: side, mine: mine, other: other);
+    if (rows.isNotEmpty) {
+      return SearchTable(
+        rows: rows,
+        ours: widget.session.fen.whiteToMove == (side == Side.white),
+        sides: found.request.method == SearchMethod.mainline
+            ? [side]
+            : const [Side.white, Side.black],
+        engineDepthAt: widget.fill.engineDepthAt,
+        onHover: (row, anchor) => _hover(row.after, row.move.uci, anchor),
+        onLeave: _leave,
+        onPlay: (row) => _play(row.move.uci),
+      );
+    }
+    return switch (mine ?? other) {
       null => _offTree(context, found),
-      OurNode(:final candidates) => _rows(
-        context,
-        side: found.side,
-        ours: true,
-        rows: [
-          for (final c in candidates)
-            _Row(move: c.move, after: c.child, share: null, trap: false),
-        ],
-      ),
-      OpponentNode(:final replies) => _rows(
-        context,
-        side: found.side,
-        ours: false,
-        rows: _replyRows(replies),
-      ),
       TerminalNode() => _sentence(context, 'The game is over here.'),
-      HorizonNode() || FrontierNode() => _sentence(
+      _ => _sentence(
         context,
         widget.fill.running
             ? 'Not reached yet.'
             : 'The search stopped before this position.',
       ),
     };
-  }
-
-  /// The replies, most played first, each marked when it loses half a pawn
-  /// or more against the best of them.
-  List<_Row> _replyRows(List<ReplyMove> replies) {
-    final best = replies
-        .map((r) => r.child.evalForUs.cp)
-        .reduce((a, b) => a < b ? a : b);
-    final sorted = [...replies]
-      ..sort((a, b) => b.probability.compareTo(a.probability));
-    return [
-      for (final r in sorted)
-        _Row(
-          move: r.move,
-          after: r.child,
-          share: r.probability,
-          trap: r.child.evalForUs.cp - best >= trapLossCp,
-        ),
-    ];
   }
 
   Widget _offTree(BuildContext context, FillFound found) {
@@ -630,38 +611,6 @@ class _SearchPaneState extends State<SearchPane>
     padding: const EdgeInsets.all(Space.m),
     child: Text(words, style: Theme.of(context).textTheme.bodySmall),
   );
-
-  Widget _rows(
-    BuildContext context, {
-    required Side side,
-    required bool ours,
-    required List<_Row> rows,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _Header(ours: ours),
-        Expanded(
-          child: ListView.builder(
-            itemCount: rows.length,
-            itemBuilder: (context, index) {
-              final row = rows[index];
-              return _RowView(
-                key: ValueKey(row.move.uci),
-                row: row,
-                engineDepth: widget.fill.engineDepthAt(row.after.fen),
-                side: side,
-                ours: ours,
-                onHover: (anchor) => _hover(row.after, row.move.uci, anchor),
-                onLeave: _leave,
-                onTap: () => _play(row.move.uci),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
 
   Widget _writtenLines(BuildContext context, LinesWritten lines) {
     final theme = Theme.of(context);
@@ -744,25 +693,6 @@ bool _sameLine(List<String> a, List<String> b) {
   return true;
 }
 
-/// A reply that loses this much against the opponent's best is a trap.
-const trapLossCp = 50;
-
-/// One move of the table: the move, where it leads, how often the opponent
-/// plays it (null at our move) and whether it is a trap.
-final class _Row {
-  const _Row({
-    required this.move,
-    required this.after,
-    required this.share,
-    required this.trap,
-  });
-
-  final MoveRef move;
-  final SearchNode after;
-  final double? share;
-  final bool trap;
-}
-
 /// A labelled number field, narrow enough for several in a row.
 class _NumberBox extends StatelessWidget {
   const _NumberBox({
@@ -805,161 +735,4 @@ class _NumberBox extends StatelessWidget {
       onChanged: (_) => onChanged?.call(),
     ),
   );
-}
-
-/// The column names over the rows.
-class _Header extends StatelessWidget {
-  const _Header({required this.ours});
-
-  final bool ours;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final style = theme.textTheme.labelSmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
-    return SizedBox(
-      height: searchHeaderHeight,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: Space.m),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(ours ? 'Your move' : 'Their reply', style: style),
-            ),
-            if (!ours)
-              SizedBox(
-                width: searchShareWidth,
-                child: Text('Played', style: style, textAlign: TextAlign.right),
-              ),
-            SizedBox(
-              width: searchValueWidth,
-              child: Text(
-                'Expectimax',
-                style: style,
-                textAlign: TextAlign.right,
-              ),
-            ),
-            SizedBox(
-              width: searchValueWidth,
-              child: Text('Engine', style: style, textAlign: TextAlign.right),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _RowView extends StatelessWidget {
-  const _RowView({
-    super.key,
-    required this.row,
-    required this.engineDepth,
-    required this.side,
-    required this.ours,
-    required this.onHover,
-    required this.onLeave,
-    required this.onTap,
-  });
-
-  final _Row row;
-  final int? engineDepth;
-
-  /// The side the search played for, whose point of view the values are
-  /// kept in; they are shown from White's.
-  final Side side;
-  final bool ours;
-  final ValueChanged<Offset> onHover;
-  final VoidCallback onLeave;
-  final VoidCallback onTap;
-
-  Offset _anchor(BuildContext context) {
-    final box = context.findRenderObject() as RenderBox;
-    return box.localToGlobal(Offset(box.size.width / 2, box.size.height));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final ink = monoText.copyWith(color: scheme.onSurface);
-    final muted = monoText.copyWith(color: scheme.onSurfaceVariant);
-    final after = row.after;
-    // An unexpanded move is worth only what the engine says; the search's
-    // own value is not in yet.
-    final searched = after is! FrontierNode;
-    final white = side == Side.white;
-    final score = after.valuation.value;
-    final share = row.share;
-    return MouseRegion(
-      onEnter: (_) => onHover(_anchor(context)),
-      onExit: (_) => onLeave(),
-      child: InkWell(
-        onTap: onTap,
-        child: SizedBox(
-          height: searchRowHeight,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: Space.m),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    displaySan(
-                      context,
-                      row.trap ? '${row.move.san}?' : row.move.san,
-                    ),
-                    style: ink,
-                  ),
-                ),
-                if (share != null)
-                  SizedBox(
-                    width: searchShareWidth,
-                    child: Text(
-                      _percent(share),
-                      style: muted,
-                      textAlign: TextAlign.right,
-                    ),
-                  ),
-                SizedBox(
-                  width: searchValueWidth,
-                  child: Text(
-                    searched ? expectimaxText(white ? score : 1 - score) : '…',
-                    style: searched ? ink : muted,
-                    textAlign: TextAlign.right,
-                  ),
-                ),
-                SizedBox(
-                  width: searchValueWidth,
-                  child: Tooltip(
-                    message: engineDepth == null
-                        ? 'Depth unknown (saved or database result)'
-                        : 'Depth $engineDepth',
-                    child: Text(
-                      _engineText(after.evalForUs, white: white),
-                      style: muted,
-                      textAlign: TextAlign.right,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The engine's verdict from White's side, as the engine pane writes one;
-/// a mate the search found is `#`.
-String _engineText(Eval eval, {required bool white}) {
-  final cp = white ? eval.cp : -eval.cp;
-  if (cp.abs() >= mateSaturationCp) return cp > 0 ? '+#' : '-#';
-  return Centipawns(cp).text;
-}
-
-String _percent(double share) {
-  final percent = (share * 100).round();
-  return percent < 1 ? '<1%' : '$percent%';
 }

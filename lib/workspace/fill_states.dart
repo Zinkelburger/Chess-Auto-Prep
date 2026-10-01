@@ -1,12 +1,15 @@
 import 'package:dartchess/dartchess.dart' show Side;
 
 import '../chess/fen.dart';
+import '../chess/generation/eval.dart';
 import '../chess/generation/evaluation_source.dart';
 import '../chess/generation/mainline_book.dart';
 import '../chess/generation/search_config.dart';
 import '../chess/generation/search_node.dart';
 import '../chess/generation/sources.dart';
 import '../chess/generation/tree_wire_v4_reader.dart';
+import '../chess/pgn/chapter.dart';
+import '../chess/pgn/game_tree.dart';
 import '../diagnostics/log.dart';
 import '../net/chessdb_moves.dart';
 import '../storage/chapter_files.dart';
@@ -307,4 +310,87 @@ final class LinesFailed extends LinesState {
   const LinesFailed(this.reason);
 
   final String reason;
+}
+
+/// Where a run began: the document's root and the moves from it to the
+/// board, the side searched for, and — when the run can become lines —
+/// the chapter as it was and its file.
+final class FillTarget {
+  const FillTarget({
+    required this.rootFen,
+    required this.cursor,
+    required this.sans,
+    required this.side,
+    this.chapter,
+  });
+
+  final Fen rootFen;
+  final NodePath cursor;
+  final List<String> sans;
+  final Side side;
+  final (Chapter, ChapterRef)? chapter;
+
+  /// How the log names the run.
+  String get label => chapter?.$2.path ?? 'the board';
+
+  /// The same start searched for the other side, for its values alone: it
+  /// is never written as lines.
+  FillTarget get mirror => FillTarget(
+    rootFen: rootFen,
+    cursor: cursor,
+    sans: sans,
+    side: side.opposite,
+  );
+}
+
+/// [seed]'s position as the search for the other side starts from it: not
+/// expanded, with the score the engine already gave it, which is the same
+/// fact from the other side.
+SearchNode? mirrorStart(SearchNode? seed) => seed == null || !seed.evaluated
+    ? null
+    : FrontierNode(fen: seed.fen, evalForUs: Eval(-seed.evalForUs.cp));
+
+/// The tree of the last run, where it was started and what it was asked.
+final class FillFound {
+  const FillFound({
+    required this.target,
+    required this.request,
+    required this.tree,
+  });
+
+  final FillTarget target;
+  final FillRequest request;
+
+  /// The search tree from the position the run started at.
+  final SearchNode tree;
+
+  Side get side => target.side;
+
+  /// The chapter the run can be written into as lines, and its file.
+  (Chapter, ChapterRef)? get chapter => target.chapter;
+
+  /// The node for the position reached from [root] by [sans], or null when
+  /// that position is not in the search: another document, a line that
+  /// leaves the tree, or a position before the one the run started at.
+  SearchNode? at(Fen root, List<String> sans) {
+    if (root != target.rootFen || sans.length < target.sans.length) {
+      return null;
+    }
+    for (final (i, san) in target.sans.indexed) {
+      if (sans[i] != san) return null;
+    }
+    SearchNode node = tree;
+    for (final san in sans.skip(target.sans.length)) {
+      final next = switch (node) {
+        OurNode(:final candidates) =>
+          candidates.where((c) => c.move.san == san).firstOrNull?.child,
+        OpponentNode(:final replies) =>
+          replies.where((r) => r.move.san == san).firstOrNull?.child,
+        _ => null,
+      };
+      if (next == null) return null;
+      node = next;
+    }
+    return node;
+  }
 }

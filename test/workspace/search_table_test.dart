@@ -1,0 +1,187 @@
+import 'package:chess_auto_prep/chess/fen.dart';
+import 'package:chess_auto_prep/chess/generation/eval.dart';
+import 'package:chess_auto_prep/chess/generation/search_node.dart';
+import 'package:chess_auto_prep/ui/theme.dart';
+import 'package:chess_auto_prep/workspace/search_table.dart';
+import 'package:dartchess/dartchess.dart' show Side;
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+const _board = Fen('r4rk1/pppbqppp/2n5/8/3N4/2N5/PPP2PPP/R2QR1K1 b - - 2 13');
+
+MoveRef _move(String san) => MoveRef(uci: san.toLowerCase(), san: san);
+
+/// A searched leaf worth [cp] to the side the tree is for.
+SearchNode _worth(String name, int cp) =>
+    HorizonNode(fen: Fen(name), evalForUs: Eval(cp));
+
+void main() {
+  // Black to move. Searched for Black, the board is Black's choice of the
+  // engine's best; searched for White, it is the replies Maia expects.
+  final forBlack = OurNode.over(
+    fen: _board,
+    evalForUs: const Eval(0),
+    candidates: [
+      CandidateMove(move: _move('Qf6'), child: _worth('after Qf6', -10)),
+      CandidateMove(move: _move('Qb4'), child: _worth('after Qb4', 20)),
+      CandidateMove(
+        move: _move('Qc5'),
+        child: const FrontierNode(fen: Fen('after Qc5'), evalForUs: Eval(-30)),
+      ),
+    ],
+  );
+  final forWhite = OpponentNode.over(
+    fen: _board,
+    evalForUs: const Eval(0),
+    replies: [
+      ReplyMove(
+        move: _move('Qb4'),
+        probability: 0.25,
+        child: _worth('after Qb4', 150),
+      ),
+      ReplyMove(
+        move: _move('Qf6'),
+        probability: 0.6,
+        child: _worth('after Qf6', 15),
+      ),
+      ReplyMove(
+        move: _move('Qd6'),
+        probability: 0.15,
+        child: _worth('after Qd6', 90),
+      ),
+    ],
+  );
+
+  group('searchRows', () {
+    test('at our move: our candidates best first with both sides\' values, '
+        'then the moves only the model expects', () {
+      final rows = searchRows(
+        side: Side.black,
+        mine: forBlack,
+        other: forWhite,
+      );
+      expect([for (final r in rows) r.move.san], ['Qb4', 'Qf6', 'Qc5', 'Qd6']);
+      final qb4 = rows[0];
+      // Black's search is worth +20 to Black here: under a half for White.
+      expect(qb4.black!.forWhite, lessThan(0.5));
+      expect(qb4.black!.searched, isTrue);
+      // White's search has White well ahead after the same move.
+      expect(qb4.white!.forWhite, greaterThan(0.6));
+      expect(qb4.share, 0.25);
+      expect(qb4.engineCp, -20, reason: 'from White\'s side');
+      expect(qb4.trap, isFalse, reason: 'our own move is never a trap');
+      final qc5 = rows[2];
+      expect(qc5.black!.searched, isFalse, reason: 'not expanded yet');
+      expect(qc5.white, isNull, reason: 'the model did not expect it');
+      expect(qc5.share, isNull);
+      final qd6 = rows[3];
+      expect(qd6.black, isNull, reason: 'not among the engine\'s best');
+      expect(qd6.engineCp, 90);
+    });
+
+    test('at their reply: most played first, traps marked, then our '
+        'search\'s other moves', () {
+      final rows = searchRows(
+        side: Side.white,
+        mine: forWhite,
+        other: forBlack,
+      );
+      expect([for (final r in rows) r.move.san], ['Qf6', 'Qb4', 'Qd6', 'Qc5']);
+      expect([for (final r in rows) r.trap], [false, true, true, false]);
+      expect(rows[0].share, 0.6);
+    });
+
+    test('one search alone still fills its side', () {
+      final rows = searchRows(side: Side.black, mine: forBlack);
+      expect(rows, hasLength(3));
+      expect(rows.every((r) => r.white == null && r.share == null), isTrue);
+      expect(searchRows(side: Side.white), isEmpty);
+      expect(
+        searchRows(side: Side.white, mine: _worth('leaf', 0)),
+        isEmpty,
+        reason: 'a leaf has no moves',
+      );
+    });
+  });
+
+  group('SearchTable', () {
+    Future<void> pump(
+      WidgetTester tester, {
+      required double width,
+      List<Side> sides = const [Side.white, Side.black],
+      ValueChanged<SearchRow>? onPlay,
+    }) => tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: width,
+              height: 300,
+              child: SearchTable(
+                rows: searchRows(
+                  side: Side.black,
+                  mine: forBlack,
+                  other: forWhite,
+                ),
+                ours: true,
+                sides: sides,
+                engineDepthAt: (after) =>
+                    after.value == 'after Qb4' ? 18 : null,
+                onHover: (_, _) {},
+                onLeave: () {},
+                onPlay: onPlay ?? (_) {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    testWidgets('a column for each side beside the engine, and the share', (
+      tester,
+    ) async {
+      SearchRow? played;
+      await pump(tester, width: 480, onPlay: (row) => played = row);
+      for (final name in ['Your move', 'Played', 'White', 'Black', 'Engine']) {
+        expect(find.text(name), findsOneWidget);
+      }
+      expect(
+        find.byTooltip(
+          'White plays its best moves; Black replies as Maia predicts. '
+          'Scored from White\'s side.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('25%'), findsOneWidget);
+      // Qb4: White's search has White a pawn and a half up, Black's has
+      // Black slightly better, and the engine agrees with Black's.
+      expect(find.text('+1.50'), findsOneWidget);
+      expect(find.text('-0.20'), findsNWidgets(2));
+      expect(find.text('…'), findsOneWidget, reason: 'Qc5 is not searched');
+      expect(find.byTooltip('Depth 18'), findsOneWidget);
+      await tester.tap(find.text('Qb4'));
+      expect(played?.move.san, 'Qb4');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a narrow pane leaves out Played and keeps the values', (
+      tester,
+    ) async {
+      await pump(tester, width: 240);
+      expect(find.text('Played'), findsNothing);
+      expect(find.text('25%'), findsNothing);
+      expect(find.text('White'), findsOneWidget);
+      expect(find.text('Black'), findsOneWidget);
+      expect(find.text('Engine'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the mainline book has one value column', (tester) async {
+      await pump(tester, width: 480, sides: const [Side.black]);
+      expect(find.text('Value'), findsOneWidget);
+      expect(find.text('White'), findsNothing);
+      expect(find.text('Black'), findsNothing);
+    });
+  });
+}

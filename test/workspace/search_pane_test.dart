@@ -275,7 +275,10 @@ void main() {
     // Depth is on the Engine value's hover, not a column of its own.
     expect(find.byTooltip('Depth 22'), findsWidgets);
     expect(find.text('22'), findsNothing);
-    expect(find.text('Expectimax'), findsOneWidget, reason: 'the column');
+    // A value for each side beside the engine's: the model here answers
+    // for Black alone, so only White's search has any.
+    expect(find.text('White'), findsOneWidget);
+    expect(find.text('Black'), findsOneWidget);
     expect(
       find.widgetWithText(FilledButton, 'Resume expectimax'),
       findsOneWidget,
