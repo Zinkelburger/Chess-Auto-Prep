@@ -91,9 +91,13 @@ static void install_menu_entry() {
   }
 
   // Absolute Exec path, refreshed every launch so the entry keeps working
-  // if the user moves the unzipped app folder. %f is the file the desktop
-  // was asked to open with us.
-  g_autofree gchar* exec_quoted = g_shell_quote(exe_path);
+  // if the user moves the unzipped app folder or the AppImage. Inside an
+  // AppImage the executable is on a mount that is gone once the app closes,
+  // so the entry starts the AppImage file the runtime names in APPIMAGE.
+  // %f is the file the desktop was asked to open with us.
+  const gchar* app_image = g_getenv("APPIMAGE");
+  g_autofree gchar* exec_quoted = g_shell_quote(
+      app_image != nullptr && *app_image != '\0' ? app_image : exe_path);
   g_autofree gchar* desktop_data = g_strdup_printf(
       "[Desktop Entry]\n"
       "Type=Application\n"

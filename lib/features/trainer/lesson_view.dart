@@ -186,56 +186,74 @@ class _OnLine extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final drill = lesson.drill;
     final wrong = drill.stage is Missed || drill.stage is Corrected;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
+    final openInBuilder = Tooltip(
+      message: 'End this sitting and inspect the shown position',
+      child: TextButton(
+        onPressed: trainer.lessonToRead == null ? null : _read,
+        child: const Text('Open in Builder'),
+      ),
+    );
+    final moves = peeking
+        ? _LinePeek(drill: drill, onClose: () => onPeek(false))
+        : _MovesSoFar(drill: drill);
+    // A narrow or short pane scrolls the lesson, the moves inline, rather
+    // than squeezing the moves to nothing.
+    return LayoutBuilder(
+      builder: (context, room) {
+        final compact =
+            room.maxHeight < _roomyHeight || room.maxWidth < _roomyWidth;
+        final column = Column(
+          mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(child: _Heading(lesson: lesson)),
-            Tooltip(
-              message: 'End this sitting and inspect the shown position',
-              child: TextButton(
-                onPressed: trainer.lessonToRead == null ? null : _read,
-                child: const Text('Open in Builder'),
+            if (compact) ...[
+              _Heading(lesson: lesson),
+              Align(alignment: Alignment.centerLeft, child: openInBuilder),
+            ] else
+              Row(
+                children: [
+                  Expanded(child: _Heading(lesson: lesson)),
+                  openInBuilder,
+                ],
               ),
+            const SizedBox(height: Space.l),
+            Text(
+              displaySan(context, prompt(lesson)),
+              style: text.titleLarge?.copyWith(
+                color: wrong ? Theme.of(context).colorScheme.error : null,
+              ),
+            ),
+            const SizedBox(height: Space.m),
+            compact ? moves : Expanded(child: moves),
+            for (final (failure, doing) in [
+              (lesson.unlogged, 'save that answer'),
+              (lesson.notExcluded, 'exclude that line'),
+            ])
+              if (failure != null)
+                Text(
+                  progressProblem(failure, doing: doing),
+                  style: text.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+            const SizedBox(height: Space.s),
+            _Control(lesson: lesson),
+            const Divider(height: Space.l),
+            _Footer(
+              lesson: lesson,
+              trainer: trainer,
+              onPeek: peeking ? null : () => onPeek(true),
             ),
           ],
-        ),
-        const SizedBox(height: Space.l),
-        Text(
-          displaySan(context, prompt(lesson)),
-          style: text.titleLarge?.copyWith(
-            color: wrong ? Theme.of(context).colorScheme.error : null,
-          ),
-        ),
-        const SizedBox(height: Space.m),
-        Expanded(
-          child: peeking
-              ? _LinePeek(drill: drill, onClose: () => onPeek(false))
-              : _MovesSoFar(drill: drill),
-        ),
-        for (final (failure, doing) in [
-          (lesson.unlogged, 'save that answer'),
-          (lesson.notExcluded, 'exclude that line'),
-        ])
-          if (failure != null)
-            Text(
-              progressProblem(failure, doing: doing),
-              style: text.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.error,
-              ),
-            ),
-        const SizedBox(height: Space.s),
-        _Control(lesson: lesson),
-        const Divider(height: Space.l),
-        _Footer(
-          lesson: lesson,
-          trainer: trainer,
-          onPeek: peeking ? null : () => onPeek(true),
-        ),
-      ],
+        );
+        return compact ? SingleChildScrollView(child: column) : column;
+      },
     );
   }
+
+  /// The room the lesson needs to give the moves the height left over.
+  static const _roomyHeight = 560.0;
+  static const _roomyWidth = 400.0;
 
   void _read() {
     if (trainer.lesson != lesson) return;
@@ -461,25 +479,38 @@ class _Footer extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(
     children: [
-      Tooltip(
-        message: AppKey.skipLine.tip('Skip this line'),
-        child: TextButton(onPressed: lesson.skip, child: const Text('Skip')),
+      // A narrow pane wraps these rather than cutting them off.
+      Expanded(
+        child: Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Tooltip(
+              message: AppKey.skipLine.tip('Skip this line'),
+              child: TextButton(
+                onPressed: lesson.skip,
+                child: const Text('Skip'),
+              ),
+            ),
+            TextButton(
+              onPressed: lesson.restart,
+              child: const Text('Restart line'),
+            ),
+            RowActions(
+              tooltip: 'Line actions',
+              children: [
+                MenuItemButton(
+                  onPressed: onPeek,
+                  child: const Text('View moves and notes'),
+                ),
+                MenuItemButton(
+                  onPressed: () => unawaited(lesson.exclude()),
+                  child: const Text('Exclude from training'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
-      TextButton(onPressed: lesson.restart, child: const Text('Restart line')),
-      RowActions(
-        tooltip: 'Line actions',
-        children: [
-          MenuItemButton(
-            onPressed: onPeek,
-            child: const Text('View moves and notes'),
-          ),
-          MenuItemButton(
-            onPressed: () => unawaited(lesson.exclude()),
-            child: const Text('Exclude from training'),
-          ),
-        ],
-      ),
-      const Spacer(),
       Tooltip(
         message: AppKey.leaveLesson.tip('Back to lines'),
         child: TextButton(

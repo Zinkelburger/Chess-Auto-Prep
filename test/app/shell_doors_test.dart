@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/ui/pane_tabs.dart';
 import 'package:chess_auto_prep/workspace/workspace_tabs.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:flutter/services.dart';
+import 'package:chess_auto_prep/workspace/explorer_pane.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_explorer.dart';
@@ -228,10 +229,12 @@ void main() {
     w.session.forward();
     final ply = w.explorer.ply;
     expect(ply, greaterThan(0));
-    // Four tabs can be wider than the card; the strip scrolls.
-    await tester.ensureVisible(find.text('Explorer'));
-    await tester.tap(find.text('Explorer'));
+    // The builder's book starts shut: its button shows the explorer under
+    // the moves.
+    expect(find.byType(ExplorerPane), findsNothing);
+    await tester.tap(find.byTooltip('Show the opening book under the moves'));
     await tester.pumpAndSettle();
+    expect(find.byType(ExplorerPane), findsOneWidget);
     await tester.ensureVisible(find.textContaining('Carlsen, M'));
     await tester.tap(find.textContaining('Carlsen, M'));
     await tester.pumpAndSettle();
@@ -256,10 +259,12 @@ void main() {
     await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
     w.lichess.pgn = null;
-    // Four tabs can be wider than the card; the strip scrolls.
-    await tester.ensureVisible(find.text('Explorer'));
-    await tester.tap(find.text('Explorer'));
+    // The builder's book starts shut: its button shows the explorer under
+    // the moves.
+    expect(find.byType(ExplorerPane), findsNothing);
+    await tester.tap(find.byTooltip('Show the opening book under the moves'));
     await tester.pumpAndSettle();
+    expect(find.byType(ExplorerPane), findsOneWidget);
     await tester.ensureVisible(find.textContaining('Carlsen, M'));
     await tester.tap(find.textContaining('Carlsen, M'));
     await tester.pumpAndSettle();

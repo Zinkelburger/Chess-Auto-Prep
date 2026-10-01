@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../chess/players/player.dart';
+import '../../ui/field_row.dart';
 import '../../ui/file_names.dart';
 import '../../ui/number_field.dart';
 import '../../ui/theme.dart';
@@ -54,7 +55,7 @@ class _GroupDialogState extends State<_GroupDialog> {
   Widget build(BuildContext context) => AlertDialog(
     title: Text(widget.group == null ? 'New group' : 'Edit group'),
     content: SizedBox(
-      width: 400,
+      width: nameDialogWidth,
       child: Form(
         key: form,
         child: Column(
@@ -84,14 +85,17 @@ class _GroupDialogState extends State<_GroupDialog> {
               },
             ),
             const SizedBox(height: Space.m),
-            NumberField(
+            FieldRow(
               label: 'Rounds',
-              value: rounds,
-              min: 1,
-              max: 30,
-              onChanged: (v) {
-                if (mounted) setState(() => rounds = v);
-              },
+              child: NumberField(
+                label: 'Rounds',
+                value: rounds,
+                min: 1,
+                max: 30,
+                onChanged: (v) {
+                  if (mounted) setState(() => rounds = v);
+                },
+              ),
             ),
           ],
         ),

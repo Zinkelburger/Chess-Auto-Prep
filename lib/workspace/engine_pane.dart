@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 
@@ -10,6 +11,7 @@ import '../ui/listening_state.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
 import 'engine_analysis.dart';
+import 'engine_settings.dart';
 import 'line_preview.dart';
 import '../ui/app_keys.dart';
 import '../ui/move_notation.dart';
@@ -25,22 +27,32 @@ import '../ui/move_notation.dart';
 /// after it on a small board; clicking a move plays the line up to it.
 /// A chevron opens a long line out to several rows. The crosshair at the
 /// status row's end shows what the side not to move threatens, as a red
-/// arrow on the board; the choice is the user's setting.
+/// arrow on the board; the choice is the user's setting. The gear beside it
+/// turns the rows into the engine's settings and back, as Lichess's does.
 class EnginePane extends StatefulWidget {
   const EnginePane({
     super.key,
     required this.session,
     required this.analysis,
     required this.settings,
+    required this.settingsOpen,
+    required this.coresAvailable,
     this.onMove,
   });
 
   final DocumentSession session;
   final EngineAnalysis analysis;
 
-  /// Where the threat's crosshair keeps its choice; the analysis follows
-  /// the setting.
+  /// Where the threat's crosshair and the gear's sliders keep their
+  /// choices; the analysis follows the settings.
   final SettingsStore settings;
+
+  /// Whether the engine's settings show in place of its lines. Held by
+  /// whoever sizes the pane, since the settings may need more room.
+  final ValueNotifier<bool> settingsOpen;
+
+  /// The cores this computer has, the most the cores slider offers.
+  final int coresAvailable;
 
   /// Where a clicked line's moves go; null plays them into the document.
   final ValueChanged<String>? onMove;
@@ -116,16 +128,29 @@ class _EnginePaneState extends State<EnginePane>
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([widget.analysis, widget.session]),
+      listenable: Listenable.merge([
+        widget.analysis,
+        widget.session,
+        widget.settingsOpen,
+      ]),
       builder: (context, _) => LinePreviewOverlay(
         preview: _preview,
         orientation: widget.session.orientation,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Header(analysis: widget.analysis, settings: widget.settings),
+            _Header(
+              analysis: widget.analysis,
+              settings: widget.settings,
+              settingsOpen: widget.settingsOpen,
+            ),
+            if (widget.settingsOpen.value)
+              EngineSettingsView(
+                settings: widget.settings,
+                coresAvailable: widget.coresAvailable,
+              )
             // Paused, only the status row remains.
-            if (widget.analysis.enabled && !widget.analysis.paused)
+            else if (widget.analysis.enabled && !widget.analysis.paused)
               for (
                 var multiPv = 1;
                 multiPv <= widget.analysis.multiPv;
@@ -157,20 +182,27 @@ class _EnginePaneState extends State<EnginePane>
   }
 }
 
-/// The height reserved only while the engine has something to show.
-double enginePaneHeight(EngineAnalysis analysis) =>
-    engineBarHeight +
-    (analysis.enabled && !analysis.paused
-        ? analysis.multiPv * engineRowHeight
-        : 0);
+/// The height reserved only while the engine has something to show. Its
+/// settings take at least their own rows and otherwise the lines' room, so
+/// opening them over three or more lines does not move the board.
+double enginePaneHeight(EngineAnalysis analysis, {bool settingsOpen = false}) {
+  final lines = analysis.enabled && !analysis.paused ? analysis.multiPv : 0;
+  final rows = settingsOpen ? max(lines, engineSettingRows) : lines;
+  return engineBarHeight + rows * engineRowHeight;
+}
 
-/// A sliding switch beside the engine's status, visible when off too, and
-/// the threat's crosshair.
+/// A sliding switch beside the engine's status, visible when off too, the
+/// threat's crosshair and the settings' gear.
 class _Header extends StatelessWidget {
-  const _Header({required this.analysis, required this.settings});
+  const _Header({
+    required this.analysis,
+    required this.settings,
+    required this.settingsOpen,
+  });
 
   final EngineAnalysis analysis;
   final SettingsStore settings;
+  final ValueNotifier<bool> settingsOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -219,17 +251,10 @@ class _Header extends StatelessWidget {
               ),
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.gps_fixed, size: IconSize.menu),
+          _HeaderToggle(
+            icon: Icons.gps_fixed,
             tooltip: analysis.threatShown ? 'Hide threat' : 'Show threat',
-            isSelected: analysis.threatShown,
-            color: scheme.onSurfaceVariant,
-            selectedIcon: Icon(
-              Icons.gps_fixed,
-              size: IconSize.menu,
-              color: scheme.primary,
-            ),
-            visualDensity: VisualDensity.compact,
+            selected: analysis.threatShown,
             onPressed: analysis.enabled
                 ? () => unawaited(
                     settings.update(
@@ -240,8 +265,43 @@ class _Header extends StatelessWidget {
                   )
                 : null,
           ),
+          _HeaderToggle(
+            icon: Icons.settings,
+            tooltip: settingsOpen.value ? 'Show lines' : 'Engine settings',
+            selected: settingsOpen.value,
+            onPressed: () => settingsOpen.value = !settingsOpen.value,
+          ),
         ],
       ),
+    );
+  }
+}
+
+/// A small icon at the header's end, muted, in the accent while it is on.
+class _HeaderToggle extends StatelessWidget {
+  const _HeaderToggle({
+    required this.icon,
+    required this.tooltip,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final bool selected;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return IconButton(
+      icon: Icon(icon, size: IconSize.menu),
+      tooltip: tooltip,
+      isSelected: selected,
+      color: scheme.onSurfaceVariant,
+      selectedIcon: Icon(icon, size: IconSize.menu, color: scheme.primary),
+      visualDensity: VisualDensity.compact,
+      onPressed: onPressed,
     );
   }
 }

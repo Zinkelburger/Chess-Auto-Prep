@@ -154,6 +154,50 @@ class _PlayerDialogState extends State<_PlayerDialog> {
     }
   }
 
+  /// One box of the form, with what it refuses.
+  Widget _field(String key, {String? helper}) => TextFormField(
+    controller: _boxes[key],
+    autofocus: key == 'name',
+    minLines: key == 'notes' ? 3 : 1,
+    maxLines: key == 'notes' ? 6 : 1,
+    decoration: InputDecoration(labelText: fields[key], helperText: helper),
+    validator: (value) {
+      final text = value?.trim() ?? '';
+      if (key == 'name' && text.isEmpty) return 'Enter a player name.';
+      if ({'uscf_id', 'fide_id', 'rating'}.contains(key) &&
+          text.isNotEmpty &&
+          !RegExp(r'^\d+$').hasMatch(text)) {
+        return 'Use digits only.';
+      }
+      if ({'chesscom', 'lichess'}.contains(key) &&
+          text.isNotEmpty &&
+          !RegExp(r'^[a-zA-Z0-9_,;\s-]+$').hasMatch(text)) {
+        return 'Enter usernames, not profile URLs.';
+      }
+      return null;
+    },
+  );
+
+  /// Who they are, where their games come from, then the numbers that
+  /// identify them side by side, and the notes last.
+  List<Widget> _rows() => [
+    _field('name'),
+    _field('chesscom', helper: 'Separate several with commas.'),
+    _field('lichess', helper: 'Separate several with commas.'),
+    _field('aliases', helper: 'Exact spellings, separated by semicolons.'),
+    Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: _field('uscf_id')),
+        const SizedBox(width: Space.m),
+        Expanded(child: _field('fide_id')),
+        const SizedBox(width: Space.m),
+        Expanded(child: _field('rating')),
+      ],
+    ),
+    _field('notes'),
+  ];
+
   @override
   Widget build(BuildContext context) => AlertDialog(
     title: Text(
@@ -166,40 +210,16 @@ class _PlayerDialogState extends State<_PlayerDialog> {
           key: _form,
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (final e in fields.entries)
+              for (final row in _rows())
                 Padding(
                   padding: const EdgeInsets.only(bottom: Space.m),
-                  child: TextFormField(
-                    controller: _boxes[e.key],
-                    autofocus: e.key == 'name',
-                    minLines: e.key == 'notes' ? 3 : 1,
-                    maxLines: e.key == 'notes' ? 6 : 1,
-                    decoration: InputDecoration(
-                      labelText: e.value,
-                      helperText: e.key == 'aliases'
-                          ? 'Separate exact spellings with semicolons.'
-                          : e.key == 'chesscom' || e.key == 'lichess'
-                          ? 'Separate multiple usernames with commas.'
-                          : null,
-                    ),
-                    validator: (value) {
-                      final text = value?.trim() ?? '';
-                      if (e.key == 'name' && text.isEmpty)
-                        return 'Enter a player name.';
-                      if ({'uscf_id', 'fide_id', 'rating'}.contains(e.key) &&
-                          text.isNotEmpty &&
-                          !RegExp(r'^\d+$').hasMatch(text))
-                        return 'Use digits only.';
-                      if ({'chesscom', 'lichess'}.contains(e.key) &&
-                          text.isNotEmpty &&
-                          !RegExp(r'^[a-zA-Z0-9_,;\s-]+$').hasMatch(text))
-                        return 'Enter usernames, not profile URLs.';
-                      return null;
-                    },
-                  ),
+                  child: row,
                 ),
-              if (_files.isNotEmpty)
+              if (_files.isNotEmpty) ...[
+                Text('PGN files', style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height: Space.xs),
                 Wrap(
                   spacing: Space.s,
                   children: [
@@ -215,6 +235,7 @@ class _PlayerDialogState extends State<_PlayerDialog> {
                       ),
                   ],
                 ),
+              ],
               if (_error != null)
                 Text(
                   _error!,
@@ -288,6 +309,32 @@ class _ImportDialogState extends State<_ImportDialog> {
       });
   }
 
+  /// One person read from the pasted text: the name over the accounts.
+  Widget _previewRow(Player player) {
+    final text = Theme.of(context).textTheme;
+    final accounts = player.accounts
+        .map((a) => '${a.site.label} ${a.username}')
+        .join(' · ');
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          player.name,
+          style: text.bodyMedium,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        Text(
+          accounts.isEmpty ? 'No online accounts' : accounts,
+          style: text.labelSmall,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) => AlertDialog(
     title: const Text('Paste players'),
@@ -314,23 +361,21 @@ class _ImportDialogState extends State<_ImportDialog> {
               _error!,
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
-          if (_preview != null) ...[
-            Text(
-              '${_preview!.length} players · existing records keep their notes and filled fields',
+          if (_preview case final preview?) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '${preview.length} ${preview.length == 1 ? 'player' : 'players'}'
+                ' · people already listed keep their notes and filled fields',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ),
+            const SizedBox(height: Space.xs),
             Expanded(
-              child: ListView(
-                children: [
-                  for (final p in _preview!)
-                    ListTile(
-                      title: Text(p.name),
-                      subtitle: Text(
-                        p.accounts
-                            .map((a) => '${a.site.label}: ${a.username}')
-                            .join(' · '),
-                      ),
-                    ),
-                ],
+              child: ListView.builder(
+                itemCount: preview.length,
+                itemExtent: puzzleRowHeight,
+                itemBuilder: (context, i) => _previewRow(preview[i]),
               ),
             ),
           ],

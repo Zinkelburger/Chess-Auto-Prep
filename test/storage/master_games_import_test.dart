@@ -57,13 +57,13 @@ void main() {
           await book.lookup(Fen.initial, classicalOnly: false) as BookFound;
       expect(start.answer.moves.single.games, 2);
       expect(start.answer.moves.single.white, 2);
+      // Windows cannot delete the folder while this handle is open.
+      final db = sqlite3.open(path, mode: OpenMode.readOnly);
       final ids = [
-        for (final row
-            in sqlite3
-                .open(path, mode: OpenMode.readOnly)
-                .select('SELECT id FROM games ORDER BY id'))
+        for (final row in db.select('SELECT id FROM games ORDER BY id'))
           '${row['id']}',
       ];
+      db.close();
       expect(await book.gamePgn(ids.last), contains('[Event "Club"]'));
       expect(
         await book.gamePgn(ids.last),

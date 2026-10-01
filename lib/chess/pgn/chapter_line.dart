@@ -1,6 +1,7 @@
 import 'game_text.dart';
 import 'game_tree.dart';
 import 'pgn_issue.dart';
+import 'pgn_reader.dart';
 
 /// One game of a chapter file: the line a reader trains and a writer edits.
 ///
@@ -10,23 +11,40 @@ import 'pgn_issue.dart';
 /// before its moves and its verbatim source. An untouched line is written
 /// back byte for byte; only an edited one is generated again.
 final class ChapterLine {
-  const ChapterLine({
+  ChapterLine({
     required this.tags,
-    required this.tree,
+    required GameTree? tree,
     required this.text,
     required this.trailer,
-    required this.terminator,
-    required this.separator,
-    this.issues = const [],
+    required String? terminator,
+    required String separator,
+    List<PgnIssue> issues = const [],
+  }) : _read = (
+         tree: tree,
+         terminator: terminator,
+         separator: separator,
+         issues: issues,
+       );
+
+  /// The game [text] with its moves not read yet: [tags] is its header
+  /// block ([readHeaders]), and everything below the header — [tree],
+  /// [terminator], [separator], [issues] — is read from [text] the first
+  /// time one of them is asked for, or handed over by [take].
+  ///
+  /// A file of thousands of games is listed from its headers and shows one
+  /// game at a time, so it opens without replaying every move of every game
+  /// first. What a line answers is the same either way; only when the work
+  /// is done differs.
+  ChapterLine.unread({
+    required this.tags,
+    required this.text,
+    required this.trailer,
   });
+
+  ChapterLine._(this.tags, this.text, this.trailer, this._read);
 
   /// Every line of the game's header block, in file order.
   final List<PgnHeader> tags;
-
-  /// The game's moves, or null when nothing could read it — a `[FEN]` header
-  /// that is not a position. An unread game keeps [text] and is never merged,
-  /// edited or generated again, so no edit elsewhere can write over it.
-  final GameTree? tree;
 
   /// The game's source, with no trailing whitespace.
   final String text;
@@ -35,14 +53,33 @@ final class ChapterLine {
   /// read and written again is unchanged.
   final String trailer;
 
+  /// What is below the header, once read. Set once and never changed.
+  _Moves? _read;
+
+  _Moves get _moves => _read ??= _movesOf(readGame(text));
+
+  /// Whether the moves are in hand, so that asking for them costs nothing.
+  bool get isRead => _read != null;
+
+  /// Takes [read], which is [readGame] of [text] done somewhere else, so the
+  /// moves need not be read here. A line that has its moves keeps them: both
+  /// are the same reading of the same text, and whoever holds the first
+  /// tree goes on holding the line's tree.
+  void take(GameRead read) => _read ??= _movesOf(read);
+
+  /// The game's moves, or null when nothing could read it — a `[FEN]` header
+  /// that is not a position. An unread game keeps [text] and is never merged,
+  /// edited or generated again, so no edit elsewhere can write over it.
+  GameTree? get tree => _moves.tree;
+
   /// The game-termination marker the file wrote, or null when it wrote none.
-  final String? terminator;
+  String? get terminator => _moves.terminator;
 
   /// The whitespace between the header block and the first move.
-  final String separator;
+  String get separator => _moves.separator;
 
   /// What reading the game could not carry into [tree].
-  final List<PgnIssue> issues;
+  List<PgnIssue> get issues => _moves.issues;
 
   /// The same game, separated from whatever follows it by [trailer].
   ///
@@ -50,15 +87,8 @@ final class ChapterLine {
   /// to the game that happens to be there: a game moved to another place
   /// takes neither the blank line that followed it nor the missing newline
   /// at the end of the file.
-  ChapterLine spacedBy(String trailer) => ChapterLine(
-    tags: tags,
-    tree: tree,
-    text: text,
-    trailer: trailer,
-    terminator: terminator,
-    separator: separator,
-    issues: issues,
-  );
+  ChapterLine spacedBy(String trailer) =>
+      ChapterLine._(tags, text, trailer, _read);
 
   /// Whether [tree] holds everything [text] holds.
   ///
@@ -86,6 +116,22 @@ final class ChapterLine {
     return event == null || event.isEmpty ? 'Line ${index + 1}' : event;
   }
 }
+
+/// What a game holds below its header block.
+typedef _Moves = ({
+  GameTree? tree,
+  String? terminator,
+  String separator,
+  List<PgnIssue> issues,
+});
+
+/// [read] without its tags, which the line holds itself.
+_Moves _movesOf(GameRead read) => (
+  tree: read.tree,
+  terminator: read.terminator,
+  separator: read.separator,
+  issues: read.issues,
+);
 
 /// Where in [tags] the header a game's id comes from is, or -1 for none.
 ///

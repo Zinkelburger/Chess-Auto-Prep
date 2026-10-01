@@ -110,7 +110,8 @@ more parameter on every layer.
 | `Replies` / `GapHunt` | The Maia table for the cursor position / the walk over the open chapter and the gap `Next gap` marked; both ask one `ReplyModel` cache | A copy of the tree or cursor |
 | `WorkspaceLayout` | Which panel is open and the split sizes | Data |
 | `FileFilter` | The game filter's rules for the open file and which of its games pass them; cleared when another file is opened, pasted or closed | The games themselves |
-| `FileTree` / `MyGamesTree` | The explorer's `This file` and `My games` trees, built off the UI isolate and dropped when their file changes | The document, the cursor |
+| `FileTree` / `MyGamesTree` | The explorer's `This file` and `My games` trees. `This file` is indexed when a file opens, from the games already read, a turn at a time between frames (`IndexBuild.ofLines`), once the moves of a file just opened have arrived (`movesBeingRead`); an index stays with the list of games it numbers, so a tab gone back to answers at once, and any changed game list drops it. `My games` is read and indexed on its own isolate the first time it is asked | The document, the cursor |
+| `ParsedFiles` (in `DocumentSession`) | The parse of each file read lately, by path, reused only when the text read from disk is the same again: a tab, Back or recent file gone back to is not parsed again, and its games are the same list. Bounded by characters of text; a file changed anywhere is parsed again. A large file shown one game at a time opens from its headers (`readChapterShowing`): the game on the board reads its own moves, and every other game's are read on another isolate and handed to the same `ChapterLine`s | Revisions, drafts, anything on disk |
 | `WorkspaceRequests` (`app/workspace_requests.dart`) | The mode, the status line, and every cross-mode request that puts a document on the board or takes it off (a list's click, Open/Import/Paste, an explorer game, Close file), each answering a sealed `RequestResult`; the leave question goes through `ExitGuard`, the side question and the clipboard through `WindowInput` | The document, panel state, dialogs |
 | A panel's owner (`GenerationRun`, `TrainingSession`, `HoleHunt`, …) | That tool's state, keyed to a document revision | A second copy of the tree or cursor |
 
@@ -156,13 +157,16 @@ changes in that tab never write the source. Tabs have left-aligned compact label
 visible close buttons, drag ordering, and a plus button. Pane tabs use the same
 strip without close buttons (right-click Close tab, or middle-click) and with neutral surface fills and stronger selected labels (source selectors also
 use neutral selection fills); closed tools reopen
-from its plus menu. Action panes grow through Split right / Split below in the tab
-context menu or plus menu, up to four panes. Dragging a tool tab reveals docking
+from its plus menu. A tab picked from the plus menu of a lone pane opens under it
+in a pane of its own, and joins the pane it was picked in once there are several;
+the plus menu also adds an empty pane. Action panes also grow through Split right
+/ Split below in the tab context menu, up to four panes. Dragging a tool tab reveals docking
 targets over the pane bodies; dropping in another pane moves it, and dropping on
 an edge splits that pane. A split moves the tab when its source has other tabs;
 a lone tab is shown in both views. Right-clicking a tool entry in Actions or the
-plus menu offers named pane destinations. Empty secondary panes collapse after
-a move; Close pane and Join all panes return their tabs to the primary pane.
+plus menu offers named pane destinations. A secondary pane whose last tab leaves
+collapses, and the main pane takes over the tabs of the pane its own last tab
+moved to; Close pane and Join all panes return their tabs to the primary pane.
 Explorer filters remain independent per pane. Collection Analysis stays in the
 primary pane and pinned mode tabs stay put. Layouts remain window state. Flip board and Analyze are
 Actions entries; the Viewer's menu omits Analyze because its moves are already

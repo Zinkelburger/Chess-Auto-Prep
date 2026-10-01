@@ -310,7 +310,9 @@ void main() {
       WidgetTester tester, {
       Fen fen = Fen.initial,
       List<BoardShape> shapes = const [],
+      BoardShape? threat,
       bool keeps = false,
+      VoidCallback? onClear,
     }) async {
       await tester.binding.setSurfaceSize(const Size(400, 400));
       await tester.pumpWidget(
@@ -321,14 +323,19 @@ void main() {
             orientation: Side.white,
             onMove: played.add,
             shapes: shapes,
+            threat: threat,
             onDraw: keeps ? kept.add : null,
+            onClear: onClear,
           ),
         ),
       );
     }
 
-    Set<Shape> drawn(WidgetTester tester) =>
-        tester.widget<Chessboard>(find.byType(Chessboard)).shapes;
+    /// Circles are chessground's; arrows are drawn over it, Lichess-sized.
+    Set<Object> drawn(WidgetTester tester) => {
+      ...tester.widget<Chessboard>(find.byType(Chessboard)).shapes,
+      ...tester.widget<BoardArrows>(find.byType(BoardArrows)).arrows,
+    };
 
     Future<void> rightDrag(WidgetTester tester, String from, String to) async {
       final gesture = await tester.startGesture(
@@ -347,7 +354,7 @@ void main() {
       await rightDrag(tester, 'g1', 'f3');
       await rightDrag(tester, 'd4', 'd4');
       expect(drawn(tester), {
-        const Arrow(color: shapeGreen, orig: Square.g1, dest: Square.f3),
+        const BoardShape(Square.g1, Square.f3, ShapeColour.green),
         const Circle(color: shapeGreen, orig: Square.d4),
       });
       await rightDrag(tester, 'd4', 'd4');
@@ -395,6 +402,43 @@ void main() {
       expect(drawn(tester), {
         const Circle(color: shapeYellow, orig: Square.c3),
       });
+    });
+
+    testWidgets('a left click asks for kept shapes to go and leaves the '
+        'threat', (tester) async {
+      var cleared = 0;
+      const threat = BoardShape(Square.d8, Square.h4, ShapeColour.red);
+      await board(
+        tester,
+        keeps: true,
+        shapes: const [BoardShape(Square.e2, Square.e4, ShapeColour.green)],
+        threat: threat,
+        onClear: () => cleared++,
+      );
+      await tester.tapAt(at('e5'));
+      await tester.pump();
+      expect(cleared, 1);
+    });
+
+    testWidgets('with nowhere to take them from, a left click hides the '
+        'shapes until the position changes; the threat stays', (tester) async {
+      const arrow = BoardShape(Square.e2, Square.e4, ShapeColour.green);
+      const threat = BoardShape(Square.d8, Square.h4, ShapeColour.red);
+      await board(tester, shapes: const [arrow], threat: threat);
+      expect(drawn(tester), {arrow, threat});
+      await tester.tapAt(at('e5'));
+      await tester.pump();
+      expect(drawn(tester), {threat});
+      expect(played, isEmpty);
+      await board(
+        tester,
+        fen: const Fen(
+          'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+        ),
+        shapes: const [arrow],
+        threat: threat,
+      );
+      expect(drawn(tester), {arrow, threat});
     });
   });
 }

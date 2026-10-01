@@ -218,6 +218,11 @@ void main() {
     final local = await openSession(book, name: 'Book');
     addTearDown(local.dispose);
     final first = NodePath.of([0]);
+    // The version the undo puts back is one no read has parsed: the file as
+    // it was opened would be shown again without being read.
+    local.session.setComment(first, 'A');
+    await pumpEventQueue();
+    final withA = local.onDisk;
     local.session.setComment(first, 'B');
     await pumpEventQueue();
 
@@ -230,14 +235,31 @@ void main() {
 
     expect(await undoing, isA<Restored>());
     await pumpEventQueue();
-    expect(local.session.commentAt(first), isNull);
+    expect(local.session.commentAt(first), 'A');
     expect(local.session.refusedEdit, isNull);
-    expect(local.onDisk, book);
+    expect(local.onDisk, withA);
     expect(
       local.store.requestedSaves,
-      hasLength(2),
-      reason: 'the edit and the undo; nothing was written over the undo',
+      hasLength(3),
+      reason: 'the edits and the undo; nothing was written over the undo',
     );
+  });
+
+  test('an undo back to the file as it was opened shows it without reading '
+      'it again', () async {
+    final book = bigChapter(games: 700);
+    final local = await openSession(book, name: 'Book');
+    addTearDown(local.dispose);
+    final opened = local.session.chapter!.lines;
+    final first = NodePath.of([0]);
+    local.session.setComment(first, 'B');
+    await pumpEventQueue();
+
+    expect(await local.session.undo(), isA<Restored>());
+    await pumpEventQueue();
+    expect(local.session.commentAt(first), isNull);
+    expect(local.session.chapter!.lines, same(opened));
+    expect(local.onDisk, book);
   });
 
   group('an undo of an edit that moved the board', () {

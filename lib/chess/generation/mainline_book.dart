@@ -218,7 +218,7 @@ Future<BookAnswer> _expand(
 
   final ours = turn == config.side;
   final replies = !ours && node.ply < config.branchPlies
-      ? _replies(_named(node.position, await practiceAt(fen)), config)
+      ? _replies(legalPractice(node.position, await practiceAt(fen)), config)
       : const <(String, double)>[];
   final chosen = replies.isNotEmpty
       ? replies
@@ -239,7 +239,7 @@ Future<String> _best(
 ) async {
   final tied = moves.where((m) => m.cp == moves.first.cp).toList();
   if (tied.length < 2) return moves.first.uci;
-  final practice = _named(position, await practiceAt(fen));
+  final practice = legalPractice(position, await practiceAt(fen));
   int games(String uci) =>
       practice.where((p) => p.uci == uci).firstOrNull?.games ?? 0;
   tied.sort((a, b) => games(b.uci).compareTo(games(a.uci)));
@@ -250,7 +250,7 @@ Future<String> _best(
 /// Masters spell castling king onto rook (`e8h8`), ChessDB king to its square
 /// (`e8g8`); both spellings are one move, their games added. A move not legal
 /// here is dropped, so it takes no share of the replies.
-List<PlayedMove> _named(Position position, List<PlayedMove> practice) {
+List<PlayedMove> legalPractice(Position position, List<PlayedMove> practice) {
   final legal = legalMovesOf(position);
   final games = <String, int>{};
   for (final move in practice) {

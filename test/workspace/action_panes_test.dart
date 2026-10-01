@@ -10,11 +10,18 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/scripted_explorer.dart';
 import '../support/session_fixture.dart';
 
-Future<ActionLayout> pumpPanes(WidgetTester tester) async {
+Future<ActionLayout> pumpPanes(
+  WidgetTester tester, {
+  bool opensBeside = false,
+}) async {
   final fixture = await openSession('[Result "*"]\n\n1. e4 *');
   final settings = SettingsStore();
   final explorer = explorerOver(fixture.session, settings: settings);
-  final layout = ActionLayout(newWorkspaceTabs(), explorer);
+  final layout = ActionLayout(
+    newWorkspaceTabs(),
+    explorer,
+    opensBeside: opensBeside,
+  );
   addTearDown(() {
     layout.dispose();
     explorer.dispose();
@@ -48,6 +55,28 @@ Finder tabIn(int index, String name) =>
     find.descendant(of: pane(index), matching: find.text(name));
 
 void main() {
+  testWidgets('the builder starts with Moves beside Expectimax and the '
+      'book shut', (tester) async {
+    final layout = await pumpPanes(tester);
+    layout.startBuilding();
+    await tester.pumpAndSettle();
+    expect(layout.count, 2);
+    expect(layout.book?.value, isFalse);
+    expect(find.text('Body 0 Moves'), findsOneWidget);
+    expect(find.text('Body 1 Expectimax'), findsOneWidget);
+    final moves = tester.getRect(pane(0));
+    final search = tester.getRect(pane(1));
+    expect(search.left, greaterThanOrEqualTo(moves.right));
+    expect(search.height, moves.height);
+    expect(layout.pane(0).isOpen(WorkspaceTab.explorer), isFalse);
+    expect(layout.pane(0).isOpen(WorkspaceTab.search), isFalse);
+    layout.reveal(WorkspaceTab.search);
+    expect(layout.active, 1, reason: 'brought up where it is open');
+    expect(layout.pane(0).isOpen(WorkspaceTab.search), isFalse);
+    layout.startBuilding();
+    expect(layout.count, 2, reason: 'a second call changes nothing');
+  });
+
   testWidgets(
     'right click splits the chosen tab and moves it to a named pane',
     (tester) async {
@@ -168,12 +197,16 @@ void main() {
       expect(layout.pane(2).selected, WorkspaceTab.explorer);
       layout.move(0, 2, WorkspaceTab.search);
       layout.move(0, 2, WorkspaceTab.moves);
-      expect(
-        layout.pane(0).selected,
+      expect(layout.visible, [
+        0,
+      ], reason: 'the main pane\'s last tab leaving joins the two panes');
+      expect(layout.pane(0).open, [
+        WorkspaceTab.replies,
         WorkspaceTab.explorer,
-        reason:
-            'keep a reading tool in the primary pane, not collection Analysis',
-      );
+        WorkspaceTab.search,
+        WorkspaceTab.moves,
+      ]);
+      expect(layout.pane(0).selected, WorkspaceTab.moves);
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     },
@@ -243,6 +276,170 @@ void main() {
     await tester.pumpAndSettle();
     expect(layout.pane(1).open, [WorkspaceTab.explorer, WorkspaceTab.search]);
     expect(layout.pane(0).isOpen(WorkspaceTab.search), isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a tab picked from + goes under a lone pane, and joins the '
+      'pane it is picked in once there are two', (tester) async {
+    final layout = await pumpPanes(tester, opensBeside: true);
+    await tester.tap(find.byTooltip('Open tab'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, 'Replies'));
+    await tester.pumpAndSettle();
+    expect(layout.count, 2);
+    expect(layout.pane(0).isOpen(WorkspaceTab.replies), isFalse);
+    expect(layout.openIn(1), [WorkspaceTab.replies]);
+    expect(
+      tester.getRect(pane(0)).bottom,
+      lessThanOrEqualTo(tester.getRect(pane(1)).top),
+    );
+    await tester.tap(find.byTooltip('Open tab').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, 'Audit'));
+    await tester.pumpAndSettle();
+    expect(layout.count, 2);
+    expect(layout.openIn(1), [WorkspaceTab.replies, WorkspaceTab.audit]);
+    // A tab already open is brought up where it is, not opened again.
+    layout.reveal(WorkspaceTab.explorer);
+    expect(layout.count, 2);
+    expect(layout.active, 0);
+    expect(layout.pane(0).selected, WorkspaceTab.explorer);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('where tabs do not open beside, a picked tab joins the pane', (
+    tester,
+  ) async {
+    final layout = await pumpPanes(tester);
+    await tester.tap(find.byTooltip('Open tab'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, 'Replies'));
+    await tester.pumpAndSettle();
+    expect(layout.count, 1);
+    expect(layout.pane(0).selected, WorkspaceTab.replies);
+  });
+
+  testWidgets('New pane adds an empty pane, filled from its + or by a tab '
+      'moved to it, and closed like any other', (tester) async {
+    final layout = await pumpPanes(tester);
+    await tester.tap(find.byTooltip('Open tab'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, 'New pane'));
+    await tester.pumpAndSettle();
+    expect(layout.count, 2);
+    expect(layout.isEmpty(1), isTrue);
+    expect(layout.openIn(1), isEmpty);
+    expect(find.textContaining('Body 1'), findsNothing);
+    expect(layout.isOpen(WorkspaceTab.replies), isFalse);
+
+    await tester.tap(find.byTooltip('Open tab').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, 'Replies'));
+    await tester.pumpAndSettle();
+    expect(layout.isEmpty(1), isFalse);
+    expect(layout.openIn(1), [WorkspaceTab.replies]);
+    expect(find.text('Body 1 Replies'), findsOneWidget);
+
+    layout.addPane(1);
+    await tester.pumpAndSettle();
+    final empty = layout.visible.last;
+    layout.move(0, empty, WorkspaceTab.search);
+    await tester.pumpAndSettle();
+    expect(layout.openIn(empty), [WorkspaceTab.search]);
+    layout.addPane(0);
+    layout.joinAll();
+    await tester.pumpAndSettle();
+    expect(layout.count, 1);
+    expect(layout.pane(0).isOpen(WorkspaceTab.search), isTrue);
+    expect(layout.pane(0).isOpen(WorkspaceTab.replies), isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('closing the main pane\'s last tab hands it the other '
+      'pane\'s tabs', (tester) async {
+    final layout = await pumpPanes(tester, opensBeside: true);
+    layout.pane(0)
+      ..close(WorkspaceTab.search)
+      ..close(WorkspaceTab.explorer);
+    expect(layout.canClose(0, WorkspaceTab.moves), isFalse);
+    layout.open(0, WorkspaceTab.explorer);
+    layout.open(1, WorkspaceTab.replies);
+    await tester.pumpAndSettle();
+    expect(layout.openIn(1), [WorkspaceTab.explorer, WorkspaceTab.replies]);
+    expect(layout.canClose(0, WorkspaceTab.moves), isTrue);
+    layout.closeTab(0, WorkspaceTab.moves);
+    await tester.pumpAndSettle();
+    expect(layout.count, 1);
+    expect(layout.pane(0).open, [WorkspaceTab.explorer, WorkspaceTab.replies]);
+    expect(layout.pane(0).selected, WorkspaceTab.replies);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the main pane takes the place of the pane whose tabs it '
+      'takes: its own old place is the one that closes', (tester) async {
+    final layout = await pumpPanes(tester);
+    layout
+      ..split(0, WorkspaceTab.search, PaneSplitDirection.right, from: 0)
+      ..split(0, WorkspaceTab.moves, PaneSplitDirection.below, from: 0);
+    await tester.pumpAndSettle();
+    // The Explorer (the main pane) over the Moves on the left, Expectimax
+    // right.
+    expect(layout.pane(0).open, [WorkspaceTab.explorer]);
+    final left = tester.getRect(pane(0));
+    final right = tester.getRect(pane(1));
+    layout.closeTab(0, WorkspaceTab.explorer);
+    await tester.pumpAndSettle();
+    // The pane beside it in the layout is the one whose tabs it takes: the
+    // Moves under it. That place closes into the main pane, and the left
+    // column is the moves alone.
+    expect(layout.visible, unorderedEquals([0, 1]));
+    expect(layout.pane(0).open, [WorkspaceTab.moves]);
+    expect(tester.getRect(pane(0)).topLeft, left.topLeft);
+    expect(tester.getRect(pane(0)).height, right.height);
+    expect(layout.openIn(1), [WorkspaceTab.search]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Moves alone is a page: no tab row and no frame, the + in '
+      'its corner; a second tab brings the rows back', (tester) async {
+    final fixture = await openSession('[Result "*"]\n\n1. e4 *');
+    final settings = SettingsStore();
+    final explorer = explorerOver(fixture.session, settings: settings);
+    final layout = ActionLayout(viewerTabs(), explorer, opensBeside: true);
+    addTearDown(() {
+      layout.dispose();
+      explorer.dispose();
+      settings.dispose();
+      fixture.dispose();
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: Scaffold(
+          body: ActionPanes(
+            layout: layout,
+            body: (_, index, tab) => Text('Body $index ${tab.title}'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('tab-row-0')), findsNothing);
+    expect(find.text('Moves'), findsNothing);
+    expect(find.text('Body 0 Moves'), findsOneWidget);
+    await tester.tap(find.byTooltip('Open tab'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, 'Explorer'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('tab-row-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('tab-row-1')), findsOneWidget);
+    expect(find.text('Body 0 Moves'), findsOneWidget);
+    expect(find.text('Body 1 Explorer'), findsOneWidget);
+    // The second pane's tab dragged onto the first: one pane again.
+    layout.move(1, 0, WorkspaceTab.explorer);
+    await tester.pumpAndSettle();
+    expect(layout.count, 1);
+    expect(layout.pane(0).open, [WorkspaceTab.moves, WorkspaceTab.explorer]);
     expect(tester.takeException(), isNull);
   });
 }

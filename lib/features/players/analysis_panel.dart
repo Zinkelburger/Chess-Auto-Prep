@@ -3,22 +3,32 @@ import 'dart:async';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 
+import '../../chess/players/download_range.dart';
+import '../../chess/players/player.dart';
 import '../../ui/choice_dialog.dart';
-import '../../ui/choice_field.dart';
-import '../../ui/number_field.dart';
+import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
-import '../../chess/players/player.dart';
-import '../../chess/tactics/game_ids.dart';
+import 'analysis_filters.dart';
+import 'analysis_rows.dart';
+import 'download_dialog.dart';
+import 'findings_view.dart';
 import 'player_analysis.dart';
 import 'player_dialogs.dart';
-import 'download_dialog.dart';
-import '../../chess/players/download_range.dart';
 import 'player_games.dart';
 import 'player_hunt.dart';
+import 'player_picker.dart';
 import 'players.dart';
-import '../../ui/move_notation.dart';
 
+/// The Player analysis column: who is being prepared for and where their
+/// games stand, the colour they are looked at from, then the search and the
+/// filters over the three lists they narrow — positions, games and the
+/// engine's findings. A row clicked opens its game on the board.
+///
+/// Everything under the colour scrolls as one, so opening the filters in a
+/// short window never squeezes the list away; the list switch stays in view
+/// at the top of it. With nobody chosen the column is the list of saved
+/// players.
 class AnalysisPanel extends StatefulWidget {
   const AnalysisPanel({
     super.key,
@@ -46,16 +56,41 @@ class AnalysisPanel extends StatefulWidget {
 
 class _AnalysisPanelState extends State<AnalysisPanel> {
   late final _search = TextEditingController(text: widget.analysis.query);
+  bool _filtersOpen = false;
 
   /// Whether the findings list shows the ones put aside instead.
   bool _showDismissed = false;
+
+  PlayerAnalysis get owner => widget.analysis;
+
+  @override
+  void initState() {
+    super.initState();
+    owner.addListener(_followQuery);
+  }
+
+  @override
+  void didUpdateWidget(AnalysisPanel old) {
+    super.didUpdateWidget(old);
+    if (old.analysis != widget.analysis) {
+      old.analysis.removeListener(_followQuery);
+      owner.addListener(_followQuery);
+      _followQuery();
+    }
+  }
+
   @override
   void dispose() {
+    owner.removeListener(_followQuery);
     _search.dispose();
     super.dispose();
   }
 
-  PlayerAnalysis get owner => widget.analysis;
+  /// Another player chosen clears the search; the box says so.
+  void _followQuery() {
+    if (owner.query.isEmpty && _search.text.isNotEmpty) _search.clear();
+  }
+
   Future<void> _choose() async {
     final player = await showChoiceDialog<Player>(
       context,
@@ -65,18 +100,25 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
       hint: 'Search players',
       empty: 'No players saved. Add a player first.',
     );
-    if (player != null && mounted) {
-      _search.clear();
-      widget.onChoose(player);
-    }
+    if (player != null && mounted) widget.onChoose(player);
   }
 
   Future<void> _add() async {
     final player = await editPlayer(context, widget.players);
-    if (player != null && mounted) {
-      _search.clear();
-      widget.onChoose(player);
-    }
+    if (player != null && mounted) widget.onChoose(player);
+  }
+
+  Future<void> _getGames(Player player) async {
+    final range = await downloadRange(context, player);
+    if (range != null && mounted) widget.onDownload(range);
+  }
+
+  void _toggleFilters() {
+    if (mounted) setState(() => _filtersOpen = !_filtersOpen);
+  }
+
+  void _dismissedShown(bool shown) {
+    if (mounted) setState(() => _showDismissed = shown);
   }
 
   @override
@@ -87,500 +129,451 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              Space.m,
-              Space.s,
-              Space.xs,
-              Space.xs,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    player?.name ?? 'Player analysis',
-                    style: Theme.of(context).textTheme.titleMedium,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+          _Header(
+            name: player?.name,
+            actions: [
+              if (player != null)
+                _menu(player)
+              else if (widget.players.players.isNotEmpty)
+                IconButton(
+                  icon: const Icon(Icons.add, size: IconSize.action),
+                  tooltip: 'Add player',
+                  onPressed: _add,
+                  visualDensity: VisualDensity.compact,
                 ),
-                widget.trailing,
-              ],
-            ),
+            ],
+            trailing: widget.trailing,
           ),
-          Expanded(child: player == null ? _picker() : _analysis(player)),
+          Expanded(
+            child: player == null
+                ? PlayerPicker(
+                    players: widget.players,
+                    onChoose: widget.onChoose,
+                    onAdd: _add,
+                    onDirectory: widget.onDirectory,
+                  )
+                : _chosen(player),
+          ),
         ],
       );
     },
   );
-  Widget _picker() => ListView(
-    padding: const EdgeInsets.all(Space.m),
+
+  /// What can be done about the player and their games, out of the way of
+  /// the lists: none of it is needed to read them.
+  Widget _menu(Player player) => RowActions(
+    tooltip: 'Player actions',
     children: [
-      const Text('Whose games would you like to prepare against?'),
-      const SizedBox(height: Space.m),
-      FilledButton.icon(
-        onPressed: _add,
-        icon: const Icon(Icons.person_add_outlined),
-        label: const Text('Add player'),
+      MenuItemButton(onPressed: _choose, child: const Text('Change player…')),
+      // Only a player with an account has games to download.
+      if (player.accounts.isNotEmpty)
+        MenuItemButton(
+          onPressed: owner.busy ? null : () => unawaited(_getGames(player)),
+          child: const Text('Get games…'),
+        ),
+      MenuItemButton(
+        onPressed: owner.busy ? null : widget.onImport,
+        child: const Text('Add PGN…'),
       ),
-      TextButton(
+      MenuItemButton(
+        onPressed: owner.busy ? null : () => unawaited(owner.select(player)),
+        child: const Text('Reload saved games'),
+      ),
+      MenuItemButton(
         onPressed: widget.onDirectory,
         child: const Text('Players & prep'),
       ),
-      if (widget.players.error != null) ...[
-        Text(widget.players.error!),
-        TextButton(
-          onPressed: widget.players.load,
-          child: const Text('Try again'),
-        ),
-      ],
-      for (final player in widget.players.players)
-        ListTile(
-          title: Text(player.name),
-          subtitle: Text(player.accounts.map((a) => a.username).join(', ')),
-          onTap: () => widget.onChoose(player),
-        ),
     ],
   );
-  Widget _analysis(Player player) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: Space.m),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Wrap(
-              spacing: Space.xs,
-              children: [
-                TextButton(
-                  onPressed: _choose,
-                  child: const Text('Change player'),
-                ),
-                TextButton(
-                  onPressed: widget.onDirectory,
-                  child: const Text('Players & prep'),
-                ),
-              ],
-            ),
-            Wrap(
-              spacing: Space.s,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: owner.busy || player.accounts.isEmpty
-                      ? null
-                      : () async {
-                          final range = await downloadRange(context, player);
-                          if (range != null && mounted)
-                            widget.onDownload(range);
-                        },
-                  icon: const Icon(Icons.download_outlined),
-                  label: const Text('Get games'),
-                ),
-                TextButton(
-                  onPressed: owner.busy ? null : widget.onImport,
-                  child: const Text('Add PGN…'),
-                ),
-                IconButton(
-                  tooltip: 'Reload saved games',
-                  onPressed: owner.busy ? null : () => owner.select(player),
-                  icon: const Icon(Icons.refresh),
-                ),
-              ],
-            ),
-            if (owner.busy) ...[
-              const LinearProgressIndicator(),
-              TextButton(onPressed: owner.cancel, child: const Text('Cancel')),
-            ],
-            if (owner.status != null)
-              Text(owner.status!, style: Theme.of(context).textTheme.bodySmall),
-            if (owner.error != null)
-              Text(
-                owner.error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            for (final warning in owner.warnings)
-              Text(
-                warning,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            const SizedBox(height: Space.s),
-            SegmentedButton<Side>(
+
+  Widget _chosen(Player player) {
+    final corpus = owner.corpus;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _Status(analysis: owner),
+        if (corpus != null && corpus.games.isEmpty)
+          _NoGames(
+            canDownload: player.accounts.isNotEmpty,
+            onDownload: () => unawaited(_getGames(player)),
+            onImport: widget.onImport,
+          ),
+        if (corpus != null && corpus.games.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Space.m, 0, Space.m, Space.s),
+            child: SegmentedButton<Side>(
               segments: const [
                 ButtonSegment(value: Side.white, label: Text('As White')),
                 ButtonSegment(value: Side.black, label: Text('As Black')),
               ],
               selected: {owner.side},
+              showSelectedIcon: false,
+              style: _segments,
               onSelectionChanged: (v) => owner.setSide(v.single),
             ),
-            const SizedBox(height: Space.s),
-            SearchField(
+          ),
+          Expanded(child: _lists(player)),
+        ],
+      ],
+    );
+  }
+
+  Widget _lists(Player player) {
+    final shown = owner.gameIndexes;
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Space.m),
+            child: SearchField(
               controller: _search,
-              hint: 'Search opponent, event or opening',
+              hint: 'Search games',
               onChanged: owner.search,
             ),
-            _filters(),
-            SegmentedButton<PlayerList>(
-              showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(
-                  value: PlayerList.openings,
-                  label: Text('Positions'),
-                ),
-                ButtonSegment(value: PlayerList.games, label: Text('Games')),
-                ButtonSegment(
-                  value: PlayerList.weaknesses,
-                  label: Text('Findings'),
-                ),
-              ],
-              selected: {owner.list},
-              onSelectionChanged: (v) => owner.configure(list: v.single),
-            ),
-            const SizedBox(height: Space.s),
-          ],
+          ),
         ),
-      ),
-      Expanded(
-        child: switch (owner.list) {
+        SliverToBoxAdapter(
+          child: _CountLine(
+            games: shown.length,
+            filters: AnalysisFilters.active(owner),
+            filtersOpen: _filtersOpen,
+            onFilters: _toggleFilters,
+          ),
+        ),
+        if (_filtersOpen)
+          SliverToBoxAdapter(child: AnalysisFilters(analysis: owner)),
+        SliverPersistentHeader(
+          pinned: true,
+          delegate: _ListSwitch(
+            list: owner.list,
+            onChanged: (list) => owner.configure(list: list),
+            color: Theme.of(context).colorScheme.surface,
+          ),
+        ),
+        ...switch (owner.list) {
           PlayerList.openings => _positions(),
-          PlayerList.games => _games(),
-          PlayerList.weaknesses => _weaknesses(),
+          PlayerList.games => _games(shown),
+          PlayerList.weaknesses => _findings(player),
         },
-      ),
-    ],
-  );
-  Widget _filters() => Align(
-    alignment: Alignment.centerLeft,
-    child: TextButton.icon(
-      icon: const Icon(Icons.filter_list),
-      label: Text(
-        'Filters · ${owner.gameIndexes.length} ${owner.gameIndexes.length == 1 ? 'game' : 'games'}',
-      ),
-      onPressed: () => showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Player analysis filters'),
-          content: SizedBox(
-            width: 400,
-            child: SingleChildScrollView(
-              child: ListenableBuilder(
-                listenable: owner,
-                builder: (context, _) => _filterFields(),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Done'),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-  Widget _filterFields() => ExpansionTile(
-    initiallyExpanded: true,
-    tilePadding: EdgeInsets.zero,
-    title: Text(
-      'Filters · ${owner.gameIndexes.length} ${owner.gameIndexes.length == 1 ? 'game' : 'games'}',
-    ),
-    children: [
-      NumberField(
-        label: 'Minimum games',
-        value: owner.minGames,
-        min: 1,
-        max: 10000,
-        onChanged: (v) => owner.configure(minGames: v),
-      ),
-      NumberField(
-        label: 'From move',
-        value: owner.minPly ~/ 2,
-        min: 0,
-        max: 20,
-        onChanged: (v) => owner.configure(minPly: v * 2),
-      ),
-      ChoiceField(
-        text: _orderName(owner.order),
-        options: PositionOrder.values.map(_orderName).toList(),
-        hint: 'Sort positions',
-        onChanged: (v) {
-          final order = PositionOrder.values
-              .where((o) => _orderName(o) == v)
-              .firstOrNull;
-          if (order != null) owner.configure(order: order);
-        },
-      ),
-      ChoiceField(
-        text: owner.recentDays == null
-            ? 'All dates'
-            : 'Last ${owner.recentDays} days',
-        options: const [
-          'All dates',
-          'Last 30 days',
-          'Last 90 days',
-          'Last 180 days',
-          'Last 365 days',
-        ],
-        hint: 'Date range',
-        onChanged: (v) {
-          if (v == 'All dates') {
-            owner.recentDays = null;
-          } else {
-            final days = int.tryParse(v.split(' ').elementAtOrNull(1) ?? '');
-            if (days == null) return;
-            owner.recentDays = days;
-          }
-          owner.changed();
-        },
-      ),
-      Wrap(
-        spacing: Space.xs,
-        children: [
-          for (final speed in TimeClass.values)
-            FilterChip(
-              label: Text(speed.label),
-              selected: owner.speeds.contains(speed),
-              onSelected: (v) {
-                owner.speeds = {...owner.speeds};
-                v ? owner.speeds.add(speed) : owner.speeds.remove(speed);
-                owner.changed();
-              },
-            ),
-        ],
-      ),
-      const Text('No time controls selected includes all games.'),
-      const SizedBox(height: Space.s),
-    ],
-  );
-  String _orderName(PositionOrder value) => switch (value) {
-    PositionOrder.frequent => 'Most played',
-    PositionOrder.lowScore => 'Lowest score',
-    PositionOrder.highScore => 'Highest score',
-    PositionOrder.badEval => 'Worst engine evaluation',
-  };
-  Widget _positions() {
+      ],
+    );
+  }
+}
+
+extension on _AnalysisPanelState {
+  List<Widget> _positions() {
     final positions = owner.positions.take(100).toList();
-    if (owner.order == PositionOrder.badEval && owner.evals.isEmpty)
-      return Center(
-        child: TextButton(
-          onPressed: () => owner.configure(list: PlayerList.weaknesses),
-          child: const Text('Run engine analysis to rank evaluations'),
-        ),
-      );
-    if (positions.isEmpty)
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(Space.m),
-          child: Text(
-            'No positions match. Try the other colour or adjust the filters.',
+    final unranked =
+        owner.order == PositionOrder.badEval && owner.evals.isEmpty;
+    return [
+      SliverToBoxAdapter(child: PositionsHeader(analysis: owner)),
+      if (unranked)
+        SliverToBoxAdapter(
+          child: ListMessage(
+            'No position has an engine evaluation yet.',
+            action: TextButton(
+              onPressed: () => owner.configure(list: PlayerList.weaknesses),
+              child: const Text('Run engine analysis to rank evaluations'),
+            ),
+          ),
+        )
+      else if (positions.isEmpty)
+        const SliverToBoxAdapter(
+          child: ListMessage(
+            'No positions match. Try the other colour or loosen the filters.',
+          ),
+        )
+      else
+        SliverList.builder(
+          itemCount: positions.length,
+          itemBuilder: (context, i) => PositionRow(
+            position: positions[i],
+            eval: owner.evals[positions[i].key],
+            onOpen: () => widget.onOpen(positions[i].games.first, positions[i]),
           ),
         ),
-      );
-    return ListView.builder(
-      itemCount: positions.length,
-      itemBuilder: (context, i) {
-        final at = positions[i];
-        return ListTile(
-          title: Text(at.label, maxLines: 2, overflow: TextOverflow.ellipsis),
-          subtitle: Text(
-            '${at.count} ${at.count == 1 ? 'game' : 'games'} · ${at.wins}W ${at.draws}D ${at.losses}L${at.unknown == 0 ? '' : ' · ${at.unknown} unfinished'}${at.score == null ? '' : ' · ${(at.score! * 100).round()}% score'}${owner.evals[at.key] == null ? '' : ' · ${scoreFromPacked(owner.evals[at.key]!).text}'}',
-          ),
-          onTap: () => widget.onOpen(at.games.first, at),
-        );
-      },
-    );
+    ];
   }
 
-  Widget _games() {
-    final indexes = owner.gameIndexes;
+  List<Widget> _games(List<int> indexes) => [
     if (indexes.isEmpty)
-      return const Center(child: Text('No games match these filters.'));
-    return ListView.builder(
-      itemCount: indexes.length,
-      itemBuilder: (context, i) {
-        final index = indexes[i], game = owner.corpus!.games[index];
-        return ListTile(
-          title: Text(game.title, maxLines: 2),
-          subtitle: Text('${game.date} · ${game.result} · ${game.tag('ECO')}'),
-          onTap: () => widget.onOpen(index, null),
-        );
-      },
-    );
-  }
+      const SliverToBoxAdapter(
+        child: ListMessage(
+          'No games match. Try the other colour or loosen the filters.',
+        ),
+      )
+    else
+      SliverFixedExtentList.builder(
+        itemExtent: puzzleRowHeight,
+        itemCount: indexes.length,
+        itemBuilder: (context, i) => PlayerGameRow(
+          game: owner.corpus!.games[indexes[i]],
+          onOpen: () => widget.onOpen(indexes[i], null),
+        ),
+      ),
+  ];
 
-  Widget _weaknesses() {
+  List<Widget> _findings(Player player) {
     final hunt = widget.hunt;
-    final id = owner.player!.id;
-    final aside = widget.players.dismissedFindings(id);
-    final dismissed = hunt.findings.where((f) => aside.contains(f.key));
+    final aside = widget.players.dismissedFindings(player.id);
     final shown = [
       for (final f in hunt.findings)
         if (aside.contains(f.key) == _showDismissed) f,
     ];
-    // One scrolling list, controls first, so a short pane never overflows.
-    return ListView(
-      children: [
-        _engineControls(),
-        if (hunt.findings.isNotEmpty)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: dismissed.isEmpty && !_showDismissed
-                  ? null
-                  : () => setState(() => _showDismissed = !_showDismissed),
-              child: Text(
-                _showDismissed
-                    ? 'Back to findings'
-                    : 'Dismissed (${dismissed.length})',
-              ),
+    return [
+      SliverToBoxAdapter(
+        child: EngineRun(
+          analysis: owner,
+          hunt: hunt,
+          dismissed: hunt.findings.where((f) => aside.contains(f.key)).length,
+          showDismissed: _showDismissed,
+          onShowDismissed: _dismissedShown,
+        ),
+      ),
+      SliverList.builder(
+        itemCount: shown.length,
+        itemBuilder: (context, i) => FindingRow(
+          finding: shown[i],
+          dismissed: _showDismissed,
+          onOpen: () =>
+              widget.onOpen(shown[i].position.games.first, shown[i].position),
+          onToggle: widget.players.busy
+              ? null
+              : () => unawaited(
+                  _showDismissed
+                      ? widget.players.restoreFinding(player.id, shown[i].key)
+                      : widget.players.dismissFinding(player.id, shown[i].key),
+                ),
+        ),
+      ),
+    ];
+  }
+}
+
+/// A switch in the column, as small as the rows under it.
+const _segments = ButtonStyle(
+  visualDensity: VisualDensity.compact,
+  padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: Space.xs)),
+);
+
+/// The mode's name, or the chosen player's, with the column's actions and
+/// the host's toggle in the corner.
+class _Header extends StatelessWidget {
+  const _Header({
+    required this.name,
+    required this.actions,
+    required this.trailing,
+  });
+
+  final String? name;
+  final List<Widget> actions;
+  final Widget trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.s, Space.xs),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              name ?? 'Player analysis',
+              style: name == null ? text.labelSmall : text.titleMedium,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-        for (final finding in shown) _finding(finding, id),
-      ],
+          ...actions,
+          trailing,
+        ],
+      ),
     );
   }
+}
 
-  Widget _finding(PlayerWeakness finding, String player) => ListTile(
-    title: Text('${finding.title} · ${finding.score.text}'),
-    subtitle: Text(
-      displaySan(
-        context,
-        '${finding.position.count} ${finding.position.count == 1 ? 'game' : 'games'}\n${finding.position.label}\n${finding.continuation}',
-      ),
-    ),
-    onTap: () => widget.onOpen(finding.position.games.first, finding.position),
-    trailing: IconButton(
-      tooltip: _showDismissed ? 'Restore finding' : 'Dismiss finding',
-      icon: Icon(_showDismissed ? Icons.undo : Icons.close),
-      onPressed: widget.players.busy
-          ? null
-          : () => unawaited(
-              _showDismissed
-                  ? widget.players.restoreFinding(player, finding.key)
-                  : widget.players.dismissFinding(player, finding.key),
-            ),
-    ),
-  );
+/// Where the player's games stand: how many and how fresh, what is being
+/// read or downloaded with the way to stop it, and anything that went wrong.
+class _Status extends StatelessWidget {
+  const _Status({required this.analysis});
 
-  Widget _engineControls() {
-    final hunt = widget.hunt;
+  final PlayerAnalysis analysis;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final wrong = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.error,
+    );
+    final status = analysis.status;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Space.m),
+      padding: const EdgeInsets.fromLTRB(Space.m, 0, Space.m, Space.s),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Check frequent positions for strong replies and unfavourable evaluations. Scores are from this player’s side.',
-          ),
-          TextButton(
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Engine settings'),
-                content: SizedBox(
-                  width: 400,
-                  child: SingleChildScrollView(
-                    child: ListenableBuilder(
-                      listenable: owner,
-                      builder: (context, _) => _engineFields(),
-                    ),
+          if (analysis.busy) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    status ?? '',
+                    style: theme.textTheme.labelSmall,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Done'),
-                  ),
-                ],
-              ),
+                TextButton(
+                  onPressed: analysis.cancel,
+                  child: const Text('Cancel'),
+                ),
+              ],
             ),
-            child: const Text('Engine settings'),
-          ),
-          FilledButton.icon(
-            onPressed: owner.busy
-                ? null
-                : hunt.running
-                ? hunt.stop
-                : hunt.start,
-            icon: Icon(hunt.running ? Icons.stop : Icons.analytics_outlined),
-            label: Text(
-              hunt.running
-                  ? 'Stop · ${hunt.done} / ${hunt.total}'
-                  : 'Analyze with engine',
-            ),
-          ),
-          if (hunt.running) const LinearProgressIndicator(),
-          if (hunt.practicalWarning != null) Text(hunt.practicalWarning!),
-          if (hunt.error != null)
-            Text(
-              hunt.error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          if (!hunt.running && hunt.total > 0)
-            Text(
-              '${hunt.done} positions checked · ${hunt.findings.length} findings',
-            ),
+            const LinearProgressIndicator(minHeight: progressLineHeight),
+          ] else if (status != null)
+            Text(status, style: theme.textTheme.labelSmall),
+          if (analysis.error case final error?) Text(error, style: wrong),
+          for (final warning in analysis.warnings) Text(warning, style: wrong),
         ],
       ),
     );
   }
+}
 
-  Widget _engineFields() {
-    final hunt = widget.hunt;
-    return ExpansionTile(
-      title: const Text('Analysis limits'),
-      initiallyExpanded: true,
+/// A player with no games yet: the two ways to get some.
+class _NoGames extends StatelessWidget {
+  const _NoGames({
+    required this.canDownload,
+    required this.onDownload,
+    required this.onImport,
+  });
+
+  /// Whether the player has an account to download from.
+  final bool canDownload;
+  final VoidCallback onDownload;
+  final VoidCallback onImport;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: Space.m),
+    child: Wrap(
+      spacing: Space.s,
+      runSpacing: Space.s,
       children: [
-        _practicalSettings(),
-        NumberField(
-          label: 'Depth',
-          value: hunt.depth,
-          min: 8,
-          max: 30,
-          onChanged: (v) => hunt.configure(depth: v),
+        if (canDownload)
+          FilledButton(onPressed: onDownload, child: const Text('Get games')),
+        if (canDownload)
+          OutlinedButton(onPressed: onImport, child: const Text('Add PGN…'))
+        else
+          FilledButton(onPressed: onImport, child: const Text('Add PGN…')),
+      ],
+    ),
+  );
+}
+
+/// How many games the colour, the search and the filters let through, with
+/// the way to the filters beside it.
+class _CountLine extends StatelessWidget {
+  const _CountLine({
+    required this.games,
+    required this.filters,
+    required this.filtersOpen,
+    required this.onFilters,
+  });
+
+  final int games;
+
+  /// How many filters are on.
+  final int filters;
+  final bool filtersOpen;
+  final VoidCallback onFilters;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.xs, 0),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            '$games ${games == 1 ? 'game' : 'games'}',
+            style: Theme.of(context).textTheme.labelSmall,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
-        NumberField(
-          label: 'Positions to check',
-          value: hunt.limit,
-          min: 1,
-          max: 1000,
-          step: 25,
-          onChanged: (v) => hunt.configure(limit: v),
+        TextButton.icon(
+          onPressed: onFilters,
+          icon: Icon(
+            filtersOpen ? Icons.expand_less : Icons.expand_more,
+            size: IconSize.action,
+          ),
+          iconAlignment: IconAlignment.end,
+          label: Text(filters == 0 ? 'Filters' : 'Filters ($filters)'),
         ),
       ],
-    );
-  }
+    ),
+  );
+}
 
-  Widget _practicalSettings() {
-    final hunt = widget.hunt;
-    return Column(
-      children: [
-        CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Include practical chances'),
-          subtitle: const Text('Uses Maia to estimate likely replies.'),
-          value: hunt.practical,
-          onChanged: hunt.running || hunt.model == null
-              ? null
-              : (v) => hunt.configure(practical: v!),
+/// Positions, Games or Findings: which list is under the search. It stays
+/// at the top of the column while its list scrolls under it.
+class _ListSwitch extends SliverPersistentHeaderDelegate {
+  const _ListSwitch({
+    required this.list,
+    required this.onChanged,
+    required this.color,
+  });
+
+  final PlayerList list;
+  final ValueChanged<PlayerList> onChanged;
+
+  /// The column's own colour, so the rows pass under the switch unseen.
+  final Color color;
+
+  @override
+  double get minExtent => trainRowHeight;
+
+  @override
+  double get maxExtent => trainRowHeight;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlaps) =>
+      // Exactly the height the header says it has: a pinned header whose
+      // child is shorter than its extent is laid out wrongly.
+      SizedBox(
+        height: maxExtent,
+        child: ColoredBox(
+          color: color,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Space.m),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SegmentedButton<PlayerList>(
+                  showSelectedIcon: false,
+                  style: _segments,
+                  segments: const [
+                    ButtonSegment(
+                      value: PlayerList.openings,
+                      label: Text('Positions'),
+                    ),
+                    ButtonSegment(
+                      value: PlayerList.games,
+                      label: Text('Games'),
+                    ),
+                    ButtonSegment(
+                      value: PlayerList.weaknesses,
+                      label: Text('Findings'),
+                    ),
+                  ],
+                  selected: {list},
+                  onSelectionChanged: (v) => onChanged(v.single),
+                ),
+              ],
+            ),
+          ),
         ),
-        if (hunt.practical) ...[
-          NumberField(
-            label: 'Player rating',
-            value: hunt.rating,
-            min: 400,
-            max: 3000,
-            step: 100,
-            onChanged: (v) => hunt.configure(rating: v),
-          ),
-          NumberField(
-            label: 'Positions to probe',
-            value: hunt.probes,
-            min: 1,
-            max: 100,
-            onChanged: (v) => hunt.configure(probes: v),
-          ),
-        ],
-      ],
-    );
-  }
+      );
+
+  @override
+  bool shouldRebuild(_ListSwitch old) => old.list != list || old.color != color;
 }

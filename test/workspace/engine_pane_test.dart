@@ -1,10 +1,12 @@
 import 'package:chess_auto_prep/engines/engine_line.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/document_session.dart';
 import 'package:chess_auto_prep/workspace/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/engine_pane.dart';
+import 'package:chess_auto_prep/workspace/engine_settings.dart';
 import 'package:chessground/chessground.dart' show StaticChessboard;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -20,9 +22,11 @@ void main() {
   late ScriptedEngine engine;
   late EngineAnalysis analysis;
   late SettingsStore settings;
+  late ValueNotifier<bool> settingsOpen;
 
   setUp(() async {
     settings = SettingsStore();
+    settingsOpen = ValueNotifier(false);
     fixture = await openSession(blackChapter);
     session = fixture.session;
     engine = ScriptedEngine();
@@ -30,6 +34,7 @@ void main() {
   });
 
   tearDown(() {
+    settingsOpen.dispose();
     analysis.dispose();
     fixture.dispose();
   });
@@ -44,6 +49,8 @@ void main() {
               session: session,
               analysis: analysis,
               settings: settings,
+              settingsOpen: settingsOpen,
+              coresAvailable: 4,
             ),
           ],
         ),
@@ -252,5 +259,69 @@ void main() {
     await tester.pump();
     expect(settings.value.engineThreat, isFalse);
     expect(analysis.threatShown, isFalse);
+  });
+
+  /// The slider in the settings row named [label].
+  Finder slider(String label) => find.descendant(
+    of: find.widgetWithText(Row, label),
+    matching: find.byType(Slider),
+  );
+
+  testWidgets('the gear turns the lines into the engine settings, which '
+      'write the shared settings when let go, and back', (tester) async {
+    // The window's wiring: the analysis follows the setting.
+    settings.addListener(() => analysis.setLines(settings.value.engineLines));
+    await analyse(tester);
+    expect(find.text('1... c5'), findsOneWidget);
+    await tester.tap(find.byTooltip('Engine settings'));
+    await tester.pump();
+    expect(settingsOpen.value, isTrue);
+    expect(find.text('1... c5'), findsNothing, reason: 'in place of lines');
+    expect(find.text('Lines'), findsOneWidget);
+    expect(find.text('1 of 4'), findsOneWidget);
+    expect(find.text('128 MB'), findsOneWidget);
+    expect(
+      tester.getSize(find.byType(EnginePane)).height,
+      engineBarHeight + engineRowHeight * 3,
+      reason: 'three lines leave room for the settings: nothing moves',
+    );
+
+    await tester.drag(slider('CPU cores'), const Offset(800, 0));
+    await tester.pump();
+    expect(settings.value.engineCores, 4);
+    expect(find.text('4 of 4'), findsOneWidget);
+    await tester.drag(slider('Lines'), const Offset(-800, 0));
+    await tester.pump();
+    expect(settings.value.engineLines, 1);
+    expect(analysis.multiPv, 1);
+    await tester.drag(slider('Memory'), const Offset(800, 0));
+    await tester.pump();
+    expect(settings.value.engineMemoryMb, Settings.maxMemoryMb);
+    expect(
+      tester.getSize(find.byType(EnginePane)).height,
+      engineBarHeight + engineRowHeight * 3,
+    );
+
+    await tester.tap(find.byTooltip('Show lines'));
+    await tester.pump();
+    expect(settingsOpen.value, isFalse);
+    expect(find.text('CPU cores'), findsNothing);
+    engine.current.emit(
+      line(score: const Centipawns(-35), depth: 18, pv: ['c7c5', 'g1f3']),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('1... c5'), findsOneWidget);
+    expect(
+      tester.getSize(find.byType(EnginePane)).height,
+      engineBarHeight + engineRowHeight,
+    );
+  });
+
+  test('the settings take their own rows, or the lines\' room if larger', () {
+    expect(
+      enginePaneHeight(analysis, settingsOpen: true),
+      engineBarHeight + engineRowHeight * engineSettingRows,
+    );
+    expect(enginePaneHeight(analysis), engineBarHeight);
   });
 }

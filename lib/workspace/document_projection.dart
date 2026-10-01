@@ -7,6 +7,7 @@ import '../storage/document_ref.dart';
 import '../storage/edit_scope.dart';
 import '../storage/reference_change.dart';
 import '../storage/pgn_document_store.dart' as store;
+import 'parsed_files.dart';
 
 /// What reading a document for the workspace came to: the chapter to show,
 /// or the sentence saying why there is none.
@@ -46,15 +47,22 @@ final class DocumentUnread extends DocumentRead {
 /// Reads [ref] through [documents] as the chapter the workspace shows.
 /// [game] reads one game of the file as the whole document, which is what a
 /// study chapter is; null merges its games, or takes the chapter [ref]
-/// names in a course file.
+/// names in a course file. The file's bytes are always read, and name the
+/// revision; [parsed] spares parsing text it has parsed before.
 Future<DocumentRead> readDocument(
   store.PgnDocumentStore documents,
   ChapterRef ref, {
   int? game,
+  ParsedFiles? parsed,
 }) async {
   switch (await documents.open(ref)) {
     case store.Opened(:final text, :final revision, :final readOnly):
-      final (:file, :view) = await readShown(ref, text, game: game);
+      final (:file, :view) = await readShown(
+        ref,
+        text,
+        game: game,
+        parsed: parsed,
+      );
       // A chapter the file does not have would otherwise open as every
       // game merged, which looks like a chapter and is not one.
       if (game != null && game >= file.lines.length) {
@@ -83,8 +91,12 @@ Future<({Chapter file, SectionView? view})> readShown(
   ChapterRef ref,
   String text, {
   int? game,
+  ParsedFiles? parsed,
 }) async {
-  final file = await readChapter(name: ref.fileName, text: text, game: game);
+  final name = ref.fileName;
+  final file = parsed == null
+      ? await readChapter(name: name, text: text, game: game)
+      : await parsed.read(path: ref.path, name: name, text: text, game: game);
   return (file: file, view: game == null ? partOf(file, ref.section) : null);
 }
 

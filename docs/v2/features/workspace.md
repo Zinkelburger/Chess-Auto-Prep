@@ -33,7 +33,11 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   introduction's at the start, and writes a drawing into that comment where the document takes
   edits — builder, study, the analysis board, the viewer while Edit is open. Elsewhere, and over a
   comment's line or a hidden puzzle answer, a drawing stays until the position changes or a left
-  click wipes it. Drawn twice a shape goes; another colour recolours it.)
+  click wipes it. Drawn twice a shape goes; another colour recolours it. 2026-10-01: arrows use
+  Lichess's geometry — a shaft 10/64 of a square wide from the middle of the square — instead of
+  chessground's quarter-square slab; a left click on the board takes the comment's shapes out of
+  it where the document takes edits, and hides them until the position changes elsewhere; the
+  threat stays.)
 - **Eval bar** — none in the old app; the only score is the engine gutter. v2 had one for a day and
   removed it on 2026-09-21 (see below): the score lives in the engine gutter here too.
 - **Move list** — mono SAN, mainline and variations styled alike, depth shown by indent clamped
@@ -75,6 +79,16 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   collapse after a move. Closing or joining panes returns their tools to the main
   pane, and Explorer filters stay independent. Collection Analysis belongs only
   to the primary pane; pinned mode tabs stay put. Layouts last for the window.
+  Since 2026-10-01 a mode starts as one pane (the Repertoire builder starts as Moves
+  beside Expectimax) and a tab picked from `+` while
+  there is one opens under it in a pane of its own; with several panes it joins
+  the pane it was picked in. `+` ▸ `New pane` adds an empty pane, filled from
+  its own `+` or by a tab dragged onto it (this replaced Split right / Split
+  below in the plus menu; both remain in a tab's right-click menu and as
+  docking targets). When the main pane's last tab is dragged to another pane
+  or closed, that pane's tabs come to the main pane, so the two become one.
+  Moves alone on the card has no tab strip and no frame. The game or chapter
+  heading is the top of the Moves text, not a block above the tabs.
   Replies retains the Maia-3 table and Next gap described in `repertoires.md`.
 - **Explorer (Database dock)** — sources: Engine evals, ChessDB, Repertoire, Opening explorer,
   Local PGN. Live explorer: Lichess, Masters, TWIC (with a download action when missing), behind a
@@ -284,10 +298,12 @@ Quirks worth a verdict:
   paste box and two paths in one dialog) is the example of what not to build.
 - **The explorer is a tab**, as lila's book button swaps the move list for the explorer in the
   same column: `Moves | Replies | Explorer`. The only new control on screen is the tab. The
-  sources sit along the tab's top as one segmented row (the owner found the gear and its menu
+  sources sit along the tab's top as one segmented row (one typeable box where the pane is too
+  narrow for them side by side) (the owner found the gear and its menu
   unintuitive, 2026-09-22), with `Filters ▾` at the row's end for the chosen source's chips,
-  folded by default and reading what they are set to (`blitz rapid classical · 2000+`) while
-  folded; Masters has none and shows no button. The sources are `Masters`, `Lichess`
+  folded by default and always labelled `Filters` (the owner found the summary noisy,
+  2026-10-01); Masters has none and shows no button. In the Repertoire builder the book
+  button leading the nav row shows this explorer under the moves instead (shut until pressed, since 2026-10-01: the builder starts as Moves beside Expectimax and nothing else). The sources are `Masters`, `Lichess`
   (speed and rating chips), `TWIC` (`Classical OTB only`; the one source that works offline, and
   only with a local master database), `This file` (the games the viewer has open) and `My games`
   (the player-analysis corpus). The body is the

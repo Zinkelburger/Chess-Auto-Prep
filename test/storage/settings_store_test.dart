@@ -2,6 +2,8 @@ import 'package:chess_auto_prep/chess/training/training_options.dart';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:chess_auto_prep/chess/generation/evaluation_source.dart';
+import 'package:chess_auto_prep/chess/generation/expectimax_options.dart';
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/storage/atomic_write.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
@@ -52,6 +54,30 @@ void main() {
       Settings.allSpeeds,
     );
   });
+
+  test(
+    'the Expectimax settings round-trip; a bad number keeps its default',
+    () {
+      final chosen = Settings.defaults.copyWith(
+        expectimax: const ExpectimaxOptions(
+          method: SearchMethod.mainline,
+          depth: 6,
+          rootMoves: 8,
+          rareOnceIn: 0,
+          source: EvaluationSource.chessDb,
+          replies: ReplySource.lichess,
+          maiaFallback: false,
+          fallbackUnder: 25,
+        ),
+      );
+      expect(Settings.fromJson(chosen.toJson()), chosen);
+      final odd = Settings.fromJson(
+        '{"expectimax": {"depth": 900, "evalDepth": "deep", "rareOnceIn": 1}}',
+      ).expectimax;
+      expect(odd, ExpectimaxOptions.defaults);
+      expect(odd.depth, isNull, reason: 'no limit');
+    },
+  );
 
   Directory quarantine() =>
       Directory(p.join(support.path, 'recovery-quarantine'));

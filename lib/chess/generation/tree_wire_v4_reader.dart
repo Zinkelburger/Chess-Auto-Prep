@@ -494,6 +494,8 @@ SearchConfig configFromSnapshot(Map<String, Object?> config) {
     maxOurMoves: _intOr(config['v2_max_our_moves'], null),
     rootMoves: _intOr(config['v2_root_moves'], null),
     replyFloor: _replyFloor(config['v2_reply_floor']),
+    replyMass: _replyMass(config['v2_reply_mass']),
+    maxReplies: _positive(_intOr(config['v2_max_replies'], null)),
     nodeBudget: budget is num && budget.isFinite && budget > 0
         ? budget.toInt()
         : null,
@@ -512,6 +514,16 @@ double _replyFloor(Object? value) =>
     ? value.toDouble()
     : 0;
 
+/// [value] as a share of the opponent's move to keep, or null — every reply
+/// — when it is not one.
+double? _replyMass(Object? value) =>
+    value is num && value.isFinite && value > 0 && value <= 1
+    ? value.toDouble()
+    : null;
+
+/// [value], or null — no cap — when it is not a positive count.
+int? _positive(int? value) => value != null && value > 0 ? value : null;
+
 /// [value], or null — no limit — when it is the number a search with none
 /// writes.
 int? _limit(int? value, int unbounded) =>
@@ -521,20 +533,25 @@ int? _limit(int? value, int unbounded) =>
 /// on another isolate; or why it cannot be one — a sentence for the screen.
 ///
 /// A seed must have been built with the same [evaluationSource],
-/// [opponentRating] and [evalDepth], for [side], with no loss window and
+/// [replySource], [opponentRating] and [evalDepth], for [side], with no loss window and
 /// no pins: a tree built otherwise holds values this search would not have
 /// given, and mixing the two would change what the tree means. A finished
 /// exhaustive tree (an MCP chapter search) seeds a run; a shortlisted one
 /// must have shortlisted as this one does, [candidateMoves] of ours and
-/// replies down to [replyFloor].
+/// replies down to [replyFloor]. A tree saved before the opponent's replies
+/// were cut to [replyMass] and [maxReplies] comes back cut ([cutReplies]);
+/// one cut differently is refused.
 Future<Object> readSearchSeed(
   String text, {
   required int opponentRating,
   required Side side,
   required String evaluationSource,
   required int evalDepth,
+  String replySource = maiaReplySource,
   int candidateMoves = 4,
   double replyFloor = 0.01,
+  double? replyMass,
+  int? maxReplies,
 }) => Isolate.run(() {
   Object? json;
   try {
@@ -545,6 +562,9 @@ Future<Object> readSearchSeed(
   if (json is Map<String, Object?>) {
     if ((json['v2_evaluation_source'] ?? 'stockfish') != evaluationSource) {
       return 'Choose the evaluation source used by this saved search.';
+    }
+    if ((json['v2_reply_source'] ?? maiaReplySource) != replySource) {
+      return 'Choose the reply source used by this saved search.';
     }
     final config = json['config'];
     if (config is! Map ||
@@ -561,8 +581,13 @@ Future<Object> readSearchSeed(
                 (config.rootMoves != null &&
                     config.replyFloor == replyFloor &&
                     config.maxOurMoves == candidateMoves)) &&
-            config.pins.isEmpty =>
-      root,
+            config.pins.isEmpty &&
+            ((config.replyMass == replyMass &&
+                    config.maxReplies == maxReplies) ||
+                (config.replyMass == null && config.maxReplies == null)) =>
+      config.replyMass == replyMass && config.maxReplies == maxReplies
+          ? root
+          : cutReplies(root, mass: replyMass, most: maxReplies),
     TreeDecoded() => 'The saved search uses different search settings or side.',
     TreeUnsupported(:final reason) => reason,
     TreeMalformed(:final detail) => detail,

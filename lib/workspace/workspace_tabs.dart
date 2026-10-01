@@ -1,12 +1,13 @@
 import '../ui/app_action.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/app_keys.dart';
+import 'action_layout.dart';
 
 /// The tabs of the reading card: the moves, the
 /// trainer, the opponent's replies, the explorer (the user's own book
 /// among its sources), the search from the board and its values, the puzzle
 /// being solved, what the user's book says about one of their games, and
-/// the chapter's audit. A new thing the card can show is a new value here, and the
+/// the chapter's audit, and the filter over the open file's games. A new thing the card can show is a new value here, and the
 /// compiler then asks for its arm in the card's body; the strip, the keys
 /// and the Actions menu know nothing about which tabs there are.
 enum WorkspaceTab {
@@ -22,6 +23,7 @@ enum WorkspaceTab {
   puzzle('Puzzle'),
   source('Game'),
   book('Book'),
+  filter('Filter'),
   player('Player openings'),
   playerBook('My book');
 
@@ -39,13 +41,15 @@ List<PaneTab<WorkspaceTab>> get _documentTabs => [
     if (tab != WorkspaceTab.puzzle &&
         tab != WorkspaceTab.source &&
         tab != WorkspaceTab.book &&
+        tab != WorkspaceTab.filter &&
         tab != WorkspaceTab.solitaire &&
         tab != WorkspaceTab.player &&
         tab != WorkspaceTab.playerBook)
       tab.tab,
 ];
 
-/// Builder starts with its building tools. Training remains opt-in.
+/// Builder starts with its building tools, which `ActionLayout.startBuilding`
+/// then sets side by side. Training remains opt-in.
 PaneTabs<WorkspaceTab> newWorkspaceTabs() => PaneTabs(
   _documentTabs,
   open: const [WorkspaceTab.moves, WorkspaceTab.explorer, WorkspaceTab.search],
@@ -65,19 +69,21 @@ PaneTabs<WorkspaceTab> readingTabs() => PaneTabs(
   open: const [WorkspaceTab.moves, WorkspaceTab.explorer, WorkspaceTab.review],
 );
 
-/// The PGN Viewer's tabs: the reading tabs, Solitaire to be opened when a
-/// game is to be guessed rather than read, and what the user's books say
-/// about the game.
+/// The PGN Viewer's tabs. A file opens as a book does, on its moves alone;
+/// the explorer, the engine's review, Solitaire, what the user's books say
+/// about the game and the filter over the file's games are opened when
+/// wanted.
 PaneTabs<WorkspaceTab> viewerTabs() => PaneTabs(
   [
     WorkspaceTab.moves.tab,
     WorkspaceTab.explorer.tab,
+    WorkspaceTab.filter.tab,
     WorkspaceTab.analysis.tab,
     WorkspaceTab.review.tab,
     WorkspaceTab.solitaire.tab,
     const PaneTab(WorkspaceTab.book, 'My books'),
   ],
-  open: const [WorkspaceTab.moves, WorkspaceTab.explorer, WorkspaceTab.review],
+  open: const [WorkspaceTab.moves],
 );
 
 /// The card's tabs in the Repertoire trainer: Train first and always
@@ -118,27 +124,37 @@ PaneTabs<WorkspaceTab> bookTabs() => PaneTabs(
 );
 
 /// The card's tabs as a browser's menu has them: each one that can be
-/// closed is shown or closed by name, and the keys that walk them are
-/// written beside the entries that take them.
+/// closed is shown or closed by name, wherever among the panes it is open,
+/// and the keys that walk them are written beside the entries that take
+/// them. Without a [layout] — the analysis board's single strip — the tabs
+/// are [tabs]' own.
 List<AppAction> tabActions(
   PaneTabs<WorkspaceTab> tabs, {
-  List<AppAction> Function(WorkspaceTab)? destinations,
+  ActionLayout? layout,
 }) => [
   for (final tab in tabs.tabs)
     if (!tab.pinned)
-      tabs.isOpen(tab.id)
+      (layout?.isOpen(tab.id) ?? tabs.isOpen(tab.id))
           ? AppAction(
               'Close ${tab.title}',
-              () => tabs.close(tab.id),
+              layout == null
+                  ? () => tabs.close(tab.id)
+                  : switch (layout.paneOf(tab.id)) {
+                      final pane? when layout.canClose(pane, tab.id) =>
+                        () => layout.closeTab(pane, tab.id),
+                      _ => null,
+                    },
               shortcut: tabs.selected == tab.id ? AppKey.closeTab.label : null,
               group: 'Action Tabs',
-              alternatives: destinations?.call(tab.id) ?? const [],
+              alternatives: layout?.destinations(tab.id) ?? const [],
             )
           : AppAction(
               'Show ${tab.title}',
-              () => tabs.show(tab.id),
+              layout == null
+                  ? () => tabs.show(tab.id)
+                  : () => layout.reveal(tab.id),
               group: 'Action Tabs',
-              alternatives: destinations?.call(tab.id) ?? const [],
+              alternatives: layout?.destinations(tab.id) ?? const [],
             ),
   AppAction(
     'Next tab',

@@ -100,6 +100,21 @@ void main() {
     expect(File(armed.armed).existsSync(), isFalse);
   });
 
+  test('the armed helper is told to reopen the app, and told not to '
+      'again', () async {
+    final updates = await started();
+    await updates.check();
+    await updates.setReopen(true);
+    await updates.install();
+    final armed = updates.status as UpdateArmed;
+    final reopen = File(p.join(p.dirname(armed.armed), reopenName));
+    expect(reopen.existsSync(), isFalse, reason: 'nothing was armed yet');
+    await updates.setReopen(true);
+    expect(reopen.existsSync(), isTrue);
+    await updates.setReopen(false);
+    expect(reopen.existsSync(), isFalse);
+  });
+
   test('a helper that does not start is a failure Try again recovers '
       'from', () async {
     final helper = StandInHelper()..starts = false;

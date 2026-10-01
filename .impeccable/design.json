@@ -1,0 +1,223 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-01T17:41:56.138818+00:00",
+  "title": "Design System: Chess Auto Prep",
+  "extensions": {
+    "colorMeta": {
+      "slate-accent": {
+        "role": "primary",
+        "displayName": "Slate Accent",
+        "tonalRamp": [
+          "#1a2433",
+          "#2a3a52",
+          "#3a5072",
+          "#4d6791",
+          "#6585b0",
+          "#8eaad2",
+          "#b4c8e3",
+          "#dbe5f2"
+        ]
+      },
+      "slate-fill": {
+        "role": "primary",
+        "displayName": "Slate Fill",
+        "tonalRamp": [
+          "#121c2a",
+          "#1d2d43",
+          "#2a4060",
+          "#3a5a85",
+          "#5476a3",
+          "#7894bd",
+          "#a3b8d6",
+          "#d0dcec"
+        ]
+      },
+      "charcoal-surface": {
+        "role": "neutral",
+        "displayName": "Charcoal Surface",
+        "tonalRamp": [
+          "#0c0c0e",
+          "#1b1b1d",
+          "#242427",
+          "#2c2c30",
+          "#38383d",
+          "#5a5a60",
+          "#9a9aa0",
+          "#e6e6e8"
+        ]
+      },
+      "reading-black": {
+        "role": "neutral",
+        "displayName": "Reading Black"
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink"
+      },
+      "muted-ink": {
+        "role": "neutral",
+        "displayName": "Muted Ink"
+      }
+    },
+    "typographyMeta": {
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default interface text."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Moves, scores and numbers in tables."
+      },
+      "reading-moves": {
+        "displayName": "Reading moves",
+        "purpose": "Movetext in the reading card."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Column headers and captions; the 12px floor."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "route",
+        "value": "150ms",
+        "purpose": "Route transitions."
+      },
+      {
+        "name": "menu",
+        "value": "100ms",
+        "purpose": "Menus opening."
+      },
+      {
+        "name": "piece",
+        "value": "120ms",
+        "purpose": "A piece sliding to its square."
+      },
+      {
+        "name": "preview-delay",
+        "value": "80ms",
+        "purpose": "Rest before a hovered move's board appears."
+      }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one action that applies or completes the task.",
+      "html": "<button class=\"ds-btn-primary\">Expectimax</button>",
+      "css": ".ds-btn-primary{background:#3A5A85;color:#E6E6E8;font:600 14px Inter,sans-serif;padding:8px 20px;border:none;border-radius:999px;cursor:pointer}.ds-btn-primary:hover{background:#44679a}.ds-btn-primary:focus-visible{outline:2px solid #8EAAD2;outline-offset:2px}.ds-btn-primary:disabled{background:#2C2C30;color:#8A8A90}"
+    },
+    {
+      "name": "Outlined Button",
+      "kind": "button",
+      "refersTo": "button-outlined",
+      "description": "Default secondary action.",
+      "html": "<button class=\"ds-btn-outlined\">Stop after finishing depth 3</button>",
+      "css": ".ds-btn-outlined{background:transparent;color:#E6E6E8;font:600 14px Inter,sans-serif;padding:8px 20px;border:1px solid #5A5A60;border-radius:999px;cursor:pointer}.ds-btn-outlined:hover{background:rgba(230,230,232,.06)}.ds-btn-outlined:focus-visible{outline:2px solid #8EAAD2;outline-offset:2px}"
+    },
+    {
+      "name": "Text Button",
+      "kind": "button",
+      "refersTo": "button-text",
+      "description": "Light actions inside rows and bars.",
+      "html": "<button class=\"ds-btn-text\">Filters</button>",
+      "css": ".ds-btn-text{background:transparent;color:#8EAAD2;font:600 14px Inter,sans-serif;padding:6px 12px;border:none;border-radius:999px;cursor:pointer}.ds-btn-text:hover{background:rgba(142,170,210,.08)}.ds-btn-text:focus-visible{outline:2px solid #8EAAD2}"
+    },
+    {
+      "name": "Pane Tab",
+      "kind": "nav",
+      "refersTo": "pane-tab",
+      "description": "Browser-style tab at the top of a pane.",
+      "html": "<div class=\"ds-tabs\"><span class=\"ds-tab ds-on\">Moves</span><span class=\"ds-tab\">Explorer</span></div>",
+      "css": ".ds-tabs{display:flex;gap:4px;padding:4px;background:#1B1B1D;border-bottom:1px solid #3A3A3E}.ds-tab{height:34px;line-height:34px;padding:0 12px;border-radius:6px;color:#9A9AA0;font:600 14px Inter,sans-serif;cursor:pointer}.ds-tab:hover{color:#E6E6E8}.ds-tab.ds-on{background:#38383D;color:#E6E6E8}"
+    },
+    {
+      "name": "Number Field",
+      "kind": "input",
+      "refersTo": null,
+      "description": "Labelled typeable number above an underline.",
+      "html": "<label class=\"ds-field\"><span>Engine depth</span><input value=\"14\"></label>",
+      "css": ".ds-field{display:inline-flex;flex-direction:column;width:96px;font-family:Inter,sans-serif}.ds-field span{font-size:12px;color:#9A9AA0}.ds-field input{background:transparent;border:none;border-bottom:1px solid #5A5A60;color:#E6E6E8;font-size:16px;padding:4px 0}.ds-field input:focus{outline:none;border-bottom:2px solid #8EAAD2}"
+    },
+    {
+      "name": "Engine Row",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Compact engine line: score gutter then moves.",
+      "html": "<div class=\"ds-eng\"><span class=\"ds-score\">+0.35</span><span class=\"ds-moves\">1. e4 e5 2. Nf3 Nc6 3. Bb5</span></div>",
+      "css": ".ds-eng{display:flex;height:28px;align-items:center;background:#1B1B1D;color:#E6E6E8;font:13px 'Source Code Pro',monospace}.ds-score{width:54px;font-weight:600}.ds-moves{color:#9A9AA0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ds-eng:hover .ds-moves{color:#E6E6E8}"
+    },
+    {
+      "name": "Reading Card",
+      "kind": "card",
+      "refersTo": "reading-card",
+      "description": "Near-black card behind the movetext.",
+      "html": "<div class=\"ds-read\"><p class=\"ds-mv\">1. e4 c5 2. Nf3 d6 3. d4</p><p class=\"ds-pr\">The Open Sicilian.</p></div>",
+      "css": ".ds-read{background:#0C0C0E;border-radius:8px;padding:24px;color:#E6E6E8}.ds-mv{font:16px/1.7 'Source Code Pro',monospace;margin:0}.ds-pr{font:16px/1.55 Inter,sans-serif;max-width:640px;margin:8px 0 0}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Analysis Room",
+    "overview": "A club player's analysis room late in the evening: one lit board, the moves written out beside it, everything else in shadow. Colour is information, never mood. Conventions follow lila (Lichess), quieter. Dark only.",
+    "keyCharacteristics": [
+      "Charcoal surfaces in three steps, with a near-black reading card under the moves.",
+      "One slate-blue accent; every other hue means a specific chess fact.",
+      "Inter for interface, Source Code Pro for moves and numbers, bundled figurines.",
+      "Flat: depth comes from tonal steps and 1px outlines, not shadows.",
+      "Fixed heights for rows, feedback lines and panes so reading never jumps."
+    ],
+    "rules": [
+      {
+        "name": "The Colour-Is-A-Fact Rule",
+        "body": "A hue appears only when it tells the player something the text does not.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Filled Button Rule",
+        "body": "A surface has at most one Slate Fill button, and it applies or completes the task.",
+        "section": "colors"
+      },
+      {
+        "name": "The Twelve-Pixel Floor Rule",
+        "body": "Nothing the player must read is smaller than 12px; only board coordinates go below.",
+        "section": "typography"
+      },
+      {
+        "name": "The Notation-Is-Mono Rule",
+        "body": "If a chess player would write it on a scoresheet or read it off an engine, it is Source Code Pro.",
+        "section": "typography"
+      },
+      {
+        "name": "The Still Page Rule",
+        "body": "Reading views never shift; hover never resizes a row.",
+        "section": "layout"
+      },
+      {
+        "name": "The No-Shadow Rule",
+        "body": "Separate surfaces with a tonal step or a 1px outline, never a drop shadow or glow.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep every gap on the 4 / 8 / 12 / 16 / 24 scale and every size in `lib/ui/theme.dart`.",
+      "Do reuse the controls in `lib/ui/` (search_field, choice_field, number_field, name_dialog, confirm_dialog, row_actions, pane_tabs, selection, app_action).",
+      "Do write labels and tooltips behaviour-first: the first sentence says what the control does; the binding comes from `ui/app_keys.dart`.",
+      "Do follow Lichess conventions for the board, arrows, explorer and engine lines.",
+      "Do give feedback lines, rows and panes fixed heights so nothing jumps."
+    ],
+    "donts": [
+      "Don't add a light theme, a system theme or an appearance setting.",
+      "Don't use colour or icons for decoration; colour marks a chess fact or a state only.",
+      "Don't use a dropdown menu the player cannot type into.",
+      "Don't write status sentences, filler empty states, rationale or history into the UI.",
+      "Don't show text below 12px except board coordinates.",
+      "Don't add shadows, glows, gradients or splash effects.",
+      "Don't put an evaluation bar on the board or per-move evaluations in the movetext.",
+      "Don't duplicate a control that already exists on the same screen."
+    ]
+  }
+}

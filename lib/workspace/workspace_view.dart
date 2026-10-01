@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:multi_split_view/multi_split_view.dart';
 
 import '../chess/explorer_answer.dart';
@@ -13,6 +14,7 @@ import 'explorer.dart';
 import '../chess/fen.dart';
 import '../storage/chapter_files.dart';
 import '../storage/settings_store.dart';
+import '../ui/app_action.dart';
 import '../ui/listening_state.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
@@ -62,12 +64,28 @@ final class WorkspaceHooks {
     this.onOpenPlace,
     this.onEditBooks,
     this.onSaveHeld,
-    this.gameBar,
+    this.quietBoard = false,
+    this.paneActions,
+    this.explorerFileBar,
+    this.underHeading,
   });
 
-  /// Buttons under the card's heading for what is done to the game on it:
-  /// the viewer's Edit, Analyze game and Solitaire.
-  final Widget? gameBar;
+  /// Under the heading: what the mode has to say about the game before it
+  /// is read, such as where it left the user's book.
+  final Widget? underHeading;
+
+  /// Whether the board has only what is in use under it, as a book has a
+  /// diagram and nothing else: the engine's row while the engine is on, the
+  /// move field while it is typed in, the move's note when there is one or
+  /// while it is edited. The viewer's.
+  final bool quietBoard;
+
+  /// Under the explorer's databases while `This file` is chosen: the
+  /// mode's way of narrowing the file's games.
+  final Widget? explorerFileBar;
+
+  /// What the mode adds to every pane's `+` under its tabs.
+  final List<AppAction> Function()? paneActions;
 
   /// What the edit strip's Save does with held edits, when not simply
   /// writing them to their file.
@@ -108,7 +126,7 @@ final class WorkspaceHooks {
   /// document: the explorer Book's free board. Null plays them into it.
   final ValueChanged<String>? onEngineMove;
 
-  /// Whether the card is headed with the game's players and the board has
+  /// Whether the moves are headed with the game's players and the board has
   /// the file's game counter under it. Tactics has neither: the puzzle says
   /// whose game it was and the list is how to get to another.
   final bool header;
@@ -124,10 +142,11 @@ final class WorkspaceHooks {
 }
 
 /// The board with the game counter, the engine's lines and the move's note
-/// under it on the left; on the right the reading card, top to bottom in a
-/// fixed order: the tab strip, the heading, the moves, the opponent's
-/// replies, the explorer or the search, the edit strip while there is
-/// editing or trouble, and the navigation row.
+/// under it on the left; on the right the reading card: the panes of tabs
+/// — the moves, the opponent's replies, the explorer, the search — then
+/// the edit strip while there is editing or trouble, and the navigation
+/// row. The heading is the top of the moves and scrolls with them, as a
+/// book heads a game.
 /// The card starts wider than the board. The keys that
 /// walk the line and take an edit back are [WorkspaceKeys], above every
 /// column that edits the document.
@@ -181,6 +200,7 @@ class WorkspaceView extends StatelessWidget {
               session: workspace.session,
               noteEditable: hooks.builder,
               editing: hooks.noteEditing ? editing : null,
+              quiet: hooks.quietBoard,
               settings: workspace.settings,
               analysis: workspace.analysis,
               onMove: hooks.onBoardMove ?? workspace.session.playMove,
@@ -190,12 +210,14 @@ class WorkspaceView extends StatelessWidget {
               // While part of the game is hidden — a puzzle's answer — the
               // engine would read it out, so it is not shown until the
               // answer is found or shown.
-              engine: _UnlessHidden(
+              engine: (settingsOpen) => _UnlessHidden(
                 session: workspace.session,
                 child: EnginePane(
                   session: workspace.session,
                   analysis: workspace.analysis,
                   settings: workspace.settings,
+                  settingsOpen: settingsOpen,
+                  coresAvailable: workspace.coresAvailable,
                   onMove: hooks.onEngineMove,
                 ),
               ),
@@ -242,7 +264,7 @@ class WorkspaceView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Divider(height: 1),
-                NavRow(session: workspace.session),
+                NavRow(session: workspace.session, book: layout?.book),
               ],
             ),
           ),
@@ -312,72 +334,101 @@ class _Tabbed extends StatelessWidget {
   final ActionLayout? layout;
   final WorkspaceHooks hooks;
 
-  Widget _body(BuildContext context, WorkspaceTab tab, {Explorer? explorer}) =>
-      switch (tab) {
-        WorkspaceTab.moves || WorkspaceTab.analysis => MoveTreeView(
-          session: workspace.session,
-          moveMenu: hooks.moveMenu,
-        ),
-        WorkspaceTab.review =>
-          workspace.review == null
-              ? const SizedBox.shrink()
-              : GameReviewPane(review: workspace.review!),
-        WorkspaceTab.train => _supplied(context, tab),
-        WorkspaceTab.replies => RepliesPane(
-          session: workspace.session,
-          replies: workspace.replies,
-          gaps: workspace.gaps,
-        ),
-        // At a puzzle the table would tick the answer, or list it as the only
-        // move with This file, so it goes while the answer is hidden, as the
-        // engine pane does.
-        WorkspaceTab.explorer => _UnlessHidden(
-          session: workspace.session,
-          child: LayoutBuilder(
-            builder: (context, size) => SingleChildScrollView(
-              child: SizedBox(
-                height: max(searchPaneMinHeight, size.maxHeight),
-                child: ExplorerPane(
-                  session: workspace.session,
-                  explorer: explorer ?? workspace.explorer,
-                  games: workspace.games,
-                  tree: workspace.tree,
-                  books: workspace.books,
-                  openings: workspace.openings,
-                  onOpenGame: hooks.onExplorerGame == null
-                      ? null
-                      : (game) {
-                          final owner = explorer ?? workspace.explorer;
-                          hooks.onExplorerGame!(
-                            game,
-                            owner.choice.source,
-                            owner.ply,
-                          );
-                        },
-                  onLogIn: hooks.onExplorerLogin,
-                  onDownloadTwic: hooks.onDownloadTwic,
-                  onOpenPlace: hooks.onOpenPlace,
-                  onEditBooks: hooks.onEditBooks,
-                ),
-              ),
-            ),
+  Widget _body(
+    BuildContext context,
+    WorkspaceTab tab, {
+    Explorer? explorer,
+    ValueNotifier<bool>? book,
+  }) => switch (tab) {
+    WorkspaceTab.moves when book != null => ValueListenableBuilder<bool>(
+      valueListenable: book,
+      builder: (context, open, _) => open
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(flex: 2, child: _moves()),
+                const Divider(height: 1),
+                Expanded(flex: 3, child: _explorer(explorer)),
+              ],
+            )
+          : _moves(),
+    ),
+    WorkspaceTab.moves || WorkspaceTab.analysis => _moves(),
+    WorkspaceTab.review =>
+      workspace.review == null
+          ? const SizedBox.shrink()
+          : GameReviewPane(review: workspace.review!),
+    WorkspaceTab.train => _supplied(context, tab),
+    WorkspaceTab.replies => RepliesPane(
+      session: workspace.session,
+      replies: workspace.replies,
+      gaps: workspace.gaps,
+    ),
+    WorkspaceTab.explorer => _explorer(explorer),
+    WorkspaceTab.search => SearchPane(
+      fill: workspace.fill,
+      session: workspace.session,
+      settings: workspace.settings,
+      onOpenChapter: hooks.onOpenChapter,
+    ),
+    WorkspaceTab.audit =>
+      workspace.audit == null
+          ? const SizedBox.shrink()
+          : AuditPane(audit: workspace.audit!, session: workspace.session),
+    WorkspaceTab.puzzle || WorkspaceTab.source => _supplied(context, tab),
+    WorkspaceTab.book || WorkspaceTab.solitaire => _supplied(context, tab),
+    WorkspaceTab.filter => _supplied(context, tab),
+    WorkspaceTab.player || WorkspaceTab.playerBook => _supplied(context, tab),
+  };
+
+  Widget _moves() => MoveTreeView(
+    session: workspace.session,
+    moveMenu: hooks.moveMenu,
+    heading: hooks.header ? _heading() : null,
+  );
+
+  // At a puzzle the table would tick the answer, or list it as the only
+  // move with This file, so it goes while the answer is hidden, as the
+  // engine pane does.
+  Widget _explorer(Explorer? explorer) => _UnlessHidden(
+    session: workspace.session,
+    child: LayoutBuilder(
+      builder: (context, size) => SingleChildScrollView(
+        child: SizedBox(
+          height: max(searchPaneMinHeight, size.maxHeight),
+          child: ExplorerPane(
+            session: workspace.session,
+            explorer: explorer ?? workspace.explorer,
+            games: workspace.games,
+            tree: workspace.tree,
+            books: workspace.books,
+            openings: workspace.openings,
+            onOpenGame: hooks.onExplorerGame == null
+                ? null
+                : (game) {
+                    final owner = explorer ?? workspace.explorer;
+                    hooks.onExplorerGame!(game, owner.choice.source, owner.ply);
+                  },
+            onLogIn: hooks.onExplorerLogin,
+            onDownloadTwic: hooks.onDownloadTwic,
+            onOpenPlace: hooks.onOpenPlace,
+            onEditBooks: hooks.onEditBooks,
+            fileBar: hooks.explorerFileBar,
           ),
         ),
-        WorkspaceTab.search => SearchPane(
-          fill: workspace.fill,
-          session: workspace.session,
-          settings: workspace.settings,
-          onOpenChapter: hooks.onOpenChapter,
-        ),
-        WorkspaceTab.audit =>
-          workspace.audit == null
-              ? const SizedBox.shrink()
-              : AuditPane(audit: workspace.audit!, session: workspace.session),
-        WorkspaceTab.puzzle || WorkspaceTab.source => _supplied(context, tab),
-        WorkspaceTab.book || WorkspaceTab.solitaire => _supplied(context, tab),
-        WorkspaceTab.player ||
-        WorkspaceTab.playerBook => _supplied(context, tab),
-      };
+      ),
+    ),
+  );
+
+  /// What is open and, under it, what the mode says about it.
+  Widget _heading() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      ReadingHeader(session: workspace.session, openings: workspace.openings),
+      ?hooks.underHeading,
+    ],
+  );
 
   /// The tabs that show the document's moves or what follows them.
   static bool _tellsAnswers(WorkspaceTab tab) => switch (tab) {
@@ -394,6 +445,7 @@ class _Tabbed extends StatelessWidget {
     WorkspaceTab.puzzle ||
     WorkspaceTab.source ||
     WorkspaceTab.book ||
+    WorkspaceTab.filter ||
     WorkspaceTab.solitaire => false,
   };
 
@@ -404,6 +456,7 @@ class _Tabbed extends StatelessWidget {
     BuildContext context,
     WorkspaceTab tab, {
     Explorer? explorer,
+    ValueNotifier<bool>? book,
   }) => ValueListenableBuilder<BoardClaim?>(
     valueListenable: hooks.lesson ?? const _NoClaim(),
     builder: (context, lesson, _) => lesson != null && _tellsAnswers(tab)
@@ -414,50 +467,36 @@ class _Tabbed extends StatelessWidget {
               style: Theme.of(context).textTheme.bodySmall,
             ),
           )
-        : _body(context, tab, explorer: explorer),
+        : _body(context, tab, explorer: explorer, book: book),
   );
 
   @override
   Widget build(BuildContext context) {
     final layout = this.layout;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (hooks.header)
-          ReadingHeader(
-            session: workspace.session,
-            openings: workspace.openings,
-          ),
-        if (hooks.gameBar case final bar?) bar,
-        Expanded(
-          child: layout != null
-              ? ActionPanes(
-                  layout: layout,
-                  body: (context, index, tab) => _visibleBody(
-                    context,
-                    tab,
-                    explorer: tab == WorkspaceTab.explorer
-                        ? layout.explorer(index)
-                        : null,
-                  ),
-                )
-              : ListenableBuilder(
-                  listenable: tabs,
-                  builder: (context, _) => Column(
-                    children: [
-                      PaneTabStrip(
-                        tabs: tabs,
-                        connected: true,
-                        label: 'Action Tabs',
-                      ),
-                      const Divider(height: 1),
-                      Expanded(child: _visibleBody(context, tabs.selected)),
-                    ],
-                  ),
-                ),
-        ),
-      ],
-    );
+    return layout != null
+        ? ActionPanes(
+            layout: layout,
+            actions: hooks.paneActions,
+            body: (context, index, tab) => _visibleBody(
+              context,
+              tab,
+              explorer:
+                  tab == WorkspaceTab.explorer || tab == WorkspaceTab.moves
+                  ? layout.explorer(index)
+                  : null,
+              book: layout.book,
+            ),
+          )
+        : ListenableBuilder(
+            listenable: tabs,
+            builder: (context, _) => Column(
+              children: [
+                PaneTabStrip(tabs: tabs, connected: true),
+                const Divider(height: 1),
+                Expanded(child: _visibleBody(context, tabs.selected)),
+              ],
+            ),
+          );
   }
 }
 
@@ -492,6 +531,7 @@ class _BoardAndCounter extends StatefulWidget {
     required this.analysis,
     this.noteEditable = false,
     this.editing,
+    this.quiet = false,
   });
 
   final DocumentSession session;
@@ -499,6 +539,10 @@ class _BoardAndCounter extends StatefulWidget {
   final EngineAnalysis analysis;
   final bool noteEditable;
   final ValueNotifier<bool>? editing;
+
+  /// Whether the engine's row, the move field and an empty note stay away
+  /// until they are used ([WorkspaceHooks.quietBoard]).
+  final bool quiet;
 
   /// Where a move made on the board or typed into the field goes.
   final ValueChanged<String> onMove;
@@ -508,8 +552,9 @@ class _BoardAndCounter extends StatefulWidget {
   final GameOrdering? ordering;
   final MoveEntry moves;
 
-  /// The engine's lines, under the counter.
-  final Widget engine;
+  /// The engine's lines, under the counter, or its settings while the
+  /// notifier it is given says so.
+  final Widget Function(ValueNotifier<bool> settingsOpen) engine;
 
   @override
   State<_BoardAndCounter> createState() => _BoardAndCounterState();
@@ -519,18 +564,34 @@ class _BoardAndCounterState extends State<_BoardAndCounter>
     with ListeningState<_BoardAndCounter> {
   double _engineRoom = 0;
 
+  /// Whether the engine shows its settings in place of its lines: here,
+  /// because the room the pane is given depends on it.
+  final _engineSettings = ValueNotifier(false);
+
   @override
   void initState() {
     super.initState();
     _engineRoom = _room();
   }
 
+  @override
+  void dispose() {
+    stopListening();
+    _engineSettings.dispose();
+    super.dispose();
+  }
+
+  /// The engine's room: none while part of the game is hidden, and none on
+  /// a quiet board until the engine is on.
   double _room() =>
-      widget.session.shownTo == null ? enginePaneHeight(widget.analysis) : 0;
+      widget.session.shownTo != null ||
+          (widget.quiet && !widget.analysis.enabled)
+      ? 0
+      : enginePaneHeight(widget.analysis, settingsOpen: _engineSettings.value);
 
   @override
   Listenable listenableOf(_BoardAndCounter widget) =>
-      Listenable.merge([widget.session, widget.analysis]);
+      Listenable.merge([widget.session, widget.analysis, _engineSettings]);
 
   @override
   void changed() {
@@ -569,44 +630,39 @@ class _BoardAndCounterState extends State<_BoardAndCounter>
                     ?widget.editing,
                   ]),
                   // A comment's line on the board is read, not played on.
-                  builder: (context, _) => BoardView(
-                    fen: session.boardFen,
-                    orientation: session.orientation,
-                    lastMove: session.boardLastMove,
-                    onMove: onMove,
-                    movable: session.commentLine.value == null,
-                    coordinates: settings.value.boardCoordinates,
-                    shapes: shapesOnBoard(
+                  builder: (context, _) {
+                    final keeps = drawsIntoComment(
                       session,
-                      widget.analysis.threat.value,
-                    ),
-                    onDraw:
-                        drawsIntoComment(
-                          session,
-                          editing: widget.editing?.value ?? false,
-                        )
-                        ? (shape) => drawIntoComment(session, shape)
-                        : null,
-                  ),
+                      editing: widget.editing?.value ?? false,
+                    );
+                    return BoardView(
+                      fen: session.boardFen,
+                      orientation: session.orientation,
+                      lastMove: session.boardLastMove,
+                      onMove: onMove,
+                      movable: session.commentLine.value == null,
+                      coordinates: settings.value.boardCoordinates,
+                      shapes: shapesOnBoard(session),
+                      threat: threatOnBoard(
+                        session,
+                        widget.analysis.threat.value,
+                      ),
+                      onDraw: keeps
+                          ? (shape) => drawIntoComment(session, shape)
+                          : null,
+                      onClear: keeps ? () => clearCommentShapes(session) : null,
+                    );
+                  },
                 ),
                 const SizedBox(height: Space.s),
                 SizedBox(
                   height: _engineRoom,
-                  child: SingleChildScrollView(child: widget.engine),
+                  child: SingleChildScrollView(
+                    child: widget.engine(_engineSettings),
+                  ),
                 ),
                 _navigation(),
-                if (below >= moveNoteMinHeight) ...[
-                  const SizedBox(height: Space.s),
-                  SizedBox(
-                    width: side,
-                    height: below,
-                    child: MoveNote(
-                      session: session,
-                      editable: widget.noteEditable,
-                      editing: widget.editing,
-                    ),
-                  ),
-                ],
+                if (below >= moveNoteMinHeight) _note(side, below),
               ],
             ),
           ),
@@ -614,6 +670,21 @@ class _BoardAndCounterState extends State<_BoardAndCounter>
       },
     );
   }
+
+  /// The move's note in the room left under the row, [side] wide.
+  Widget _note(double side, double below) => Padding(
+    padding: const EdgeInsets.only(top: Space.s),
+    child: SizedBox(
+      width: side,
+      height: below,
+      child: MoveNote(
+        session: widget.session,
+        editable: widget.noteEditable,
+        editing: widget.editing,
+        quiet: widget.quiet,
+      ),
+    ),
+  );
 
   Widget _navigation() => SizedBox(
     height: navRowHeight,
@@ -627,6 +698,7 @@ class _BoardAndCounterState extends State<_BoardAndCounter>
             onMove: widget.session.commentLine.value == null
                 ? widget.onMove
                 : null,
+            whenUsed: widget.quiet,
           ),
         ),
         Expanded(
@@ -698,18 +770,85 @@ class _ClaimedBoard extends StatelessWidget {
 
 /// The move field at its width, in the row under the board.
 class _Typed extends StatelessWidget {
-  const _Typed({required this.moves, required this.fen, required this.onMove});
+  const _Typed({
+    required this.moves,
+    required this.fen,
+    required this.onMove,
+    this.whenUsed = false,
+  });
 
   final MoveEntry moves;
   final Fen fen;
   final ValueChanged<String>? onMove;
 
+  /// Whether the field is seen only while it has the keys or words in it.
+  final bool whenUsed;
+
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: moveFieldWidth,
-    child: Center(
-      child: MoveField(entry: moves, fen: fen, onMove: onMove),
-    ),
+  Widget build(BuildContext context) {
+    final field = SizedBox(
+      width: moveFieldWidth,
+      child: Center(
+        child: MoveField(entry: moves, fen: fen, onMove: onMove),
+      ),
+    );
+    return whenUsed ? _WhenUsed(moves: moves, child: field) : field;
+  }
+}
+
+/// The move field seen only while it has the keys or words in it. It keeps
+/// its place and stays in the tree either way, so `/` finds it and nothing
+/// beside it moves when it comes.
+class _WhenUsed extends StatefulWidget {
+  const _WhenUsed({required this.moves, required this.child});
+
+  final MoveEntry moves;
+  final Widget child;
+
+  @override
+  State<_WhenUsed> createState() => _WhenUsedState();
+}
+
+class _WhenUsedState extends State<_WhenUsed> with ListeningState<_WhenUsed> {
+  bool _used = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _used = _usedNow;
+  }
+
+  bool get _usedNow =>
+      widget.moves.focus.hasFocus || widget.moves.words.text.isNotEmpty;
+
+  @override
+  Listenable listenableOf(_WhenUsed widget) =>
+      Listenable.merge([widget.moves.focus, widget.moves.words]);
+
+  @override
+  void dispose() {
+    stopListening();
+    super.dispose();
+  }
+
+  /// The field under this clears its own words while it is being built, on
+  /// a new position; that is heard here, above it, so the change is shown
+  /// once the frame is done.
+  @override
+  void changed() {
+    if (!mounted || _usedNow == _used) return;
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) => changed());
+      return;
+    }
+    setState(() => _used = _usedNow);
+  }
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    ignoring: !_used,
+    child: Opacity(opacity: _used ? 1 : 0, child: widget.child),
   );
 }
 
@@ -730,9 +869,13 @@ class _NoClaim implements ValueListenable<BoardClaim?> {
 /// The four buttons under the moves that walk the line: start, back,
 /// forward, end. Each says its key, because each has one.
 class NavRow extends StatelessWidget {
-  const NavRow({super.key, required this.session});
+  const NavRow({super.key, required this.session, this.book});
 
   final DocumentSession session;
+
+  /// Whether the opening book shows under the moves; its button leads the
+  /// row, as Lichess's does, where the layout offers it.
+  final ValueNotifier<bool>? book;
 
   @override
   Widget build(BuildContext context) {
@@ -745,6 +888,22 @@ class NavRow extends StatelessWidget {
           return Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
+              if (book case final book?)
+                ValueListenableBuilder<bool>(
+                  valueListenable: book,
+                  builder: (context, open, _) => IconButton(
+                    icon: Icon(
+                      open ? Icons.menu_book : Icons.menu_book_outlined,
+                      size: IconSize.action,
+                    ),
+                    tooltip: open
+                        ? 'Hide the opening book'
+                        : 'Show the opening book under the moves',
+                    isSelected: open,
+                    onPressed: () => book.value = !open,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
               _button(
                 Icons.first_page,
                 AppKey.start.tip('Start'),

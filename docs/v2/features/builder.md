@@ -18,7 +18,9 @@ audit and the Findings pane are [checks.md](checks.md).
 
 ## Current v2 workflow (2026-09-27)
 
-Builder opens Expectimax, Moves and Explorer, with Expectimax selected. Train and
+Builder opens Moves on the left and Expectimax on the right, with Expectimax
+selected; the book button under the moves opens the Explorer there (shut at
+first, since 2026-10-01). Train and
 Replies remain available from the inner tab menu but are not initially open.
 The **Action Tabs** layout control offers 1, 2, 3 or 4 fixed panes: one pane,
 two side by side, one on the left and two on the right, or four quadrants.
@@ -30,19 +32,50 @@ layouts last for the current app session and are retained per mode.
 The move-note card beneath the board is directly editable, including the chapter introduction. It uses the
 existing commit-on-navigation editor and guarded document saver.
 
-Expectimax has a play button and inline text fields for Maia rating, root moves,
-candidate count, depth and reply coverage. Root moves (default 4) limits our first
-move to the engine's best; Candidates limits every later move of ours. Both Stop and Stop after finishing depth N carry pause icons; Stop
-finishes the current position, while the other finishes the whole search level.
-The opponent rating and search limit are labelled, and the engine target depth
-is displayed separately. Hover an Engine value for its recorded depth (engine,
-cache or Lichess cloud).
-Depth 14 is the engine target; cache/database results may differ. Per-result
+Expectimax is headed by one bar that never moves (2026-10-01): a button that is
+`Expectimax`, `Pause` or `Resume` in the same place at the same width, the
+`Depth` box (empty is no limit) and a gear, with a typeable `Replies from`
+field (Maia, Lichess masters, Lichess players, TWIC games) beside the depth
+where the pane is 480px or wider and on its own line under the bar where it is
+not. One status line under it starts
+with the side the search prepares, `White` or `Black`, as a text button: the
+side is the bottom of the board, so pressing it turns the board (as F does). It
+is held while a search runs. It is not a two-part switch: the owner removed a
+permanent White/Black switch from the builder on 2026-09-22. After it the line says what will run
+(`Maia 2200 · best 4, then 4`), then how far the search has
+got; while a search with no depth runs, `Finish depth N` at the line's end lets
+the level under way finish before pausing. The gear swaps the results in place
+for the rest of the settings, as the engine pane's gear does: Maia practical |
+ChessDB mainline; with a database chosen, a tick box `Fall back to Maia under`
+N `games at a position` (ticked, 10), and for Lichess players a line naming the
+Explorer tab's speeds and ratings; Maia rating (hidden when Maia is never
+asked), First move and Later moves (our best engine moves
+searched, default 4 each), Search replies met once in N games, Engine depth and
+Evaluation (Engine, ChessDB, Lichess cloud). They are saved in `settings.json`
+(`Settings.expectimax`, with the shared opponent rating) and shown again under
+Settings ▸ Expectimax; a running search shows them without letting them change.
+Hover an Engine value for its recorded depth (engine, cache or Lichess cloud).
+Depth 14 is the default engine depth; cache/database results may differ. Per-result
 depths remain session metadata: older/resumed tree values and ChessDB results
 without a depth report it as unavailable. Empty searches show a start
 instruction, and scratch boards omit the redundant
-“Temporary analysis” heading. Stockfish is the default; optional database
-sources are selected beside the fields. Ctrl+G uses the same selected settings.
+“Temporary analysis” heading. The engine alone is the default evaluation.
+
+One press searches the board for both sides (2026-10-01), on the one engine:
+for the side at the bottom, and for the other side with the roles swapped. The
+table is `Your move` or `Their reply`, `Played`, `White`, `Black`, `Engine`,
+all from White's side. `White` is what the move is worth when White plays its
+best moves and Black replies as the chosen reply source has players play; `Black` is
+the other way round.
+A move whose value in the other side's column sits well off the engine's is one
+the side playing it is expected to go wrong after; where the two agree the
+position plays itself. `Played` shows wherever a search modelled the side to
+move, so it is there at our moves as well, and is the first column a pane too
+narrow drops. Status counts, `Make lines`, Positions and the trap mark belong
+to the board's side; the other side's tree is kept beside the chapter and
+resumed with it, and its failure never fails the run. The mainline book is
+built for the board's side alone and shows one `Value` column.
+Ctrl+G uses the same saved settings.
 Board navigation while running (results, moves, back/forward) stops the old search,
 saves its committed tree, and continues from
 the clicked position using compatible child values. Failed saves block the next
@@ -52,7 +85,7 @@ not launch work unexpectedly. Make lines remains the direct action below results
 The [interactive search policy](../../ALGORITHM.md#v2-interactive-expectimax)
 shortlists our moves from the root down.
 
-**View Tabs** have a labelled strip and selected tabs use an accent fill and border.
+Document tabs use an accent fill and border when selected.
 They include the current mode, such as `Builder · Main` or
 `Viewer · Match`, and restore that mode when selected.
 

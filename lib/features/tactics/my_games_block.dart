@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../chess/tactics/game_ids.dart';
 import '../../storage/my_accounts.dart';
 import '../../ui/theme.dart';
+import '../../ui/toggle_chip.dart';
 import 'my_games.dart';
 import 'my_games_words.dart';
 
@@ -12,9 +13,14 @@ import 'my_games_words.dart';
 /// that fetches and reviews them, and one line saying where that stands.
 /// With no username yet it is only the way to add one.
 class MyGamesBlock extends StatelessWidget {
-  const MyGamesBlock({super.key, required this.games});
+  const MyGamesBlock({super.key, required this.games, this.primary = true});
 
   final MyGames games;
+
+  /// Whether getting the games is the thing to do in the column. Where
+  /// there are puzzles to play it is not, and its button steps back so
+  /// Play is the one filled button.
+  final bool primary;
 
   @override
   Widget build(BuildContext context) {
@@ -48,11 +54,12 @@ class MyGamesBlock extends StatelessWidget {
         style: Theme.of(context).textTheme.bodySmall,
       ),
       const SizedBox(height: Space.s),
-      FilledButton(
+      _action(
+        primary: primary,
         onPressed: games.savingAccounts
             ? null
             : () => unawaited(editAccounts(context, games)),
-        child: const Text('Add accounts'),
+        label: 'Add accounts',
       ),
       const SizedBox(height: Space.s),
       const Divider(height: 1),
@@ -68,7 +75,7 @@ class MyGamesBlock extends StatelessWidget {
         _Usernames(games: games),
         _Speeds(games: games),
         const SizedBox(height: Space.xs),
-        _Transport(games: games),
+        _Transport(games: games, primary: primary),
         if (line.isNotEmpty) ...[
           const SizedBox(height: Space.xs),
           Text(
@@ -144,14 +151,9 @@ class _Speeds extends StatelessWidget {
       runSpacing: Space.xs,
       children: [
         for (final speed in GameSpeed.values)
-          FilterChip(
-            label: Text(speed.label),
+          ToggleChip(
+            label: speed.label,
             selected: speeds.contains(speed),
-            showCheckmark: false,
-            visualDensity: VisualDensity.compact,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            padding: EdgeInsets.zero,
-            labelPadding: const EdgeInsets.symmetric(horizontal: Space.s),
             onSelected:
                 games.running || (speeds.length == 1 && speeds.contains(speed))
                 ? null
@@ -166,9 +168,10 @@ class _Speeds extends StatelessWidget {
 
 /// Get games, Pause while it runs, Resume after a pause.
 class _Transport extends StatelessWidget {
-  const _Transport({required this.games});
+  const _Transport({required this.games, required this.primary});
 
   final MyGames games;
+  final bool primary;
 
   @override
   Widget build(BuildContext context) {
@@ -197,7 +200,8 @@ class _Transport extends StatelessWidget {
           );
     return Tooltip(
       message: tip,
-      child: FilledButton.icon(
+      child: _action(
+        primary: primary,
         onPressed: pausing
             ? null
             : games.running
@@ -205,11 +209,29 @@ class _Transport extends StatelessWidget {
             : games.savingAccounts
             ? null
             : () => unawaited(games.start()),
-        icon: Icon(icon, size: IconSize.action),
-        label: Text(label),
+        icon: icon,
+        label: label,
       ),
     );
   }
+}
+
+/// The block's button: filled where it is the thing to do, outlined where
+/// something else in the column is.
+Widget _action({
+  required bool primary,
+  required VoidCallback? onPressed,
+  required String label,
+  IconData? icon,
+}) {
+  final mark = icon == null ? null : Icon(icon, size: IconSize.action);
+  return primary
+      ? FilledButton.icon(onPressed: onPressed, icon: mark, label: Text(label))
+      : OutlinedButton.icon(
+          onPressed: onPressed,
+          icon: mark,
+          label: Text(label),
+        );
 }
 
 /// Opens the usernames and keeps what was typed. Nothing downloads.

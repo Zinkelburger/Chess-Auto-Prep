@@ -40,8 +40,10 @@ const snapshotEvery = Duration(seconds: 2);
 /// a finished game is worth 1, 0.5 or 0; a position at the horizon is worth
 /// the logistic [expectedScore] of the engine's fixed-depth verdict; one of
 /// our positions is worth the best of the moves the loss window admitted; one
-/// of the opponent's is worth the average of every reply the model gives
-/// positive probability, weighted by it.
+/// of the opponent's is worth the average of the replies the model makes
+/// likely, weighted by it — every reply with positive probability, or the
+/// likeliest ones renormalised when [SearchConfig.replyMass] or
+/// [SearchConfig.maxReplies] cuts the rest.
 ///
 /// A six-node example, White to move, horizon two, loss limit 200: we play
 /// the two moves the window keeps; against the first the opponent has one
@@ -481,8 +483,10 @@ final class _Search {
     return kept.isEmpty ? legal : kept;
   }
 
-  /// The opponent's turn: take the model's whole distribution over the legal
-  /// replies and keep every reply it gives positive probability. Null on the
+  /// The opponent's turn: take the model's distribution over the legal
+  /// replies and keep the likeliest ones the config allows, renormalised
+  /// ([likeliestReplies]); every reply with positive probability when it
+  /// sets no cut. Null on the
   /// same terms as [_ourMoves], so a budget can never leave part of a
   /// probability distribution behind.
   Future<Expansion?> _replies(SearchPath path) async {
@@ -499,7 +503,11 @@ final class _Search {
       _stop ??= _PolicyFailed(path.fen, _policyReason(result));
       return null;
     }
-    final played = _repliesPlayed(path, legal, shares);
+    final played = _repliesPlayed(
+      path,
+      legal,
+      likeliestReplies(shares, mass: config.replyMass, most: config.maxReplies),
+    );
     if (!_fits(played.length)) return null;
     final pendings = await _leavesOf([
       for (final (_, _, child) in played) child,
@@ -512,8 +520,8 @@ final class _Search {
     ]);
   }
 
-  /// Every reply the model gives positive probability, played, with the
-  /// share it holds of the opponent's move.
+  /// Every reply in [shares], played, with the share it holds of the
+  /// opponent's move.
   List<(MoveRef, double, SearchPath)> _repliesPlayed(
     SearchPath path,
     List<NamedMove> legal,

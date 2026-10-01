@@ -198,6 +198,53 @@ void main() {
     expect(restarted.state, isA<FillIdle>());
   });
 
+  test('saved searches refuse a changed reply source', () async {
+    String? saved;
+    final first = fillWith(
+      ScriptedEvaluator(),
+      keepTree: (_, text, {required runId}) async {
+        saved = text;
+      },
+    );
+    const masters = FillRequest(
+      elo: 2200,
+      depthPlies: 1,
+      replies: ReplySource.masters,
+      fallbackUnder: 10,
+    );
+    await first.start(masters);
+    expect(saved, contains('"v2_reply_source": "masters+maia<10"'));
+    expect(saved, contains('"maia_only": false'));
+    for (final other in const [
+      FillRequest(elo: 2200, depthPlies: 2),
+      FillRequest(elo: 2200, depthPlies: 2, replies: ReplySource.masters),
+    ]) {
+      final restarted = fillWith(
+        ScriptedEvaluator(),
+        loadTree: (_, _) => Stream.value(saved!),
+      );
+      expect(
+        await restarted.resume(other),
+        'Choose the reply source used by this saved search.',
+      );
+    }
+    final same = fillWith(
+      ScriptedEvaluator(),
+      loadTree: (_, _) => Stream.value(saved!),
+    );
+    expect(
+      await same.resume(
+        const FillRequest(
+          elo: 2200,
+          depthPlies: 2,
+          replies: ReplySource.masters,
+          fallbackUnder: 10,
+        ),
+      ),
+      isNull,
+    );
+  });
+
   group('resume passes over newer saved searches it cannot use', () {
     Future<String> savedAt(int elo) async {
       String? saved;
@@ -265,6 +312,24 @@ void main() {
         await restarted.resume(request),
         'No saved search starts at this board position.',
       );
+    });
+
+    test('the Expectimax button searches afresh when there is nothing to '
+        'continue, or only a search of other settings', () async {
+      final other = await savedAt(2000);
+      final restarted = fillWith(
+        ScriptedEvaluator(),
+        loadTree: (_, _) => Stream.value(other),
+      );
+      expect(
+        await restarted.resume(
+          const FillRequest(elo: 1800, depthPlies: 1),
+          orAfresh: true,
+        ),
+        isNull,
+      );
+      expect(restarted.state, isA<FillDone>());
+      expect(restarted.found!.request.elo, 1800);
     });
   });
 

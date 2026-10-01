@@ -23,6 +23,7 @@ void main() {
         InstallKind.linuxDeb,
         InstallKind.linuxRpm,
         InstallKind.linuxPortable,
+        InstallKind.linuxAppImage,
       ]) {
         final launch = helperLaunch(
           kind,
@@ -90,6 +91,7 @@ void main() {
         InstallKind.linuxDeb,
         InstallKind.linuxRpm,
         InstallKind.linuxPortable,
+        InstallKind.linuxAppImage,
       ]) {
         expect(script, contains('${kind.name})'), reason: kind.name);
       }
@@ -150,6 +152,29 @@ void main() {
       },
     );
 
+    test('an AppImage in a folder the user can write updates itself; one '
+        'that cannot be replaced, or a Flatpak, updates by hand', () async {
+      final appImage = File(p.join(root.path, 'Chess Auto Prep.AppImage'))
+        ..writeAsStringSync('AppImage');
+      final environment = {UpdateInstaller.appImageVariable: appImage.path};
+      final asked = <List<String>>[];
+      UpdateInstaller mounted({bool writable = true, bool flatpak = false}) =>
+          UpdateInstaller(
+            readHelper: (_) async => '',
+            executable: '/tmp/.mount_ChessAbc/chess_auto_prep',
+            environment: {...environment, if (flatpak) 'FLATPAK_ID': 'x'},
+            abi: Abi.linuxX64,
+            run: (command, arguments) async {
+              asked.add([command, ...arguments]);
+              return ProcessResult(0, writable ? 0 : 1, '', '');
+            },
+          );
+      expect(await mounted().detect(), InstallKind.linuxAppImage);
+      expect(asked.single.last, appImage.path, reason: 'the file is checked');
+      expect(await mounted(writable: false).detect(), InstallKind.manual);
+      expect(await mounted(flatpak: true).detect(), InstallKind.manual);
+    });
+
     test('macOS always updates by hand', () async {
       expect(
         await installer(
@@ -208,6 +233,60 @@ void main() {
       );
       expect(await installer.cancel(armed), isTrue);
       expect(File(armed).existsSync(), isFalse);
+    });
+
+    test('the helper reopens the app only when asked, and an earlier '
+        "run's request does not carry over", () async {
+      final installer = portableInstaller(root);
+      final payload = payloadIn(root);
+      final reopen = File(p.join(payload.folder, reopenName));
+      var started = await installer.schedule(
+        payload,
+        InstallKind.linuxPortable,
+      );
+      var armed = (started as HelperArmed).armed;
+      expect(reopen.existsSync(), isFalse);
+      expect(await installer.setReopen(armed, reopen: true), isTrue);
+      expect(reopen.existsSync(), isTrue);
+      expect(await installer.setReopen(armed, reopen: false), isTrue);
+      expect(reopen.existsSync(), isFalse);
+
+      // Left by a helper that was killed before it could tidy up.
+      expect(await installer.setReopen(armed, reopen: true), isTrue);
+      expect(await installer.cancel(armed), isTrue);
+      started = await installer.schedule(payload, InstallKind.linuxPortable);
+      armed = (started as HelperArmed).armed;
+      expect(reopen.existsSync(), isFalse);
+      expect(await installer.cancel(armed), isTrue);
+    });
+
+    test('an AppImage helper replaces and reopens the AppImage file, not '
+        'the mount the app runs from', () async {
+      final helper = StandInHelper();
+      final launched = <List<String>>[];
+      final appImage = p.join(root.path, 'Chess Auto Prep.AppImage');
+      final installer = UpdateInstaller(
+        readHelper: (_) async => '# helper',
+        executable: '/tmp/.mount_ChessAbc/chess_auto_prep',
+        environment: {UpdateInstaller.appImageVariable: appImage},
+        abi: Abi.linuxX64,
+        appPid: 4242,
+        run: helper.run,
+        startDetached: (_, arguments) {
+          launched.add(arguments);
+          return helper.launch(arguments);
+        },
+        readyPoll: const Duration(milliseconds: 5),
+        readyPolls: 20,
+      );
+      final started = await installer.schedule(
+        payloadIn(root),
+        InstallKind.linuxAppImage,
+      );
+      // install_linux.sh: app_pid payload expected executable kind armed.
+      expect(launched.single[4], appImage);
+      expect(launched.single[5], 'linuxAppImage');
+      expect(await installer.cancel((started as HelperArmed).armed), isTrue);
     });
 
     test('a helper that never starts leaves nothing armed', () async {
@@ -466,6 +545,10 @@ void main() {
       InstallKind.linuxPortable,
     );
     expect(started, isA<HelperArmed>());
+    expect(
+      await installer.setReopen((started as HelperArmed).armed, reopen: true),
+      isTrue,
+    );
     expect(File(p.join(app.path, 'restarted')).existsSync(), isFalse);
     fakeApp.kill();
     final restarted = File(p.join(app.path, 'restarted'));

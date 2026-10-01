@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../chess/tactics/puzzle.dart';
 import '../../chess/tactics/puzzle_run.dart';
+import '../../ui/check_row.dart';
 import '../../ui/theme.dart';
 import 'puzzle_trainer.dart';
 import '../../ui/app_keys.dart';
@@ -203,14 +204,32 @@ class _FeedbackLine extends StatelessWidget {
       ),
     };
     final problem = up.saveProblem;
+    final strong = text?.copyWith(color: colour, fontWeight: FontWeight.w600);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          displaySan(context, words),
-          style: text?.copyWith(color: colour, fontWeight: FontWeight.w600),
-          overflow: TextOverflow.ellipsis,
-        ),
+        // The answer is moves, so it is set as moves are everywhere else.
+        if (up.feedback case Revealed(:final rest))
+          Text.rich(
+            TextSpan(
+              children: [
+                const TextSpan(text: 'Solution: '),
+                TextSpan(
+                  text: displaySan(context, rest.join(' ')),
+                  style: monoText.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+            style: strong,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          )
+        else
+          Text(
+            displaySan(context, words),
+            style: strong,
+            overflow: TextOverflow.ellipsis,
+          ),
         if (problem != null)
           Text(
             'Not saved: $problem',
@@ -224,10 +243,11 @@ class _FeedbackLine extends StatelessWidget {
   }
 }
 
-/// Show solution, Reset and Skip in the same places whatever happened; Skip
-/// reads Next once the attempt is scored, and becomes the filled button:
-/// the thing to do now. Analyze takes Show solution's place once the answer
-/// is on view.
+/// Show solution, Reset and Skip in the same places whatever happened.
+/// Only one of them is ever filled, and only once the attempt is scored:
+/// Skip reads Next then, the thing to do now. Until then the thing to do is
+/// on the board, and the buttons stay out of its way. Analyze takes Show
+/// solution's place once the answer is on view.
 class _Buttons extends StatelessWidget {
   const _Buttons({
     required this.trainer,
@@ -269,12 +289,14 @@ class _Buttons extends StatelessWidget {
           onPressed: atStart ? null : trainer.reset,
         ),
         if (moved)
-          _button(
-            'Next',
-            Icons.arrow_forward,
-            next,
-            tip: AppKey.nextGame.tip('Next puzzle'),
-            iconAfter: true,
+          Tooltip(
+            message: AppKey.nextGame.tip('Next puzzle'),
+            child: FilledButton.icon(
+              onPressed: next,
+              icon: const Icon(Icons.arrow_forward, size: IconSize.action),
+              iconAlignment: IconAlignment.end,
+              label: const Text('Next'),
+            ),
           )
         else
           _button(
@@ -288,7 +310,8 @@ class _Buttons extends StatelessWidget {
     );
   }
 
-  /// A labelled button with its icon, using the shared action color.
+  /// A labelled button with its icon, in the outline every secondary
+  /// action has.
   static Widget _button(
     String label,
     IconData icon,
@@ -297,7 +320,7 @@ class _Buttons extends StatelessWidget {
     bool iconAfter = false,
   }) => Tooltip(
     message: tip,
-    child: FilledButton.icon(
+    child: OutlinedButton.icon(
       onPressed: onPressed,
       icon: Icon(icon, size: IconSize.action),
       iconAlignment: iconAfter ? IconAlignment.end : IconAlignment.start,
@@ -347,24 +370,11 @@ class _AutoAdvance extends StatelessWidget {
   final PuzzleTrainer trainer;
 
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Checkbox(
-          value: trainer.autoAdvance,
-          onChanged: (on) => trainer.setAutoAdvance(on ?? false),
-          visualDensity: VisualDensity.compact,
-        ),
-        Flexible(
-          child: Text(
-            'Go to the next puzzle after a solve',
-            style: Theme.of(context).textTheme.bodySmall,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => CheckRow(
+    label: 'Go to the next puzzle after a solve',
+    value: trainer.autoAdvance,
+    onChanged: trainer.setAutoAdvance,
+  );
 }
 
 /// `‹  Puzzle 3 of 26 · 2 solved · 1 failed`, and the way to stop.
@@ -446,15 +456,22 @@ class _RecapView extends StatelessWidget {
         Wrap(
           spacing: Space.s,
           children: [
-            if (recap.retry.isNotEmpty)
+            // One way on is filled: the mistakes again while there are
+            // some, otherwise Done.
+            if (recap.retry.isNotEmpty) ...[
               FilledButton(
                 onPressed: () => unawaited(trainer.retryMistakes()),
                 child: Text('Retry mistakes (${recap.retry.length})'),
               ),
-            FilledButton(
-              onPressed: trainer.closeRecap,
-              child: const Text('Done'),
-            ),
+              OutlinedButton(
+                onPressed: trainer.closeRecap,
+                child: const Text('Done'),
+              ),
+            ] else
+              FilledButton(
+                onPressed: trainer.closeRecap,
+                child: const Text('Done'),
+              ),
           ],
         ),
       ],

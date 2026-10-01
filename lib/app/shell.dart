@@ -39,6 +39,7 @@ import '../workspace/finds_panel.dart';
 import '../workspace/move_field.dart';
 import '../workspace/workspace.dart';
 import '../workspace/workspace_keys.dart';
+import '../workspace/action_layout.dart';
 import '../workspace/workspace_tabs.dart';
 import '../workspace/workspace_view.dart';
 import 'full_screen.dart';
@@ -201,9 +202,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// split view keys each pane by its area, and a pane rebuilt from a new
   /// area loses what it had open.
   final _panes = MultiSplitViewController();
-  // The list starts as narrow as it goes: the board is what the window is
-  // for, and the divider is there for whoever wants more of the list.
-  final _list = Area(data: _Pane.list, size: paneMinWidth, min: paneMinWidth);
+  final _list = Area(
+    data: _Pane.list,
+    size: listColumnWidth,
+    min: paneMinWidth,
+  );
   final _playerList = Area(
     data: _Pane.list,
     size: playerColumnWidth,
@@ -311,7 +314,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         ? await _requests.readInBuilder(line.ref, line.sans, game: line.game)
         : await _requests.openAt(line.ref, line.sans, game: line.game);
     if (!mounted || result is! RequestDone) return;
-    if (line.place != ReadIn.board) _tabs.show(WorkspaceTab.moves);
+    if (line.place != ReadIn.board) _view.show(WorkspaceTab.moves);
   }
 
   /// While the explorer's Book is up the board is its free board; otherwise a
@@ -356,7 +359,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     final result = await _requests.importFile();
     if (!mounted || result is! RequestDone) return;
     _train.lines.setScope(TrainScope.chapter);
-    _tabs.show(WorkspaceTab.train);
+    _view.show(WorkspaceTab.train);
   }
 
   /// Space shows the answer while a puzzle is on the board; otherwise it
@@ -433,7 +436,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
             confirm: 'Add and train',
           ),
       showTrain: () {
-        if (mounted) _views[Mode.repertoires]!.tabs.show(WorkspaceTab.train);
+        if (mounted) _views[Mode.repertoires]!.show(WorkspaceTab.train);
       },
     ),
   );
@@ -547,7 +550,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
             exportPgn: () => unawaited(
               exportViewerPgn(context, _docs.viewer, _requests.say),
             ),
-            search: () => unawaited(_search.search(_tabs)),
+            search: () => unawaited(_search.search(_view.layout)),
             accounts: () => unawaited(editAccounts(context, _train.myGames)),
             newBook: () =>
                 unawaited(newBook(context, _ws.books, say: _requests.say)),
@@ -590,7 +593,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     ...AppKey.paste.bind(() => unawaited(_paste())),
     ...AppKey.pastePosition.bind(() => unawaited(_paste(positionOnly: true))),
     ...AppKey.analysisBoard.bind(() => unawaited(_analyze())),
-    ...AppKey.search.bind(() => unawaited(_search.search(_tabs))),
+    ...AppKey.search.bind(() => unawaited(_search.search(_view.layout))),
     ...AppKey.play.bind(_space),
     ...AppKey.nextGame.bind(() => _walk(1)),
     ...AppKey.previousGame.bind(() => _walk(-1)),
@@ -689,7 +692,6 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
               child: Column(
                 children: [
                   PaneTabStrip(
-                    label: 'View Tabs',
                     tabs: _requests.documents.tabs,
                     onSelect: (id) => unawaited(_requests.documents.select(id)),
                     onClose: (id) => unawaited(_requests.documents.close(id)),
@@ -741,7 +743,10 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         builder: _view is RepertoiresView,
         noteEditing: _view is RepertoiresView || _view is ViewerView,
         header: _view.header,
-        gameBar: _inspecting ? null : _view.gameBar(_editing),
+        underHeading: _inspecting ? null : _view.underHeading,
+        quietBoard: _view.quietBoard,
+        paneActions: _inspecting ? null : () => _view.paneActions(_editing),
+        explorerFileBar: _inspecting ? null : _view.explorerFileBar,
         gameCounter: !_inspecting && _view.gameCounter,
         gameOrdering: _view.gameOrdering,
         moveMenu: _inspecting ? null : _view.moveMenu,
@@ -868,20 +873,15 @@ final class SearchDoor {
   /// What refused the search goes in the bar. A mode without a Search tab
   /// (Tactics, My games) starts nothing: the search would run where it
   /// cannot be seen or stopped, with the engine pane paused for it.
-  Future<void> search(PaneTabs<WorkspaceTab> tabs) async {
+  Future<void> search(ActionLayout layout) async {
     if (!fill.canStart) return;
-    if (!tabs.tabs.any((tab) => tab.id == WorkspaceTab.search)) return;
-    tabs.show(WorkspaceTab.search);
-    final refusal = await fill.start(
-      FillRequest(
-        elo: settings.value.opponentElo,
-        depthPlies: fill.depth,
-        rootMoves: fill.rootMoves,
-        candidateMoves: fill.candidateMoves,
-        replyFloor: fill.replyFloor,
-        source: fill.source,
-        method: fill.method,
-      ),
+    if (!layout.pane(0).tabs.any((tab) => tab.id == WorkspaceTab.search)) {
+      return;
+    }
+    layout.reveal(WorkspaceTab.search);
+    final refusal = await fill.resume(
+      FillRequest.of(settings.value),
+      orAfresh: true,
     );
     if (refusal != null) requests.say(refusal);
   }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import '../chess/generation/evaluation_source.dart';
 
@@ -87,6 +88,7 @@ final class WorkspaceWiring {
     finds: _finds,
     myGamesTree: _myGamesTree,
     openings: _openings,
+    coresAvailable: Platform.numberOfProcessors,
   );
 
   late final _openings = OpeningNames(_env.openingBook);
@@ -223,23 +225,28 @@ final class WorkspaceWiring {
     if (started is StartFailed) return FillUnavailable(started.reason);
     final engine = (started as Started).engine;
     final local = CachedEvaluator(
-      FixedDepthEvaluator(engine, depth: fillEvalDepth),
+      FixedDepthEvaluator(engine, depth: request.evalDepth),
       _env.evalCache(),
-      depth: fillEvalDepth,
+      depth: request.evalDepth,
     );
     final remote = request.source == EvaluationSource.stockfish
         ? null
         : SearchEvaluator(
             source: request.source,
             fallback: local,
-            minDepth: fillEvalDepth,
+            minDepth: request.evalDepth,
             run: _env.lookups.run(),
           );
     return FillReady(
       evaluator: remote ?? local,
-      candidates: FixedDepthCandidates(engine, depth: fillEvalDepth),
-      policy: MaiaOpponent(_env.maia, elo: request.elo),
-      continuations: FixedDepthEvaluator(engine, depth: fillEvalDepth),
+      candidates: FixedDepthCandidates(engine, depth: request.evalDepth),
+      policy: opponentFor(
+        request,
+        maia: _env.maia,
+        explorer: _env.lichessExplorer,
+        book: _env.masterBook,
+      ),
+      continuations: FixedDepthEvaluator(engine, depth: request.evalDepth),
       release: () async {
         remote?.close();
         await engine.quit();

@@ -1,53 +1,134 @@
 import 'package:flutter/material.dart';
 
 import '../../chess/players/player.dart';
+import '../../chess/tactics/game_ids.dart';
+import '../../ui/theme.dart';
 import 'players.dart';
 
-/// Evidence stays visible until the user explicitly links an account.
-class PlayerLookup extends StatelessWidget {
+/// What the account research found for a person, folded under their row:
+/// each suggested account with the evidence for it and the button that
+/// links it. Nothing is linked until the user presses that button.
+class PlayerLookup extends StatefulWidget {
   const PlayerLookup({super.key, required this.player, required this.owner});
   final Player player;
   final Players owner;
+
+  @override
+  State<PlayerLookup> createState() => _PlayerLookupState();
+}
+
+class _PlayerLookupState extends State<PlayerLookup> {
+  bool _open = false;
+
+  void _toggle() {
+    if (mounted) setState(() => _open = !_open);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final lookup = player.fields['lookup'];
+    final lookup = widget.player.fields['lookup'];
     if (lookup is! Map) return const SizedBox.shrink();
     final candidates = lookup['candidates'] is List
-        ? (lookup['candidates'] as List).whereType<Map>()
+        ? (lookup['candidates'] as List).whereType<Map>().toList()
         : const <Map>[];
-    return ExpansionTile(
-      tilePadding: EdgeInsets.zero,
-      title: Text(
-        candidates.isEmpty
-            ? 'Account lookup'
-            : '${candidates.length} suggested accounts',
-      ),
-      subtitle: Text(
-        '${lookup['status'] ?? 'Saved research'}'.replaceAll('_', ' '),
-      ),
+    final steps = lookup['next_steps'] is List
+        ? lookup['next_steps'] as List
+        : const [];
+    final small = Theme.of(context).textTheme.labelSmall;
+    final status = '${lookup['status'] ?? 'saved research'}'.replaceAll(
+      '_',
+      ' ',
+    );
+    final count = candidates.length;
+    final words = count == 0
+        ? 'Account lookup'
+        : '$count suggested ${count == 1 ? 'account' : 'accounts'}';
+    // With nothing to open it is one quiet line, not a button.
+    if (candidates.isEmpty && steps.isEmpty) {
+      return Text('$words · $status', style: small);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final candidate in candidates)
-          ListTile(
-            title: Text('${candidate['site']}: ${candidate['username']}'),
-            subtitle: Text('${candidate['evidence'] ?? 'No evidence saved.'}'),
-            trailing: TextButton(
-              onPressed:
-                  owner.busy ||
-                      owner.needsRetry ||
-                      !{'chesscom', 'lichess'}.contains(candidate['site']) ||
-                      candidate['username'] is! String
-                  ? null
-                  : () => _use(candidate, lookup),
-              child: const Text('Use account'),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextButton.icon(
+              onPressed: _toggle,
+              icon: Icon(
+                _open ? Icons.expand_less : Icons.expand_more,
+                size: IconSize.action,
+              ),
+              iconAlignment: IconAlignment.end,
+              label: Text(words),
             ),
-          ),
-        if (lookup['next_steps'] case final List steps)
-          for (final step in steps) ListTile(title: Text('$step')),
+            Flexible(
+              child: Text(
+                status,
+                style: small,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        if (_open) ...[
+          for (final candidate in candidates) _candidate(candidate, lookup),
+          for (final step in steps)
+            Padding(
+              padding: const EdgeInsets.only(left: Space.m, top: Space.xs),
+              child: Text('$step', style: small),
+            ),
+        ],
       ],
     );
   }
 
+  Widget _candidate(Map candidate, Map lookup) {
+    final theme = Theme.of(context);
+    final owner = widget.owner;
+    final site = GameSite.values
+        .where((s) => s.name == candidate['site'])
+        .firstOrNull;
+    return Padding(
+      padding: const EdgeInsets.only(left: Space.m),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${site?.label ?? candidate['site']} '
+                  '${candidate['username']}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                Text(
+                  '${candidate['evidence'] ?? 'No evidence saved.'}',
+                  style: theme.textTheme.labelSmall,
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed:
+                owner.busy ||
+                    owner.needsRetry ||
+                    site == null ||
+                    candidate['username'] is! String
+                ? null
+                : () => _use(candidate, lookup),
+            child: const Text('Use account'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _use(Map candidate, Map lookup) {
+    final player = widget.player;
     final site = candidate['site'] as String;
     final names =
         player.accounts
@@ -55,7 +136,7 @@ class PlayerLookup extends StatelessWidget {
             .map((a) => a.username)
             .toSet()
           ..add(candidate['username'] as String);
-    owner.save(
+    widget.owner.save(
       player.edited({
         site: names.join(', '),
         'lookup': {

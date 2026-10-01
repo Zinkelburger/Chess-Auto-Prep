@@ -472,6 +472,58 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
   /// box suggests.
   List<String> get players => file == null ? const [] : _players;
 
+  /// The side the followed player had in the game at [index] of the file
+  /// and who they played, or null when nobody is followed or they are not
+  /// one of its two players: what a row of their collection says instead
+  /// of repeating their name.
+  ({Side side, String opponent})? followedIn(int index) {
+    final player = followed;
+    final lines = _rowsLines;
+    if (file == null || player == null || lines == null) return null;
+    if (index >= lines.length) return null;
+    final tags = lines[index].tags;
+    final side = sideOfPlayer(player, tags);
+    if (side == null) return null;
+    final opponent = tagValue(
+      tags,
+      side == Side.white ? 'Black' : 'White',
+    )?.trim();
+    if (opponent == null || opponent.isEmpty || opponent == '?') return null;
+    return (side: side, opponent: opponent);
+  }
+
+  /// How many of the file's games the followed player had White in and how
+  /// many Black, worked out once per player and list of games.
+  ({int white, int black}) get followedSides {
+    final player = followed;
+    final lines = _rowsLines;
+    if (file == null || player == null || lines == null) {
+      return (white: 0, black: 0);
+    }
+    final known = _sides;
+    if (known != null &&
+        known.player == player &&
+        identical(known.lines, lines)) {
+      return known.count;
+    }
+    var white = 0, black = 0;
+    for (final line in lines) {
+      switch (sideOfPlayer(player, line.tags)) {
+        case Side.white:
+          white++;
+        case Side.black:
+          black++;
+        case null:
+      }
+    }
+    final count = (white: white, black: black);
+    _sides = (player: player, lines: lines, count: count);
+    return count;
+  }
+
+  ({String player, List<ChapterLine> lines, ({int white, int black}) count})?
+  _sides;
+
   /// Follows the player [typed] names from now on, or nobody when it is
   /// empty; the game on the board turns at once. Called with a name picked
   /// or submitted, never one half typed.
@@ -503,43 +555,22 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
     if (side != null && _session.orientation != side) _session.flip();
   }
 
+  /// What the list says about each list of games, by that very list: a
+  /// file gone back to with its games unchanged — another tab and back —
+  /// is not summarised again, which for ten thousand games is most of
+  /// what putting it back up costs.
+  static final _listings = Expando<_Listing>('game listing');
+
   void _summarise(List<ChapterLine> lines) {
-    final tags = [for (final line in lines) line.tags];
-    _collectionPlayer = collectionPlayer(tags);
-    _players = List.unmodifiable(playerCounts(tags).keys.take(maxPlayers));
-    final grouping = groupChapters(tags);
-    _chapterOf = grouping.hasChapters ? grouping.titles : null;
+    final listing = _listings[lines] ??= _Listing.of(lines);
+    _collectionPlayer = listing.player;
+    _players = listing.players;
+    _chapterOf = listing.chapterOf;
+    _chapterSizes = listing.chapterSizes;
+    _rows = listing.rows;
     _selection = null;
     _order = null;
     _ordinals = null;
-    final sizes = <String, int>{};
-    for (final title in _chapterOf ?? const <String>[]) {
-      sizes[title] = (sizes[title] ?? 0) + 1;
-    }
-    _chapterSizes = sizes;
-    _rows = List.unmodifiable([
-      for (final (index, line) in lines.indexed)
-        _summary(line, index, grouping),
-    ]);
-  }
-
-  /// A game's row. Under a chapter a course's line is called by its own
-  /// title — the header [ChapterGrouping.titleKey] names — rather than
-  /// `Chapter – Line` as its player tags would read.
-  GameSummary _summary(ChapterLine line, int index, ChapterGrouping grouping) {
-    final game = summarizeGame(line, index: index);
-    if (!grouping.hasChapters) return game;
-    final title = tagValue(line.tags, grouping.titleKey)?.trim() ?? '';
-    if (isPlaceholderTitle(title) ||
-        title == grouping.titles[index] ||
-        !game.title.contains(grouping.titles[index])) {
-      return game;
-    }
-    return GameSummary(
-      title: title,
-      result: game.result,
-      setting: game.setting,
-    );
   }
 
   /// The filter applied: the list is another list.
@@ -572,4 +603,74 @@ final class ViewerChapter {
 
   /// How many games the chapter holds, whatever the search shows of it.
   final int size;
+}
+
+/// What the viewer's list says about one list of games: each game's row,
+/// the chapters they fall under and the players they are by.
+final class _Listing {
+  _Listing._({
+    required this.player,
+    required this.players,
+    required this.chapterOf,
+    required this.chapterSizes,
+    required this.rows,
+  });
+
+  factory _Listing.of(List<ChapterLine> lines) {
+    final tags = [for (final line in lines) line.tags];
+    final grouping = groupChapters(tags);
+    final chapterOf = grouping.hasChapters ? grouping.titles : null;
+    final sizes = <String, int>{};
+    for (final title in chapterOf ?? const <String>[]) {
+      sizes[title] = (sizes[title] ?? 0) + 1;
+    }
+    return _Listing._(
+      player: collectionPlayer(tags),
+      players: List.unmodifiable(
+        playerCounts(tags).keys.take(PgnViewer.maxPlayers),
+      ),
+      chapterOf: chapterOf,
+      chapterSizes: sizes,
+      rows: List.unmodifiable([
+        for (final (index, line) in lines.indexed)
+          _summary(line, index, grouping),
+      ]),
+    );
+  }
+
+  /// The file's player, when one plays in most of its games.
+  final String? player;
+
+  /// The file's players, those in the most games first.
+  final List<String> players;
+
+  /// Each game's chapter, when the file has chapters; else null.
+  final List<String>? chapterOf;
+  final Map<String, int> chapterSizes;
+
+  /// One summary per game, in file order.
+  final List<GameSummary> rows;
+
+  /// A game's row. Under a chapter a course's line is called by its own
+  /// title — the header [ChapterGrouping.titleKey] names — rather than
+  /// `Chapter – Line` as its player tags would read.
+  static GameSummary _summary(
+    ChapterLine line,
+    int index,
+    ChapterGrouping grouping,
+  ) {
+    final game = summarizeGame(line, index: index);
+    if (!grouping.hasChapters) return game;
+    final title = tagValue(line.tags, grouping.titleKey)?.trim() ?? '';
+    if (isPlaceholderTitle(title) ||
+        title == grouping.titles[index] ||
+        !game.title.contains(grouping.titles[index])) {
+      return game;
+    }
+    return GameSummary(
+      title: title,
+      result: game.result,
+      setting: game.setting,
+    );
+  }
 }

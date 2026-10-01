@@ -31,6 +31,9 @@ class LinuxUpdateTest(unittest.TestCase):
         self.state.mkdir(parents=True)
         self.armed = self.state / 'install-requested'
         self.armed.write_text('1')
+        # The user is updating now: the helper reopens the app.
+        self.reopen = self.state / 'reopen'
+        self.reopen.write_text('1')
         self.archive = self.state / 'linux.zip'
 
     def bundle(self, extra=None):
@@ -72,6 +75,22 @@ class LinuxUpdateTest(unittest.TestCase):
         self.assertEqual(len(old), 1)
         self.assertEqual((old[0] / 'personal.pgn').read_text(), 'user annotation')
         self.assertEqual((old[0] / 'chess_auto_prep').read_text(), 'old executable')
+
+    def test_closing_for_the_day_installs_without_reopening(self):
+        self.bundle()
+        self.reopen.unlink()
+        with self.launch() as helper:
+            self.assertEqual(helper.wait(timeout=10), 0)
+        self.assertTrue((self.app / 'lib/libapp.so').exists())
+        time.sleep(.5)
+        self.assertFalse((self.app / 'restarted').exists())
+        self.assertFalse((self.root / 'updates' / 'last-error.txt').exists())
+
+    def test_reopen_request_does_not_outlive_its_helper(self):
+        self.bundle()
+        with self.launch() as helper:
+            self.assertEqual(helper.wait(timeout=10), 0)
+        self.assertFalse(self.reopen.exists())
 
     def test_waits_for_close_and_cancellation_does_not_replace(self):
         self.bundle()
@@ -140,6 +159,57 @@ class LinuxUpdateTest(unittest.TestCase):
         self.assertEqual((self.app / 'chess_auto_prep').read_text(), 'old executable')
 
 
+@unittest.skipUnless(sys.platform == 'linux', 'Linux helper')
+class LinuxAppImageUpdateTest(unittest.TestCase):
+    # An AppImage is an ELF file with "AI" and type 2 at byte 8.
+    MAGIC = b'\x7fELF\x02\x01\x01\x00AI\x02'
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix='appimage space-')
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.app = self.root / "Chess Auto Prep 'quoted'.AppImage"
+        self.app.write_bytes(self.MAGIC + b'old')
+        self.app.chmod(0o750)
+        self.state = self.root / 'updates' / 'attempt'
+        self.state.mkdir(parents=True)
+        self.armed = self.state / 'install-requested'
+        self.armed.write_text('1')
+        self.payload = self.state / 'chess-auto-prep-v1.17.0-linux-x86_64.AppImage'
+
+    def launch(self, content):
+        self.payload.write_bytes(content)
+        digest = hashlib.sha256(content).hexdigest()
+        return subprocess.Popen([
+            'bash', str(ROOT / 'assets/updater/install_linux.sh'), '2147483647',
+            str(self.payload), digest, str(self.app), 'linuxAppImage', str(self.armed),
+        ])
+
+    def leftovers(self):
+        return [p.name for p in self.root.iterdir() if '.update-' in p.name]
+
+    def test_replaces_the_file_in_place_keeping_its_mode(self):
+        with self.launch(self.MAGIC + b'new') as helper:
+            self.assertEqual(helper.wait(timeout=10), 0)
+        self.assertEqual(self.app.read_bytes(), self.MAGIC + b'new')
+        self.assertEqual(stat.S_IMODE(self.app.stat().st_mode), 0o750)
+        self.assertEqual(self.leftovers(), [])
+        self.assertFalse((self.root / 'updates' / 'last-error.txt').exists())
+
+    def test_a_file_that_is_not_an_appimage_is_refused(self):
+        with self.launch(b'#!/bin/sh\necho not an AppImage\n') as helper:
+            self.assertNotEqual(helper.wait(timeout=10), 0)
+        self.assertEqual(self.app.read_bytes(), self.MAGIC + b'old')
+        self.assertEqual(self.leftovers(), [])
+        self.assertTrue((self.root / 'updates' / 'last-error.txt').exists())
+
+    def test_cancelled_request_leaves_the_file(self):
+        self.armed.unlink()
+        with self.launch(self.MAGIC + b'new') as helper:
+            self.assertEqual(helper.wait(timeout=10), 0)
+        self.assertEqual(self.app.read_bytes(), self.MAGIC + b'old')
+
+
 @unittest.skipUnless(os.name == 'nt', 'Windows helper')
 class WindowsUpdateTest(unittest.TestCase):
     @classmethod
@@ -174,6 +244,9 @@ class WindowsUpdateTest(unittest.TestCase):
         shutil.copyfile(self.probe, self.app)
         self.armed = self.state / 'install-requested'
         self.armed.write_text('1')
+        # The user is updating now: the helper reopens the app.
+        self.reopen = self.state / 'reopen'
+        self.reopen.write_text('1')
         self.request = self.state / 'request.json'
         self.write_request()
         # Preserve logs before TemporaryDirectory cleanup, including on failure.
@@ -263,7 +336,16 @@ class WindowsUpdateTest(unittest.TestCase):
         ])
         self.wait_file(self.app.parent / 'restarted.txt', helper)
         self.assertFalse(self.armed.exists())
+        self.assertFalse(self.reopen.exists())
         self.assertFalse((self.state / 'helper-ready').exists())
+        self.assertFalse((self.state.parent / 'last-error.txt').exists())
+
+    def test_closing_for_the_day_installs_without_reopening(self):
+        self.reopen.unlink()
+        self.finish(self.launch())
+        self.assertTrue((self.state / 'arguments.txt').exists(), self.diagnostics())
+        time.sleep(2)
+        self.assertFalse((self.app.parent / 'restarted.txt').exists(), self.diagnostics())
         self.assertFalse((self.state.parent / 'last-error.txt').exists())
 
     def test_corruption_rejected_before_installer_launch(self):

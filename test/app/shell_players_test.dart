@@ -49,6 +49,22 @@ final class _FlakyPlayers implements PlayerStore {
   Future<void> removeGroup(PlayerGroup group) => _inner.removeGroup(group);
 }
 
+/// Opens the `⋯` menu of the one person listed.
+Future<void> openPlayerMenu(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('Player actions'));
+  await tester.pumpAndSettle();
+}
+
+/// Whether that menu offers to delete the person's saved games; the menu is
+/// shut again.
+Future<bool> offersDeleteGames(WidgetTester tester) async {
+  await openPlayerMenu(tester);
+  final offered = find.text('Delete saved games…').evaluate().isNotEmpty;
+  await tester.tap(find.byTooltip('Player actions'));
+  await tester.pumpAndSettle();
+  return offered;
+}
+
 void main() {
   late WindowFixture w;
   late _FlakyPlayers players;
@@ -96,19 +112,95 @@ void main() {
     expect(w.parts.players.analysis.side, Side.black);
     expect(tester.takeException(), isNull);
   });
-  testWidgets('filters use a bounded dialog instead of overflowing the list', (
+  testWidgets('filters open in the column, named, and scroll with the list '
+      'instead of overflowing it', (tester) async {
+    await w.pumpShell(tester);
+    await tester.runAsync(() => w.parts.players.analysis.select(player));
+    w.requests.switchTo(Mode.playerAnalysis);
+    await tester.pumpAndSettle();
+    expect(find.text('1 game'), findsOneWidget);
+    await tester.tap(find.text('Filters'));
+    await tester.pumpAndSettle();
+    expect(find.text('Minimum games'), findsOneWidget);
+    expect(find.text('From move'), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byTooltip('Increase Minimum games'));
+    await tester.pumpAndSettle();
+    expect(w.parts.players.analysis.minGames, 2);
+    expect(find.text('Filters (1)'), findsOneWidget);
+    // The two that say which positions are listed go with the games list.
+    w.parts.players.analysis.configure(list: PlayerList.games);
+    await tester.pumpAndSettle();
+    expect(find.text('Minimum games'), findsNothing);
+    expect(find.text('Time controls'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('the positions table is sorted by its column names', (
     tester,
   ) async {
     await w.pumpShell(tester);
     await tester.runAsync(() => w.parts.players.analysis.select(player));
     w.requests.switchTo(Mode.playerAnalysis);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Filters · 1 game'));
+    final analysis = w.parts.players.analysis;
+    expect(analysis.order, PositionOrder.frequent);
+    await tester.tap(find.byTooltip('Worst score first'));
     await tester.pumpAndSettle();
-    expect(find.text('Player analysis filters'), findsOneWidget);
+    expect(analysis.order, PositionOrder.lowScore);
+    await tester.tap(find.byTooltip('Best score first'));
+    await tester.pumpAndSettle();
+    expect(analysis.order, PositionOrder.highScore);
+    await tester.tap(find.byTooltip('Most played first'));
+    await tester.pumpAndSettle();
+    expect(analysis.order, PositionOrder.frequent);
+    // Wins, draws and losses as a crosstable writes them.
+    expect(find.text('+1 =0 −0'), findsWidgets);
     expect(tester.takeException(), isNull);
-    await tester.tap(find.text('Done'));
+  });
+  testWidgets('a board the games never reached offers their first move', (
+    tester,
+  ) async {
+    await w.pumpShell(tester);
+    await tester.runAsync(() => w.parts.players.analysis.select(player));
+    w.requests.switchTo(Mode.playerAnalysis);
     await tester.pumpAndSettle();
+    w.session.playMove('a2a3');
+    await tester.pumpAndSettle();
+    expect(
+      find.text('None of these games reached the position on the board.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Go to the first move'));
+    await tester.pumpAndSettle();
+    expect(w.session.source?.path, '/collections/player.pgn');
+    expect(find.text('Go to the first move'), findsNothing);
+    expect(find.text('White / Draw / Black'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('a group is headed by what is known of the event, and what is '
+      'seldom done to it is in the toolbar menu', (tester) async {
+    final group = PlayerGroup.create(
+      'Club Open',
+    ).edited({'date': '2026-10-10', 'rounds': 5}).member(player.id);
+    await w.parts.players.directory.saveGroup(group);
+    await w.pumpShell(tester);
+    w.requests.switchTo(Mode.players);
+    w.parts.players.directory.showGroup(group.id);
+    await tester.pumpAndSettle();
+    expect(
+      find.text('2026-10-10 · 5 rounds · 1 player · 0 prepared'),
+      findsOneWidget,
+    );
+    expect(find.byType(FilledButton), findsOneWidget);
+    expect(find.text('Add players'), findsOneWidget);
+    expect(find.text('Copy prep sheet'), findsNothing);
+    await tester.tap(find.byTooltip('More actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit group…'), findsOneWidget);
+    expect(find.text('Copy prep sheet'), findsOneWidget);
+    expect(find.text('Export prep sheet…'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
   testWidgets('group prepared state survives leaving and reopening it', (
     tester,
@@ -119,13 +211,14 @@ void main() {
     w.requests.switchTo(Mode.players);
     w.parts.players.directory.showGroup(group.id);
     await tester.pumpAndSettle();
-    expect(find.text('Not prepared yet'), findsOneWidget);
+    expect(find.text('Prepared'), findsOneWidget);
+    expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isFalse);
     await tester.tap(find.byType(Checkbox));
     await tester.pumpAndSettle();
     expect(w.parts.players.directory.group!.prepared(player.id), true);
     await w.parts.players.directory.load();
     await tester.pumpAndSettle();
-    expect(find.text('Prepared'), findsOneWidget);
+    expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
   });
   testWidgets(
     'prep study has both colours and the saved board line opens in Study',
@@ -320,6 +413,7 @@ void main() {
     await settle();
     expect(find.text('4 saved games · 1 PGN file'), findsOneWidget);
 
+    await openPlayerMenu(tester);
     await tester.tap(find.text('Delete saved games…'));
     await tester.pumpAndSettle();
     expect(find.text('Delete Alex’s saved games?'), findsOneWidget);
@@ -327,12 +421,13 @@ void main() {
     await settle();
     expect(w.store.deleted.keys, [download]);
     expect(find.text('2 saved games · 1 PGN file'), findsOneWidget);
-    expect(find.text('Delete saved games…'), findsNothing);
+    expect(await offersDeleteGames(tester), isFalse);
 
     w.store.documents[download] = Opened(_games, scriptedRevision(_games));
     unawaited(w.parts.players.saved.refresh());
     await settle();
-    await tester.tap(find.byTooltip('Remove player'));
+    await openPlayerMenu(tester);
+    await tester.tap(find.text('Remove player…'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Remove and delete games'));
     await settle();
@@ -366,6 +461,7 @@ void main() {
     await w.pumpShell(tester);
     w.requests.switchTo(Mode.players);
     await settle();
+    await openPlayerMenu(tester);
     await tester.tap(find.text('Delete saved games…'));
     await tester.pumpAndSettle();
     expect(
@@ -379,7 +475,7 @@ void main() {
     await settle();
     expect(w.store.deleted.keys, [theirs]);
     expect(w.store.documents, contains(mine));
-    expect(find.text('Delete saved games…'), findsNothing);
+    expect(await offersDeleteGames(tester), isFalse);
     expect(tester.takeException(), isNull);
   });
 
@@ -410,9 +506,10 @@ void main() {
         'offered and the person goes alone', (tester) async {
       w.accounts.unavailable = true;
       await showPlayers(tester);
-      expect(find.text('Delete saved games…'), findsNothing);
+      expect(await offersDeleteGames(tester), isFalse);
 
-      await tester.tap(find.byTooltip('Remove player'));
+      await openPlayerMenu(tester);
+      await tester.tap(find.text('Remove player…'));
       await settle(tester);
       expect(find.text('Remove and delete games'), findsNothing);
       expect(
@@ -432,15 +529,16 @@ void main() {
     testWidgets('the user\'s accounts changed since the count: the question '
         'is asked about them as they are now', (tester) async {
       await showPlayers(tester);
-      expect(find.text('Delete saved games…'), findsOneWidget);
+      expect(await offersDeleteGames(tester), isTrue);
       await w.accounts.setUsername(GameSite.lichess, 'alex');
 
-      await tester.tap(find.byTooltip('Remove player'));
+      await openPlayerMenu(tester);
+      await tester.tap(find.text('Remove player…'));
       await settle(tester);
       expect(find.text('Remove and delete games'), findsNothing);
       await tester.tap(find.text('Cancel'));
       await settle(tester);
-      expect(find.text('Delete saved games…'), findsNothing);
+      expect(await offersDeleteGames(tester), isFalse);
     });
 
     testWidgets('a person whose downloads could not be deleted stays', (
@@ -448,7 +546,8 @@ void main() {
     ) async {
       await showPlayers(tester);
       w.store.deletes.add(const IoFailure('disk gone'));
-      await tester.tap(find.byTooltip('Remove player'));
+      await openPlayerMenu(tester);
+      await tester.tap(find.text('Remove player…'));
       await settle(tester);
       await tester.tap(find.text('Remove and delete games'));
       await settle(tester);
@@ -476,11 +575,12 @@ void main() {
     ];
     analysis.changed();
     await tester.pumpAndSettle();
-    expect(find.text('Unfavourable position · -0.90'), findsOneWidget);
+    expect(find.text('Unfavourable position'), findsOneWidget);
+    expect(find.text('-0.90'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Dismiss finding'));
     await tester.pumpAndSettle();
-    expect(find.text('Unfavourable position · -0.90'), findsNothing);
+    expect(find.text('Unfavourable position'), findsNothing);
     expect(
       w.parts.players.directory.players.single.strings('dismissed_findings'),
       [hunt.findings.single.key],
@@ -492,7 +592,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Back to findings'));
     await tester.pumpAndSettle();
-    expect(find.text('Unfavourable position · -0.90'), findsOneWidget);
+    expect(find.text('Unfavourable position'), findsOneWidget);
     expect(
       w.parts.players.directory.players.single.strings('dismissed_findings'),
       isEmpty,

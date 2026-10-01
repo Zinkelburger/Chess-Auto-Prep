@@ -6,6 +6,8 @@ import 'package:chess_auto_prep/features/library/library_panel.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:chess_auto_prep/workspace/explorer_pane.dart';
+import 'package:chess_auto_prep/ui/choice_field.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/window_fixture.dart';
@@ -101,9 +103,22 @@ void main() {
     await w.pumpShell(tester);
     await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Explorer'));
+    // The builder's book starts shut: its button shows the explorer under
+    // the moves.
+    expect(find.byType(ExplorerPane), findsNothing);
+    await tester.tap(find.byTooltip('Show the opening book under the moves'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Book').first);
+    expect(find.byType(ExplorerPane), findsOneWidget);
+    // Under the moves the databases do not fit side by side: one box to
+    // pick a database in.
+    await tester.tap(
+      find.descendant(
+        of: find.byType(ExplorerPane),
+        matching: find.byType(ChoiceField),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Book').last);
     await tester.pumpAndSettle();
     expect(find.text('Test book'), findsOneWidget);
     await tester.tap(find.byTooltip('Edit books'));

@@ -1,20 +1,26 @@
 import 'package:flutter/material.dart';
 
 import '../chess/explorer_choice.dart';
+import '../ui/choice_field.dart';
+import '../ui/fold_button.dart';
 import '../ui/theme.dart';
 import 'explorer.dart';
 
 /// The top of the Explorer tab: the databases side by side, the chosen one
 /// pressed, and at the end `Filters` for the one that can be narrowed.
-/// The filters fold away under it so the table keeps the room; what they
-/// are set to shows beside the button while they are folded.
+/// The filters fold away under it so the table keeps the room.
 class ExplorerSourceBar extends StatefulWidget {
   const ExplorerSourceBar({
     super.key,
     required this.explorer,
     this.book,
+    this.thisFile,
     this.onDownload,
   });
+
+  /// Under the databases while `This file` is chosen: what narrows the
+  /// file's games, which is the business of the mode that opened it.
+  final Widget? thisFile;
 
   final Explorer explorer;
   final VoidCallback? onDownload;
@@ -46,16 +52,14 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
         Padding(
           padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.s, 0),
           // The end of the row goes under the databases when the card is
-          // too narrow for both, and the databases scroll sideways when it
-          // is too narrow for them alone: nothing is cut off.
+          // too narrow for both, and the databases become one box to type
+          // or pick a database in when it is too narrow for them alone:
+          // nothing is cut off.
           child: Wrap(
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: _Sources(explorer: _explorer),
-              ),
+              _Sources(explorer: _explorer),
               if (choice.source == ExplorerSource.book && widget.book != null)
                 ConstrainedBox(
                   constraints: const BoxConstraints(
@@ -82,8 +86,8 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
                   constraints: const BoxConstraints(
                     maxWidth: explorerTrailingMaxWidth,
                   ),
-                  child: _FilterButton(
-                    label: unfolded ? 'Filters' : _folded(choice),
+                  child: FoldButton(
+                    label: 'Filters',
                     unfolded: unfolded,
                     onPressed: () {
                       if (mounted) setState(() => _unfolded = !_unfolded);
@@ -93,6 +97,7 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
             ],
           ),
         ),
+        if (choice.source == ExplorerSource.thisFile) ?_fileBar(),
         if (unfolded)
           Padding(
             padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, 0),
@@ -110,39 +115,14 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
     );
   }
 
-  /// The folded button's words: what the filters are set to.
-  String _folded(ExplorerChoice choice) {
-    final narrowing = choice.narrowing;
-    return narrowing.isEmpty ? 'Filters' : narrowing;
-  }
-}
-
-class _FilterButton extends StatelessWidget {
-  const _FilterButton({
-    required this.label,
-    required this.unfolded,
-    required this.onPressed,
-  });
-  final String label;
-  final bool unfolded;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) => TextButton(
-    onPressed: onPressed,
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Flexible(
-          child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-        ),
-        Icon(
-          unfolded ? Icons.expand_less : Icons.expand_more,
-          size: IconSize.menu,
-        ),
-      ],
+  /// The mode's own row under the databases, for `This file`.
+  Widget? _fileBar() => switch (widget.thisFile) {
+    final bar? => Padding(
+      padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.m, 0),
+      child: bar,
     ),
-  );
+    null => null,
+  };
 }
 
 /// The databases side by side, the chosen one pressed.
@@ -152,7 +132,52 @@ class _Sources extends StatelessWidget {
   final Explorer explorer;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, room) {
+      final sources = explorer.sources;
+      if (_widthOf(context, sources) <= room.maxWidth) return _buttons();
+      final choice = explorer.choice;
+      return SizedBox(
+        width: explorerSourceFieldWidth,
+        child: ChoiceField(
+          text: choice.source.title,
+          options: [for (final source in sources) source.title],
+          hint: 'Database',
+          onSubmitted: (title) {
+            for (final source in sources) {
+              if (source.title == title) {
+                explorer.choose(choice.copyWith(source: source));
+              }
+            }
+          },
+        ),
+      );
+    },
+  );
+
+  /// The width the databases need side by side: each title, its padding
+  /// and the borders between them.
+  static double _widthOf(BuildContext context, List<ExplorerSource> sources) {
+    final style = Theme.of(context).textTheme.labelLarge;
+    final scale = MediaQuery.textScalerOf(context);
+    var width = 0.0;
+    for (final source in sources) {
+      final painter = TextPainter(
+        text: TextSpan(text: source.title, style: style),
+        textDirection: TextDirection.ltr,
+        textScaler: scale,
+        maxLines: 1,
+      )..layout();
+      width += painter.width + 2 * Space.s + _segmentSlack;
+      painter.dispose();
+    }
+    return width;
+  }
+
+  /// The border and rounding each segment adds to its words and padding.
+  static const _segmentSlack = 4.0;
+
+  Widget _buttons() {
     final choice = explorer.choice;
     return SegmentedButton<ExplorerSource>(
       segments: [

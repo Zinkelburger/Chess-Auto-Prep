@@ -21,6 +21,10 @@ enum InstallKind {
   /// The release zip, unpacked where the user can write, with its marker.
   linuxPortable('linux.zip'),
 
+  /// The release AppImage, in a folder the user can write. The file is
+  /// replaced in place, so shortcuts and the menu entry keep working.
+  linuxAppImage('linux-x86_64.AppImage'),
+
   /// Nothing the app can install itself: Flatpak, macOS, the Windows zip,
   /// an unmarked or read-only bundle, a development build. The user is sent
   /// to the release page.
@@ -70,7 +74,10 @@ HelperLaunch helperLaunch(
       request,
     ],
   ),
-  InstallKind.linuxDeb || InstallKind.linuxRpm || InstallKind.linuxPortable => (
+  InstallKind.linuxDeb ||
+  InstallKind.linuxRpm ||
+  InstallKind.linuxPortable ||
+  InstallKind.linuxAppImage => (
     executable: '/bin/bash',
     arguments: [
       script,
@@ -125,10 +132,13 @@ final class HelperBusy extends HelperStart {
 /// script in `assets/updater/` that swaps it in after the app closes. The
 /// helper checks the SHA-256 again just before it installs, never kills the
 /// app, and writes `last-error.txt` in the updates folder when it fails.
+/// It opens the app again only when asked to ([setReopen]): closing the app
+/// for the day installs and leaves it closed.
 ///
 /// Package installs are left to their package manager (`pkexec dpkg` or
 /// `rpm`) and the Windows installer; a marked portable Linux bundle is
-/// exchanged as a folder, keeping the previous one beside it.
+/// exchanged as a folder, keeping the previous one beside it, and an
+/// AppImage is replaced by the new file under the same name.
 ///
 /// Every helper holds `install.lock` in the updates folder while it runs
 /// (`flock` on Linux, an unshared handle on Windows). That lock, not the
@@ -162,6 +172,10 @@ final class UpdateInstaller {
   final int readyPolls;
 
   static const packagedExecutable = '/opt/chess-auto-prep/chess_auto_prep';
+
+  /// Set by the AppImage runtime to the file the user ran; the app itself
+  /// runs from a read-only mount of it.
+  static const appImageVariable = 'APPIMAGE';
   static const portableMarker = '.chess-auto-prep-portable';
   static const _package = 'chess-auto-prep';
   static const _windowsUninstaller = 'unins000.exe';
@@ -177,6 +191,11 @@ final class UpdateInstaller {
       }
       if (abi != Abi.linuxX64 || environment.containsKey('FLATPAK_ID')) {
         return InstallKind.manual;
+      }
+      if (environment[appImageVariable] case final appImage?) {
+        return await _writableAppImage(appImage)
+            ? InstallKind.linuxAppImage
+            : InstallKind.manual;
       }
       if (executable == packagedExecutable) return await _linuxPackage();
       return await _writablePortable()
@@ -224,6 +243,22 @@ final class UpdateInstaller {
     ]);
   }
 
+  /// An AppImage file the helper can replace: the file and its folder are
+  /// writable, with the tools the helper needs.
+  Future<bool> _writableAppImage(String appImage) => _succeeds('sh', [
+    '-c',
+    r'test -f "$1" && test -w "$1" && test -w "$(dirname "$1")" && command -v sha256sum && command -v flock && command -v od',
+    'updater',
+    appImage,
+  ]);
+
+  /// What the helper replaces and then opens: the AppImage file, not the
+  /// mount the app runs from, which is gone once the app has closed.
+  String _installed(InstallKind kind) => switch (kind) {
+    InstallKind.linuxAppImage => environment[appImageVariable] ?? executable,
+    _ => executable,
+  };
+
   Future<bool> _succeeds(String command, List<String> arguments) async =>
       (await run(command, arguments))?.exitCode == 0;
 
@@ -246,6 +281,7 @@ final class UpdateInstaller {
     }
     try {
       await _removeReady(folder);
+      await _remove(p.join(folder, reopenName));
       await armed.writeAsString('1', flush: true);
       await script.writeAsString(
         await readHelper(
@@ -274,7 +310,7 @@ final class UpdateInstaller {
         request: request.path,
         appPid: appPid,
         payload: payload,
-        executable: executable,
+        executable: _installed(kind),
         armed: armed.path,
       );
       await startDetached(launch.executable, launch.arguments);
@@ -302,6 +338,23 @@ final class UpdateInstaller {
       return true;
     } on Object catch (error) {
       log.w('cancel the update install', error);
+      return false;
+    }
+  }
+
+  /// Tells the helper armed by [armed] whether to open the app again once
+  /// it has installed. False when that could not be written.
+  Future<bool> setReopen(String armed, {required bool reopen}) async {
+    final marker = File(p.join(p.dirname(armed), reopenName));
+    try {
+      if (reopen) {
+        await marker.writeAsString('1', flush: true);
+      } else {
+        await _remove(marker.path);
+      }
+      return true;
+    } on Object catch (error) {
+      log.w('ask the update helper to reopen the app', error);
       return false;
     }
   }

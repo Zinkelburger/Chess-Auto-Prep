@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/chess/pgn/board_shapes.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
@@ -29,7 +30,8 @@ import 'package:chess_auto_prep/workspace/repertoire_shelf.dart';
 import 'package:chess_auto_prep/workspace/repertoire_tree.dart';
 import 'package:chess_auto_prep/workspace/workspace.dart';
 import 'package:chess_auto_prep/workspace/workspace_view.dart';
-import 'package:chessground/chessground.dart' show Arrow, Chessboard;
+import 'package:chess_auto_prep/workspace/board_view.dart';
+import 'package:chessground/chessground.dart' show Chessboard;
 import 'package:dartchess/dartchess.dart' show Square;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -128,10 +130,15 @@ void main() {
       finds: Finds(store: FindsStore.inMemory),
       myGamesTree: ScriptedLocalGames(),
       openings: OpeningNames(() async => const []),
+      coresAvailable: 4,
     );
   }
 
-  Future<void> pump(WidgetTester tester, {ActionLayout? layout}) async {
+  Future<void> pump(
+    WidgetTester tester, {
+    ActionLayout? layout,
+    WorkspaceHooks hooks = const WorkspaceHooks(),
+  }) async {
     await tester.binding.setSurfaceSize(const Size(1200, 820));
     await tester.pumpWidget(
       MaterialApp(
@@ -151,6 +158,7 @@ void main() {
               layout: layout,
               editing: editing,
               moves: moves,
+              hooks: hooks,
             ),
           ),
         ),
@@ -224,7 +232,8 @@ void main() {
   });
 
   testWidgets('a right-drag on the board draws an arrow into the comment of '
-      'the move under the cursor, and the board shows it', (tester) async {
+      'the move under the cursor, the board shows it, and a left click takes '
+      'it out again', (tester) async {
     await pump(tester);
     session.goTo(NodePath.of(const [0]));
     await tester.pump();
@@ -247,12 +256,17 @@ void main() {
       'The Sicilian [%eval 0.30] [%cal Gg1f3]',
     );
     expect(
-      tester.widget<Chessboard>(board).shapes,
-      contains(
-        const Arrow(color: shapeGreen, orig: Square.g1, dest: Square.f3),
-      ),
+      tester.widget<BoardArrows>(find.byType(BoardArrows)).arrows,
+      contains(const BoardShape(Square.g1, Square.f3, ShapeColour.green)),
     );
     expect(find.textContaining('[%cal'), findsNothing);
+    await tester.tapAt(at(4, 4));
+    await tester.pump();
+    expect(session.commentAt(session.cursor), 'The Sicilian [%eval 0.30]');
+    expect(
+      tester.widget<BoardArrows>(find.byType(BoardArrows)).arrows,
+      isEmpty,
+    );
   });
 
   testWidgets('clicking a variation move puts the cursor on it', (
@@ -306,28 +320,60 @@ void main() {
     layout.pane(0).show(WorkspaceTab.search);
     await tester.pumpAndSettle();
     expect(find.byType(ExplorerPane), findsNWidgets(3));
-    expect(find.text('Engine target: depth 14'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Depth'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('game heading stays above the Action Tabs in every reading tab', (
-    tester,
-  ) async {
+  testWidgets('the game is headed at the top of its moves, and nowhere over '
+      'the other tabs', (tester) async {
     await pump(tester);
-    for (final tab in [
-      WorkspaceTab.moves,
-      WorkspaceTab.replies,
-      WorkspaceTab.explorer,
-    ]) {
+    tabs.show(WorkspaceTab.moves);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byType(MoveTreeView),
+        matching: find.byType(ReadingHeader),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester.getTopLeft(find.byType(ReadingHeader)).dy,
+      greaterThanOrEqualTo(
+        tester.getBottomLeft(find.byType(PaneTabStrip<WorkspaceTab>)).dy,
+      ),
+    );
+    for (final tab in [WorkspaceTab.replies, WorkspaceTab.explorer]) {
       tabs.show(tab);
       await tester.pumpAndSettle();
-      expect(
-        tester.getBottomLeft(find.byType(ReadingHeader)).dy,
-        lessThanOrEqualTo(
-          tester.getTopLeft(find.byType(PaneTabStrip<WorkspaceTab>)).dy,
-        ),
-      );
+      expect(find.byType(ReadingHeader), findsNothing);
     }
+  });
+
+  testWidgets('a quiet board has the engine row and the move field only '
+      'while they are used', (tester) async {
+    await pump(tester, hooks: const WorkspaceHooks(quietBoard: true));
+    await tester.pumpAndSettle();
+    expect(find.text('Engine').hitTestable(), findsNothing);
+    final field = find.byType(MoveField);
+    expect(
+      tester
+          .widget<Opacity>(
+            find.ancestor(of: field, matching: find.byType(Opacity)).first,
+          )
+          .opacity,
+      0,
+    );
+    moves.focus.requestFocus();
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<Opacity>(
+            find.ancestor(of: field, matching: find.byType(Opacity)).first,
+          )
+          .opacity,
+      1,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('engine off returns its line space and keeps the switch', (
@@ -347,6 +393,22 @@ void main() {
     );
     await tester.tap(find.byTooltip('Turn engine off (E)'));
     await tester.pumpAndSettle();
+    expect(tester.getTopLeft(field).dy, offAt);
+  });
+
+  testWidgets('the engine gear makes room for its settings while it is open', (
+    tester,
+  ) async {
+    await pump(tester);
+    final field = find.byTooltip('Type a move (/)');
+    final offAt = tester.getTopLeft(field).dy;
+    await tester.tap(find.byTooltip('Engine settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('CPU cores'), findsOneWidget);
+    expect(tester.getTopLeft(field).dy - offAt, engineRowHeight * 3);
+    await tester.tap(find.byTooltip('Show lines'));
+    await tester.pumpAndSettle();
+    expect(find.text('CPU cores'), findsNothing);
     expect(tester.getTopLeft(field).dy, offAt);
   });
 

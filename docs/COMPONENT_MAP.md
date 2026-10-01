@@ -53,7 +53,11 @@ Bughouse mode is offered when its engine assets are present.
 - Trainer Learn/Review and the shared Train tab use the same scheduling and
   lesson owners. Training records remain under Documents.
 - Viewer owns collections, selection/filter/sort and held edits; analysis tabs
-  preserve their source draft. Export uses the exclusive PGN exporter.
+  preserve their source draft. Export uses the exclusive PGN exporter. It opens
+  on the moves alone (`viewerTabs`), has its own Explorer starting on `This
+  file` (`Explorer.independent(starting:)`), and supplies the Filter tab
+  (`ViewerFilterPane`) and the followed player's colour choice
+  (`PlayerSideChoice`) through `ModeView`.
 - Study uses the same document session for chapters, tags, starts, cleanup,
   quiz markers, import/export and retained retry commands.
 - Tactics mines downloaded games into `tactics_sets/Default.pgn`, trains puzzles
@@ -64,12 +68,34 @@ Bughouse mode is offered when its engine assets are present.
 - Databases browses/imports/downloads master games and reports storage usage.
   Cleanup is limited to explicitly selected derived data.
 - Generation owns search trees and draft publication; Replies/gaps and Audit
-  use the current workspace and chapter revision.
+  use the current workspace and chapter revision. A practical search from the
+  board (`workspace/fill_gaps.dart`) builds two trees in one run, the board's
+  side and the other; `FillGaps.nodeAtBoard(side:)` reads either, and
+  `workspace/search_table.dart` merges them into the Expectimax table's
+  White, Black and Engine columns.
+- The Repertoire builder starts with two panes: Moves on the left, Expectimax
+  on the right (`ActionLayout.startBuilding`). As on Lichess, a book button
+  leading the nav row shows the main Explorer under the moves
+  (`ActionLayout.book`, shut until pressed). Requests for a tab
+  (`ActionLayout.reveal`) bring it up in the pane that already has it. The
+  Explorer's narrowing folds under a button always labelled Filters
+  (`ui/fold_button.dart`); where the databases do not fit side by side they
+  become one typeable box (`ChoiceField`).
 - Engine tournaments use the shared supervisor, retryable checkpoints, saved
   history, ratings/crosstables and viewer handoff. Bughouse keeps its own two-board
   screen, Hivemind analysis, archive/book reads and saved matches.
 - Settings includes accounts, engine/training controls, diagnostics, shortcuts,
   licenses and verified update downloads/install-on-close.
+  The engine pane's gear swaps its lines in place for Lines, CPU cores and
+  Memory sliders; both views write the same settings, which the workspace
+  wiring applies to the running engine. The Expectimax tab's gear does the
+  same for the search (`workspace/search_settings.dart`): its rows and
+  Settings ▸ Expectimax write `Settings.expectimax`
+  (`chess/generation/expectimax_options.dart`), and every way of starting a
+  search reads `FillRequest.of(settings)`. `opponentFor` in
+  `workspace/search_opponents.dart` turns the request's reply source into the
+  search's opponent: Maia, or a games database (Lichess explorer, local master
+  book) with Maia behind it.
 
 Unported conveniences remain in the feature specs/backlog; the presence of a
 mode is not a claim of every historical v1 control being reproduced.

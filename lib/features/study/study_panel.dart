@@ -467,17 +467,23 @@ class _Toolbar extends StatelessWidget {
         children: [
           Row(
             children: [
-              // Room for the buttons first: a narrow pane cuts the label.
-              Flexible(
-                child: Text(
-                  'Your studies',
-                  style: Theme.of(context).textTheme.labelSmall,
-                  overflow: TextOverflow.ellipsis,
+              // Room for the buttons first: a narrow pane cuts the label,
+              // which otherwise has all the row leaves it.
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'Your studies',
+                        style: Theme.of(context).textTheme.labelSmall,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: Space.xs),
+                    RowActions(tooltip: 'Study actions', children: _actions),
+                  ],
                 ),
               ),
-              const SizedBox(width: Space.xs),
-              RowActions(tooltip: 'Study actions', children: _actions),
-              const Spacer(),
               ?trailing,
             ],
           ),

@@ -8,7 +8,8 @@ import '../ui/theme.dart';
 import 'document_session.dart';
 import 'opening_names.dart';
 
-/// What is open, the way a book heads a game: the name centred, and under
+/// What is open, at the top of the moves the way a book heads a game: the
+/// name centred, and under
 /// it who played it and where, or how much of the file a merged chapter
 /// holds and which side it is played from. The side is written, not
 /// switched: it is asked once, when a file does not say, and changed from
@@ -41,7 +42,7 @@ class ReadingHeader extends StatelessWidget {
         final chapter = session.chapter;
         if (chapter == null) {
           return Padding(
-            padding: const EdgeInsets.all(readingCardInset),
+            padding: const EdgeInsets.symmetric(vertical: readingCardInset),
             child: Text(
               'Open a chapter',
               style: text.bodySmall,
@@ -49,12 +50,15 @@ class ReadingHeader extends StatelessWidget {
             ),
           );
         }
+        // The moves have their own inset at the sides too. The `+` of a
+        // card that is one page sits in the top right corner, so the name
+        // stays clear of it on both sides and remains centred.
         return Padding(
           padding: const EdgeInsets.fromLTRB(
-            readingCardInset,
-            readingCardInset,
-            readingCardInset,
-            Space.s,
+            Space.xl,
+            Space.l,
+            Space.xl,
+            Space.l,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,

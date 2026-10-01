@@ -34,8 +34,8 @@ final class GenerationTrees {
   GenerationTrees(this.recovery, {this.afterPublish});
 
   /// How many earlier runs of a chapter are kept beside the one just written;
-  /// following the board writes a tree at every step.
-  static const keptRuns = 8;
+  /// following the board writes two trees at every step, one for each side.
+  static const keptRuns = 16;
 
   final RecoveryGate recovery;
 

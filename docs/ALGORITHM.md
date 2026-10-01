@@ -176,27 +176,65 @@ is fabricated for a single engine line.
 ## V2 interactive Expectimax
 
 The Builder's interactive Expectimax uses a bounded candidate policy rather than
-an exhaustive Pure tree. From the root down, Stockfish at depth 14 supplies a
+an exhaustive Pure tree. From the root down, Stockfish at the panel's Engine
+depth (default 14) supplies a
 MultiPV shortlist of our moves: Root moves (default four) for our first move,
 at the root or under each first reply, and Candidates (default four) after it.
 Only those child positions get separate fixed-depth evaluations and recursive
 expansion. A failed or incomplete shortlist stops with a visible error.
 Callers without a ranking source score all candidates before retaining the best
 N. Other callers retain their existing exhaustive defaults. The panel exposes
-Maia rating, root moves, candidate count, depth in half-moves (blank for no limit), and
-reply coverage directly above the results. Coverage is expressed as one in N
+Maia rating, root moves, candidate count, depth in half-moves (blank for no limit),
+engine depth and reply coverage directly above the results. Coverage is expressed as one in N
 games, default 100; zero expands every reply. Settings apply to the next search
 and are disabled during a run.
 
-Opponent nodes retain all positive Maia probability mass. Paths below the configured cumulative
-reach threshold (default 1%) stop at their engine estimate instead of expanding further; the remaining
-replies are not renormalized to pretend the rare replies disappeared. The 25,000
+A practical search is run twice from the same board at once, on the one
+engine (`FillGaps._buildMirror`): for the side at the bottom of the board, and
+for the other side with the roles swapped, so the same position is our choice
+in one tree and Maia's reply in the other. Each tree has its own 25,000-node
+budget and is saved as its own run. The second exists for its values: the
+table sets a move's expected score when White is the prepared side beside its
+score when Black is, and beside the engine's. The gap between the engine and
+the other side's column is how far a human on the move is expected to drift
+from best play. The board's tree alone drives status, Positions and drafted
+lines; the second stops with it unless the first ran its whole depth.
+
+**Where the replies come from** (2026-10-01) is the bar's `Replies from`
+choice: Maia (the default), Lichess masters, Lichess players at the speeds and
+ratings the Explorer tab is set to, or the TWIC games on this machine
+(`DatabaseOpponent` in `workspace/search_opponents.dart`). A database answers a
+position with each legal reply weighted by its games (`playedPolicy`); a move
+not legal there takes no weight and the two spellings of castling are one move.
+With `Fall back to Maia under N games` ticked (the default, N = 10), a position
+where the database has fewer than N games is answered by Maia instead. One
+position has one source: the two are never blended, and whichever answers is
+turned into shares of one over the legal moves (`Policy.sharesOver`) before the
+cut below renormalizes what is kept, so every opponent position's replies sum
+to one whatever scale its source counted in. Unticked, the database answers
+wherever it has a game and the run stops where it has none. A database that
+cannot be asked (no login, no connection, a rate limit, no TWIC import) stops
+the run with its own sentence on the status line and keeps the tree; it never
+turns into a Maia search. A saved tree records the choice
+(`v2_reply_source`, such as `masters+maia<10` or
+`lichess:Blitz,Rapid:2200,2500`; absent means Maia), and Resume only continues
+a tree whose source, narrowing and fallback match.
+
+Opponent nodes keep Maia's likeliest replies until they cover 90% of its
+distribution, at most five, and renormalize the kept shares to sum to one
+(`fillReplyMass`, `fillMaxReplies`). Maia's softmax gives every legal move some
+weight, so without the cut each opponent position cost 30–40 engine
+evaluations, most of them for replies under 2%. Kept paths below the configured
+cumulative reach threshold (default 1%) stop at their engine estimate instead of
+expanding further. The 25,000
 new-node budget still bounds a batch. This is approximate candidate selection and
 selective depth; an omitted engine candidate might have a better practical score.
-Saved v4 configuration records `v2_max_our_moves`, `v2_root_moves` and
-`v2_reply_floor`; resumed interactive runs require matching settings. Existing exhaustive trees
+Saved v4 configuration records `v2_max_our_moves`, `v2_root_moves`,
+`v2_reply_floor`, `v2_reply_mass` and `v2_max_replies`; resumed interactive runs
+require matching settings, except that a tree saved before the reply cut is cut
+on load (`cutReplies`) rather than refused. Existing exhaustive trees
 (including MCP-built chapter searches) can seed an interactive run; their completed
-branches and values are retained while new expansions use the shortlist. Narrowed
+branches are retained, cut to the likeliest replies, while new expansions use the shortlist. Narrowed
 trees carry algorithm version 4 so older exhaustive-only app/C/MCP readers refuse
 to resume them under the wrong branching assumptions. Exhaustive exports stay at
 algorithm version 3.
@@ -207,10 +245,14 @@ from the latest board only after that save finishes. A manual stop or a change
 of document/side cancels the pending restart. Up to 16 previous roots are retained
 in memory, so backing up displays their results immediately and a new search
 reuses compatible values. Chapter searches also keep their existing saved trees
-on disk. A stopped search stays stopped while browsing; Expectimax continues
-from the current board and its retained values. Resume also loads a saved root
-after restarting the app. Rating, evaluation source, candidate count and reply
-coverage must match to reuse an interactive tree. Interactive trees saved before
+on disk. A stopped search stays stopped while browsing. The one Expectimax
+button reads Resume expectimax when a compatible search covers the board, and
+continues from the current board, not the old root, with its retained values.
+Otherwise it loads a saved tree starting at the board (after restarting the
+app), and when none fits it starts afresh there. Rating, evaluation source,
+engine depth, candidate count and reply coverage must match to reuse an
+interactive tree. The status line says only how far it got: Stopped at depth N
+· X positions. Interactive trees saved before
 the root was shortlisted (no `v2_root_moves`) are refused; start a new search.
 Raising Root moves, or starting from a deeper node of an earlier search, evaluates
 only the root moves that are missing and keeps the work below the others. Engine evaluations continue to use the shared

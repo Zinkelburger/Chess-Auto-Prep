@@ -1,6 +1,7 @@
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/move_tree_view.dart';
 import 'package:chess_auto_prep/workspace/session_results.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -119,6 +120,33 @@ void main() {
       fixture.onDisk.indexOf('[Event "Indian"]'),
       lessThan(fixture.onDisk.indexOf('[Event "Queen\'s"]')),
     );
+  });
+
+  testWidgets('the menu opens under the move that asked for it, and is the '
+      'one menu of the list', (tester) async {
+    final fixture = await openSession(twoLines);
+    addTearDown(fixture.dispose);
+    await pumpTree(tester, fixture);
+    expect(find.byType(MenuAnchor), findsOneWidget);
+
+    for (final move in ['Nf6', 'c4']) {
+      final token = tester.getRect(
+        find.ancestor(
+          of: find.textContaining(move),
+          matching: find.byType(InkWell),
+        ),
+      );
+      await tester.tap(find.textContaining(move), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      // Its first entry, inside the menu's own padding.
+      final entry = tester.getTopLeft(find.text('Promote variation'));
+      expect(entry.dy - token.bottom, inInclusiveRange(0, 32), reason: move);
+      expect(entry.dx - token.left, inInclusiveRange(0, 32), reason: move);
+      // A click anywhere else puts it away.
+      await tester.tapAt(const Offset(390, 590));
+      await tester.pumpAndSettle();
+      expect(find.text('Promote variation'), findsNothing);
+    }
   });
 
   testWidgets('deleting from a move takes it off the screen quietly and undo '

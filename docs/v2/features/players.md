@@ -9,8 +9,18 @@ Plan step: 10
 ## Current v2 workflow
 
 Use **Players & prep** to add/edit a person, preview a pasted roster, reconnect
-saved accounts and old PGNs, or collect people in a tournament group. Cards use
-the normal app controls and wrap at the available width. Edits use a validated
+saved accounts and old PGNs, or collect people in a tournament group. The page
+(2026-10-01) is one dense list: a row per person with the name and rating, the
+accounts by site and the US Chess ID, the prep notes, linked studies as chips, and
+in a column of its own the saved games (under the name in a narrow window). A row
+shows the two things done with a person, `Analyze games` and `New prep study` /
+`Open prep study`; `Edit player…`, `Link study…`, `Unlink prep study`, `Delete saved
+games…` and `Remove player…` are in its `⋯`. The toolbar is the search, the one
+filled button (`Add player`, `Add players` in a group, `New group` over the groups),
+`Paste players`, and in a group `Open group study` and `Train group study`; `Edit
+group…`, the prep sheet, `Add saved players`, `Update US Chess ratings` and reload
+are in its `⋯`. A group is headed by its name and `2026-10-10 · 5 rounds · 18 players
+· 5 prepared`, and each member has a `Prepared` tick. Edits use a validated
 Save dialog; notes do not save on every keystroke. Group date/rounds are editable,
 prepared checkboxes persist, and US Chess rating updates show progress and Stop.
 Saved account-research candidates show their evidence and an explicit Use account
@@ -22,9 +32,26 @@ Exact names, aliases and handles determine the player's colour; unmatched games
 are reported and excluded. Get games remembers count/months and time controls;
 refresh adds games without removing existing ones. Positions, Games and Findings
 share the colour/search/date/speed filters (Bullet … Correspondence, and Other for
-a game whose time control cannot be read). Less common settings live in dialogs.
-The Player openings tab follows the board; clicking a game there keeps its position.
-The My book tab checks the opponent against the active book for our colour.
+a game whose time control cannot be read).
+
+The column (2026-10-01) is the player's name with one `⋯` menu (`Change player…`,
+`Get games…` when there is an account, `Add PGN…`, `Reload saved games`, `Players &
+prep`), the status line, `As White` / `As Black`, the search, a count beside a
+`Filters` fold, and the `Positions` / `Games` / `Findings` switch, which stays in
+view while its list scrolls. Filters and the engine's settings open in the column,
+every control named; there are no settings dialogs. Positions are a table: the
+moves, `Games`, `Score`, with wins, draws and losses under the moves as `+4 =2 −3`
+and the engine's score once there is one. The column names sort it (`Games`, then
+`Score` worst first and, pressed again, best first; `Eval` once a pass has run).
+A game row names the opponent. With nobody chosen the column is a searchable list
+of the saved players.
+
+The Player openings tab follows the board and is drawn as the Explorer table: a row
+per move with its games, share and result bar, then the games. Clicking a game
+there keeps its position. When the board is somewhere the games never were — as it
+is on arriving from another mode — the tab says so and `Go to the first move` opens
+the player's games from the start. The My book tab checks the opponent against the
+active book for our colour.
 
 Analyze runs a finite, cancellable Stockfish pass on the most frequent positions.
 Scores are from the selected player's perspective. Findings distinguish bad

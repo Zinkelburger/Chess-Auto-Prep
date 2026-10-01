@@ -130,3 +130,36 @@ final class Policy {
     return {for (final entry in support.entries) entry.key: entry.value / mass};
   }
 }
+
+/// The likeliest of [shares], taken most likely first until they cover
+/// [mass] of the opponent's move or number [most], whichever comes first,
+/// and renormalised so the kept replies again sum to one. At least one reply
+/// is always kept; null for both keeps every reply.
+///
+/// Example: `{e7e5: 0.5, c7c5: 0.42, e7e6: 0.05, d7d5: 0.03}` with mass 0.9
+/// keeps e7e5 and c7c5 (0.92 covered) as `{e7e5: 0.543…, c7c5: 0.456…}`.
+/// Equal shares are ordered by UCI so the cut does not depend on map order.
+Map<String, double> likeliestReplies(
+  Map<String, double> shares, {
+  double? mass,
+  int? most,
+}) {
+  if (mass == null && most == null) return shares;
+  final ranked = shares.entries.toList()
+    ..sort((a, b) {
+      final order = b.value.compareTo(a.value);
+      return order != 0 ? order : a.key.compareTo(b.key);
+    });
+  final kept = <String, double>{};
+  var covered = 0.0;
+  for (final entry in ranked) {
+    if (kept.isNotEmpty &&
+        ((most != null && kept.length >= most) ||
+            (mass != null && covered >= mass - 1e-12))) {
+      break;
+    }
+    kept[entry.key] = entry.value;
+    covered += entry.value;
+  }
+  return {for (final entry in kept.entries) entry.key: entry.value / covered};
+}
