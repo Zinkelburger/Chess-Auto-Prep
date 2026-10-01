@@ -1,20 +1,24 @@
-import 'player_lookup.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
 
+import '../../chess/players/player.dart';
 import '../../ui/choice_dialog.dart';
 import '../../ui/confirm_dialog.dart';
+import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
-import '../../ui/relative_time.dart';
 import '../../ui/theme.dart';
-import '../../chess/players/player.dart';
-import 'player_dialogs.dart';
+import 'analysis_rows.dart' show ListMessage;
 import 'group_dialog.dart';
+import 'person_row.dart';
+import 'player_dialogs.dart';
 import 'players.dart';
 import 'saved_games.dart';
 
+/// The Players & prep page: everyone the user prepares for, or the groups
+/// they are collected in for an event, as one dense list. A row has the two
+/// things done with a person; the page has one filled button, which adds to
+/// whatever is listed.
 class PlayersScreen extends StatefulWidget {
   const PlayersScreen({
     super.key,
@@ -136,171 +140,16 @@ class _PlayersScreenState extends State<PlayersScreen> {
       final groups = owner.showingGroups && group == null;
       return Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1040),
+          constraints: const BoxConstraints(maxWidth: playersPageWidth),
           child: Padding(
             padding: const EdgeInsets.all(Space.l),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Wrap(
-                  spacing: Space.s,
-                  runSpacing: Space.s,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    if (group != null)
-                      TextButton.icon(
-                        onPressed: () {
-                          _search.clear();
-                          owner.showGroup(null);
-                        },
-                        icon: const Icon(Icons.arrow_back),
-                        label: const Text('Groups'),
-                      ),
-                    Text(
-                      group?.name ?? 'Players & prep',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    if (group == null)
-                      SegmentedButton<bool>(
-                        segments: const [
-                          ButtonSegment(
-                            value: false,
-                            label: Text('All players'),
-                          ),
-                          ButtonSegment(value: true, label: Text('Groups')),
-                        ],
-                        selected: {owner.showingGroups},
-                        onSelectionChanged: (v) {
-                          if (!mounted) return;
-                          _search.clear();
-                          owner.showGroups(v.single);
-                        },
-                      ),
-                  ],
-                ),
+                group == null ? _viewSwitch() : _groupHeading(group),
                 const SizedBox(height: Space.m),
-                Wrap(
-                  spacing: Space.s,
-                  runSpacing: Space.s,
-                  children: [
-                    FilledButton.icon(
-                      onPressed: owner.busy || owner.needsRetry
-                          ? null
-                          : groups
-                          ? () => _group()
-                          : group != null
-                          ? () => _addMember(group)
-                          : () => editPlayer(context, owner),
-                      icon: const Icon(Icons.add),
-                      label: Text(
-                        groups
-                            ? 'New group'
-                            : group != null
-                            ? 'Add players'
-                            : 'Add player',
-                      ),
-                    ),
-                    if (!groups)
-                      OutlinedButton.icon(
-                        onPressed: owner.busy || owner.needsRetry
-                            ? null
-                            : () => importPlayers(context, owner),
-                        icon: const Icon(Icons.content_paste),
-                        label: const Text('Paste players'),
-                      ),
-                    if (group != null) ...[
-                      TextButton(
-                        onPressed: owner.busy ? null : () => _group(old: group),
-                        child: const Text('Edit group'),
-                      ),
-                      TextButton(
-                        onPressed: () => widget.onGroupStudy(group),
-                        child: const Text('Open group study'),
-                      ),
-                      TextButton(
-                        onPressed: () => widget.onTrainGroup(group),
-                        child: const Text('Train group study'),
-                      ),
-                      if (group.fields['study'] case final String study
-                          when study.isNotEmpty)
-                        TextButton(
-                          onPressed: owner.busy
-                              ? null
-                              : () => owner.unlinkGroupStudy(group),
-                          child: const Text('Unlink group study'),
-                        ),
-                      TextButton(
-                        onPressed: () => widget.onCopy(group),
-                        child: const Text('Copy prep sheet'),
-                      ),
-                      TextButton(
-                        onPressed: () => widget.onExport(group),
-                        child: const Text('Export prep sheet…'),
-                      ),
-                    ],
-                    TextButton(
-                      onPressed: owner.busy ? null : widget.onSaved,
-                      child: const Text('Add saved players'),
-                    ),
-                    TextButton(
-                      onPressed: owner.lookupRating == null
-                          ? null
-                          : owner.lookingUp
-                          ? owner.stopLookup
-                          : owner.updateRatings,
-                      child: Text(
-                        owner.lookingUp
-                            ? 'Stop lookup'
-                            : 'Update US Chess ratings',
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: owner.busy ? null : owner.load,
-                      tooltip: 'Reload players and groups',
-                      icon: const Icon(Icons.refresh),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: Space.m),
-                SearchField(
-                  controller: _search,
-                  hint: groups ? 'Search groups' : 'Search name, ID or account',
-                  onChanged: owner.search,
-                ),
-                if (owner.busy) const LinearProgressIndicator(),
-                if (owner.lookupStatus != null) Text(owner.lookupStatus!),
-                for (final warning in owner.warnings) Text(warning),
-                if (owner.error != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: Space.s),
-                    child: Wrap(
-                      spacing: Space.s,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(
-                          owner.error!,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                        ),
-                        if (owner.needsRetry) ...[
-                          TextButton(
-                            onPressed: owner.busy ? null : owner.retry,
-                            child: const Text('Retry save'),
-                          ),
-                          TextButton(
-                            onPressed: owner.busy ? null : owner.discardFailed,
-                            child: const Text('Discard failed edit and reload'),
-                          ),
-                        ] else
-                          TextButton(
-                            onPressed: owner.load,
-                            child: const Text('Try again'),
-                          ),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: Space.s),
+                _toolbar(group, groups),
+                _Notices(players: owner),
                 Expanded(child: groups ? _groups() : _people()),
               ],
             ),
@@ -309,219 +158,366 @@ class _PlayersScreenState extends State<PlayersScreen> {
       );
     },
   );
+
+  /// Everyone, or the groups people are collected in for an event.
+  Widget _viewSwitch() => Align(
+    alignment: Alignment.centerLeft,
+    child: SegmentedButton<bool>(
+      segments: const [
+        ButtonSegment(value: false, label: Text('All players')),
+        ButtonSegment(value: true, label: Text('Groups')),
+      ],
+      selected: {owner.showingGroups},
+      showSelectedIcon: false,
+      onSelectionChanged: (v) {
+        if (!mounted) return;
+        _search.clear();
+        owner.showGroups(v.single);
+      },
+    ),
+  );
+
+  /// The way back to the groups, then the group's name and what is known of
+  /// the event: `2026-10-10 · 5 rounds · 18 players · 5 prepared`.
+  Widget _groupHeading(PlayerGroup group) {
+    final text = Theme.of(context).textTheme;
+    return Row(
+      children: [
+        TextButton.icon(
+          onPressed: () {
+            _search.clear();
+            owner.showGroup(null);
+          },
+          icon: const Icon(Icons.arrow_back, size: IconSize.action),
+          label: const Text('Groups'),
+        ),
+        const SizedBox(width: Space.s),
+        Flexible(
+          child: Text(
+            group.name,
+            style: text.titleMedium,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: Space.m),
+        Flexible(
+          child: Text(
+            groupLine(group),
+            style: text.bodySmall,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The search, the one filled button — adding to whatever is listed — and
+  /// the few things done to the list as a whole. The rest is behind `⋯`.
+  Widget _toolbar(PlayerGroup? group, bool groups) {
+    final blocked = owner.busy || owner.needsRetry;
+    return Wrap(
+      spacing: Space.s,
+      runSpacing: Space.s,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        SizedBox(
+          width: playersSearchWidth,
+          child: SearchField(
+            controller: _search,
+            hint: groups ? 'Search groups' : 'Search name, ID or account',
+            onChanged: owner.search,
+          ),
+        ),
+        FilledButton(
+          onPressed: blocked
+              ? null
+              : groups
+              ? () => _group()
+              : group != null
+              ? () => _addMember(group)
+              : () => editPlayer(context, owner),
+          child: Text(
+            groups
+                ? 'New group'
+                : group != null
+                ? 'Add players'
+                : 'Add player',
+          ),
+        ),
+        if (!groups)
+          OutlinedButton(
+            onPressed: blocked ? null : () => importPlayers(context, owner),
+            child: const Text('Paste players'),
+          ),
+        if (group != null) ...[
+          TextButton(
+            onPressed: () => widget.onGroupStudy(group),
+            child: const Text('Open group study'),
+          ),
+          TextButton(
+            onPressed: () => widget.onTrainGroup(group),
+            child: const Text('Train group study'),
+          ),
+        ],
+        _more(group),
+      ],
+    );
+  }
+
+  /// What is done seldom: the group's own entries first, then the
+  /// directory's.
+  Widget _more(PlayerGroup? group) => RowActions(
+    tooltip: 'More actions',
+    children: [
+      if (group != null) ...[
+        MenuItemButton(
+          onPressed: owner.busy ? null : () => _group(old: group),
+          child: const Text('Edit group…'),
+        ),
+        MenuItemButton(
+          onPressed: () => widget.onCopy(group),
+          child: const Text('Copy prep sheet'),
+        ),
+        MenuItemButton(
+          onPressed: () => widget.onExport(group),
+          child: const Text('Export prep sheet…'),
+        ),
+        if (group.fields['study'] case final String study when study.isNotEmpty)
+          MenuItemButton(
+            onPressed: owner.busy ? null : () => owner.unlinkGroupStudy(group),
+            child: const Text('Unlink group study'),
+          ),
+      ],
+      MenuItemButton(
+        onPressed: owner.busy ? null : widget.onSaved,
+        child: const Text('Add saved players'),
+      ),
+      // Only where there is a rating service to ask.
+      if (owner.lookupRating != null)
+        MenuItemButton(
+          onPressed: owner.lookingUp ? null : owner.updateRatings,
+          child: const Text('Update US Chess ratings'),
+        ),
+      MenuItemButton(
+        onPressed: owner.busy ? null : owner.load,
+        child: const Text('Reload players and groups'),
+      ),
+    ],
+  );
+
   Widget _groups() {
     final groups = owner.groups
         .where((g) => g.name.toLowerCase().contains(owner.query.toLowerCase()))
         .toList();
-    if (groups.isEmpty)
-      return const Center(
-        child: Text(
-          'No groups to show. Create a group for an event or training session.',
-        ),
+    if (groups.isEmpty) {
+      return ListMessage(
+        owner.query.isNotEmpty
+            ? 'No groups match this search.'
+            : 'No groups yet. A group collects the players of an event, with '
+                  'a prep sheet and a study for the whole field.',
       );
-    return ListView.builder(
+    }
+    return ListView.separated(
       itemCount: groups.length,
-      itemBuilder: (context, i) {
-        final g = groups[i];
-        return Card(
-          child: ListTile(
-            title: Text(g.name),
-            subtitle: Text(
-              '${g.entries.length} players · ${g.entries.where((e) => e['prepared'] == true).length} prepared',
-            ),
-            onTap: () {
-              _search.clear();
-              owner.showGroup(g.id);
-            },
-            trailing: IconButton(
-              tooltip: 'Remove group',
-              icon: const Icon(Icons.delete_outline),
-              onPressed: owner.busy
-                  ? null
-                  : () async {
-                      if (await confirmAction(
-                            context,
-                            title: 'Remove ${g.name}?',
-                            message:
-                                'Players, saved games and studies stay in your library.',
-                            confirm: 'Remove',
-                          ) &&
-                          mounted)
-                        await owner.removeGroup(g);
-                    },
-            ),
-          ),
-        );
-      },
+      separatorBuilder: (context, _) => const Divider(height: 1),
+      itemBuilder: (context, i) => _GroupRow(
+        group: groups[i],
+        busy: owner.busy,
+        onOpen: () {
+          _search.clear();
+          owner.showGroup(groups[i].id);
+        },
+        onEdit: () => _group(old: groups[i]),
+        onRemove: () => _removeGroup(groups[i]),
+      ),
     );
+  }
+
+  Future<void> _removeGroup(PlayerGroup group) async {
+    if (await confirmAction(
+          context,
+          title: 'Remove ${group.name}?',
+          message: 'Players, saved games and studies stay in your library.',
+          confirm: 'Remove',
+        ) &&
+        mounted) {
+      await owner.removeGroup(group);
+    }
   }
 
   Widget _people() {
     final players = owner.visible;
-    if (players.isEmpty)
-      return Center(
-        child: Text(
-          owner.query.isNotEmpty
-              ? 'No players match this search.'
-              : owner.group == null
-              ? 'Add a player with an online account or import a player list.'
-              : 'Add players from your directory, or paste the event’s player list.',
-        ),
+    if (players.isEmpty) {
+      return ListMessage(
+        owner.query.isNotEmpty
+            ? 'No players match this search.'
+            : owner.group == null
+            ? 'No players yet. Add a player with an online account, or paste '
+                  'a player list.'
+            : 'Nobody in this group yet. Add players from your directory, or '
+                  'paste the event’s player list.',
       );
-    return ListView.builder(
+    }
+    return ListView.separated(
       itemCount: players.length,
-      itemBuilder: (context, i) {
-        final p = players[i];
-        final group = owner.group;
-        return _personCard(p, group);
-      },
+      separatorBuilder: (context, _) => const Divider(height: 1),
+      itemBuilder: (context, i) => PersonRow(
+        player: players[i],
+        group: owner.group,
+        owner: owner,
+        saved: widget.saved,
+        onAnalyze: widget.onAnalyze,
+        onStudy: widget.onStudy,
+        onLink: widget.onLink,
+        onLinkedStudy: widget.onLinkedStudy,
+        onRemove: _remove,
+        onDeleteGames: _deleteGames,
+      ),
     );
   }
+}
 
-  Widget _personCard(Player p, PlayerGroup? group) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(Space.m),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+/// `2026-10-10 · 5 rounds · 18 players · 5 prepared`: what is known of the
+/// event, then how far the prep is.
+String groupLine(PlayerGroup group) {
+  final players = group.entries.length;
+  final prepared = group.entries.where((e) => e['prepared'] == true).length;
+  final rounds = group.fields['rounds'];
+  return [
+    if (group.fields['date'] case final String date when date.isNotEmpty) date,
+    if (rounds is int) '$rounds ${rounds == 1 ? 'round' : 'rounds'}',
+    '$players ${players == 1 ? 'player' : 'players'}',
+    '$prepared prepared',
+  ].join(' · ');
+}
+
+/// One group: its name over what is known of the event. Opens on a click.
+class _GroupRow extends StatelessWidget {
+  const _GroupRow({
+    required this.group,
+    required this.busy,
+    required this.onOpen,
+    required this.onEdit,
+    required this.onRemove,
+  });
+
+  final PlayerGroup group;
+  final bool busy;
+  final VoidCallback onOpen, onEdit, onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return InkWell(
+      onTap: onOpen,
+      child: SizedBox(
+        height: puzzleRowHeight,
+        child: Row(
           children: [
-            Row(
+            const SizedBox(width: Space.m),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    group.name,
+                    style: text.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    groupLine(group),
+                    style: text.labelSmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            RowActions(
+              tooltip: 'Group actions',
               children: [
-                if (group != null)
-                  Checkbox(
-                    value: group.prepared(p.id),
-                    onChanged: owner.busy
-                        ? null
-                        : (value) => owner.saveGroup(
-                            group.member(p.id, prepared: value),
-                            expected: group,
-                          ),
-                  ),
-                Expanded(
-                  child: Text(
-                    p.name,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
+                MenuItemButton(
+                  onPressed: busy ? null : onEdit,
+                  child: const Text('Edit group…'),
                 ),
-                if (p.text('rating').isNotEmpty) Text(p.text('rating')),
-                IconButton(
-                  onPressed: owner.busy ? null : () => _remove(p),
-                  tooltip: group == null
-                      ? 'Remove player'
-                      : 'Remove from group',
-                  icon: const Icon(Icons.delete_outline),
+                MenuItemButton(
+                  onPressed: busy ? null : onRemove,
+                  child: const Text('Remove group…'),
                 ),
               ],
             ),
-            if (group != null)
-              Text(
-                group.prepared(p.id) ? 'Prepared' : 'Not prepared yet',
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
-            Text(
-              p.accounts.isEmpty
-                  ? 'No online accounts linked'
-                  : p.accounts
-                        .map((a) => '${a.site.label}: ${a.username}')
-                        .join(' · '),
-            ),
-            Text(_savedLine(widget.saved.of(p), p.files.length)),
-            if (p.text('uscf_id').isNotEmpty)
-              Text('US Chess ${p.text('uscf_id')}'),
-            if (p.text('notes').isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: Space.s),
-                child: Text(
-                  p.text('notes'),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            _personActions(p),
-            PlayerLookup(player: p, owner: owner),
+            const SizedBox(width: Space.s),
           ],
         ),
       ),
     );
   }
-
-  Widget _personActions(Player p) => Wrap(
-    spacing: Space.s,
-    runSpacing: Space.xs,
-    children: [
-      TextButton.icon(
-        onPressed: () => widget.onAnalyze(p),
-        icon: const Icon(Icons.analytics_outlined),
-        label: const Text('Analyze games'),
-      ),
-      TextButton(
-        onPressed: owner.busy
-            ? null
-            : () => editPlayer(context, owner, player: p),
-        child: const Text('Edit player'),
-      ),
-      TextButton(
-        onPressed: () => widget.onLink(p),
-        child: const Text('Link study…'),
-      ),
-      if (widget.saved.of(p) case final saved? when saved.deletable > 0)
-        TextButton(
-          onPressed: owner.busy || widget.saved.deleting.contains(p.id)
-              ? null
-              : () => _deleteGames(p),
-          child: const Text('Delete saved games…'),
-        ),
-      ..._studyLinks(p),
-      TextButton(
-        onPressed: () => widget.onStudy(p),
-        child: Text(
-          p.text('prep_file').isEmpty ? 'New prep study' : 'Open prep study',
-        ),
-      ),
-      if (p.text('prep_file').isNotEmpty)
-        TextButton(
-          onPressed: owner.busy ? null : () => owner.unlinkPrep(p),
-          child: const Text('Unlink prep study'),
-        ),
-    ],
-  );
-  List<Widget> _studyLinks(Player player) => [
-    for (final link in player.fields['studies'] as List? ?? const [])
-      if (link is Map && link['path'] is String)
-        InputChip(
-          label: Text(
-            link['chapter'] as String? ??
-                p.basenameWithoutExtension(link['path'] as String),
-          ),
-          onPressed: () => widget.onLinkedStudy(
-            link['path'] as String,
-            link['chapter'] as String?,
-          ),
-          onDeleted: owner.busy
-              ? null
-              : () => owner.save(
-                  player.edited({
-                    'studies': [
-                      for (final other in player.fields['studies'] as List)
-                        if (!identical(other, link)) other,
-                    ],
-                  }),
-                  expected: player,
-                ),
-        ),
-  ];
 }
 
-/// `412 saved games · 2 PGN files · downloaded 3d ago`; blank until counted,
-/// so the card keeps its height when the count arrives.
-String _savedLine(GamesSummary? saved, int files) {
-  if (saved == null) return '';
-  final games = saved.downloaded + saved.linked;
-  return [
-    games == 0
-        ? 'No saved games'
-        : '$games saved ${games == 1 ? 'game' : 'games'}',
-    if (files > 0) '$files PGN ${files == 1 ? 'file' : 'files'}',
-    if (saved.fetched case final at?) 'downloaded ${relativeTime(at)}',
-  ].join(' · ');
+/// Under the toolbar: the line that says the directory is being read or
+/// written, a rating lookup with the way to stop it, files that could not
+/// be read, and a failed save with what can be done about it. The line for
+/// the bar is always there, so the list does not move when it shows.
+class _Notices extends StatelessWidget {
+  const _Notices({required this.players});
+
+  final Players players;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final wrong = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.error,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: Space.s),
+          child: SizedBox(
+            height: progressLineHeight,
+            child: players.busy ? const LinearProgressIndicator() : null,
+          ),
+        ),
+        if (players.lookupStatus case final status?)
+          Row(
+            children: [
+              Flexible(child: Text(status, style: theme.textTheme.bodySmall)),
+              if (players.lookingUp)
+                TextButton(
+                  onPressed: players.stopLookup,
+                  child: const Text('Stop'),
+                ),
+            ],
+          ),
+        for (final warning in players.warnings) Text(warning, style: wrong),
+        if (players.error case final error?)
+          Wrap(
+            spacing: Space.s,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(error, style: wrong),
+              if (players.needsRetry) ...[
+                TextButton(
+                  onPressed: players.busy ? null : players.retry,
+                  child: const Text('Retry save'),
+                ),
+                TextButton(
+                  onPressed: players.busy ? null : players.discardFailed,
+                  child: const Text('Discard failed edit and reload'),
+                ),
+              ] else
+                TextButton(
+                  onPressed: players.load,
+                  child: const Text('Try again'),
+                ),
+            ],
+          ),
+      ],
+    );
+  }
 }
