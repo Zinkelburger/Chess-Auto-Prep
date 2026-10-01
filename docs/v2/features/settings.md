@@ -118,8 +118,10 @@ The title bar reads `Settings` with a close button (`Close settings`, Escape). N
   `<cache>/updates/<tag>-<random>/`, hashed as they arrive and renamed only when size and SHA-256
   match; failed, cancelled and superseded attempts are removed. The helpers in `assets/updater/`
   (same binary name and bundle layout in v2) reopen the app only when a `reopen` marker sits beside
-  the armed marker, which `Update now` writes just before closing: Windows setup, `.deb`, `.rpm` and a marked
-  portable Linux zip install themselves; Flatpak, macOS, the Windows zip and unmarked bundles get the
+  the armed marker, which `Update now` writes just before closing: Windows setup, `.deb`, `.rpm`, a marked
+  portable Linux zip and an AppImage in a writable folder (detected by `APPIMAGE`; the file is
+  replaced in place under its own name, after its type-2 magic and SHA-256 are checked) install
+  themselves; Flatpak, macOS, the Windows zip and unmarked bundles get the
   release page.
 - **`App` ▸ About & open source** — `Chess Auto Prep on GitHub` (`Source code, releases, and issue
   tracker`), **`Open log folder`** (`Errors are written to app.log — attach it to a bug report`),

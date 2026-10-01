@@ -198,6 +198,7 @@ final class AppUpdates extends ChangeNotifier {
     if (_disposed) return;
     _kind = kind;
     _previousFailure = failure;
+    log.i('updates: installed as ${kind.name}');
     notifyListeners();
     if (!_outside.automatic) return;
     _timer = Timer(startDelay, () {

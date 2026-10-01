@@ -34,9 +34,9 @@ class AssetsTest(unittest.TestCase):
 
     def test_complete_downloads_and_exact_checksums(self):
         self.stage()
-        self.assertEqual(len(list(self.destination.iterdir())), 9)
+        self.assertEqual(len(list(self.destination.iterdir())), 10)
         lines = (self.destination / 'SHA256SUMS').read_text().splitlines()
-        self.assertEqual(len(lines), 8)
+        self.assertEqual(len(lines), 9)
         for line in lines:
             digest, name = line.split('  ')
             self.assertEqual(digest, hashlib.sha256((self.destination / name).read_bytes()).hexdigest())

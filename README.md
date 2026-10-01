@@ -16,12 +16,15 @@ Download your system’s file from the **[latest release](https://github.com/Zin
 | Windows | `windows-setup.exe` |
 | Debian / Ubuntu / Mint | `linux-amd64.deb` |
 | Fedora / RHEL / openSUSE | `linux-x86_64.rpm` |
-| Other Linux | `linux.flatpak` |
+| Other Linux | `linux-x86_64.AppImage` |
 | macOS — Apple Silicon | `macos-arm64.zip` |
 | macOS — Intel | `macos-x86_64.zip` |
 
-Open the installer, or extract the macOS ZIP and open the app. Linux downloads
-require an x86_64 computer. Portable ZIPs are also available for Windows and Linux.
+Open the installer, or extract the macOS ZIP and open the app. To run the
+AppImage, allow it to run as a program (right-click → Properties, or
+`chmod +x`) and double-click it. Linux downloads require an x86_64 computer.
+Portable ZIPs are also available for Windows and Linux, and a Flatpak that
+updates only by hand.
 
 The app is unsigned: Windows may require **More info → Run anyway**;
 on macOS, right-click the app and choose **Open** the first time.
@@ -32,9 +35,10 @@ Open a PGN file to review games, or create a repertoire to build and practice
 your opening lines. Set your Lichess username in Settings to load tactics from
 your games.
 
-On Windows and Linux, find update options under **Settings → About → App updates**.
-You can also install a newer version from the release page. Keep backups of
-important work before upgrading.
+The app checks GitHub for new versions and offers to update now or when you
+close it (Windows installer, AppImage, .deb, .rpm and the Linux ZIP). Update
+options are under **Settings → App**. The Flatpak, macOS and the Windows ZIP
+update from the release page. Keep backups of important work before upgrading.
 
 [Technical documentation](docs/COMPONENT_MAP.md) · [License: AGPL-3.0](LICENSE)
 

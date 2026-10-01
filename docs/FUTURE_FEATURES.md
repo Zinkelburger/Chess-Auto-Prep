@@ -77,7 +77,7 @@ retired components. Current mode specs and later owner decisions take priority.
 | One namespaced Documents root / relocatable data home | **Deferred** | Existing named folders and root-level legacy files remain addressable. A future move needs copy/verify/switch migration and external-path handling. |
 | Windows bulk data outside roaming profiles | **Deferred** | Existing support databases use AppData/Roaming. New update payloads use local cache; moving old databases requires a separate migration. |
 | OS credential vault | **Not started** | OAuth/PAT tokens currently use SharedPreferences. Use the [credential migration gate](ARCHITECTURE_RENEWAL.md#known-hard-problems) before migrating Accounts UI; verify native storage and preserve accounts across failures. |
-| Additional auto-update formats and cleanup | **Partial** | Windows Setup, deb/rpm and marked Linux portable bundles supported. Flatpak/Windows ZIP/macOS use manual updates; install logs, downloaded releases and previous portable bundles need a retention UI. |
+| Additional auto-update formats and cleanup | **Partial** | Windows Setup, deb/rpm, AppImage and marked Linux portable bundles supported. Flatpak/Windows ZIP/macOS use manual updates; install logs, downloaded releases and previous portable bundles need a retention UI. |
 | Native update smoke matrix | **Partial** | Linux portable helper tests and Windows helper tests with disposable fake programs are gated. Test actual Windows Setup and Linux authorization/cancellation before publishing. |
 
 ### Release distribution follow-ups

@@ -20,6 +20,7 @@ finish() {
     printf 'Update installation failed (exit %s). Details: %s/install.log\n' "$result" "$state_dir" > "$(dirname "$state_dir")/last-error.txt"
   fi
   rm -f -- "$state_dir/helper-ready" "$state_dir/reopen" "$armed"
+  if test -n "${appimage_stage:-}"; then rm -f -- "$appimage_stage"; fi
 }
 trap finish EXIT
 printf 'ready\n' > "$state_dir/helper-ready"
@@ -60,6 +61,21 @@ case "$kind" in
       mv -- "$previous" "$install_dir"
       exit 1
     fi
+    ;;
+  linuxAppImage)
+    # Replace the file the user runs under its own name, so shortcuts and
+    # the menu entry keep working. The copy is checked again, and must be
+    # an AppImage: an ELF file with "AI" and type 2 at byte 8.
+    test -f "$executable"
+    appimage_stage=$(mktemp "${executable}.update-XXXXXXXX")
+    cp -- "$payload" "$appimage_stage"
+    copied=$(sha256sum -- "$appimage_stage")
+    test "${copied%% *}" = "$expected"
+    test "$(od -An -tx1 -j8 -N3 -- "$appimage_stage" | tr -d ' \n')" = 414902
+    chmod --reference="$executable" -- "$appimage_stage"
+    chmod u+x -- "$appimage_stage"
+    mv -f -- "$appimage_stage" "$executable"
+    appimage_stage=
     ;;
   *) exit 1 ;;
 esac

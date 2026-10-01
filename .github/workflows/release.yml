@@ -108,6 +108,9 @@ jobs:
       - name: Build .rpm
         run: packaging/rpm/build_rpm.sh "${{ github.ref_name }}" build/linux/x64/release/bundle .
 
+      - name: Build AppImage
+        run: packaging/appimage/build_appimage.sh "${{ github.ref_name }}" build/linux/x64/release/bundle .
+
       - name: Install flatpak-builder
         run: sudo apt-get install -y flatpak flatpak-builder
 
@@ -131,6 +134,7 @@ jobs:
             chess-auto-prep-${{ github.ref_name }}-linux.flatpak
             chess-auto-prep-${{ github.ref_name }}-linux-amd64.deb
             chess-auto-prep-${{ github.ref_name }}-linux-x86_64.rpm
+            chess-auto-prep-${{ github.ref_name }}-linux-x86_64.AppImage
 
   build-windows:
     needs: [quality-gate, bughouse-gate]
@@ -291,7 +295,7 @@ jobs:
           name: macos-x86_64-build
           path: artifacts/macos-x86_64-build
 
-      - name: Verify all eight downloads and generate their checksums
+      - name: Verify all nine downloads and generate their checksums
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: python3 scripts/release_assets.py "$RELEASE_TAG" artifacts build/release-assets

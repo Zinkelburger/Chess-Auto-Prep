@@ -13,7 +13,8 @@ def expected_assets(tag):
     prefix = f'chess-auto-prep-{tag}-'
     return {
         'linux-build': [prefix + suffix for suffix in (
-            'linux.zip', 'linux.flatpak', 'linux-amd64.deb', 'linux-x86_64.rpm')],
+            'linux.zip', 'linux.flatpak', 'linux-amd64.deb', 'linux-x86_64.rpm',
+            'linux-x86_64.AppImage')],
         'windows-build': [prefix + suffix for suffix in ('windows.zip', 'windows-setup.exe')],
         'macos-arm64-build': [prefix + 'macos-arm64.zip'],
         'macos-x86_64-build': [prefix + 'macos-x86_64.zip'],

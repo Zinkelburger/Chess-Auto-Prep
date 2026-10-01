@@ -159,6 +159,57 @@ class LinuxUpdateTest(unittest.TestCase):
         self.assertEqual((self.app / 'chess_auto_prep').read_text(), 'old executable')
 
 
+@unittest.skipUnless(sys.platform == 'linux', 'Linux helper')
+class LinuxAppImageUpdateTest(unittest.TestCase):
+    # An AppImage is an ELF file with "AI" and type 2 at byte 8.
+    MAGIC = b'\x7fELF\x02\x01\x01\x00AI\x02'
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix='appimage space-')
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.app = self.root / "Chess Auto Prep 'quoted'.AppImage"
+        self.app.write_bytes(self.MAGIC + b'old')
+        self.app.chmod(0o750)
+        self.state = self.root / 'updates' / 'attempt'
+        self.state.mkdir(parents=True)
+        self.armed = self.state / 'install-requested'
+        self.armed.write_text('1')
+        self.payload = self.state / 'chess-auto-prep-v1.17.0-linux-x86_64.AppImage'
+
+    def launch(self, content):
+        self.payload.write_bytes(content)
+        digest = hashlib.sha256(content).hexdigest()
+        return subprocess.Popen([
+            'bash', str(ROOT / 'assets/updater/install_linux.sh'), '2147483647',
+            str(self.payload), digest, str(self.app), 'linuxAppImage', str(self.armed),
+        ])
+
+    def leftovers(self):
+        return [p.name for p in self.root.iterdir() if '.update-' in p.name]
+
+    def test_replaces_the_file_in_place_keeping_its_mode(self):
+        with self.launch(self.MAGIC + b'new') as helper:
+            self.assertEqual(helper.wait(timeout=10), 0)
+        self.assertEqual(self.app.read_bytes(), self.MAGIC + b'new')
+        self.assertEqual(stat.S_IMODE(self.app.stat().st_mode), 0o750)
+        self.assertEqual(self.leftovers(), [])
+        self.assertFalse((self.root / 'updates' / 'last-error.txt').exists())
+
+    def test_a_file_that_is_not_an_appimage_is_refused(self):
+        with self.launch(b'#!/bin/sh\necho not an AppImage\n') as helper:
+            self.assertNotEqual(helper.wait(timeout=10), 0)
+        self.assertEqual(self.app.read_bytes(), self.MAGIC + b'old')
+        self.assertEqual(self.leftovers(), [])
+        self.assertTrue((self.root / 'updates' / 'last-error.txt').exists())
+
+    def test_cancelled_request_leaves_the_file(self):
+        self.armed.unlink()
+        with self.launch(self.MAGIC + b'new') as helper:
+            self.assertEqual(helper.wait(timeout=10), 0)
+        self.assertEqual(self.app.read_bytes(), self.MAGIC + b'old')
+
+
 @unittest.skipUnless(os.name == 'nt', 'Windows helper')
 class WindowsUpdateTest(unittest.TestCase):
     @classmethod
