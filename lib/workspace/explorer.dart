@@ -127,6 +127,7 @@ final class Explorer extends ChangeNotifier {
     required ExplorerDatabases databases,
     this.debounce = const Duration(milliseconds: 250),
     this.rememberChoice = true,
+    this.first,
     ExplorerChoice? initialChoice,
   }) : _session = session,
        _settings = settings,
@@ -143,14 +144,23 @@ final class Explorer extends ChangeNotifier {
   final Duration debounce;
   final bool rememberChoice;
 
+  /// The database listed first, when not the book: a mode that is about
+  /// one of them leads with it.
+  final ExplorerSource? first;
+
   /// A second pane shares data access and the board, but owns its filters.
-  Explorer independent() => Explorer(
+  /// A mode that starts on a database of its own passes it as [starting],
+  /// and it is then the first one listed.
+  Explorer independent({ExplorerSource? starting}) => Explorer(
     session: _session,
     settings: _settings,
     databases: _databases,
     debounce: debounce,
     rememberChoice: false,
-    initialChoice: choice,
+    first: starting ?? first,
+    initialChoice: starting == null
+        ? choice
+        : choice.copyWith(source: starting),
   );
 
   /// The deepest ply a database is asked about.
@@ -181,12 +191,16 @@ final class Explorer extends ChangeNotifier {
 
   /// TWIC stays discoverable when absent so its download can be offered.
   List<ExplorerSource> get sources => [
-    ExplorerSource.book,
-    ExplorerSource.masters,
-    ExplorerSource.lichess,
-    ExplorerSource.twic,
-    ExplorerSource.thisFile,
-    ExplorerSource.myGames,
+    ?first,
+    for (final source in const [
+      ExplorerSource.book,
+      ExplorerSource.masters,
+      ExplorerSource.lichess,
+      ExplorerSource.twic,
+      ExplorerSource.thisFile,
+      ExplorerSource.myGames,
+    ])
+      if (source != first) source,
   ];
 
   /// What the chosen source's answers are over, when it is games on this

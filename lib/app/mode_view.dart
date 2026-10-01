@@ -11,8 +11,10 @@ import '../features/books/books_screen.dart';
 import '../features/bughouse/bughouse_screen.dart';
 import '../features/library/library.dart';
 import '../features/library/library_panel.dart';
-import '../features/pgn_viewer/game_bar.dart';
+import '../chess/explorer_choice.dart';
+import '../features/pgn_viewer/filter_pane.dart';
 import '../features/pgn_viewer/pgn_viewer_panel.dart';
+import '../features/pgn_viewer/player_side_choice.dart';
 import '../features/study/study_panel.dart';
 import '../storage/chapter_files.dart';
 import '../ui/app_action.dart';
@@ -27,6 +29,7 @@ import '../workspace/chapter_commands.dart';
 import '../workspace/copy_name_dialog.dart';
 import '../workspace/document_actions.dart';
 import '../workspace/document_session.dart';
+import '../workspace/explorer.dart';
 import '../workspace/game_ordering.dart';
 import '../workspace/move_tree_view.dart' show MoveMenu;
 import '../workspace/solitaire.dart';
@@ -74,14 +77,33 @@ typedef ModeMenu = ({
 /// own tabs for the life of the window, so what the user opened in one mode
 /// is still open when they come back to it.
 abstract base class ModeView {
-  ModeView(this.workspace, PaneTabs<WorkspaceTab> tabs)
-    : layout = ActionLayout(tabs, workspace.explorer);
+  /// [explorer] is the mode's own, when its Explorer tab starts on a
+  /// database of its own instead of the one the settings remember.
+  ///
+  /// [opensBeside] is for a mode whose first pane reads well at half the
+  /// card's height: a tab picked while it is the only pane opens under it.
+  ModeView(
+    this.workspace,
+    PaneTabs<WorkspaceTab> tabs, {
+    Explorer? explorer,
+    bool opensBeside = false,
+  }) : _explorer = explorer,
+       layout = ActionLayout(
+         tabs,
+         explorer ?? workspace.explorer,
+         opensBeside: opensBeside,
+       );
 
   final Workspace workspace;
+  final Explorer? _explorer;
 
   /// The reading card's tabs in this mode: which are open and which is up.
   final ActionLayout layout;
   PaneTabs<WorkspaceTab> get tabs => layout.tabs;
+
+  /// Brings [tab] up where it is open, else opens it as the layout opens a
+  /// picked tab.
+  void show(WorkspaceTab tab) => layout.reveal(tab);
 
   /// The left column, with [toggle] — the `«` that hides it — in its corner.
   Widget list(Widget toggle);
@@ -111,9 +133,23 @@ abstract base class ModeView {
   /// What a right-click on a move offers.
   MoveMenu? get moveMenu => null;
 
-  /// Buttons under the card's heading for the game on the board, with the
-  /// edit strip's switch; null for none.
-  Widget? gameBar(ValueNotifier<bool> editing) => null;
+  /// Under the heading: what the mode says about the game before it is
+  /// read; null for nothing.
+  Widget? get underHeading => null;
+
+  /// Whether the heading is the top of the moves instead of a block over
+  /// the card's tabs.
+  bool get headingInMoves => false;
+
+  /// Whether the board has only what is in use under it.
+  bool get quietBoard => false;
+
+  /// Under the explorer's databases while `This file` is chosen.
+  Widget? get explorerFileBar => null;
+
+  /// What every pane's `+` offers under its tabs: what the mode keeps out
+  /// of sight until it is asked for.
+  List<AppAction> paneActions(ValueNotifier<bool> editing) => const [];
 
   /// The body of a tab only this mode has, or null.
   Widget? tab(BuildContext context, WorkspaceTab tab) => null;
@@ -141,7 +177,10 @@ abstract base class ModeView {
   /// the rest. The screen binds [windowKeys] beside its own.
   Widget? screen(Map<ShortcutActivator, VoidCallback> windowKeys) => null;
 
-  void dispose() => layout.dispose();
+  void dispose() {
+    layout.dispose();
+    _explorer?.dispose();
+  }
 
   /// What can be done to the document on the board, in every mode that
   /// shows one as a document.
@@ -158,7 +197,13 @@ abstract base class ModeView {
 /// Study. They share the Actions menu and differ in the list and in the one
 /// file entry.
 abstract base class _DocumentModeView extends ModeView {
-  _DocumentModeView(super.workspace, super.tabs, this.requests);
+  _DocumentModeView(
+    super.workspace,
+    super.tabs,
+    this.requests, {
+    super.explorer,
+    super.opensBeside,
+  });
 
   final WorkspaceRequests requests;
 
@@ -186,7 +231,7 @@ abstract base class _DocumentModeView extends ModeView {
     if (this is _LibraryView) ..._repertoire(menu.dialogs),
     ...documentEntries(menu),
     ...menu.board(),
-    ...tabActions(tabs, destinations: layout.destinations),
+    ...tabActions(tabs, layout: layout),
   ];
 
   /// The chapter as a repertoire — its gaps, its side and the fill — or,
@@ -289,7 +334,18 @@ final class TrainerView extends _LibraryView {
 /// The files the PGN Viewer has open or has had open.
 final class ViewerView extends _DocumentModeView {
   ViewerView(Workspace workspace, WorkspaceRequests requests, this._modes)
-    : super(workspace, viewerTabs(), requests);
+    : super(
+        workspace,
+        viewerTabs(),
+        requests,
+        // What is played in the file being read comes first here; the
+        // databases are a click away.
+        explorer: workspace.explorer.independent(
+          starting: ExplorerSource.thisFile,
+        ),
+        // The moves stay in view while a tool is used under them.
+        opensBeside: true,
+      );
 
   final DocumentModes _modes;
 
@@ -316,7 +372,7 @@ final class ViewerView extends _DocumentModeView {
     final review = workspace.review;
     if (review == null) return;
     if (review.running) return review.stop();
-    tabs.show(WorkspaceTab.review);
+    show(WorkspaceTab.review);
     unawaited(review.start());
   }
 
@@ -327,12 +383,12 @@ final class ViewerView extends _DocumentModeView {
     if (solitaire.active) return solitaire.stop();
     _modes.autoplay.stop();
     solitaire.offer();
-    tabs.show(WorkspaceTab.solitaire);
+    show(WorkspaceTab.solitaire);
   }
 
   /// My books, on the move where the game left the book.
   void _showMyLine() {
-    tabs.show(WorkspaceTab.book);
+    show(WorkspaceTab.book);
     if (workspace.boardBook?.state case BoardBookChecked(
       :final verdict,
       :final game,
@@ -342,23 +398,35 @@ final class ViewerView extends _DocumentModeView {
   }
 
   @override
-  Widget? gameBar(ValueNotifier<bool> editing) => _solitaire == null
-      ? null
-      : Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ViewerGameBar(
-              session: workspace.session,
-              editing: editing,
-              review: workspace.review,
-              solitaire: _solitaire!,
-              onAnalyze: analyze,
-              onSolitaire: solitaire,
-            ),
-            if (workspace.boardBook case final book?)
-              BookDeviationLine(book: book, onShowLine: _showMyLine),
-          ],
-        );
+  Widget? get underHeading => switch (workspace.boardBook) {
+    final book? => BookDeviationLine(book: book, onShowLine: _showMyLine),
+    null => null,
+  };
+
+  @override
+  bool get quietBoard => true;
+
+  @override
+  bool get headingInMoves => true;
+
+  /// Editing and the engine, which a file read as a book has no control
+  /// on screen for: here with their keys, so they can be found.
+  @override
+  List<AppAction> paneActions(ValueNotifier<bool> editing) => [
+    for (final action in documentActions(
+      session: workspace.session,
+      analysis: workspace.analysis,
+      editing: editing,
+      onSaveCopy: () {},
+    ))
+      if (action.shortcut == AppKey.edit.label ||
+          action.shortcut == AppKey.engine.label)
+        action,
+  ];
+
+  @override
+  Widget? get explorerFileBar =>
+      PlayerSideChoice(viewer: _modes.viewer, filter: _modes.filter);
 
   @override
   Widget? tab(BuildContext context, WorkspaceTab tab) => switch (tab) {
@@ -366,6 +434,13 @@ final class ViewerView extends _DocumentModeView {
       solitaire: _solitaire!,
       onNextGame: _modes.viewer.file == null ? null : () => walk(1),
       onAddToStudy: _addGame,
+    ),
+    WorkspaceTab.filter => ViewerFilterPane(
+      viewer: _modes.viewer,
+      filter: _modes.filter,
+      say: requests.say,
+      onSaveToStudy: _addSelection,
+      onPosition: _filterByPosition,
     ),
     WorkspaceTab.book when workspace.boardBook != null => BoardBookPane(
       book: workspace.boardBook!,
@@ -451,6 +526,12 @@ final class ViewerView extends _DocumentModeView {
         group: 'Game',
       ),
       AppAction(
+        'Filter games',
+        _modes.viewer.file == null ? null : () => show(WorkspaceTab.filter),
+        icon: Icons.filter_list,
+        group: 'File',
+      ),
+      AppAction(
         'Export visible games as PGN…',
         _modes.viewer.file == null || _modes.filter.busy
             ? null
@@ -483,17 +564,19 @@ final class ViewerView extends _DocumentModeView {
         ),
       ];
 
+  /// Keeps the games that reach the position on the board, which is the
+  /// analysis board's while that is the one shown.
+  void _filterByPosition() => _modes.filter.reaching(
+    workspace.inspection?.active == true
+        ? workspace.inspection!.session.boardFen
+        : workspace.session.boardFen,
+  );
+
   @override
   Widget list(Widget toggle) => PgnViewerPanel(
     viewer: _modes.viewer,
     filter: _modes.filter,
-    say: requests.say,
-    onSaveToStudy: _addSelection,
-    onPosition: () => _modes.filter.reaching(
-      workspace.inspection?.active == true
-          ? workspace.inspection!.session.boardFen
-          : workspace.session.boardFen,
-    ),
+    onFilter: () => show(WorkspaceTab.filter),
     onOpen: (file) => unawaited(requests.openFile(file)),
     onBrowse: () => unawaited(requests.browse()),
     trailing: toggle,

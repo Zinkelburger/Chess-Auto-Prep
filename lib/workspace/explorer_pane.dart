@@ -48,7 +48,12 @@ class ExplorerPane extends StatefulWidget {
     this.onDownloadTwic,
     this.onOpenPlace,
     this.onEditBooks,
+    this.fileBar,
   });
+
+  /// Under the databases while `This file` is chosen: the mode's way of
+  /// narrowing the file's games.
+  final Widget? fileBar;
 
   /// The active book by position, for `Book`.
   final RepertoireTree tree;
@@ -145,6 +150,7 @@ class _ExplorerPaneState extends State<ExplorerPane>
                       widget.explorer.recovery != ExplorerRecovery.download
                   ? () => unawaited(_downloadTwic())
                   : null,
+              thisFile: widget.fileBar,
               book: widget.onEditBooks == null
                   ? null
                   : BookChip(books: widget.books, onEdit: widget.onEditBooks!),

@@ -26,10 +26,15 @@ class ReadingHeader extends StatelessWidget {
     super.key,
     required this.session,
     required this.openings,
+    this.inMoves = false,
   });
 
   final DocumentSession session;
   final OpeningNames openings;
+
+  /// Whether it is the top of the moves, which have their own inset at the
+  /// sides, rather than a block of the card over its tabs.
+  final bool inMoves;
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +46,9 @@ class ReadingHeader extends StatelessWidget {
         final chapter = session.chapter;
         if (chapter == null) {
           return Padding(
-            padding: const EdgeInsets.all(readingCardInset),
+            padding: inMoves
+                ? const EdgeInsets.symmetric(vertical: readingCardInset)
+                : const EdgeInsets.all(readingCardInset),
             child: Text(
               'Open a chapter',
               style: text.bodySmall,
@@ -49,13 +56,18 @@ class ReadingHeader extends StatelessWidget {
             ),
           );
         }
+        // In the moves their own inset is at its sides too. The `+` of a
+        // card that is one page sits in the top right corner, so the name
+        // stays clear of it on both sides and remains centred.
         return Padding(
-          padding: const EdgeInsets.fromLTRB(
-            readingCardInset,
-            readingCardInset,
-            readingCardInset,
-            Space.s,
-          ),
+          padding: inMoves
+              ? const EdgeInsets.fromLTRB(Space.xl, Space.l, Space.xl, Space.l)
+              : const EdgeInsets.fromLTRB(
+                  readingCardInset,
+                  readingCardInset,
+                  readingCardInset,
+                  Space.s,
+                ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

@@ -222,6 +222,6 @@ final class MyGamesView extends ModeView {
   List<AppAction> actions(ModeMenu menu) => [
     ...myGamesActions(_training.myGames, onAccounts: menu.dialogs.accounts),
     ...documentEntries(menu),
-    ...tabActions(tabs, destinations: layout.destinations),
+    ...tabActions(tabs, layout: layout),
   ];
 }
