@@ -188,15 +188,21 @@ reply coverage directly above the results. Coverage is expressed as one in N
 games, default 100; zero expands every reply. Settings apply to the next search
 and are disabled during a run.
 
-Opponent nodes retain all positive Maia probability mass. Paths below the configured cumulative
-reach threshold (default 1%) stop at their engine estimate instead of expanding further; the remaining
-replies are not renormalized to pretend the rare replies disappeared. The 25,000
+Opponent nodes keep Maia's likeliest replies until they cover 90% of its
+distribution, at most five, and renormalize the kept shares to sum to one
+(`fillReplyMass`, `fillMaxReplies`). Maia's softmax gives every legal move some
+weight, so without the cut each opponent position cost 30–40 engine
+evaluations, most of them for replies under 2%. Kept paths below the configured
+cumulative reach threshold (default 1%) stop at their engine estimate instead of
+expanding further. The 25,000
 new-node budget still bounds a batch. This is approximate candidate selection and
 selective depth; an omitted engine candidate might have a better practical score.
-Saved v4 configuration records `v2_max_our_moves`, `v2_root_moves` and
-`v2_reply_floor`; resumed interactive runs require matching settings. Existing exhaustive trees
+Saved v4 configuration records `v2_max_our_moves`, `v2_root_moves`,
+`v2_reply_floor`, `v2_reply_mass` and `v2_max_replies`; resumed interactive runs
+require matching settings, except that a tree saved before the reply cut is cut
+on load (`cutReplies`) rather than refused. Existing exhaustive trees
 (including MCP-built chapter searches) can seed an interactive run; their completed
-branches and values are retained while new expansions use the shortlist. Narrowed
+branches are retained, cut to the likeliest replies, while new expansions use the shortlist. Narrowed
 trees carry algorithm version 4 so older exhaustive-only app/C/MCP readers refuse
 to resume them under the wrong branching assumptions. Exhaustive exports stay at
 algorithm version 3.
