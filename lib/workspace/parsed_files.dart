@@ -43,7 +43,9 @@ final class ParsedFiles {
           ? kept.file
           : withGame(kept.file, game);
     }
-    final file = await readChapter(name: name, text: text, game: game);
+    final file = game == null
+        ? await readChapter(name: name, text: text)
+        : await readChapterShowing(name: name, text: text, game: game);
     _keep(path, text, file);
     return file;
   }
