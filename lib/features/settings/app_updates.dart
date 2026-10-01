@@ -411,6 +411,15 @@ final class AppUpdates extends ChangeNotifier {
     }
   }
 
+  /// Whether the armed helper opens the app again once it has installed:
+  /// asked just before the app closes itself to update now, and taken back
+  /// when the user kept the app open after all.
+  Future<void> setReopen(bool reopen) async {
+    if (_status case UpdateArmed(:final armed)) {
+      await _outside.installer.setReopen(armed, reopen: reopen);
+    }
+  }
+
   /// Answers the prompt: not now.
   void later() {
     _prompt = null;
@@ -424,8 +433,8 @@ final class AppUpdates extends ChangeNotifier {
     unawaited(_remember(choices.copyWith(skipped: offer.tag)));
   }
 
-  /// Answers the prompt: install [offer] (or, when this copy updates by
-  /// hand, open its release page).
+  /// Answers the prompt: install [offer] when the app closes (or, when
+  /// this copy updates by hand, open its release page).
   Future<void> accept(UpdateOffer offer) async {
     _prompt = null;
     notifyListeners();

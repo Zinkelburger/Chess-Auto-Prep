@@ -78,6 +78,11 @@ const armedName = 'install-requested';
 /// Written by a helper once it runs, removed when it ends. A helper that
 /// was killed leaves it behind, so it proves nothing on its own.
 const helperReadyName = 'helper-ready';
+
+/// Written by the app beside the armed marker when the user is updating
+/// now: the helper opens the app again once it has installed. Without it
+/// the app stays closed, as the user left it.
+const reopenName = 'reopen';
 const _failedInstallName = 'last-error.txt';
 
 /// How recently a half-written download or an arming marker must have

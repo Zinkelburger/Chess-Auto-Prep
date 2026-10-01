@@ -11,6 +11,7 @@ $config = Get-Content -LiteralPath $Request -Raw -Encoding UTF8 | ConvertFrom-Js
 $stateDir = Split-Path -Parent $Request
 $log = Join-Path $stateDir 'install.log'
 $ready = Join-Path $stateDir 'helper-ready'
+$reopen = Join-Path $stateDir 'reopen'
 $lock = $null
 $exitCode = 0
 try {
@@ -43,7 +44,9 @@ try {
     if ($setup.ExitCode -ne 0) { throw "Installer exited with $($setup.ExitCode)" }
     Remove-Item -LiteralPath (Join-Path (Split-Path -Parent $stateDir) 'last-error.txt') -ErrorAction SilentlyContinue
     Add-Content -LiteralPath $log -Value 'Installation completed.'
-    Start-Process -FilePath $config.executable
+    # Reopen only for an update the user asked for now; closing for the day
+    # leaves the app closed.
+    if (Test-Path -LiteralPath $reopen) { Start-Process -FilePath $config.executable }
 } catch {
     $exitCode = 1
     Add-Content -LiteralPath $log -Value ($_ | Out-String)
@@ -52,6 +55,7 @@ try {
     Write-Error -Message $_.ToString() -ErrorAction Continue
 } finally {
     Remove-Item -LiteralPath $ready -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $reopen -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $config.armed -ErrorAction SilentlyContinue
     if ($lock) { $lock.Dispose() }
 }

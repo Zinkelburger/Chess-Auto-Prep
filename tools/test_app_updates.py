@@ -31,6 +31,9 @@ class LinuxUpdateTest(unittest.TestCase):
         self.state.mkdir(parents=True)
         self.armed = self.state / 'install-requested'
         self.armed.write_text('1')
+        # The user is updating now: the helper reopens the app.
+        self.reopen = self.state / 'reopen'
+        self.reopen.write_text('1')
         self.archive = self.state / 'linux.zip'
 
     def bundle(self, extra=None):
@@ -72,6 +75,22 @@ class LinuxUpdateTest(unittest.TestCase):
         self.assertEqual(len(old), 1)
         self.assertEqual((old[0] / 'personal.pgn').read_text(), 'user annotation')
         self.assertEqual((old[0] / 'chess_auto_prep').read_text(), 'old executable')
+
+    def test_closing_for_the_day_installs_without_reopening(self):
+        self.bundle()
+        self.reopen.unlink()
+        with self.launch() as helper:
+            self.assertEqual(helper.wait(timeout=10), 0)
+        self.assertTrue((self.app / 'lib/libapp.so').exists())
+        time.sleep(.5)
+        self.assertFalse((self.app / 'restarted').exists())
+        self.assertFalse((self.root / 'updates' / 'last-error.txt').exists())
+
+    def test_reopen_request_does_not_outlive_its_helper(self):
+        self.bundle()
+        with self.launch() as helper:
+            self.assertEqual(helper.wait(timeout=10), 0)
+        self.assertFalse(self.reopen.exists())
 
     def test_waits_for_close_and_cancellation_does_not_replace(self):
         self.bundle()
@@ -174,6 +193,9 @@ class WindowsUpdateTest(unittest.TestCase):
         shutil.copyfile(self.probe, self.app)
         self.armed = self.state / 'install-requested'
         self.armed.write_text('1')
+        # The user is updating now: the helper reopens the app.
+        self.reopen = self.state / 'reopen'
+        self.reopen.write_text('1')
         self.request = self.state / 'request.json'
         self.write_request()
         # Preserve logs before TemporaryDirectory cleanup, including on failure.
@@ -263,7 +285,16 @@ class WindowsUpdateTest(unittest.TestCase):
         ])
         self.wait_file(self.app.parent / 'restarted.txt', helper)
         self.assertFalse(self.armed.exists())
+        self.assertFalse(self.reopen.exists())
         self.assertFalse((self.state / 'helper-ready').exists())
+        self.assertFalse((self.state.parent / 'last-error.txt').exists())
+
+    def test_closing_for_the_day_installs_without_reopening(self):
+        self.reopen.unlink()
+        self.finish(self.launch())
+        self.assertTrue((self.state / 'arguments.txt').exists(), self.diagnostics())
+        time.sleep(2)
+        self.assertFalse((self.app.parent / 'restarted.txt').exists(), self.diagnostics())
         self.assertFalse((self.state.parent / 'last-error.txt').exists())
 
     def test_corruption_rejected_before_installer_launch(self):

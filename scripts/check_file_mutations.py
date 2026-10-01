@@ -61,7 +61,7 @@ APPROVED: dict[str, tuple[int, str]] = {
     "lib/storage/backups.dart": (4, "v2 kept versions under Support; creates folders and sets aside unreadable indexes; explicit retention cleanup removes only archived versions beyond the newest 100 and older than 90 days; an owed history merged into its document's newer one leaves an index already copied there and an emptied folder, which are removed"),
     "lib/storage/viewer_drafts.dart": (1, "v2 unsaved viewer edits under Support: the one mutation takes a checkpoint away once its edits were saved or discarded; one edited past or unreadable is moved aside, never deleted"),
     "lib/storage/update_files.dart": (4, "v2 update downloads under the cache folder: stream into a private attempt folder's .part, rename it only once size and SHA-256 match, delete a failed/cancelled or superseded attempt folder (never one an armed helper uses), and remove the helper's one-shot last-error.txt once read; all derived data"),
-    "lib/storage/update_install.dart": (4, "v2 update helper hand-off: write the disposable armed marker, helper script and Windows request into the verified payload's private attempt folder; delete the armed marker to cancel"),
+    "lib/storage/update_install.dart": (5, "v2 update helper hand-off: write the disposable armed marker, reopen marker, helper script and Windows request into the verified payload's private attempt folder; delete the armed marker to cancel"),
 }
 
 NON_FILESYSTEM_DELETE = re.compile(r"\b(?:store|db|http)\.delete\s*\(")
