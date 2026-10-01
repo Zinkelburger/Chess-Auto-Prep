@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/chess/pgn/board_shapes.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
@@ -29,7 +30,8 @@ import 'package:chess_auto_prep/workspace/repertoire_shelf.dart';
 import 'package:chess_auto_prep/workspace/repertoire_tree.dart';
 import 'package:chess_auto_prep/workspace/workspace.dart';
 import 'package:chess_auto_prep/workspace/workspace_view.dart';
-import 'package:chessground/chessground.dart' show Arrow, Chessboard;
+import 'package:chess_auto_prep/workspace/board_view.dart';
+import 'package:chessground/chessground.dart' show Chessboard;
 import 'package:dartchess/dartchess.dart' show Square;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -225,7 +227,8 @@ void main() {
   });
 
   testWidgets('a right-drag on the board draws an arrow into the comment of '
-      'the move under the cursor, and the board shows it', (tester) async {
+      'the move under the cursor, the board shows it, and a left click takes '
+      'it out again', (tester) async {
     await pump(tester);
     session.goTo(NodePath.of(const [0]));
     await tester.pump();
@@ -248,12 +251,17 @@ void main() {
       'The Sicilian [%eval 0.30] [%cal Gg1f3]',
     );
     expect(
-      tester.widget<Chessboard>(board).shapes,
-      contains(
-        const Arrow(color: shapeGreen, orig: Square.g1, dest: Square.f3),
-      ),
+      tester.widget<BoardArrows>(find.byType(BoardArrows)).arrows,
+      contains(const BoardShape(Square.g1, Square.f3, ShapeColour.green)),
     );
     expect(find.textContaining('[%cal'), findsNothing);
+    await tester.tapAt(at(4, 4));
+    await tester.pump();
+    expect(session.commentAt(session.cursor), 'The Sicilian [%eval 0.30]');
+    expect(
+      tester.widget<BoardArrows>(find.byType(BoardArrows)).arrows,
+      isEmpty,
+    );
   });
 
   testWidgets('clicking a variation move puts the cursor on it', (

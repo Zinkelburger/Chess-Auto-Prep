@@ -584,25 +584,29 @@ class _BoardAndCounterState extends State<_BoardAndCounter>
                     ?widget.editing,
                   ]),
                   // A comment's line on the board is read, not played on.
-                  builder: (context, _) => BoardView(
-                    fen: session.boardFen,
-                    orientation: session.orientation,
-                    lastMove: session.boardLastMove,
-                    onMove: onMove,
-                    movable: session.commentLine.value == null,
-                    coordinates: settings.value.boardCoordinates,
-                    shapes: shapesOnBoard(
+                  builder: (context, _) {
+                    final keeps = drawsIntoComment(
                       session,
-                      widget.analysis.threat.value,
-                    ),
-                    onDraw:
-                        drawsIntoComment(
-                          session,
-                          editing: widget.editing?.value ?? false,
-                        )
-                        ? (shape) => drawIntoComment(session, shape)
-                        : null,
-                  ),
+                      editing: widget.editing?.value ?? false,
+                    );
+                    return BoardView(
+                      fen: session.boardFen,
+                      orientation: session.orientation,
+                      lastMove: session.boardLastMove,
+                      onMove: onMove,
+                      movable: session.commentLine.value == null,
+                      coordinates: settings.value.boardCoordinates,
+                      shapes: shapesOnBoard(session),
+                      threat: threatOnBoard(
+                        session,
+                        widget.analysis.threat.value,
+                      ),
+                      onDraw: keeps
+                          ? (shape) => drawIntoComment(session, shape)
+                          : null,
+                      onClear: keeps ? () => clearCommentShapes(session) : null,
+                    );
+                  },
                 ),
                 const SizedBox(height: Space.s),
                 SizedBox(

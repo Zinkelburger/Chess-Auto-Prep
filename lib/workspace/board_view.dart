@@ -1,5 +1,6 @@
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,8 +22,10 @@ import '../ui/theme.dart';
 /// A right-drag draws an arrow and a right-click a circle, as on Lichess:
 /// green, or red with Shift, blue with Alt, yellow with Ctrl. What is drawn
 /// goes to [onDraw] when the board has somewhere to keep it; otherwise it
-/// stays on this board until the position changes or the left button is
-/// pressed on it.
+/// stays on this board until the position changes. The left button pressed
+/// on the board wipes the shapes, as a click does on Lichess: kept ones
+/// through [onClear], the rest from this board until the position changes.
+/// The [threat] stays.
 class BoardView extends StatefulWidget {
   const BoardView({
     super.key,
@@ -33,7 +36,9 @@ class BoardView extends StatefulWidget {
     this.coordinates = true,
     this.movable = true,
     this.shapes = const [],
+    this.threat,
     this.onDraw,
+    this.onClear,
   });
 
   final Fen fen;
@@ -52,12 +57,17 @@ class BoardView extends StatefulWidget {
   /// Whether a piece may be moved; the position is shown either way.
   final bool movable;
 
-  /// The arrows and circles someone else keeps: the move's comment, the
-  /// engine's threat.
+  /// The arrows and circles someone else keeps: the move's comment.
   final List<BoardShape> shapes;
+
+  /// The engine's threat, which a click does not wipe.
+  final BoardShape? threat;
 
   /// Where a shape the user draws goes; null keeps it on this board alone.
   final ValueChanged<BoardShape>? onDraw;
+
+  /// Takes the kept [shapes] away; null hides them on this board alone.
+  final VoidCallback? onClear;
 
   @override
   State<BoardView> createState() => _BoardViewState();
@@ -71,6 +81,9 @@ class _BoardViewState extends State<BoardView> {
 
   /// The shape under a right-drag in progress, drawn as it goes.
   BoardShape? _drawing;
+
+  /// Whether a click hid [BoardView.shapes] with nowhere to take them from.
+  bool _hidden = false;
 
   @override
   void initState() {
@@ -87,6 +100,7 @@ class _BoardViewState extends State<BoardView> {
     if (old.fen != widget.fen) {
       _drawn = const [];
       _drawing = null;
+      _hidden = false;
       // Clear package-owned selection/drag state before replacing a position,
       // even when the new position has the same side to move. Keeping the old
       // FEN here preserves the animation into the new position below.
@@ -139,24 +153,60 @@ class _BoardViewState extends State<BoardView> {
           onPointerMove: (event) => _move(event, constraints.maxWidth),
           onPointerUp: (_) => _up(),
           onPointerCancel: (_) => _cancel(),
-          child: Chessboard(
-            size: constraints.maxWidth,
-            controller: _controller,
-            orientation: widget.orientation,
-            settings: settings,
-            shapes: {
-              for (final shape in [...widget.shapes, ..._drawn, ?_drawing])
-                _shapeOf(shape),
-            },
-            onMove: (move, {viaDragAndDrop}) {
-              if (!mounted) return;
-              widget.onMove(move.uci);
-            },
+          child: Stack(
+            children: [
+              Chessboard(
+                size: constraints.maxWidth,
+                controller: _controller,
+                orientation: widget.orientation,
+                settings: settings,
+                shapes: {
+                  for (final shape in _shown())
+                    if (shape.isCircle) _circleOf(shape),
+                },
+                onMove: (move, {viaDragAndDrop}) {
+                  if (!mounted) return;
+                  widget.onMove(move.uci);
+                },
+              ),
+              // Arrows go over the pieces, as on Lichess, and away while a
+              // pawn waits for the piece it becomes. The promotion has no
+              // public listenable; setting it does not notify the controller.
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: ValueListenableBuilder(
+                    // ignore: invalid_use_of_internal_member
+                    valueListenable: _controller.pendingPromotionNotifier,
+                    builder: (context, promotion, _) => promotion != null
+                        ? const SizedBox.shrink()
+                        : BoardArrows(
+                            arrows: [
+                              for (final shape in _shown())
+                                if (!shape.isCircle) shape,
+                            ],
+                            drawing: _drawing?.isCircle ?? true
+                                ? null
+                                : _drawing,
+                            orientation: widget.orientation,
+                          ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
+
+  /// Everything on the board now: the kept shapes unless a click hid them,
+  /// the threat, what was drawn here and the shape under the drag.
+  List<BoardShape> _shown() => [
+    if (!_hidden) ...widget.shapes,
+    ?widget.threat,
+    ..._drawn,
+    ?_drawing,
+  ];
 
   /// The right button starts a shape on the square under it; the left one
   /// wipes what was drawn with nowhere to keep it, as a click does on
@@ -166,8 +216,15 @@ class _BoardViewState extends State<BoardView> {
       final square = squareAt(event.localPosition, size, widget.orientation);
       if (square == null) return;
       setState(() => _drawing = BoardShape.circle(square, _heldColour()));
-    } else if (event.buttons == kPrimaryButton && _drawn.isNotEmpty) {
-      setState(() => _drawn = const []);
+    } else if (event.buttons == kPrimaryButton) {
+      if (_drawn.isNotEmpty) setState(() => _drawn = const []);
+      if (_hidden || widget.shapes.isEmpty) return;
+      final clear = widget.onClear;
+      if (clear != null) {
+        clear();
+      } else {
+        setState(() => _hidden = true);
+      }
     }
   }
 
@@ -213,16 +270,127 @@ ShapeColour _heldColour() {
   return ShapeColour.green;
 }
 
-Shape _shapeOf(BoardShape shape) {
-  final color = switch (shape.colour) {
-    ShapeColour.green => shapeGreen,
-    ShapeColour.red => shapeRed,
-    ShapeColour.blue => shapeBlue,
-    ShapeColour.yellow => shapeYellow,
-  };
-  return shape.isCircle
-      ? Circle(color: color, orig: shape.from)
-      : Arrow(color: color, orig: shape.from, dest: shape.to);
+Color _colourOf(ShapeColour colour) => switch (colour) {
+  ShapeColour.green => shapeGreen,
+  ShapeColour.red => shapeRed,
+  ShapeColour.blue => shapeBlue,
+  ShapeColour.yellow => shapeYellow,
+};
+
+Shape _circleOf(BoardShape shape) =>
+    Circle(color: _colourOf(shape.colour), orig: shape.from);
+
+/// The arrows on a board, drawn as Lichess draws them: a shaft a sixth of a
+/// square wide from the middle of one square, its head's point just short of
+/// the middle of the other. chessground's own arrow is half as wide again
+/// and reads as a slab.
+class BoardArrows extends StatelessWidget {
+  const BoardArrows({
+    super.key,
+    required this.arrows,
+    required this.orientation,
+    this.drawing,
+  });
+
+  /// Every arrow shown, [drawing] among them.
+  final List<BoardShape> arrows;
+
+  /// The arrow under a right-drag, a little thinner while it is drawn.
+  final BoardShape? drawing;
+
+  final Side orientation;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    size: Size.infinite,
+    painter: _ArrowPainter(arrows, drawing, orientation),
+  );
+}
+
+class _ArrowPainter extends CustomPainter {
+  _ArrowPainter(this.arrows, this.drawing, this.orientation);
+
+  final List<BoardShape> arrows;
+  final BoardShape? drawing;
+  final Side orientation;
+
+  // Lichess's sizes, in sixty-fourths of a square: chessground's brush
+  // width 10, an arrow ending 10 short of the middle (20 when another ends
+  // on the same square, so their heads stay apart), and a head 4 widths
+  // across and 3 long, placed 2.05 widths back from its point's end.
+  static const _width = 10 / 64;
+  static const _margin = 10 / 64;
+  static const _sharedMargin = 20 / 64;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final square = size.width / 8;
+    final ending = <Square, int>{};
+    for (final arrow in arrows) {
+      ending[arrow.to] = (ending[arrow.to] ?? 0) + 1;
+    }
+    for (final arrow in arrows) {
+      final current = arrow == drawing;
+      final shared = !current && ending[arrow.to]! > 1;
+      _arrow(
+        canvas,
+        square,
+        arrow,
+        width: square * _width * (current ? 0.85 : 1),
+        margin: square * (shared ? _sharedMargin : _margin),
+      );
+    }
+  }
+
+  void _arrow(
+    Canvas canvas,
+    double square,
+    BoardShape arrow, {
+    required double width,
+    required double margin,
+  }) {
+    final from = _centre(arrow.from, square);
+    final to = _centre(arrow.to, square);
+    final direction = (to - from) / (to - from).distance;
+    final across = Offset(-direction.dy, direction.dx);
+    final end = to - direction * margin;
+    final base = end - direction * (2.05 * width);
+    final head = Path()
+      ..moveTo(
+        end.dx + direction.dx * 0.95 * width,
+        end.dy + direction.dy * 0.95 * width,
+      )
+      ..lineTo((base + across * 2 * width).dx, (base + across * 2 * width).dy)
+      ..lineTo((base - across * 2 * width).dx, (base - across * 2 * width).dy)
+      ..close();
+    final colour = _colourOf(arrow.colour);
+    // One layer per arrow, so where shaft and head overlap is no darker.
+    canvas.saveLayer(null, Paint()..color = Color.fromRGBO(0, 0, 0, colour.a));
+    final solid = colour.withValues(alpha: 1);
+    canvas
+      ..drawLine(
+        from,
+        end,
+        Paint()
+          ..color = solid
+          ..strokeWidth = width
+          ..strokeCap = StrokeCap.round,
+      )
+      ..drawPath(head, Paint()..color = solid)
+      ..restore();
+  }
+
+  Offset _centre(Square at, double square) {
+    final column = orientation == Side.white ? at.file : 7 - at.file;
+    final row = orientation == Side.white ? 7 - at.rank : at.rank;
+    return Offset((column + 0.5) * square, (row + 0.5) * square);
+  }
+
+  @override
+  bool shouldRepaint(_ArrowPainter old) =>
+      !listEquals(old.arrows, arrows) ||
+      old.drawing != drawing ||
+      old.orientation != orientation;
 }
 
 /// A board with nothing on it and nobody to move, which is what a position
