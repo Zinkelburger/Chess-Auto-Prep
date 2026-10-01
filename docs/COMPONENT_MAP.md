@@ -68,7 +68,11 @@ Bughouse mode is offered when its engine assets are present.
 - Databases browses/imports/downloads master games and reports storage usage.
   Cleanup is limited to explicitly selected derived data.
 - Generation owns search trees and draft publication; Replies/gaps and Audit
-  use the current workspace and chapter revision.
+  use the current workspace and chapter revision. A practical search from the
+  board (`workspace/fill_gaps.dart`) builds two trees in one run, the board's
+  side and the other; `FillGaps.nodeAtBoard(side:)` reads either, and
+  `workspace/search_table.dart` merges them into the Expectimax table's
+  White, Black and Engine columns.
 - The Repertoire builder starts split: Moves over the Explorer on the left,
   Expectimax on the right (`ActionLayout.startBuilding`). Requests for a tab
   (`ActionLayout.reveal`) bring it up in the pane that already has it. The

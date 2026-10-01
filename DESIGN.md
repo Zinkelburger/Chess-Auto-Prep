@@ -239,7 +239,8 @@ active pane's a brighter grey. Dividers between panes are 1px lines with a
 
 ### Tool panes (Expectimax is the pattern)
 - **Bar:** a fixed-height row that never reflows: the pane's one action (a button that keeps its place and width whatever it says: Expectimax, Pause, Resume), the one or two values changed on every use, and a gear at the end.
-- **Status:** one fixed-height line under the bar: what will run, then progress, then the outcome or the problem. A secondary action for the running state sits at its end.
+- **Status:** one fixed-height line under the bar: what will run, then progress, then the outcome or the problem. A secondary action for the running state sits at its end. A fact that frames the whole pane sits at its start as a text button that names it and changes it (Expectimax: the side prepared, which turns the board).
+- **Value table:** a fixed header and 32px rows; the move takes the room left by fixed mono gutters (48px share, 56px values). A pane too narrow drops the least needed column whole (Played) rather than squeezing any.
 - **Gear:** swaps the pane's content in place for the remaining settings, one named row each with a one-line explanation on screen, and back. The same rows appear as a Settings group and write the same saved values. While the action runs they are shown but locked, with one line saying why.
 
 ### Engine lines

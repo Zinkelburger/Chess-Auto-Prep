@@ -32,14 +32,18 @@ existing commit-on-navigation editor and guarded document saver.
 
 Expectimax is headed by one bar that never moves (2026-10-01): a button that is
 `Expectimax`, `Pause` or `Resume` in the same place at the same width, the
-`Depth` box (empty is no limit) and a gear. One status line under it says what
-will run (`For White · Maia 2200 · best 4, then 4`), then how far the search has
+`Depth` box (empty is no limit) and a gear. One status line under it starts
+with the side the search prepares, `White` or `Black`, as a text button: the
+side is the bottom of the board, so pressing it turns the board (as F does). It
+is held while a search runs. It is not a two-part switch: the owner removed a
+permanent White/Black switch from the builder on 2026-09-22. After it the line says what will run
+(`Maia 2200 · best 4, then 4`), then how far the search has
 got; while a search with no depth runs, `Finish depth N` at the line's end lets
 the level under way finish before pausing. The gear swaps the results in place
 for the rest of the settings, as the engine pane's gear does: Maia practical |
 ChessDB mainline, Maia rating, First move and Later moves (our best engine moves
 searched, default 4 each), Search replies met once in N games, Engine depth and
-Evaluation (Stockfish, ChessDB, Lichess). They are saved in `settings.json`
+Evaluation (Engine, ChessDB, Lichess cloud). They are saved in `settings.json`
 (`Settings.expectimax`, with the shared opponent rating) and shown again under
 Settings ▸ Expectimax; a running search shows them without letting them change.
 Hover an Engine value for its recorded depth (engine, cache or Lichess cloud).
@@ -47,7 +51,21 @@ Depth 14 is the default engine depth; cache/database results may differ. Per-res
 depths remain session metadata: older/resumed tree values and ChessDB results
 without a depth report it as unavailable. Empty searches show a start
 instruction, and scratch boards omit the redundant
-“Temporary analysis” heading. Stockfish is the default evaluation.
+“Temporary analysis” heading. The engine alone is the default evaluation.
+
+One press searches the board for both sides (2026-10-01), on the one engine:
+for the side at the bottom, and for the other side with the roles swapped. The
+table is `Your move` or `Their reply`, `Played`, `White`, `Black`, `Engine`,
+all from White's side. `White` is what the move is worth when White plays its
+best moves and Black replies as Maia predicts; `Black` is the other way round.
+A move whose value in the other side's column sits well off the engine's is one
+the side playing it is expected to go wrong after; where the two agree the
+position plays itself. `Played` shows wherever a search modelled the side to
+move, so it is there at our moves as well, and is the first column a pane too
+narrow drops. Status counts, `Make lines`, Positions and the trap mark belong
+to the board's side; the other side's tree is kept beside the chapter and
+resumed with it, and its failure never fails the run. The mainline book is
+built for the board's side alone and shows one `Value` column.
 Ctrl+G uses the same saved settings.
 Board navigation while running (results, moves, back/forward) stops the old search,
 saves its committed tree, and continues from

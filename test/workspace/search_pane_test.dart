@@ -357,13 +357,14 @@ void main() {
     expect(find.byType(StaticChessboard), findsNothing);
   });
 
-  testWidgets('the side switch turns the board, and the next search is for '
-      'the side chosen', (tester) async {
+  testWidgets('the side\'s button turns the board, and the next search is '
+      'for the side it then names', (tester) async {
     await pump(tester);
     expect(fixture.session.orientation, Side.white);
-    await tester.tap(find.text('Black'));
+    await tester.tap(find.byTooltip('Search for Black and turn the board (F)'));
     await tester.pump();
     expect(fixture.session.orientation, Side.black);
+    expect(find.widgetWithText(TextButton, 'Black'), findsOneWidget);
     await tester.runAsync(() async {
       await tester.tap(find.widgetWithText(FilledButton, 'Expectimax'));
       while (!fill.running) {
@@ -373,8 +374,8 @@ void main() {
       await tester.pump();
       expect(
         tester
-            .widget<SegmentedButton<Side>>(find.byType(SegmentedButton<Side>))
-            .onSelectionChanged,
+            .widget<TextButton>(find.widgetWithText(TextButton, 'Black'))
+            .onPressed,
         isNull,
       );
       fill.finish();
@@ -384,7 +385,7 @@ void main() {
     });
     await tester.pumpAndSettle();
     expect(fill.found!.side, Side.black);
-    await tester.tap(find.text('White').first);
+    await tester.tap(find.widgetWithText(TextButton, 'Black'));
     await tester.pump();
     expect(fixture.session.orientation, Side.white);
   });
@@ -417,11 +418,11 @@ void main() {
     // Depth is on the Engine value's hover, not a column of its own.
     expect(find.byTooltip('Depth 22'), findsWidgets);
     expect(find.text('22'), findsNothing);
-    // A value for each side beside the engine's, under the side switch:
+    // A value for each side beside the engine's, under the side's button:
     // the model here answers for Black alone, so only White's search has
     // any.
-    expect(find.text('White'), findsNWidgets(2), reason: 'switch and column');
-    expect(find.text('Black'), findsNWidgets(2), reason: 'switch and column');
+    expect(find.text('White'), findsNWidgets(2), reason: 'side and column');
+    expect(find.text('Black'), findsOneWidget, reason: 'the column');
     expect(
       find.widgetWithText(FilledButton, 'Resume'),
       findsOneWidget,

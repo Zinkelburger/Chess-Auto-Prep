@@ -9,7 +9,9 @@ Plan step: 7
 ## Current interactive workflow (2026-09-27)
 
 The tab is now **Expectimax**: one fixed bar (the Expectimax/Pause/Resume
-button, `Depth`, a gear), one status line, then the values. The gear swaps the
+button, `Depth`, a gear), one status line headed by the side's flip button,
+then the values: since 2026-10-01 one press searches for both sides and
+the table has a `White`, a `Black` and an `Engine` column. The gear swaps the
 values for the remaining settings (method, Maia rating, first and later move
 counts, reply coverage, engine depth, evaluation source), which are saved
 settings also listed under Settings ▸ Expectimax; see

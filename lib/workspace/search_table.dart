@@ -78,7 +78,9 @@ List<SearchRow> searchRows({
       rows[move.uci] = SearchRow(
         move: move,
         after: child.fen,
-        engineCp: held?.engineCp ?? (white ? cp : -cp),
+        // Trees of different runs may hold two scores for one position:
+        // White's is shown, whichever way the board is turned.
+        engineCp: white ? cp : held?.engineCp ?? -cp,
         share: held?.share ?? share,
         white: white ? worth : held?.white,
         black: white ? held?.black : worth,

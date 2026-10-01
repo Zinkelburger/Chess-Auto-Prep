@@ -27,8 +27,9 @@ import '../ui/app_keys.dart';
 ///
 /// One bar heads the panel and never moves: the button that starts,
 /// pauses and resumes the search, its depth, and the gear that swaps the
-/// results for the rest of the settings. Under it one line holds the side
-/// the search prepares, which turns the board, and what the search is doing.
+/// results for the rest of the settings. Under it one line names the side
+/// the search prepares, on a button that turns the board to the other, and
+/// says what the search is doing.
 ///
 /// Then, for the position on the board, every move the search looked at
 /// with what it is worth when White is the prepared side and Black replies
@@ -348,30 +349,26 @@ class _SearchPaneState extends State<SearchPane>
             'best ${_options.rootMoves}, then ${_options.candidateMoves}'
             '${_options.source == EvaluationSource.stockfish ? '' : ' · ${_options.source.label}'}';
 
-  /// The side the search prepares, which is the bottom of the board:
-  /// choosing the other turns the board. Kept while a search runs, as the
-  /// rest of its settings are.
-  Widget _sideChoice() => Tooltip(
-    message: AppKey.flip.tip('Search for this side and turn the board'),
-    child: SegmentedButton<Side>(
-      segments: const [
-        ButtonSegment(value: Side.white, label: Text('White')),
-        ButtonSegment(value: Side.black, label: Text('Black')),
-      ],
-      selected: {widget.session.orientation},
-      showSelectedIcon: false,
-      style: const ButtonStyle(
-        visualDensity: VisualDensity.compact,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        padding: WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: Space.s),
-        ),
+  /// The side the search prepares, which is the bottom of the board, as a
+  /// button that turns the board to the other. Held while a search runs,
+  /// as the rest of its settings are.
+  Widget _sideButton() {
+    final white = widget.session.orientation == Side.white;
+    return Tooltip(
+      message: AppKey.flip.tip(
+        'Search for ${white ? 'Black' : 'White'} and turn the board',
       ),
-      onSelectionChanged: widget.fill.running
-          ? null
-          : (_) => widget.session.flip(),
-    ),
-  );
+      child: TextButton.icon(
+        style: TextButton.styleFrom(
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.symmetric(horizontal: Space.s),
+        ),
+        onPressed: widget.fill.running ? null : widget.session.flip,
+        icon: const Icon(Icons.swap_vert, size: IconSize.action),
+        label: Text(white ? 'White' : 'Black'),
+      ),
+    );
+  }
 
   /// One line of fixed height: the side, then what will run, how far the
   /// search has got, what it did, or what went wrong. While a search with
@@ -412,10 +409,10 @@ class _SearchPaneState extends State<SearchPane>
     return SizedBox(
       height: searchStatusHeight,
       child: Padding(
-        padding: const EdgeInsets.only(left: Space.m, right: Space.xs),
+        padding: const EdgeInsets.only(left: Space.xs, right: Space.xs),
         child: Row(
           children: [
-            _sideChoice(),
+            _sideButton(),
             const SizedBox(width: Space.s),
             Expanded(
               child: Text(

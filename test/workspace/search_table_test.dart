@@ -34,15 +34,23 @@ void main() {
     fen: _board,
     evalForUs: const Eval(0),
     replies: [
+      // The engine has Qb4 as fine for Black, and White's search finds
+      // White a pawn and a half up after it.
       ReplyMove(
         move: _move('Qb4'),
         probability: 0.25,
-        child: _worth('after Qb4', 150),
+        child: OurNode.over(
+          fen: const Fen('after Qb4'),
+          evalForUs: const Eval(-20),
+          candidates: [
+            CandidateMove(move: _move('Nd5'), child: _worth('deeper', 150)),
+          ],
+        ),
       ),
       ReplyMove(
         move: _move('Qf6'),
         probability: 0.6,
-        child: _worth('after Qf6', 15),
+        child: _worth('after Qf6', 10),
       ),
       ReplyMove(
         move: _move('Qd6'),
@@ -87,7 +95,8 @@ void main() {
         other: forBlack,
       );
       expect([for (final r in rows) r.move.san], ['Qf6', 'Qb4', 'Qd6', 'Qc5']);
-      expect([for (final r in rows) r.trap], [false, true, true, false]);
+      expect([for (final r in rows) r.trap], [false, false, true, false]);
+      expect(rows[1].engineCp, -20, reason: 'one score, either way up');
       expect(rows[0].share, 0.6);
     });
 
@@ -158,6 +167,8 @@ void main() {
       // Black slightly better, and the engine agrees with Black's.
       expect(find.text('+1.50'), findsOneWidget);
       expect(find.text('-0.20'), findsNWidgets(2));
+      // Qf6 is worth the same to both searches and to the engine.
+      expect(find.text('+0.10'), findsNWidgets(3));
       expect(find.text('…'), findsOneWidget, reason: 'Qc5 is not searched');
       expect(find.byTooltip('Depth 18'), findsOneWidget);
       await tester.tap(find.text('Qb4'));

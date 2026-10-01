@@ -183,6 +183,8 @@ final class FillGaps extends ChangeNotifier {
   Completer<void>? _finished;
   int _followTicket = 0;
 
+  /// The engine as the run under way asks it: one for both of its sides.
+  EngineAnswers? _answers;
   final _history = <FillFound>[];
   FillRequest? _activeRequest;
   (Object?, Fen, Side)? _board;
@@ -430,6 +432,7 @@ final class FillGaps extends ChangeNotifier {
     SearchNode? seed,
     SearchNode? mirrorSeed,
   ) async {
+    _answers = null;
     final tools = await _tools(request);
     final Future<void> Function() release;
     switch (tools) {
@@ -585,7 +588,7 @@ final class FillGaps extends ChangeNotifier {
         root: root,
         seed: seed,
         config: config,
-        evaluator: EngineAnswers(
+        evaluator: _answers ??= EngineAnswers(
           engine.evaluator,
           depths: _engineDepths,
           lines: _bestLines,

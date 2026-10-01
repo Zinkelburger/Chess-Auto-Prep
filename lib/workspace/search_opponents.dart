@@ -56,15 +56,23 @@ final class MastersPlayed {
 /// neither.
 ///
 /// Keyed by the four-field position, since neither depends on the clocks.
+///
+/// A position is asked about once: a run searches the board for both sides
+/// at the same time, the two meet many of the same positions, and both
+/// must hold the one score for each.
 final class EngineAnswers implements PositionEvaluator {
   EngineAnswers(this.evaluator, {required this.depths, required this.lines});
 
   final PositionEvaluator evaluator;
   final Map<String, int> depths;
   final Map<String, List<String>> lines;
+  final _asked = <String, Future<EvaluationResult>>{};
 
   @override
-  Future<EvaluationResult> evaluate(Position position) async {
+  Future<EvaluationResult> evaluate(Position position) =>
+      _asked[position.fen] ??= _ask(position);
+
+  Future<EvaluationResult> _ask(Position position) async {
     final result = await evaluationOf(evaluator, position);
     if (result case Evaluated(:final depth, :final pv)) {
       final key = Fen(position.fen).position;

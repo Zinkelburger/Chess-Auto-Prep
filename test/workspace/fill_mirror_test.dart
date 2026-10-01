@@ -107,6 +107,13 @@ void main() {
     expect(fill.nodeAtBoard(side: Side.black), isA<OurNode>());
   });
 
+  test('a position both sides reach is scored once', () async {
+    final evaluator = ScriptedEvaluator();
+    final fill = fillWith(evaluator);
+    await fill.start(request);
+    expect(evaluator.asked.toSet().length, evaluator.asked.length);
+  });
+
   test('the run reports the board\'s side alone', () async {
     final alone = fillWith(
       ScriptedEvaluator(),
