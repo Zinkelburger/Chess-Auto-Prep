@@ -154,18 +154,41 @@ class _MovesState extends State<_Moves> {
               key: ply == mistake ? _mistake : null,
               onTap: () => widget.onOpen(ply + 1),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: Text(
-                  '${moveNumberLabel(move, startsLine: ply == 0)}${move.san}'
-                  '${ply == mistake ? widget.kind.glyph : ''}',
-                  style: ply == mistake
-                      ? monoText.copyWith(fontWeight: FontWeight.w700)
-                      : monoText,
+                padding: moveTokenPadding,
+                child: _move(
+                  moveNumberLabel(move, startsLine: ply == 0),
+                  move.san,
+                  marked: ply == mistake,
                 ),
               ),
             ),
         ],
       ),
+    );
+  }
+
+  /// A move as the reading card sets one: its number a step quieter, and
+  /// the puzzle's move in bold with its mark in the review's colour.
+  Widget _move(String number, String san, {required bool marked}) {
+    final glyph = widget.kind.glyph;
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: number,
+            style: const TextStyle(color: readingNumberColor),
+          ),
+          TextSpan(text: san),
+          if (marked)
+            TextSpan(
+              text: glyph,
+              style: TextStyle(color: mistakeColor(glyph)),
+            ),
+        ],
+      ),
+      style: marked
+          ? readingMoveText.copyWith(fontWeight: FontWeight.w700)
+          : readingMoveText,
     );
   }
 }

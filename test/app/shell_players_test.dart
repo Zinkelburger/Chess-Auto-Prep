@@ -96,19 +96,71 @@ void main() {
     expect(w.parts.players.analysis.side, Side.black);
     expect(tester.takeException(), isNull);
   });
-  testWidgets('filters use a bounded dialog instead of overflowing the list', (
+  testWidgets('filters open in the column, named, and scroll with the list '
+      'instead of overflowing it', (tester) async {
+    await w.pumpShell(tester);
+    await tester.runAsync(() => w.parts.players.analysis.select(player));
+    w.requests.switchTo(Mode.playerAnalysis);
+    await tester.pumpAndSettle();
+    expect(find.text('1 game'), findsOneWidget);
+    await tester.tap(find.text('Filters'));
+    await tester.pumpAndSettle();
+    expect(find.text('Minimum games'), findsOneWidget);
+    expect(find.text('From move'), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byTooltip('Increase Minimum games'));
+    await tester.pumpAndSettle();
+    expect(w.parts.players.analysis.minGames, 2);
+    expect(find.text('Filters (1)'), findsOneWidget);
+    // The two that say which positions are listed go with the games list.
+    w.parts.players.analysis.configure(list: PlayerList.games);
+    await tester.pumpAndSettle();
+    expect(find.text('Minimum games'), findsNothing);
+    expect(find.text('Time controls'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('the positions table is sorted by its column names', (
     tester,
   ) async {
     await w.pumpShell(tester);
     await tester.runAsync(() => w.parts.players.analysis.select(player));
     w.requests.switchTo(Mode.playerAnalysis);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Filters · 1 game'));
+    final analysis = w.parts.players.analysis;
+    expect(analysis.order, PositionOrder.frequent);
+    await tester.tap(find.byTooltip('Worst score first'));
     await tester.pumpAndSettle();
-    expect(find.text('Player analysis filters'), findsOneWidget);
+    expect(analysis.order, PositionOrder.lowScore);
+    await tester.tap(find.byTooltip('Best score first'));
+    await tester.pumpAndSettle();
+    expect(analysis.order, PositionOrder.highScore);
+    await tester.tap(find.byTooltip('Most played first'));
+    await tester.pumpAndSettle();
+    expect(analysis.order, PositionOrder.frequent);
+    // Wins, draws and losses as a crosstable writes them.
+    expect(find.text('+1 =0 −0'), findsWidgets);
     expect(tester.takeException(), isNull);
-    await tester.tap(find.text('Done'));
+  });
+  testWidgets('a board the games never reached offers their first move', (
+    tester,
+  ) async {
+    await w.pumpShell(tester);
+    await tester.runAsync(() => w.parts.players.analysis.select(player));
+    w.requests.switchTo(Mode.playerAnalysis);
     await tester.pumpAndSettle();
+    w.session.playMove('a2a3');
+    await tester.pumpAndSettle();
+    expect(
+      find.text('None of these games reached the position on the board.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Go to the first move'));
+    await tester.pumpAndSettle();
+    expect(w.session.source?.path, '/collections/player.pgn');
+    expect(find.text('Go to the first move'), findsNothing);
+    expect(find.text('White / Draw / Black'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
   testWidgets('group prepared state survives leaving and reopening it', (
     tester,
@@ -476,11 +528,12 @@ void main() {
     ];
     analysis.changed();
     await tester.pumpAndSettle();
-    expect(find.text('Unfavourable position · -0.90'), findsOneWidget);
+    expect(find.text('Unfavourable position'), findsOneWidget);
+    expect(find.text('-0.90'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Dismiss finding'));
     await tester.pumpAndSettle();
-    expect(find.text('Unfavourable position · -0.90'), findsNothing);
+    expect(find.text('Unfavourable position'), findsNothing);
     expect(
       w.parts.players.directory.players.single.strings('dismissed_findings'),
       [hunt.findings.single.key],
@@ -492,7 +545,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Back to findings'));
     await tester.pumpAndSettle();
-    expect(find.text('Unfavourable position · -0.90'), findsOneWidget);
+    expect(find.text('Unfavourable position'), findsOneWidget);
     expect(
       w.parts.players.directory.players.single.strings('dismissed_findings'),
       isEmpty,

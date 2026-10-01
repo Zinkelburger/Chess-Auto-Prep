@@ -64,6 +64,9 @@ abstract final class IconSize {
 
   /// The tick in a menu row, and the gap held for it where there is none.
   static const menu = 16.0;
+
+  /// The arrow beside the column a table is sorted by, at the small size.
+  static const sort = 12.0;
 }
 
 /// The bundled chess figurines (♔♕♖♗♘), drawn where the text face has none,
@@ -660,5 +663,33 @@ const booksListWidth = 260.0;
 const bookRowHeight = 36.0;
 const bookChapterIndent = 28.0;
 
-/// Player statistics need room for their three related views.
-const double playerColumnWidth = 340;
+/// The Player analysis column: room for a line of moves beside its two
+/// number gutters, and for the three names of its list switch.
+const double playerColumnWidth = 300;
+
+/// The gutters of the positions table: how many games reached a position,
+/// and how the player scored from it.
+const positionGamesWidth = 56.0;
+const positionScoreWidth = 52.0;
+
+/// A named control on one line of a column or a dialog: the row, and the
+/// width a typeable choice takes at its end, which is a number stepper's.
+const fieldRowHeight = 36.0;
+const fieldControlWidth = 144.0;
+
+/// The bar that says a download or an engine pass is running: a line, not
+/// a stripe.
+const progressLineHeight = 2.0;
+
+/// The mark on the move a puzzle is about, in the review's colours: the
+/// same blue, amber and red the game review draws them in.
+Color mistakeColor(String glyph) => switch (glyph) {
+  '??' => ReviewColors.blunder,
+  '?' => ReviewColors.mistake,
+  '?!' => ReviewColors.inaccuracy,
+  _ => _text,
+};
+
+/// The move numbers of a game read in the card: there to count by, so a
+/// step quieter than the moves.
+const readingNumberColor = _muted;
