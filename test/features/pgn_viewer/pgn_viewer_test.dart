@@ -171,6 +171,20 @@ void main() {
     },
   );
 
+  test('a file gone back to with its games unchanged is listed as it was, '
+      'not summarised again', () async {
+    fixture = await viewerOver(threeGameFile);
+    await fixture.open();
+    final rows = fixture.viewer.games;
+    expect(rows, hasLength(3));
+
+    await fixture.session.showAnalysisBoard();
+    expect(fixture.viewer.games, isEmpty);
+    await fixture.open(game: 1);
+    expect(fixture.viewer.games, same(rows));
+    expect(fixture.viewer.current, 1);
+  });
+
   test('closing the file empties the list', () async {
     fixture = await viewerOver(threeGameFile);
     await fixture.open();

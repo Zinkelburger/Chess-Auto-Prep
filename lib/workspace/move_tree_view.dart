@@ -63,6 +63,7 @@ class _MoveTreeViewState extends State<MoveTreeView>
   DocumentSession get session => widget.session;
 
   final _selection = Selection<NodePath>();
+  final _menu = GlobalKey<_MoveMenuState>();
 
   /// The lines last built, and the tree and orientation they show.
   ({GameTree tree, Side side, Widget lines})? _built;
@@ -90,6 +91,9 @@ class _MoveTreeViewState extends State<MoveTreeView>
   /// Takes the moves out. Nothing is said about it: the moves are gone from
   /// the tree on screen, and Ctrl+Z puts them back.
   void _deleteFrom(NodePath path) => deleteFrom(widget.session, path);
+
+  void _showMenu(BuildContext move, List<Widget> entries) =>
+      _menu.currentState?.show(move, entries);
 
   Widget _comment(String comment, Fen at, NodePath from) => CommentBlocks(
     comment: comment,
@@ -160,6 +164,7 @@ class _MoveTreeViewState extends State<MoveTreeView>
       (path) => const [],
       _deleteFrom,
       _comment,
+      _showMenu,
     );
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
@@ -183,29 +188,37 @@ class _MoveTreeViewState extends State<MoveTreeView>
       (path) => widget.moveMenu?.call(path) ?? const [],
       _deleteFrom,
       _comment,
+      _showMenu,
     );
     return LinePreviewOverlay(
       preview: preview,
       orientation: side,
-      child: SingleChildScrollView(
-        // Another game starts at the top: the scroll offset belongs to the
-        // game it was scrolled in, and an edit keeps it.
-        key: ValueKey((widget.session.source, widget.session.game)),
-        padding: const EdgeInsets.fromLTRB(
-          readingCardInset,
-          Space.s,
-          readingCardInset,
-          Space.l,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (widget.heading case final heading?)
-              SizedBox(width: double.infinity, child: heading),
-            if (displayComment(tree.rootComment ?? '').isNotEmpty)
-              _comment(tree.rootComment!, tree.rootFen, const NodePath.root()),
-            ...builder.line(const NodePath.root(), tree.children),
-          ],
+      child: _MoveMenu(
+        key: _menu,
+        child: SingleChildScrollView(
+          // Another game starts at the top: the scroll offset belongs to the
+          // game it was scrolled in, and an edit keeps it.
+          key: ValueKey((widget.session.source, widget.session.game)),
+          padding: const EdgeInsets.fromLTRB(
+            readingCardInset,
+            Space.s,
+            readingCardInset,
+            Space.l,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (widget.heading case final heading?)
+                SizedBox(width: double.infinity, child: heading),
+              if (displayComment(tree.rootComment ?? '').isNotEmpty)
+                _comment(
+                  tree.rootComment!,
+                  tree.rootFen,
+                  const NodePath.root(),
+                ),
+              ...builder.line(const NodePath.root(), tree.children),
+            ],
+          ),
         ),
       ),
     );
@@ -222,6 +235,9 @@ typedef MoveMenu = List<Widget> Function(NodePath path);
 /// [from] — the one a line of analysis in it is played from.
 typedef _CommentWidget = Widget Function(String comment, Fen at, NodePath from);
 
+/// Opens `entries` as the menu of the move drawn at `move`.
+typedef _ShowMenu = void Function(BuildContext move, List<Widget> entries);
+
 final class _LineBuilder {
   _LineBuilder(
     this.session,
@@ -229,6 +245,7 @@ final class _LineBuilder {
     this.moveMenu,
     this.onDeleteFrom,
     this.comment,
+    this.showMenu,
   );
 
   final DocumentSession session;
@@ -243,6 +260,8 @@ final class _LineBuilder {
   final ValueChanged<NodePath> onDeleteFrom;
 
   final _CommentWidget comment;
+
+  final _ShowMenu showMenu;
 
   /// The line that starts at `siblings[branch]` and follows main
   /// continuations to the end. A comment is a paragraph of its own, so the
@@ -305,6 +324,7 @@ final class _LineBuilder {
         quizEnds: false,
         onTap: () => session.goTo(NodePath.of(limit.indexes.take(depth + 1))),
         actions: () => const [],
+        showMenu: showMenu,
       ),
   ];
 
@@ -352,6 +372,7 @@ final class _LineBuilder {
         ),
         ...moveMenu(path),
       ],
+      showMenu: showMenu,
     );
   }
 }
@@ -399,6 +420,47 @@ class _VariationBlock extends StatelessWidget {
   }
 }
 
+/// The one menu of a move list, opened under whichever move asks for it.
+///
+/// Every move can open a menu and almost none ever does, so the moves share
+/// this one rather than each carry an anchor, an overlay and a controller
+/// of its own: a game of a hundred moves is put on screen without building
+/// a hundred of them.
+class _MoveMenu extends StatefulWidget {
+  const _MoveMenu({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<_MoveMenu> createState() => _MoveMenuState();
+}
+
+class _MoveMenuState extends State<_MoveMenu> {
+  final _menu = MenuController();
+  List<Widget> _entries = const [];
+
+  /// Opens [entries] just under the move drawn at [move], where a menu
+  /// anchored to that move would open.
+  void show(BuildContext move, List<Widget> entries) {
+    final token = move.findRenderObject();
+    final list = context.findRenderObject();
+    if (entries.isEmpty || token is! RenderBox || list is! RenderBox) return;
+    setState(() => _entries = entries);
+    _menu.open(
+      position: list.globalToLocal(
+        token.localToGlobal(Offset(0, token.size.height)),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => MenuAnchor(
+    controller: _menu,
+    menuChildren: _entries,
+    child: widget.child,
+  );
+}
+
 /// One clickable move, with what can be done to it on the right button.
 /// When it becomes the selected one it scrolls itself into view. The menu's
 /// entries are made when it opens: a list of a thousand moves has no use for
@@ -413,6 +475,7 @@ class _MoveToken extends StatefulWidget {
     required this.quizEnds,
     required this.onTap,
     required this.actions,
+    required this.showMenu,
   });
 
   final String label;
@@ -433,18 +496,18 @@ class _MoveToken extends StatefulWidget {
   /// What the right button offers for this move, asked when it opens.
   final List<Widget> Function() actions;
 
+  /// Opens the list's menu under this move.
+  final _ShowMenu showMenu;
+
   @override
   State<_MoveToken> createState() => _MoveTokenState();
 }
 
 class _MoveTokenState extends State<_MoveToken>
     with ListeningState<_MoveToken> {
-  final _menu = MenuController();
-
   /// Whether this move was the selected one when last drawn, so a rebuilt
   /// list does not scroll to a move that was already selected.
   bool _selected = false;
-  bool _menuOpen = false;
 
   @override
   Listenable listenableOf(_MoveToken widget) => widget.selected;
@@ -463,9 +526,7 @@ class _MoveTokenState extends State<_MoveToken>
     setState(() => _selected = now);
   }
 
-  void _menuShown(bool open) {
-    if (mounted && open != _menuOpen) setState(() => _menuOpen = open);
-  }
+  void _openMenu() => widget.showMenu(context, widget.actions());
 
   /// After the frame, because the token has no position until it is laid out.
   void _reveal() {
@@ -525,24 +586,18 @@ class _MoveTokenState extends State<_MoveToken>
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return MenuAnchor(
-      controller: _menu,
-      onOpen: () => _menuShown(true),
-      onClose: () => _menuShown(false),
-      menuChildren: _menuOpen ? widget.actions() : const [],
-      child: InkWell(
-        onTap: widget.onTap,
-        onSecondaryTap: _menu.open,
-        onLongPress: _menu.open,
-        borderRadius: BorderRadius.circular(3),
-        child: Container(
-          padding: moveTokenPadding,
-          decoration: BoxDecoration(
-            color: _selected ? scheme.primary.withValues(alpha: 0.35) : null,
-            borderRadius: BorderRadius.circular(3),
-          ),
-          child: _label(scheme),
+    return InkWell(
+      onTap: widget.onTap,
+      onSecondaryTap: _openMenu,
+      onLongPress: _openMenu,
+      borderRadius: BorderRadius.circular(3),
+      child: Container(
+        padding: moveTokenPadding,
+        decoration: BoxDecoration(
+          color: _selected ? scheme.primary.withValues(alpha: 0.35) : null,
+          borderRadius: BorderRadius.circular(3),
         ),
+        child: _label(scheme),
       ),
     );
   }

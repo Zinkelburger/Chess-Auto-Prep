@@ -1,4 +1,4 @@
-import 'package:dartchess/dartchess.dart' show Move, Position;
+import 'package:dartchess/dartchess.dart' show Move, NormalMove, Position;
 
 import '../fen.dart';
 import 'game_tree.dart';
@@ -45,8 +45,13 @@ final class _Node {
   final Position after;
   String? starting;
   String? comment;
-  final List<int> nags = [];
+
+  /// Null until the move has one: most have none.
+  List<int>? nags;
   final List<_Node> children = [];
+
+  /// The finished move, once [_freeze] has made it.
+  MoveNode? frozen;
 }
 
 /// One level of variation: where the next move goes, and where the last one
@@ -132,7 +137,7 @@ final class _Moves {
     }
     return (
       tree: GameTree(
-        rootFen: Fen(root.fen),
+        rootFen: fenOf(root),
         rootComment: _rootComment,
         children: _freeze(_top),
       ),
@@ -149,13 +154,15 @@ final class _Moves {
       _say(at, (l, c) => IllegalMove(spelling, line: l, column: c));
       return null;
     }
-    final (next, san) = position.makeSan(move);
+    // [_parsed] answers only a legal move, so it is not checked again.
+    final (next, written) = position.makeSanUnchecked(move);
+    final san = _sans[written] ??= written;
     return _Node(
       MoveNode(
         san: san,
         spelling: san == spelling ? null : spelling,
-        uci: move.uci,
-        fen: Fen(next.fen),
+        uci: _uciOf(move),
+        fen: fenOf(next),
       ),
       next,
     );
@@ -209,7 +216,7 @@ final class _Moves {
       _say(at, (l, c) => StrayAnnotation(line: l, column: c));
       return;
     }
-    node.nags.add(value);
+    (node.nags ??= []).add(value);
   }
 
   void _openVariation(int at) {
@@ -252,6 +259,18 @@ final class _Moves {
   }
 }
 
+/// Each SAN read so far, so that a move played in a thousand games is one
+/// string in all of them: a file of ten thousand games holds a million
+/// moves and only a few thousand different ones.
+final _sans = <String, String>{};
+
+/// The same for a move's UCI, by the squares it is between.
+final _ucis = List<String?>.filled(64 * 64, null);
+
+String _uciOf(Move move) => move is NormalMove && move.promotion == null
+    ? _ucis[move.from * 64 + move.to] ??= move.uci
+    : move.uci;
+
 /// Two comments in a row are one comment: `{a} {b}` and `{a b}` say the same
 /// thing to every reader, and joining them is what lets a game with either
 /// come back as itself.
@@ -272,18 +291,19 @@ List<MoveNode> _freeze(List<_Node> nodes) {
     order.add(node);
     pending.addAll(node.children);
   }
-  final made = <_Node, MoveNode>{};
   for (final node in order.reversed) {
-    made[node] = node.built.copyWith(
+    final nags = node.nags;
+    final children = node.children;
+    node.frozen = node.built.copyWith(
       startingComment: node.starting,
       comment: node.comment,
-      nags: List.unmodifiable(node.nags),
-      children: List.unmodifiable([
-        for (final child in node.children) made[child]!,
-      ]),
+      nags: nags == null ? const [] : List.unmodifiable(nags),
+      children: children.isEmpty
+          ? const []
+          : List.unmodifiable([for (final child in children) child.frozen!]),
     );
   }
-  return List.unmodifiable([for (final node in nodes) made[node]!]);
+  return List.unmodifiable([for (final node in nodes) node.frozen!]);
 }
 
 /// The move [spelling] names in [position], or null when it names none.

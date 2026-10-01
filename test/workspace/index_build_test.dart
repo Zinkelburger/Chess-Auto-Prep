@@ -52,6 +52,35 @@ void main() {
     }
   });
 
+  test('a file opened showing one game is indexed from the moves read on '
+      'the other isolate, not read here a game at a time', () async {
+    final text = bigChapter(games: 1500);
+    final shown = await readChapterShowing(name: 'games', text: text, game: 0);
+    final build = IndexBuild.ofLines(shown.lines);
+    // Waiting for the moves to arrive, the build has asked no game for its.
+    await Future<void>.delayed(Duration.zero);
+    final unread = shown.lines.where((line) => !line.isRead).length;
+    // All but the game shown, which the chapter read for the board.
+    expect(unread, anyOf(0, shown.lines.length - 1));
+    final index = (await build.result)!;
+    final whole = OpeningIndex.of([for (final line in shown.lines) line.text]);
+    expect(index.gameCount, 1500);
+    expect(movesOf(index.answer(afterD4D5)), movesOf(whole.answer(afterD4D5)));
+  });
+
+  test('a build stopped while the moves are on their way indexes '
+      'nothing', () async {
+    final text = bigChapter(games: 1500);
+    final shown = await readChapterShowing(name: 'games', text: text, game: 0);
+    final progress = <int>[];
+    final build = IndexBuild.ofLines(shown.lines, onProgress: progress.add);
+    build.cancel();
+    expect(await build.result, isNull);
+    await movesBeingRead(shown.lines);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(progress, isEmpty);
+  });
+
   test('a build stopped answers null and indexes no further', () async {
     final lines = parseChapter(
       name: 'games',

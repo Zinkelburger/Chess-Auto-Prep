@@ -182,11 +182,11 @@ final class GameTree {
   /// comes to it — or null when the main line never does.
   NodePath? mainLineTo(Fen fen) {
     final wanted = fen.position;
-    var path = const NodePath.root();
-    if (rootFen.position == wanted) return path;
+    if (rootFen.isAt(wanted)) return const NodePath.root();
+    var plies = 0;
     for (var node = children.firstOrNull; node != null;) {
-      path = path.mainChild;
-      if (node.fen.position == wanted) return path;
+      plies++;
+      if (node.fen.isAt(wanted)) return NodePath.of(List.filled(plies, 0));
       node = node.children.firstOrNull;
     }
     return null;
