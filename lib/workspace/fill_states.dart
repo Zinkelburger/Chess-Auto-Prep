@@ -4,7 +4,10 @@ import '../chess/fen.dart';
 import '../chess/generation/evaluation_source.dart';
 import '../chess/generation/mainline_book.dart';
 import '../chess/generation/search_config.dart';
+import '../chess/generation/search_node.dart';
 import '../chess/generation/sources.dart';
+import '../chess/generation/tree_wire_v4_reader.dart';
+import '../diagnostics/log.dart';
 import '../net/chessdb_moves.dart';
 import '../storage/chapter_files.dart';
 
@@ -32,6 +35,7 @@ final class FillRequest {
     this.candidateMoves = 4,
     this.replyFloor = 0.01,
     this.method = SearchMethod.practical,
+    this.evalDepth = fillEvalDepth,
   });
 
   final SearchMethod method;
@@ -44,8 +48,12 @@ final class FillRequest {
   final int candidateMoves;
   final double replyFloor;
 
+  /// The engine depth each position is scored at.
+  final int evalDepth;
+
   bool compatibleWith(FillRequest other) =>
       method == other.method &&
+      evalDepth == other.evalDepth &&
       elo == other.elo &&
       source == other.source &&
       candidateMoves == other.candidateMoves &&
@@ -83,9 +91,48 @@ final class FillRequest {
   );
 }
 
-/// The engine depth every search scores positions at: the old app's
-/// default, and what the shared cache is keyed on.
+/// The first of [trees], newest first, [request] can go on from for
+/// [side]; or, when there is none, why the newest cannot.
+Future<Object> savedSeed(
+  Stream<String> trees,
+  FillRequest request,
+  Side side,
+) async {
+  String? refused;
+  try {
+    await for (final text in trees) {
+      final decoded =
+          await readSearchSeed(
+            text,
+            opponentRating: request.treeRating,
+            side: side,
+            evaluationSource: request.treeSource,
+            evalDepth: request.evalDepth,
+            candidateMoves: request.candidateMoves,
+            replyFloor: request.replyFloor,
+            replyMass: fillReplyMass,
+            maxReplies: fillMaxReplies,
+          ).catchError((Object error) {
+            log.w('resume search', error);
+            return 'The saved search could not be read.';
+          });
+      if (decoded is SearchNode) return decoded;
+      refused ??= decoded as String;
+    }
+  } on Object catch (error) {
+    log.w('resume search', error);
+    refused ??= 'The saved search could not be read.';
+  }
+  return refused ?? 'No saved search starts at this board position.';
+}
+
+/// The engine depth a search scores positions at unless the Expectimax
+/// tab asks for another; the shared cache is keyed on the depth.
 const fillEvalDepth = 14;
+
+/// The range the engine depth may be set to.
+const minFillEvalDepth = 1;
+const maxFillEvalDepth = 40;
 
 /// One user-started search adds at most this many positions, under the interactive branching policy.
 const fillNodeBudget = 25000;

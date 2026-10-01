@@ -80,7 +80,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(OutlinePanel), findsOneWidget);
       if (find.text('Train').evaluate().isEmpty) {
-        await tester.tap(find.byTooltip('Open tab'));
+        await tester.tap(find.byTooltip('Open tab').first);
         await tester.pumpAndSettle();
       }
       await tester.tap(find.text('Train'));
@@ -89,6 +89,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(w.lineTrainer.board.value, isNotNull);
       expect(find.byType(OutlinePanel), findsNothing);
+      await tester.ensureVisible(find.text('Back to lines'));
       await tester.tap(find.text('Back to lines'));
       await tester.pumpAndSettle();
       expect(find.byType(OutlinePanel), findsOneWidget);
@@ -102,7 +103,7 @@ void main() {
     await pump(tester);
     await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Open tab'));
+    await tester.tap(find.byTooltip('Open tab').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Train'));
     w.lineTrainer.show();
@@ -128,7 +129,7 @@ void main() {
     await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
     if (find.text('Train').evaluate().isEmpty) {
-      await tester.tap(find.byTooltip('Open tab'));
+      await tester.tap(find.byTooltip('Open tab').first);
       await tester.pumpAndSettle();
     }
     await tester.tap(find.text('Train'));
@@ -332,7 +333,7 @@ void main() {
     await pump(tester);
     await tester.tap(inLibrary(find.text('Main')).last);
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Open tab'));
+    await tester.tap(find.byTooltip('Open tab').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Replies'));
     await tester.pumpAndSettle();
@@ -444,7 +445,7 @@ void main() {
     await tester.tap(inLibrary(find.text('Main')).last);
     await tester.pumpAndSettle();
     if (find.text('Train').evaluate().isEmpty) {
-      await tester.tap(find.byTooltip('Open tab'));
+      await tester.tap(find.byTooltip('Open tab').first);
       await tester.pumpAndSettle();
     }
     await tester.tap(find.text('Train'));

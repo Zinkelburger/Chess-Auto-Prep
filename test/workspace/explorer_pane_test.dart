@@ -191,7 +191,7 @@ void main() {
   });
 
   testWidgets('the databases sit side by side at the top; Filters unfolds '
-      'the chosen one\'s chips and says what they are set to', (tester) async {
+      'the chosen one\'s chips and is always called Filters', (tester) async {
     await show(tester);
     expect(find.text('Masters'), findsOneWidget);
     expect(find.text('TWIC'), findsOneWidget);
@@ -200,9 +200,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(settings.value.explorer.source, ExplorerSource.lichess);
     expect(lichess.asked.last.choice.source, ExplorerSource.lichess);
-    expect(find.text('Blitz Rapid Classical · 2000+'), findsOneWidget);
+    expect(find.text('Blitz Rapid Classical · 2000+'), findsNothing);
     expect(find.text('Speed'), findsNothing, reason: 'folded');
-    await tester.tap(find.text('Blitz Rapid Classical · 2000+'));
+    await tester.tap(find.text('Filters'));
     await tester.pumpAndSettle();
     expect(find.text('Speed'), findsOneWidget);
     await tester.tap(find.text('Bullet'));
@@ -214,10 +214,7 @@ void main() {
     await tester.tap(find.text('Filters'));
     await tester.pumpAndSettle();
     expect(find.text('Speed'), findsNothing);
-    expect(
-      find.text('Bullet Blitz Rapid Classical · 1600 2000 2200 2500'),
-      findsOneWidget,
-    );
+    expect(find.text('Filters'), findsOneWidget, reason: 'not the settings');
     await tester.tap(find.text('TWIC'));
     await tester.pumpAndSettle();
     expect(settings.value.explorer.source, ExplorerSource.twic);

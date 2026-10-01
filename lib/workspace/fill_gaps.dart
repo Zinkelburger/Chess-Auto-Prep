@@ -17,7 +17,6 @@ import '../chess/generation/search_result.dart';
 import '../chess/generation/sources.dart';
 import '../chess/generation/traps.dart';
 import '../chess/generation/tree_wire_v4.dart';
-import '../chess/generation/tree_wire_v4_reader.dart';
 import '../chess/pgn/chapter.dart';
 import '../chess/pgn/chapter_heading.dart';
 import '../chess/pgn/game_tree.dart';
@@ -192,6 +191,9 @@ final class FillGaps extends ChangeNotifier {
 
   int rootMoves = 4;
   int candidateMoves = 4;
+
+  /// The engine depth the next search scores positions at.
+  int evalDepth = fillEvalDepth;
   double replyFloor = 0.01;
   final _history = <FillFound>[];
   FillRequest? _activeRequest;
@@ -339,7 +341,10 @@ final class FillGaps extends ChangeNotifier {
     );
     seed ??= nodeAtBoard(request: request);
     _remember();
-    if (_activeRequest?.source != request.source) _engineDepths.clear();
+    if (_activeRequest?.source != request.source ||
+        _activeRequest?.evalDepth != request.evalDepth) {
+      _engineDepths.clear();
+    }
     _activeRequest = request;
     _followEnabled = true;
     _active = true;
@@ -371,22 +376,33 @@ final class FillGaps extends ChangeNotifier {
     return null;
   }
 
+  /// The next search as the Expectimax tab has it set, against [elo].
+  FillRequest requestFor(int elo) => FillRequest(
+    elo: elo,
+    depthPlies: depth,
+    source: source,
+    rootMoves: rootMoves,
+    candidateMoves: candidateMoves,
+    replyFloor: replyFloor,
+    method: method,
+    evalDepth: evalDepth,
+  );
+
   /// Continue the newest tree from this board whose settings match, including
-  /// after restart: values of different settings are never mixed.
-  Future<String?> resume(FillRequest request) async {
+  /// after restart: values of different settings are never mixed. With
+  /// [orAfresh], the Expectimax button, a board with nothing to continue is
+  /// searched from nothing.
+  Future<String?> resume(FillRequest request, {bool orAfresh = false}) async {
     if (!canStart) return 'Finish the current search or save first.';
     final source = _session.source;
     final fen = _session.fen;
     final side = _session.orientation;
-    var seed = nodeAtBoard(request: request);
+    Object? seed = nodeAtBoard(request: request);
     if (seed == null) {
       final load = _loadTree;
-      if (source == null || load == null) {
-        return 'No saved search is available for this board.';
-      }
-      final saved = await _savedSeed(load(source, fen), request, side);
-      if (saved is! SearchNode) return saved as String;
-      seed = saved;
+      seed = source == null || load == null
+          ? 'No saved search is available for this board.'
+          : await savedSeed(load(source, fen), request, side);
     }
     if (_session.source != source ||
         _session.fen != fen ||
@@ -394,42 +410,10 @@ final class FillGaps extends ChangeNotifier {
         !canStart) {
       return 'The board changed while loading the search.';
     }
-    return start(request, seed: seed);
-  }
-
-  /// The first of [trees], newest first, [request] can go on from for
-  /// [side]; or, when there is none, why the newest cannot.
-  Future<Object> _savedSeed(
-    Stream<String> trees,
-    FillRequest request,
-    Side side,
-  ) async {
-    String? refused;
-    try {
-      await for (final text in trees) {
-        final decoded =
-            await readSearchSeed(
-              text,
-              opponentRating: request.treeRating,
-              side: side,
-              evaluationSource: request.treeSource,
-              evalDepth: fillEvalDepth,
-              candidateMoves: request.candidateMoves,
-              replyFloor: request.replyFloor,
-              replyMass: fillReplyMass,
-              maxReplies: fillMaxReplies,
-            ).catchError((Object error) {
-              log.w('resume search', error);
-              return 'The saved search could not be read.';
-            });
-        if (decoded is SearchNode) return decoded;
-        refused ??= decoded as String;
-      }
-    } on Object catch (error) {
-      log.w('resume search', error);
-      refused ??= 'The saved search could not be read.';
-    }
-    return refused ?? 'No saved search starts at this board position.';
+    if (seed is SearchNode) return start(request, seed: seed);
+    if (!orAfresh) return seed as String;
+    log.i('search afresh: $seed');
+    return start(request);
   }
 
   Future<void> _run(
@@ -598,7 +582,7 @@ final class FillGaps extends ChangeNotifier {
       tree,
       config,
       complete: complete,
-      evalDepth: fillEvalDepth,
+      evalDepth: request.evalDepth,
       opponentRating: request.treeRating,
       evaluationSource: request.treeSource,
     );
