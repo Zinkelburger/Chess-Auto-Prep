@@ -170,7 +170,6 @@ class PaneTabStrip<K extends Object> extends StatefulWidget {
     this.onClose,
     this.onAdd,
     this.connected = false,
-    this.label,
     this.showAdd = true,
     this.onContextMenu,
     this.onDragStarted,
@@ -187,7 +186,6 @@ class PaneTabStrip<K extends Object> extends StatefulWidget {
   final ValueChanged<K>? onSelect;
   final ValueChanged<K>? onClose;
   final VoidCallback? onAdd;
-  final String? label;
   final bool showAdd;
   final void Function(K, Offset)? onContextMenu;
   final ValueChanged<PaneTabDrag<K>>? onDragStarted;
@@ -257,14 +255,6 @@ class _PaneTabStripState<K extends Object> extends State<PaneTabStrip<K>>
       height: paneTabHeight,
       child: Row(
         children: [
-          if (widget.label != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: Space.m),
-              child: Text(
-                widget.label!,
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
-            ),
           Flexible(
             child: Listener(
               onPointerSignal: _wheel,

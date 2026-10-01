@@ -197,9 +197,13 @@ void main() {
         receipt.committed.contentHash,
         (await unflushed.revisionOf(ref)).contentHash,
       );
+      // Windows never flushes a folder, so it has nothing to warn about.
       expect(
         logged.map((entry) => entry.level),
-        allOf(contains(LogLevel.warning), isNot(contains(LogLevel.error))),
+        allOf(
+          Platform.isWindows ? anything : contains(LogLevel.warning),
+          isNot(contains(LogLevel.error)),
+        ),
       );
 
       final second = await unflushed.edit(ref, theirs, receipt.committed);

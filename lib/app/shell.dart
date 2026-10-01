@@ -689,7 +689,6 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
               child: Column(
                 children: [
                   PaneTabStrip(
-                    label: 'View Tabs',
                     tabs: _requests.documents.tabs,
                     onSelect: (id) => unawaited(_requests.documents.select(id)),
                     onClose: (id) => unawaited(_requests.documents.close(id)),
