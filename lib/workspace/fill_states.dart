@@ -1,5 +1,6 @@
 import 'package:dartchess/dartchess.dart' show Side;
 
+import '../chess/explorer_choice.dart';
 import '../chess/fen.dart';
 import '../chess/generation/eval.dart';
 import '../chess/generation/evaluation_source.dart';
@@ -16,7 +17,8 @@ import '../net/chessdb_moves.dart';
 import '../storage/chapter_files.dart';
 import '../storage/settings.dart';
 
-export '../chess/generation/expectimax_options.dart' show SearchMethod;
+export '../chess/generation/expectimax_options.dart'
+    show ReplySource, SearchMethod;
 
 /// What a search is asked for: the opponent's rating and how deep to go.
 ///
@@ -33,6 +35,9 @@ final class FillRequest {
     this.replyFloor = 0.01,
     this.method = SearchMethod.practical,
     this.evalDepth = fillEvalDepth,
+    this.replies = ReplySource.maia,
+    this.fallbackUnder,
+    this.lichess = const ExplorerChoice(source: ExplorerSource.lichess),
   });
 
   /// The next search as [settings] have it: the Expectimax tab's button,
@@ -47,6 +52,11 @@ final class FillRequest {
         replyFloor: settings.expectimax.replyFloor,
         method: settings.expectimax.method,
         evalDepth: settings.expectimax.evalDepth,
+        replies: settings.expectimax.replies,
+        fallbackUnder: settings.expectimax.maiaFallback
+            ? settings.expectimax.fallbackUnder
+            : null,
+        lichess: settings.explorer.copyWith(source: ExplorerSource.lichess),
       );
 
   final SearchMethod method;
@@ -62,8 +72,36 @@ final class FillRequest {
   /// The engine depth each position is scored at.
   final int evalDepth;
 
+  /// Where the opponent's replies come from.
+  final ReplySource replies;
+
+  /// A database with fewer games than this at a position leaves it to
+  /// Maia; null never does. Nothing to Maia itself.
+  final int? fallbackUnder;
+
+  /// The Lichess games asked when they are the [replies]: the speeds and
+  /// ratings the Explorer tab is narrowed to.
+  final ExplorerChoice lichess;
+
+  /// The opponent in one word a saved tree can be matched on: a tree's
+  /// replies are never continued from another source, another narrowing of
+  /// it or another fallback. `maia`, `masters+maia<10`,
+  /// `lichess:Blitz,Rapid:2200,2500`.
+  String get replyKey {
+    final source = switch (replies) {
+      ReplySource.lichess =>
+        'lichess:${lichess.speedsInOrder.map((s) => s.title).join(',')}:'
+            '${lichess.ratingsInOrder.join(',')}',
+      _ => replies.name,
+    };
+    return replies == ReplySource.maia || fallbackUnder == null
+        ? source
+        : '$source+maia<$fallbackUnder';
+  }
+
   bool compatibleWith(FillRequest other) =>
       method == other.method &&
+      replyKey == other.replyKey &&
       evalDepth == other.evalDepth &&
       elo == other.elo &&
       source == other.source &&
@@ -118,6 +156,7 @@ Future<Object> savedSeed(
             opponentRating: request.treeRating,
             side: side,
             evaluationSource: request.treeSource,
+            replySource: request.replyKey,
             evalDepth: request.evalDepth,
             candidateMoves: request.candidateMoves,
             replyFloor: request.replyFloor,

@@ -28,6 +28,8 @@ class ChoiceField extends StatefulWidget {
     this.onChanged,
     this.onSubmitted,
     required this.hint,
+    this.label,
+    this.enabled = true,
   });
 
   final String text;
@@ -40,6 +42,13 @@ class ChoiceField extends StatefulWidget {
 
   /// What goes in the box, such as `Field` or `Value`.
   final String hint;
+
+  /// The field's name, written on its border where nothing beside it
+  /// names it.
+  final String? label;
+
+  /// False while the choice cannot change: shown, not typed into.
+  final bool enabled;
 
   /// How many suggestions show at once.
   static const shown = 20;
@@ -124,6 +133,7 @@ class _ChoiceFieldState extends State<ChoiceField> {
             builder: (context, value, _) => TextField(
               controller: controller,
               focusNode: focus,
+              enabled: widget.enabled,
               onChanged: widget.onChanged,
               onSubmitted: (text) => _submit(text, submit),
               // The body size, as the search box: a field in a row of
@@ -132,6 +142,10 @@ class _ChoiceFieldState extends State<ChoiceField> {
               decoration: InputDecoration(
                 isDense: true,
                 hintText: widget.hint,
+                labelText: widget.label,
+                floatingLabelBehavior: widget.label == null
+                    ? null
+                    : FloatingLabelBehavior.always,
                 prefixIcon: value.text.isEmpty
                     ? const Icon(Icons.search, size: IconSize.menu)
                     : null,

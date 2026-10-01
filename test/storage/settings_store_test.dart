@@ -65,6 +65,9 @@ void main() {
           rootMoves: 8,
           rareOnceIn: 0,
           source: EvaluationSource.chessDb,
+          replies: ReplySource.lichess,
+          maiaFallback: false,
+          fallbackUnder: 25,
         ),
       );
       expect(Settings.fromJson(chosen.toJson()), chosen);

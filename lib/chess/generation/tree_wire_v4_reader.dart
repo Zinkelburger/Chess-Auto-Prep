@@ -533,7 +533,7 @@ int? _limit(int? value, int unbounded) =>
 /// on another isolate; or why it cannot be one — a sentence for the screen.
 ///
 /// A seed must have been built with the same [evaluationSource],
-/// [opponentRating] and [evalDepth], for [side], with no loss window and
+/// [replySource], [opponentRating] and [evalDepth], for [side], with no loss window and
 /// no pins: a tree built otherwise holds values this search would not have
 /// given, and mixing the two would change what the tree means. A finished
 /// exhaustive tree (an MCP chapter search) seeds a run; a shortlisted one
@@ -547,6 +547,7 @@ Future<Object> readSearchSeed(
   required Side side,
   required String evaluationSource,
   required int evalDepth,
+  String replySource = maiaReplySource,
   int candidateMoves = 4,
   double replyFloor = 0.01,
   double? replyMass,
@@ -561,6 +562,9 @@ Future<Object> readSearchSeed(
   if (json is Map<String, Object?>) {
     if ((json['v2_evaluation_source'] ?? 'stockfish') != evaluationSource) {
       return 'Choose the evaluation source used by this saved search.';
+    }
+    if ((json['v2_reply_source'] ?? maiaReplySource) != replySource) {
+      return 'Choose the reply source used by this saved search.';
     }
     final config = json['config'];
     if (config is! Map ||

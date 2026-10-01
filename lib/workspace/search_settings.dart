@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../chess/explorer_choice.dart';
 import '../chess/generation/evaluation_source.dart';
 import '../chess/generation/expectimax_options.dart';
 import '../storage/settings.dart';
@@ -13,6 +14,24 @@ import '../ui/theme.dart';
 /// the same way behind the tab's gear and in Settings ▸ Expectimax.
 abstract final class SearchSettingCopy {
   static const depth = ('Depth', 'half-moves searched from the board');
+  static const replies = (
+    'Replies from',
+    'where the opponent\'s replies and how often come from',
+  );
+  static const fallback = ('Fall back to Maia under', 'games at a position');
+
+  /// The reply sources by the names the Explorer tab gives them.
+  static const replySources = [
+    (ReplySource.maia, 'Maia'),
+    (ReplySource.masters, 'Masters'),
+    (ReplySource.lichess, 'Lichess'),
+    (ReplySource.twic, 'TWIC'),
+  ];
+
+  /// The Lichess games [choice] is narrowed to: `Blitz Rapid · 2200 2500`.
+  static String lichessGames(ExplorerChoice choice) =>
+      '${choice.speedsInOrder.map((s) => s.title).join(' ')} · '
+      '${choice.ratingsInOrder.join(' ')}';
   static const rating = ('Maia rating', 'opponent replies at this Elo');
   static const rootMoves = ('First move', 'our best engine moves searched');
   static const candidateMoves = (
@@ -88,6 +107,58 @@ class SearchSettingsView extends StatelessWidget {
     ),
   );
 
+  /// The tick that lets Maia answer where the database has too few games,
+  /// and how few that is.
+  Widget _fallback(ExpectimaxOptions e) => _SettingLine(
+    copy: SearchSettingCopy.fallback,
+    leading: Checkbox(
+      value: e.maiaFallback,
+      semanticLabel: 'Fall back to Maia',
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      onChanged: locked
+          ? null
+          : (on) => _change((o) => o.copyWith(maiaFallback: on ?? false)),
+    ),
+    control: SearchNumberBox(
+      name: SearchSettingCopy.fallback.$1,
+      value: e.fallbackUnder,
+      min: 1,
+      max: ExpectimaxOptions.maxFallbackUnder,
+      enabled: !locked && e.maiaFallback,
+      onChanged: (n) => _change((o) => o.copyWith(fallbackUnder: n)),
+      onProblem: onProblem,
+    ),
+  );
+
+  /// Who answers for the opponent besides the bar's choice: which Lichess
+  /// games, whether Maia fills in, and Maia's rating where it is asked.
+  List<Widget> _opponent(Settings s) {
+    final e = s.expectimax;
+    return [
+      if (e.replies == ReplySource.lichess)
+        _SettingLine(
+          copy: (
+            'Lichess games',
+            '${SearchSettingCopy.lichessGames(s.explorer)}, from the '
+                'Explorer tab',
+          ),
+        ),
+      if (e.replies != ReplySource.maia) _fallback(e),
+      // Maia's rating means nothing where Maia is never asked.
+      if (e.replies == ReplySource.maia || e.maiaFallback)
+        _number(
+          SearchSettingCopy.rating,
+          value: s.opponentElo,
+          min: Settings.minElo,
+          max: Settings.maxElo,
+          onChanged: (n) => unawaited(
+            settings.update(settings.value.copyWith(opponentElo: n)),
+          ),
+        ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = settings.value;
@@ -115,15 +186,7 @@ class SearchSettingsView extends StatelessWidget {
         ),
         if (e.method == SearchMethod.practical) ...[
           const SizedBox(height: Space.s),
-          _number(
-            SearchSettingCopy.rating,
-            value: s.opponentElo,
-            min: Settings.minElo,
-            max: Settings.maxElo,
-            onChanged: (n) => unawaited(
-              settings.update(settings.value.copyWith(opponentElo: n)),
-            ),
-          ),
+          ..._opponent(s),
           _number(
             SearchSettingCopy.rootMoves,
             value: e.rootMoves,
@@ -170,10 +233,13 @@ class SearchSettingsView extends StatelessWidget {
 
 /// A setting's name over its one line, with its box at the row's end.
 class _SettingLine extends StatelessWidget {
-  const _SettingLine({required this.copy, this.control});
+  const _SettingLine({required this.copy, this.control, this.leading});
 
   final (String, String) copy;
   final Widget? control;
+
+  /// A tick box before the name, where the row is turned on and off.
+  final Widget? leading;
 
   @override
   Widget build(BuildContext context) {
@@ -184,6 +250,10 @@ class _SettingLine extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: Space.xs),
         child: Row(
           children: [
+            if (leading case final leading?) ...[
+              leading,
+              const SizedBox(width: Space.s),
+            ],
             Expanded(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
