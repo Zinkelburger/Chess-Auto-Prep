@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../chess/game_filter.dart';
 import '../chess/fen.dart';
+import '../chess/pgn/chapter.dart' show movesBeingRead;
 import '../chess/pgn/chapter_line.dart';
 import '../chess/pgn/game_text.dart';
 import '../storage/chapter_files.dart';
@@ -158,19 +159,37 @@ final class FileFilter extends ChangeNotifier {
       _kept = 0;
       _busy = true;
       final moves = _applied.position != null || _applied.readsMoves;
-      final run = _run = FilterRun.start(
-        [for (final line in _lines) line.tags],
-        _applied,
-        timeout: moves ? const Duration(seconds: 15) : timeout,
-        trees: moves ? [for (final line in _lines) line.tree] : null,
-      );
-      unawaited(_receive(run));
+      // A file just opened may still have its games' moves on their way
+      // from the isolate reading them; a search of the moves starts when
+      // they are here rather than read every game on this one.
+      final read = moves ? movesBeingRead(_lines) : null;
+      if (read == null) {
+        _start(moves: moves);
+      } else {
+        final revision = _revision;
+        unawaited(
+          read.whenComplete(() {
+            if (_disposed || revision != _revision || _run != null) return;
+            _start(moves: moves);
+          }),
+        );
+      }
       return;
     }
     _accept([
       for (final line in _lines)
         _applied.keeps((header) => tagValue(line.tags, header)),
     ]);
+  }
+
+  void _start({required bool moves}) {
+    final run = _run = FilterRun.start(
+      [for (final line in _lines) line.tags],
+      _applied,
+      timeout: moves ? const Duration(seconds: 15) : timeout,
+      trees: moves ? [for (final line in _lines) line.tree] : null,
+    );
+    unawaited(_receive(run));
   }
 
   /// Small literal filters remain immediate. Regex, positions and move

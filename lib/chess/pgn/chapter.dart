@@ -147,6 +147,89 @@ Future<Chapter> readChapter({
     ? Future.value(parseChapter(name: name, text: text, game: game))
     : Isolate.run(() => parseChapter(name: name, text: text, game: game));
 
+/// [text] as a chapter showing its game [game], back as soon as that game
+/// can be shown and the others listed.
+///
+/// A file of thousands of games takes seconds to read whole, nearly all of
+/// it replaying moves of games nobody is looking at. So a large file is cut
+/// into its games and only their headers are read before this answers; the
+/// game on the board reads its own moves when they are asked for
+/// ([ChapterLine.unread]). The moves of every game are read meanwhile on
+/// another isolate and handed to the same lines when they are done, and
+/// [movesBeingRead] says when that is, for whoever needs them all.
+///
+/// The chapter is the one [readChapter] gives. A small file is read whole.
+Future<Chapter> readChapterShowing({
+  required String name,
+  required String text,
+  required int game,
+}) async {
+  if (text.length < readOffThreadFrom) {
+    return parseChapter(name: name, text: text, game: game);
+  }
+  // A read that fails leaves each game to read its own moves, which gives
+  // the same answer later: nothing is waited on that cannot be done here.
+  final moves = Isolate.run(() => _gamesRead(text))..ignore();
+  final heads = await Isolate.run(() => _headsRead(text));
+  final lines = List<ChapterLine>.unmodifiable([
+    for (final (index, span) in heads.games.indexed)
+      ChapterLine.unread(
+        tags: heads.tags[index],
+        text: span.text,
+        trailer: span.trailer,
+      ),
+  ]);
+  final taken = _take(lines, moves);
+  for (final line in lines) {
+    _reading[line] = taken;
+  }
+  return _built(name: name, preamble: heads.preamble, lines: lines, game: game);
+}
+
+/// The reading on its way to each line made by [readChapterShowing].
+final _reading = Expando<Future<void>>('moves being read');
+
+/// Completes when the moves on their way to [lines] from another isolate
+/// have arrived; null when none are, and asking each line for its moves
+/// costs only what it has not read. Work over every game's moves waits for
+/// this rather than read them here, a game at a time, while the same
+/// reading is about to be handed over.
+Future<void>? movesBeingRead(List<ChapterLine> lines) {
+  final waits = <Future<void>>{
+    for (final line in lines)
+      if (!line.isRead) ?_reading[line],
+  };
+  return waits.isEmpty ? null : Future.wait(waits);
+}
+
+Future<void> _take(
+  List<ChapterLine> lines,
+  Future<List<GameRead>> moves,
+) async {
+  try {
+    final read = await moves;
+    for (final (index, line) in lines.indexed) {
+      line.take(read[index]);
+    }
+  } on Object {
+    // See [readChapterShowing]: the lines read themselves.
+  }
+}
+
+({String preamble, List<GameSpan> games, List<List<PgnHeader>> tags})
+_headsRead(String text) {
+  final document = splitChapterText(text);
+  return (
+    preamble: document.preamble,
+    games: document.games,
+    tags: [for (final span in document.games) readHeaders(span.text)],
+  );
+}
+
+List<GameRead> _gamesRead(String text) => [
+  for (final span in splitChapterText(text).games) readGame(span.text),
+];
+
 /// Below this many characters or bytes, work that reads every one of them —
 /// parsing a chapter, decoding a file, encoding and hashing text, comparing
 /// two versions game by game — is done on the calling isolate: the trip to

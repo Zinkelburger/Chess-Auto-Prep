@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:isolate';
 
 import '../chess/opening_index.dart';
-import '../chess/pgn/chapter.dart' show readOffThreadFrom;
+import '../chess/pgn/chapter.dart' show movesBeingRead, readOffThreadFrom;
 import '../chess/pgn/chapter_line.dart';
 
 /// One [OpeningIndex] being built, which can be stopped.
@@ -35,6 +35,14 @@ final class IndexBuild {
         lines.forEach(index.addLine);
         build._finish(index.build());
       });
+    } else if (movesBeingRead(lines) case final read?) {
+      // The games' moves are on their way from the isolate reading them:
+      // walking them now would read each one here instead.
+      unawaited(
+        read.whenComplete(() {
+          if (!build._cancelled) build._nextTurn(lines, index, 0, onProgress);
+        }),
+      );
     } else {
       build._nextTurn(lines, index, 0, onProgress);
     }

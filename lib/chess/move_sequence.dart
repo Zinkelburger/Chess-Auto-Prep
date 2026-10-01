@@ -78,6 +78,9 @@ final class MoveSequence {
   }
 
   static bool _playsAt(List<String> line, List<String> moves, int start) {
+    // A sequence tied to the first move is tried there even in a game with
+    // fewer moves than it has.
+    if (start + moves.length > line.length) return false;
     for (var i = 0; i < moves.length; i++) {
       if (line[start + i] != moves[i]) return false;
     }
