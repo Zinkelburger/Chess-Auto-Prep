@@ -23,6 +23,12 @@ import '../support/session_fixture.dart';
 /// White king and pawn against a bare king: few moves, so a run is small.
 const kingAndPawn = '4k3/8/8/8/8/8/4P3/4K3 w - - 0 1';
 
+/// Shows the search settings folded under Settings.
+Future<void> unfold(WidgetTester tester) async {
+  await tester.tap(find.text('Settings'));
+  await tester.pump();
+}
+
 void main() {
   late SessionFixture fixture;
   late EngineAnalysis analysis;
@@ -189,6 +195,12 @@ void main() {
     tester,
   ) async {
     await pump(tester);
+    expect(
+      find.widgetWithText(TextField, 'Depth'),
+      findsNothing,
+      reason: 'folded under Settings',
+    );
+    await unfold(tester);
     for (final label in [
       'Engine depth',
       'Maia rating',
@@ -221,6 +233,7 @@ void main() {
   /// Runs a search two plies deep from the board, on real time.
   Future<void> searched(WidgetTester tester) async {
     await pump(tester);
+    await unfold(tester);
     await tester.enterText(find.widgetWithText(TextField, 'Depth'), '2');
     await tester.pumpAndSettle();
     await tester.runAsync(() async {
@@ -255,6 +268,7 @@ void main() {
     tester,
   ) async {
     await pump(tester);
+    await unfold(tester);
     await tester.enterText(find.widgetWithText(TextField, 'Depth'), '2');
     await tester.enterText(find.widgetWithText(TextField, 'Root moves'), '6');
     await tester.pumpAndSettle();

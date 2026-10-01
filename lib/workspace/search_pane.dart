@@ -15,6 +15,7 @@ import '../engines/engine_line.dart' show Centipawns;
 import '../storage/chapter_files.dart';
 import '../storage/settings.dart';
 import '../storage/settings_store.dart';
+import '../ui/fold_button.dart';
 import '../ui/listening_state.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
@@ -90,6 +91,9 @@ class _SearchPaneState extends State<SearchPane>
   /// Why the last press of Search did nothing: a number out of range or a
   /// refusal. Cleared by the next press.
   String? _problem;
+
+  /// Whether the search settings show; folded, the table keeps the room.
+  bool _unfolded = false;
 
   /// The run and the position the rows are for.
   (FillTarget?, Fen)? _rowsFor;
@@ -420,64 +424,92 @@ class _SearchPaneState extends State<SearchPane>
         };
     return Padding(
       padding: const EdgeInsets.fromLTRB(Space.m, Space.m, Space.m, Space.s),
-      child: Wrap(
-        spacing: Space.s,
-        runSpacing: Space.s,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ..._settingsFields(),
-          if (running == null) ...[
-            Tooltip(
-              message: AppKey.search.tip(
-                resumable
-                    ? 'Go on from the search at this board'
-                    : 'Search from the board',
-              ),
-              child: FilledButton.icon(
-                onPressed: fill.canStart ? () => unawaited(_search()) : null,
-                icon: const Icon(Icons.play_arrow),
-                label: Text(switch ((resumable, _book)) {
-                  (true, true) => 'Resume build',
-                  (true, false) => 'Resume expectimax',
-                  (false, true) => 'Build',
-                  (false, false) => 'Expectimax',
-                }),
-              ),
-            ),
-          ] else ...[
-            // A search with a depth ends there by itself.
-            if (running.of == null) ...[
-              Tooltip(
-                message:
-                    'Score every position at this depth, then stop and '
-                    'keep the tree',
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.pause),
-                  onPressed: running.stopping || running.lastPly != null
-                      ? null
-                      : fill.finishLevel,
-                  label: Text(
-                    'Stop after finishing depth '
-                    '${running.lastPly ?? (running.depth < 1 ? 1 : running.depth)}',
-                  ),
-                ),
-              ),
-              const SizedBox(width: Space.s),
-            ],
-            Tooltip(
-              message:
-                  'Finish the current position, then stop and keep the results',
-              child: FilledButton.icon(
-                icon: const Icon(Icons.pause),
-                onPressed: running.stopping ? null : fill.finish,
-                label: const Text('Stop'),
-              ),
+          Wrap(
+            spacing: Space.s,
+            runSpacing: Space.s,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [..._actions(fill, running, resumable), _settingsFold()],
+          ),
+          if (_unfolded) ...[
+            const SizedBox(height: Space.s),
+            Wrap(
+              spacing: Space.s,
+              runSpacing: Space.s,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: _settingsFields(),
             ),
           ],
         ],
       ),
     );
   }
+
+  /// The settings fold away under this so the table keeps the room.
+  Widget _settingsFold() => FoldButton(
+    label: 'Settings',
+    unfolded: _unfolded,
+    onPressed: () {
+      if (mounted) setState(() => _unfolded = !_unfolded);
+    },
+  );
+
+  /// Start or resume while idle; the two stops while running.
+  List<Widget> _actions(
+    FillGaps fill,
+    FillRunning? running,
+    bool resumable,
+  ) => [
+    if (running == null) ...[
+      Tooltip(
+        message: AppKey.search.tip(
+          resumable
+              ? 'Go on from the search at this board'
+              : 'Search from the board',
+        ),
+        child: FilledButton.icon(
+          onPressed: fill.canStart ? () => unawaited(_search()) : null,
+          icon: const Icon(Icons.play_arrow),
+          label: Text(switch ((resumable, _book)) {
+            (true, true) => 'Resume build',
+            (true, false) => 'Resume expectimax',
+            (false, true) => 'Build',
+            (false, false) => 'Expectimax',
+          }),
+        ),
+      ),
+    ] else ...[
+      // A search with a depth ends there by itself.
+      if (running.of == null) ...[
+        Tooltip(
+          message:
+              'Score every position at this depth, then stop and '
+              'keep the tree',
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.pause),
+            onPressed: running.stopping || running.lastPly != null
+                ? null
+                : fill.finishLevel,
+            label: Text(
+              'Stop after finishing depth '
+              '${running.lastPly ?? (running.depth < 1 ? 1 : running.depth)}',
+            ),
+          ),
+        ),
+        const SizedBox(width: Space.s),
+      ],
+      Tooltip(
+        message: 'Finish the current position, then stop and keep the results',
+        child: FilledButton.icon(
+          icon: const Icon(Icons.pause),
+          onPressed: running.stopping ? null : fill.finish,
+          label: const Text('Stop'),
+        ),
+      ),
+    ],
+  ];
 
   /// One quiet line: how far the search has got, what it did, or what
   /// went wrong.

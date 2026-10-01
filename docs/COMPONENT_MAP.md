@@ -65,10 +65,13 @@ Bughouse mode is offered when its engine assets are present.
   Cleanup is limited to explicitly selected derived data.
 - Generation owns search trees and draft publication; Replies/gaps and Audit
   use the current workspace and chapter revision.
-- The Repertoire builder starts split: Moves over the Explorer on the left,
-  Expectimax on the right (`ActionLayout.startBuilding`). Requests for a tab
+- The Repertoire builder starts with two panes: Moves on the left, Expectimax
+  on the right (`ActionLayout.startBuilding`). As on Lichess, a book button
+  leading the nav row shows the main Explorer under the moves
+  (`ActionLayout.book`, on by default). Requests for a tab
   (`ActionLayout.reveal`) bring it up in the pane that already has it. The
-  Explorer's narrowing sits behind a button always labelled Filters.
+  Explorer's narrowing sits behind a button always labelled Filters, and the
+  Expectimax settings fold under Settings beside its button (`ui/fold_button.dart`).
 - Engine tournaments use the shared supervisor, retryable checkpoints, saved
   history, ratings/crosstables and viewer handoff. Bughouse keeps its own two-board
   screen, Hivemind analysis, archive/book reads and saved matches.

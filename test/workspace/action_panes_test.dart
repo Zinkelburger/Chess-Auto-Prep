@@ -48,26 +48,26 @@ Finder tabIn(int index, String name) =>
     find.descendant(of: pane(index), matching: find.text(name));
 
 void main() {
-  testWidgets('the builder starts with Moves over the Explorer and '
-      'Expectimax beside them, all in view', (tester) async {
+  testWidgets('the builder starts with Moves beside Expectimax and the '
+      'book switched on under the moves', (tester) async {
     final layout = await pumpPanes(tester);
     layout.startBuilding();
     await tester.pumpAndSettle();
-    expect(layout.count, 3);
-    expect(find.text('Body 2 Moves'), findsOneWidget);
-    expect(find.text('Body 0 Explorer'), findsOneWidget);
+    expect(layout.count, 2);
+    expect(layout.book?.value, isTrue);
+    expect(find.text('Body 0 Moves'), findsOneWidget);
     expect(find.text('Body 1 Expectimax'), findsOneWidget);
-    final moves = tester.getRect(pane(2));
-    final explorer = tester.getRect(pane(0));
+    final moves = tester.getRect(pane(0));
     final search = tester.getRect(pane(1));
-    expect(moves.bottom, lessThanOrEqualTo(explorer.top));
-    expect(moves.left, explorer.left);
     expect(search.left, greaterThanOrEqualTo(moves.right));
-    expect(search.height, greaterThan(moves.height));
-    expect(layout.pane(0).isOpen(WorkspaceTab.moves), isFalse);
+    expect(search.height, moves.height);
+    expect(layout.pane(0).isOpen(WorkspaceTab.explorer), isFalse);
+    expect(layout.pane(0).isOpen(WorkspaceTab.search), isFalse);
+    layout.reveal(WorkspaceTab.search);
+    expect(layout.active, 1, reason: 'brought up where it is open');
     expect(layout.pane(0).isOpen(WorkspaceTab.search), isFalse);
     layout.startBuilding();
-    expect(layout.count, 3, reason: 'a second call changes nothing');
+    expect(layout.count, 2, reason: 'a second call changes nothing');
   });
 
   testWidgets(

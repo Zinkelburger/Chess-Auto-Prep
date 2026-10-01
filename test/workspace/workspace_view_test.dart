@@ -315,7 +315,7 @@ void main() {
     layout.pane(0).show(WorkspaceTab.search);
     await tester.pumpAndSettle();
     expect(find.byType(ExplorerPane), findsNWidgets(3));
-    expect(find.widgetWithText(TextField, 'Engine depth'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
