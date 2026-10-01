@@ -30,19 +30,25 @@ layouts last for the current app session and are retained per mode.
 The move-note card beneath the board is directly editable, including the chapter introduction. It uses the
 existing commit-on-navigation editor and guarded document saver.
 
-Expectimax has a play button and inline text fields for Maia rating, root moves,
-candidate count, depth and reply coverage. Root moves (default 4) limits our first
-move to the engine's best; Candidates limits every later move of ours. Both Stop and Stop after finishing depth N carry pause icons; Stop
-finishes the current position, while the other finishes the whole search level.
-The opponent rating and search limit are labelled, and the engine target depth
-is displayed separately. Hover an Engine value for its recorded depth (engine,
-cache or Lichess cloud).
-Depth 14 is the engine target; cache/database results may differ. Per-result
+Expectimax is headed by one bar that never moves (2026-10-01): a button that is
+`Expectimax`, `Pause` or `Resume` in the same place at the same width, the
+`Depth` box (empty is no limit) and a gear. One status line under it says what
+will run (`For White · Maia 2200 · best 4, then 4`), then how far the search has
+got; while a search with no depth runs, `Finish depth N` at the line's end lets
+the level under way finish before pausing. The gear swaps the results in place
+for the rest of the settings, as the engine pane's gear does: Maia practical |
+ChessDB mainline, Maia rating, First move and Later moves (our best engine moves
+searched, default 4 each), Search replies met once in N games, Engine depth and
+Evaluation (Stockfish, ChessDB, Lichess). They are saved in `settings.json`
+(`Settings.expectimax`, with the shared opponent rating) and shown again under
+Settings ▸ Expectimax; a running search shows them without letting them change.
+Hover an Engine value for its recorded depth (engine, cache or Lichess cloud).
+Depth 14 is the default engine depth; cache/database results may differ. Per-result
 depths remain session metadata: older/resumed tree values and ChessDB results
 without a depth report it as unavailable. Empty searches show a start
 instruction, and scratch boards omit the redundant
-“Temporary analysis” heading. Stockfish is the default; optional database
-sources are selected beside the fields. Ctrl+G uses the same selected settings.
+“Temporary analysis” heading. Stockfish is the default evaluation.
+Ctrl+G uses the same saved settings.
 Board navigation while running (results, moves, back/forward) stops the old search,
 saves its committed tree, and continues from
 the clicked position using compatible child values. Failed saves block the next

@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/chess/game_filter.dart';
 import 'package:chess_auto_prep/chess/pgn/collection_player.dart';
+import 'package:chess_auto_prep/chess/pgn/game_order.dart';
 import 'package:chess_auto_prep/chess/pgn/reading_place.dart';
 import 'package:chess_auto_prep/storage/viewer_places.dart';
 import 'package:dartchess/dartchess.dart' show Side;
@@ -198,58 +199,46 @@ void main() {
     expect(find.text('Nothing matches "fischer".'), findsOneWidget);
   });
 
-  testWidgets('Filter games unfolds a Field / Rule / Value row; a rule '
-      'narrows the list and folds to a chip that removes it', (tester) async {
+  testWidgets('the filter button asks for the Filter tab; a filter that '
+      'narrows the list says how far and clears from here', (tester) async {
     fixture = await viewerOver(threeGameFile);
     await fixture.open();
-    await pump(tester);
-    expect(find.text('Field'), findsNothing, reason: 'folded');
-    await tester.tap(find.text('Filter games'));
+    var asked = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: Scaffold(
+          body: SizedBox(
+            width: _panelWidth,
+            child: PgnViewerPanel(
+              viewer: fixture.viewer,
+              filter: fixture.filter,
+              onFilter: () => asked++,
+              onOpen: (_) {},
+              onBrowse: () {},
+            ),
+          ),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
-    expect(find.text('Player'), findsOneWidget, reason: 'one blank row');
-    expect(find.text('contains'), findsOneWidget);
-    final value = find.widgetWithText(TextField, 'Value');
-    await tester.enterText(value, 'Carlsen');
+    expect(find.text('Clear'), findsNothing);
+    await tester.tap(find.byTooltip('Filter games'));
+    expect(asked, 1);
+
+    fixture.filter.apply(
+      const GameFilter(rules: [HeaderRule(value: 'Carlsen')]),
+    );
     await tester.pumpAndSettle();
-    expect(find.text('Carlsen, Magnus – Nakamura, Hikaru'), findsWidgets);
-    expect(find.text('Ding, Liren – Giri, Anish'), findsNothing);
     expect(find.text('1 of 3'), findsOneWidget);
-    await tester.tap(find.text('Filter games'));
-    await tester.pumpAndSettle();
-    expect(find.text('Player contains Carlsen'), findsOneWidget);
-    await tester.tap(find.byTooltip('Remove this rule'));
+    expect(find.text('Ding, Liren – Giri, Anish'), findsNothing);
+    await tester.tap(find.text('Clear'));
     await tester.pumpAndSettle();
     expect(find.text('Ding, Liren – Giri, Anish'), findsOneWidget);
     expect(fixture.filter.narrowing, isFalse);
   });
 
-  testWidgets('a Moves rule takes a move sequence and narrows the list to '
-      'the games that play it', (tester) async {
-    fixture = await viewerOver(threeGameFile);
-    await fixture.open();
-    await pump(tester);
-    await tester.tap(find.text('Filter games'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextField, 'Player'), 'Moves');
-    await tester.pumpAndSettle();
-    final sequence = find.widgetWithText(TextField, 'e4 c5 … Nf3');
-    expect(sequence, findsOneWidget, reason: 'the value box shows the form');
-    await tester.enterText(sequence, '1.d4 … c4');
-    await tester.pump(const Duration(milliseconds: 400));
-    // The worker answers on the real clock; its answer lands on a pump.
-    for (var i = 0; i < 500 && fixture.filter.busy; i++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 10)),
-      );
-      await tester.pump();
-    }
-    await tester.pumpAndSettle();
-    expect(find.text('Ding, Liren – Giri, Anish'), findsWidgets);
-    expect(find.text('Club night'), findsNothing);
-    expect(find.text('1 of 3'), findsOneWidget);
-  });
-
-  testWidgets('a filter nothing passes says so and offers every game back', (
+  testWidgets('a filter nothing passes says so and clears back to every game', (
     tester,
   ) async {
     fixture = await viewerOver(threeGameFile);
@@ -259,9 +248,47 @@ void main() {
     );
     await pump(tester);
     expect(find.text('No games match the filter.'), findsOneWidget);
-    await tester.tap(find.text('Show all games'));
+    expect(find.text('0 of 3'), findsOneWidget);
+    await tester.tap(find.text('Clear'));
     await tester.pumpAndSettle();
     expect(find.text('Club night'), findsOneWidget);
+  });
+
+  testWidgets('a followed player\'s collection lists who they played and '
+      'the colour they had, not their own name on every row', (tester) async {
+    fixture = await viewerOver(_kasparovGames);
+    await fixture.open();
+    await pump(tester);
+    expect(fixture.viewer.followed, 'Kasparov, Gary');
+    expect(find.text('Chandler, Murray G'), findsOneWidget);
+    expect(find.text('Galle, Andre'), findsOneWidget);
+    expect(find.textContaining('Kasparov, Gary –'), findsNothing);
+    expect(find.byTooltip('Had White'), findsNWidgets(2));
+    expect(find.byTooltip('Had Black'), findsOneWidget);
+    expect(fixture.viewer.followedSides, (white: 2, black: 1));
+    fixture.viewer.follow('');
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Had White'), findsNothing);
+    expect(find.text('Kasparov, Gary – Galle, Andre'), findsOneWidget);
+  });
+
+  testWidgets('the order of the games is typed or picked, not a menu', (
+    tester,
+  ) async {
+    fixture = await viewerOver(threeGameFile);
+    await fixture.open();
+    await pump(tester);
+    final box = find.descendant(
+      of: find.byKey(const ValueKey('game-order')),
+      matching: find.byType(TextField),
+    );
+    expect(find.byType(DropdownButton<GameOrder>), findsNothing);
+    await tester.tap(box);
+    await tester.enterText(box, 'Newest');
+    await tester.pump();
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(fixture.viewer.sort, GameOrder.dateDesc);
   });
 
   // Under 64 KiB, so the file is read on this isolate: a widget test's
@@ -396,6 +423,30 @@ const _carlsenGames = '''
 [Black "Giri, Anish"]
 
 1. c4 e5 *
+''';
+
+/// One player's finished games, with either colour.
+const _kasparovGames = '''
+[Event "Wch U16"]
+[White "Chandler, Murray G"]
+[Black "Kasparov, Gary"]
+[Result "1-0"]
+
+1. e4 c5 1-0
+
+[Event "Wch U16"]
+[White "Kasparov, Gary"]
+[Black "Galle, Andre"]
+[Result "1-0"]
+
+1. d4 d5 1-0
+
+[Event "Wch U16"]
+[White "Kasparov, Gary"]
+[Black "Grinberg, Nir"]
+[Result "1/2-1/2"]
+
+1. d4 Nf6 1/2-1/2
 ''';
 
 /// Every reading place saved, in order.

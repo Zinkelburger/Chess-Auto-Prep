@@ -46,5 +46,15 @@ void main() {
     expect(store.value.engineCores, 3);
     expect(store.value.engineMemoryMb, 512);
     expect(store.value.boardCoordinates, isFalse);
+
+    // The Expectimax rows write what the tab's gear shows.
+    number('Depth').onChanged(6);
+    number('Later moves').onChanged(3);
+    number('Search replies met once in').onChanged(0);
+    expect(store.value.expectimax.depth, 6);
+    expect(store.value.expectimax.candidateMoves, 3);
+    expect(store.value.expectimax.replyFloor, 0);
+    number('Depth').onChanged(0);
+    expect(store.value.expectimax.depth, isNull, reason: '0 is no limit');
   });
 }

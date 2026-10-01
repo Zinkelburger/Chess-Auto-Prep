@@ -9,7 +9,6 @@ import '../chess/openings.dart';
 import '../chess/generation/draft_chapter.dart';
 import '../chess/generation/draft_lines.dart';
 import '../chess/generation/mainline_book.dart';
-import '../chess/generation/evaluation_source.dart';
 import '../chess/generation/search.dart';
 import '../chess/generation/search_config.dart';
 import '../chess/generation/search_node.dart';
@@ -168,10 +167,6 @@ final class FillGaps extends ChangeNotifier {
 
   bool get running => _state is FillRunning;
 
-  /// How many half-moves deep the next search looks: the Search tab's
-  /// number, kept for the life of the window. Null, the default, searches
-  /// until the user stops it.
-  int? depth;
   final _engineDepths = <String, int>{};
 
   /// The engine's best line from each position it scored this session,
@@ -181,20 +176,9 @@ final class FillGaps extends ChangeNotifier {
 
   int? engineDepthAt(Fen fen) => _engineDepths[fen.position];
 
-  EvaluationSource source = EvaluationSource.stockfish;
-
-  /// What the next search builds: the Expectimax tab's choice, kept for
-  /// the life of the window.
-  SearchMethod method = SearchMethod.practical;
   Completer<void>? _finished;
   int _followTicket = 0;
 
-  int rootMoves = 4;
-  int candidateMoves = 4;
-
-  /// The engine depth the next search scores positions at.
-  int evalDepth = fillEvalDepth;
-  double replyFloor = 0.01;
   final _history = <FillFound>[];
   FillRequest? _activeRequest;
   (Object?, Fen, Side)? _board;
@@ -375,18 +359,6 @@ final class FillGaps extends ChangeNotifier {
     }
     return null;
   }
-
-  /// The next search as the Expectimax tab has it set, against [elo].
-  FillRequest requestFor(int elo) => FillRequest(
-    elo: elo,
-    depthPlies: depth,
-    source: source,
-    rootMoves: rootMoves,
-    candidateMoves: candidateMoves,
-    replyFloor: replyFloor,
-    method: method,
-    evalDepth: evalDepth,
-  );
 
   /// Continue the newest tree from this board whose settings match, including
   /// after restart: values of different settings are never mixed. With

@@ -169,12 +169,7 @@ class _BookDeviationLineState extends State<BookDeviationLine> {
       final theme = Theme.of(context);
       final left = state.verdict as LeftBook;
       return Padding(
-        padding: const EdgeInsets.fromLTRB(
-          readingCardInset,
-          0,
-          readingCardInset,
-          Space.s,
-        ),
+        padding: const EdgeInsets.only(bottom: Space.s),
         child: Wrap(
           alignment: WrapAlignment.center,
           crossAxisAlignment: WrapCrossAlignment.center,

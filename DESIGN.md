@@ -237,6 +237,11 @@ active pane's a brighter grey. Dividers between panes are 1px lines with a
 - **Rows:** fixed height, ink on charcoal, the selected row in Selection Grey. Numbers right-aligned in mono gutters (engine score 54px, explorer games 96px).
 - **Result bar:** three grey parts with their own quiet ink, at most 220px wide.
 
+### Tool panes (Expectimax is the pattern)
+- **Bar:** a fixed-height row that never reflows: the pane's one action (a button that keeps its place and width whatever it says: Expectimax, Pause, Resume), the one or two values changed on every use, and a gear at the end.
+- **Status:** one fixed-height line under the bar: what will run, then progress, then the outcome or the problem. A secondary action for the running state sits at its end.
+- **Gear:** swaps the pane's content in place for the remaining settings, one named row each with a one-line explanation on screen, and back. The same rows appear as a Settings group and write the same saved values. While the action runs they are shown but locked, with one line saying why.
+
 ### Engine lines
 - **Style:** the old inline-bar style, not a Lichess headline: a small switch and status, then 28px rows with a 54px score gutter and the moves after it. Hovering a move floats its board.
 

@@ -53,7 +53,11 @@ Bughouse mode is offered when its engine assets are present.
 - Trainer Learn/Review and the shared Train tab use the same scheduling and
   lesson owners. Training records remain under Documents.
 - Viewer owns collections, selection/filter/sort and held edits; analysis tabs
-  preserve their source draft. Export uses the exclusive PGN exporter.
+  preserve their source draft. Export uses the exclusive PGN exporter. It opens
+  on the moves alone (`viewerTabs`), has its own Explorer starting on `This
+  file` (`Explorer.independent(starting:)`), and supplies the Filter tab
+  (`ViewerFilterPane`) and the followed player's colour choice
+  (`PlayerSideChoice`) through `ModeView`.
 - Study uses the same document session for chapters, tags, starts, cleanup,
   quiz markers, import/export and retained retry commands.
 - Tactics mines downloaded games into `tactics_sets/Default.pgn`, trains puzzles
@@ -76,7 +80,11 @@ Bughouse mode is offered when its engine assets are present.
   licenses and verified update downloads/install-on-close.
   The engine pane's gear swaps its lines in place for Lines, CPU cores and
   Memory sliders; both views write the same settings, which the workspace
-  wiring applies to the running engine.
+  wiring applies to the running engine. The Expectimax tab's gear does the
+  same for the search (`workspace/search_settings.dart`): its rows and
+  Settings ▸ Expectimax write `Settings.expectimax`
+  (`chess/generation/expectimax_options.dart`), and every way of starting a
+  search reads `FillRequest.of(settings)`.
 
 Unported conveniences remain in the feature specs/backlog; the presence of a
 mode is not a claim of every historical v1 control being reproduced.

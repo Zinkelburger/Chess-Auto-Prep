@@ -34,6 +34,7 @@ import '../workspace/book_chip.dart';
 import '../workspace/copy_name_dialog.dart';
 import '../storage/finds_store.dart';
 import '../workspace/fill_gaps.dart';
+import '../workspace/fill_states.dart';
 import '../workspace/finds_panel.dart';
 import '../workspace/move_field.dart';
 import '../workspace/workspace.dart';
@@ -740,7 +741,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         builder: _view is RepertoiresView,
         noteEditing: _view is RepertoiresView || _view is ViewerView,
         header: _view.header,
-        gameBar: _inspecting ? null : _view.gameBar(_editing),
+        underHeading: _inspecting ? null : _view.underHeading,
+        quietBoard: _view.quietBoard,
+        headingInMoves: _view.headingInMoves,
+        paneActions: _inspecting ? null : () => _view.paneActions(_editing),
+        explorerFileBar: _inspecting ? null : _view.explorerFileBar,
         gameCounter: !_inspecting && _view.gameCounter,
         gameOrdering: _view.gameOrdering,
         moveMenu: _inspecting ? null : _view.moveMenu,
@@ -874,7 +879,7 @@ final class SearchDoor {
     }
     layout.reveal(WorkspaceTab.search);
     final refusal = await fill.resume(
-      fill.requestFor(settings.value.opponentElo),
+      FillRequest.of(settings.value),
       orAfresh: true,
     );
     if (refusal != null) requests.say(refusal);

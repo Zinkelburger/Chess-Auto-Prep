@@ -134,7 +134,11 @@ void main() {
     );
   }
 
-  Future<void> pump(WidgetTester tester, {ActionLayout? layout}) async {
+  Future<void> pump(
+    WidgetTester tester, {
+    ActionLayout? layout,
+    WorkspaceHooks hooks = const WorkspaceHooks(),
+  }) async {
     await tester.binding.setSurfaceSize(const Size(1200, 820));
     await tester.pumpWidget(
       MaterialApp(
@@ -154,6 +158,7 @@ void main() {
               layout: layout,
               editing: editing,
               moves: moves,
+              hooks: hooks,
             ),
           ),
         ),
@@ -315,7 +320,7 @@ void main() {
     layout.pane(0).show(WorkspaceTab.search);
     await tester.pumpAndSettle();
     expect(find.byType(ExplorerPane), findsNWidgets(3));
-    expect(find.widgetWithText(TextField, 'Engine depth'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Depth'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -337,6 +342,58 @@ void main() {
         ),
       );
     }
+  });
+
+  testWidgets('a mode that reads like a book heads the game at the top of '
+      'its moves, and nowhere over the other tabs', (tester) async {
+    await pump(tester, hooks: const WorkspaceHooks(headingInMoves: true));
+    tabs.show(WorkspaceTab.moves);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byType(MoveTreeView),
+        matching: find.byType(ReadingHeader),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester.getTopLeft(find.byType(ReadingHeader)).dy,
+      greaterThanOrEqualTo(
+        tester.getBottomLeft(find.byType(PaneTabStrip<WorkspaceTab>)).dy,
+      ),
+    );
+    for (final tab in [WorkspaceTab.replies, WorkspaceTab.explorer]) {
+      tabs.show(tab);
+      await tester.pumpAndSettle();
+      expect(find.byType(ReadingHeader), findsNothing);
+    }
+  });
+
+  testWidgets('a quiet board has the engine row and the move field only '
+      'while they are used', (tester) async {
+    await pump(tester, hooks: const WorkspaceHooks(quietBoard: true));
+    await tester.pumpAndSettle();
+    expect(find.text('Engine').hitTestable(), findsNothing);
+    final field = find.byType(MoveField);
+    expect(
+      tester
+          .widget<Opacity>(
+            find.ancestor(of: field, matching: find.byType(Opacity)).first,
+          )
+          .opacity,
+      0,
+    );
+    moves.focus.requestFocus();
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<Opacity>(
+            find.ancestor(of: field, matching: find.byType(Opacity)).first,
+          )
+          .opacity,
+      1,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('engine off returns its line space and keeps the switch', (

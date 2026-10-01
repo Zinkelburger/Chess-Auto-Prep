@@ -44,6 +44,53 @@ void main() {
     expect(find.byTooltip('Play d4 (→)'), findsNothing);
   });
 
+  testWidgets('a quiet note is a card only where something is said, or '
+      'while it is written', (tester) async {
+    fixture.dispose();
+    fixture = await openSession('''
+[Event "Bare"]
+[Result "*"]
+
+1. e4 e5 2. Nf3 {The king's knight.} Nc6 *
+''');
+    final editing = ValueNotifier(false);
+    addTearDown(editing.dispose);
+    await tester.binding.setSurfaceSize(const Size(500, 300));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: Scaffold(
+          body: MoveNote(
+            session: fixture.session,
+            editing: editing,
+            quiet: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    Finder card() => find.descendant(
+      of: find.byType(MoveNote),
+      matching: find.byType(Material),
+    );
+    expect(card(), findsNothing, reason: 'the start, nothing said');
+    fixture.session.forward();
+    await tester.pump();
+    expect(card(), findsNothing, reason: '1. e4, nothing said');
+    fixture.session
+      ..forward()
+      ..forward();
+    await tester.pump();
+    expect(find.text("The king's knight."), findsOneWidget);
+    fixture.session.forward();
+    await tester.pump();
+    expect(card(), findsNothing);
+    editing.value = true;
+    await tester.pump();
+    expect(card(), findsWidgets, reason: 'being written');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a game with no introduction still shows its first move', (
     tester,
   ) async {
