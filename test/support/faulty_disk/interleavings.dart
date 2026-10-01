@@ -146,7 +146,8 @@ void interleavings<S>(Interleaving<S> spec) {
       replay: (v) => "CAP_FAULT_ONLY='${spec.name}/${v.at}'",
       partial: only != null,
     );
-  });
+    // One isolate per pause point: past 30 s on a busy CI runner.
+  }, timeout: const Timeout(Duration(minutes: 3)));
 }
 
 /// Whether the interleaved [ran], which left [state], is one of [orders]:

@@ -35,7 +35,10 @@ void main() {
       await observeDirectory(root.path);
       await syncFile(at('staged'));
       await installNewFile(at('staged'), at('a'));
-      await syncDirectory(root.path);
+      // Windows has no folder flush; the call is still seen, then refused.
+      await syncDirectory(
+        root.path,
+      ).catchError((Object _) {}, test: (_) => Platform.isWindows);
       await File(at('next')).writeAsString('two');
       await replaceFileContents(at('next'), at('a'));
       await movePathNoReplace(at('a'), at('c'));

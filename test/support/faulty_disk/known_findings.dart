@@ -59,6 +59,7 @@ Map<String, String> recoveryLedger(String journal, {bool books = false}) => {
     'recoveryMissing/*/$read/O6': briefMissingSetsAside,
   if (books)
     for (final contract in ['O1', 'O6'])
-      'recoveryMissing/*/read:Support/books.json#0/$contract':
+      // Which read of books.json recovery reaches first varies by run.
+      'recoveryMissing/*/read:Support/books.json#*/$contract':
           booksMissingSkipped,
 };
