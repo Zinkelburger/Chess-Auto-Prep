@@ -74,8 +74,8 @@ Bughouse mode is offered when its engine assets are present.
   leading the nav row shows the main Explorer under the moves
   (`ActionLayout.book`, on by default). Requests for a tab
   (`ActionLayout.reveal`) bring it up in the pane that already has it. The
-  Explorer's narrowing sits behind a button always labelled Filters, and the
-  Expectimax settings fold under Settings beside its button (`ui/fold_button.dart`).
+  Explorer's narrowing folds under a button always labelled Filters
+  (`ui/fold_button.dart`).
 - Engine tournaments use the shared supervisor, retryable checkpoints, saved
   history, ratings/crosstables and viewer handoff. Bughouse keeps its own two-board
   screen, Hivemind analysis, archive/book reads and saved matches.
@@ -83,7 +83,11 @@ Bughouse mode is offered when its engine assets are present.
   licenses and verified update downloads/install-on-close.
   The engine pane's gear swaps its lines in place for Lines, CPU cores and
   Memory sliders; both views write the same settings, which the workspace
-  wiring applies to the running engine.
+  wiring applies to the running engine. The Expectimax tab's gear does the
+  same for the search (`workspace/search_settings.dart`): its rows and
+  Settings ▸ Expectimax write `Settings.expectimax`
+  (`chess/generation/expectimax_options.dart`), and every way of starting a
+  search reads `FillRequest.of(settings)`.
 
 Unported conveniences remain in the feature specs/backlog; the presence of a
 mode is not a claim of every historical v1 control being reproduced.

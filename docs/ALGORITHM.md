@@ -185,7 +185,7 @@ expansion. A failed or incomplete shortlist stops with a visible error.
 Callers without a ranking source score all candidates before retaining the best
 N. Other callers retain their existing exhaustive defaults. The panel exposes
 Maia rating, root moves, candidate count, depth in half-moves (blank for no limit),
-engine depth and reply coverage above the results, folded under Settings. Coverage is expressed as one in N
+engine depth and reply coverage directly above the results. Coverage is expressed as one in N
 games, default 100; zero expands every reply. Settings apply to the next search
 and are disabled during a run.
 

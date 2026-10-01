@@ -1,21 +1,19 @@
-import '../chess/generation/evaluation_source.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../chess/fen.dart';
 import '../chess/generation/draft_lines.dart' show expectimaxText;
 import '../chess/generation/eval.dart';
+import '../chess/generation/evaluation_source.dart';
+import '../chess/generation/expectimax_options.dart';
 import '../chess/generation/mainline_book.dart' show MainlineConfig;
 import '../chess/generation/search_node.dart';
 import '../engines/engine_line.dart' show Centipawns;
 import '../storage/chapter_files.dart';
-import '../storage/settings.dart';
 import '../storage/settings_store.dart';
-import '../ui/fold_button.dart';
 import '../ui/listening_state.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
@@ -23,14 +21,17 @@ import 'fill_gaps.dart';
 import 'fill_states.dart';
 import 'finds.dart';
 import 'line_preview.dart';
+import 'search_settings.dart';
 import '../ui/app_keys.dart';
 import '../ui/move_notation.dart';
 
 /// The Expectimax panel: the expectimax search from the
 /// board and its values.
 ///
-/// Editable search settings and the play/stop action head the panel. Under them, for the position on
-/// the board, every move the search looked at with what it is worth
+/// One bar heads the panel and never moves: the button that starts,
+/// pauses and resumes the search, its depth, and the gear that swaps the
+/// results for the rest of the settings. Under a one-line status, for the
+/// position on the board, every move the search looked at with what it is worth
 /// against the modelled opponent (Expectimax) and what the engine alone
 /// says (Engine), both from White's side. At the opponent's move each reply
 /// also says how often it is played, and a reply that throws away half a
@@ -52,8 +53,8 @@ class SearchPane extends StatefulWidget {
   final FillGaps fill;
   final DocumentSession session;
 
-  /// Where the opponent's rating and the cover rule are kept: the Replies
-  /// tab reads the same two numbers.
+  /// Where the search's settings are kept: the bar, the gear and
+  /// Settings ▸ Expectimax all change them here.
   final SettingsStore settings;
 
   /// Opens the draft the lines were written to.
@@ -67,33 +68,15 @@ class _SearchPaneState extends State<SearchPane>
     with ListeningState<SearchPane> {
   final _preview = ValueNotifier<LinePreview?>(null);
   Timer? _settle;
-  late final _elo = TextEditingController(
-    text: '${widget.settings.value.opponentElo}',
-  );
-  late final _depth = TextEditingController(
-    text: widget.fill.depth?.toString() ?? '',
-  );
-  late final _evalDepth = TextEditingController(
-    text: '${widget.fill.evalDepth}',
-  );
-  late final _rootMoves = TextEditingController(
-    text: '${widget.fill.rootMoves}',
-  );
-  late final _candidates = TextEditingController(
-    text: '${widget.fill.candidateMoves}',
-  );
-  late final _cover = TextEditingController(
-    text: widget.fill.replyFloor == 0
-        ? '0'
-        : '${(1 / widget.fill.replyFloor).round()}',
-  );
 
-  /// Why the last press of Search did nothing: a number out of range or a
-  /// refusal. Cleared by the next press.
-  String? _problem;
+  /// Whether the gear's settings are shown where the results are.
+  bool _settingsOpen = false;
 
-  /// Whether the search settings show; folded, the table keeps the room.
-  bool _unfolded = false;
+  /// What is typed in a box and cannot be taken; gone once it can.
+  String? _invalid;
+
+  /// Why the last press of the button did nothing. Cleared by the next.
+  String? _refusal;
 
   /// The run and the position the rows are for.
   (FillTarget?, Fen)? _rowsFor;
@@ -128,62 +111,28 @@ class _SearchPaneState extends State<SearchPane>
   void dispose() {
     _settle?.cancel();
     _preview.dispose();
-    _elo.dispose();
-    _depth.dispose();
-    _evalDepth.dispose();
-    _rootMoves.dispose();
-    _candidates.dispose();
-    _cover.dispose();
     super.dispose();
   }
 
-  FillRequest get _request =>
-      widget.fill.requestFor(widget.settings.value.opponentElo);
+  FillRequest get _request => FillRequest.of(widget.settings.value);
 
-  Future<bool> _applySettings() async {
-    final elo = int.tryParse(_elo.text.trim());
-    final depthText = _depth.text.trim();
-    final depth = int.tryParse(depthText);
-    final rootMoves = int.tryParse(_rootMoves.text.trim());
-    final candidates = int.tryParse(_candidates.text.trim());
-    final cover = int.tryParse(_cover.text.trim());
-    final evalDepth = int.tryParse(_evalDepth.text.trim());
-    final problem =
-        elo == null || elo < Settings.minElo || elo > Settings.maxElo
-        ? 'Maia rating: ${Settings.minElo} to ${Settings.maxElo}'
-        : depthText.isNotEmpty &&
-              (depth == null || depth < minFillDepth || depth > maxFillDepth)
-        ? 'Depth: $minFillDepth to $maxFillDepth, or empty for no limit'
-        : rootMoves == null || rootMoves < 1 || rootMoves > 218
-        ? 'Root moves: 1 to 218'
-        : candidates == null || candidates < 1 || candidates > 218
-        ? 'Candidates: 1 to 218'
-        : cover == null || cover < 0 || cover == 1
-        ? 'Reply coverage: 2 or more games, or 0 for every reply'
-        : evalDepth == null ||
-              evalDepth < minFillEvalDepth ||
-              evalDepth > maxFillEvalDepth
-        ? 'Engine depth: $minFillEvalDepth to $maxFillEvalDepth'
-        : null;
-    if (!mounted) return false;
-    setState(() => _problem = problem);
-    if (problem != null) return false;
-    widget.fill.depth = depth;
-    widget.fill.rootMoves = rootMoves!;
-    widget.fill.candidateMoves = candidates!;
-    widget.fill.replyFloor = cover == 0 ? 0 : 1 / cover!;
-    widget.fill.evalDepth = evalDepth!;
-    await widget.settings.update(
-      widget.settings.value.copyWith(opponentElo: elo!),
-    );
-    return mounted;
+  void _problem(String? invalid) {
+    if (!mounted || invalid == _invalid) return;
+    setState(() => _invalid = invalid);
+  }
+
+  void _toggleSettings() {
+    // A box left mid-number puts its setting back before it goes.
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _settingsOpen = !_settingsOpen);
   }
 
   Future<void> _search() async {
-    if (!await _applySettings()) return;
+    if (_invalid != null) return;
+    setState(() => _refusal = null);
     final refusal = await widget.fill.resume(_request, orAfresh: true);
     if (!mounted || refusal == null) return;
-    setState(() => _problem = refusal);
+    setState(() => _refusal = refusal);
   }
 
   void _hover(SearchNode after, String uci, Offset anchor) {
@@ -208,7 +157,7 @@ class _SearchPaneState extends State<SearchPane>
     unawaited(
       widget.fill.followMove(uci).then((problem) {
         if (!mounted || problem == null) return;
-        setState(() => _problem = problem);
+        setState(() => _refusal = problem);
       }),
     );
   }
@@ -219,6 +168,7 @@ class _SearchPaneState extends State<SearchPane>
       listenable: Listenable.merge([
         widget.fill,
         widget.session.anyChange,
+        widget.settings,
         ?widget.fill.finds,
       ]),
       builder: (context, _) => LinePreviewOverlay(
@@ -236,10 +186,18 @@ class _SearchPaneState extends State<SearchPane>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _form(context),
+                  _bar(context),
                   _status(context),
                   const Divider(height: 1),
-                  Expanded(child: _table(context)),
+                  Expanded(
+                    child: _settingsOpen
+                        ? SearchSettingsView(
+                            settings: widget.settings,
+                            locked: widget.fill.running,
+                            onProblem: _problem,
+                          )
+                        : _table(context),
+                  ),
                   if (widget.fill.treeSaveProblem != null)
                     Padding(
                       padding: const EdgeInsets.all(Space.m),
@@ -279,256 +237,138 @@ class _SearchPaneState extends State<SearchPane>
     );
   }
 
-  bool get _book => widget.fill.method == SearchMethod.mainline;
+  ExpectimaxOptions get _options => widget.settings.value.expectimax;
 
-  /// Maia practical or the ChessDB mainline book. The book asks no model
-  /// and no engine, so their fields go while it is chosen.
-  Widget _methodChoice() => SegmentedButton<SearchMethod>(
-    segments: [
-      for (final method in SearchMethod.values)
-        ButtonSegment(value: method, label: Text(method.label)),
-    ],
-    selected: {widget.fill.method},
-    showSelectedIcon: false,
-    style: const ButtonStyle(visualDensity: VisualDensity.compact),
-    onSelectionChanged: widget.fill.running
-        ? null
-        : (picked) {
-            if (!mounted) return;
-            setState(() {
-              widget.fill.method = picked.single;
-              _problem = null;
-            });
-          },
-  );
+  bool get _book => _options.method == SearchMethod.mainline;
 
-  List<Widget> _settingsFields() => [
-    _methodChoice(),
-    if (_book)
-      Tooltip(
-        message:
-            'Follow the opponent\'s master replies this many half-moves '
-            'from the board; past it every line runs on as ChessDB\'s '
-            'mainline. Empty is ${MainlineConfig.defaultBranchPlies}.',
-        child: _NumberBox(
-          label: 'Depth',
-          box: _depth,
-          width: searchDepthWidth,
-          hint: '${MainlineConfig.defaultBranchPlies}',
-          enabled: !widget.fill.running,
-          onSubmitted: () => unawaited(_applySettings()),
-          onChanged: () => unawaited(_applySettings()),
-        ),
-      )
-    else
-      ..._practicalFields(),
-  ];
-
-  List<Widget> _practicalFields() => [
-    _NumberBox(
-      label: 'Maia rating',
-      box: _elo,
-      width: searchEloWidth,
-      enabled: !widget.fill.running,
-      onSubmitted: () => unawaited(_applySettings()),
-      onChanged: () => unawaited(_applySettings()),
-    ),
-    Tooltip(
-      message: 'Our best engine moves searched for our first move.',
-      child: _NumberBox(
-        label: 'Root moves',
-        box: _rootMoves,
-        width: searchEloWidth,
-        enabled: !widget.fill.running,
-        onSubmitted: () => unawaited(_applySettings()),
-        onChanged: () => unawaited(_applySettings()),
-      ),
-    ),
-    Tooltip(
-      message: 'Our best engine moves searched at each later move.',
-      child: _NumberBox(
-        label: 'Candidates',
-        box: _candidates,
-        width: searchEloWidth,
-        enabled: !widget.fill.running,
-        onSubmitted: () => unawaited(_applySettings()),
-        onChanged: () => unawaited(_applySettings()),
-      ),
-    ),
-    Tooltip(
-      message:
-          'Search depth in half-moves from the current board. Empty means no depth limit.',
-      child: _NumberBox(
-        label: 'Depth',
-        box: _depth,
-        width: searchDepthWidth,
-        hint: 'No limit',
-        enabled: !widget.fill.running,
-        onSubmitted: () => unawaited(_applySettings()),
-        onChanged: () => unawaited(_applySettings()),
-      ),
-    ),
-    Tooltip(
-      message:
-          'Engine depth each position is scored at. Hover an Engine value '
-          'for the depth it was scored at.',
-      child: _NumberBox(
-        label: 'Engine depth',
-        box: _evalDepth,
-        width: searchEloWidth,
-        enabled: !widget.fill.running,
-        onSubmitted: () => unawaited(_applySettings()),
-        onChanged: () => unawaited(_applySettings()),
-      ),
-    ),
-    Tooltip(
-      message:
-          'Expand reply paths met at least once in this many games. Rarer replies keep their engine value. 0 expands every reply.',
-      child: _NumberBox(
-        label: '1 in N games',
-        box: _cover,
-        width: searchEloWidth,
-        enabled: !widget.fill.running,
-        onSubmitted: () => unawaited(_applySettings()),
-        onChanged: () => unawaited(_applySettings()),
-      ),
-    ),
-    PopupMenuButton<EvaluationSource>(
-      tooltip: 'Evaluation source',
-      enabled: !widget.fill.running,
-      initialValue: widget.fill.source,
-      onSelected: (source) {
-        if (mounted) setState(() => widget.fill.source = source);
-      },
-      itemBuilder: (_) => [
-        for (final source in EvaluationSource.values)
-          PopupMenuItem(value: source, child: Text(source.label)),
-      ],
+  /// The bar: the one button, the depth and the gear, each where it always
+  /// is whatever the search is doing.
+  Widget _bar(BuildContext context) {
+    final running = widget.fill.running;
+    return SizedBox(
+      height: searchBarHeight,
       child: Padding(
-        padding: const EdgeInsets.all(Space.s),
-        child: Text(widget.fill.source.label),
-      ),
-    ),
-  ];
-
-  Widget _form(BuildContext context) {
-    final fill = widget.fill;
-    final state = fill.state;
-    final running = state is FillRunning ? state : null;
-    // A search with these settings covers the board: pressing goes on.
-    final resumable =
-        running == null &&
-        switch (fill.nodeAtBoard(request: _request)) {
-          OurNode() || OpponentNode() => true,
-          _ => false,
-        };
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, Space.m, Space.m, Space.s),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: Space.s,
-            runSpacing: Space.s,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [..._actions(fill, running, resumable), _settingsFold()],
-          ),
-          if (_unfolded) ...[
-            const SizedBox(height: Space.s),
-            Wrap(
-              spacing: Space.s,
-              runSpacing: Space.s,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: _settingsFields(),
+        padding: const EdgeInsets.only(left: Space.m, right: Space.xs),
+        child: Row(
+          children: [
+            SizedBox(width: searchRunWidth, child: _runButton()),
+            const SizedBox(width: Space.s),
+            Tooltip(
+              message: _book
+                  ? 'Follow the opponent\'s master replies this many '
+                        'half-moves from the board; past it every line runs '
+                        'on as ChessDB\'s mainline.'
+                  : 'Half-moves searched from the board. Empty goes on '
+                        'until paused.',
+              child: SearchNumberBox(
+                name: SearchSettingCopy.depth.$1,
+                label: SearchSettingCopy.depth.$1,
+                empty: _book
+                    ? '${MainlineConfig.defaultBranchPlies}'
+                    : 'No limit',
+                value: _options.depth,
+                min: ExpectimaxOptions.minDepth,
+                max: ExpectimaxOptions.maxDepth,
+                width: searchDepthWidth,
+                enabled: !running,
+                onProblem: _problem,
+                onChanged: (depth) => unawaited(
+                  widget.settings.update(
+                    widget.settings.value.copyWith(
+                      expectimax: _options.withDepth(depth),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const Spacer(),
+            IconButton(
+              icon: const Icon(Icons.settings, size: IconSize.action),
+              tooltip: _settingsOpen ? 'Show results' : 'Expectimax settings',
+              isSelected: _settingsOpen,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              selectedIcon: Icon(
+                Icons.settings,
+                size: IconSize.action,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              onPressed: _toggleSettings,
             ),
           ],
-        ],
+        ),
       ),
     );
   }
 
-  /// The settings fold away under this so the table keeps the room.
-  Widget _settingsFold() => FoldButton(
-    label: 'Settings',
-    unfolded: _unfolded,
-    onPressed: () {
-      if (mounted) setState(() => _unfolded = !_unfolded);
-    },
-  );
-
-  /// Start or resume while idle; the two stops while running.
-  List<Widget> _actions(
-    FillGaps fill,
-    FillRunning? running,
-    bool resumable,
-  ) => [
-    if (running == null) ...[
-      Tooltip(
-        message: AppKey.search.tip(
-          resumable
-              ? 'Go on from the search at this board'
-              : 'Search from the board',
-        ),
-        child: FilledButton.icon(
-          onPressed: fill.canStart ? () => unawaited(_search()) : null,
-          icon: const Icon(Icons.play_arrow),
-          label: Text(switch ((resumable, _book)) {
-            (true, true) => 'Resume build',
-            (true, false) => 'Resume expectimax',
-            (false, true) => 'Build',
-            (false, false) => 'Expectimax',
-          }),
-        ),
-      ),
-    ] else ...[
-      // A search with a depth ends there by itself.
-      if (running.of == null) ...[
-        Tooltip(
-          message:
-              'Score every position at this depth, then stop and '
-              'keep the tree',
-          child: OutlinedButton.icon(
-            icon: const Icon(Icons.pause),
-            onPressed: running.stopping || running.lastPly != null
-                ? null
-                : fill.finishLevel,
-            label: Text(
-              'Stop after finishing depth '
-              '${running.lastPly ?? (running.depth < 1 ? 1 : running.depth)}',
-            ),
-          ),
-        ),
-        const SizedBox(width: Space.s),
-      ],
-      Tooltip(
-        message: 'Finish the current position, then stop and keep the results',
+  /// Start, Resume or Pause: one button in one place.
+  Widget _runButton() {
+    final fill = widget.fill;
+    final running = switch (fill.state) {
+      final FillRunning running => running,
+      _ => null,
+    };
+    if (running != null) {
+      return Tooltip(
+        message: 'Finish the current position, then pause and keep the results',
         child: FilledButton.icon(
           icon: const Icon(Icons.pause),
           onPressed: running.stopping ? null : fill.finish,
-          label: const Text('Stop'),
+          label: const Text('Pause'),
+        ),
+      );
+    }
+    // A search with these settings covers the board: pressing goes on.
+    final resumable = switch (fill.nodeAtBoard(request: _request)) {
+      OurNode() || OpponentNode() => true,
+      _ => false,
+    };
+    return Tooltip(
+      message: AppKey.search.tip(
+        resumable
+            ? 'Go on from the search at this board'
+            : 'Search from the board',
+      ),
+      child: FilledButton.icon(
+        onPressed: fill.canStart ? () => unawaited(_search()) : null,
+        icon: const Icon(Icons.play_arrow),
+        label: Text(
+          resumable
+              ? 'Resume'
+              : _book
+              ? 'Build'
+              : 'Expectimax',
         ),
       ),
-    ],
-  ];
+    );
+  }
 
-  /// One quiet line: how far the search has got, what it did, or what
-  /// went wrong.
+  /// What the next search will be, for the side it is for.
+  String _summary(String forSide) => _book
+      ? '$forSide · ChessDB\'s best moves, master replies'
+      : '$forSide · Maia ${widget.settings.value.opponentElo} · '
+            'best ${_options.rootMoves}, then ${_options.candidateMoves}'
+            '${_options.source == EvaluationSource.stockfish ? '' : ' · ${_options.source.label}'}';
+
+  /// One line of fixed height: what will run, how far the search has got,
+  /// what it did, or what went wrong. While a search with no depth runs,
+  /// the way to let it finish the depth it is on sits at the line's end.
   Widget _status(BuildContext context) {
     final theme = Theme.of(context);
-    final found = widget.fill.found;
-    final side = found?.side ?? widget.session.orientation;
-    final forSide = 'for ${side == Side.white ? 'White' : 'Black'}';
-    final (words, error) = switch (widget.fill.state) {
-      _ when _problem != null => (_problem!, true),
+    final side = widget.fill.found?.side ?? widget.session.orientation;
+    final state = widget.fill.state;
+    final problem = _invalid ?? _refusal;
+    final (words, error) = switch (state) {
+      _ when problem != null => (problem, true),
       FillIdle() => (
-        _book
-            ? 'ChessDB\'s best moves against master replies · $forSide'
-            : 'Best ${widget.fill.rootMoves} at the root, '
-                  '${widget.fill.candidateMoves} deeper · $forSide',
+        _summary(side == Side.white ? 'For White' : 'For Black'),
+        false,
+      ),
+      FillRunning(:final lastPly?, :final nodes, stopping: false) => (
+        'Pausing after depth $lastPly · $nodes positions',
         false,
       ),
       FillRunning(:final depth, :final of, :final nodes, :final stopping) => (
-        '${stopping ? 'Stopping at' : 'Searching'} depth $depth'
+        '${stopping ? 'Pausing at depth' : 'Depth'} $depth'
             '${of == null || stopping ? '' : ' of $of'} · $nodes positions',
         false,
       ),
@@ -548,15 +388,44 @@ class _SearchPaneState extends State<SearchPane>
         ),
       FillFailed(:final reason) => (reason, true),
     };
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, 0, Space.m, Space.s),
-      child: Text(
-        words,
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: error ? theme.colorScheme.error : null,
+    return SizedBox(
+      height: searchStatusHeight,
+      child: Padding(
+        padding: const EdgeInsets.only(left: Space.m, right: Space.xs),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                words,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: error ? theme.colorScheme.error : null,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (state case FillRunning(
+              of: null,
+              lastPly: null,
+              stopping: false,
+              :final depth,
+            ))
+              Tooltip(
+                message:
+                    'Score every position at this depth, then pause and '
+                    'keep the tree',
+                child: TextButton(
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: widget.fill.finishLevel,
+                  child: Text('Finish depth ${depth < 1 ? 1 : depth}'),
+                ),
+              )
+            else
+              const SizedBox(width: Space.s),
+          ],
         ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
       ),
     );
   }
@@ -577,7 +446,7 @@ class _SearchPaneState extends State<SearchPane>
         context,
         widget.fill.running
             ? 'Evaluating the first moves…'
-            : 'Press ▶ Expectimax to evaluate moves from this position.',
+            : 'Press ▶ ${_book ? 'Build' : 'Expectimax'} to evaluate moves from this position.',
       );
     final node = widget.fill.nodeAtBoard(request: found.request);
     return switch (node) {
@@ -793,50 +662,6 @@ final class _Row {
   final SearchNode after;
   final double? share;
   final bool trap;
-}
-
-/// A labelled number field, narrow enough for several in a row.
-class _NumberBox extends StatelessWidget {
-  const _NumberBox({
-    required this.label,
-    required this.box,
-    required this.width,
-    required this.enabled,
-    required this.onSubmitted,
-    this.hint,
-    this.onChanged,
-  });
-
-  final String label;
-
-  /// What an empty box means.
-  final String? hint;
-  final TextEditingController box;
-  final double width;
-  final bool enabled;
-  final VoidCallback onSubmitted;
-  final VoidCallback? onChanged;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: width,
-    child: TextField(
-      controller: box,
-      enabled: enabled,
-      keyboardType: TextInputType.number,
-      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        isDense: true,
-        floatingLabelBehavior: hint == null
-            ? null
-            : FloatingLabelBehavior.always,
-      ),
-      onSubmitted: (_) => onSubmitted(),
-      onChanged: (_) => onChanged?.call(),
-    ),
-  );
 }
 
 /// The column names over the rows.

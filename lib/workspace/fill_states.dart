@@ -2,6 +2,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 
 import '../chess/fen.dart';
 import '../chess/generation/evaluation_source.dart';
+import '../chess/generation/expectimax_options.dart';
 import '../chess/generation/mainline_book.dart';
 import '../chess/generation/search_config.dart';
 import '../chess/generation/search_node.dart';
@@ -10,16 +11,9 @@ import '../chess/generation/tree_wire_v4_reader.dart';
 import '../diagnostics/log.dart';
 import '../net/chessdb_moves.dart';
 import '../storage/chapter_files.dart';
+import '../storage/settings.dart';
 
-/// What a search builds: expectimax against the human model, or ChessDB's
-/// objectively best book (`chess/generation/mainline_book.dart`).
-enum SearchMethod {
-  practical('Maia practical'),
-  mainline('ChessDB mainline');
-
-  const SearchMethod(this.label);
-  final String label;
-}
+export '../chess/generation/expectimax_options.dart' show SearchMethod;
 
 /// What a search is asked for: the opponent's rating and how deep to go.
 ///
@@ -37,6 +31,20 @@ final class FillRequest {
     this.method = SearchMethod.practical,
     this.evalDepth = fillEvalDepth,
   });
+
+  /// The next search as [settings] have it: the Expectimax tab's button,
+  /// Ctrl+G and Actions all start this one.
+  FillRequest.of(Settings settings)
+    : this(
+        elo: settings.opponentElo,
+        depthPlies: settings.expectimax.depth,
+        source: settings.expectimax.source,
+        rootMoves: settings.expectimax.rootMoves,
+        candidateMoves: settings.expectimax.candidateMoves,
+        replyFloor: settings.expectimax.replyFloor,
+        method: settings.expectimax.method,
+        evalDepth: settings.expectimax.evalDepth,
+      );
 
   final SearchMethod method;
   final EvaluationSource source;
@@ -126,13 +134,9 @@ Future<Object> savedSeed(
   return refused ?? 'No saved search starts at this board position.';
 }
 
-/// The engine depth a search scores positions at unless the Expectimax
-/// tab asks for another; the shared cache is keyed on the depth.
-const fillEvalDepth = 14;
-
-/// The range the engine depth may be set to.
-const minFillEvalDepth = 1;
-const maxFillEvalDepth = 40;
+/// The engine depth a search scores positions at unless the settings ask
+/// for another; the shared cache is keyed on the depth.
+const fillEvalDepth = ExpectimaxOptions.defaultEvalDepth;
 
 /// One user-started search adds at most this many positions, under the interactive branching policy.
 const fillNodeBudget = 25000;
@@ -144,10 +148,6 @@ const fillNodeBudget = 25000;
 /// evaluation each.
 const fillReplyMass = 0.9;
 const fillMaxReplies = 5;
-
-/// The range a search's depth may be set to, when it is set at all.
-const minFillDepth = 1;
-const maxFillDepth = 64;
 
 /// What a search needs and where it comes from: an engine and the model, or
 /// why there are none.

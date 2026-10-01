@@ -38,6 +38,9 @@ class SearchField extends StatelessWidget {
         autofocus: autofocus,
         onChanged: onChanged,
         onSubmitted: onSubmitted,
+        // The body size, not a text field's own larger one: the box sits in
+        // a column of rows and must not be the loudest thing in it.
+        style: Theme.of(context).textTheme.bodyMedium,
         decoration: InputDecoration(
           isDense: true,
           hintText: hint,
