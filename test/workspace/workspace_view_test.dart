@@ -324,29 +324,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('game heading stays above the Action Tabs in every reading tab', (
-    tester,
-  ) async {
+  testWidgets('the game is headed at the top of its moves, and nowhere over '
+      'the other tabs', (tester) async {
     await pump(tester);
-    for (final tab in [
-      WorkspaceTab.moves,
-      WorkspaceTab.replies,
-      WorkspaceTab.explorer,
-    ]) {
-      tabs.show(tab);
-      await tester.pumpAndSettle();
-      expect(
-        tester.getBottomLeft(find.byType(ReadingHeader)).dy,
-        lessThanOrEqualTo(
-          tester.getTopLeft(find.byType(PaneTabStrip<WorkspaceTab>)).dy,
-        ),
-      );
-    }
-  });
-
-  testWidgets('a mode that reads like a book heads the game at the top of '
-      'its moves, and nowhere over the other tabs', (tester) async {
-    await pump(tester, hooks: const WorkspaceHooks(headingInMoves: true));
     tabs.show(WorkspaceTab.moves);
     await tester.pumpAndSettle();
     expect(

@@ -12,6 +12,10 @@ abstract final class Space {
   static const xl = 24.0;
 }
 
+/// How wide a mode's list starts out: room for a game's two players or a
+/// chapter's name on one row. The divider takes it down to [paneMinWidth].
+const listColumnWidth = 260.0;
+
 /// How wide the chapter outline between the list and the board starts out.
 /// The old app's column is 18% of the window's body clamped to 220–280.
 const outlineColumnWidth = 240.0;

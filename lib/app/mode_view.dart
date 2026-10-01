@@ -115,7 +115,7 @@ abstract base class ModeView {
   /// open.
   Listenable get changes;
 
-  /// Whether the card is headed with the game's players.
+  /// Whether the moves are headed with the game's players.
   bool get header => true;
 
   /// Whether the board has the file's game counter under it.
@@ -136,10 +136,6 @@ abstract base class ModeView {
   /// Under the heading: what the mode says about the game before it is
   /// read; null for nothing.
   Widget? get underHeading => null;
-
-  /// Whether the heading is the top of the moves instead of a block over
-  /// the card's tabs.
-  bool get headingInMoves => false;
 
   /// Whether the board has only what is in use under it.
   bool get quietBoard => false;
@@ -407,9 +403,6 @@ final class ViewerView extends _DocumentModeView {
 
   @override
   bool get quietBoard => true;
-
-  @override
-  bool get headingInMoves => true;
 
   /// Editing and the engine, which a file read as a book has no control
   /// on screen for: here with their keys, so they can be found.
