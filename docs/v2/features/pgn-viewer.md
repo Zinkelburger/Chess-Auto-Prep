@@ -354,6 +354,9 @@ and Save dialogs still offer Save a copy when needed. Independent scratch
 
 ## Game buttons and solitaire (2026-09-28)
 
+(The three buttons were removed on 2026-10-01; see the next section. The
+Solitaire tab itself is unchanged.)
+
 The owner could not find editing, analysis or solitaire in the v2 viewer. A
 game's heading now has three outlined buttons under it: **Edit** (Ctrl+E,
 `Done editing` while the strip is open), **Analyze game** (opens Game review
@@ -376,6 +379,39 @@ list of missed moves with what was tried. Esc, another game or leaving the
 mode ends it. Solitaire never writes the file. Not built from the old
 viewer: the reveal timer, sideline guessing, keeping wrong guesses as
 variations, and trophies.
+
+## Book reading, Filter tab and This file (2026-10-01)
+
+Owner: "sometimes I just want to view a PGN like a book. No engine, no weird
+stuff, no extra buttons." This replaces the three buttons above.
+
+- **A file opens as a book.** The card is the moves alone: no tab strip, no
+  frame, the `+` in its corner. The game's heading (players, result · event ·
+  year, opening) is the top of the move text and scrolls with it; nothing sits
+  above the tabs. Where a game left the user's book is said under that heading.
+- **Under the board** is the game counter and nothing else until it is used:
+  the engine's row while the engine is on (E), the move field while it is typed
+  in (`/`), the note card when the move has a note or while editing (Ctrl+E).
+- **`+`** lists the viewer's tabs (Moves, Explorer, Filter, Analysis, Game
+  review, Solitaire, My books), then `Edit` and `Engine on` with their keys,
+  then `New pane`. The Actions menu has the same entries. `Analyze game` is the
+  button of the Game review tab.
+- **The Explorer starts on `This file`** in the viewer, listed first; the other
+  modes keep the database the settings remember. For a followed player it
+  offers `All n` / `White n` / `Black n` under the databases. That writes a
+  `White contains <player>` or `Black contains <player>` rule into the file's
+  filter, so the list narrows with the table.
+- **`Filter` is a tab** (owner: "bring back some sort of filter tab"): the
+  count, one Field / Rule / Value row per rule on one line when the pane is
+  wide enough, `Add rule`, `Reaching this position`, `All` / `Any`, `Clear`,
+  and `Export matching games…` / `Save to study…` while it narrows. The list
+  column has a filter button that opens it and, while narrowed, `n of N` with
+  `Clear`.
+- **The list** heads itself with the file's name. The order is a typeable
+  field. In a followed player's collection a row is the colour they had (a
+  light or dark disc) and their opponent, not their own name on every row.
+
+Not built: remembering the open tabs per file, and resizing panes by dragging.
 
 ## Opening names (2026-09-28)
 

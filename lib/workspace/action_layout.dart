@@ -30,15 +30,36 @@ final class ActionPaneSplit extends ActionPaneNode {
 
 /// Splits grow from the pane being used. Stable slots retain Explorer filters
 /// when another pane is closed; the primary slot owns collection analysis.
+///
+/// One pane is what a mode starts as. Where [opensBeside] is set, a tab
+/// picked from `+` while there is one goes under it in a pane of its own,
+/// so what was being read stays in view; with more panes it joins the one
+/// it was picked in. A pane can also be added empty, to be filled from its
+/// `+` or by a tab dragged onto it. A pane whose last tab leaves is closed
+/// and the others take its room.
 final class ActionLayout extends ChangeNotifier {
-  ActionLayout(PaneTabs<WorkspaceTab> first, this._explorer) {
+  ActionLayout(
+    PaneTabs<WorkspaceTab> first,
+    this._explorer, {
+    this.opensBeside = false,
+  }) {
     _panes.add(first);
     first.addListener(notifyListeners);
   }
 
   final Explorer _explorer;
+
+  /// Whether a tab picked while there is one pane opens under it in a pane
+  /// of its own ([open]). A mode whose first pane cannot be read at half
+  /// its height leaves this off, and a picked tab then joins that pane.
+  final bool opensBeside;
   final _panes = <PaneTabs<WorkspaceTab>>[];
   final _explorers = <int, Explorer>{};
+
+  /// The panes added empty and not filled yet. Each still has the one tab
+  /// its [PaneTabs] must have, which is not shown until something is opened
+  /// there.
+  final _empty = <int>{};
   ActionPaneNode _root = const ActionPaneLeaf(0);
   int _active = 0;
 
@@ -48,7 +69,14 @@ final class ActionLayout extends ChangeNotifier {
   int get active => _active;
   PaneTabs<WorkspaceTab> get tabs => _panes[_active];
   PaneTabs<WorkspaceTab> pane(int index) => _panes[index];
-  bool isOpen(WorkspaceTab tab) => visible.any((i) => pane(i).isOpen(tab));
+  bool isOpen(WorkspaceTab tab) => visible.any((i) => openIn(i).contains(tab));
+
+  /// Whether pane [index] was added empty and nothing was opened in it yet.
+  bool isEmpty(int index) => _empty.contains(index);
+
+  /// The tabs pane [index] shows, left to right: none while it is empty.
+  List<WorkspaceTab> openIn(int index) =>
+      isEmpty(index) ? const [] : pane(index).open;
   int? sourceOf(PaneTabs<WorkspaceTab> tabs) {
     final index = _panes.indexOf(tabs);
     return visible.contains(index) ? index : null;
@@ -74,16 +102,68 @@ final class ActionLayout extends ChangeNotifier {
     if (!canPlace(tab, index)) return;
     select(index);
     pane(index).show(tab);
+    if (_empty.remove(index)) {
+      for (final other in pane(index).open.where((id) => id != tab).toList()) {
+        pane(index).close(other);
+      }
+      notifyListeners();
+    }
   }
 
-  /// Brings [tab] up in the pane that already has it open, else opens it
-  /// in the pane in use: a tab is never opened twice by a request.
+  /// Brings [tab] up in the pane that has it open; else opens it as a tab
+  /// picked in the pane in use is opened ([open]). A tab is never opened
+  /// twice by a request.
   void reveal(WorkspaceTab tab) {
     for (final index in visible) {
-      if (pane(index).isOpen(tab)) return show(index, tab);
+      if (openIn(index).contains(tab)) return show(index, tab);
     }
-    tabs.show(tab);
+    open(active, tab);
   }
+
+  /// A tab picked from the `+` of pane [index]. Where [opensBeside] is set
+  /// and there is one pane, it goes under it in a pane of its own; a tab
+  /// that cannot have one, and any tab once there are several panes, joins
+  /// the pane it was picked in.
+  void open(int index, WorkspaceTab tab) {
+    if (!canPlace(tab, index)) return;
+    if (opensBeside &&
+        count == 1 &&
+        !pane(index).isOpen(tab) &&
+        canSplit(tab)) {
+      return split(index, tab, PaneSplitDirection.below);
+    }
+    show(index, tab);
+  }
+
+  /// An empty pane under pane [index], the one in use until it is filled.
+  void addPane(int index) {
+    if (!visible.contains(index) || count >= 4) return;
+    final fresh = [0, 1, 2, 3].firstWhere((i) => !visible.contains(i));
+    _ensure(
+      fresh,
+      pane(0).tabs
+          .firstWhere((tab) => tab.id != WorkspaceTab.analysis && !tab.pinned)
+          .id,
+    );
+    _empty.add(fresh);
+    _root = _replace(
+      _root,
+      index,
+      ActionPaneSplit(
+        PaneSplitDirection.below,
+        ActionPaneLeaf(index),
+        ActionPaneLeaf(fresh),
+      ),
+    );
+    _active = fresh;
+    notifyListeners();
+  }
+
+  /// Whether another pane can be added: four is what the card has room for,
+  /// and a mode whose tabs are all pinned has nothing to put in one.
+  bool get canAddPane =>
+      count < 4 &&
+      pane(0).tabs.any((tab) => tab.id != WorkspaceTab.analysis && !tab.pinned);
 
   void _ensure(int index, WorkspaceTab initial) {
     while (_panes.length <= index) {
@@ -120,6 +200,7 @@ final class ActionLayout extends ChangeNotifier {
     if (!visible.contains(index) || !canSplit(tab)) return;
     final fresh = [0, 1, 2, 3].firstWhere((i) => !visible.contains(i));
     _ensure(fresh, tab);
+    _empty.remove(fresh);
     pane(fresh).show(tab);
     for (final other in pane(fresh).open.where((id) => id != tab).toList()) {
       pane(fresh).close(other);
@@ -144,8 +225,26 @@ final class ActionLayout extends ChangeNotifier {
     if (from == to ||
         !visible.contains(from) ||
         !canPlace(tab, to) ||
-        !pane(from).isOpen(tab) ||
+        !openIn(from).contains(tab) ||
         pane(from).tabOf(tab).pinned) {
+      return;
+    }
+    // The main pane cannot be closed, so when its last tab leaves for
+    // another pane that pane's tabs come to it instead: one pane fewer
+    // either way, holding the tabs of both.
+    if (from == 0 && pane(0).open.length == 1) {
+      final joining = openIn(to);
+      _absorb(to, inItsPlace: true);
+      if (before != null) {
+        pane(0).move(tab, before: before);
+      } else {
+        for (final other in joining) {
+          pane(0).move(other, before: tab);
+        }
+      }
+      pane(0).show(tab);
+      _active = 0;
+      notifyListeners();
       return;
     }
     show(to, tab);
@@ -159,41 +258,72 @@ final class ActionLayout extends ChangeNotifier {
     if (pane(from).open.length == 1 && from != 0) {
       _root = _without(_root, from)!;
     } else {
-      // Keep the primary pane available without opening collection analysis.
-      if (pane(from).open.length == 1) {
-        final available = pane(
-          from,
-        ).tabs.where((t) => t.id != tab && t.id != WorkspaceTab.analysis);
-        pane(from).show(
-          available
-              .firstWhere(
-                (t) => t.id == WorkspaceTab.explorer,
-                orElse: () => available.first,
-              )
-              .id,
-        );
-      }
       pane(from).close(tab);
     }
   }
 
-  /// Whether [tab] can be closed in pane [index]: the main pane keeps one
-  /// tab, and closing another pane's last tab closes that pane.
+  /// The main pane takes the tabs of pane [other], after its own, and
+  /// [other] is closed. With [inItsPlace] the main pane also moves to where
+  /// [other] was, so it is the main pane's old place that closes: what a
+  /// pane whose last tab left looks like from outside.
+  void _absorb(int other, {bool inItsPlace = false}) {
+    for (final tab in openIn(other)) {
+      pane(0).show(tab);
+    }
+    _empty.remove(other);
+    if (inItsPlace) _root = _swapped(_root, 0, other);
+    _root = _without(_root, other)!;
+    if (_active == other) _active = 0;
+  }
+
+  /// [node] with panes [a] and [b] in each other's places.
+  ActionPaneNode _swapped(ActionPaneNode node, int a, int b) => switch (node) {
+    ActionPaneLeaf(:final index) =>
+      index == a
+          ? ActionPaneLeaf(b)
+          : index == b
+          ? ActionPaneLeaf(a)
+          : node,
+    ActionPaneSplit() => ActionPaneSplit(
+      node.direction,
+      _swapped(node.first, a, b),
+      _swapped(node.second, a, b),
+    ),
+  };
+
+  /// The pane the main one takes the tabs of when its own last tab is
+  /// closed: the first other pane with any.
+  int? get _heir => visible.where((i) => i != 0 && !isEmpty(i)).firstOrNull;
+
+  /// The pane [tab] is open in, the one in use first; null when none has it.
+  int? paneOf(WorkspaceTab tab) => [
+    active,
+    ...visible,
+  ].where((index) => openIn(index).contains(tab)).firstOrNull;
+
+  /// Whether [tab] can be closed in pane [index]: closing a pane's last tab
+  /// closes the pane, and the main pane's last tab closes only while
+  /// another pane has tabs to take its place.
   bool canClose(int index, WorkspaceTab tab) =>
       visible.contains(index) &&
-      pane(index).isOpen(tab) &&
+      openIn(index).contains(tab) &&
       !pane(index).tabOf(tab).pinned &&
-      (index != 0 || pane(index).open.length > 1);
+      (index != 0 || pane(index).open.length > 1 || _heir != null);
 
   void closeTab(int index, WorkspaceTab tab) {
     if (!canClose(index, tab)) return;
-    if (pane(index).open.length == 1) {
+    if (pane(index).open.length > 1) return pane(index).close(tab);
+    if (index == 0) {
+      final selected = pane(_heir!).selected;
+      _absorb(_heir!, inItsPlace: true);
+      pane(0)
+        ..close(tab)
+        ..show(selected);
+    } else {
       _root = _without(_root, index)!;
       if (_active == index) _active = 0;
-      notifyListeners();
-    } else {
-      pane(index).close(tab);
     }
+    notifyListeners();
   }
 
   ActionPaneNode? _without(ActionPaneNode node, int index) {
@@ -209,12 +339,8 @@ final class ActionLayout extends ChangeNotifier {
   void closePane(int index) {
     if (index == 0 || !visible.contains(index)) return;
     final selected = pane(0).selected;
-    for (final tab in pane(index).open) {
-      pane(0).show(tab);
-    }
+    _absorb(index);
     pane(0).show(selected);
-    _root = _without(_root, index)!;
-    if (_active == index) _active = 0;
     notifyListeners();
   }
 
@@ -238,7 +364,8 @@ final class ActionLayout extends ChangeNotifier {
           locate(split.second, [...path, horizontal ? 'Right' : 'Bottom']);
     }
 
-    return '${locate(root, [])} — ${pane(index).selected.title}';
+    final shown = isEmpty(index) ? 'empty' : pane(index).selected.title;
+    return '${locate(root, [])} — $shown';
   }
 
   List<AppAction> destinations(WorkspaceTab tab, {int? from}) => [

@@ -46,11 +46,22 @@ const choiceFieldMenuWidth = 280.0;
 
 /// How wide a filter rule's rule box is, beside a field box that takes the
 /// rest of the line.
-const filterRuleWidth = 96.0;
+const filterRuleWidth = 120.0;
 
-/// The narrowest a filter rule's first line holds both its field and its
-/// rule box; under it the rule goes on a line of its own.
-const filterRuleLineWidth = 260.0;
+/// How wide a filter rule's field box is when the rule is on one line.
+const filterFieldWidth = 150.0;
+
+/// The narrowest pane a filter rule's field, rule and value share a line
+/// in; under it the value goes on a line of its own.
+const filterRowWidth = 440.0;
+
+/// How tall the line that counts the games a filter keeps is: a text
+/// button's height, so `Clear` coming and going moves nothing under it.
+const filterCountHeight = 40.0;
+
+/// How wide the mark of the colour a player had is, in a list of their
+/// games.
+const sideMarkSize = 10.0;
 
 /// The tallest the box of an engine's own output grows under a failed
 /// registration before it scrolls: about a dozen mono lines.

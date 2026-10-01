@@ -53,7 +53,11 @@ Bughouse mode is offered when its engine assets are present.
 - Trainer Learn/Review and the shared Train tab use the same scheduling and
   lesson owners. Training records remain under Documents.
 - Viewer owns collections, selection/filter/sort and held edits; analysis tabs
-  preserve their source draft. Export uses the exclusive PGN exporter.
+  preserve their source draft. Export uses the exclusive PGN exporter. It opens
+  on the moves alone (`viewerTabs`), has its own Explorer starting on `This
+  file` (`Explorer.independent(starting:)`), and supplies the Filter tab
+  (`ViewerFilterPane`) and the followed player's colour choice
+  (`PlayerSideChoice`) through `ModeView`.
 - Study uses the same document session for chapters, tags, starts, cleanup,
   quiz markers, import/export and retained retry commands.
 - Tactics mines downloaded games into `tactics_sets/Default.pgn`, trains puzzles
