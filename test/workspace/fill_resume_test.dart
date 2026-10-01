@@ -266,6 +266,24 @@ void main() {
         'No saved search starts at this board position.',
       );
     });
+
+    test('the Expectimax button searches afresh when there is nothing to '
+        'continue, or only a search of other settings', () async {
+      final other = await savedAt(2000);
+      final restarted = fillWith(
+        ScriptedEvaluator(),
+        loadTree: (_, _) => Stream.value(other),
+      );
+      expect(
+        await restarted.resume(
+          const FillRequest(elo: 1800, depthPlies: 1),
+          orAfresh: true,
+        ),
+        isNull,
+      );
+      expect(restarted.state, isA<FillDone>());
+      expect(restarted.found!.request.elo, 1800);
+    });
   });
 
   test('a board flipped while a saved search decodes starts no search for '

@@ -178,7 +178,7 @@ void main() {
   ) async {
     await openKid(tester);
     if (find.text('Train').evaluate().isEmpty) {
-      await tester.tap(find.byTooltip('Open tab'));
+      await tester.tap(find.byTooltip('Open tab').first);
       await tester.pumpAndSettle();
     }
     await tester.tap(find.text('Train'));

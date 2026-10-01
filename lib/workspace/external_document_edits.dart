@@ -271,3 +271,8 @@ final class ExternalDocumentEdits {
     return result ?? refused('The source editor is busy or not saved.');
   }
 }
+
+/// Only the session decides when editors must hand over their text.
+final class _Editors extends ChangeNotifier {
+  void commit() => notifyListeners();
+}

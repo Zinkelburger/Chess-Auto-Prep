@@ -6,8 +6,7 @@ import 'explorer.dart';
 
 /// The top of the Explorer tab: the databases side by side, the chosen one
 /// pressed, and at the end `Filters` for the one that can be narrowed.
-/// The filters fold away under it so the table keeps the room; what they
-/// are set to shows beside the button while they are folded.
+/// The filters fold away under it so the table keeps the room.
 class ExplorerSourceBar extends StatefulWidget {
   const ExplorerSourceBar({
     super.key,
@@ -83,7 +82,7 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
                     maxWidth: explorerTrailingMaxWidth,
                   ),
                   child: _FilterButton(
-                    label: unfolded ? 'Filters' : _folded(choice),
+                    label: 'Filters',
                     unfolded: unfolded,
                     onPressed: () {
                       if (mounted) setState(() => _unfolded = !_unfolded);
@@ -108,12 +107,6 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
         const SizedBox(height: Space.xs),
       ],
     );
-  }
-
-  /// The folded button's words: what the filters are set to.
-  String _folded(ExplorerChoice choice) {
-    final narrowing = choice.narrowing;
-    return narrowing.isEmpty ? 'Filters' : narrowing;
   }
 }
 

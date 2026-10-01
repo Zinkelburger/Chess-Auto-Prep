@@ -225,23 +225,23 @@ final class WorkspaceWiring {
     if (started is StartFailed) return FillUnavailable(started.reason);
     final engine = (started as Started).engine;
     final local = CachedEvaluator(
-      FixedDepthEvaluator(engine, depth: fillEvalDepth),
+      FixedDepthEvaluator(engine, depth: request.evalDepth),
       _env.evalCache(),
-      depth: fillEvalDepth,
+      depth: request.evalDepth,
     );
     final remote = request.source == EvaluationSource.stockfish
         ? null
         : SearchEvaluator(
             source: request.source,
             fallback: local,
-            minDepth: fillEvalDepth,
+            minDepth: request.evalDepth,
             run: _env.lookups.run(),
           );
     return FillReady(
       evaluator: remote ?? local,
-      candidates: FixedDepthCandidates(engine, depth: fillEvalDepth),
+      candidates: FixedDepthCandidates(engine, depth: request.evalDepth),
       policy: MaiaOpponent(_env.maia, elo: request.elo),
-      continuations: FixedDepthEvaluator(engine, depth: fillEvalDepth),
+      continuations: FixedDepthEvaluator(engine, depth: request.evalDepth),
       release: () async {
         remote?.close();
         await engine.quit();
