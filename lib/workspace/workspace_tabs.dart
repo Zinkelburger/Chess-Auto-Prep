@@ -48,7 +48,8 @@ List<PaneTab<WorkspaceTab>> get _documentTabs => [
       tab.tab,
 ];
 
-/// Builder starts with its building tools. Training remains opt-in.
+/// Builder starts with its building tools, which `ActionLayout.startBuilding`
+/// then sets side by side. Training remains opt-in.
 PaneTabs<WorkspaceTab> newWorkspaceTabs() => PaneTabs(
   _documentTabs,
   open: const [WorkspaceTab.moves, WorkspaceTab.explorer, WorkspaceTab.search],

@@ -35,30 +35,6 @@ void main() {
     expect(ExplorerAnswer.empty.isEmpty, isTrue);
   });
 
-  test('the choice says how it is narrowed in a few words', () {
-    expect(ExplorerChoice.defaults.narrowing, '');
-    expect(const ExplorerChoice(source: ExplorerSource.twic).narrowing, '');
-    expect(
-      const ExplorerChoice(source: ExplorerSource.lichess).narrowing,
-      'Blitz Rapid Classical · 2000+',
-    );
-    expect(
-      const ExplorerChoice(
-        source: ExplorerSource.lichess,
-        speeds: {LichessSpeed.bullet},
-        ratings: {1600, 2200},
-      ).narrowing,
-      'Bullet · 1600 2200',
-    );
-    expect(
-      const ExplorerChoice(
-        source: ExplorerSource.twic,
-        classicalOnly: true,
-      ).narrowing,
-      'Classical only',
-    );
-  });
-
   test('the choice survives the settings file, and a missing or unknown '
       'part is the default', () {
     const chosen = ExplorerChoice(

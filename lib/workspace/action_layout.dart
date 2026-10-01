@@ -234,7 +234,7 @@ final class ActionLayout extends ChangeNotifier {
     // either way, holding the tabs of both.
     if (from == 0 && pane(0).open.length == 1) {
       final joining = openIn(to);
-      _absorb(to);
+      _absorb(to, inItsPlace: true);
       if (before != null) {
         pane(0).move(tab, before: before);
       } else {
@@ -263,15 +263,33 @@ final class ActionLayout extends ChangeNotifier {
   }
 
   /// The main pane takes the tabs of pane [other], after its own, and
-  /// [other] is closed.
-  void _absorb(int other) {
+  /// [other] is closed. With [inItsPlace] the main pane also moves to where
+  /// [other] was, so it is the main pane's old place that closes: what a
+  /// pane whose last tab left looks like from outside.
+  void _absorb(int other, {bool inItsPlace = false}) {
     for (final tab in openIn(other)) {
       pane(0).show(tab);
     }
     _empty.remove(other);
+    if (inItsPlace) _root = _swapped(_root, 0, other);
     _root = _without(_root, other)!;
     if (_active == other) _active = 0;
   }
+
+  /// [node] with panes [a] and [b] in each other's places.
+  ActionPaneNode _swapped(ActionPaneNode node, int a, int b) => switch (node) {
+    ActionPaneLeaf(:final index) =>
+      index == a
+          ? ActionPaneLeaf(b)
+          : index == b
+          ? ActionPaneLeaf(a)
+          : node,
+    ActionPaneSplit() => ActionPaneSplit(
+      node.direction,
+      _swapped(node.first, a, b),
+      _swapped(node.second, a, b),
+    ),
+  };
 
   /// The pane the main one takes the tabs of when its own last tab is
   /// closed: the first other pane with any.
@@ -297,7 +315,7 @@ final class ActionLayout extends ChangeNotifier {
     if (pane(index).open.length > 1) return pane(index).close(tab);
     if (index == 0) {
       final selected = pane(_heir!).selected;
-      _absorb(_heir!);
+      _absorb(_heir!, inItsPlace: true);
       pane(0)
         ..close(tab)
         ..show(selected);
@@ -390,6 +408,31 @@ final class ActionLayout extends ChangeNotifier {
     ),
     AppAction('Join all panes', count > 1 ? joinAll : null, group: 'Layout'),
   ];
+
+  /// The builder's start: Moves over the Explorer on the left, Expectimax
+  /// on the right, all three in view at once. The Explorer keeps the main
+  /// pane, whose database and filters are the remembered ones, and the main
+  /// pane keeps the other tabs to be shown by name.
+  void startBuilding() {
+    if (count > 1) return;
+    _ensure(1, WorkspaceTab.search);
+    _ensure(2, WorkspaceTab.moves);
+    pane(0)
+      ..show(WorkspaceTab.explorer)
+      ..close(WorkspaceTab.search)
+      ..close(WorkspaceTab.moves);
+    _root = const ActionPaneSplit(
+      PaneSplitDirection.right,
+      ActionPaneSplit(
+        PaneSplitDirection.below,
+        ActionPaneLeaf(2),
+        ActionPaneLeaf(0),
+      ),
+      ActionPaneLeaf(1),
+    );
+    _active = 1;
+    notifyListeners();
+  }
 
   /// Initial arrangements retained for fixtures and callers restoring a layout.
   void arrange(int count) {

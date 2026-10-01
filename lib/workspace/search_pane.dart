@@ -72,6 +72,9 @@ class _SearchPaneState extends State<SearchPane>
   late final _depth = TextEditingController(
     text: widget.fill.depth?.toString() ?? '',
   );
+  late final _evalDepth = TextEditingController(
+    text: '${widget.fill.evalDepth}',
+  );
   late final _rootMoves = TextEditingController(
     text: '${widget.fill.rootMoves}',
   );
@@ -123,21 +126,15 @@ class _SearchPaneState extends State<SearchPane>
     _preview.dispose();
     _elo.dispose();
     _depth.dispose();
+    _evalDepth.dispose();
     _rootMoves.dispose();
     _candidates.dispose();
     _cover.dispose();
     super.dispose();
   }
 
-  FillRequest get _request => FillRequest(
-    elo: widget.settings.value.opponentElo,
-    depthPlies: widget.fill.depth,
-    source: widget.fill.source,
-    rootMoves: widget.fill.rootMoves,
-    candidateMoves: widget.fill.candidateMoves,
-    replyFloor: widget.fill.replyFloor,
-    method: widget.fill.method,
-  );
+  FillRequest get _request =>
+      widget.fill.requestFor(widget.settings.value.opponentElo);
 
   Future<bool> _applySettings() async {
     final elo = int.tryParse(_elo.text.trim());
@@ -146,6 +143,7 @@ class _SearchPaneState extends State<SearchPane>
     final rootMoves = int.tryParse(_rootMoves.text.trim());
     final candidates = int.tryParse(_candidates.text.trim());
     final cover = int.tryParse(_cover.text.trim());
+    final evalDepth = int.tryParse(_evalDepth.text.trim());
     final problem =
         elo == null || elo < Settings.minElo || elo > Settings.maxElo
         ? 'Maia rating: ${Settings.minElo} to ${Settings.maxElo}'
@@ -158,6 +156,10 @@ class _SearchPaneState extends State<SearchPane>
         ? 'Candidates: 1 to 218'
         : cover == null || cover < 0 || cover == 1
         ? 'Reply coverage: 2 or more games, or 0 for every reply'
+        : evalDepth == null ||
+              evalDepth < minFillEvalDepth ||
+              evalDepth > maxFillEvalDepth
+        ? 'Engine depth: $minFillEvalDepth to $maxFillEvalDepth'
         : null;
     if (!mounted) return false;
     setState(() => _problem = problem);
@@ -166,18 +168,16 @@ class _SearchPaneState extends State<SearchPane>
     widget.fill.rootMoves = rootMoves!;
     widget.fill.candidateMoves = candidates!;
     widget.fill.replyFloor = cover == 0 ? 0 : 1 / cover!;
+    widget.fill.evalDepth = evalDepth!;
     await widget.settings.update(
       widget.settings.value.copyWith(opponentElo: elo!),
     );
     return mounted;
   }
 
-  Future<void> _search({bool resume = false}) async {
+  Future<void> _search() async {
     if (!await _applySettings()) return;
-    final request = _request;
-    final refusal = resume
-        ? await widget.fill.resume(request)
-        : await widget.fill.start(request);
+    final refusal = await widget.fill.resume(_request, orAfresh: true);
     if (!mounted || refusal == null) return;
     setState(() => _problem = refusal);
   }
@@ -233,22 +233,6 @@ class _SearchPaneState extends State<SearchPane>
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _form(context),
-                  if (!_book)
-                    Tooltip(
-                      message:
-                          'Engine evaluation target, separate from Expectimax search depth. '
-                          'Cached scores may be deeper; database scores and proven mates may differ. '
-                          'Each Engine value shows its recorded depth in the next column.',
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: Space.m,
-                        ),
-                        child: Text(
-                          'Engine target: depth $fillEvalDepth',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
-                    ),
                   _status(context),
                   const Divider(height: 1),
                   Expanded(child: _table(context)),
@@ -382,6 +366,19 @@ class _SearchPaneState extends State<SearchPane>
     ),
     Tooltip(
       message:
+          'Engine depth each position is scored at. Hover an Engine value '
+          'for the depth it was scored at.',
+      child: _NumberBox(
+        label: 'Engine depth',
+        box: _evalDepth,
+        width: searchEloWidth,
+        enabled: !widget.fill.running,
+        onSubmitted: () => unawaited(_applySettings()),
+        onChanged: () => unawaited(_applySettings()),
+      ),
+    ),
+    Tooltip(
+      message:
           'Expand reply paths met at least once in this many games. Rarer replies keep their engine value. 0 expands every reply.',
       child: _NumberBox(
         label: '1 in N games',
@@ -414,6 +411,13 @@ class _SearchPaneState extends State<SearchPane>
     final fill = widget.fill;
     final state = fill.state;
     final running = state is FillRunning ? state : null;
+    // A search with these settings covers the board: pressing goes on.
+    final resumable =
+        running == null &&
+        switch (fill.nodeAtBoard(request: _request)) {
+          OurNode() || OpponentNode() => true,
+          _ => false,
+        };
     return Padding(
       padding: const EdgeInsets.fromLTRB(Space.m, Space.m, Space.m, Space.s),
       child: Wrap(
@@ -424,23 +428,20 @@ class _SearchPaneState extends State<SearchPane>
           ..._settingsFields(),
           if (running == null) ...[
             Tooltip(
-              message:
-                  'Continue a search from this board, including a saved search',
-              child: IconButton(
-                icon: const Icon(Icons.playlist_play),
-                onPressed: fill.canStart
-                    ? () => unawaited(_search(resume: true))
-                    : null,
-              ),
-            ),
-            Tooltip(
               message: AppKey.search.tip(
-                'Search from the board (pauses after $fillNodeBudget new positions)',
+                resumable
+                    ? 'Go on from the search at this board'
+                    : 'Search from the board',
               ),
               child: FilledButton.icon(
                 onPressed: fill.canStart ? () => unawaited(_search()) : null,
                 icon: const Icon(Icons.play_arrow),
-                label: Text(_book ? 'Build' : 'Expectimax'),
+                label: Text(switch ((resumable, _book)) {
+                  (true, true) => 'Resume build',
+                  (true, false) => 'Resume expectimax',
+                  (false, true) => 'Build',
+                  (false, false) => 'Expectimax',
+                }),
               ),
             ),
           ] else ...[
@@ -494,36 +495,23 @@ class _SearchPaneState extends State<SearchPane>
                   '${widget.fill.candidateMoves} deeper · $forSide',
         false,
       ),
-      FillRunning(
-        :final depth,
-        :final of,
-        :final nodes,
-        :final stopping,
-        :final lastPly,
-      ) =>
-        (
-          stopping
-              ? 'Stopping at depth $depth · $nodes positions'
-              : 'Searching $forSide · depth $depth'
-                    '${of == null ? '' : ' of $of'} · $nodes positions'
-                    '${lastPly == null ? '' : ' · stops after depth $lastPly'}',
-          false,
-        ),
+      FillRunning(:final depth, :final of, :final nodes, :final stopping) => (
+        '${stopping ? 'Stopping at' : 'Searching'} depth $depth'
+            '${of == null || stopping ? '' : ' of $of'} · $nodes positions',
+        false,
+      ),
       FillDone(
         :final depth,
         :final nodes,
         :final complete,
-        :final budgetReached,
         :final sourceLost,
         :final stoppedBy,
       ) =>
         (
-          '${complete ? 'Searched' : 'Stopped at'} depth $depth $forSide · '
-              '$nodes positions${_ratedWords(found)}'
-              '${budgetReached ? ' · position budget reached' : ''}'
+          '${complete ? 'Searched' : 'Stopped at'} depth $depth · '
+              '$nodes positions'
               '${sourceLost ? ' · ChessDB stopped answering' : ''}'
-              '${stoppedBy == null ? '' : ' · $stoppedBy'}'
-              '${complete ? '' : ' · Resume to continue'}${_findsWords()}',
+              '${stoppedBy == null ? '' : ' · $stoppedBy'}${_findsWords()}',
           false,
         ),
       FillFailed(:final reason) => (reason, true),
@@ -541,17 +529,12 @@ class _SearchPaneState extends State<SearchPane>
     );
   }
 
-  String _ratedWords(FillFound? found) => switch (found?.request) {
-    final request? when request.method == SearchMethod.practical =>
-      ' · rated ${request.elo}',
-    _ => '',
-  };
-
   /// What the run pointed out, and where to see it.
   String _findsWords() => switch (widget.fill.finds?.recorded) {
-    FindsReading() => ' · looking for positions…',
+    FindsReading() => '',
     FindsUnsaved() => ' · search positions not saved',
-    FindsKept(:final count) => ' · $count found, listed in Positions (Ctrl+P)',
+    FindsKept(count: 0) => '',
+    FindsKept(:final count) => ' · $count found (Positions, Ctrl+P)',
     null => '',
   };
 

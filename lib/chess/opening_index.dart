@@ -47,25 +47,20 @@ final class OpeningIndex {
     List<String>? ids,
     void Function(int done)? onProgress,
   }) {
-    final moves = <int, Map<String, List<int>>>{};
-    final results = Uint8List(texts.length);
-    final games = <ExplorerGame>[];
-    var unread = 0;
-    for (final (index, text) in texts.indexed) {
+    final index = OpeningIndexBuilder();
+    for (final (at, text) in texts.indexed) {
       final read = readGame(text);
-      results[index] = _resultOf(read).index;
-      games.add(_gameOf(read.tags, ids?[index] ?? '$index'));
-      final tree = read.tree;
-      if (tree == null || tree.isEmpty) {
-        unread++;
-      } else {
-        _addMainLine(moves, index, tree.rootFen, tree.children.first);
-      }
-      if (onProgress != null && (index + 1) % progressEvery == 0) {
-        onProgress(index + 1);
+      index.add(
+        tags: read.tags,
+        tree: read.tree,
+        terminator: read.terminator,
+        id: ids?[at],
+      );
+      if (onProgress != null && (at + 1) % progressEvery == 0) {
+        onProgress(at + 1);
       }
     }
-    return OpeningIndex._(moves, results, games, unread);
+    return index.build();
   }
 
   /// How often [OpeningIndex.of] reports progress, in games.
@@ -121,6 +116,39 @@ final class OpeningIndex {
   }
 }
 
+/// An [OpeningIndex] given its games one at a time, already read: what a
+/// caller holding the games' trees uses, so indexing them does not read
+/// their text a second time, and can stop between any two games.
+final class OpeningIndexBuilder {
+  final _moves = <int, Map<String, List<int>>>{};
+  final _results = <int>[];
+  final _games = <ExplorerGame>[];
+  var _unread = 0;
+
+  /// Adds the next game. [id] names it for the games list and defaults to
+  /// its place among the games added. A game with no [tree], or no moves in
+  /// it, is counted in [OpeningIndex.unread] and indexes nothing.
+  void add({
+    required List<PgnHeader> tags,
+    required GameTree? tree,
+    required String? terminator,
+    String? id,
+  }) {
+    final index = _games.length;
+    _results.add(_resultOf(tags, terminator).index);
+    _games.add(_gameOf(tags, id ?? '$index'));
+    if (tree == null || tree.isEmpty) {
+      _unread++;
+    } else {
+      _addMainLine(_moves, index, tree.rootFen, tree.children.first);
+    }
+  }
+
+  /// The index over the games added. The builder is spent.
+  OpeningIndex build() =>
+      OpeningIndex._(_moves, Uint8List.fromList(_results), _games, _unread);
+}
+
 /// How a game ended, as the index keeps it: one byte a game.
 enum GameResult { white, draw, black, undecided }
 
@@ -146,8 +174,8 @@ void _addMainLine(
 }
 
 /// The `[Result]` tag, else the marker the moves ended with.
-GameResult _resultOf(GameRead read) {
-  final said = tagValue(read.tags, 'Result')?.trim() ?? read.terminator;
+GameResult _resultOf(List<PgnHeader> tags, String? terminator) {
+  final said = tagValue(tags, 'Result')?.trim() ?? terminator;
   return switch (said) {
     '1-0' => GameResult.white,
     '0-1' => GameResult.black,

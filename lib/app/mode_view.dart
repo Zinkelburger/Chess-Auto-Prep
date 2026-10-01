@@ -247,7 +247,7 @@ abstract base class _DocumentModeView extends ModeView {
       ),
       AppAction(
         'Train this chapter',
-        session.chapter == null ? null : () => tabs.show(WorkspaceTab.train),
+        session.chapter == null ? null : () => show(WorkspaceTab.train),
         group: 'Repertoire',
       ),
       AppAction(
@@ -260,7 +260,7 @@ abstract base class _DocumentModeView extends ModeView {
           'Audit this chapter',
           audit.canStart
               ? () {
-                  tabs.show(WorkspaceTab.audit);
+                  show(WorkspaceTab.audit);
                   unawaited(audit.start());
                 }
               : null,
@@ -310,7 +310,9 @@ final class RepertoiresView extends _LibraryView {
     Workspace workspace,
     WorkspaceRequests requests,
     DocumentModes modes,
-  ) : super(workspace, newWorkspaceTabs(), requests, modes);
+  ) : super(workspace, newWorkspaceTabs(), requests, modes) {
+    layout.startBuilding();
+  }
 
   @override
   bool get offersBuilder => false;
@@ -328,7 +330,7 @@ final class TrainerView extends _LibraryView {
 
   /// Coming here is coming to train, whichever tab was left up.
   @override
-  void entered() => tabs.show(WorkspaceTab.train);
+  void entered() => show(WorkspaceTab.train);
 }
 
 /// The files the PGN Viewer has open or has had open.

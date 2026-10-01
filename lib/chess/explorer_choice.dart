@@ -98,29 +98,6 @@ final class ExplorerChoice {
       if (ratings.contains(rating)) rating,
   ];
 
-  /// How the chosen database is narrowed, in a few words:
-  /// `blitz rapid classical · 2000+`, `classical only`, or empty when it is
-  /// not narrowed at all. The database itself is the pressed button.
-  String get narrowing => switch (source) {
-    ExplorerSource.book ||
-    ExplorerSource.masters ||
-    ExplorerSource.thisFile ||
-    ExplorerSource.myGames => '',
-    ExplorerSource.twic => classicalOnly ? 'Classical only' : '',
-    ExplorerSource.lichess =>
-      '${speedsInOrder.map((s) => s.title).join(' ')} · ${_ratingsSummary()}',
-  };
-
-  /// `2000+` when the bands run to the top without a hole, else the bands.
-  String _ratingsSummary() {
-    final chosen = ratingsInOrder;
-    if (chosen.isEmpty) return 'any rating';
-    final from = lichessRatings.indexOf(chosen.first);
-    final toTheTop = lichessRatings.sublist(from);
-    if (chosen.length == toTheTop.length) return '${chosen.first}+';
-    return chosen.join(' ');
-  }
-
   /// What a cache is keyed by: everything that changes the answer.
   String get key =>
       '${source.name}|${speedsInOrder.map((s) => s.title).join(',')}|'

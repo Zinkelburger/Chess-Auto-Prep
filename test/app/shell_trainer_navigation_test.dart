@@ -24,7 +24,7 @@ void main() {
     w.requests.switchTo(mode);
     await tester.pumpAndSettle();
     if (find.text('Train').evaluate().isEmpty) {
-      await tester.tap(find.byTooltip('Open tab'));
+      await tester.tap(find.byTooltip('Open tab').first);
       await tester.pumpAndSettle();
     }
     await tester.tap(find.text('Train'));
@@ -41,6 +41,7 @@ void main() {
         await start(tester, mode);
         final shown = w.lineTrainer.lesson!.drill.fen;
         final before = (w.store.documents[kidMain] as Opened).text;
+        await tester.ensureVisible(find.text('Open in Builder'));
         await tester.tap(find.text('Open in Builder'));
         await tester.pumpAndSettle();
         expect(w.requests.mode, Mode.repertoires);

@@ -320,7 +320,7 @@ void main() {
     layout.pane(0).show(WorkspaceTab.search);
     await tester.pumpAndSettle();
     expect(find.byType(ExplorerPane), findsNWidgets(3));
-    expect(find.text('Engine target: depth 14'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Engine depth'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
