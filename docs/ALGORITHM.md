@@ -176,15 +176,16 @@ is fabricated for a single engine line.
 ## V2 interactive Expectimax
 
 The Builder's interactive Expectimax uses a bounded candidate policy rather than
-an exhaustive Pure tree. From the root down, Stockfish at depth 14 supplies a
+an exhaustive Pure tree. From the root down, Stockfish at the panel's Engine
+depth (default 14) supplies a
 MultiPV shortlist of our moves: Root moves (default four) for our first move,
 at the root or under each first reply, and Candidates (default four) after it.
 Only those child positions get separate fixed-depth evaluations and recursive
 expansion. A failed or incomplete shortlist stops with a visible error.
 Callers without a ranking source score all candidates before retaining the best
 N. Other callers retain their existing exhaustive defaults. The panel exposes
-Maia rating, root moves, candidate count, depth in half-moves (blank for no limit), and
-reply coverage directly above the results. Coverage is expressed as one in N
+Maia rating, root moves, candidate count, depth in half-moves (blank for no limit),
+engine depth and reply coverage directly above the results. Coverage is expressed as one in N
 games, default 100; zero expands every reply. Settings apply to the next search
 and are disabled during a run.
 
@@ -213,10 +214,14 @@ from the latest board only after that save finishes. A manual stop or a change
 of document/side cancels the pending restart. Up to 16 previous roots are retained
 in memory, so backing up displays their results immediately and a new search
 reuses compatible values. Chapter searches also keep their existing saved trees
-on disk. A stopped search stays stopped while browsing; Expectimax continues
-from the current board and its retained values. Resume also loads a saved root
-after restarting the app. Rating, evaluation source, candidate count and reply
-coverage must match to reuse an interactive tree. Interactive trees saved before
+on disk. A stopped search stays stopped while browsing. The one Expectimax
+button reads Resume expectimax when a compatible search covers the board, and
+continues from the current board, not the old root, with its retained values.
+Otherwise it loads a saved tree starting at the board (after restarting the
+app), and when none fits it starts afresh there. Rating, evaluation source,
+engine depth, candidate count and reply coverage must match to reuse an
+interactive tree. The status line says only how far it got: Stopped at depth N
+· X positions. Interactive trees saved before
 the root was shortlisted (no `v2_root_moves`) are refused; start a new search.
 Raising Root moves, or starting from a deeper node of an earlier search, evaluates
 only the root moves that are missing and keeps the work below the others. Engine evaluations continue to use the shared

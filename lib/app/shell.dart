@@ -34,11 +34,11 @@ import '../workspace/book_chip.dart';
 import '../workspace/copy_name_dialog.dart';
 import '../storage/finds_store.dart';
 import '../workspace/fill_gaps.dart';
-import '../workspace/fill_states.dart';
 import '../workspace/finds_panel.dart';
 import '../workspace/move_field.dart';
 import '../workspace/workspace.dart';
 import '../workspace/workspace_keys.dart';
+import '../workspace/action_layout.dart';
 import '../workspace/workspace_tabs.dart';
 import '../workspace/workspace_view.dart';
 import 'full_screen.dart';
@@ -311,7 +311,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         ? await _requests.readInBuilder(line.ref, line.sans, game: line.game)
         : await _requests.openAt(line.ref, line.sans, game: line.game);
     if (!mounted || result is! RequestDone) return;
-    if (line.place != ReadIn.board) _tabs.show(WorkspaceTab.moves);
+    if (line.place != ReadIn.board) _view.show(WorkspaceTab.moves);
   }
 
   /// While the explorer's Book is up the board is its free board; otherwise a
@@ -356,7 +356,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     final result = await _requests.importFile();
     if (!mounted || result is! RequestDone) return;
     _train.lines.setScope(TrainScope.chapter);
-    _tabs.show(WorkspaceTab.train);
+    _view.show(WorkspaceTab.train);
   }
 
   /// Space shows the answer while a puzzle is on the board; otherwise it
@@ -433,7 +433,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
             confirm: 'Add and train',
           ),
       showTrain: () {
-        if (mounted) _views[Mode.repertoires]!.tabs.show(WorkspaceTab.train);
+        if (mounted) _views[Mode.repertoires]!.show(WorkspaceTab.train);
       },
     ),
   );
@@ -547,7 +547,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
             exportPgn: () => unawaited(
               exportViewerPgn(context, _docs.viewer, _requests.say),
             ),
-            search: () => unawaited(_search.search(_tabs)),
+            search: () => unawaited(_search.search(_view.layout)),
             accounts: () => unawaited(editAccounts(context, _train.myGames)),
             newBook: () =>
                 unawaited(newBook(context, _ws.books, say: _requests.say)),
@@ -590,7 +590,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     ...AppKey.paste.bind(() => unawaited(_paste())),
     ...AppKey.pastePosition.bind(() => unawaited(_paste(positionOnly: true))),
     ...AppKey.analysisBoard.bind(() => unawaited(_analyze())),
-    ...AppKey.search.bind(() => unawaited(_search.search(_tabs))),
+    ...AppKey.search.bind(() => unawaited(_search.search(_view.layout))),
     ...AppKey.play.bind(_space),
     ...AppKey.nextGame.bind(() => _walk(1)),
     ...AppKey.previousGame.bind(() => _walk(-1)),
@@ -867,20 +867,15 @@ final class SearchDoor {
   /// What refused the search goes in the bar. A mode without a Search tab
   /// (Tactics, My games) starts nothing: the search would run where it
   /// cannot be seen or stopped, with the engine pane paused for it.
-  Future<void> search(PaneTabs<WorkspaceTab> tabs) async {
+  Future<void> search(ActionLayout layout) async {
     if (!fill.canStart) return;
-    if (!tabs.tabs.any((tab) => tab.id == WorkspaceTab.search)) return;
-    tabs.show(WorkspaceTab.search);
-    final refusal = await fill.start(
-      FillRequest(
-        elo: settings.value.opponentElo,
-        depthPlies: fill.depth,
-        rootMoves: fill.rootMoves,
-        candidateMoves: fill.candidateMoves,
-        replyFloor: fill.replyFloor,
-        source: fill.source,
-        method: fill.method,
-      ),
+    if (!layout.pane(0).tabs.any((tab) => tab.id == WorkspaceTab.search)) {
+      return;
+    }
+    layout.reveal(WorkspaceTab.search);
+    final refusal = await fill.resume(
+      fill.requestFor(settings.value.opponentElo),
+      orAfresh: true,
     );
     if (refusal != null) requests.say(refusal);
   }

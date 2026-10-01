@@ -123,7 +123,7 @@ void main() {
     expect(published, hasLength(1));
   });
 
-  testWidgets('a run the model stops says so ahead of the resume hint', (
+  testWidgets('a run the model stops says so after its depth and positions', (
     tester,
   ) async {
     fill.dispose();
@@ -146,10 +146,10 @@ void main() {
     final status = find.textContaining('the opponent model could not answer');
     expect(status, findsOneWidget);
     final words = tester.widget<Text>(status).data!;
-    expect(
-      words.indexOf('could not answer'),
-      lessThan(words.indexOf('Resume to continue')),
-    );
+    expect(words, startsWith('Stopped at depth '));
+    expect(words, isNot(contains('Resume')));
+    expect(words, isNot(contains('rated')));
+    expect(find.widgetWithText(FilledButton, 'Resume expectimax'), findsOne);
   });
 
   testWidgets('both pause controls explain when they stop and keep the run', (
@@ -189,8 +189,8 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    expect(find.text('Engine target: depth 14'), findsOneWidget);
     for (final label in [
+      'Engine depth',
       'Maia rating',
       'Candidates',
       'Depth',
@@ -275,7 +275,12 @@ void main() {
     // Depth is on the Engine value's hover, not a column of its own.
     expect(find.byTooltip('Depth 22'), findsWidgets);
     expect(find.text('22'), findsNothing);
-    expect(find.text('Expectimax'), findsNWidgets(2));
+    expect(find.text('Expectimax'), findsOneWidget, reason: 'the column');
+    expect(
+      find.widgetWithText(FilledButton, 'Resume expectimax'),
+      findsOneWidget,
+      reason: 'the search covers the board',
+    );
     // Six root moves keep every legal move, weak ones included.
     expect(find.text('e4'), findsOneWidget);
     expect(find.text('e3'), findsOneWidget);

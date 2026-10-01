@@ -138,37 +138,52 @@ class _LineListState extends State<LineList> {
   }
 
   /// The height the header, the toolbar and a few rows of lines need.
-  static const _shortest = 360.0;
+  static const _shortest = 400.0;
 
-  Widget _toolbar(TrainingProgress progress) => Row(
-    children: [
-      SegmentedButton<_Showing>(
-        segments: [
-          const ButtonSegment(value: _Showing.lines, label: Text('Lines')),
-          ButtonSegment(
-            value: _Showing.mistakes,
-            label: Text('Mistakes · ${progress.mistakes.length}'),
-          ),
-        ],
-        selected: {_showing},
-        showSelectedIcon: false,
-        onSelectionChanged: (s) {
+  /// The search goes under the switch when the card is too narrow for both.
+  Widget _toolbar(TrainingProgress progress) => LayoutBuilder(
+    builder: (context, constraints) {
+      final narrow = constraints.maxWidth < _toolbarRowWidth;
+      final search = SearchField(
+        controller: _search,
+        hint: _showing == _Showing.lines ? 'Search lines' : 'Search mistakes',
+        onChanged: (text) {
           if (!mounted) return;
-          setState(() => _showing = s.single);
+          setState(() => _query = text.toLowerCase());
         },
-      ),
-      const SizedBox(width: Space.m),
-      Expanded(
-        child: SearchField(
-          controller: _search,
-          hint: _showing == _Showing.lines ? 'Search lines' : 'Search mistakes',
-          onChanged: (text) {
-            if (!mounted) return;
-            setState(() => _query = text.toLowerCase());
-          },
-        ),
+      );
+      return Flex(
+        direction: narrow ? Axis.vertical : Axis.horizontal,
+        crossAxisAlignment: narrow
+            ? CrossAxisAlignment.stretch
+            : CrossAxisAlignment.center,
+        children: [
+          _switch(progress),
+          narrow
+              ? const SizedBox(height: Space.s)
+              : const SizedBox(width: Space.m),
+          narrow ? search : Expanded(child: search),
+        ],
+      );
+    },
+  );
+
+  static const _toolbarRowWidth = 420.0;
+
+  Widget _switch(TrainingProgress progress) => SegmentedButton<_Showing>(
+    segments: [
+      const ButtonSegment(value: _Showing.lines, label: Text('Lines')),
+      ButtonSegment(
+        value: _Showing.mistakes,
+        label: Text('Mistakes · ${progress.mistakes.length}'),
       ),
     ],
+    selected: {_showing},
+    showSelectedIcon: false,
+    onSelectionChanged: (s) {
+      if (!mounted) return;
+      setState(() => _showing = s.single);
+    },
   );
 
   /// The orders the lines can be put in: the likeliest first only when the

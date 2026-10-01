@@ -156,7 +156,7 @@ abstract final class ReviewColors {
   static const plot = Color(0xFF2E2E32);
 }
 
-const searchPaneMinHeight = 300.0;
+const searchPaneMinHeight = 360.0;
 const searchRecoveryMinHeight = 440.0;
 const searchEloWidth = 84.0;
 const searchDepthWidth = 64.0;

@@ -83,6 +83,9 @@ abstract base class ModeView {
   final ActionLayout layout;
   PaneTabs<WorkspaceTab> get tabs => layout.tabs;
 
+  /// Brings [tab] up where it is open, else in the pane in use.
+  void show(WorkspaceTab tab) => layout.reveal(tab);
+
   /// The left column, with [toggle] — the `«` that hides it — in its corner.
   Widget list(Widget toggle);
 
@@ -202,7 +205,7 @@ abstract base class _DocumentModeView extends ModeView {
       ),
       AppAction(
         'Train this chapter',
-        session.chapter == null ? null : () => tabs.show(WorkspaceTab.train),
+        session.chapter == null ? null : () => show(WorkspaceTab.train),
         group: 'Repertoire',
       ),
       AppAction(
@@ -215,7 +218,7 @@ abstract base class _DocumentModeView extends ModeView {
           'Audit this chapter',
           audit.canStart
               ? () {
-                  tabs.show(WorkspaceTab.audit);
+                  show(WorkspaceTab.audit);
                   unawaited(audit.start());
                 }
               : null,
@@ -265,7 +268,9 @@ final class RepertoiresView extends _LibraryView {
     Workspace workspace,
     WorkspaceRequests requests,
     DocumentModes modes,
-  ) : super(workspace, newWorkspaceTabs(), requests, modes);
+  ) : super(workspace, newWorkspaceTabs(), requests, modes) {
+    layout.startBuilding();
+  }
 
   @override
   bool get offersBuilder => false;
@@ -283,7 +288,7 @@ final class TrainerView extends _LibraryView {
 
   /// Coming here is coming to train, whichever tab was left up.
   @override
-  void entered() => tabs.show(WorkspaceTab.train);
+  void entered() => show(WorkspaceTab.train);
 }
 
 /// The files the PGN Viewer has open or has had open.
@@ -316,7 +321,7 @@ final class ViewerView extends _DocumentModeView {
     final review = workspace.review;
     if (review == null) return;
     if (review.running) return review.stop();
-    tabs.show(WorkspaceTab.review);
+    show(WorkspaceTab.review);
     unawaited(review.start());
   }
 
@@ -327,12 +332,12 @@ final class ViewerView extends _DocumentModeView {
     if (solitaire.active) return solitaire.stop();
     _modes.autoplay.stop();
     solitaire.offer();
-    tabs.show(WorkspaceTab.solitaire);
+    show(WorkspaceTab.solitaire);
   }
 
   /// My books, on the move where the game left the book.
   void _showMyLine() {
-    tabs.show(WorkspaceTab.book);
+    show(WorkspaceTab.book);
     if (workspace.boardBook?.state case BoardBookChecked(
       :final verdict,
       :final game,

@@ -76,6 +76,15 @@ final class ActionLayout extends ChangeNotifier {
     pane(index).show(tab);
   }
 
+  /// Brings [tab] up in the pane that already has it open, else opens it
+  /// in the pane in use: a tab is never opened twice by a request.
+  void reveal(WorkspaceTab tab) {
+    for (final index in visible) {
+      if (pane(index).isOpen(tab)) return show(index, tab);
+    }
+    tabs.show(tab);
+  }
+
   void _ensure(int index, WorkspaceTab initial) {
     while (_panes.length <= index) {
       final catalog = pane(0).tabs
@@ -272,6 +281,31 @@ final class ActionLayout extends ChangeNotifier {
     ),
     AppAction('Join all panes', count > 1 ? joinAll : null, group: 'Layout'),
   ];
+
+  /// The builder's start: Moves over the Explorer on the left, Expectimax
+  /// on the right, all three in view at once. The Explorer keeps the main
+  /// pane, whose database and filters are the remembered ones, and the main
+  /// pane keeps the other tabs to be shown by name.
+  void startBuilding() {
+    if (count > 1) return;
+    _ensure(1, WorkspaceTab.search);
+    _ensure(2, WorkspaceTab.moves);
+    pane(0)
+      ..show(WorkspaceTab.explorer)
+      ..close(WorkspaceTab.search)
+      ..close(WorkspaceTab.moves);
+    _root = const ActionPaneSplit(
+      PaneSplitDirection.right,
+      ActionPaneSplit(
+        PaneSplitDirection.below,
+        ActionPaneLeaf(2),
+        ActionPaneLeaf(0),
+      ),
+      ActionPaneLeaf(1),
+    );
+    _active = 1;
+    notifyListeners();
+  }
 
   /// Initial arrangements retained for fixtures and callers restoring a layout.
   void arrange(int count) {
