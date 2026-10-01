@@ -447,11 +447,7 @@ class _Tabbed extends StatelessWidget {
                   listenable: tabs,
                   builder: (context, _) => Column(
                     children: [
-                      PaneTabStrip(
-                        tabs: tabs,
-                        connected: true,
-                        label: 'Action Tabs',
-                      ),
+                      PaneTabStrip(tabs: tabs, connected: true),
                       const Divider(height: 1),
                       Expanded(child: _visibleBody(context, tabs.selected)),
                     ],

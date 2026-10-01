@@ -52,7 +52,7 @@ not launch work unexpectedly. Make lines remains the direct action below results
 The [interactive search policy](../../ALGORITHM.md#v2-interactive-expectimax)
 shortlists our moves from the root down.
 
-**View Tabs** have a labelled strip and selected tabs use an accent fill and border.
+Document tabs use an accent fill and border when selected.
 They include the current mode, such as `Builder · Main` or
 `Viewer · Match`, and restore that mode when selected.
 
