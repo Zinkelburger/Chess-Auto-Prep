@@ -210,6 +210,31 @@ void main() {
       expect(File(armed).existsSync(), isFalse);
     });
 
+    test('the helper reopens the app only when asked, and an earlier '
+        "run's request does not carry over", () async {
+      final installer = portableInstaller(root);
+      final payload = payloadIn(root);
+      final reopen = File(p.join(payload.folder, reopenName));
+      var started = await installer.schedule(
+        payload,
+        InstallKind.linuxPortable,
+      );
+      var armed = (started as HelperArmed).armed;
+      expect(reopen.existsSync(), isFalse);
+      expect(await installer.setReopen(armed, reopen: true), isTrue);
+      expect(reopen.existsSync(), isTrue);
+      expect(await installer.setReopen(armed, reopen: false), isTrue);
+      expect(reopen.existsSync(), isFalse);
+
+      // Left by a helper that was killed before it could tidy up.
+      expect(await installer.setReopen(armed, reopen: true), isTrue);
+      expect(await installer.cancel(armed), isTrue);
+      started = await installer.schedule(payload, InstallKind.linuxPortable);
+      armed = (started as HelperArmed).armed;
+      expect(reopen.existsSync(), isFalse);
+      expect(await installer.cancel(armed), isTrue);
+    });
+
     test('a helper that never starts leaves nothing armed', () async {
       final installer = portableInstaller(
         root,
@@ -466,6 +491,10 @@ void main() {
       InstallKind.linuxPortable,
     );
     expect(started, isA<HelperArmed>());
+    expect(
+      await installer.setReopen((started as HelperArmed).armed, reopen: true),
+      isTrue,
+    );
     expect(File(p.join(app.path, 'restarted')).existsSync(), isFalse);
     fakeApp.kill();
     final restarted = File(p.join(app.path, 'restarted'));

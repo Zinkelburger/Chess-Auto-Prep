@@ -125,6 +125,8 @@ final class HelperBusy extends HelperStart {
 /// script in `assets/updater/` that swaps it in after the app closes. The
 /// helper checks the SHA-256 again just before it installs, never kills the
 /// app, and writes `last-error.txt` in the updates folder when it fails.
+/// It opens the app again only when asked to ([setReopen]): closing the app
+/// for the day installs and leaves it closed.
 ///
 /// Package installs are left to their package manager (`pkexec dpkg` or
 /// `rpm`) and the Windows installer; a marked portable Linux bundle is
@@ -246,6 +248,7 @@ final class UpdateInstaller {
     }
     try {
       await _removeReady(folder);
+      await _remove(p.join(folder, reopenName));
       await armed.writeAsString('1', flush: true);
       await script.writeAsString(
         await readHelper(
@@ -302,6 +305,23 @@ final class UpdateInstaller {
       return true;
     } on Object catch (error) {
       log.w('cancel the update install', error);
+      return false;
+    }
+  }
+
+  /// Tells the helper armed by [armed] whether to open the app again once
+  /// it has installed. False when that could not be written.
+  Future<bool> setReopen(String armed, {required bool reopen}) async {
+    final marker = File(p.join(p.dirname(armed), reopenName));
+    try {
+      if (reopen) {
+        await marker.writeAsString('1', flush: true);
+      } else {
+        await _remove(marker.path);
+      }
+      return true;
+    } on Object catch (error) {
+      log.w('ask the update helper to reopen the app', error);
       return false;
     }
   }

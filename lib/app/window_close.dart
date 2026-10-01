@@ -46,10 +46,12 @@ final class WindowClose with WindowListener {
   }
 
   @override
-  void onWindowClose() => unawaited(_close());
+  void onWindowClose() => unawaited(close());
 
-  Future<void> _close() async {
-    if (await _leave() != AppExitResponse.exit) return;
+  /// Closes the window as its close button does; false when [leave] kept
+  /// it open.
+  Future<bool> close() async {
+    if (await _leave() != AppExitResponse.exit) return false;
     // [leave] closed the log file; the console still hears an error.
     try {
       await _window.setPreventClose(false);
@@ -57,6 +59,7 @@ final class WindowClose with WindowListener {
     } on Object catch (error) {
       log.e('close the window', error);
     }
+    return true;
   }
 
   /// Lets the window go: the close button closes it the plugin's way
