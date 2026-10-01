@@ -409,25 +409,26 @@ final class ActionLayout extends ChangeNotifier {
     AppAction('Join all panes', count > 1 ? joinAll : null, group: 'Layout'),
   ];
 
-  /// The builder's start: Moves over the Explorer on the left, Expectimax
-  /// on the right, all three in view at once. The Explorer keeps the main
-  /// pane, whose database and filters are the remembered ones, and the main
-  /// pane keeps the other tabs to be shown by name.
+  /// Whether the opening book shows under the moves, as Lichess's book
+  /// button has it; null where the layout does not offer it.
+  ValueNotifier<bool>? get book => _book;
+  ValueNotifier<bool>? _book;
+
+  /// The builder's start: Moves with the book under them on the left,
+  /// Expectimax on the right, all in view at once. The book is the main
+  /// pane's Explorer, whose database and filters are the remembered ones;
+  /// the main pane keeps the other tabs to be shown by name.
   void startBuilding() {
     if (count > 1) return;
+    _book ??= ValueNotifier(true);
     _ensure(1, WorkspaceTab.search);
-    _ensure(2, WorkspaceTab.moves);
     pane(0)
-      ..show(WorkspaceTab.explorer)
+      ..show(WorkspaceTab.moves)
       ..close(WorkspaceTab.search)
-      ..close(WorkspaceTab.moves);
+      ..close(WorkspaceTab.explorer);
     _root = const ActionPaneSplit(
       PaneSplitDirection.right,
-      ActionPaneSplit(
-        PaneSplitDirection.below,
-        ActionPaneLeaf(2),
-        ActionPaneLeaf(0),
-      ),
+      ActionPaneLeaf(0),
       ActionPaneLeaf(1),
     );
     _active = 1;
@@ -471,6 +472,7 @@ final class ActionLayout extends ChangeNotifier {
     for (final explorer in _explorers.values) {
       explorer.dispose();
     }
+    _book?.dispose();
     super.dispose();
   }
 }

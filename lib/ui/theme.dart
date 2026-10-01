@@ -693,6 +693,15 @@ const double playerColumnWidth = 300;
 const positionGamesWidth = 56.0;
 const positionScoreWidth = 52.0;
 
+/// The Players & prep page: how wide its list grows in a wide window, the
+/// search box at the head of its actions, the column a person's saved games
+/// are written in, and the row width under which that column goes below the
+/// name instead of beside it.
+const playersPageWidth = 1040.0;
+const playersSearchWidth = 320.0;
+const personGamesWidth = 280.0;
+const personRowBreak = 720.0;
+
 /// A named control on one line of a column or a dialog: the row, and the
 /// width a typeable choice takes at its end, which is a number stepper's.
 const fieldRowHeight = 36.0;

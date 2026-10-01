@@ -14,6 +14,7 @@ import 'package:chess_auto_prep/workspace/document_saver.dart';
 import 'package:chess_auto_prep/workspace/explorer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:chess_auto_prep/workspace/explorer_pane.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/window_fixture.dart';
@@ -98,8 +99,8 @@ void main() {
 
       app.lichess.throwing = const SocketFailure();
       app.explorer.choose(const ExplorerChoice(source: ExplorerSource.lichess));
-      await tester.tap(find.text('Explorer'));
       await tester.pumpAndSettle();
+      expect(find.byType(ExplorerPane), findsOneWidget, reason: 'the book');
       expect(
         tester.takeException(),
         isNull,

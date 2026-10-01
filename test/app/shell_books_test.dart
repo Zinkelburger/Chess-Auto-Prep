@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/features/library/library_panel.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:chess_auto_prep/workspace/explorer_pane.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/window_fixture.dart';
@@ -101,8 +102,8 @@ void main() {
     await w.pumpShell(tester);
     await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Explorer'));
-    await tester.pumpAndSettle();
+    // The builder shows the explorer as the book under the moves.
+    expect(find.byType(ExplorerPane), findsOneWidget);
     await tester.tap(find.text('Book').first);
     await tester.pumpAndSettle();
     expect(find.text('Test book'), findsOneWidget);
