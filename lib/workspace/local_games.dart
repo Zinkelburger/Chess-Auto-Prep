@@ -18,8 +18,9 @@ import 'file_filter.dart';
 import 'index_build.dart';
 
 /// The explorer's two sources on this machine — the open file's games and
-/// the user's own — each an [OpeningIndex] built the first time the
-/// explorer asks with it chosen, and answered from at once after that.
+/// the user's own — each an [OpeningIndex] answered from at once when it is
+/// built: the open file's when the file opens, the user's own the first
+/// time the explorer asks with it chosen.
 
 sealed class TreeState {
   const TreeState();
@@ -92,16 +93,29 @@ abstract interface class SavedGames implements LocalGames {
 /// the document through the [FileFilter], which reads it first, so the
 /// games the filter numbers are the games the tree numbers.
 ///
+/// A file is indexed when it opens, before the explorer asks, from the
+/// games as they were read ([IndexBuild.ofLines]), so `This file` answers
+/// by the time it is looked at. An edit to it is indexed again only when
+/// the explorer next looks.
+///
 /// Another file, a paste onto the board or the file closed stops a build
 /// still running and drops the tree at once. Any changed game list also
 /// drops it: positional IDs in an index belong to its input snapshot, and
 /// even equal-sized lists can number different games. Rules can narrow the
 /// same snapshot without building again.
+///
+/// An index stays with the list of games it was built from for as long as
+/// anything holds that list ([_indexes]), so a file gone back to with its
+/// games unchanged — another tab and back — answers at once.
 final class FileTree extends ChangeNotifier implements LocalGames {
   FileTree({required FileFilter filter}) : _filter = filter {
     _filter.addListener(_follow);
     _follow();
   }
+
+  /// Each index, by the very list of games it numbers. It goes when the
+  /// list does: no index outlives its games or is asked about others.
+  static final _indexes = Expando<OpeningIndex>('opening index');
 
   final FileFilter _filter;
 
@@ -144,6 +158,7 @@ final class FileTree extends ChangeNotifier implements LocalGames {
   void forget() {
     _stop();
     _index = null;
+    if (_lines.isNotEmpty) _indexes[_lines] = null;
     _state = const TreeUnbuilt();
     notifyListeners();
   }
@@ -151,9 +166,10 @@ final class FileTree extends ChangeNotifier implements LocalGames {
   Future<void> _run() async {
     final lines = _lines;
     late final IndexBuild build;
-    build = _build = IndexBuild.start([
-      for (final line in lines) line.text,
-    ], onProgress: (done) => _progress(build, done, lines.length));
+    build = _build = IndexBuild.ofLines(
+      lines,
+      onProgress: (done) => _progress(build, done, lines.length),
+    );
     _state = TreeReading(0, lines.length);
     notifyListeners();
     final OpeningIndex? index;
@@ -170,12 +186,16 @@ final class FileTree extends ChangeNotifier implements LocalGames {
     // Cancelled, or overtaken by another file or another edit.
     if (_disposed || index == null || build != _build) return;
     _build = null;
+    // Every document with no games shares one empty list.
+    if (lines.isNotEmpty) _indexes[lines] = index;
     _index = index;
-    _state = index.gameCount == index.unread
-        ? const TreeEmpty('This file has no games with moves.')
-        : const TreeBuilt();
+    _state = _built(index);
     notifyListeners();
   }
+
+  static TreeState _built(OpeningIndex index) => index.gameCount == index.unread
+      ? const TreeEmpty('This file has no games with moves.')
+      : const TreeBuilt();
 
   void _progress(IndexBuild build, int done, int total) {
     if (_disposed || build != _build) return;
@@ -194,13 +214,15 @@ final class FileTree extends ChangeNotifier implements LocalGames {
       notifyListeners();
       return;
     }
+    final opened = file != null && !sameFile(file, _file);
     _lines = lines;
     _file = file;
     _filterSeen = _filter.revision;
     _stop();
-    _index = null;
-    _state = const TreeUnbuilt();
+    final index = _index = lines.isEmpty ? null : _indexes[lines];
+    _state = index == null ? const TreeUnbuilt() : _built(index);
     notifyListeners();
+    if (opened) want();
   }
 
   void _stop() {
