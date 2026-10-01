@@ -141,8 +141,8 @@ GameTree lineTree(Fen rootFen, List<String> sans) {
   if (san == nullMoveSan) return nullMovePlayed(position, spelling: san);
   final move = position.parseSan(san);
   if (move == null) return null;
-  final (next, spelled) = position.makeSan(move);
-  return (MoveNode(san: spelled, uci: move.uci, fen: Fen(next.fen)), next);
+  final (next, spelled) = position.makeSanUnchecked(move);
+  return (MoveNode(san: spelled, uci: move.uci, fen: fenOf(next)), next);
 }
 
 /// [tree] with [node] appended to the children of the node at [at].

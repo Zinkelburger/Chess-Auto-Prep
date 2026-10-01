@@ -79,7 +79,8 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   collapse after a move. Closing or joining panes returns their tools to the main
   pane, and Explorer filters stay independent. Collection Analysis belongs only
   to the primary pane; pinned mode tabs stay put. Layouts last for the window.
-  Since 2026-10-01 a mode starts as one pane and a tab picked from `+` while
+  Since 2026-10-01 a mode starts as one pane (the Repertoire builder starts as Moves
+  beside Expectimax) and a tab picked from `+` while
   there is one opens under it in a pane of its own; with several panes it joins
   the pane it was picked in. `+` ▸ `New pane` adds an empty pane, filled from
   its own `+` or by a tab dragged onto it (this replaced Split right / Split
@@ -299,8 +300,9 @@ Quirks worth a verdict:
   same column: `Moves | Replies | Explorer`. The only new control on screen is the tab. The
   sources sit along the tab's top as one segmented row (the owner found the gear and its menu
   unintuitive, 2026-09-22), with `Filters ▾` at the row's end for the chosen source's chips,
-  folded by default and reading what they are set to (`blitz rapid classical · 2000+`) while
-  folded; Masters has none and shows no button. The sources are `Masters`, `Lichess`
+  folded by default and always labelled `Filters` (the owner found the summary noisy,
+  2026-10-01); Masters has none and shows no button. In the Repertoire builder the book
+  button leading the nav row shows this explorer under the moves instead (on by default). The sources are `Masters`, `Lichess`
   (speed and rating chips), `TWIC` (`Classical OTB only`; the one source that works offline, and
   only with a local master database), `This file` (the games the viewer has open) and `My games`
   (the player-analysis corpus). The body is the

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../chess/explorer_choice.dart';
+import '../ui/fold_button.dart';
 import '../ui/theme.dart';
 import 'explorer.dart';
 
@@ -86,7 +87,7 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
                   constraints: const BoxConstraints(
                     maxWidth: explorerTrailingMaxWidth,
                   ),
-                  child: _FilterButton(
+                  child: FoldButton(
                     label: 'Filters',
                     unfolded: unfolded,
                     onPressed: () {
@@ -123,34 +124,6 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
     ),
     null => null,
   };
-}
-
-class _FilterButton extends StatelessWidget {
-  const _FilterButton({
-    required this.label,
-    required this.unfolded,
-    required this.onPressed,
-  });
-  final String label;
-  final bool unfolded;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) => TextButton(
-    onPressed: onPressed,
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Flexible(
-          child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-        ),
-        Icon(
-          unfolded ? Icons.expand_less : Icons.expand_more,
-          size: IconSize.menu,
-        ),
-      ],
-    ),
-  );
 }
 
 /// The databases side by side, the chosen one pressed.
