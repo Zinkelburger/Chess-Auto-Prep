@@ -1,25 +1,22 @@
 import 'package:dartchess/dartchess.dart' show Side;
 
 import '../chess/fen.dart';
+import '../chess/generation/eval.dart';
 import '../chess/generation/evaluation_source.dart';
+import '../chess/generation/expectimax_options.dart';
 import '../chess/generation/mainline_book.dart';
 import '../chess/generation/search_config.dart';
 import '../chess/generation/search_node.dart';
 import '../chess/generation/sources.dart';
 import '../chess/generation/tree_wire_v4_reader.dart';
+import '../chess/pgn/chapter.dart';
+import '../chess/pgn/game_tree.dart';
 import '../diagnostics/log.dart';
 import '../net/chessdb_moves.dart';
 import '../storage/chapter_files.dart';
+import '../storage/settings.dart';
 
-/// What a search builds: expectimax against the human model, or ChessDB's
-/// objectively best book (`chess/generation/mainline_book.dart`).
-enum SearchMethod {
-  practical('Maia practical'),
-  mainline('ChessDB mainline');
-
-  const SearchMethod(this.label);
-  final String label;
-}
+export '../chess/generation/expectimax_options.dart' show SearchMethod;
 
 /// What a search is asked for: the opponent's rating and how deep to go.
 ///
@@ -37,6 +34,20 @@ final class FillRequest {
     this.method = SearchMethod.practical,
     this.evalDepth = fillEvalDepth,
   });
+
+  /// The next search as [settings] have it: the Expectimax tab's button,
+  /// Ctrl+G and Actions all start this one.
+  FillRequest.of(Settings settings)
+    : this(
+        elo: settings.opponentElo,
+        depthPlies: settings.expectimax.depth,
+        source: settings.expectimax.source,
+        rootMoves: settings.expectimax.rootMoves,
+        candidateMoves: settings.expectimax.candidateMoves,
+        replyFloor: settings.expectimax.replyFloor,
+        method: settings.expectimax.method,
+        evalDepth: settings.expectimax.evalDepth,
+      );
 
   final SearchMethod method;
   final EvaluationSource source;
@@ -126,13 +137,9 @@ Future<Object> savedSeed(
   return refused ?? 'No saved search starts at this board position.';
 }
 
-/// The engine depth a search scores positions at unless the Expectimax
-/// tab asks for another; the shared cache is keyed on the depth.
-const fillEvalDepth = 14;
-
-/// The range the engine depth may be set to.
-const minFillEvalDepth = 1;
-const maxFillEvalDepth = 40;
+/// The engine depth a search scores positions at unless the settings ask
+/// for another; the shared cache is keyed on the depth.
+const fillEvalDepth = ExpectimaxOptions.defaultEvalDepth;
 
 /// One user-started search adds at most this many positions, under the interactive branching policy.
 const fillNodeBudget = 25000;
@@ -144,10 +151,6 @@ const fillNodeBudget = 25000;
 /// evaluation each.
 const fillReplyMass = 0.9;
 const fillMaxReplies = 5;
-
-/// The range a search's depth may be set to, when it is set at all.
-const minFillDepth = 1;
-const maxFillDepth = 64;
 
 /// What a search needs and where it comes from: an engine and the model, or
 /// why there are none.
@@ -307,4 +310,87 @@ final class LinesFailed extends LinesState {
   const LinesFailed(this.reason);
 
   final String reason;
+}
+
+/// Where a run began: the document's root and the moves from it to the
+/// board, the side searched for, and — when the run can become lines —
+/// the chapter as it was and its file.
+final class FillTarget {
+  const FillTarget({
+    required this.rootFen,
+    required this.cursor,
+    required this.sans,
+    required this.side,
+    this.chapter,
+  });
+
+  final Fen rootFen;
+  final NodePath cursor;
+  final List<String> sans;
+  final Side side;
+  final (Chapter, ChapterRef)? chapter;
+
+  /// How the log names the run.
+  String get label => chapter?.$2.path ?? 'the board';
+
+  /// The same start searched for the other side, for its values alone: it
+  /// is never written as lines.
+  FillTarget get mirror => FillTarget(
+    rootFen: rootFen,
+    cursor: cursor,
+    sans: sans,
+    side: side.opposite,
+  );
+}
+
+/// [seed]'s position as the search for the other side starts from it: not
+/// expanded, with the score the engine already gave it, which is the same
+/// fact from the other side.
+SearchNode? mirrorStart(SearchNode? seed) => seed == null || !seed.evaluated
+    ? null
+    : FrontierNode(fen: seed.fen, evalForUs: Eval(-seed.evalForUs.cp));
+
+/// The tree of the last run, where it was started and what it was asked.
+final class FillFound {
+  const FillFound({
+    required this.target,
+    required this.request,
+    required this.tree,
+  });
+
+  final FillTarget target;
+  final FillRequest request;
+
+  /// The search tree from the position the run started at.
+  final SearchNode tree;
+
+  Side get side => target.side;
+
+  /// The chapter the run can be written into as lines, and its file.
+  (Chapter, ChapterRef)? get chapter => target.chapter;
+
+  /// The node for the position reached from [root] by [sans], or null when
+  /// that position is not in the search: another document, a line that
+  /// leaves the tree, or a position before the one the run started at.
+  SearchNode? at(Fen root, List<String> sans) {
+    if (root != target.rootFen || sans.length < target.sans.length) {
+      return null;
+    }
+    for (final (i, san) in target.sans.indexed) {
+      if (sans[i] != san) return null;
+    }
+    SearchNode node = tree;
+    for (final san in sans.skip(target.sans.length)) {
+      final next = switch (node) {
+        OurNode(:final candidates) =>
+          candidates.where((c) => c.move.san == san).firstOrNull?.child,
+        OpponentNode(:final replies) =>
+          replies.where((r) => r.move.san == san).firstOrNull?.child,
+        _ => null,
+      };
+      if (next == null) return null;
+      node = next;
+    }
+    return node;
+  }
 }

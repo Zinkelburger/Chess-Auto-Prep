@@ -114,6 +114,10 @@ final class PlayerAnalysisView extends ModeView {
       analysis: players.analysis,
       session: workspace.session,
       onOpen: (i) => unawaited(_open(i, null, fen: workspace.session.fen)),
+      onStart: () {
+        final first = players.analysis.gameIndexes.firstOrNull;
+        if (first != null) unawaited(_open(first, null));
+      },
     ),
     WorkspaceTab.playerBook => PlayerBookPane(
       book: players.book,
@@ -180,7 +184,7 @@ final class PlayerAnalysisView extends ModeView {
     ),
     ...documentEntries(menu),
     ...menu.board(),
-    ...tabActions(tabs, destinations: layout.destinations),
+    ...tabActions(tabs, layout: layout),
   ];
 }
 

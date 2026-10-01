@@ -367,7 +367,13 @@ void main() {
       await following;
       fill.removeListener(follow);
       expect(fill.found!.target.sans, ['e4']);
-      expect(saved.length, 2);
+      expect(
+        saved.length,
+        3,
+        reason:
+            'after e4 it is Black\'s move, and Black\'s side of that '
+            'board is kept beside White\'s',
+      );
       expect(releases, 2);
     },
   );

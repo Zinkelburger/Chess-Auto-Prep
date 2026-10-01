@@ -79,6 +79,15 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   collapse after a move. Closing or joining panes returns their tools to the main
   pane, and Explorer filters stay independent. Collection Analysis belongs only
   to the primary pane; pinned mode tabs stay put. Layouts last for the window.
+  Since 2026-10-01 a mode starts as one pane and a tab picked from `+` while
+  there is one opens under it in a pane of its own; with several panes it joins
+  the pane it was picked in. `+` ▸ `New pane` adds an empty pane, filled from
+  its own `+` or by a tab dragged onto it (this replaced Split right / Split
+  below in the plus menu; both remain in a tab's right-click menu and as
+  docking targets). When the main pane's last tab is dragged to another pane
+  or closed, that pane's tabs come to the main pane, so the two become one.
+  Moves alone on the card has no tab strip and no frame. The game or chapter
+  heading is the top of the Moves text, not a block above the tabs.
   Replies retains the Maia-3 table and Next gap described in `repertoires.md`.
 - **Explorer (Database dock)** — sources: Engine evals, ChessDB, Repertoire, Opening explorer,
   Local PGN. Live explorer: Lichess, Masters, TWIC (with a download action when missing), behind a

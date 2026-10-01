@@ -189,6 +189,17 @@ engine depth and reply coverage directly above the results. Coverage is expresse
 games, default 100; zero expands every reply. Settings apply to the next search
 and are disabled during a run.
 
+A practical search is run twice from the same board at once, on the one
+engine (`FillGaps._buildMirror`): for the side at the bottom of the board, and
+for the other side with the roles swapped, so the same position is our choice
+in one tree and Maia's reply in the other. Each tree has its own 25,000-node
+budget and is saved as its own run. The second exists for its values: the
+table sets a move's expected score when White is the prepared side beside its
+score when Black is, and beside the engine's. The gap between the engine and
+the other side's column is how far a human on the move is expected to drift
+from best play. The board's tree alone drives status, Positions and drafted
+lines; the second stops with it unless the first ran its whole depth.
+
 Opponent nodes keep Maia's likeliest replies until they cover 90% of its
 distribution, at most five, and renormalize the kept shares to sum to one
 (`fillReplyMass`, `fillMaxReplies`). Maia's softmax gives every legal move some

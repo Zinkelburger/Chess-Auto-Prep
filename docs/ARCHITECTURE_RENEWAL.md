@@ -157,13 +157,16 @@ changes in that tab never write the source. Tabs have left-aligned compact label
 visible close buttons, drag ordering, and a plus button. Pane tabs use the same
 strip without close buttons (right-click Close tab, or middle-click) and with neutral surface fills and stronger selected labels (source selectors also
 use neutral selection fills); closed tools reopen
-from its plus menu. Action panes grow through Split right / Split below in the tab
-context menu or plus menu, up to four panes. Dragging a tool tab reveals docking
+from its plus menu. A tab picked from the plus menu of a lone pane opens under it
+in a pane of its own, and joins the pane it was picked in once there are several;
+the plus menu also adds an empty pane. Action panes also grow through Split right
+/ Split below in the tab context menu, up to four panes. Dragging a tool tab reveals docking
 targets over the pane bodies; dropping in another pane moves it, and dropping on
 an edge splits that pane. A split moves the tab when its source has other tabs;
 a lone tab is shown in both views. Right-clicking a tool entry in Actions or the
-plus menu offers named pane destinations. Empty secondary panes collapse after
-a move; Close pane and Join all panes return their tabs to the primary pane.
+plus menu offers named pane destinations. A secondary pane whose last tab leaves
+collapses, and the main pane takes over the tabs of the pane its own last tab
+moved to; Close pane and Join all panes return their tabs to the primary pane.
 Explorer filters remain independent per pane. Collection Analysis stays in the
 primary pane and pinned mode tabs stay put. Layouts remain window state. Flip board and Analyze are
 Actions entries; the Viewer's menu omits Analyze because its moves are already

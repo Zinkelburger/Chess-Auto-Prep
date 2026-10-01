@@ -472,6 +472,58 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
   /// box suggests.
   List<String> get players => file == null ? const [] : _players;
 
+  /// The side the followed player had in the game at [index] of the file
+  /// and who they played, or null when nobody is followed or they are not
+  /// one of its two players: what a row of their collection says instead
+  /// of repeating their name.
+  ({Side side, String opponent})? followedIn(int index) {
+    final player = followed;
+    final lines = _rowsLines;
+    if (file == null || player == null || lines == null) return null;
+    if (index >= lines.length) return null;
+    final tags = lines[index].tags;
+    final side = sideOfPlayer(player, tags);
+    if (side == null) return null;
+    final opponent = tagValue(
+      tags,
+      side == Side.white ? 'Black' : 'White',
+    )?.trim();
+    if (opponent == null || opponent.isEmpty || opponent == '?') return null;
+    return (side: side, opponent: opponent);
+  }
+
+  /// How many of the file's games the followed player had White in and how
+  /// many Black, worked out once per player and list of games.
+  ({int white, int black}) get followedSides {
+    final player = followed;
+    final lines = _rowsLines;
+    if (file == null || player == null || lines == null) {
+      return (white: 0, black: 0);
+    }
+    final known = _sides;
+    if (known != null &&
+        known.player == player &&
+        identical(known.lines, lines)) {
+      return known.count;
+    }
+    var white = 0, black = 0;
+    for (final line in lines) {
+      switch (sideOfPlayer(player, line.tags)) {
+        case Side.white:
+          white++;
+        case Side.black:
+          black++;
+        case null:
+      }
+    }
+    final count = (white: white, black: black);
+    _sides = (player: player, lines: lines, count: count);
+    return count;
+  }
+
+  ({String player, List<ChapterLine> lines, ({int white, int black}) count})?
+  _sides;
+
   /// Follows the player [typed] names from now on, or nobody when it is
   /// empty; the game on the board turns at once. Called with a name picked
   /// or submitted, never one half typed.

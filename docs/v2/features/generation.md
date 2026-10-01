@@ -8,8 +8,14 @@ Plan step: 7
 
 ## Current interactive workflow (2026-09-27)
 
-The tab is now **Expectimax**, with a play button and directly editable
-Maia rating, candidate count, depth and reply-coverage fields. Builder shows it alongside Moves and Explorer by default;
+The tab is now **Expectimax**: one fixed bar (the Expectimax/Pause/Resume
+button, `Depth`, a gear), one status line headed by the side's flip button,
+then the values: since 2026-10-01 one press searches for both sides and
+the table has a `White`, a `Black` and an `Engine` column. The gear swaps the
+values for the remaining settings (method, Maia rating, first and later move
+counts, reply coverage, engine depth, evaluation source), which are saved
+settings also listed under Settings ▸ Expectimax; see
+[Builder](builder.md#current-v2-workflow-2026-09-27). Builder shows it alongside Moves and Explorer by default;
 Train is optional. While searching, all board navigation (including back/forward)
 saves the old tree before continuing from the latest selected position. Previous
 roots remain available for immediate display and reuse; browsing while stopped
@@ -22,7 +28,7 @@ An engine or model that cannot answer one position stops the run, not the tree: 
 above it is saved, recorded and offered to `Make lines`, the status line says the engine or the
 model stopped it (the log names the position), and Resume goes on from it. Only a board the engine cannot score at all fails the run.
 
-**Maia practical | ChessDB mainline** (2026-09-28) heads the tab. The mainline
+**Maia practical | ChessDB mainline** (2026-09-28) is the first row behind the tab's gear. The mainline
 book (`chess/generation/mainline_book.dart`) weighs nothing practical: our move
 is ChessDB's best (`queryall`; a tie goes to the move masters played most),
 their replies are the masters' moves from `master_games.db` (most played first,
@@ -385,7 +391,7 @@ persistence. Make lines remains available; another search waits for resolution o
 Make lines refuses a chapter moved, renamed or deleted since the search rather than writing
 the draft to its old folder.
 
-`Resume` (beside Expectimax) continues the matching in-memory tree or the most recent saved
+The button reads `Resume` where a search with the same settings covers the board, and continues the matching in-memory tree or the most recent saved
 tree starting at the board that it can use: a newer tree with other settings, or one that cannot be
 read, is passed over for an older one that matches; when none of them can be read, Resume says so. Side, opponent rating, evaluation source, candidate count and reply coverage
 must agree; a board flipped or moved while the tree loads starts nothing. The in-memory lookup also reuses subtrees and retained earlier roots.

@@ -7,7 +7,8 @@ import '../engines/maia/move_policy.dart';
 import '../storage/master_book.dart';
 
 // The opponents a search from the board plays against: the Maia model for
-// the practical search, the masters' games for the mainline book.
+// the practical search, the masters' games for the mainline book. And what
+// the engine told it that the tree does not keep.
 
 /// The Maia model as the search's opponent, at one rating.
 ///
@@ -46,4 +47,38 @@ final class MastersPlayed {
     ],
     BookAbsent() || BookUnreadable() || BookClassicalIncomplete() => const [],
   };
+}
+
+/// What the engine said during one owner's searches that the tree does not
+/// keep: the depth each score was reached at, and the engine's best line.
+/// Only answers the evaluator actually supplied are recorded — a cached
+/// score has no line — and both are session-local: a saved tree records
+/// neither.
+///
+/// Keyed by the four-field position, since neither depends on the clocks.
+///
+/// A position is asked about once: a run searches the board for both sides
+/// at the same time, the two meet many of the same positions, and both
+/// must hold the one score for each.
+final class EngineAnswers implements PositionEvaluator {
+  EngineAnswers(this.evaluator, {required this.depths, required this.lines});
+
+  final PositionEvaluator evaluator;
+  final Map<String, int> depths;
+  final Map<String, List<String>> lines;
+  final _asked = <String, Future<EvaluationResult>>{};
+
+  @override
+  Future<EvaluationResult> evaluate(Position position) =>
+      _asked[position.fen] ??= _ask(position);
+
+  Future<EvaluationResult> _ask(Position position) async {
+    final result = await evaluationOf(evaluator, position);
+    if (result case Evaluated(:final depth, :final pv)) {
+      final key = Fen(position.fen).position;
+      if (depth != null) depths[key] = depth;
+      if (pv.isNotEmpty) lines[key] = pv;
+    }
+    return result;
+  }
 }

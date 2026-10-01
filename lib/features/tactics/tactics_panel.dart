@@ -95,7 +95,11 @@ class _TacticsPanelState extends State<TacticsPanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _Toolbar(trailing: widget.trailing),
-          MyGamesBlock(games: widget.myGames),
+          // With puzzles to play, Play is the column's one filled button.
+          MyGamesBlock(
+            games: widget.myGames,
+            primary: widget.set.puzzles.isEmpty,
+          ),
           Expanded(
             child: switch (widget.set.state) {
               SetLoading() => const SizedBox.shrink(),
@@ -168,7 +172,7 @@ class _TacticsPanelState extends State<TacticsPanel> {
           ),
           child: SearchField(
             controller: _search,
-            hint: 'Search by player, date or move',
+            hint: 'Search',
             onChanged: _searched,
           ),
         ),
@@ -393,6 +397,7 @@ class _PuzzleRow extends StatelessWidget {
     final stats = puzzle.stats;
     // A new puzzle says nothing: most are, and a column of `new` is noise.
     final record = stats.isNew ? '' : '${stats.successes}/${stats.reviews}';
+    final tried = stats.reviews == 1 ? '1 try' : '${stats.reviews} tries';
     return Material(
       color: open ? theme.colorScheme.surfaceContainerHighest : null,
       child: InkWell(
@@ -401,7 +406,13 @@ class _PuzzleRow extends StatelessWidget {
           padding: const EdgeInsets.only(left: Space.m),
           child: Row(
             children: [
-              Expanded(child: _lines(theme, record)),
+              Expanded(
+                child: _lines(
+                  theme,
+                  record,
+                  'Solved ${stats.successes} of $tried',
+                ),
+              ),
               menu,
             ],
           ),
@@ -412,7 +423,7 @@ class _PuzzleRow extends StatelessWidget {
 }
 
 extension on _PuzzleRow {
-  Widget _lines(ThemeData theme, String record) => Column(
+  Widget _lines(ThemeData theme, String record, String recordTip) => Column(
     mainAxisAlignment: MainAxisAlignment.center,
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
@@ -425,20 +436,29 @@ extension on _PuzzleRow {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          Text(
-            outcome ?? record,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: outcome == 'failed' ? theme.colorScheme.error : null,
+          if (outcome case final outcome?)
+            Text(
+              outcome,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: outcome == 'failed' ? theme.colorScheme.error : null,
+              ),
+            )
+          else if (record.isNotEmpty)
+            Tooltip(
+              message: recordTip,
+              child: Text(record, style: theme.textTheme.labelSmall),
             ),
-          ),
         ],
       ),
+      // When, then who it was against: in a narrow column the name is cut
+      // short, never the date, which is what tells two games apart.
       Text(
         [
-          if (puzzle.opponent.isNotEmpty) 'vs ${puzzle.opponent}',
           if (puzzle.date.isNotEmpty) puzzle.date,
+          if (puzzle.opponent.isNotEmpty) 'vs ${puzzle.opponent}',
         ].join(' · '),
         style: theme.textTheme.labelSmall,
+        maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
     ],
