@@ -228,8 +228,8 @@ class _Header extends StatelessWidget {
     final (prepared, modelled) = side == Side.white
         ? ('White', 'Black')
         : ('Black', 'White');
-    return '$prepared plays its best moves; $modelled replies as Maia '
-        'predicts. Scored from White\'s side.';
+    return '$prepared plays its best moves; $modelled replies the way '
+        'players do. Scored from White\'s side.';
   }
 
   @override

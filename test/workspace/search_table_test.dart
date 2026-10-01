@@ -157,7 +157,7 @@ void main() {
       }
       expect(
         find.byTooltip(
-          'White plays its best moves; Black replies as Maia predicts. '
+          'White plays its best moves; Black replies the way players do. '
           'Scored from White\'s side.',
         ),
         findsOneWidget,

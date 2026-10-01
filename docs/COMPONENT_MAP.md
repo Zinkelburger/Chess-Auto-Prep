@@ -79,7 +79,8 @@ Bughouse mode is offered when its engine assets are present.
   (`ActionLayout.book`, shut until pressed). Requests for a tab
   (`ActionLayout.reveal`) bring it up in the pane that already has it. The
   Explorer's narrowing folds under a button always labelled Filters
-  (`ui/fold_button.dart`).
+  (`ui/fold_button.dart`); where the databases do not fit side by side they
+  become one typeable box (`ChoiceField`).
 - Engine tournaments use the shared supervisor, retryable checkpoints, saved
   history, ratings/crosstables and viewer handoff. Bughouse keeps its own two-board
   screen, Hivemind analysis, archive/book reads and saved matches.
