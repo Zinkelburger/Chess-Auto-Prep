@@ -48,6 +48,9 @@ const choiceDialogHeight = 280.0;
 /// The widest a typeable choice field's suggestions grow.
 const choiceFieldMenuWidth = 280.0;
 
+/// The Explorer's database box, when the databases do not fit side by side.
+const explorerSourceFieldWidth = 160.0;
+
 /// How wide a filter rule's rule box is, beside a field box that takes the
 /// rest of the line.
 const filterRuleWidth = 120.0;

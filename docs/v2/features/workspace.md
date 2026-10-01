@@ -298,7 +298,8 @@ Quirks worth a verdict:
   paste box and two paths in one dialog) is the example of what not to build.
 - **The explorer is a tab**, as lila's book button swaps the move list for the explorer in the
   same column: `Moves | Replies | Explorer`. The only new control on screen is the tab. The
-  sources sit along the tab's top as one segmented row (the owner found the gear and its menu
+  sources sit along the tab's top as one segmented row (one typeable box where the pane is too
+  narrow for them side by side) (the owner found the gear and its menu
   unintuitive, 2026-09-22), with `Filters ▾` at the row's end for the chosen source's chips,
   folded by default and always labelled `Filters` (the owner found the summary noisy,
   2026-10-01); Masters has none and shows no button. In the Repertoire builder the book

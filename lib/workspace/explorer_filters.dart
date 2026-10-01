@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../chess/explorer_choice.dart';
+import '../ui/choice_field.dart';
 import '../ui/fold_button.dart';
 import '../ui/theme.dart';
 import 'explorer.dart';
@@ -51,16 +52,14 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
         Padding(
           padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.s, 0),
           // The end of the row goes under the databases when the card is
-          // too narrow for both, and the databases scroll sideways when it
-          // is too narrow for them alone: nothing is cut off.
+          // too narrow for both, and the databases become one box to type
+          // or pick a database in when it is too narrow for them alone:
+          // nothing is cut off.
           child: Wrap(
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: _Sources(explorer: _explorer),
-              ),
+              _Sources(explorer: _explorer),
               if (choice.source == ExplorerSource.book && widget.book != null)
                 ConstrainedBox(
                   constraints: const BoxConstraints(
@@ -133,7 +132,52 @@ class _Sources extends StatelessWidget {
   final Explorer explorer;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, room) {
+      final sources = explorer.sources;
+      if (_widthOf(context, sources) <= room.maxWidth) return _buttons();
+      final choice = explorer.choice;
+      return SizedBox(
+        width: explorerSourceFieldWidth,
+        child: ChoiceField(
+          text: choice.source.title,
+          options: [for (final source in sources) source.title],
+          hint: 'Database',
+          onSubmitted: (title) {
+            for (final source in sources) {
+              if (source.title == title) {
+                explorer.choose(choice.copyWith(source: source));
+              }
+            }
+          },
+        ),
+      );
+    },
+  );
+
+  /// The width the databases need side by side: each title, its padding
+  /// and the borders between them.
+  static double _widthOf(BuildContext context, List<ExplorerSource> sources) {
+    final style = Theme.of(context).textTheme.labelLarge;
+    final scale = MediaQuery.textScalerOf(context);
+    var width = 0.0;
+    for (final source in sources) {
+      final painter = TextPainter(
+        text: TextSpan(text: source.title, style: style),
+        textDirection: TextDirection.ltr,
+        textScaler: scale,
+        maxLines: 1,
+      )..layout();
+      width += painter.width + 2 * Space.s + _segmentSlack;
+      painter.dispose();
+    }
+    return width;
+  }
+
+  /// The border and rounding each segment adds to its words and padding.
+  static const _segmentSlack = 4.0;
+
+  Widget _buttons() {
     final choice = explorer.choice;
     return SegmentedButton<ExplorerSource>(
       segments: [

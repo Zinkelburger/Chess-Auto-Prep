@@ -18,6 +18,7 @@ import 'package:chessground/chessground.dart' show StaticChessboard;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:chess_auto_prep/ui/choice_field.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/my_games_fixture.dart';
@@ -68,6 +69,7 @@ void main() {
     Future<bool> Function(BuildContext)? onLogIn,
     Future<bool> Function(BuildContext)? onDownloadTwic,
     OpeningNames? openings,
+    double width = 960,
   }) async {
     final names = openings ?? OpeningNames(() async => const []);
     addTearDown(names.dispose);
@@ -101,7 +103,7 @@ void main() {
                 child: SizedBox(
                   // The test font's letters are square: six sources need
                   // the room.
-                  width: 960,
+                  width: width,
                   child: ExplorerPane(
                     session: fixture.session,
                     explorer: explorer,
@@ -223,6 +225,24 @@ void main() {
     await tester.tap(find.text('Classical OTB only'));
     await tester.pumpAndSettle();
     expect(settings.value.explorer.classicalOnly, isTrue);
+  });
+
+  testWidgets('too narrow for the databases side by side, they are one box '
+      'to type or pick a database in', (tester) async {
+    await show(tester, width: 300);
+    expect(find.byType(SegmentedButton<ExplorerSource>), findsNothing);
+    final box = find.byType(ChoiceField);
+    expect(box, findsOneWidget);
+    expect(
+      find.descendant(of: box, matching: find.text('Masters')),
+      findsOneWidget,
+    );
+    await tester.tap(box);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('TWIC').last);
+    await tester.pumpAndSettle();
+    expect(settings.value.explorer.source, ExplorerSource.twic);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('This file is the open file\'s games and My games the '
