@@ -44,7 +44,6 @@ void main() {
 
   test('equal-count reload cannot use old positional IDs', () async {
     await over(threeGameFile);
-    tree.want();
     await settled(tree);
     fixture.filter.apply(
       const GameFilter(rules: [HeaderRule(value: 'Carlsen')]),
@@ -64,8 +63,17 @@ void main() {
     if (answer != null) expect(movesOf(answer), ['e2e4']);
   });
 
-  test('nothing is built until the explorer looks', () async {
+  test('a file is built when it opens, before the explorer looks', () async {
     await over(threeGameFile);
+    await settled(tree);
+    expect(movesOf(tree.answerAt(Fen.initial)), hasLength(3));
+    expect(tree.summary, '3 games');
+  });
+
+  test('the board, which is no file, is not built until the explorer '
+      'looks', () async {
+    await over(threeGameFile);
+    await fixture.session.showAnalysisBoard(analysisBoard(side: Side.white));
     expect(tree.state, isA<TreeUnbuilt>());
     expect(tree.answerAt(Fen.initial), isNull);
     expect(tree.summary, isNull);
@@ -74,7 +82,6 @@ void main() {
   test('a small file is built at once: its games merged by position, with '
       'how they ended', () async {
     await over(threeGameFile);
-    tree.want();
     await settled(tree);
     final start = tree.answerAt(Fen.initial)!;
     expect(movesOf(start), ['e2e4', 'd2d4', 'c2c4']);
@@ -88,7 +95,6 @@ void main() {
     'the viewer\'s filter narrows the answers without building again',
     () async {
       await over(threeGameFile);
-      tree.want();
       await settled(tree);
       final built = states.length;
       fixture.filter.apply(
@@ -104,17 +110,15 @@ void main() {
 
   test('switching games reads nothing again', () async {
     await over(threeGameFile);
-    tree.want();
     await settled(tree);
     fixture.session.showGame(2);
     expect(tree.state, isA<TreeBuilt>());
     expect(movesOf(tree.answerAt(Fen.initial)), hasLength(3));
   });
 
-  test('a large file is built on another isolate, saying how far it has '
+  test('a large file is built a turn at a time, saying how far it has '
       'got', () async {
     await over(bigChapter(games: 1500));
-    tree.want();
     expect(tree.state, isA<TreeReading>());
     await settled(tree);
     expect(tree.state, isA<TreeBuilt>());
@@ -125,42 +129,72 @@ void main() {
     expect(tree.answerAt(afterD4D5)!.total, 1500);
   });
 
+  test('a file gone back to with its games as they were answers at once, '
+      'building nothing again', () async {
+    await over(bigChapter(games: 1500));
+    await settled(tree);
+    await openOther(threeGameFile);
+    await settled(tree);
+    states.clear();
+    await fixture.session.open(fixture.ref, game: 0);
+    expect(tree.state, isA<TreeBuilt>());
+    expect(tree.answerAt(afterD4D5)!.total, 1500);
+    expect(states.whereType<TreeReading>(), isEmpty);
+  });
+
+  test('Try again reads a file gone back to again', () async {
+    await over(threeGameFile);
+    await settled(tree);
+    tree.forget();
+    await openOther(threeGameFile);
+    states.clear();
+    await fixture.session.open(fixture.ref, game: 0);
+    await settled(tree);
+    expect(states.whereType<TreeReading>(), isNotEmpty);
+  });
+
   group('the file leaving stops its build and drops its tree:', () {
+    /// Leaves a large file half built for [leave]'s document, and answers
+    /// once the old build would have finished had it gone on.
     Future<void> leaving(Future<void> Function() leave) async {
       await over(bigChapter(games: 1500));
-      tree.want();
       expect(tree.state, isA<TreeReading>());
       await leave();
-      expect(tree.state, isA<TreeUnbuilt>());
-      expect(tree.answerAt(afterD4D5), isNull);
-      // Long enough for the old build to have finished had it gone on.
+      expect(tree.answerAt(afterD4D5)?.isEmpty ?? true, isTrue);
       await Future<void>.delayed(const Duration(seconds: 1));
-      expect(tree.answerAt(afterD4D5), isNull);
-      expect(states.whereType<TreeBuilt>(), isEmpty);
-      tree.want();
-      await settled(tree);
       expect(tree.answerAt(afterD4D5)?.isEmpty ?? true, isTrue);
     }
 
-    test('another file opened', () => leaving(() => openOther(threeGameFile)));
+    test('another file opened, which is built in its place', () async {
+      await leaving(() => openOther(threeGameFile));
+      expect(states.whereType<TreeBuilt>(), hasLength(1));
+      expect(movesOf(tree.answerAt(Fen.initial)), hasLength(3));
+      expect(tree.summary, '3 games');
+    });
 
-    test('a game pasted onto the board', () async {
-      await leaving(
+    for (final (name, leave) in [
+      (
+        'a game pasted onto the board',
         () =>
             fixture.session.showAnalysisBoard(analysisBoard(side: Side.white)),
-      );
-    });
-
-    test('the file closed', () async {
-      await leaving(() async => fixture.session.closed());
-    });
+      ),
+      ('the file closed', () async => fixture.session.closed()),
+    ]) {
+      test(name, () async {
+        await leaving(leave);
+        expect(tree.state, isA<TreeUnbuilt>());
+        expect(states.whereType<TreeBuilt>(), isEmpty);
+        tree.want();
+        await settled(tree);
+        expect(tree.answerAt(afterD4D5)?.isEmpty ?? true, isTrue);
+      });
+    }
   });
 
   test(
     'an edit invalidates the index until its new snapshot is built',
     () async {
       await over(threeGameFile);
-      tree.want();
       await settled(tree);
       fixture.session.setComment(NodePath.of(const [0]), 'A note');
       expect(tree.state, isA<TreeUnbuilt>());
@@ -174,7 +208,6 @@ void main() {
   test('the same file read again with another number of games drops the '
       'tree, whose numbers would name other games', () async {
     await over(threeGameFile);
-    tree.want();
     await settled(tree);
     fixture.store.documents[fixture.ref] = Opened(
       '$threeGameFile\n[Event "Late"]\n[Result "0-1"]\n\n1. g3 0-1\n',
@@ -191,7 +224,6 @@ void main() {
   test('an edit that lands mid-build starts again and never shows the '
       'overtaken tree', () async {
     await over(bigChapter(games: 1500));
-    tree.want();
     fixture.session.setComment(NodePath.of([0]), 'A note');
     expect(tree.state, isA<TreeUnbuilt>());
     tree.want();
@@ -202,7 +234,6 @@ void main() {
 
   test('a file of games with no moves says so', () async {
     await over('[Event "Empty"]\n\n*\n');
-    tree.want();
     await settled(tree);
     expect(tree.state, isA<TreeEmpty>());
   });
