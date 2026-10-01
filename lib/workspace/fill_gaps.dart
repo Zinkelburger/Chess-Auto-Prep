@@ -13,12 +13,10 @@ import '../chess/generation/search.dart';
 import '../chess/generation/search_config.dart';
 import '../chess/generation/search_node.dart';
 import '../chess/generation/search_result.dart';
-import '../chess/generation/sources.dart';
 import '../chess/generation/traps.dart';
 import '../chess/generation/tree_wire_v4.dart';
 import '../chess/pgn/chapter.dart';
 import '../chess/pgn/chapter_heading.dart';
-import '../chess/pgn/game_tree.dart';
 import '../chess/pgn/tree_edit.dart' show positionOf;
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
@@ -33,6 +31,7 @@ import 'opening_names.dart';
 import 'generated_draft.dart';
 
 import 'fill_states.dart';
+import 'search_opponents.dart';
 
 /// The expectimax search from the board: the Search tab.
 ///
@@ -94,6 +93,11 @@ final class FillGaps extends ChangeNotifier {
 
   FillState _state = const FillIdle();
   FillFound? _found;
+
+  /// The same run searched for the other side, as far as it has got: what
+  /// each move is worth when that side is the prepared one. The mainline
+  /// book builds none.
+  FillFound? _mirror;
   LinesState? _lines;
   GeneratedDraft? _draft;
   int _draftLines = 0;
@@ -179,6 +183,8 @@ final class FillGaps extends ChangeNotifier {
   Completer<void>? _finished;
   int _followTicket = 0;
 
+  /// The engine as the run under way asks it: one for both of its sides.
+  EngineAnswers? _answers;
   final _history = <FillFound>[];
   FillRequest? _activeRequest;
   (Object?, Fen, Side)? _board;
@@ -193,23 +199,26 @@ final class FillGaps extends ChangeNotifier {
 
   /// Retain previous roots so going back can display and resume their values.
   void _remember() {
-    final found = _found;
-    if (found == null) return;
-    _history.removeWhere(
-      (old) =>
-          old.tree.fen == found.tree.fen &&
-          old.side == found.side &&
-          old.request.compatibleWith(found.request),
-    );
-    _history.add(found);
-    if (_history.length > 16) _history.removeAt(0);
+    for (final found in [?_found, ?_mirror]) {
+      _history.removeWhere(
+        (old) =>
+            old.tree.fen == found.tree.fen &&
+            old.side == found.side &&
+            old.request.compatibleWith(found.request),
+      );
+      _history.add(found);
+      if (_history.length > 32) _history.removeAt(0);
+    }
   }
 
-  SearchNode? nodeAtBoard({FillRequest? request}) {
+  /// The board's position in the newest tree searched for [side], the
+  /// bottom of the board unless another is asked for.
+  SearchNode? nodeAtBoard({FillRequest? request, Side? side}) {
     final tree = _session.tree;
     if (tree == null) return null;
+    side ??= _session.orientation;
     final sans = [for (final move in tree.lineTo(_session.cursor)) move.san];
-    final searches = [if (_found != null) _found!, ..._history.reversed];
+    final searches = [?_found, ?_mirror, ..._history.reversed];
     // Prefer a search rooted here over an older subtree of another root.
     searches.sort(
       (a, b) => (b.tree.fen == _session.fen ? 1 : 0).compareTo(
@@ -217,7 +226,7 @@ final class FillGaps extends ChangeNotifier {
       ),
     );
     for (final found in searches) {
-      if (found.side != _session.orientation ||
+      if (found.side != side ||
           (request != null && !found.request.compatibleWith(request)))
         continue;
       final node = found.at(tree.rootFen, sans);
@@ -292,7 +301,11 @@ final class FillGaps extends ChangeNotifier {
 
   /// Starts a run, or answers why it did not: the one sentence the screen
   /// shows. Null when it started.
-  Future<String?> start(FillRequest request, {SearchNode? seed}) async {
+  Future<String?> start(
+    FillRequest request, {
+    SearchNode? seed,
+    SearchNode? mirrorSeed,
+  }) async {
     if (_disposed) return 'The search owner is closed.';
     if (_active || running) return 'A search is already running.';
     if (_jobs.heldByOther(this)) {
@@ -324,6 +337,13 @@ final class FillGaps extends ChangeNotifier {
       chapter: drafting ? (chapter, source) : null,
     );
     seed ??= nodeAtBoard(request: request);
+    final mirror = request.method == SearchMethod.practical
+        ? target.mirror
+        : null;
+    if (mirror != null) {
+      mirrorSeed ??=
+          nodeAtBoard(request: request, side: mirror.side) ?? mirrorStart(seed);
+    }
     _remember();
     if (_activeRequest?.source != request.source ||
         _activeRequest?.evalDepth != request.evalDepth) {
@@ -337,6 +357,9 @@ final class FillGaps extends ChangeNotifier {
     _found = seed == null
         ? null
         : FillFound(target: target, request: request, tree: seed);
+    _mirror = mirror == null || mirrorSeed == null
+        ? null
+        : FillFound(target: mirror, request: request, tree: mirrorSeed);
     _lines = null;
     _draft = null;
     _set(
@@ -348,7 +371,7 @@ final class FillGaps extends ChangeNotifier {
     );
     _jobs.take(this, 'Paused while searching');
     try {
-      await _run(request, target, root, seed);
+      await _run(request, target, root, seed, mirrorSeed);
     } on Object catch (error) {
       log.w('search ${target.label}', error);
       _set(
@@ -369,23 +392,37 @@ final class FillGaps extends ChangeNotifier {
     final source = _session.source;
     final fen = _session.fen;
     final side = _session.orientation;
-    Object? seed = nodeAtBoard(request: request);
-    if (seed == null) {
-      final load = _loadTree;
-      seed = source == null || load == null
-          ? 'No saved search is available for this board.'
-          : await savedSeed(load(source, fen), request, side);
-    }
-    if (_session.source != source ||
+    bool moved() =>
+        _session.source != source ||
         _session.fen != fen ||
         _session.orientation != side ||
-        !canStart) {
-      return 'The board changed while loading the search.';
+        !canStart;
+    const changed = 'The board changed while loading the search.';
+    final seed = await _seedFor(request, side);
+    if (moved()) return changed;
+    final mirror = request.method == SearchMethod.practical
+        ? await _seedFor(request, side.opposite)
+        : null;
+    if (moved()) return changed;
+    final mirrorSeed = mirror is SearchNode ? mirror : null;
+    if (seed is SearchNode) {
+      return start(request, seed: seed, mirrorSeed: mirrorSeed);
     }
-    if (seed is SearchNode) return start(request, seed: seed);
     if (!orAfresh) return seed as String;
     log.i('search afresh: $seed');
-    return start(request);
+    return start(request, mirrorSeed: mirrorSeed);
+  }
+
+  /// The tree a search for [side] goes on from at this board: one this
+  /// window holds, else the newest saved beside the chapter; or why there
+  /// is none.
+  Future<Object> _seedFor(FillRequest request, Side side) async {
+    if (nodeAtBoard(request: request, side: side) case final node?) return node;
+    final source = _session.source;
+    final load = _loadTree;
+    return source == null || load == null
+        ? 'No saved search is available for this board.'
+        : savedSeed(load(source, _session.fen), request, side);
   }
 
   Future<void> _run(
@@ -393,7 +430,9 @@ final class FillGaps extends ChangeNotifier {
     FillTarget target,
     Position root,
     SearchNode? seed,
+    SearchNode? mirrorSeed,
   ) async {
+    _answers = null;
     final tools = await _tools(request);
     final Future<void> Function() release;
     switch (tools) {
@@ -414,11 +453,26 @@ final class FillGaps extends ChangeNotifier {
       _set(const FillIdle());
       return;
     }
+    // The other side is searched beside this one, on the same engine, and
+    // stops with it unless this one ran its whole depth.
+    SearchResult? ended;
+    final mirroring = tools is! FillReady
+        ? null
+        : _buildMirror(
+            tools,
+            request,
+            target.mirror,
+            root,
+            mirrorSeed,
+            stopped: () => ended != null && ended is! SearchComplete,
+          );
     final (config, result) = await _build(tools, request, target, root, seed);
+    ended = result;
+    final mirror = await mirroring;
     await _released();
     if (_disposed) return;
     if (_discarded) {
-      _found = null;
+      _found = _mirror = null;
       _set(const FillIdle());
       return;
     }
@@ -428,6 +482,17 @@ final class FillGaps extends ChangeNotifier {
       return;
     }
     _show(target, request, tree);
+    // A mirror with no move under the board has nothing to show or keep.
+    final other = switch (mirror == null ? null : _treeOf(mirror.$2).$1) {
+      final OurNode tree => tree,
+      final OpponentNode tree => tree,
+      _ => null,
+    };
+    if (other == null) {
+      _mirror = null;
+    } else {
+      _show(target.mirror, request, other, mirror: true);
+    }
     final reached = _state is FillRunning ? (_state as FillRunning).depth : 0;
     if (why != null) log.w('search ${target.label}', why);
     log.i('search ${target.label}: ${nodesIn(tree)} positions');
@@ -442,7 +507,35 @@ final class FillGaps extends ChangeNotifier {
           result.reason == StopReason.sourceUnavailable,
       stoppedBy: stoppedBy,
     );
-    await _publish(target, request, tree, config, result, done);
+    await _publish(target, request, tree, config, result, done, [
+      if (other != null) (other, mirror!.$1, mirror.$2 is SearchComplete),
+    ]);
+  }
+
+  /// The same search for the other side, or null when it could not be made:
+  /// its values are an extra, so its failure is logged and never the run's.
+  Future<(SearchConfig, SearchResult)?> _buildMirror(
+    FillReady tools,
+    FillRequest request,
+    FillTarget target,
+    Position root,
+    SearchNode? seed, {
+    required CancelSignal stopped,
+  }) async {
+    try {
+      return await _build(
+        tools,
+        request,
+        target,
+        root,
+        seed,
+        mirror: true,
+        stopped: () => _stopping || _state is! FillRunning || stopped(),
+      );
+    } on Object catch (error) {
+      log.w('search ${target.label} for ${target.side.name}', error);
+      return null;
+    }
   }
 
   /// The tree [tools] build from [root], or from [seed]: the expectimax
@@ -452,8 +545,10 @@ final class FillGaps extends ChangeNotifier {
     FillRequest request,
     FillTarget target,
     Position root,
-    SearchNode? seed,
-  ) async {
+    SearchNode? seed, {
+    bool mirror = false,
+    CancelSignal? stopped,
+  }) async {
     int? lastPly() => switch (_state) {
       FillRunning(:final lastPly) => lastPly,
       _ => null,
@@ -493,17 +588,17 @@ final class FillGaps extends ChangeNotifier {
         root: root,
         seed: seed,
         config: config,
-        evaluator: EngineAnswers(
+        evaluator: _answers ??= EngineAnswers(
           engine.evaluator,
           depths: _engineDepths,
           lines: _bestLines,
         ),
         policy: engine.policy,
         candidates: engine.candidates,
-        isCancelled: () => _stopping,
+        isCancelled: stopped ?? () => _stopping,
         lastPly: lastPly,
-        onProgress: _progress,
-        onSnapshot: (tree) => _show(target, request, tree),
+        onProgress: mirror ? null : _progress,
+        onSnapshot: (tree) => _show(target, request, tree, mirror: mirror),
       ),
     );
   }
@@ -517,6 +612,7 @@ final class FillGaps extends ChangeNotifier {
     SearchConfig config,
     SearchResult result,
     FillDone done,
+    List<(SearchNode, SearchConfig, bool)> mirrors,
   ) async {
     _set(done);
     final source = target.chapter?.$2;
@@ -532,7 +628,14 @@ final class FillGaps extends ChangeNotifier {
           case final recording?)
         recording.then<void>((_) {}),
       if (source != null && keep != null)
-        _saveTree(source, tree, config, result is SearchComplete, request),
+        () async {
+          for (final (tree, config, complete) in [
+            ...mirrors,
+            (tree, config, result is SearchComplete),
+          ]) {
+            await _saveTree(source, tree, config, complete, request);
+          }
+        }(),
     ];
     final work = Future.wait(saving).then<void>(
       (_) {},
@@ -566,7 +669,7 @@ final class FillGaps extends ChangeNotifier {
     );
     try {
       await entry.run();
-      treeSaveProblem = null;
+      if (!canRetryTree) treeSaveProblem = null;
     } on Object catch (error) {
       treeSaveProblem = 'The search tree could not be saved. Retry saving it.';
       log.w('save search tree', error);
@@ -574,9 +677,19 @@ final class FillGaps extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  void _show(FillTarget target, FillRequest request, SearchNode tree) {
+  void _show(
+    FillTarget target,
+    FillRequest request,
+    SearchNode tree, {
+    bool mirror = false,
+  }) {
     if (_discarded) return;
-    _found = FillFound(target: target, request: request, tree: tree);
+    final found = FillFound(target: target, request: request, tree: tree);
+    if (mirror) {
+      _mirror = found;
+    } else {
+      _found = found;
+    }
     notifyListeners();
   }
 
@@ -856,98 +969,5 @@ final class FillGaps extends ChangeNotifier {
     _disposed = true;
     _releaseSoon();
     super.dispose();
-  }
-}
-
-/// What the engine said during one owner's searches that the tree does not
-/// keep: the depth each score was reached at, and the engine's best line.
-/// Only answers the evaluator actually supplied are recorded — a cached
-/// score has no line — and both are session-local: a saved tree records
-/// neither.
-///
-/// Keyed by the four-field position, since neither depends on the clocks.
-final class EngineAnswers implements PositionEvaluator {
-  EngineAnswers(this.evaluator, {required this.depths, required this.lines});
-
-  final PositionEvaluator evaluator;
-  final Map<String, int> depths;
-  final Map<String, List<String>> lines;
-
-  @override
-  Future<EvaluationResult> evaluate(Position position) async {
-    final result = await evaluationOf(evaluator, position);
-    if (result case Evaluated(:final depth, :final pv)) {
-      final key = Fen(position.fen).position;
-      if (depth != null) depths[key] = depth;
-      if (pv.isNotEmpty) lines[key] = pv;
-    }
-    return result;
-  }
-}
-
-/// Where a run began: the document's root and the moves from it to the
-/// board, the side searched for, and — when the run can become lines —
-/// the chapter as it was and its file.
-final class FillTarget {
-  const FillTarget({
-    required this.rootFen,
-    required this.cursor,
-    required this.sans,
-    required this.side,
-    this.chapter,
-  });
-
-  final Fen rootFen;
-  final NodePath cursor;
-  final List<String> sans;
-  final Side side;
-  final (Chapter, ChapterRef)? chapter;
-
-  /// How the log names the run.
-  String get label => chapter?.$2.path ?? 'the board';
-}
-
-/// The tree of the last run, where it was started and what it was asked.
-final class FillFound {
-  const FillFound({
-    required this.target,
-    required this.request,
-    required this.tree,
-  });
-
-  final FillTarget target;
-  final FillRequest request;
-
-  /// The search tree from the position the run started at.
-  final SearchNode tree;
-
-  Side get side => target.side;
-
-  /// The chapter the run can be written into as lines, and its file.
-  (Chapter, ChapterRef)? get chapter => target.chapter;
-
-  /// The node for the position reached from [root] by [sans], or null when
-  /// that position is not in the search: another document, a line that
-  /// leaves the tree, or a position before the one the run started at.
-  SearchNode? at(Fen root, List<String> sans) {
-    if (root != target.rootFen || sans.length < target.sans.length) {
-      return null;
-    }
-    for (final (i, san) in target.sans.indexed) {
-      if (sans[i] != san) return null;
-    }
-    SearchNode node = tree;
-    for (final san in sans.skip(target.sans.length)) {
-      final next = switch (node) {
-        OurNode(:final candidates) =>
-          candidates.where((c) => c.move.san == san).firstOrNull?.child,
-        OpponentNode(:final replies) =>
-          replies.where((r) => r.move.san == san).firstOrNull?.child,
-        _ => null,
-      };
-      if (next == null) return null;
-      node = next;
-    }
-    return node;
   }
 }

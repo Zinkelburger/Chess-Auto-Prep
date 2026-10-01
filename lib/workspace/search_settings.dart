@@ -26,12 +26,12 @@ abstract final class SearchSettingCopy {
   static const evalDepth = ('Engine depth', 'each position scored this deep');
   static const source = (
     'Evaluation',
-    'a database answers first, Stockfish the rest',
+    'a database answers first, the engine the rest',
   );
 
   /// The evaluation sources by the name of what answers first.
   static const sources = [
-    (EvaluationSource.stockfish, 'Stockfish'),
+    (EvaluationSource.stockfish, 'Engine'),
     (EvaluationSource.chessDb, 'ChessDB'),
     (EvaluationSource.lichess, 'Lichess'),
   ];

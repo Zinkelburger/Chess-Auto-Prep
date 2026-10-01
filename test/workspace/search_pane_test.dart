@@ -207,7 +207,7 @@ void main() {
   ) async {
     await pump(tester);
     expect(find.byType(TextField), findsOneWidget, reason: 'the depth');
-    expect(find.text('For White · Maia 2200 · best 4, then 4'), findsOne);
+    expect(find.text('Maia 2200 · best 4, then 4'), findsOne);
     await tester.tap(find.byTooltip('Expectimax settings'));
     await tester.pump();
     for (final name in [
@@ -240,10 +240,7 @@ void main() {
     expect(settings.value.expectimax.candidateMoves, 2);
     expect(FillRequest.of(settings.value).replyFloor, 0.02);
     expect(settings.value.expectimax.source, EvaluationSource.chessDb);
-    expect(
-      find.text('For White · Maia 1800 · best 4, then 2 · ChessDB + Stockfish'),
-      findsOne,
-    );
+    expect(find.text('Maia 1800 · best 4, then 2 · ChessDB'), findsOne);
     // A number out of range is said, not taken, and nothing starts on it.
     await tester.scrollUntilVisible(
       find.text('Later moves'),
@@ -360,6 +357,39 @@ void main() {
     expect(find.byType(StaticChessboard), findsNothing);
   });
 
+  testWidgets('the side\'s button turns the board, and the next search is '
+      'for the side it then names', (tester) async {
+    await pump(tester);
+    expect(fixture.session.orientation, Side.white);
+    await tester.tap(find.byTooltip('Search for Black and turn the board (F)'));
+    await tester.pump();
+    expect(fixture.session.orientation, Side.black);
+    expect(find.widgetWithText(TextButton, 'Black'), findsOneWidget);
+    await tester.runAsync(() async {
+      await tester.tap(find.widgetWithText(FilledButton, 'Expectimax'));
+      while (!fill.running) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      // A search keeps the side it started with.
+      await tester.pump();
+      expect(
+        tester
+            .widget<TextButton>(find.widgetWithText(TextButton, 'Black'))
+            .onPressed,
+        isNull,
+      );
+      fill.finish();
+      while (fill.running) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    });
+    await tester.pumpAndSettle();
+    expect(fill.found!.side, Side.black);
+    await tester.tap(find.widgetWithText(TextButton, 'Black'));
+    await tester.pump();
+    expect(fixture.session.orientation, Side.white);
+  });
+
   testWidgets('the values at the board, following it: every move of ours, '
       'then their replies most played first with the trap marked', (
     tester,
@@ -388,7 +418,11 @@ void main() {
     // Depth is on the Engine value's hover, not a column of its own.
     expect(find.byTooltip('Depth 22'), findsWidgets);
     expect(find.text('22'), findsNothing);
-    expect(find.text('Expectimax'), findsOneWidget, reason: 'the column');
+    // A value for each side beside the engine's, under the side's button:
+    // the model here answers for Black alone, so only White's search has
+    // any.
+    expect(find.text('White'), findsNWidgets(2), reason: 'side and column');
+    expect(find.text('Black'), findsOneWidget, reason: 'the column');
     expect(
       find.widgetWithText(FilledButton, 'Resume'),
       findsOneWidget,

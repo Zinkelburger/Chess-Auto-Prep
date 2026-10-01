@@ -89,6 +89,13 @@ GameRead readGame(String text) {
   );
 }
 
+/// The header block of the game [text], as [readGame] gives it in
+/// [GameRead.tags], read without reading any of the moves: what a list of
+/// a file's games needs of each, at about a hundredth of the cost.
+List<PgnHeader> readHeaders(String text) => [
+  for (final token in lexHeader(text)) _header(token),
+];
+
 bool _isHeader(PgnToken token) => token is TagToken || token is HeaderLineToken;
 
 PgnHeader _header(PgnToken token) => switch (token) {

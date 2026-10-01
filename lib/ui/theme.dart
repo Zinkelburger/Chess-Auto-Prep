@@ -182,8 +182,12 @@ const searchRunWidth = 148.0;
 const searchDepthWidth = 84.0;
 const searchHeaderHeight = 24.0;
 const searchRowHeight = 32.0;
-const searchShareWidth = 64.0;
-const searchValueWidth = 88.0;
+const searchShareWidth = 48.0;
+const searchValueWidth = 56.0;
+
+/// The least the move's own column keeps: a pane with less to spare than
+/// this leaves out Played.
+const searchMoveWidth = 64.0;
 
 /// The Replies table: a row per move the model expects, as tall as an
 /// engine row, with its share in a gutter as wide as an engine score.
