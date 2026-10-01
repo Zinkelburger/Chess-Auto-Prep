@@ -12,9 +12,18 @@ import 'workspace_tabs.dart';
 
 /// Docking affordances appear during a drag, leaving the reading area quiet.
 class ActionPanes extends StatefulWidget {
-  const ActionPanes({super.key, required this.layout, required this.body});
+  const ActionPanes({
+    super.key,
+    required this.layout,
+    required this.body,
+    this.actions,
+  });
   final ActionLayout layout;
   final Widget Function(BuildContext, int, WorkspaceTab) body;
+
+  /// What the mode puts in every pane's `+` under its tabs: the things it
+  /// keeps out of sight until they are asked for.
+  final List<AppAction> Function()? actions;
 
   @override
   State<ActionPanes> createState() => _ActionPanesState();
@@ -48,10 +57,27 @@ class _ActionPanesState extends State<ActionPanes> {
     ),
   };
 
+  /// Moves alone on the card is the page of a book: no strip and no frame,
+  /// the `+` in its corner.
+  bool get _page =>
+      layout.count == 1 &&
+      layout.openIn(0).length == 1 &&
+      layout.openIn(0).single == WorkspaceTab.moves;
+
   Widget _pane(BuildContext context, int index) {
     final tabs = layout.pane(index);
     final scheme = Theme.of(context).colorScheme;
     final drag = _drag;
+    if (_page) {
+      return Stack(
+        key: ValueKey('action-pane-$index'),
+        fit: StackFit.expand,
+        children: [
+          _body(context, index, tabs.selected),
+          Positioned(top: Space.xs, right: Space.xs, child: _paneMenu(index)),
+        ],
+      );
+    }
     return Listener(
       onPointerDown: (_) => layout.select(index),
       child: Focus(
@@ -68,7 +94,7 @@ class _ActionPanesState extends State<ActionPanes> {
             color: scheme.surface,
             shape: RoundedRectangleBorder(
               side: BorderSide(
-                color: layout.active == index
+                color: layout.active == index && layout.count > 1
                     ? scheme.onSurfaceVariant.withValues(alpha: 0.55)
                     : scheme.outlineVariant,
               ),
@@ -83,16 +109,8 @@ class _ActionPanesState extends State<ActionPanes> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      LayoutBuilder(
-                        builder: (context, size) => SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: SizedBox(
-                            width: math.max(actionPaneMinWidth, size.maxWidth),
-                            height: size.maxHeight,
-                            child: widget.body(context, index, tabs.selected),
-                          ),
-                        ),
-                      ),
+                      if (!layout.isEmpty(index))
+                        _body(context, index, tabs.selected),
                       if (drag != null && layout.sourceOf(drag.source) != null)
                         _docking(index, drag),
                     ],
@@ -105,6 +123,18 @@ class _ActionPanesState extends State<ActionPanes> {
       ),
     );
   }
+
+  Widget _body(BuildContext context, int index, WorkspaceTab tab) =>
+      LayoutBuilder(
+        builder: (context, size) => SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(
+            width: math.max(actionPaneMinWidth, size.maxWidth),
+            height: size.maxHeight,
+            child: widget.body(context, index, tab),
+          ),
+        ),
+      );
 
   List<AppAction> _tabActions(int index, WorkspaceTab tab) => [
     if (!layout.pane(index).tabOf(tab).pinned)
@@ -124,7 +154,14 @@ class _ActionPanesState extends State<ActionPanes> {
       color: scheme.surfaceContainerLow,
       child: Row(
         children: [
-          Expanded(child: _stripTarget(index, _strip(index))),
+          Expanded(
+            child: _stripTarget(
+              index,
+              layout.isEmpty(index)
+                  ? const SizedBox(height: paneTabHeight)
+                  : _strip(index),
+            ),
+          ),
           _paneMenu(index),
         ],
       ),
@@ -181,6 +218,8 @@ class _ActionPanesState extends State<ActionPanes> {
     },
   );
 
+  /// The pane's `+`: every tab the mode has, opened as the layout opens a
+  /// picked tab, then an empty pane and the ways to have fewer.
   Widget _paneMenu(int index) {
     final tabs = layout.pane(index);
     return MenuAnchor(
@@ -193,32 +232,36 @@ class _ActionPanesState extends State<ActionPanes> {
               layout.destinations(tab.id),
             ),
             child: MenuItemButton(
-              onPressed: () => layout.show(index, tab.id),
+              onPressed: () => layout.open(index, tab.id),
               child: Text(tab.title),
             ),
           ),
+        if (widget.actions?.call() case final actions?
+            when actions.isNotEmpty) ...[
+          const Divider(height: 1),
+          for (final action in actions)
+            MenuItemButton(
+              onPressed: action.run,
+              leadingIcon: action.icon == null
+                  ? null
+                  : Icon(action.icon, size: IconSize.menu),
+              trailingIcon: action.shortcut == null
+                  ? null
+                  : Text(
+                      action.shortcut!,
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+              child: Text(action.label),
+            ),
+        ],
         const Divider(height: 1),
         MenuItemButton(
-          onPressed: layout.canSplit(tabs.selected)
-              ? () =>
-                    layout.split(index, tabs.selected, PaneSplitDirection.right)
-              : null,
-          leadingIcon: const Icon(
-            Icons.vertical_split_outlined,
-            size: IconSize.menu,
-          ),
-          child: const Text('Split right'),
-        ),
-        MenuItemButton(
-          onPressed: layout.canSplit(tabs.selected)
-              ? () =>
-                    layout.split(index, tabs.selected, PaneSplitDirection.below)
-              : null,
+          onPressed: layout.canAddPane ? () => layout.addPane(index) : null,
           leadingIcon: const Icon(
             Icons.horizontal_split_outlined,
             size: IconSize.menu,
           ),
-          child: const Text('Split below'),
+          child: const Text('New pane'),
         ),
         if (index != 0)
           MenuItemButton(
