@@ -1,6 +1,9 @@
+import 'package:dartchess/dartchess.dart' show Side;
+
 import '../chess/fen.dart';
 import '../chess/generation/evaluation_source.dart';
 import '../chess/generation/mainline_book.dart';
+import '../chess/generation/search_config.dart';
 import '../chess/generation/sources.dart';
 import '../net/chessdb_moves.dart';
 import '../storage/chapter_files.dart';
@@ -64,6 +67,20 @@ final class FillRequest {
   /// The rating a saved tree records: none for the book, which asks no
   /// model.
   int get treeRating => method == SearchMethod.mainline ? 0 : elo;
+
+  /// The expectimax search this request asks for, playing [side], on top of
+  /// the [seeded] positions a resumed tree already holds.
+  SearchConfig expectimaxFor(Side side, {int seeded = 0}) => SearchConfig(
+    side: side,
+    horizonPlies: depthPlies,
+    lossLimitCp: null,
+    maxOurMoves: candidateMoves,
+    rootMoves: rootMoves,
+    replyFloor: replyFloor,
+    replyMass: fillReplyMass,
+    maxReplies: fillMaxReplies,
+    nodeBudget: fillNodeBudget + seeded,
+  );
 }
 
 /// The engine depth every search scores positions at: the old app's
@@ -72,6 +89,14 @@ const fillEvalDepth = 14;
 
 /// One user-started search adds at most this many positions, under the interactive branching policy.
 const fillNodeBudget = 25000;
+
+/// The opponent's replies a search keeps at each of its positions: the
+/// likeliest until they cover this share of Maia's distribution, at most
+/// [fillMaxReplies], renormalised. Maia gives every legal move some weight,
+/// and the 30-odd it barely expects would otherwise cost an engine
+/// evaluation each.
+const fillReplyMass = 0.9;
+const fillMaxReplies = 5;
 
 /// The range a search's depth may be set to, when it is set at all.
 const minFillDepth = 1;

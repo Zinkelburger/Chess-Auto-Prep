@@ -1,5 +1,6 @@
 import '../fen.dart';
 import 'eval.dart';
+import 'sources.dart';
 
 /// A move as the two notations the search needs: standard UCI to identify it
 /// (it is what the opponent model is keyed by, and what ties are broken on)
@@ -173,7 +174,7 @@ int compareCandidates(CandidateMove a, CandidateMove b) {
   return order;
 }
 
-/// A reply the opponent model gives positive probability, and where it leads.
+/// A reply the search kept at an opponent position, and where it leads.
 final class ReplyMove {
   const ReplyMove({
     required this.move,
@@ -183,8 +184,8 @@ final class ReplyMove {
 
   final MoveRef move;
 
-  /// The reply's share of the opponent's policy over the legal moves, so the
-  /// shares of one node sum to one.
+  /// The reply's share of the opponent's policy over the kept replies, so
+  /// the shares of one node sum to one.
   final double probability;
 
   final SearchNode child;
@@ -200,8 +201,9 @@ final class OpponentNode extends SearchNode {
     required this.replies,
   });
 
-  /// Every reply with positive probability is kept; there is no cap on how
-  /// many, and rare replies are not dropped to save work.
+  /// [replies] are the ones the search kept — every reply with positive
+  /// probability, or the likeliest few ([SearchConfig.replyMass]) — with
+  /// shares that sum to one.
   factory OpponentNode.over({
     required Fen fen,
     required Eval? evalForUs,
@@ -310,3 +312,44 @@ int nodesIn(SearchNode node) => switch (node) {
     1 + replies.fold(0, (sum, r) => sum + nodesIn(r.child)),
   _ => 1,
 };
+
+/// [node] with every opponent position cut to its likeliest replies, as a
+/// search with [mass] and [most] would have kept them ([likeliestReplies]),
+/// and the values above them taken again. For a tree saved before the cut,
+/// so a resume goes on from the tree it would have built; a tree already cut
+/// is not cut again, because its shares are already renormalised.
+SearchNode cutReplies(SearchNode node, {double? mass, int? most}) =>
+    switch (node) {
+      OurNode(:final fen, :final evalForUs, :final candidates) => OurNode.over(
+        fen: fen,
+        evalForUs: evalForUs,
+        candidates: [
+          for (final c in candidates)
+            CandidateMove(
+              move: c.move,
+              child: cutReplies(c.child, mass: mass, most: most),
+            ),
+        ],
+      ),
+      OpponentNode(:final fen, :final evalForUs, :final replies) => () {
+        final shares = likeliestReplies(
+          {for (final r in replies) r.move.uci: r.probability},
+          mass: mass,
+          most: most,
+        );
+        return OpponentNode.over(
+          fen: fen,
+          evalForUs: evalForUs,
+          replies: [
+            for (final r in replies)
+              if (shares[r.move.uci] case final share?)
+                ReplyMove(
+                  move: r.move,
+                  probability: share,
+                  child: cutReplies(r.child, mass: mass, most: most),
+                ),
+          ],
+        );
+      }(),
+      _ => node,
+    };

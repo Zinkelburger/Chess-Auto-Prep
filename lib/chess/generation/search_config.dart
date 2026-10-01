@@ -15,6 +15,8 @@ final class SearchConfig {
     this.nodeBudget,
     this.pins = const {},
     this.replyFloor = 0,
+    this.replyMass,
+    this.maxReplies,
     this.maxOurMoves,
     this.rootMoves,
   });
@@ -78,4 +80,14 @@ final class SearchConfig {
   /// the horizon allows. Our own moves count as certain, so the reach only
   /// falls at the opponent's moves.
   final double replyFloor;
+
+  /// The opponent's replies are taken most likely first until they cover
+  /// this share of the model's distribution, the rest dropped and the kept
+  /// shares renormalised to sum to one. Null keeps every reply the model
+  /// gives any weight.
+  final double? replyMass;
+
+  /// The most replies one opponent position keeps, applied with
+  /// [replyMass]. Null sets no cap.
+  final int? maxReplies;
 }

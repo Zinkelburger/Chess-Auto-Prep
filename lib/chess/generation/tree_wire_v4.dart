@@ -151,6 +151,8 @@ Map<String, Object?> _configJson(
   'v2_max_our_moves': ?config.maxOurMoves,
   if (config.maxOurMoves != null) 'v2_root_moves': ?config.rootMoves,
   if (config.replyFloor != 0) 'v2_reply_floor': config.replyFloor,
+  'v2_reply_mass': ?config.replyMass,
+  'v2_max_replies': ?config.maxReplies,
   'eval_depth': ?evalDepth,
   'maia_elo': ?opponentRating,
 };

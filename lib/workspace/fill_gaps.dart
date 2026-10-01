@@ -416,6 +416,8 @@ final class FillGaps extends ChangeNotifier {
               evalDepth: fillEvalDepth,
               candidateMoves: request.candidateMoves,
               replyFloor: request.replyFloor,
+              replyMass: fillReplyMass,
+              maxReplies: fillMaxReplies,
             ).catchError((Object error) {
               log.w('resume search', error);
               return 'The saved search could not be read.';
@@ -525,14 +527,9 @@ final class FillGaps extends ChangeNotifier {
       );
     }
     final engine = tools as FillReady;
-    final config = SearchConfig(
-      side: target.side,
-      horizonPlies: request.depthPlies,
-      lossLimitCp: null,
-      maxOurMoves: request.candidateMoves,
-      rootMoves: request.rootMoves,
-      replyFloor: request.replyFloor,
-      nodeBudget: fillNodeBudget + (seed == null ? 0 : nodesIn(seed)),
+    final config = request.expectimaxFor(
+      target.side,
+      seeded: seed == null ? 0 : nodesIn(seed),
     );
     return (
       config,
