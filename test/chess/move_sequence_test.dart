@@ -48,6 +48,9 @@ void main() {
         isNull,
       );
       expect(opening.endIn(sicilian, fromStart: true, toEnd: true), isNull);
+      // A game with fewer moves than the sequence does not start with it.
+      expect(opening.endIn(const ['e4'], fromStart: true), isNull);
+      expect(opening.endIn(const [], fromStart: true), isNull);
       expect(
         MoveSequence.parse(
           'e4 … Nf6',

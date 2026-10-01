@@ -99,7 +99,18 @@ void main() {
     ]) {
       expect(Fen(fen).position, position);
       expect(positionKey(Fen(fen)), summed(position));
+      expect(Fen(fen).isAt(position), isTrue);
     }
+    // The same pieces with another side to move, or only the start of the
+    // position, are not it.
+    expect(
+      Fen.initial.isAt('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w'),
+      isFalse,
+    );
+    expect(
+      Fen.initial.isAt('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq -'),
+      isFalse,
+    );
   });
 
   test('another variant is left to dartchess', () {

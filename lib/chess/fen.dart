@@ -25,6 +25,12 @@ extension type const Fen(String value) {
   /// different roads have in common, and what a model or a cache keys on.
   String get position => value.substring(0, _positionEnd(value));
 
+  /// Whether this is the position [position] names ([Fen.position]), asked
+  /// without cutting this one's out: a search of a file's games asks it of
+  /// every move of every game.
+  bool isAt(String position) =>
+      value.startsWith(position) && _positionEnd(value) == position.length;
+
   String? _field(int index) {
     final fields = value.split(' ');
     return index < fields.length ? fields[index] : null;
