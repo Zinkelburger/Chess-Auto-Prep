@@ -14,10 +14,12 @@ import '../chess/pgn/chapter.dart';
 /// Kept by how lately each was read, up to [budget] characters of text in
 /// all. A file larger than that is not kept.
 final class ParsedFiles {
-  ParsedFiles({this.budget = 4 * 1024 * 1024});
+  ParsedFiles({this.budget = 8 * 1024 * 1024});
 
   /// How many characters of file text the kept parses may come from: the
-  /// trees read from them take some forty times that in memory.
+  /// trees read from them take some thirty times that in memory. Eight
+  /// megabytes holds one collection of ten thousand games, so that going
+  /// back to its tab does not read a million moves again.
   final int budget;
 
   /// Oldest first.

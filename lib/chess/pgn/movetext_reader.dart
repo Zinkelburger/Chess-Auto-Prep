@@ -1,4 +1,4 @@
-import 'package:dartchess/dartchess.dart' show Move, Position;
+import 'package:dartchess/dartchess.dart' show Move, NormalMove, Position;
 
 import '../fen.dart';
 import 'game_tree.dart';
@@ -155,12 +155,13 @@ final class _Moves {
       return null;
     }
     // [_parsed] answers only a legal move, so it is not checked again.
-    final (next, san) = position.makeSanUnchecked(move);
+    final (next, written) = position.makeSanUnchecked(move);
+    final san = _sans[written] ??= written;
     return _Node(
       MoveNode(
         san: san,
         spelling: san == spelling ? null : spelling,
-        uci: move.uci,
+        uci: _uciOf(move),
         fen: fenOf(next),
       ),
       next,
@@ -257,6 +258,18 @@ final class _Moves {
     _issues.add(make(place.line, place.column));
   }
 }
+
+/// Each SAN read so far, so that a move played in a thousand games is one
+/// string in all of them: a file of ten thousand games holds a million
+/// moves and only a few thousand different ones.
+final _sans = <String, String>{};
+
+/// The same for a move's UCI, by the squares it is between.
+final _ucis = List<String?>.filled(64 * 64, null);
+
+String _uciOf(Move move) => move is NormalMove && move.promotion == null
+    ? _ucis[move.from * 64 + move.to] ??= move.uci
+    : move.uci;
 
 /// Two comments in a row are one comment: `{a} {b}` and `{a b}` say the same
 /// thing to every reader, and joining them is what lets a game with either

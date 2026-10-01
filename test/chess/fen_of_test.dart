@@ -74,6 +74,34 @@ void main() {
     expect(fenOf(position).value, endsWith(' 9999 1'));
   });
 
+  test('a position is the FEN without its move counters, and its key is the '
+      'sum over those characters', () {
+    int summed(String text) {
+      var hash = -3750763034362895579;
+      for (final unit in text.codeUnits) {
+        hash ^= unit;
+        hash *= 1099511628211;
+      }
+      return hash;
+    }
+
+    for (final (fen, position) in [
+      (
+        Fen.initial.value,
+        'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+      ),
+      ('8/8/8/8/k2pP2R/8/8/4K3 b - e3 0 1', '8/8/8/8/k2pP2R/8/8/4K3 b - e3'),
+      // Fewer fields than a FEN has: all of it.
+      ('8/8/8/8/8/8/8/8 w -', '8/8/8/8/8/8/8/8 w -'),
+      ('', ''),
+      // An empty field is still a field.
+      ('a  b c d e', 'a  b c'),
+    ]) {
+      expect(Fen(fen).position, position);
+      expect(positionKey(Fen(fen)), summed(position));
+    }
+  });
+
   test('another variant is left to dartchess', () {
     final Position position = Crazyhouse.initial;
     expect(fenOf(position).value, position.fen);

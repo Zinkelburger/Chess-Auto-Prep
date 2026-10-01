@@ -23,7 +23,7 @@ extension type const Fen(String value) {
   /// The four fields that make a position — pieces, side, castling, en
   /// passant — without the move counters: what two positions reached by
   /// different roads have in common, and what a model or a cache keys on.
-  String get position => value.split(' ').take(4).join(' ');
+  String get position => value.substring(0, _positionEnd(value));
 
   String? _field(int index) {
     final fields = value.split(' ');
@@ -37,14 +37,29 @@ const _fnvPrime = 1099511628211;
 /// The key the old app's databases file a position under: 64-bit FNV-1a
 /// over [Fen.position], the same sum its importers and the Python tools
 /// take, so a row they wrote is found. Two roads to one position share it.
+///
+/// The sum is taken over the FEN's own characters up to where the move
+/// counters start: an index of a file's games takes one for every move of
+/// every game, and cutting the text out first cost more than summing it.
 int positionKey(Fen fen) {
-  final text = fen.position;
+  final text = fen.value;
+  final end = _positionEnd(text);
   var hash = _fnvOffset;
-  for (var i = 0; i < text.length; i++) {
+  for (var i = 0; i < end; i++) {
     hash ^= text.codeUnitAt(i);
     hash *= _fnvPrime;
   }
   return hash;
+}
+
+/// Where [Fen.position] ends in [fen]: at its fourth space, or at its end
+/// when it has fewer fields than that.
+int _positionEnd(String fen) {
+  var spaces = 0;
+  for (var i = 0; i < fen.length; i++) {
+    if (fen.codeUnitAt(i) == _space && ++spaces == 4) return i;
+  }
+  return fen.length;
 }
 
 /// [position] as FEN: what dartchess's `Position.fen` answers, character
