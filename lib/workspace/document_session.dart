@@ -23,6 +23,7 @@ import 'document_saver.dart';
 import 'document_access.dart';
 import 'document_projection.dart';
 import 'document_history.dart';
+import 'parsed_files.dart';
 import 'session_results.dart';
 
 part 'external_document_edits.dart';
@@ -40,6 +41,7 @@ final class DocumentSession extends ChangeNotifier {
   final store.PgnDocumentStore _store;
   final DocumentSaver _saver;
   final access = DocumentAccess();
+  final _parsed = ParsedFiles();
   late final externalEdits = ExternalDocumentEdits(this);
 
   /// The persisted input behind the shown draft; training must retain this
@@ -338,7 +340,7 @@ final class DocumentSession extends ChangeNotifier {
     if (_disposed || ticket != _opens) return const OpenOvertaken();
     final version = access.versionOf(ref.path);
     final leftAsIs = !_saver.settled;
-    final read = await readDocument(_store, ref, game: game);
+    final read = await readDocument(_store, ref, game: game, parsed: _parsed);
     if (_disposed || ticket != _opens) return const OpenOvertaken();
     if (access.versionOf(ref.path) != version)
       return _opened(ref, game, ticket);
@@ -693,7 +695,7 @@ final class DocumentSession extends ChangeNotifier {
     _restoring = true;
     final ({Chapter file, SectionView? view}) read;
     try {
-      read = await readShown(ref, text, game: game);
+      read = await readShown(ref, text, game: game, parsed: _parsed);
     } finally {
       _restoring = false;
     }
@@ -992,9 +994,4 @@ final class DocumentSession extends ChangeNotifier {
     _editors.dispose();
     super.dispose();
   }
-}
-
-/// Only the session decides when editors must hand over their text.
-final class _Editors extends ChangeNotifier {
-  void commit() => notifyListeners();
 }

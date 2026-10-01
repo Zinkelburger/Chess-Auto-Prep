@@ -66,6 +66,28 @@ void main() {
     },
   );
 
+  test('a file tab gone back to shows the games it read, without reading '
+      'them again; a file changed since is read', () async {
+    await w.requests.open(kidMain);
+    final games = w.session.chapter!.lines;
+    await w.requests.newAnalysisBoard();
+    final analysis = w.requests.documents.tabs.selected;
+    await w.requests.documents.select(kidMain);
+    expect(w.session.source, kidMain);
+    expect(w.session.chapter!.lines, same(games));
+
+    await w.requests.documents.select(analysis);
+    const changed =
+        '// Color: White\n\n[Event "Changed elsewhere"]\n\n1. g3 *\n';
+    w.store.documents[kidMain] = store.Opened(
+      changed,
+      scriptedRevision(changed),
+    );
+    await w.requests.documents.select(kidMain);
+    expect(w.session.chapter!.lines, isNot(same(games)));
+    expect(w.session.tree!.children.single.san, 'g3');
+  });
+
   test('file tabs show and restore their selected mode', () async {
     await w.requests.open(kidMain);
     expect(w.requests.documents.tabs.tabOf(kidMain).title, 'Builder · Main');
