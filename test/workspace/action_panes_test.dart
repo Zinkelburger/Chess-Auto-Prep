@@ -55,26 +55,26 @@ Finder tabIn(int index, String name) =>
     find.descendant(of: pane(index), matching: find.text(name));
 
 void main() {
-  testWidgets('the builder starts with Moves over the Explorer and '
-      'Expectimax beside them, all in view', (tester) async {
+  testWidgets('the builder starts with Moves beside Expectimax and the '
+      'book switched on under the moves', (tester) async {
     final layout = await pumpPanes(tester);
     layout.startBuilding();
     await tester.pumpAndSettle();
-    expect(layout.count, 3);
-    expect(find.text('Body 2 Moves'), findsOneWidget);
-    expect(find.text('Body 0 Explorer'), findsOneWidget);
+    expect(layout.count, 2);
+    expect(layout.book?.value, isTrue);
+    expect(find.text('Body 0 Moves'), findsOneWidget);
     expect(find.text('Body 1 Expectimax'), findsOneWidget);
-    final moves = tester.getRect(pane(2));
-    final explorer = tester.getRect(pane(0));
+    final moves = tester.getRect(pane(0));
     final search = tester.getRect(pane(1));
-    expect(moves.bottom, lessThanOrEqualTo(explorer.top));
-    expect(moves.left, explorer.left);
     expect(search.left, greaterThanOrEqualTo(moves.right));
-    expect(search.height, greaterThan(moves.height));
-    expect(layout.pane(0).isOpen(WorkspaceTab.moves), isFalse);
+    expect(search.height, moves.height);
+    expect(layout.pane(0).isOpen(WorkspaceTab.explorer), isFalse);
+    expect(layout.pane(0).isOpen(WorkspaceTab.search), isFalse);
+    layout.reveal(WorkspaceTab.search);
+    expect(layout.active, 1, reason: 'brought up where it is open');
     expect(layout.pane(0).isOpen(WorkspaceTab.search), isFalse);
     layout.startBuilding();
-    expect(layout.count, 3, reason: 'a second call changes nothing');
+    expect(layout.count, 2, reason: 'a second call changes nothing');
   });
 
   testWidgets(
@@ -378,19 +378,23 @@ void main() {
   testWidgets('the main pane takes the place of the pane whose tabs it '
       'takes: its own old place is the one that closes', (tester) async {
     final layout = await pumpPanes(tester);
-    layout.startBuilding();
+    layout
+      ..split(0, WorkspaceTab.search, PaneSplitDirection.right, from: 0)
+      ..split(0, WorkspaceTab.moves, PaneSplitDirection.below, from: 0);
     await tester.pumpAndSettle();
-    // Moves over the Explorer (the main pane) on the left, Expectimax right.
-    final moves = tester.getRect(pane(2));
+    // The Explorer (the main pane) over the Moves on the left, Expectimax
+    // right.
+    expect(layout.pane(0).open, [WorkspaceTab.explorer]);
+    final left = tester.getRect(pane(0));
     final right = tester.getRect(pane(1));
     layout.closeTab(0, WorkspaceTab.explorer);
     await tester.pumpAndSettle();
-    // The pane before it in the layout is the one whose tabs it takes: the
-    // Moves above it. The Explorer's place closes and the left column is
-    // the moves alone.
+    // The pane beside it in the layout is the one whose tabs it takes: the
+    // Moves under it. That place closes into the main pane, and the left
+    // column is the moves alone.
     expect(layout.visible, unorderedEquals([0, 1]));
     expect(layout.pane(0).open, [WorkspaceTab.moves]);
-    expect(tester.getRect(pane(0)).topLeft, moves.topLeft);
+    expect(tester.getRect(pane(0)).topLeft, left.topLeft);
     expect(tester.getRect(pane(0)).height, right.height);
     expect(layout.openIn(1), [WorkspaceTab.search]);
     expect(tester.takeException(), isNull);
