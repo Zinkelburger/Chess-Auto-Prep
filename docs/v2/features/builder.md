@@ -65,7 +65,8 @@ One press searches the board for both sides (2026-10-01), on the one engine:
 for the side at the bottom, and for the other side with the roles swapped. The
 table is `Your move` or `Their reply`, `Played`, `White`, `Black`, `Engine`,
 all from White's side. `White` is what the move is worth when White plays its
-best moves and Black replies as Maia predicts; `Black` is the other way round.
+best moves and Black replies as the chosen reply source has players play; `Black` is
+the other way round.
 A move whose value in the other side's column sits well off the engine's is one
 the side playing it is expected to go wrong after; where the two agree the
 position plays itself. `Played` shows wherever a search modelled the side to
