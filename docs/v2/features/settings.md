@@ -102,15 +102,23 @@ The title bar reads `Settings` with a close button (`Close settings`, Escape). N
   app…` / `Cancel installation`, or the failure in the error colour / `Try again`. After a failed
   install, `Previous update did not finish` with the helper's line and `Show log`, and once in the
   bar: `The last update did not finish. See Settings ▸ App.` An automatic check that finds a new
-  version asks once per run: `Chess Auto Prep X.Y.Z is available`, `It installs when you close the
-  app.` (or `Download the new version from GitHub.`), `Release notes`, and `Skip this version` /
-  `Later` / `Install` (or `Download`). A skipped version is neither asked about nor downloaded again;
+  version asks once per run: `Chess Auto Prep X.Y.Z is available`, `Update now closes the app and
+  reopens it on the new version.`, `Release notes`, and `Skip this version` / `When I close the app` /
+  `Update now` (a copy updated by hand: `Download the new version from GitHub.` with `Skip this
+  version` / `Later` / `Download`). Escape is not now. `Update now` (2026-10-01) keeps the question
+  up as `Updating to Chess Auto Prep X.Y.Z` with the download's bar and `Downloading… 42%` /
+  `Cancel`, then `Starting the installer…`; once the helper is armed the app closes through the
+  normal way out (unsaved words are asked about) and the helper installs and opens it again. A
+  failure is said in the question with `Close` / `Try again`. `When I close the app` downloads in
+  the background and installs at the next close, after which the app stays closed.
+  A skipped version is neither asked about nor downloaded again;
   a newer one is. Automatic checks that fail are only logged. Release builds check 10 s after start
   and then hourly whether a day has passed; development builds only on `Check now`, unless
   `CHESS_AUTO_PREP_RELEASES_URL` points them at a local release fixture. Downloads go to
   `<cache>/updates/<tag>-<random>/`, hashed as they arrive and renamed only when size and SHA-256
-  match; failed, cancelled and superseded attempts are removed. The helpers in `assets/updater/` are
-  unchanged (same binary name and bundle layout in v2): Windows setup, `.deb`, `.rpm` and a marked
+  match; failed, cancelled and superseded attempts are removed. The helpers in `assets/updater/`
+  (same binary name and bundle layout in v2) reopen the app only when a `reopen` marker sits beside
+  the armed marker, which `Update now` writes just before closing: Windows setup, `.deb`, `.rpm` and a marked
   portable Linux zip install themselves; Flatpak, macOS, the Windows zip and unmarked bundles get the
   release page.
 - **`App` ▸ About & open source** — `Chess Auto Prep on GitHub` (`Source code, releases, and issue
