@@ -188,8 +188,10 @@ below from a tab's context menu; each pane has a browser-style tab strip
 Moves over Explorer on the left, Expectimax on the right.
 
 Spacing is a five-step scale (4, 8, 12, 16, 24); every gap is one of them.
-Minimums keep content usable: 180px for any pane, 320px for the board
-column, 300px for the reading card, 320px for an action pane. A pane shorter
+The list column starts 260px wide (300px in Player analysis) and the outline
+240px; the dividers drag. Minimums keep content usable: 180px for any pane,
+320px for the board column, 300px for the reading card, 320px for an action
+pane. A pane shorter
 than its content's minimum scrolls as a whole rather than squeezing a list to
 nothing. Rows are fixed: 34px list rows, 28px engine and reply rows, 32px
 search rows, 44px two-line trainer rows.

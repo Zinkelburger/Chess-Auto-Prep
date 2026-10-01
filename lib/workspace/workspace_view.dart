@@ -65,16 +65,10 @@ final class WorkspaceHooks {
     this.onEditBooks,
     this.onSaveHeld,
     this.quietBoard = false,
-    this.headingInMoves = false,
     this.paneActions,
     this.explorerFileBar,
     this.underHeading,
   });
-
-  /// Whether the heading is the top of the moves, scrolling with them, as
-  /// a book heads a game, rather than a block over the card's tabs. The
-  /// viewer's.
-  final bool headingInMoves;
 
   /// Under the heading: what the mode has to say about the game before it
   /// is read, such as where it left the user's book.
@@ -132,7 +126,7 @@ final class WorkspaceHooks {
   /// document: the explorer Book's free board. Null plays them into it.
   final ValueChanged<String>? onEngineMove;
 
-  /// Whether the card is headed with the game's players and the board has
+  /// Whether the moves are headed with the game's players and the board has
   /// the file's game counter under it. Tactics has neither: the puzzle says
   /// whose game it was and the list is how to get to another.
   final bool header;
@@ -148,11 +142,11 @@ final class WorkspaceHooks {
 }
 
 /// The board with the game counter, the engine's lines and the move's note
-/// under it on the left; on the right the reading card: the heading, the
-/// panes of tabs — the moves, the opponent's replies, the explorer, the
-/// search — then the edit strip while there is editing or trouble, and the
-/// navigation row. A mode that reads like a book puts the heading at the
-/// top of the moves instead ([WorkspaceHooks.headingInMoves]).
+/// under it on the left; on the right the reading card: the panes of tabs
+/// — the moves, the opponent's replies, the explorer, the search — then
+/// the edit strip while there is editing or trouble, and the navigation
+/// row. The heading is the top of the moves and scrolls with them, as a
+/// book heads a game.
 /// The card starts wider than the board. The keys that
 /// walk the line and take an edit back are [WorkspaceKeys], above every
 /// column that edits the document.
@@ -345,9 +339,7 @@ class _Tabbed extends StatelessWidget {
         WorkspaceTab.moves || WorkspaceTab.analysis => MoveTreeView(
           session: workspace.session,
           moveMenu: hooks.moveMenu,
-          heading: hooks.header && hooks.headingInMoves
-              ? _heading(inMoves: true)
-              : null,
+          heading: hooks.header ? _heading() : null,
         ),
         WorkspaceTab.review =>
           workspace.review == null
@@ -413,15 +405,11 @@ class _Tabbed extends StatelessWidget {
       };
 
   /// What is open and, under it, what the mode says about it.
-  Widget _heading({required bool inMoves}) => Column(
+  Widget _heading() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     mainAxisSize: MainAxisSize.min,
     children: [
-      ReadingHeader(
-        session: workspace.session,
-        openings: workspace.openings,
-        inMoves: inMoves,
-      ),
+      ReadingHeader(session: workspace.session, openings: workspace.openings),
       ?hooks.underHeading,
     ],
   );
@@ -468,7 +456,7 @@ class _Tabbed extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final layout = this.layout;
-    final panes = layout != null
+    return layout != null
         ? ActionPanes(
             layout: layout,
             actions: hooks.paneActions,
@@ -490,14 +478,6 @@ class _Tabbed extends StatelessWidget {
               ],
             ),
           );
-    if (!hooks.header || hooks.headingInMoves) return panes;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _heading(inMoves: false),
-        Expanded(child: panes),
-      ],
-    );
   }
 }
 

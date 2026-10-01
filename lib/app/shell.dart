@@ -202,9 +202,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// split view keys each pane by its area, and a pane rebuilt from a new
   /// area loses what it had open.
   final _panes = MultiSplitViewController();
-  // The list starts as narrow as it goes: the board is what the window is
-  // for, and the divider is there for whoever wants more of the list.
-  final _list = Area(data: _Pane.list, size: paneMinWidth, min: paneMinWidth);
+  final _list = Area(
+    data: _Pane.list,
+    size: listColumnWidth,
+    min: paneMinWidth,
+  );
   final _playerList = Area(
     data: _Pane.list,
     size: playerColumnWidth,
@@ -743,7 +745,6 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         header: _view.header,
         underHeading: _inspecting ? null : _view.underHeading,
         quietBoard: _view.quietBoard,
-        headingInMoves: _view.headingInMoves,
         paneActions: _inspecting ? null : () => _view.paneActions(_editing),
         explorerFileBar: _inspecting ? null : _view.explorerFileBar,
         gameCounter: !_inspecting && _view.gameCounter,

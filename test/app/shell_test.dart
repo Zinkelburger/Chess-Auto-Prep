@@ -551,7 +551,7 @@ void main() {
     expect(hide, findsOneWidget);
     expect(find.byTooltip('Show the list (Ctrl+B)'), findsNothing);
     final corner = tester.getTopRight(hide);
-    expect(corner.dx, closeTo(paneMinWidth, Space.l));
+    expect(corner.dx, closeTo(listColumnWidth, Space.l));
     expect(corner.dy, greaterThan(40));
     await tester.tap(hide);
     await tester.pumpAndSettle();
