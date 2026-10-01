@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 
 import '../../chess/tactics/puzzle.dart';
 import '../../chess/tactics/puzzle_queue.dart';
+import '../../ui/check_row.dart';
 import '../../ui/theme.dart';
+import '../../ui/toggle_chip.dart';
 
 /// Which puzzles Tactics plays and in what order, under the count they
 /// change. Every change is kept at once; there is nothing to apply.
@@ -33,11 +35,10 @@ class PuzzleFilters extends StatelessWidget {
           _Chips(
             children: [
               for (final kind in MistakeKind.values)
-                FilterChip(
-                  label: Text(_kindLabel(kind)),
+                ToggleChip(
+                  label: _kindLabel(kind),
                   selected: filter.kinds.contains(kind),
                   onSelected: (on) => _kind(kind, on),
-                  visualDensity: VisualDensity.compact,
                 ),
             ],
           ),
@@ -47,11 +48,10 @@ class PuzzleFilters extends StatelessWidget {
           _Chips(
             children: [
               for (final order in PuzzleOrder.values)
-                ChoiceChip(
-                  label: Text(order.label),
+                ToggleChip(
+                  label: order.label,
                   selected: filter.order == order,
                   onSelected: (_) => onChanged(filter.copyWith(order: order)),
-                  visualDensity: VisualDensity.compact,
                 ),
             ],
           ),
@@ -66,18 +66,19 @@ class PuzzleFilters extends StatelessWidget {
   }
 
   List<Widget> _checks() => [
-    _Check(
+    CheckRow(
       label: 'Group by game',
       value: filter.groupByGame,
       onChanged: (on) => onChanged(filter.copyWith(groupByGame: on)),
     ),
-    _Check(
+    CheckRow(
       label: 'Unreviewed only',
       value: filter.unreviewedOnly,
       onChanged: (on) => onChanged(filter.copyWith(unreviewedOnly: on)),
     ),
-    _Check(
-      label: 'Hide one-star puzzles',
+    CheckRow(
+      label: 'Hide one-star',
+      tooltip: 'One star is how a puzzle is hidden from training.',
       value: filter.hideOneStar,
       onChanged: (on) => onChanged(filter.copyWith(hideOneStar: on)),
     ),
@@ -102,37 +103,6 @@ class _Chips extends StatelessWidget {
 
 String _capital(String word) =>
     word.isEmpty ? word : word[0].toUpperCase() + word.substring(1);
-
-/// A box and its label, one line, the whole line clickable.
-class _Check extends StatelessWidget {
-  const _Check({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String label;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () => onChanged(!value),
-      child: Row(
-        children: [
-          Checkbox(
-            value: value,
-            onChanged: (on) => onChanged(on ?? false),
-            visualDensity: VisualDensity.compact,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-          Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
-        ],
-      ),
-    );
-  }
-}
 
 /// `Last [14] days`, or every date. Counted from the game's date, today
 /// being the first day; the number is taken when the box is left or Enter
@@ -186,6 +156,7 @@ class _DaysState extends State<_Days> {
   @override
   Widget build(BuildContext context) {
     final all = widget.days == null;
+    final small = Theme.of(context).textTheme.bodySmall;
     return Tooltip(
       message: 'Counted from the date the game was played.',
       child: Row(
@@ -198,7 +169,9 @@ class _DaysState extends State<_Days> {
             visualDensity: VisualDensity.compact,
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
-          const Flexible(child: Text('Last', overflow: TextOverflow.clip)),
+          Flexible(
+            child: Text('Last', style: small, overflow: TextOverflow.clip),
+          ),
           const SizedBox(width: Space.xs),
           SizedBox(
             width: dayCountWidth,
@@ -207,6 +180,9 @@ class _DaysState extends State<_Days> {
               focusNode: _focus,
               enabled: !all,
               textAlign: TextAlign.center,
+              style: monoText.copyWith(
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               onSubmitted: _take,
@@ -221,7 +197,9 @@ class _DaysState extends State<_Days> {
             ),
           ),
           const SizedBox(width: Space.xs),
-          const Flexible(child: Text('days', overflow: TextOverflow.clip)),
+          Flexible(
+            child: Text('days', style: small, overflow: TextOverflow.clip),
+          ),
         ],
       ),
     );

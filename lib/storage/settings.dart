@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show setEquals;
 
 import '../chess/explorer_choice.dart';
+import '../chess/generation/expectimax_options.dart';
 import '../chess/training/training_options.dart';
 import '../chess/tactics/game_ids.dart' show GameSpeed;
 import '../chess/tactics/puzzle_queue.dart';
@@ -26,6 +27,7 @@ final class Settings {
     this.copyFilesIntoDocuments = true,
     this.opponentElo = 2200,
     this.coverOnceIn = 50,
+    this.expectimax = ExpectimaxOptions.defaults,
     this.explorer = ExplorerChoice.defaults,
     this.puzzles = PuzzleFilter.defaults,
     this.autoAdvance = true,
@@ -69,6 +71,10 @@ final class Settings {
   /// least once in this many games at [opponentElo]. Fifty is Chessbook's
   /// default and about four opponent moves deep in a main line.
   final int coverOnceIn;
+
+  /// How the next search from the board is set. The Expectimax tab and
+  /// Settings both change it here.
+  final ExpectimaxOptions expectimax;
 
   /// Which database the Explorer tab asks and how it is narrowed. Not a
   /// row of the settings page: the tab's own gear is where it is chosen,
@@ -132,6 +138,7 @@ final class Settings {
     bool? copyFilesIntoDocuments,
     int? opponentElo,
     int? coverOnceIn,
+    ExpectimaxOptions? expectimax,
     ExplorerChoice? explorer,
     PuzzleFilter? puzzles,
     bool? autoAdvance,
@@ -152,6 +159,7 @@ final class Settings {
         copyFilesIntoDocuments ?? this.copyFilesIntoDocuments,
     opponentElo: opponentElo ?? this.opponentElo,
     coverOnceIn: coverOnceIn ?? this.coverOnceIn,
+    expectimax: expectimax ?? this.expectimax,
     explorer: explorer ?? this.explorer,
     puzzles: puzzles ?? this.puzzles,
     autoAdvance: autoAdvance ?? this.autoAdvance,
@@ -177,6 +185,7 @@ final class Settings {
     'copyFilesIntoDocuments': copyFilesIntoDocuments,
     'opponentElo': opponentElo,
     'coverOnceIn': coverOnceIn,
+    'expectimax': expectimax.toJson(),
     'explorer': explorer.toJson(),
     'puzzles': puzzles.toJson(),
     'autoAdvance': autoAdvance,
@@ -219,6 +228,7 @@ final class Settings {
       ),
       opponentElo: pick('opponentElo', defaults.opponentElo),
       coverOnceIn: pick('coverOnceIn', defaults.coverOnceIn),
+      expectimax: ExpectimaxOptions.fromJson(decoded['expectimax']),
       explorer: ExplorerChoice.fromJson(decoded['explorer']),
       puzzles: PuzzleFilter.fromJson(decoded['puzzles']),
       autoAdvance: pick('autoAdvance', defaults.autoAdvance),
@@ -248,6 +258,7 @@ final class Settings {
     'copyFilesIntoDocuments',
     'opponentElo',
     'coverOnceIn',
+    'expectimax',
     'explorer',
     'puzzles',
     'autoAdvance',
@@ -283,6 +294,7 @@ final class Settings {
       other.copyFilesIntoDocuments == copyFilesIntoDocuments &&
       other.opponentElo == opponentElo &&
       other.coverOnceIn == coverOnceIn &&
+      other.expectimax == expectimax &&
       other.explorer == explorer &&
       other.puzzles == puzzles &&
       other.autoAdvance == autoAdvance &&
@@ -303,6 +315,7 @@ final class Settings {
     copyFilesIntoDocuments,
     opponentElo,
     coverOnceIn,
+    expectimax,
     explorer,
     puzzles,
     autoAdvance,

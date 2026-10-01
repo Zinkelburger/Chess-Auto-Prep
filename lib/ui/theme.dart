@@ -46,11 +46,22 @@ const choiceFieldMenuWidth = 280.0;
 
 /// How wide a filter rule's rule box is, beside a field box that takes the
 /// rest of the line.
-const filterRuleWidth = 96.0;
+const filterRuleWidth = 120.0;
 
-/// The narrowest a filter rule's first line holds both its field and its
-/// rule box; under it the rule goes on a line of its own.
-const filterRuleLineWidth = 260.0;
+/// How wide a filter rule's field box is when the rule is on one line.
+const filterFieldWidth = 150.0;
+
+/// The narrowest pane a filter rule's field, rule and value share a line
+/// in; under it the value goes on a line of its own.
+const filterRowWidth = 440.0;
+
+/// How tall the line that counts the games a filter keeps is: a text
+/// button's height, so `Clear` coming and going moves nothing under it.
+const filterCountHeight = 40.0;
+
+/// How wide the mark of the colour a player had is, in a list of their
+/// games.
+const sideMarkSize = 10.0;
 
 /// The tallest the box of an engine's own output grows under a failed
 /// registration before it scrolls: about a dozen mono lines.
@@ -64,6 +75,9 @@ abstract final class IconSize {
 
   /// The tick in a menu row, and the gap held for it where there is none.
   static const menu = 16.0;
+
+  /// The arrow beside the column a table is sorted by, at the small size.
+  static const sort = 12.0;
 }
 
 /// The bundled chess figurines (♔♕♖♗♘), drawn where the text face has none,
@@ -158,8 +172,14 @@ abstract final class ReviewColors {
 
 const searchPaneMinHeight = 360.0;
 const searchRecoveryMinHeight = 440.0;
-const searchEloWidth = 84.0;
-const searchDepthWidth = 64.0;
+
+/// The Expectimax tab's bar and the status line under it keep their height
+/// and the button its width whatever it says, so nothing under or beside
+/// them moves when a search starts, pauses or fails.
+const searchBarHeight = 56.0;
+const searchStatusHeight = 32.0;
+const searchRunWidth = 148.0;
+const searchDepthWidth = 84.0;
 const searchHeaderHeight = 24.0;
 const searchRowHeight = 32.0;
 const searchShareWidth = 48.0;
@@ -664,5 +684,33 @@ const booksListWidth = 260.0;
 const bookRowHeight = 36.0;
 const bookChapterIndent = 28.0;
 
-/// Player statistics need room for their three related views.
-const double playerColumnWidth = 340;
+/// The Player analysis column: room for a line of moves beside its two
+/// number gutters, and for the three names of its list switch.
+const double playerColumnWidth = 300;
+
+/// The gutters of the positions table: how many games reached a position,
+/// and how the player scored from it.
+const positionGamesWidth = 56.0;
+const positionScoreWidth = 52.0;
+
+/// A named control on one line of a column or a dialog: the row, and the
+/// width a typeable choice takes at its end, which is a number stepper's.
+const fieldRowHeight = 36.0;
+const fieldControlWidth = 144.0;
+
+/// The bar that says a download or an engine pass is running: a line, not
+/// a stripe.
+const progressLineHeight = 2.0;
+
+/// The mark on the move a puzzle is about, in the review's colours: the
+/// same blue, amber and red the game review draws them in.
+Color mistakeColor(String glyph) => switch (glyph) {
+  '??' => ReviewColors.blunder,
+  '?' => ReviewColors.mistake,
+  '?!' => ReviewColors.inaccuracy,
+  _ => _text,
+};
+
+/// The move numbers of a game read in the card: there to count by, so a
+/// step quieter than the moves.
+const readingNumberColor = _muted;

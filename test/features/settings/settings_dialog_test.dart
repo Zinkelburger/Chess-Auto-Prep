@@ -105,12 +105,13 @@ void main() {
       'Tactics',
       'Engine',
       'Repertoire',
+      'Expectimax',
       'Files',
       'Accounts',
       'App',
       'Shortcuts',
     ]) {
-      if (place == 'Accounts' || place == 'App' || place == 'Shortcuts') {
+      if (const {'Files', 'Accounts', 'App', 'Shortcuts'}.contains(place)) {
         await tester.scrollUntilVisible(
           find.text(place),
           100,
@@ -180,6 +181,16 @@ void main() {
     await tester.tap(find.text('Hide'));
     await tester.pumpAndSettle();
     expect(store.value.boardCoordinates, isFalse);
+    await tester.scrollUntilVisible(
+      find.text('Files'),
+      100,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView).first,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     await tester.tap(find.text('Files'));
     await tester.pumpAndSettle();
     await tester.tap(find.byType(Switch));

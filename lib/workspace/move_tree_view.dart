@@ -34,9 +34,19 @@ import '../ui/move_notation.dart';
 /// same value: moving the cursor rebuilds only the move it left and the
 /// move it reached, not a whole book of moves per arrow key.
 class MoveTreeView extends StatefulWidget {
-  const MoveTreeView({super.key, required this.session, this.moveMenu});
+  const MoveTreeView({
+    super.key,
+    required this.session,
+    this.moveMenu,
+    this.heading,
+  });
 
   final DocumentSession session;
+
+  /// What heads the moves, as a book heads a game: it is the top of the
+  /// text and scrolls away with it. It is kept with the lines built for a
+  /// tree, so it listens for whatever it shows.
+  final Widget? heading;
 
   /// What the mode showing the move list adds to a move's menu, under the
   /// edits every mode has. The list knows nothing about the entries: it says
@@ -101,11 +111,25 @@ class _MoveTreeViewState extends State<MoveTreeView>
         final shownTo = widget.session.shownTo;
         if (tree == null || tree.isEmpty || shownTo?.isRoot == true) {
           _built = null;
-          return Center(
-            child: Text(
-              'No moves',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (widget.heading case final heading?)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: readingCardInset,
+                  ),
+                  child: heading,
+                ),
+              Expanded(
+                child: Center(
+                  child: Text(
+                    'No moves',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ),
+            ],
           );
         }
         if (shownTo != null) {
@@ -144,7 +168,10 @@ class _MoveTreeViewState extends State<MoveTreeView>
         readingCardInset,
         Space.l,
       ),
-      child: _Row(builder.found(tree, shownTo)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [?widget.heading, _Row(builder.found(tree, shownTo))],
+      ),
     );
   }
 
@@ -173,6 +200,8 @@ class _MoveTreeViewState extends State<MoveTreeView>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (widget.heading case final heading?)
+              SizedBox(width: double.infinity, child: heading),
             if (displayComment(tree.rootComment ?? '').isNotEmpty)
               _comment(tree.rootComment!, tree.rootFen, const NodePath.root()),
             ...builder.line(const NodePath.root(), tree.children),

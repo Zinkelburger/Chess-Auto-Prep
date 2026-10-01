@@ -12,8 +12,13 @@ class ExplorerSourceBar extends StatefulWidget {
     super.key,
     required this.explorer,
     this.book,
+    this.thisFile,
     this.onDownload,
   });
+
+  /// Under the databases while `This file` is chosen: what narrows the
+  /// file's games, which is the business of the mode that opened it.
+  final Widget? thisFile;
 
   final Explorer explorer;
   final VoidCallback? onDownload;
@@ -92,6 +97,7 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
             ],
           ),
         ),
+        if (choice.source == ExplorerSource.thisFile) ?_fileBar(),
         if (unfolded)
           Padding(
             padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, 0),
@@ -108,6 +114,15 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
       ],
     );
   }
+
+  /// The mode's own row under the databases, for `This file`.
+  Widget? _fileBar() => switch (widget.thisFile) {
+    final bar? => Padding(
+      padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.m, 0),
+      child: bar,
+    ),
+    null => null,
+  };
 }
 
 class _FilterButton extends StatelessWidget {

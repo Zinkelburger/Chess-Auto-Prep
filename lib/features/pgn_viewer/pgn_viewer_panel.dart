@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:dartchess/dartchess.dart' show Side;
+
 import '../../chess/game_filter.dart';
 import '../../chess/pgn/game_order.dart';
 import '../../chess/pgn/game_summary.dart';
@@ -12,8 +14,6 @@ import '../../ui/search_field.dart';
 import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
 import '../../workspace/file_filter.dart';
-import 'game_filter_bar.dart';
-import 'export_dialog.dart';
 import 'pgn_viewer.dart';
 import '../../ui/app_keys.dart';
 
@@ -26,8 +26,10 @@ typedef OpenPgnFile = void Function(ChapterRef file);
 ///
 /// Opening a file is the host's, because it takes the workspace off the
 /// document it has; closing one is in the Actions menu with everything
-/// else that can be done to the document. The panel itself keeps only what
-/// the user typed into the search field.
+/// else that can be done to the document. The filter's rules are the
+/// Filter tab's; here is the button that opens it and, while it narrows
+/// the list, how far. The panel itself keeps only what the user typed into
+/// the search field.
 class PgnViewerPanel extends StatefulWidget {
   const PgnViewerPanel({
     super.key,
@@ -35,20 +37,16 @@ class PgnViewerPanel extends StatefulWidget {
     required this.filter,
     required this.onOpen,
     required this.onBrowse,
+    this.onFilter,
     this.trailing,
-    this.say,
-    this.onPosition,
-    this.onSaveToStudy,
   });
 
   final PgnViewer viewer;
-  final VoidCallback? onPosition;
 
-  /// The games the list shows, into a study.
-  final VoidCallback? onSaveToStudy;
-  final void Function(String?)? say;
+  /// Shows the Filter tab.
+  final VoidCallback? onFilter;
 
-  /// Which of the file's games the list shows, set under the search box.
+  /// Which of the file's games the list shows.
   final FileFilter filter;
 
   /// A file from the recent list.
@@ -108,7 +106,11 @@ class _PgnViewerPanelState extends State<PgnViewerPanel>
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Toolbar(onBrowse: widget.onBrowse, trailing: widget.trailing),
+            _Toolbar(
+              name: file?.name,
+              onBrowse: widget.onBrowse,
+              trailing: widget.trailing,
+            ),
             if (_viewer.recentProblem case final problem?) _Message(problem),
             Expanded(
               child: file == null ? _recent(context) : _games(context, file),
@@ -148,41 +150,42 @@ class _PgnViewerPanelState extends State<PgnViewerPanel>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.s, 0),
-          child: Text(
-            file.name,
-            style: Theme.of(context).textTheme.titleMedium,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            Space.m,
-            Space.s,
-            Space.s,
-            Space.s,
-          ),
-          child: SearchField(
-            controller: _search,
-            hint: 'Search games',
-            onChanged: _viewer.search,
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Space.m),
-          child: DropdownButton<GameOrder>(
-            isExpanded: true,
-            value: _viewer.sort,
-            items: [
-              for (final order in GameOrder.values)
-                DropdownMenuItem(value: order, child: Text(order.label)),
+          padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.xs, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: SearchField(
+                  controller: _search,
+                  hint: 'Search',
+                  onChanged: _viewer.search,
+                ),
+              ),
+              if (widget.onFilter case final filter?)
+                IconButton(
+                  key: const ValueKey('filter-games'),
+                  icon: const Icon(Icons.filter_list, size: IconSize.action),
+                  tooltip: 'Filter games',
+                  isSelected: widget.filter.narrowing,
+                  visualDensity: VisualDensity.compact,
+                  onPressed: filter,
+                ),
             ],
-            onChanged: (order) {
-              if (order != null) _viewer.sortBy(order);
-            },
           ),
         ),
-        if (_viewer.games.length > 1)
+        if (_viewer.games.length > 1) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.s, 0),
+            child: Tooltip(
+              message: 'The order the games are listed and walked in',
+              child: ChoiceField(
+                key: const ValueKey('game-order'),
+                text: _viewer.sort.label,
+                options: [for (final order in GameOrder.values) order.label],
+                hint: 'Order',
+                onSubmitted: _sortNamed,
+              ),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.s, 0),
             child: Tooltip(
@@ -196,35 +199,45 @@ class _PgnViewerPanelState extends State<PgnViewerPanel>
               ),
             ),
           ),
-        GameFilterBar(filter: widget.filter, onPosition: widget.onPosition),
-        if (widget.filter.narrowing) _matchingActions(context),
+        ],
+        if (widget.filter.narrowing) _narrowed(context),
+        const SizedBox(height: Space.xs),
         Expanded(child: _rows()),
       ],
     );
   }
 
-  /// What can be done with the games the filter found.
-  Widget _matchingActions(BuildContext context) {
-    final ready =
-        !widget.filter.busy &&
-        widget.filter.problem == null &&
-        _viewer.visible.isNotEmpty;
+  /// The order [typed] names; words that name none leave it as it is.
+  void _sortNamed(String typed) {
+    final wanted = typed.trim().toLowerCase();
+    for (final order in GameOrder.values) {
+      if (order.label.toLowerCase() == wanted) return _viewer.sortBy(order);
+    }
+  }
+
+  /// How far the filter narrows the list, and the way back to every game.
+  Widget _narrowed(BuildContext context) {
+    final theme = Theme.of(context);
+    final filter = widget.filter;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Space.m),
-      child: Wrap(
-        spacing: Space.xs,
+      padding: const EdgeInsets.fromLTRB(Space.m, 0, Space.xs, 0),
+      child: Row(
         children: [
-          TextButton(
-            onPressed: ready
-                ? () => exportViewerPgn(context, _viewer, widget.say ?? (_) {})
-                : null,
-            child: const Text('Export matching games…'),
-          ),
-          if (widget.onSaveToStudy case final save?)
-            TextButton(
-              onPressed: ready ? save : null,
-              child: const Text('Save to study…'),
+          Expanded(
+            child: Text(
+              filter.busy ? 'Filtering…' : '${filter.kept} of ${filter.total}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
+          ),
+          TextButton(
+            onPressed: () => filter.apply(GameFilter.none),
+            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            child: const Text('Clear'),
+          ),
         ],
       ),
     );
@@ -264,19 +277,7 @@ class _PgnViewerPanelState extends State<PgnViewerPanel>
     if (_viewer.query.trim().isNotEmpty) {
       return _Message('Nothing matches "${_viewer.query}".');
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _Message('No games match the filter.'),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Space.m),
-          child: TextButton(
-            onPressed: () => widget.filter.apply(GameFilter.none),
-            child: const Text('Show all games'),
-          ),
-        ),
-      ],
-    );
+    return const _Message('No games match the filter.');
   }
 
   Widget _gameRow(
@@ -288,6 +289,7 @@ class _PgnViewerPanelState extends State<PgnViewerPanel>
     index: index,
     ordinal: _viewer.ordinalOf(index),
     game: game,
+    followed: _viewer.followedIn(index),
     open: index == current,
     indented: indented,
     onOpen: () => _viewer.showGame(index),
@@ -434,11 +436,17 @@ class _ChapterRow extends StatelessWidget {
   }
 }
 
-/// The panel's name with the one thing to do before a file is open beside
-/// it, and the host's toggle in the corner.
+/// The open file's name with the one thing to do before a file is open
+/// beside it, and the host's toggle in the corner.
 class _Toolbar extends StatelessWidget {
-  const _Toolbar({required this.onBrowse, required this.trailing});
+  const _Toolbar({
+    required this.name,
+    required this.onBrowse,
+    required this.trailing,
+  });
 
+  /// The open file's name; null while none is open.
+  final String? name;
   final VoidCallback onBrowse;
   final Widget? trailing;
 
@@ -448,22 +456,24 @@ class _Toolbar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.s, 0),
       child: Row(
         children: [
-          // Room for the buttons first: a narrow pane cuts the label.
-          Flexible(
-            child: Text(
-              'PGN Viewer',
-              style: Theme.of(context).textTheme.labelSmall,
-              overflow: TextOverflow.ellipsis,
+          // Room for the buttons first: a narrow pane cuts the name.
+          Expanded(
+            child: Tooltip(
+              message: name ?? '',
+              child: Text(
+                name ?? '',
+                style: Theme.of(context).textTheme.titleMedium,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
-          const SizedBox(width: Space.xs),
           IconButton(
             icon: const Icon(Icons.add, size: IconSize.action),
             tooltip: AppKey.openFile.tip('Open PGN file…'),
             onPressed: onBrowse,
             visualDensity: VisualDensity.compact,
           ),
-          const Spacer(),
           ?trailing,
         ],
       ),
@@ -471,7 +481,9 @@ class _Toolbar extends StatelessWidget {
   }
 }
 
-/// One game of the open file: its number, its players and how it ended.
+/// One game of the open file: its number, its players and how it ended. In
+/// a followed player's collection the row is the colour they had and who
+/// they played: their own name on every row says nothing.
 class _GameRow extends StatelessWidget {
   const _GameRow({
     required this.index,
@@ -479,12 +491,17 @@ class _GameRow extends StatelessWidget {
     required this.game,
     required this.open,
     required this.onOpen,
+    this.followed,
     this.indented = false,
   });
 
   final int index;
   final int ordinal;
   final GameSummary game;
+
+  /// The followed player's colour in this game and their opponent, when
+  /// someone is followed and played it.
+  final ({Side side, String opponent})? followed;
 
   /// This is the game on the board.
   final bool open;
@@ -520,8 +537,18 @@ class _GameRow extends StatelessWidget {
                   ),
                 ),
               ),
+              if (followed case (:final side, opponent: _)) ...[
+                _SideMark(side),
+                const SizedBox(width: Space.s),
+              ],
               Expanded(
-                child: Text(game.title, overflow: TextOverflow.ellipsis),
+                child: Tooltip(
+                  message: game.title,
+                  child: Text(
+                    followed?.opponent ?? game.title,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
               if (game.result.isNotEmpty)
                 Padding(
@@ -530,6 +557,31 @@ class _GameRow extends StatelessWidget {
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The colour the followed player had: a light disc for White, a dark one
+/// ringed so it shows on the dark list for Black.
+class _SideMark extends StatelessWidget {
+  const _SideMark(this.side);
+
+  final Side side;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: side == Side.white ? 'Had White' : 'Had Black',
+      child: Container(
+        width: sideMarkSize,
+        height: sideMarkSize,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: side == Side.white ? scheme.onSurface : scheme.surface,
+          border: Border.all(color: scheme.onSurfaceVariant),
         ),
       ),
     );

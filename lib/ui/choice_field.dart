@@ -126,6 +126,9 @@ class _ChoiceFieldState extends State<ChoiceField> {
               focusNode: focus,
               onChanged: widget.onChanged,
               onSubmitted: (text) => _submit(text, submit),
+              // The body size, as the search box: a field in a row of
+              // controls is read with them, not above them.
+              style: Theme.of(context).textTheme.bodyMedium,
               decoration: InputDecoration(
                 isDense: true,
                 hintText: widget.hint,

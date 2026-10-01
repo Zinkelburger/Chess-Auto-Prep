@@ -27,7 +27,9 @@ fallback are bundled. Do not restore retired AppColors/AppTextStyles,
 design_system, legacy theme boundaries or localization generation.
 
 Reuse the controls in `lib/ui/`: search_field, choice_field, number_field,
-name_dialog, confirm_dialog, row_actions, pane_tabs, selection and app_action.
+field_row, check_row, toggle_chip, name_dialog, confirm_dialog, row_actions,
+pane_tabs, selection and app_action. A stepper or choice in a column or dialog
+sits in a `FieldRow` that names it. A mode's column has one filled button.
 Keep search visible, with its magnifier and clear action. Use compact searchable
 Field / Rule / Value rows for filters and removable chips for selected sets.
 Reserve the strongest filled action for applying or completing a task.

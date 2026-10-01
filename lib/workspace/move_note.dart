@@ -27,11 +27,17 @@ class MoveNote extends StatefulWidget {
     required this.session,
     this.editable = false,
     this.editing,
+    this.quiet = false,
   });
 
   final DocumentSession session;
   final bool editable;
   final ValueNotifier<bool>? editing;
+
+  /// Whether there is no card until there is a note to read or one is
+  /// being written: a move with nothing said about it is in the moves
+  /// already.
+  final bool quiet;
 
   @override
   State<MoveNote> createState() => _MoveNoteState();
@@ -66,6 +72,13 @@ class _MoveNoteState extends State<MoveNote> with CommentPreviews<MoveNote> {
             move == null &&
             upcoming == null &&
             notes.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        if (widget.quiet &&
+            !edit &&
+            notes.isEmpty &&
+            (upcoming == null ||
+                _notesAt(tree, path.mainChild, upcoming).isEmpty)) {
           return const SizedBox.shrink();
         }
         final scheme = Theme.of(context).colorScheme;
