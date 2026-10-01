@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart';
 
+import '../../chess/generation/expectimax_options.dart';
 import '../../storage/settings.dart';
 import '../../storage/settings_store.dart';
 import 'app_updates.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/move_notation.dart';
+import '../../workspace/search_settings.dart';
 import 'lichess_account.dart';
 import 'update_rows.dart';
 
@@ -297,6 +299,7 @@ List<SettingGroup> settingGroups({
         hint: 'rarer replies are not counted as gaps',
       ),
     ]),
+    SettingGroup('Expectimax', _expectimaxRows(s, change)),
     SettingGroup('Files', [
       SettingRow(
         'Copy files from outside Documents when opened',
@@ -380,3 +383,88 @@ String accountHint(AccountStatus status) => switch (status) {
 String _day(DateTime? when) => when == null
     ? 'revoked'
     : when.toLocal().toIso8601String().substring(0, 10);
+
+/// The Expectimax tab's settings, as its gear shows them. The opponent's
+/// rating is the Repertoire row above: one number for both.
+List<SettingRow> _expectimaxRows(
+  Settings s,
+  void Function(Settings Function(Settings now) edit) change,
+) {
+  final e = s.expectimax;
+  void set(ExpectimaxOptions Function(ExpectimaxOptions now) edit) =>
+      change((now) => now.copyWith(expectimax: edit(now.expectimax)));
+  SettingRow number(
+    (String, String) copy,
+    int value,
+    int min,
+    int max,
+    ExpectimaxOptions Function(ExpectimaxOptions now, int n) edit, {
+    String? hint,
+  }) => SettingRow(
+    copy.$1,
+    NumberSetting(
+      value: value,
+      min: min,
+      max: max,
+      onChanged: (n) => set((now) => edit(now, n)),
+    ),
+    hint: hint ?? copy.$2,
+  );
+  return [
+    SettingRow(
+      'Method',
+      ChoiceSetting(
+        options: [for (final m in SearchMethod.values) (m, m.label)],
+        value: e.method,
+        onChanged: (m) => set((now) => now.copyWith(method: m)),
+      ),
+    ),
+    number(
+      SearchSettingCopy.depth,
+      e.depth ?? 0,
+      0,
+      ExpectimaxOptions.maxDepth,
+      (now, n) => now.withDepth(n == 0 ? null : n),
+      hint: '${SearchSettingCopy.depth.$2}; 0 is no limit',
+    ),
+    number(
+      SearchSettingCopy.rootMoves,
+      e.rootMoves,
+      1,
+      ExpectimaxOptions.maxMoves,
+      (now, n) => now.copyWith(rootMoves: n),
+    ),
+    number(
+      SearchSettingCopy.candidateMoves,
+      e.candidateMoves,
+      1,
+      ExpectimaxOptions.maxMoves,
+      (now, n) => now.copyWith(candidateMoves: n),
+    ),
+    number(
+      SearchSettingCopy.rare,
+      e.rareOnceIn,
+      0,
+      ExpectimaxOptions.maxRareOnceIn,
+      // One game in one is every game: the step past zero is two.
+      (now, n) =>
+          now.copyWith(rareOnceIn: n == 1 ? (now.rareOnceIn == 0 ? 2 : 0) : n),
+    ),
+    number(
+      SearchSettingCopy.evalDepth,
+      e.evalDepth,
+      ExpectimaxOptions.minEvalDepth,
+      ExpectimaxOptions.maxEvalDepth,
+      (now, n) => now.copyWith(evalDepth: n),
+    ),
+    SettingRow(
+      SearchSettingCopy.source.$1,
+      ChoiceSetting(
+        options: SearchSettingCopy.sources,
+        value: e.source,
+        onChanged: (source) => set((now) => now.copyWith(source: source)),
+      ),
+      hint: SearchSettingCopy.source.$2,
+    ),
+  ];
+}

@@ -158,8 +158,14 @@ abstract final class ReviewColors {
 
 const searchPaneMinHeight = 360.0;
 const searchRecoveryMinHeight = 440.0;
-const searchEloWidth = 84.0;
-const searchDepthWidth = 64.0;
+
+/// The Expectimax tab's bar and the status line under it keep their height
+/// and the button its width whatever it says, so nothing under or beside
+/// them moves when a search starts, pauses or fails.
+const searchBarHeight = 56.0;
+const searchStatusHeight = 32.0;
+const searchRunWidth = 148.0;
+const searchDepthWidth = 84.0;
 const searchHeaderHeight = 24.0;
 const searchRowHeight = 32.0;
 const searchShareWidth = 64.0;

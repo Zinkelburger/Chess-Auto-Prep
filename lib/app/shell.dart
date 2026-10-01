@@ -34,6 +34,7 @@ import '../workspace/book_chip.dart';
 import '../workspace/copy_name_dialog.dart';
 import '../storage/finds_store.dart';
 import '../workspace/fill_gaps.dart';
+import '../workspace/fill_states.dart';
 import '../workspace/finds_panel.dart';
 import '../workspace/move_field.dart';
 import '../workspace/workspace.dart';
@@ -874,7 +875,7 @@ final class SearchDoor {
     }
     layout.reveal(WorkspaceTab.search);
     final refusal = await fill.resume(
-      fill.requestFor(settings.value.opponentElo),
+      FillRequest.of(settings.value),
       orAfresh: true,
     );
     if (refusal != null) requests.say(refusal);

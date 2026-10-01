@@ -76,7 +76,11 @@ Bughouse mode is offered when its engine assets are present.
   licenses and verified update downloads/install-on-close.
   The engine pane's gear swaps its lines in place for Lines, CPU cores and
   Memory sliders; both views write the same settings, which the workspace
-  wiring applies to the running engine.
+  wiring applies to the running engine. The Expectimax tab's gear does the
+  same for the search (`workspace/search_settings.dart`): its rows and
+  Settings ▸ Expectimax write `Settings.expectimax`
+  (`chess/generation/expectimax_options.dart`), and every way of starting a
+  search reads `FillRequest.of(settings)`.
 
 Unported conveniences remain in the feature specs/backlog; the presence of a
 mode is not a claim of every historical v1 control being reproduced.
