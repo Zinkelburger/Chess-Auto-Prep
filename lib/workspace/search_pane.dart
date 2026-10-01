@@ -21,6 +21,7 @@ import 'line_preview.dart';
 import 'search_settings.dart';
 import 'search_table.dart';
 import '../ui/app_keys.dart';
+import '../ui/choice_field.dart';
 
 /// The Expectimax panel: the expectimax search from the
 /// board and its values.
@@ -243,62 +244,109 @@ class _SearchPaneState extends State<SearchPane>
 
   /// The bar: the one button, the depth and the gear, each where it always
   /// is whatever the search is doing.
-  Widget _bar(BuildContext context) {
-    final running = widget.fill.running;
-    return SizedBox(
-      height: searchBarHeight,
-      child: Padding(
-        padding: const EdgeInsets.only(left: Space.m, right: Space.xs),
-        child: Row(
-          children: [
-            SizedBox(width: searchRunWidth, child: _runButton()),
-            const SizedBox(width: Space.s),
-            Tooltip(
-              message: _book
-                  ? 'Follow the opponent\'s master replies this many '
-                        'half-moves from the board; past it every line runs '
-                        'on as ChessDB\'s mainline.'
-                  : 'Half-moves searched from the board. Empty goes on '
-                        'until paused.',
-              child: SearchNumberBox(
-                name: SearchSettingCopy.depth.$1,
-                label: SearchSettingCopy.depth.$1,
-                empty: _book
-                    ? '${MainlineConfig.defaultBranchPlies}'
-                    : 'No limit',
-                value: _options.depth,
-                min: ExpectimaxOptions.minDepth,
-                max: ExpectimaxOptions.maxDepth,
-                width: searchDepthWidth,
-                enabled: !running,
-                onProblem: _problem,
-                onChanged: (depth) => unawaited(
-                  widget.settings.update(
-                    widget.settings.value.copyWith(
-                      expectimax: _options.withDepth(depth),
-                    ),
-                  ),
-                ),
+  Widget _bar(BuildContext context) => LayoutBuilder(
+    builder: (context, size) {
+      final replies = _book ? null : _repliesField();
+      final inline = size.maxWidth >= searchBarInlineWidth;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: searchBarHeight,
+            child: Padding(
+              padding: const EdgeInsets.only(left: Space.m, right: Space.xs),
+              child: Row(
+                children: [
+                  SizedBox(width: searchRunWidth, child: _runButton()),
+                  const SizedBox(width: Space.s),
+                  _depthBox(),
+                  if (inline && replies != null) ...[
+                    const SizedBox(width: Space.s),
+                    SizedBox(width: searchRepliesWidth, child: replies),
+                  ],
+                  const Spacer(),
+                  _gear(context),
+                ],
               ),
             ),
-            const Spacer(),
-            IconButton(
-              icon: const Icon(Icons.settings, size: IconSize.action),
-              tooltip: _settingsOpen ? 'Show results' : 'Expectimax settings',
-              isSelected: _settingsOpen,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              selectedIcon: Icon(
-                Icons.settings,
-                size: IconSize.action,
-                color: Theme.of(context).colorScheme.primary,
+          ),
+          if (!inline && replies != null)
+            SizedBox(
+              height: searchRepliesRowHeight,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: Space.m),
+                child: Align(child: replies),
               ),
-              onPressed: _toggleSettings,
             ),
-          ],
+        ],
+      );
+    },
+  );
+
+  Widget _depthBox() => Tooltip(
+    message: _book
+        ? 'Follow the opponent\'s master replies this many '
+              'half-moves from the board; past it every line runs '
+              'on as ChessDB\'s mainline.'
+        : 'Half-moves searched from the board. Empty goes on '
+              'until paused.',
+    child: SearchNumberBox(
+      name: SearchSettingCopy.depth.$1,
+      label: SearchSettingCopy.depth.$1,
+      empty: _book ? '${MainlineConfig.defaultBranchPlies}' : 'No limit',
+      value: _options.depth,
+      min: ExpectimaxOptions.minDepth,
+      max: ExpectimaxOptions.maxDepth,
+      width: searchDepthWidth,
+      enabled: !widget.fill.running,
+      onProblem: _problem,
+      onChanged: (depth) => unawaited(
+        widget.settings.update(
+          widget.settings.value.copyWith(expectimax: _options.withDepth(depth)),
         ),
       ),
-    );
-  }
+    ),
+  );
+
+  /// Where the opponent's replies come from: typed or picked, taken at once.
+  Widget _repliesField() => Tooltip(
+    message:
+        'Where the opponent\'s replies and how often each is played '
+        'come from.',
+    child: ChoiceField(
+      text: _options.replies.label,
+      options: [for (final source in ReplySource.values) source.label],
+      hint: 'Maia or a database',
+      label: SearchSettingCopy.replies.$1,
+      enabled: !widget.fill.running,
+      onSubmitted: (picked) {
+        final source = ReplySource.values
+            .where((source) => source.label == picked)
+            .firstOrNull;
+        if (source == null || source == _options.replies) return;
+        unawaited(
+          widget.settings.update(
+            widget.settings.value.copyWith(
+              expectimax: _options.copyWith(replies: source),
+            ),
+          ),
+        );
+      },
+    ),
+  );
+
+  Widget _gear(BuildContext context) => IconButton(
+    icon: const Icon(Icons.settings, size: IconSize.action),
+    tooltip: _settingsOpen ? 'Show results' : 'Expectimax settings',
+    isSelected: _settingsOpen,
+    color: Theme.of(context).colorScheme.onSurfaceVariant,
+    selectedIcon: Icon(
+      Icons.settings,
+      size: IconSize.action,
+      color: Theme.of(context).colorScheme.primary,
+    ),
+    onPressed: _toggleSettings,
+  );
 
   /// Start, Resume or Pause: one button in one place.
   Widget _runButton() {
@@ -343,11 +391,19 @@ class _SearchPaneState extends State<SearchPane>
   }
 
   /// What the next search will be.
-  String get _summary => _book
-      ? 'ChessDB\'s best moves, master replies'
-      : 'Maia ${widget.settings.value.opponentElo} · '
-            'best ${_options.rootMoves}, then ${_options.candidateMoves}'
-            '${_options.source == EvaluationSource.stockfish ? '' : ' · ${_options.source.label}'}';
+  String get _summary {
+    if (_book) return 'ChessDB\'s best moves, master replies';
+    final e = _options;
+    final maia = 'Maia ${widget.settings.value.opponentElo}';
+    return [
+      if (e.replies == ReplySource.maia)
+        maia
+      else if (e.maiaFallback)
+        '$maia under ${e.fallbackUnder} games',
+      'best ${e.rootMoves}, then ${e.candidateMoves}',
+      if (e.source != EvaluationSource.stockfish) e.source.label,
+    ].join(' · ');
+  }
 
   /// The side the search prepares, which is the bottom of the board, as a
   /// button that turns the board to the other. Held while a search runs,
@@ -414,14 +470,18 @@ class _SearchPaneState extends State<SearchPane>
           children: [
             _sideButton(),
             const SizedBox(width: Space.s),
+            // The line is one line; resting on it says the rest.
             Expanded(
-              child: Text(
-                words,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: error ? theme.colorScheme.error : null,
+              child: Tooltip(
+                message: words,
+                child: Text(
+                  words,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: error ? theme.colorScheme.error : null,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
             ),
             if (state case FillRunning(

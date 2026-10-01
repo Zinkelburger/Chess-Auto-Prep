@@ -419,6 +419,30 @@ List<SettingRow> _expectimaxRows(
         onChanged: (m) => set((now) => now.copyWith(method: m)),
       ),
     ),
+    SettingRow(
+      SearchSettingCopy.replies.$1,
+      ChoiceSetting(
+        options: SearchSettingCopy.replySources,
+        value: e.replies,
+        onChanged: (source) => set((now) => now.copyWith(replies: source)),
+      ),
+      hint: SearchSettingCopy.replies.$2,
+    ),
+    SettingRow(
+      'Fall back to Maia',
+      ToggleSetting(
+        value: e.maiaFallback,
+        onChanged: (on) => set((now) => now.copyWith(maiaFallback: on)),
+      ),
+      hint: 'where the database has too few games at a position',
+    ),
+    number(
+      SearchSettingCopy.fallback,
+      e.fallbackUnder,
+      1,
+      ExpectimaxOptions.maxFallbackUnder,
+      (now, n) => now.copyWith(fallbackUnder: n),
+    ),
     number(
       SearchSettingCopy.depth,
       e.depth ?? 0,

@@ -18,7 +18,9 @@ audit and the Findings pane are [checks.md](checks.md).
 
 ## Current v2 workflow (2026-09-27)
 
-Builder opens Expectimax, Moves and Explorer, with Expectimax selected. Train and
+Builder opens Moves on the left and Expectimax on the right, with Expectimax
+selected; the book button under the moves opens the Explorer there (shut at
+first, since 2026-10-01). Train and
 Replies remain available from the inner tab menu but are not initially open.
 The **Action Tabs** layout control offers 1, 2, 3 or 4 fixed panes: one pane,
 two side by side, one on the left and two on the right, or four quadrants.
@@ -32,7 +34,10 @@ existing commit-on-navigation editor and guarded document saver.
 
 Expectimax is headed by one bar that never moves (2026-10-01): a button that is
 `Expectimax`, `Pause` or `Resume` in the same place at the same width, the
-`Depth` box (empty is no limit) and a gear. One status line under it starts
+`Depth` box (empty is no limit) and a gear, with a typeable `Replies from`
+field (Maia, Lichess masters, Lichess players, TWIC games) beside the depth
+where the pane is 480px or wider and on its own line under the bar where it is
+not. One status line under it starts
 with the side the search prepares, `White` or `Black`, as a text button: the
 side is the bottom of the board, so pressing it turns the board (as F does). It
 is held while a search runs. It is not a two-part switch: the owner removed a
@@ -41,7 +46,10 @@ permanent White/Black switch from the builder on 2026-09-22. After it the line s
 got; while a search with no depth runs, `Finish depth N` at the line's end lets
 the level under way finish before pausing. The gear swaps the results in place
 for the rest of the settings, as the engine pane's gear does: Maia practical |
-ChessDB mainline, Maia rating, First move and Later moves (our best engine moves
+ChessDB mainline; with a database chosen, a tick box `Fall back to Maia under`
+N `games at a position` (ticked, 10), and for Lichess players a line naming the
+Explorer tab's speeds and ratings; Maia rating (hidden when Maia is never
+asked), First move and Later moves (our best engine moves
 searched, default 4 each), Search replies met once in N games, Engine depth and
 Evaluation (Engine, ChessDB, Lichess cloud). They are saved in `settings.json`
 (`Settings.expectimax`, with the shared opponent rating) and shown again under

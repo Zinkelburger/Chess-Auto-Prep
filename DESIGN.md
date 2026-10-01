@@ -185,7 +185,8 @@ compact engine lines, typed-move field, note card) beside the reading card's
 panes, first shared two parts board to three parts card. Panes split right or
 below from a tab's context menu; each pane has a browser-style tab strip
 (34px tabs, the chosen one filled). The Repertoire builder starts split:
-Moves over Explorer on the left, Expectimax on the right.
+Moves on the left, Expectimax on the right; the book opens under the moves
+from its button.
 
 Spacing is a five-step scale (4, 8, 12, 16, 24); every gap is one of them.
 The list column starts 260px wide (300px in Player analysis) and the outline

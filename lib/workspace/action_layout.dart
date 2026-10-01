@@ -414,13 +414,13 @@ final class ActionLayout extends ChangeNotifier {
   ValueNotifier<bool>? get book => _book;
   ValueNotifier<bool>? _book;
 
-  /// The builder's start: Moves with the book under them on the left,
-  /// Expectimax on the right, all in view at once. The book is the main
-  /// pane's Explorer, whose database and filters are the remembered ones;
-  /// the main pane keeps the other tabs to be shown by name.
+  /// The builder's start: Moves on the left, Expectimax on the right. The
+  /// book starts shut and opens under the moves from its button; it is the
+  /// main pane's Explorer, whose database and filters are the remembered
+  /// ones. The main pane keeps the other tabs to be shown by name.
   void startBuilding() {
     if (count > 1) return;
-    _book ??= ValueNotifier(true);
+    _book ??= ValueNotifier(false);
     _ensure(1, WorkspaceTab.search);
     pane(0)
       ..show(WorkspaceTab.moves)

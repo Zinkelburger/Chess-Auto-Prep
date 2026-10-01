@@ -246,6 +246,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     final updates? => UpdatePrompt(
       updates: updates,
       navigator: _navigator,
+      closeApp: _windowClose.close,
       child: shell,
     ),
     null => shell,

@@ -19,7 +19,7 @@ finish() {
   if test "$result" -ne 0; then
     printf 'Update installation failed (exit %s). Details: %s/install.log\n' "$result" "$state_dir" > "$(dirname "$state_dir")/last-error.txt"
   fi
-  rm -f -- "$state_dir/helper-ready" "$armed"
+  rm -f -- "$state_dir/helper-ready" "$state_dir/reopen" "$armed"
 }
 trap finish EXIT
 printf 'ready\n' > "$state_dir/helper-ready"
@@ -65,5 +65,9 @@ case "$kind" in
 esac
 rm -f -- "$(dirname "$state_dir")/last-error.txt"
 printf 'Installation completed.\n'
-# Keep the log for failed launches; no forced rollback after a data migration.
-"$executable" </dev/null >>"$state_dir/restart.log" 2>&1 9>&- &
+# Reopen only for an update the user asked for now; closing for the day
+# leaves the app closed. Keep the log for failed launches; no forced rollback
+# after a data migration.
+if test -f "$state_dir/reopen"; then
+  "$executable" </dev/null >>"$state_dir/restart.log" 2>&1 9>&- &
+fi

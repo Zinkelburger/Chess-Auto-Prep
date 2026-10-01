@@ -184,6 +184,13 @@ const searchBarHeight = 56.0;
 const searchStatusHeight = 32.0;
 const searchRunWidth = 148.0;
 const searchDepthWidth = 84.0;
+
+/// The bar's `Replies from` field: beside the depth where the pane is at
+/// least [searchBarInlineWidth] wide, on a line of its own under it where
+/// it is not. Which of the two depends on the pane's width alone.
+const searchRepliesWidth = 176.0;
+const searchRepliesRowHeight = 52.0;
+const searchBarInlineWidth = 480.0;
 const searchHeaderHeight = 24.0;
 const searchRowHeight = 32.0;
 const searchShareWidth = 48.0;

@@ -76,7 +76,7 @@ Bughouse mode is offered when its engine assets are present.
 - The Repertoire builder starts with two panes: Moves on the left, Expectimax
   on the right (`ActionLayout.startBuilding`). As on Lichess, a book button
   leading the nav row shows the main Explorer under the moves
-  (`ActionLayout.book`, on by default). Requests for a tab
+  (`ActionLayout.book`, shut until pressed). Requests for a tab
   (`ActionLayout.reveal`) bring it up in the pane that already has it. The
   Explorer's narrowing folds under a button always labelled Filters
   (`ui/fold_button.dart`).
@@ -91,7 +91,10 @@ Bughouse mode is offered when its engine assets are present.
   same for the search (`workspace/search_settings.dart`): its rows and
   Settings ▸ Expectimax write `Settings.expectimax`
   (`chess/generation/expectimax_options.dart`), and every way of starting a
-  search reads `FillRequest.of(settings)`.
+  search reads `FillRequest.of(settings)`. `opponentFor` in
+  `workspace/search_opponents.dart` turns the request's reply source into the
+  search's opponent: Maia, or a games database (Lichess explorer, local master
+  book) with Maia behind it.
 
 Unported conveniences remain in the feature specs/backlog; the presence of a
 mode is not a claim of every historical v1 control being reproduced.

@@ -1,10 +1,15 @@
 import 'package:dartchess/dartchess.dart' show Position;
 
+import '../chess/explorer_choice.dart';
 import '../chess/fen.dart';
+import '../chess/generation/expectimax_options.dart';
 import '../chess/generation/mainline_book.dart' show PlayedMove;
+import '../chess/generation/played_policy.dart';
 import '../chess/generation/sources.dart';
 import '../engines/maia/move_policy.dart';
+import '../net/lichess_explorer.dart';
 import '../storage/master_book.dart';
+import 'fill_states.dart';
 
 // The opponents a search from the board plays against: the Maia model for
 // the practical search, the masters' games for the mainline book. And what
@@ -27,6 +32,126 @@ final class MaiaOpponent implements OpponentPolicy {
         MaiaPolicy(:final shares) => PolicyFound(Policy(shares)),
         MaiaFailed(:final reason) => PolicyUnavailable(reason),
       };
+}
+
+/// What a database of games said when asked about one position.
+sealed class PlayedLookup {
+  const PlayedLookup();
+}
+
+/// The replies played there, which may be none.
+final class PlayedFound extends PlayedLookup {
+  const PlayedFound(this.moves);
+
+  final List<PlayedMove> moves;
+}
+
+/// The database could not be asked; [reason] is a sentence for the screen.
+final class PlayedUnavailable extends PlayedLookup {
+  const PlayedUnavailable(this.reason);
+
+  final String reason;
+}
+
+typedef PlayedAt = Future<PlayedLookup> Function(Fen fen);
+
+/// A database of games as the search's opponent: at each position the
+/// replies played there, weighted by their games.
+///
+/// One position has one source. Where the database has fewer than
+/// [fallbackUnder] games and there is a [fallback], the fallback answers
+/// that position whole; the two are never blended, and the search turns
+/// whichever answered into shares of one. With no fallback the database
+/// answers wherever it has a game and the search stops where it has none.
+/// A database that cannot be asked stops the search: a lost connection is
+/// not a reason to change the opponent.
+///
+/// A position is asked about once, since a run meets many positions twice.
+final class DatabaseOpponent implements OpponentPolicy {
+  DatabaseOpponent({
+    required this.name,
+    required PlayedAt played,
+    this.fallback,
+    this.fallbackUnder = 1,
+  }) : _played = played;
+
+  /// What the database is called, for the sentence said when it is empty.
+  final String name;
+  final PlayedAt _played;
+  final OpponentPolicy? fallback;
+  final int fallbackUnder;
+  final _asked = <String, Future<PolicyResult>>{};
+
+  @override
+  Future<PolicyResult> policyFor(Position position) =>
+      _asked[Fen(position.fen).position] ??= _ask(position);
+
+  Future<PolicyResult> _ask(Position position) async {
+    final lookup = await _played(Fen(position.fen));
+    if (lookup is! PlayedFound) {
+      return PolicyUnavailable((lookup as PlayedUnavailable).reason);
+    }
+    final (:policy, :games) = playedPolicy(position, lookup.moves);
+    final fallback = this.fallback;
+    if (fallback != null && games < fallbackUnder) {
+      return fallback.policyFor(position);
+    }
+    if (games == 0) {
+      return PolicyUnavailable('$name has no games at this position');
+    }
+    return PolicyFound(policy);
+  }
+}
+
+/// Lichess's explorer, narrowed as [choice] says, asked for the replies.
+PlayedAt lichessPlayed(LichessExplorer explorer, ExplorerChoice choice) =>
+    (fen) async => switch (await explorer.fetch(ExplorerQuery(fen, choice))) {
+      ExplorerFetched(:final answer) => PlayedFound([
+        for (final move in answer.moves) (uci: move.uci, games: move.games),
+      ]),
+      ExplorerNotFetched(:final sentence) => PlayedUnavailable(sentence),
+    };
+
+/// The master games on this machine, asked for the replies.
+PlayedAt twicPlayed(MasterBook book) =>
+    (fen) async => switch (await book.lookup(fen, classicalOnly: false)) {
+      BookFound(:final answer) => PlayedFound([
+        for (final move in answer.moves) (uci: move.uci, games: move.games),
+      ]),
+      BookAbsent() => const PlayedUnavailable(
+        'There are no TWIC games on this computer. Get them in Databases.',
+      ),
+      BookUnreadable() || BookClassicalIncomplete() => const PlayedUnavailable(
+        'The TWIC games on this computer could not be read.',
+      ),
+    };
+
+/// The opponent [request] asks for: Maia, or a database with Maia behind
+/// it where the request says so.
+OpponentPolicy opponentFor(
+  FillRequest request, {
+  required MovePolicy maia,
+  required LichessExplorer explorer,
+  required MasterBook book,
+}) {
+  final model = MaiaOpponent(maia, elo: request.elo);
+  final played = switch (request.replies) {
+    ReplySource.maia => null,
+    ReplySource.masters => lichessPlayed(
+      explorer,
+      const ExplorerChoice(source: ExplorerSource.masters),
+    ),
+    ReplySource.lichess => lichessPlayed(explorer, request.lichess),
+    ReplySource.twic => twicPlayed(book),
+  };
+  if (played == null) return model;
+  final under = request.fallbackUnder;
+  return DatabaseOpponent(
+    name: request.replies.label,
+    played: played,
+    fallback: under == null ? null : model,
+    fallbackUnder: under ?? 1,
+  );
 }
 
 /// The replies masters played, in the games on this machine, as the
