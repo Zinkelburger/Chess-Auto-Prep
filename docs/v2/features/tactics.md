@@ -165,6 +165,12 @@ Puzzle/Game, Escape leaves editor, then tab, then puzzle. A SAN or UCI letter fo
   the games mined and book-checked; a daily game counts as classical and a game with no `TimeControl`
   is always included.
 
+- v2 (2026-10-01): one filled button at a time. In the column it is `Play` once the set has puzzles
+  (`Add accounts` / `Get games` are outlined then); on the Puzzle tab it is `Next`, once the attempt is
+  scored, and `Show solution`, `Skip` and `Analyze` are outlined. A row is the move and its record over
+  the date and the opponent, the date first so a narrow column cuts the name, not the date. The Game tab sets the moves in the
+  reading card's type, the puzzle's move bold with its mark in the review's colour.
+
 ## Keep / Change / Drop
 Keep — Games header
 Keep — Game card

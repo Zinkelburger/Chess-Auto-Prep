@@ -172,7 +172,7 @@ class _TacticsPanelState extends State<TacticsPanel> {
           ),
           child: SearchField(
             controller: _search,
-            hint: 'Search puzzles',
+            hint: 'Search',
             onChanged: _searched,
           ),
         ),
@@ -450,32 +450,16 @@ extension on _PuzzleRow {
             ),
         ],
       ),
-      // Who it was against, and when. The name gives way to the date in a
-      // narrow column, not the other way round: the date is what tells two
-      // games against one opponent apart.
-      Row(
-        children: [
-          Expanded(
-            child: Text(
-              puzzle.opponent.isEmpty ? '' : 'vs ${puzzle.opponent}',
-              style: theme.textTheme.labelSmall,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (puzzle.date.isNotEmpty) ...[
-            const SizedBox(width: Space.s),
-            Flexible(
-              child: Text(
-                puzzle.date,
-                style: theme.textTheme.labelSmall,
-                maxLines: 1,
-                softWrap: false,
-                overflow: TextOverflow.fade,
-              ),
-            ),
-          ],
-        ],
+      // When, then who it was against: in a narrow column the name is cut
+      // short, never the date, which is what tells two games apart.
+      Text(
+        [
+          if (puzzle.date.isNotEmpty) puzzle.date,
+          if (puzzle.opponent.isNotEmpty) 'vs ${puzzle.opponent}',
+        ].join(' · '),
+        style: theme.textTheme.labelSmall,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
     ],
   );

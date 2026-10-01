@@ -41,6 +41,9 @@ class PlayerTreePane extends StatelessWidget {
       if (corpus == null) {
         return const ListMessage('Choose a player to see what they play.');
       }
+      if (corpus.games.isEmpty) {
+        return const ListMessage('This player has no games yet.');
+      }
       final answer = corpus.openings.answer(
         session.fen,
         keeps: (i) => analysis.includes(corpus.games[i]),
