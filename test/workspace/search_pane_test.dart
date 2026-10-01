@@ -272,8 +272,9 @@ void main() {
     expect(fill.depth, 2);
     expect(fill.rootMoves, 6);
     expect(find.text('Your move'), findsOneWidget);
-    expect(find.byTooltip('Engine depth 22'), findsWidgets);
-    expect(find.text('22'), findsWidgets);
+    // Depth is on the Engine value's hover, not a column of its own.
+    expect(find.byTooltip('Depth 22'), findsWidgets);
+    expect(find.text('22'), findsNothing);
     expect(find.text('Expectimax'), findsNWidgets(2));
     // Six root moves keep every legal move, weak ones included.
     expect(find.text('e4'), findsOneWidget);

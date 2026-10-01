@@ -862,10 +862,6 @@ class _Header extends StatelessWidget {
               width: searchValueWidth,
               child: Text('Engine', style: style, textAlign: TextAlign.right),
             ),
-            SizedBox(
-              width: engineDepthWidth,
-              child: Text('Depth', style: style, textAlign: TextAlign.right),
-            ),
           ],
         ),
       ),
@@ -952,20 +948,12 @@ class _RowView extends StatelessWidget {
                 ),
                 SizedBox(
                   width: searchValueWidth,
-                  child: Text(
-                    _engineText(after.evalForUs, white: white),
-                    style: muted,
-                    textAlign: TextAlign.right,
-                  ),
-                ),
-                SizedBox(
-                  width: engineDepthWidth,
                   child: Tooltip(
                     message: engineDepth == null
-                        ? 'Engine depth unavailable for this saved or database result'
-                        : 'Engine depth $engineDepth',
+                        ? 'Depth unknown (saved or database result)'
+                        : 'Depth $engineDepth',
                     child: Text(
-                      engineDepth?.toString() ?? '—',
+                      _engineText(after.evalForUs, white: white),
                       style: muted,
                       textAlign: TextAlign.right,
                     ),

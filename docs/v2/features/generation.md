@@ -301,10 +301,10 @@ are trivial — do not go straight to lines*. Supersedes the two sections above 
 - **The table follows the board.** Under a status line (`Searching for White · depth 3 of 8 ·
   406 positions`, then `Searched …` or `Stopped at depth 3 …`), the position on the board is
   looked up in the search tree by the moves from the document's root. At our move: `Your move ·
-  Expectimax · Engine · Depth`, best first. At theirs: `Their reply · Played · Expectimax · Engine · Depth`,
+  Expectimax · Engine`, best first. At theirs: `Their reply · Played · Expectimax · Engine`,
   most played first, a reply losing ≥ 50 cp against their best reply marked `?` (a trap).
-  The Depth column shows the recorded engine depth for each score; unknown depths
-  from older saved or database results display `—` rather than the target depth.
+  Hovering an Engine value shows the recorded engine depth (`Depth 22`); older saved or
+  database results without one say the depth is unknown rather than showing the target.
   Values are White-relative, as the engine pane's; a move not expanded yet reads `…` in the
   Expectimax column. A click plays the move (into the chapter, as the Explorer's do), a hover
   floats the position. Off the tree: `This position is not in the search.` with `Go to where it
