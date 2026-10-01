@@ -33,7 +33,11 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   introduction's at the start, and writes a drawing into that comment where the document takes
   edits — builder, study, the analysis board, the viewer while Edit is open. Elsewhere, and over a
   comment's line or a hidden puzzle answer, a drawing stays until the position changes or a left
-  click wipes it. Drawn twice a shape goes; another colour recolours it.)
+  click wipes it. Drawn twice a shape goes; another colour recolours it. 2026-10-01: arrows use
+  Lichess's geometry — a shaft 10/64 of a square wide from the middle of the square — instead of
+  chessground's quarter-square slab; a left click on the board takes the comment's shapes out of
+  it where the document takes edits, and hides them until the position changes elsewhere; the
+  threat stays.)
 - **Eval bar** — none in the old app; the only score is the engine gutter. v2 had one for a day and
   removed it on 2026-09-21 (see below): the score lives in the engine gutter here too.
 - **Move list** — mono SAN, mainline and variations styled alike, depth shown by indent clamped

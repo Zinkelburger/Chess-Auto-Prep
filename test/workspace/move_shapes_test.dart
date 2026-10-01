@@ -27,7 +27,7 @@ void main() {
       session.commentAt(session.cursor),
       'The Sicilian [%eval 0.30] [%cal Gg1f3]',
     );
-    expect(shapesOnBoard(session, null), [_arrow]);
+    expect(shapesOnBoard(session), [_arrow]);
     await pumpEventQueue();
     expect(
       fixture.onDisk,
@@ -36,17 +36,32 @@ void main() {
 
     drawIntoComment(session, _arrow);
     expect(session.commentAt(session.cursor), 'The Sicilian [%eval 0.30]');
-    expect(shapesOnBoard(session, null), isEmpty);
+    expect(shapesOnBoard(session), isEmpty);
+  });
+
+  test('clearing takes every shape out of the comment and keeps the words', () {
+    final session = fixture.session;
+    session.goTo(NodePath.of(const [0]));
+    drawIntoComment(session, _arrow);
+    drawIntoComment(
+      session,
+      const BoardShape.circle(Square.d4, ShapeColour.red),
+    );
+    expect(shapesOnBoard(session), hasLength(2));
+    clearCommentShapes(session);
+    expect(session.commentAt(session.cursor), 'The Sicilian [%eval 0.30]');
+    expect(shapesOnBoard(session), isEmpty);
   });
 
   test('the threat is drawn in red only on the position it is for', () {
     final session = fixture.session;
     final threat = (fen: session.boardFen, uci: 'g1f3');
-    expect(shapesOnBoard(session, threat), [
+    expect(
+      threatOnBoard(session, threat),
       const BoardShape(Square.g1, Square.f3, ShapeColour.red),
-    ]);
+    );
     session.forward();
-    expect(shapesOnBoard(session, threat), isEmpty);
+    expect(threatOnBoard(session, threat), isNull);
   });
 
   test('the threat is not drawn while the rest of the game is hidden', () {
@@ -55,9 +70,9 @@ void main() {
     // A solitaire game or a puzzle shows the game only as far as the move
     // under the cursor: the threat would point at the answer.
     session.showOnlyTo(session.cursor);
-    expect(shapesOnBoard(session, threat), isEmpty);
+    expect(threatOnBoard(session, threat), isNull);
     session.showOnlyTo(null);
-    expect(shapesOnBoard(session, threat), hasLength(1));
+    expect(threatOnBoard(session, threat), isNotNull);
   });
 
   test(
@@ -77,7 +92,7 @@ void main() {
         0,
       );
       expect(drawsIntoComment(session, editing: false), isFalse);
-      expect(shapesOnBoard(session, null), isEmpty);
+      expect(shapesOnBoard(session), isEmpty);
 
       final readOnly = await openSession(blackChapter, readOnly: 'outside');
       addTearDown(readOnly.dispose);
