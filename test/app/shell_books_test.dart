@@ -102,7 +102,11 @@ void main() {
     await w.pumpShell(tester);
     await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
-    // The builder shows the explorer as the book under the moves.
+    // The builder's book starts shut: its button shows the explorer under
+    // the moves.
+    expect(find.byType(ExplorerPane), findsNothing);
+    await tester.tap(find.byTooltip('Show the opening book under the moves'));
+    await tester.pumpAndSettle();
     expect(find.byType(ExplorerPane), findsOneWidget);
     await tester.tap(find.text('Book').first);
     await tester.pumpAndSettle();

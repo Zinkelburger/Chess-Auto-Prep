@@ -302,7 +302,7 @@ Quirks worth a verdict:
   unintuitive, 2026-09-22), with `Filters ▾` at the row's end for the chosen source's chips,
   folded by default and always labelled `Filters` (the owner found the summary noisy,
   2026-10-01); Masters has none and shows no button. In the Repertoire builder the book
-  button leading the nav row shows this explorer under the moves instead (on by default). The sources are `Masters`, `Lichess`
+  button leading the nav row shows this explorer under the moves instead (shut until pressed, since 2026-10-01: the builder starts as Moves beside Expectimax and nothing else). The sources are `Masters`, `Lichess`
   (speed and rating chips), `TWIC` (`Classical OTB only`; the one source that works offline, and
   only with a local master database), `This file` (the games the viewer has open) and `My games`
   (the player-analysis corpus). The body is the

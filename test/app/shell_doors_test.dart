@@ -229,7 +229,11 @@ void main() {
     w.session.forward();
     final ply = w.explorer.ply;
     expect(ply, greaterThan(0));
-    // The builder shows the explorer as the book under the moves.
+    // The builder's book starts shut: its button shows the explorer under
+    // the moves.
+    expect(find.byType(ExplorerPane), findsNothing);
+    await tester.tap(find.byTooltip('Show the opening book under the moves'));
+    await tester.pumpAndSettle();
     expect(find.byType(ExplorerPane), findsOneWidget);
     await tester.ensureVisible(find.textContaining('Carlsen, M'));
     await tester.tap(find.textContaining('Carlsen, M'));
@@ -255,7 +259,11 @@ void main() {
     await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
     w.lichess.pgn = null;
-    // The builder shows the explorer as the book under the moves.
+    // The builder's book starts shut: its button shows the explorer under
+    // the moves.
+    expect(find.byType(ExplorerPane), findsNothing);
+    await tester.tap(find.byTooltip('Show the opening book under the moves'));
+    await tester.pumpAndSettle();
     expect(find.byType(ExplorerPane), findsOneWidget);
     await tester.ensureVisible(find.textContaining('Carlsen, M'));
     await tester.tap(find.textContaining('Carlsen, M'));

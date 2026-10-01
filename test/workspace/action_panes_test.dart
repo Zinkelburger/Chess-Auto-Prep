@@ -56,12 +56,12 @@ Finder tabIn(int index, String name) =>
 
 void main() {
   testWidgets('the builder starts with Moves beside Expectimax and the '
-      'book switched on under the moves', (tester) async {
+      'book shut', (tester) async {
     final layout = await pumpPanes(tester);
     layout.startBuilding();
     await tester.pumpAndSettle();
     expect(layout.count, 2);
-    expect(layout.book?.value, isTrue);
+    expect(layout.book?.value, isFalse);
     expect(find.text('Body 0 Moves'), findsOneWidget);
     expect(find.text('Body 1 Expectimax'), findsOneWidget);
     final moves = tester.getRect(pane(0));

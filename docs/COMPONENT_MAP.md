@@ -76,7 +76,7 @@ Bughouse mode is offered when its engine assets are present.
 - The Repertoire builder starts with two panes: Moves on the left, Expectimax
   on the right (`ActionLayout.startBuilding`). As on Lichess, a book button
   leading the nav row shows the main Explorer under the moves
-  (`ActionLayout.book`, on by default). Requests for a tab
+  (`ActionLayout.book`, shut until pressed). Requests for a tab
   (`ActionLayout.reveal`) bring it up in the pane that already has it. The
   Explorer's narrowing folds under a button always labelled Filters
   (`ui/fold_button.dart`).
