@@ -1,3 +1,4 @@
+import { ExpectimaxTables } from './expectimax';
 /** Bughouse Lab's UI. Rules and inference remain in one reusable worker. */
 import {
   BOARDS, Boards, LineView, Lines, PIECE_NAMES, SEAT, SetupBoxes, squaresOf,
@@ -110,6 +111,8 @@ async function position(): Promise<Position> {
   }
   return result!;
 }
+const expectimax = new ExpectimaxTables(el('bh-expectimax'), (board, uci) => { choosePlay(board, [uci]); });
+
 async function load(): Promise<boolean> {
   if (busy) return false;
   const asked = lines.snapshot();
@@ -117,6 +120,7 @@ async function load(): Promise<boolean> {
   try {
     const next = await position();
     state = next; accepted = asked;
+    void expectimax.load(state.dual_fen);
     boards.deselect(); setup.error(''); clearResult();
     setup.fill(state.dual_fen);
     status('Move on either board, or ask Hivemind for a move.');

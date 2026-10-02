@@ -1,5 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
+import '../styles/bughouse-expectimax.css';
 import BughouseBoards from '../components/BughouseBoards.astro';
 import '../styles/bughouse-board.css';
 import '../styles/bughouse.css';
@@ -62,6 +63,7 @@ const CHOICES = [
         </div>
       </form>
       <div id="bh-result" class="bh-result" aria-live="polite"></div>
+      <section id="bh-expectimax" class="bh-expectimax" aria-label="Saved expectimax" aria-live="polite"></section>
       <details class="bh-keyboard"><summary>Enter a move with keyboard</summary>
       <form id="bh-move-form" class="bh-move-entry" aria-label="Enter a move">
         <label for="bh-move-board">Play on</label>

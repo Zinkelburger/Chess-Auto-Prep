@@ -17,7 +17,12 @@ BughouseBackend backend({
     final legal = p.legalMoves(b);
     return {for (final m in legal) m.uci: 1 / legal.length};
   },
-  evaluate: (_) async => value == null ? .1 : await value(),
+  evaluate: (p, b) async => (
+    value: value == null ? .1 : await value(),
+    best: p.legalMoves(b).first.uci,
+    nodes: 1500,
+    depth: 8,
+  ),
   close: () async => close?.call(),
 );
 
@@ -28,7 +33,7 @@ void main() {
     final lab = BughouseLab();
     final owner = BughouseExpectimaxSearch(
       lab: lab,
-      startBackend: () async => backend(),
+      startBackend: (_) async => backend(),
     );
     addTearDown(owner.dispose);
     addTearDown(lab.dispose);
@@ -45,8 +50,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('bughouse-expectimax-run')));
     await tester.pumpAndSettle();
     expect(owner.complete, isTrue);
-    expect(owner.rows, hasLength(20));
-    expect(find.text('Expected'), findsOneWidget);
+    expect(owner.rows, hasLength(4));
+    expect(find.text('Exp W'), findsOneWidget);
     expect(find.textContaining('no clocks or sitting'), findsOneWidget);
     expect(find.text('Play move'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -61,7 +66,7 @@ void main() {
     final lab = BughouseLab();
     final owner = BughouseExpectimaxSearch(
       lab: lab,
-      startBackend: () async => backend(),
+      startBackend: (_) async => backend(),
     );
     await owner.start();
     lab.setClock(ClockCase.abMaySit);
@@ -71,7 +76,7 @@ void main() {
     expect(owner.rows, isEmpty);
     await owner.start();
     expect(owner.team, Team.cd);
-    expect(owner.rows.first.child.expected, closeTo(-.1, 1e-9));
+    expect(owner.rows.first.child.white, closeTo(-.1, 1e-9));
     owner.dispose();
     lab.dispose();
   });
@@ -84,7 +89,7 @@ void main() {
       var closed = 0;
       final owner = BughouseExpectimaxSearch(
         lab: lab,
-        startBackend: () => ready.future,
+        startBackend: (_) => ready.future,
       );
       final work = owner.start();
       await Future<void>.delayed(Duration.zero);
@@ -107,7 +112,7 @@ void main() {
       var starts = 0;
       final owner = BughouseExpectimaxSearch(
         lab: lab,
-        startBackend: () async {
+        startBackend: (_) async {
           starts++;
           return starts == 1 ? backend(value: () => ready.future) : backend();
         },
@@ -131,7 +136,7 @@ void main() {
     final lab = BughouseLab();
     final owner = BughouseExpectimaxSearch(
       lab: lab,
-      startBackend: () async => throw StateError('CrazyAra missing'),
+      startBackend: (_) async => throw StateError('CrazyAra missing'),
     );
     await owner.start();
     expect(owner.problem, contains('CrazyAra missing'));

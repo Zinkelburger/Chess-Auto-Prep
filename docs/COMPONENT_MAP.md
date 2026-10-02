@@ -138,3 +138,22 @@ save/reopen, conflict, process-kill and recovery tests remain.
 - Platform runners, `packages/document_file_io`, engine assets/updaters,
   `tools/mcp/`, `tools/bughouse_db/` and the separate `tree_builder/` prototype
   retain their own responsibilities. See [tooling](agents/tooling.md).
+
+### Bughouse practical search
+
+- `chess/bughouse/expectimax.dart` expands Hivemind best + top four human moves
+  above 1%, backing up both prepared colours in the same tree. See
+  [Bughouse expectimax](ALGORITHM.md#bughouse-expectimax) for the score convention,
+  unexpanded probability, calibration and limitations.
+- `engines/crazyara_engine.dart`, `engines/bughouse_backend.dart` and Hivemind's
+  `inspect` protocol provide policy and searched evaluations under the engine
+  supervisor. `tools/setup_crazyara.py` installs the optional pinned Linux runtime.
+- `features/bughouse/expectimax_search.dart` owns cancellation and progress;
+  `expectimax_panel.dart` shows Played, Eval, Exp W and Exp B, with replies for
+  the selected move. `storage/bughouse_expectimax.dart` owns evaluation checkpoints
+  and complete snapshots in `bughouse_expectimax.db`.
+- `tools/bughouse_db/expectimax.py` seeds/supervises a resumable queue;
+  `tools/build_bughouse_expectimax.dart` runs the production Dart implementation.
+  The API reader/importer is `python/twic-position-finder/bughouse_expectimax.py`;
+  `frontend/src/bughouse/expectimax.ts` renders the shared snapshots on both
+  bughouse web pages.

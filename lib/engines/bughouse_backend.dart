@@ -10,7 +10,9 @@ final class BughouseBackend {
     required this.policy,
     required this.evaluate,
     required this.close,
+    this.identity = 'scripted',
   });
+  final String identity;
   final BughousePolicy policy;
   final BughouseValue evaluate;
   final Future<void> Function() close;
@@ -18,6 +20,7 @@ final class BughouseBackend {
   static Future<BughouseBackend> start({
     required Future<CrazyaraProcess> Function() crazyara,
     required Future<HivemindStart> Function() hivemind,
+    int nodes = 1500,
   }) async {
     final policy = await crazyara();
     try {
@@ -29,8 +32,11 @@ final class BughouseBackend {
         throw const EngineFailure('This Hivemind cannot evaluate positions.');
       }
       return BughouseBackend(
+        identity:
+            '${engine.provenance['engine_sha256']}:${engine.provenance['network_sha256']}',
         policy: policy.policy,
-        evaluate: (engine as HivemindValue).evaluate,
+        evaluate: (position, board) =>
+            (engine as HivemindValue).inspect(position, board, nodes),
         close: () async {
           await Future.wait([policy.quit(), engine.quit()]);
         },

@@ -230,9 +230,10 @@ LabModes wireLabModes(AppEnvironment env) {
     lab: lab,
     expectimax: BughouseExpectimaxSearch(
       lab: lab,
-      startBackend: () {
+      book: env.bughouseExpectimaxBook,
+      startBackend: (nodes) {
         if (search.engineOn) search.toggleEngine();
-        return env.launchBughouseSearch();
+        return env.launchBughouseSearch(nodes);
       },
     ),
     search: search,

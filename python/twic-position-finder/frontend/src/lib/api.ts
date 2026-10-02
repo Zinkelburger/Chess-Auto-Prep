@@ -295,6 +295,7 @@ export interface BookPosition {
   teams: Team[];
   moves: BookMove[];
   picks: BookPick[];
+  expectimax?: BughouseExpectimaxTables;
   /** `computers`: how many computers have analysed it; the first one's scores are shown. */
   meta: { source: string; engine: string; nodes: number; child_nodes: number; created_at: number; computers: number } | null;
 }
@@ -344,4 +345,19 @@ export function hideAlert(el: HTMLElement): void {
 export function messageOf(err: unknown, fallback = 'Something went wrong.'): string {
   if (err instanceof ApiError) return err.message;
   return fallback;
+}
+
+
+export interface BughouseExpectedMove {
+  uci: string; san: string; probability: number;
+  eval: number; white: number; black: number; coverage: number;
+  nodes: number; depth: number | null; replies: BughouseExpectedMove[];
+}
+export interface BughouseExpectimax {
+  model: string; plies: number; nodes: number; updated: number;
+  perspective: 'white-on-selected-board'; rows: BughouseExpectedMove[];
+}
+export type BughouseExpectimaxTables = Record<'A' | 'B', BughouseExpectimax | null>;
+export function bughouseExpectimax(fen: string): Promise<BughouseExpectimaxTables> {
+  return request(`/api/bughousedb/expectimax?fen=${encodeURIComponent(fen)}`);
 }

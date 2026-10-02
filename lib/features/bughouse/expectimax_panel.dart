@@ -22,9 +22,10 @@ class BughouseExpectimaxPanel extends StatelessWidget {
       children: [
         _controls(context),
         Text(
-          '${search.board.label} · ${search.team.label} · no clocks or sitting',
+          '${search.board.label} · no clocks or sitting',
           style: Theme.of(context).textTheme.bodySmall,
         ),
+        const Text('White / Black expectimax · scores from White’s side.'),
         const Text('Partner board fixed; captures still feed its pockets.'),
         SizedBox(
           height: labStatusHeight,
@@ -81,9 +82,7 @@ class BughouseExpectimaxPanel extends StatelessWidget {
         ],
       ),
       ExpansionTile(
-        title: Text(
-          '${search.plies} plies · ${search.coveragePercent}% replies',
-        ),
+        title: Text('${search.plies} plies · ${search.nodes} Hivemind nodes'),
         tilePadding: EdgeInsets.zero,
         children: [
           _number(
@@ -94,21 +93,14 @@ class BughouseExpectimaxPanel extends StatelessWidget {
             (n) => search.configure(plies: n),
           ),
           _number(
-            'Reply coverage %',
-            search.coveragePercent,
-            50,
+            'Hivemind nodes',
+            search.nodes,
             100,
-            (n) => search.configure(coverage: n),
-          ),
-          _number(
-            'Maximum replies',
-            search.maxReplies,
-            1,
-            128,
-            (n) => search.configure(maxReplies: n),
+            30000,
+            (n) => search.configure(nodes: n),
           ),
           const Text(
-            'Every own move is considered. Unsearched replies retain the position’s static value. Stops at 10,000 evaluated positions.',
+            'Hivemind’s best move + top 4 policy moves above 1%. Unsearched reply mass retains the searched value. Stops at 10,000 positions.',
           ),
         ],
       ),
@@ -128,6 +120,7 @@ class BughouseExpectimaxPanel extends StatelessWidget {
       child: NumberField(
         label: label,
         value: value,
+        step: max > 100 ? 100 : 1,
         min: min,
         max: max,
         onChanged: change,
@@ -144,22 +137,22 @@ class BughouseExpectimaxPanel extends StatelessWidget {
         const Expanded(child: Text('Move')),
         _heading(
           'Played',
-          'CrazyAra’s estimated human move frequency.',
+          'Calibrated CrazyAra policy: a proxy for human moves, not a human-trained model.',
           searchShareWidth,
         ),
         _heading(
           'Eval',
-          'Static Hivemind evaluation for the moving team. Its own scale, not pawns or win odds.',
+          'Searched Hivemind evaluation from White’s side. Its own scale, not pawns or win odds.',
           searchValueWidth,
         ),
         _heading(
-          'Expected',
-          'Best continuations for us; probability-weighted replies for them. Higher is better.',
+          'Exp W',
+          'Expectimax White: White chooses best continuations, Black follows human probabilities. Higher is better for White.',
           searchValueWidth,
         ),
         _heading(
-          'Lift',
-          'Expected minus static value: the gain from practical chances.',
+          'Exp B',
+          'Expectimax Black: Black chooses best continuations, White follows human probabilities. Lower is better for Black.',
           searchValueWidth,
         ),
       ],
@@ -201,16 +194,8 @@ class BughouseExpectimaxPanel extends StatelessWidget {
                 searchShareWidth,
               ),
               _numberCell(_score(row.child.evaluation), searchValueWidth),
-              _numberCell(_score(row.child.expected), searchValueWidth),
-              _numberCell(
-                _score(row.child.expected) == _score(row.child.evaluation)
-                    ? '0.00'
-                    : _signed(
-                        scoreOf(row.child.expected) -
-                            scoreOf(row.child.evaluation),
-                      ),
-                searchValueWidth,
-              ),
+              _numberCell(_score(row.child.white), searchValueWidth),
+              _numberCell(_score(row.child.black), searchValueWidth),
             ],
           ),
         ),
@@ -251,7 +236,12 @@ class BughouseExpectimaxPanel extends StatelessWidget {
                 '${(reply.probability * 100).toStringAsFixed(1)}%',
                 searchShareWidth,
               ),
-              _numberCell(_score(reply.child.expected), searchValueWidth),
+              _numberCell(
+                _score(
+                  reply.child.prepared(search.lab.position.turn(search.board)),
+                ),
+                searchValueWidth,
+              ),
             ],
           ),
         ),
@@ -260,7 +250,7 @@ class BughouseExpectimaxPanel extends StatelessWidget {
         style: Theme.of(context).textTheme.bodySmall,
       ),
       Text(
-        'CrazyAra calibrated on FICS · Hivemind values',
+        'CrazyAra calibrated on FICS · Hivemind depth ${row.child.depth ?? 'mate'}, ${row.child.nodes} nodes',
         style: Theme.of(context).textTheme.bodySmall,
       ),
     ],

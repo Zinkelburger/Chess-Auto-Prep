@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../chess/bughouse/expectimax.dart';
+import '../../storage/bughouse_expectimax.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import '../../chess/bughouse/table.dart';
 import '../../engines/bughouse_backend.dart';
 import 'bughouse_lab.dart';
@@ -10,18 +12,23 @@ import 'bughouse_lab.dart';
 /// Owns a cancellable search snapshot. Board edits invalidate its rows; flips,
 /// hover and the old engine panel's clock selector do not affect this model.
 final class BughouseExpectimaxSearch extends ChangeNotifier {
-  BughouseExpectimaxSearch({required this.lab, required this.startBackend}) {
+  BughouseExpectimaxSearch({
+    required this.lab,
+    required this.startBackend,
+    this.book,
+  }) {
     _position = lab.position.keyText;
     lab.addListener(_changed);
+    unawaited(_loadSaved());
   }
 
   final BughouseLab lab;
-  final Future<BughouseBackend> Function() startBackend;
+  final Future<BughouseBackend> Function(int nodes) startBackend;
+  final BughouseExpectimaxBook? book;
   String _position = '';
   BoardNumber board = BoardNumber.one;
   int plies = 2;
-  int maxReplies = 24;
-  int coveragePercent = 90;
+  int nodes = 1500;
   bool running = false;
   bool complete = false;
   bool _disposed = false;
@@ -38,18 +45,13 @@ final class BughouseExpectimaxSearch extends ChangeNotifier {
 
   Team get team => lab.position.mover(board).team;
 
-  void configure({
-    BoardNumber? board,
-    int? plies,
-    int? maxReplies,
-    int? coverage,
-  }) {
+  void configure({BoardNumber? board, int? plies, int? nodes}) {
     if (running) return;
     this.board = board ?? this.board;
     this.plies = plies ?? this.plies;
-    this.maxReplies = maxReplies ?? this.maxReplies;
-    coveragePercent = coverage ?? coveragePercent;
+    this.nodes = nodes ?? this.nodes;
     _clear();
+    unawaited(_loadSaved());
     _notify();
   }
 
@@ -65,6 +67,7 @@ final class BughouseExpectimaxSearch extends ChangeNotifier {
     _position = position;
     stop();
     _clear();
+    unawaited(_loadSaved());
     _notify();
   }
 
@@ -79,17 +82,41 @@ final class BughouseExpectimaxSearch extends ChangeNotifier {
     status = 'Search the position for practical chances.';
   }
 
+  Future<void> _loadSaved() async {
+    if (book == null || _disposed || running) return;
+    final generation = ++_generation;
+    try {
+      final saved = await book!.load(
+        lab.position,
+        board,
+        BughouseSearchOptions(plies: plies, nodes: nodes),
+      );
+      if (_disposed || generation != _generation || saved == null) return;
+      rows = [...saved]
+        ..sort(
+          (a, b) => lab.position.turn(board) == Side.white
+              ? b.child.white.compareTo(a.child.white)
+              : a.child.black.compareTo(b.child.black),
+        );
+      total = saved.length;
+      complete = true;
+      selected = rows.firstOrNull;
+      status = 'Saved · ${rows.length} moves · both colours';
+      _notify();
+    } on Object catch (error) {
+      if (_disposed || generation != _generation) return;
+      problem = 'Could not read saved expectimax: $error';
+      _notify();
+    }
+  }
+
   Future<void> start() {
     if (running || _disposed) return _work;
     final before = _work;
     final generation = ++_generation;
     final root = lab.position;
     final chosenBoard = board;
-    final options = BughouseSearchOptions(
-      plies: plies,
-      maxReplies: maxReplies,
-      replyCoverage: coveragePercent / 100,
-    );
+    final options = BughouseSearchOptions(plies: plies, nodes: nodes);
     _clear();
     running = true;
     total = root.legalMoves(chosenBoard).length;
@@ -110,12 +137,26 @@ final class BughouseExpectimaxSearch extends ChangeNotifier {
     try {
       await before;
       if (!current()) return;
-      backend = await startBackend();
+      final saved = await book?.load(root, chosenBoard, options);
+      if (!current()) return;
+      if (saved != null) {
+        rows = [...saved]
+          ..sort(
+            (a, b) => lab.position.turn(board) == Side.white
+                ? b.child.white.compareTo(a.child.white)
+                : a.child.black.compareTo(b.child.black),
+          );
+        total = saved.length;
+        complete = true;
+        selected = rows.firstOrNull;
+        status = 'Saved · ${rows.length} moves · both colours';
+        return;
+      }
+      backend = await startBackend(options.nodes);
       if (!current()) return;
       _backend = backend;
       final search = BughouseExpectimax(
         board: chosenBoard,
-        team: root.mover(chosenBoard).team,
         policy: backend.policy,
         evaluate: backend.evaluate,
         options: options,
@@ -132,7 +173,12 @@ final class BughouseExpectimaxSearch extends ChangeNotifier {
       await for (final row in search.search(root)) {
         if (!current()) break;
         rows = [...rows, row]
-          ..sort((a, b) => b.child.expected.compareTo(a.child.expected));
+          ..sort(
+            (a, b) => root.turn(chosenBoard) == Side.white
+                ? b.child.white.compareTo(a.child.white)
+                : a.child.black.compareTo(b.child.black),
+          );
+        total = search.rootCandidates;
         positions = search.positions;
         minimumCoverage = search.minimumCoverage;
         status = '${rows.length} / $total moves · $positions positions';
@@ -144,11 +190,13 @@ final class BughouseExpectimaxSearch extends ChangeNotifier {
             ? 'No moves to search: the position has ended.'
             : 'Complete · ${rows.length} moves · $positions positions';
         selected = rows.firstOrNull;
+        await book?.save(root, chosenBoard, options, rows);
       }
     } on BughouseSearchStopped catch (e) {
       if (current()) status = '${e.reason} · ${rows.length} / $total moves';
     } on Object catch (e) {
       if (current()) {
+        complete = false;
         problem = '$e';
         status = 'Search failed';
       }

@@ -24,36 +24,36 @@ void main() {
         };
       }
 
-      Future<double> evaluate(TablePosition p) async {
+      double raw(TablePosition p) {
         if (p.one.board.pieceAt(Square.e4)?.role != Role.pawn) return .1;
         if (p.one.board.pieceAt(Square.d5) != null) return .8;
         if (p.one.board.pieceAt(Square.e5) != null) return -.8;
         return -.2;
       }
 
-      Future<BughouseBranch> e4(double coverage) async {
-        final search = BughouseExpectimax(
-          board: BoardNumber.one,
-          team: Team.ab,
-          policy: policy,
-          evaluate: evaluate,
-          options: BughouseSearchOptions(replyCoverage: coverage),
-          cancelled: () => false,
-        );
-        final rows = await search.search(TablePosition.initial).toList();
-        expect(rows.length, 20);
-        rows.sort((a, b) => b.child.expected.compareTo(a.child.expected));
-        expect(rows.first.move.uci, 'e2e4');
-        return rows.first;
-      }
-
-      final all = await e4(1);
-      expect(all.child.evaluation, -.2);
-      expect(all.child.expected, closeTo(.64, 1e-9));
-      final cut = await e4(.9);
-      expect(cut.child.coverage, closeTo(.9, 1e-9));
-      expect(cut.child.expected, closeTo(.9 * .8 + .1 * -.2, 1e-9));
-      expect(cut.child.branches.length, 1);
+      Future<BughouseEvaluation> evaluate(
+        TablePosition p,
+        BoardNumber b,
+      ) async => (
+        value: raw(p),
+        best: p.play(b, 'e2e4') != null ? 'e2e4' : p.legalMoves(b).first.uci,
+        nodes: 1500,
+        depth: 8,
+      );
+      final search = BughouseExpectimax(
+        board: BoardNumber.one,
+        policy: policy,
+        evaluate: evaluate,
+        options: const BughouseSearchOptions(),
+        cancelled: () => false,
+      );
+      final rows = await search.search(TablePosition.initial).toList();
+      expect(rows.length, lessThanOrEqualTo(5));
+      final row = rows.firstWhere((r) => r.move.uci == 'e2e4');
+      expect(row.child.evaluation, -.2);
+      expect(row.child.white, closeTo(.64, 1e-9));
+      expect(row.child.black, -.8);
+      expect(row.child.coverage, closeTo(1, 1e-9));
     },
   );
 
@@ -67,42 +67,61 @@ void main() {
       TablePosition? captured;
       final search = BughouseExpectimax(
         board: BoardNumber.two,
-        team: Team.cd,
+
         policy: uniform,
-        evaluate: (position) async {
+        evaluate: (position, b) async {
           if (position.two.board.pieceAt(Square.d5)?.color == Side.white)
             captured = position;
-          return -.4;
+          return (
+            value: -.4,
+            best:
+                position.play(b, 'e4d5')?.move.uci ??
+                position.legalMoves(b).first.uci,
+            nodes: 1500,
+            depth: 8,
+          );
         },
         options: const BughouseSearchOptions(plies: 1),
         cancelled: () => false,
       );
       final rows = await search.search(p).toList();
-      expect(rows.every((r) => r.child.expected == .4), isTrue);
+      expect(rows.every((r) => r.child.white == .4), isTrue);
       expect(captured!.one.pockets!.of(Side.black, Role.pawn), 1);
       expect(captured!.two.pockets!.of(Side.white, Role.pawn), 0);
     },
   );
 
-  test('own turns maximize at deeper plies, not average', () async {
-    final search = BughouseExpectimax(
-      board: BoardNumber.one,
-      team: Team.ab,
-      policy: uniform,
-      evaluate: (p) async =>
-          p.one.board.pieceAt(Square.f3)?.role == Role.knight ? .8 : -.2,
-      options: const BughouseSearchOptions(
-        plies: 3,
-        maxReplies: 1,
-        replyCoverage: .01,
-      ),
-      cancelled: () => false,
-    );
-    final rows = await search.search(TablePosition.initial).toList();
-    final e4 = rows.firstWhere((r) => r.move.uci == 'e2e4');
-    expect(e4.child.branches.single.child.expected, .8);
-    expect(e4.child.branches.single.child.branches.length, greaterThan(1));
-  });
+  test(
+    'candidate beam retains engine choice below 1%, excludes other rare moves',
+    () {
+      final p = TablePosition.initial;
+      final legal = p.legalMoves(BoardNumber.one);
+      final probabilities = {for (final m in legal) m.uci: .001};
+      for (final (i, m) in legal.take(5).indexed) {
+        probabilities[m.uci] = .3 - i * .04;
+      }
+      probabilities['e2e4'] = .001;
+      final moves = bughouseCandidates(
+        p,
+        BoardNumber.one,
+        probabilities,
+        'e2e4',
+      );
+      expect(moves.length, 5);
+      expect(moves.map((m) => m.uci), contains('e2e4'));
+      expect(moves.map((m) => m.uci), isNot(contains(legal[4].uci)));
+      probabilities[legal[0].uci] = .01;
+      expect(
+        bughouseCandidates(
+          p,
+          BoardNumber.one,
+          probabilities,
+          'e2e4',
+        ).map((m) => m.uci),
+        isNot(contains(legal[0].uci)),
+      );
+    },
+  );
 
   test('terminal mate is decisive without calling a network', () async {
     const fen = '6k1/5ppp/8/8/8/8/5PPP/6K1[Q] w - - 0 1';
@@ -112,14 +131,19 @@ void main() {
     );
     final search = BughouseExpectimax(
       board: BoardNumber.one,
-      team: Team.ab,
+
       policy: uniform,
-      evaluate: (_) async => 0,
+      evaluate: (p, b) async => (
+        value: 0.0,
+        best: p.play(b, 'Q@e8')?.move.uci ?? p.legalMoves(b).first.uci,
+        nodes: 1500,
+        depth: 8,
+      ),
       options: const BughouseSearchOptions(plies: 1),
       cancelled: () => false,
     );
     final rows = await search.search(p).toList();
-    expect(rows.firstWhere((r) => r.move.uci == 'Q@e8').child.expected, 1);
+    expect(rows.firstWhere((r) => r.move.uci == 'Q@e8').child.white, 1);
   });
 
   test(
@@ -129,9 +153,14 @@ void main() {
       BughouseExpectimax search(BughousePolicy policy, int limit) =>
           BughouseExpectimax(
             board: BoardNumber.one,
-            team: Team.ab,
+
             policy: policy,
-            evaluate: (_) async => 0,
+            evaluate: (p, b) async => (
+              value: 0.0,
+              best: p.play(b, 'Q@e8')?.move.uci ?? p.legalMoves(b).first.uci,
+              nodes: 1500,
+              depth: 8,
+            ),
             options: BughouseSearchOptions(maxPositions: limit),
             cancelled: () => stopped,
           );

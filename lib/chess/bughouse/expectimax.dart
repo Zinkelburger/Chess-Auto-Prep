@@ -1,30 +1,32 @@
-/// A single-board expectimax tree with real cross-board capture transfers.
-/// Values are calibrated Hivemind Q, from the root mover's team, not win odds.
+/// Both prepared colours backed up over one pruned bughouse tree.
 library;
 
 import 'dart:math' as math;
-
+import 'package:dartchess/dartchess.dart' show Side;
 import 'table.dart';
 
 typedef BughousePolicy =
-    Future<Map<String, double>> Function(
-      TablePosition position,
-      BoardNumber board,
-    );
-typedef BughouseValue = Future<double> Function(TablePosition position);
+    Future<Map<String, double>> Function(TablePosition, BoardNumber);
+typedef BughouseEvaluation = ({
+  double value,
+  String? best,
+  int nodes,
+  int? depth,
+});
+typedef BughouseValue =
+    Future<BughouseEvaluation> Function(TablePosition, BoardNumber);
 
 final class BughouseSearchOptions {
   const BughouseSearchOptions({
     this.plies = 2,
-    this.replyCoverage = .9,
-    this.maxReplies = 24,
+    this.nodes = 1500,
     this.maxPositions = 10000,
   });
-
   final int plies;
-  final double replyCoverage;
-  final int maxReplies;
+  final int nodes;
   final int maxPositions;
+  static const model = 'crazyara-os96-t1.5-hivemind-search-v2';
+  String get key => '$model:$plies:$nodes';
 }
 
 final class BughouseBranch {
@@ -38,20 +40,28 @@ final class BughouseNode {
   const BughouseNode({
     required this.position,
     required this.evaluation,
-    required this.expected,
+    required this.white,
+    required this.black,
     this.branches = const [],
     this.coverage = 1,
+    this.nodes = 0,
+    this.depth,
   });
-
   final TablePosition position;
-  final double evaluation;
-  final double expected;
-  final List<BughouseBranch> branches;
 
-  /// Probability actually expanded at this chance node. Unexpanded mass
-  /// retains this position's static value, rather than being renormalized away.
+  /// All three values are from White's perspective on the selected board.
+  final double evaluation;
+
+  /// White chooses best continuations; Black follows the human distribution.
+  final double white;
+
+  /// Black chooses best continuations; White follows the human distribution.
+  final double black;
+  final List<BughouseBranch> branches;
   final double coverage;
-  double get lift => expected - evaluation;
+  final int nodes;
+  final int? depth;
+  double prepared(Side side) => side == Side.white ? white : black;
 }
 
 final class BughouseSearchStopped implements Exception {
@@ -59,63 +69,84 @@ final class BughouseSearchStopped implements Exception {
   final String reason;
 }
 
-/// One run. Every own legal move is kept. Opponent moves are expanded in
-/// probability order to the coverage/count limits, with the tail valued at
-/// the current position. No partner moves, sitting or clock state are inputs.
+/// The engine's best move plus the four most probable moves above 1%, deduped.
+/// The best move is retained even when the policy gives it <=1% probability.
+List<TableMove> bughouseCandidates(
+  TablePosition p,
+  BoardNumber board,
+  Map<String, double> probabilities,
+  String? best,
+) {
+  final legal = p.legalMoves(board);
+  final ranked = [...legal]
+    ..sort((a, b) => probabilities[b.uci]!.compareTo(probabilities[a.uci]!));
+  final chosen = <String>{
+    if (best != null && legal.any((m) => m.uci == best)) best,
+    ...ranked
+        .where((m) => probabilities[m.uci]! > .01)
+        .take(4)
+        .map((m) => m.uci),
+  };
+  return [for (final uci in chosen) legal.firstWhere((m) => m.uci == uci)];
+}
+
 final class BughouseExpectimax {
   BughouseExpectimax({
     required this.board,
-    required this.team,
     required this.policy,
     required this.evaluate,
     required this.options,
     required this.cancelled,
     this.onProgress,
   });
-
   final BoardNumber board;
-  final Team team;
   final BughousePolicy policy;
   final BughouseValue evaluate;
   final BughouseSearchOptions options;
   final bool Function() cancelled;
   final void Function(int positions)? onProgress;
-  final _values = <String, double>{};
+  final _values = <String, BughouseEvaluation>{};
   final _policies = <String, Map<String, double>>{};
   final _nodes = <(String, int), BughouseNode>{};
   int get positions => _values.length;
   double minimumCoverage = 1;
+  int rootCandidates = 0;
 
   void _check() {
     if (cancelled()) throw const BughouseSearchStopped('Stopped');
   }
 
-  Future<double> _value(TablePosition position) async {
+  Future<BughouseEvaluation> _value(TablePosition position) async {
     _check();
     final key = position.keyText;
     if (_values[key] case final value?) return value;
-    if (positions >= options.maxPositions) {
+    if (positions >= options.maxPositions)
       throw const BughouseSearchStopped('Position limit reached');
-    }
-    // Under the no-waiting model, checkmate on either board ends the game.
+    double? terminal;
     for (final b in BoardNumber.values) {
       if (position.board(b).isCheckmate) {
-        return _values[key] = position.mover(b).team == team ? -1 : 1;
+        terminal = position.mover(b).team == Team.ab ? -1 : 1;
       }
     }
-    if (position.legalMoves(board).isEmpty) return _values[key] = 0;
-    final value = await evaluate(position);
+    if (terminal == null && position.legalMoves(board).isEmpty) terminal = 0;
+    final answer = terminal == null
+        ? await evaluate(position, board)
+        : (value: terminal, best: null, nodes: 0, depth: null);
     _check();
-    if (!value.isFinite || value.abs() > 1.00001) {
-      throw StateError('Hivemind returned an invalid position value.');
-    }
-    _values[key] = team == Team.ab ? value : -value;
+    if (!answer.value.isFinite || answer.value.abs() > 1.00001)
+      throw StateError('Invalid Hivemind value');
+    // Network values are AB; the table always reads White on the selected board.
+    _values[key] = (
+      value: board == BoardNumber.one ? answer.value : -answer.value,
+      best: answer.best,
+      nodes: answer.nodes,
+      depth: answer.depth,
+    );
     onProgress?.call(positions);
     return _values[key]!;
   }
 
   Future<Map<String, double>> _policy(TablePosition position) async {
-    _check();
     final key = position.board(board).fen;
     if (_policies[key] case final known?) return known;
     final answer = await policy(position, board);
@@ -131,23 +162,17 @@ final class BughouseExpectimax {
     return _policies[key] = answer;
   }
 
-  /// A complete root row arrives as soon as its subtree has been evaluated.
-  /// Cancellation keeps completed rows, never an unfinished weighted sum.
+  bool _terminal(TablePosition p) =>
+      p.legalMoves(board).isEmpty ||
+      BoardNumber.values.any((b) => p.board(b).isCheckmate);
+
   Stream<BughouseBranch> search(TablePosition root) async* {
-    if (options.plies < 1 ||
-        options.maxReplies < 1 ||
-        options.replyCoverage <= 0 ||
-        options.replyCoverage > 1) {
-      throw ArgumentError('Invalid bughouse search limits');
-    }
-    if (root.mover(board).team != team) {
-      throw ArgumentError('The prepared team must be on move');
-    }
-    await _value(root);
-    if (BoardNumber.values.any((b) => root.board(b).isCheckmate)) return;
+    if (options.plies < 1) throw ArgumentError('Invalid search depth');
+    final value = await _value(root);
+    if (_terminal(root)) return;
     final probabilities = await _policy(root);
-    final moves = root.legalMoves(board)
-      ..sort((a, b) => probabilities[b.uci]!.compareTo(probabilities[a.uci]!));
+    final moves = bughouseCandidates(root, board, probabilities, value.best);
+    rootCandidates = moves.length;
     for (final move in moves) {
       final child = await _visit(
         root.play(board, move.uci)!.after,
@@ -162,50 +187,54 @@ final class BughouseExpectimax {
     final key = (position.keyText, depth);
     if (_nodes[key] case final known?) return known;
     final value = await _value(position);
-    final moves = position.legalMoves(board);
-    if (depth == 0 ||
-        moves.isEmpty ||
-        BoardNumber.values.any((b) => position.board(b).isCheckmate)) {
+    if (depth == 0 || _terminal(position)) {
       return _nodes[key] = BughouseNode(
         position: position,
-        evaluation: value,
-        expected: value,
+        evaluation: value.value,
+        white: value.value,
+        black: value.value,
+        nodes: value.nodes,
+        depth: value.depth,
       );
     }
-    final own = position.mover(board).team == team;
-    final probabilities = own ? <String, double>{} : await _policy(position);
-    if (!own) {
-      moves.sort(
-        (a, b) => probabilities[b.uci]!.compareTo(probabilities[a.uci]!),
-      );
-    }
+    final probabilities = await _policy(position);
+    final moves = bughouseCandidates(
+      position,
+      board,
+      probabilities,
+      value.best,
+    );
     final branches = <BughouseBranch>[];
-    double mass = 0, expected = own ? -1 : 0;
+    double mass = 0, whiteAverage = 0, blackAverage = 0;
+    double bestWhite = -1, bestBlack = 1;
     for (final move in moves) {
-      final chance = own ? 0.0 : probabilities[move.uci]!;
+      final chance = probabilities[move.uci]!;
       final child = await _visit(
         position.play(board, move.uci)!.after,
         depth - 1,
       );
       branches.add(BughouseBranch(move, chance, child));
-      expected = own
-          ? math.max(expected, child.expected)
-          : expected + chance * child.expected;
+      whiteAverage += chance * child.white;
+      blackAverage += chance * child.black;
+      bestWhite = math.max(bestWhite, child.white);
+      bestBlack = math.min(bestBlack, child.black);
       mass += chance;
-      if (!own &&
-          (mass >= options.replyCoverage ||
-              branches.length >= options.maxReplies))
-        break;
     }
-    final coverage = own ? 1.0 : mass.clamp(0.0, 1.0);
+    final coverage = mass.clamp(0.0, 1.0);
     minimumCoverage = math.min(minimumCoverage, coverage);
-    if (!own) expected += (1 - coverage) * value;
+    // Unexpanded mass stays at the current searched value, never disappears.
+    whiteAverage += (1 - coverage) * value.value;
+    blackAverage += (1 - coverage) * value.value;
+    final whiteTurn = position.turn(board) == Side.white;
     return _nodes[key] = BughouseNode(
       position: position,
-      evaluation: value,
-      expected: expected,
+      evaluation: value.value,
+      white: whiteTurn ? bestWhite : whiteAverage,
+      black: whiteTurn ? blackAverage : bestBlack,
       branches: List.unmodifiable(branches),
       coverage: coverage,
+      nodes: value.nodes,
+      depth: value.depth,
     );
   }
 }

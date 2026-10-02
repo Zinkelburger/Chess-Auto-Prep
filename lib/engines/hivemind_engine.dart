@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../chess/bughouse/hivemind.dart';
+import '../chess/bughouse/expectimax.dart';
 import '../chess/bughouse/table.dart';
 import '../diagnostics/log.dart';
 import 'engine.dart';
@@ -114,6 +115,11 @@ abstract interface class Hivemind {
 /// Static, two-seat calibrated Q for A + B, with the clock input fixed off.
 abstract interface class HivemindValue {
   Future<double> evaluate(TablePosition position);
+  Future<BughouseEvaluation> inspect(
+    TablePosition position,
+    BoardNumber board,
+    int nodes,
+  );
 }
 
 /// The conversation with one Hivemind process. It speaks UCI with three
@@ -191,12 +197,67 @@ final class HivemindProcess implements Hivemind, HivemindValue, EngineProcess {
   }
 
   double? _policyValue;
+  double _seatOffset = 0;
 
   @override
   Future<double> evaluate(TablePosition position) {
     final answer = _queue.then((_) => _evaluate(position));
     _queue = answer.then((_) {}, onError: (Object _) {});
     return answer;
+  }
+
+  @override
+  Future<BughouseEvaluation> inspect(
+    TablePosition position,
+    BoardNumber board,
+    int nodes,
+  ) {
+    final answer = _queue.then((_) => _inspect(position, board, nodes));
+    _queue = answer.then((_) {}, onError: (Object _) {});
+    return answer;
+  }
+
+  Future<BughouseEvaluation> _inspect(
+    TablePosition position,
+    BoardNumber board,
+    int nodes,
+  ) async {
+    // The other team may have neither board on move. Static two-seat values
+    // still measure this position's clock offset; search supplies its strength.
+    await _evaluate(position);
+    final team = position.mover(board).team;
+    final answer = await _search((
+      position: position,
+      team: team,
+      maySit: false,
+      mustMove: board == BoardNumber.one ? MustMove.one : MustMove.two,
+      lines: 1,
+      budget: NodeBudget(nodes),
+    ));
+    if (answer is HivemindFailed) throw EngineFailure(answer.reason);
+    final found = answer as HivemindSearched;
+    final top = found.top;
+    if (top == null || (top.q == null && top.mate == null)) {
+      throw const EngineFailure('Hivemind returned no searched evaluation.');
+    }
+    final raw = top.mate == null
+        ? (top.q! - _seatOffset).clamp(-1.0, 1.0)
+        : (top.mate! > 0 ? 1.0 : -1.0);
+    final candidate = found.best?.on(board);
+    final best = candidate == null
+        ? null
+        : position.play(board, candidate)?.move.uci;
+    if (best == null && position.legalMoves(board).isNotEmpty) {
+      throw const EngineFailure(
+        'Hivemind did not choose a move on the selected board.',
+      );
+    }
+    return (
+      value: team == Team.ab ? raw : -raw,
+      best: best,
+      nodes: top.nodes,
+      depth: top.depth,
+    );
   }
 
   Future<double> _evaluate(TablePosition position) async {
@@ -219,6 +280,7 @@ final class HivemindProcess implements Hivemind, HivemindValue, EngineProcess {
         }
         values.add(value);
       }
+      _seatOffset = (values[0] + values[1]) / 2;
       return (values[0] - values[1]) / 2;
     } on TimeoutException {
       await _process.kill();

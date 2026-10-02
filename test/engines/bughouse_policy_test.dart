@@ -12,6 +12,7 @@ final class PolicyPipe implements UciProcess {
   String team = 'white';
   bool omitValue = false;
   bool killed = false;
+  bool searched = false;
   @override
   int get pid => 1234;
   @override
@@ -25,7 +26,16 @@ final class PolicyPipe implements UciProcess {
     if (line == 'setoption name Team value white') team = 'white';
     if (line == 'policy' && !omitValue)
       output.add('Value: ${team == 'white' ? '-0.3' : '-0.7'}');
-    if (line.startsWith('go ')) output.add('bestmove e2e4');
+    if (line.startsWith('go ')) {
+      if (searched) {
+        output.add(
+          'info depth 7 multipv 1 score cp -228 nodes 1523 nps 249 time 981 pv (e2e4,pass)',
+        );
+        output.add('bestmove (e2e4,pass)');
+      } else {
+        output.add('bestmove e2e4');
+      }
+    }
     if (line == 'root') {
       for (final (i, m)
           in TablePosition.initial.legalMoves(BoardNumber.one).indexed) {
@@ -60,6 +70,28 @@ void main() {
         engine.evaluate(TablePosition.initial),
         throwsA(isA<Exception>()),
       );
+      await engine.quit();
+    },
+  );
+
+  test(
+    'searched values use the node budget, selected board and calibrated seat',
+    () async {
+      final pipe = PolicyPipe()..searched = true;
+      final engine = (await HivemindProcess.start(pipe))!;
+      final result = await engine.inspect(
+        TablePosition.initial,
+        BoardNumber.one,
+        1500,
+      );
+      expect(result.best, 'e2e4');
+      expect(result.nodes, 1523);
+      expect(result.depth, 7);
+      expect(result.value, inInclusiveRange(-1.0, 1.0));
+      expect(pipe.sent, contains('go nodes 1500'));
+      expect(pipe.sent, contains('setoption name RequireMoveOn value A'));
+      expect(pipe.sent, contains('setoption name TimeAdvantage value false'));
+      expect(pipe.sent, contains('stop'));
       await engine.quit();
     },
   );
