@@ -87,11 +87,13 @@ abstract base class ModeView {
     PaneTabs<WorkspaceTab> tabs, {
     Explorer? explorer,
     bool opensBeside = false,
+    bool analysisInPanes = false,
   }) : _explorer = explorer,
        layout = ActionLayout(
          tabs,
          explorer ?? workspace.explorer,
          opensBeside: opensBeside,
+         analysisInPanes: analysisInPanes,
        );
 
   final Workspace workspace;
@@ -199,6 +201,7 @@ abstract base class _DocumentModeView extends ModeView {
     this.requests, {
     super.explorer,
     super.opensBeside,
+    super.analysisInPanes,
   });
 
   final WorkspaceRequests requests;
@@ -277,8 +280,13 @@ abstract base class _DocumentModeView extends ModeView {
 /// As in the viewer, a tool picked while the card is one pane opens under
 /// it, so the moves or the lesson stay in view.
 abstract base class _LibraryView extends _DocumentModeView {
-  _LibraryView(super.workspace, super.tabs, super.requests, this._modes)
-    : super(opensBeside: true);
+  _LibraryView(
+    super.workspace,
+    super.tabs,
+    super.requests,
+    this._modes, {
+    super.analysisInPanes,
+  }) : super(opensBeside: true);
 
   final DocumentModes _modes;
 
@@ -325,7 +333,7 @@ final class TrainerView extends _LibraryView {
     Workspace workspace,
     WorkspaceRequests requests,
     DocumentModes modes,
-  ) : super(workspace, trainerTabs(), requests, modes);
+  ) : super(workspace, trainerTabs(), requests, modes, analysisInPanes: true);
 
   /// Coming here is coming to train, whichever tab was left up.
   @override

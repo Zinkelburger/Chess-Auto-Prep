@@ -92,6 +92,7 @@ PaneTabs<WorkspaceTab> viewerTabs() => PaneTabs(
 PaneTabs<WorkspaceTab> trainerTabs() => PaneTabs(
   const [
     PaneTab(WorkspaceTab.train, 'Train', pinned: true),
+    PaneTab(WorkspaceTab.analysis, 'Analysis'),
     PaneTab(WorkspaceTab.moves, 'Moves'),
     PaneTab(WorkspaceTab.explorer, 'Explorer'),
   ],

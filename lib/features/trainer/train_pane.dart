@@ -6,6 +6,7 @@ import 'lesson_view.dart';
 import 'line_list.dart';
 import 'trainer.dart';
 import 'trainer_words.dart';
+import 'training_home.dart';
 
 /// The Train tab of the reading card: the lines of the chapter, or of its
 /// repertoire, with where each stands and the two ways in — Review what is
@@ -20,9 +21,11 @@ class TrainPane extends StatefulWidget {
     this.bookChip,
     this.onImport,
     this.onSettings,
+    this.onStudy,
   });
 
   final Trainer trainer;
+  final VoidCallback? onStudy;
   final VoidCallback? onImport;
   final VoidCallback? onSettings;
 
@@ -70,16 +73,47 @@ class _TrainPaneState extends State<TrainPane> {
             children: [
               FilledButton(
                 onPressed: trainer.resume,
-                child: const Text('Resume lesson'),
+                child: Text(
+                  trainer.selection.active
+                      ? 'Return to training'
+                      : 'Resume lesson',
+                ),
               ),
               TextButton(
                 onPressed: trainer.leave,
-                child: const Text('Back to lines'),
+                child: Text(
+                  trainer.selection.active ? 'Stop for now' : 'Back to lines',
+                ),
               ),
             ],
           ),
         ],
       ),
+    ),
+  );
+
+  Widget _chooseRepertoire(BuildContext context, Trainer trainer) => Padding(
+    padding: const EdgeInsets.all(readingCardInset),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          trainer.selection.root.isEmpty
+              ? 'Choose your repertoire'
+              : 'No training lines available',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: Space.m),
+        const Text(
+          'Choose a repertoire in the left panel, or import a course PGN. Your progress is saved as you train.',
+        ),
+        const SizedBox(height: Space.l),
+        if (widget.onImport != null)
+          FilledButton(
+            onPressed: widget.onImport,
+            child: const Text('Import course PGN…'),
+          ),
+      ],
     ),
   );
 
@@ -89,6 +123,7 @@ class _TrainPaneState extends State<TrainPane> {
       if (lesson.suspended) return _paused(trainer, lesson.line.name);
       return LessonView(
         lesson: lesson,
+        onStudy: widget.onStudy,
         trainer: trainer,
         moves: widget.moves,
         onRead: widget.onRead,
@@ -98,6 +133,10 @@ class _TrainPaneState extends State<TrainPane> {
       TrainerIdle() ||
       TrainerLoading() => const _Sentence('Reading training progress…'),
       // The scope stays in reach: a book trains with nothing open.
+      TrainerEmpty() when trainer.selection.active => _chooseRepertoire(
+        context,
+        trainer,
+      ),
       TrainerEmpty(:final why) => Padding(
         padding: const EdgeInsets.all(Space.m),
         child: Column(
@@ -128,6 +167,12 @@ class _TrainPaneState extends State<TrainPane> {
       TrainerFailed(:final failure) => _Failed(
         sentence: progressProblem(failure, doing: 'read the training progress'),
         onRetry: trainer.reload,
+      ),
+      final TrainerReady ready when trainer.selection.active => TrainingHome(
+        trainer: trainer,
+        ready: ready,
+        onRead: widget.onRead,
+        onSettings: widget.onSettings,
       ),
       final TrainerReady ready => LineList(
         trainer: trainer,

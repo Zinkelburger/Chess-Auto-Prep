@@ -32,8 +32,10 @@ class LessonView extends StatefulWidget {
     required this.trainer,
     required this.moves,
     required this.onRead,
+    this.onStudy,
   });
 
+  final VoidCallback? onStudy;
   final Lesson lesson;
   final Trainer trainer;
   final ValueChanged<LineToRead> onRead;
@@ -155,6 +157,7 @@ class _LessonViewState extends State<LessonView> {
                     lesson: widget.lesson,
                     trainer: widget.trainer,
                     onRead: widget.onRead,
+                    onStudy: widget.onStudy,
                     peeking: _peeking == widget.lesson.line.key,
                     onPeek: _peek,
                   ),
@@ -170,15 +173,16 @@ class _OnLine extends StatelessWidget {
     required this.lesson,
     required this.trainer,
     required this.onRead,
+    this.onStudy,
     required this.peeking,
     required this.onPeek,
   });
-
   final Lesson lesson;
   final Trainer trainer;
   final ValueChanged<LineToRead> onRead;
 
   /// Whether the whole line and its notes show instead of the moves so far.
+  final VoidCallback? onStudy;
   final bool peeking;
   final ValueChanged<bool> onPeek;
 
@@ -188,10 +192,12 @@ class _OnLine extends StatelessWidget {
     final drill = lesson.drill;
     final wrong = drill.stage is Missed || drill.stage is Corrected;
     final openInBuilder = Tooltip(
-      message: 'End this sitting and inspect the shown position',
+      message: onStudy == null
+          ? 'End this sitting and inspect the shown position'
+          : 'Explore this position with analysis and databases, then return to training',
       child: TextButton(
-        onPressed: trainer.lessonToRead == null ? null : _read,
-        child: const Text('Open in Builder'),
+        onPressed: onStudy ?? (trainer.lessonToRead == null ? null : _read),
+        child: Text(onStudy == null ? 'Open in Builder' : 'Study position'),
       ),
     );
     final moves = peeking
@@ -244,6 +250,7 @@ class _OnLine extends StatelessWidget {
                   _Footer(
                     lesson: lesson,
                     trainer: trainer,
+                    onBuilder: onStudy == null ? null : _read,
                     onPeek: peeking ? null : () => onPeek(true),
                   ),
                 ],
@@ -538,8 +545,10 @@ class _Footer extends StatelessWidget {
     required this.lesson,
     required this.trainer,
     required this.onPeek,
+    this.onBuilder,
   });
 
+  final VoidCallback? onBuilder;
   final Lesson lesson;
   final Trainer trainer;
 
@@ -568,13 +577,22 @@ class _Footer extends StatelessWidget {
             RowActions(
               tooltip: 'Line actions',
               children: [
+                if (onBuilder != null)
+                  MenuItemButton(
+                    onPressed: onBuilder,
+                    child: const Text('Open in Builder'),
+                  ),
                 MenuItemButton(
                   onPressed: onPeek,
                   child: const Text('View moves and notes'),
                 ),
                 MenuItemButton(
                   onPressed: () => unawaited(lesson.exclude()),
-                  child: const Text('Exclude from training'),
+                  child: Text(
+                    trainer.selection.active
+                        ? 'Pause line training'
+                        : 'Exclude from training',
+                  ),
                 ),
               ],
             ),
@@ -585,7 +603,9 @@ class _Footer extends StatelessWidget {
         message: AppKey.leaveLesson.tip('Back to lines'),
         child: TextButton(
           onPressed: trainer.leave,
-          child: const Text('Back to lines'),
+          child: Text(
+            trainer.selection.active ? 'Stop for now' : 'Back to lines',
+          ),
         ),
       ),
     ],

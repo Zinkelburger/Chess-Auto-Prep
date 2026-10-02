@@ -386,11 +386,9 @@ class TrainingProgress extends ChangeNotifier {
         final changes = <Change<Review>>[];
         final history = <HistoryRow>[];
         for (final line in lines) {
-          final status = this.status(line);
-          final trained =
-              status == LineStatus.due || status == LineStatus.learned;
-          if (known ? status != LineStatus.untrained : !trained) continue;
+          if (line.modelGame || line.yourMoves == 0) continue;
           final review = reviewOf(line);
+          if (known == !review.untrained) continue;
           final after = known
               ? markedKnown(review, now: now, nth: changes.length)
               : markedUnknown(review);

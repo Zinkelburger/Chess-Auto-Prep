@@ -17,6 +17,15 @@ void main() {
   setUp(() => w = WindowFixture());
   tearDown(() => w.dispose());
 
+  Future<void> openBuilder(WidgetTester tester) async {
+    if (find.text('Open in Builder').evaluate().isEmpty) {
+      await tester.tap(find.byTooltip('Line actions'));
+      await tester.pumpAndSettle();
+    }
+    await tester.ensureVisible(find.text('Open in Builder'));
+    await tester.tap(find.text('Open in Builder'));
+  }
+
   Future<void> start(WidgetTester tester, Mode mode) async {
     await w.pumpShell(tester);
     unawaited(w.requests.open(kidMain));
@@ -41,8 +50,8 @@ void main() {
         await start(tester, mode);
         final shown = w.lineTrainer.lesson!.drill.fen;
         final before = (w.store.documents[kidMain] as Opened).text;
-        await tester.ensureVisible(find.text('Open in Builder'));
-        await tester.tap(find.text('Open in Builder'));
+
+        await openBuilder(tester);
         await tester.pumpAndSettle();
         expect(w.requests.mode, Mode.repertoires);
         expect(w.session.source, kidMain);
@@ -106,7 +115,7 @@ void main() {
     (tester) async {
       await bookLesson(tester);
       final shown = w.lineTrainer.lesson!.drill.fen;
-      await tester.tap(find.text('Open in Builder'));
+      await openBuilder(tester);
       await tester.pumpAndSettle();
       expect(w.session.source, second);
       expect(w.session.fen, shown);
@@ -128,7 +137,7 @@ void main() {
   ) async {
     await bookLesson(tester);
     w.store.documents.remove(course);
-    await tester.tap(find.text('Open in Builder'));
+    await openBuilder(tester);
     await tester.pumpAndSettle();
     expect(w.requests.mode, Mode.trainer);
     expect(w.session.source, kidMain);
@@ -142,7 +151,7 @@ void main() {
   ) async {
     await bookLesson(tester);
     w.store.hold = true;
-    await tester.tap(find.text('Open in Builder'));
+    await openBuilder(tester);
     await tester.pumpAndSettle();
     expect(w.store.waiting, greaterThan(0));
     unawaited(w.requests.open(kidMain));
@@ -165,7 +174,7 @@ void main() {
     expect(w.saver.settled, isFalse);
     final draft = w.session.tree;
     w.store.saves.add(const IoFailure('disk still full'));
-    await tester.tap(find.text('Open in Builder'));
+    await openBuilder(tester);
     await tester.pumpAndSettle();
     expect(w.question.asked, isNotEmpty);
     expect(w.session.source, kidMain);

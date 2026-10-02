@@ -23,6 +23,7 @@ import '../../workspace/engine_analysis.dart';
 import 'lesson.dart';
 import 'progress.dart';
 import 'training_scope.dart';
+import 'training_selection.dart';
 
 /// How much the trainer takes in: the chapter on the board, every chapter
 /// of its repertoire, or every chapter of the book in use.
@@ -135,7 +136,8 @@ class Trainer extends ChangeNotifier {
     RepertoireCatalog? catalog,
     PendingWrites? pendingWrites,
     this.settings,
-  }) : pendingWrites = pendingWrites ?? PendingWrites(),
+  }) : selection = TrainingSelection(catalog, settings),
+       pendingWrites = pendingWrites ?? PendingWrites(),
        _catalog = catalog,
        _books = books,
        _session = session,
@@ -143,6 +145,7 @@ class Trainer extends ChangeNotifier {
        _files = files,
        _analysis = analysis,
        _time = time {
+    selection.addListener(_selectionChanged);
     settings?.addListener(_settingsChanged);
     _session.addListener(_follow);
     _savedRevision = _session.persistedRevision;
@@ -151,15 +154,88 @@ class Trainer extends ChangeNotifier {
     _catalog?.addListener(_catalogChanged);
   }
 
+  String? progressProblem;
+  Future<void> changeProgress(Future<ProgressWrite> write) async {
+    final result = await write;
+    if (_disposed) return;
+    progressProblem = result is ProgressWritten
+        ? null
+        : 'Training progress could not be saved. Reload progress and try again.';
+    notifyListeners();
+  }
+
+  final TrainingSelection selection;
+  String? _selectedRoot;
+
+  void _selectionChanged() {
+    final root = selection.active ? selection.root : null;
+    if (root != _selectedRoot) {
+      _selectedRoot = root;
+      unawaited(_load(force: true));
+    } else {
+      notifyListeners();
+    }
+  }
+
+  /// Lines in the browsing scope; picking rows narrows the next session only.
+  List<TrainingLine> get scopeLines {
+    final state = _state;
+    if (state is! TrainerReady) return const [];
+    if (!selection.active) return state.lines;
+    return [
+      for (final c in state.chapters)
+        if (selection.chapter == null || selection.chapter == c.ref)
+          for (final line in c.lines)
+            if (selection.line == null || selection.line == line.key) line,
+    ];
+  }
+
+  List<TrainingLine> get availableLines {
+    final state = _state;
+    if (state is! TrainerReady) return const [];
+    final paused = {
+      if (selection.active)
+        for (final c in state.chapters)
+          if (selection.chapterPaused(c.ref))
+            for (final line in c.lines) line.key,
+    };
+    return scopeLines
+        .where(
+          (line) =>
+              !paused.contains(line.key) &&
+              (!selection.choosing || selection.picked.contains(line.key)),
+        )
+        .toList();
+  }
+
+  List<TrainingLine> get reviewLines {
+    final state = _state;
+    if (state is! TrainerReady) return const [];
+    if (!options.reviewAll &&
+        selection.line == null &&
+        selection.picked.isEmpty) {
+      return dueNow(availableLines, state.progress.reviews, state.progress.now);
+    }
+    return availableLines
+        .where(
+          (line) =>
+              line.yourMoves > 0 &&
+              {
+                LineStatus.learned,
+                LineStatus.due,
+              }.contains(state.progress.status(line)),
+        )
+        .toList();
+  }
+
   final SettingsStore? settings;
-  TrainingOptions get options =>
-      settings?.value.training ?? TrainingOptions.defaults;
+  TrainingOptions get options => selection.options;
   void _settingsChanged() => notifyListeners();
 
   int sittingCount(int count, int limit) =>
       limit == 0 || count < limit ? count : limit;
   int get learnCount => sittingCount(untrainedCount, options.learnLimit);
-  int get reviewCount => sittingCount(dueCount, options.reviewLimit);
+  int get reviewCount => sittingCount(reviewLines.length, options.reviewLimit);
 
   final RepertoireCatalog? _catalog;
   final PendingWrites pendingWrites;
@@ -173,6 +249,22 @@ class Trainer extends ChangeNotifier {
   /// unless the file holds other chapters of the scope too.
   void _catalogChanged() {
     if (_state is TrainerIdle) return;
+    if (selection.active) {
+      final catalog = _catalog!;
+      if (_catalogInputs == catalog.inputsRevision) {
+        notifyListeners();
+        return;
+      }
+      _catalogInputs = catalog.inputsRevision;
+      final change = catalog.admittedChange;
+      if (change != null && !change.touches(selection.root)) return;
+      if (_lesson != null && _state is TrainerReady) {
+        unawaited(_checkRetained(_lesson!, _state as TrainerReady));
+      } else {
+        unawaited(_load(force: true));
+      }
+      return;
+    }
     final catalog = _catalog!;
     if (_catalogInputs == catalog.inputsRevision) return;
     _catalogInputs = catalog.inputsRevision;
@@ -229,6 +321,9 @@ class Trainer extends ChangeNotifier {
   /// means the file changed some other way, and the scope is read again.
   void _saved() {
     final revision = _session.persistedRevision;
+    // Closing the saver detaches its target before the session publishes its
+    // scratch board. It is not a new source revision or a failed save.
+    if (revision == null) return;
     final returning =
         _retained &&
         _lesson != null &&
@@ -321,7 +416,7 @@ class Trainer extends ChangeNotifier {
     final state = _state;
     if (state is! TrainerReady) return const [];
     final progress = state.progress;
-    return queue(state.lines, progress.reviews, progress.now);
+    return queue(availableLines, progress.reviews, progress.now);
   }
 
   TrainScope get scope => _scope;
@@ -355,6 +450,7 @@ class Trainer extends ChangeNotifier {
   }
 
   void setScope(TrainScope scope) {
+    selection.followDocument();
     if (scope == _scope) return;
     _scope = scope;
     unawaited(_load());
@@ -373,7 +469,7 @@ class Trainer extends ChangeNotifier {
   /// A sitting of the lines never trained, up to the configured limit.
   void learn() => _sit(SittingKind.learn, (lines, progress) {
     return toLearn(
-      lines,
+      availableLines,
       progress.reviews,
       progress.now,
     ).take(learnCount).toList();
@@ -382,11 +478,7 @@ class Trainer extends ChangeNotifier {
   /// A sitting of the lines due now, up to the configured limit.
   void review() => _sit(
     SittingKind.review,
-    (lines, progress) => dueNow(
-      lines,
-      progress.reviews,
-      progress.now,
-    ).take(reviewCount).toList(),
+    (lines, progress) => reviewLines.take(reviewCount).toList(),
   );
 
   /// A retained row action selects its key in the current scope, never the
@@ -524,6 +616,16 @@ class Trainer extends ChangeNotifier {
   /// training lines. With a sitting active, document detours suspend it and
   /// preserve the original source until it changes or Back to lines is chosen.
   void _follow() {
+    if (selection.active) {
+      if (_lesson != null && _session.source != _read?.ref) suspend();
+      final state = _state;
+      if (state is TrainerReady &&
+          _session.source != null &&
+          state.chapters.any((c) => c.ref == _session.source) &&
+          !identical(_session.chapter, _read?.chapter))
+        _relined();
+      return;
+    }
     final read = _read;
     final chapter = _session.chapter;
     if (_lesson != null &&
@@ -614,6 +716,7 @@ class Trainer extends ChangeNotifier {
     _become(const TrainerLoading());
     if (previous is TrainerReady) await previous.progress.settle();
     if (load != _loads) return;
+    if (selection.active) return _loadSelected(load, chapter, ref);
     if (_scope == TrainScope.book) return _loadBook(load, chapter, ref);
     if (chapter == null || ref == null) {
       return _become(const TrainerEmpty(NothingToTrain.noChapter));
@@ -631,6 +734,33 @@ class Trainer extends ChangeNotifier {
         : await _chapters.repertoireOf(open);
     if (load != _loads) return;
     await _loaded(load, chapters, study: chapter.game != null);
+  }
+
+  Future<void> _loadSelected(
+    int load,
+    Chapter? chapter,
+    ChapterRef? ref,
+  ) async {
+    final root = selection.root;
+    if (root.isEmpty) {
+      return _become(const TrainerEmpty(NothingToTrain.noChapter));
+    }
+    final open = chapter != null && ref != null && chapter.game == null
+        ? (
+            ref: ref,
+            lines: trainingLines(chapter, source: ref.path),
+            revision: _session.trainingSourceRevision,
+          )
+        : null;
+    final chapters = await _chapters.chaptersWhere(
+      (ref) => _catalog?.repertoireOf(ref.path) == root,
+      open,
+    );
+    if (_disposed || load != _loads) return;
+    if (chapters.isEmpty) {
+      return _become(const TrainerEmpty(NothingToTrain.noChapter));
+    }
+    await _loaded(load, chapters);
   }
 
   /// The chapters of the book in use, the one on the board as it stands
@@ -721,6 +851,8 @@ class Trainer extends ChangeNotifier {
     // A load still reading is overtaken: it makes no progress to leak and
     // tells nobody.
     _loads++;
+    selection.removeListener(_selectionChanged);
+    selection.dispose();
     settings?.removeListener(_settingsChanged);
     _session.removeListener(_follow);
     _session.persistedChanges.removeListener(_saved);

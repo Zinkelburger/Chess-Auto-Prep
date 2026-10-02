@@ -220,7 +220,7 @@ List<SettingGroup> settingGroups({
         ),
       ),
       SettingRow(
-        'Rate reviews myself',
+        'Rate difficulty myself',
         ToggleSetting(
           value: s.training.rateReviews,
           onChanged: (on) => change(

@@ -51,7 +51,12 @@ Bughouse mode is offered when its engine assets are present.
 - Library and chapter outline share guarded PGN storage; edits, moves, deletes,
   restore and accepted training outcomes use the existing recovery owners.
 - Trainer Learn/Review and the shared Train tab use the same scheduling and
-  lesson owners. A mode, tab or file detour suspends the current lesson and its
+  lesson owners. `TrainingSelection` keeps the dedicated trainer's repertoire,
+  browsing scope and session picks independent of the board document;
+  `TrainingOutline` and `TrainingHome` live inside the existing three panels.
+  `TrainingOptions` persists the repertoire, review choice and parent pauses.
+  Analysis/Explorer help opens a scratch study detour at the lesson position;
+  Return to training restores the retained lesson. A mode, tab or file detour suspends the current lesson and its
   timers; Resume reclaims the board in the visible Train pane. Back to lines
   ends it explicitly. Accepted ratings finish saving while paused; a changed
   source invalidates the retained lesson. Training records remain under Documents.

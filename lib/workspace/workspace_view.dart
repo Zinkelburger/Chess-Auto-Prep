@@ -38,6 +38,7 @@ import 'repertoire_tree.dart' show TreePlace;
 import 'search_pane.dart';
 import 'workspace.dart';
 import 'workspace_tabs.dart';
+import 'training_analysis_pane.dart';
 import '../ui/app_keys.dart';
 
 /// What the window around the workspace adds to it: the mode's own tabs
@@ -55,6 +56,8 @@ final class WorkspaceHooks {
     this.tabBody,
     this.boardClaim,
     this.lesson,
+    this.trainingTools = false,
+    this.onStudyLesson,
     this.onBoardMove,
     this.onEngineMove,
     this.onExplorerGame,
@@ -69,6 +72,9 @@ final class WorkspaceHooks {
     this.explorerFileBar,
     this.underHeading,
   });
+
+  final bool trainingTools;
+  final VoidCallback? onStudyLesson;
 
   /// Under the heading: what the mode has to say about the game before it
   /// is read, such as where it left the user's book.
@@ -311,6 +317,10 @@ class _Tabbed extends StatelessWidget {
             )
           : _moves(),
     ),
+    WorkspaceTab.analysis when hooks.trainingTools => TrainingAnalysisPane(
+      workspace: workspace,
+      onMove: hooks.onEngineMove,
+    ),
     WorkspaceTab.moves || WorkspaceTab.analysis => _moves(),
     WorkspaceTab.review =>
       workspace.review == null
@@ -420,9 +430,23 @@ class _Tabbed extends StatelessWidget {
     builder: (context, lesson, _) => lesson != null && _tellsAnswers(tab)
         ? Padding(
             padding: const EdgeInsets.all(readingCardInset),
-            child: Text(
-              'Hidden while training',
-              style: Theme.of(context).textTheme.bodySmall,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Hidden while training',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                if (hooks.onStudyLesson != null) ...[
+                  const SizedBox(height: Space.s),
+                  OutlinedButton(
+                    onPressed: hooks.onStudyLesson,
+                    child: const Text('Reveal help and study'),
+                  ),
+                  const SizedBox(height: Space.s),
+                  const Text('Your lesson stays ready to resume.'),
+                ],
+              ],
             ),
           )
         : _body(context, tab, explorer: explorer, book: book),

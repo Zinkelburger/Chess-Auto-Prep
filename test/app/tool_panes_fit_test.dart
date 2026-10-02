@@ -49,7 +49,7 @@ void main() {
     await tester.pumpAndSettle();
     w.lineTrainer.learn();
     await tester.pumpAndSettle();
-    expect(find.text('Back to lines'), findsOneWidget);
+    expect(find.text('Stop for now'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -168,7 +168,7 @@ void main() {
       expect(find.byType(LessonView), findsOneWidget);
       for (final control in [
         find.widgetWithText(FilledButton, 'Next'),
-        find.text('Back to lines'),
+        find.text('Stop for now'),
       ]) {
         final rect = tester.getRect(control);
         expect(

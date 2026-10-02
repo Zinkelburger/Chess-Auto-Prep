@@ -70,7 +70,7 @@ final class SittingOver extends LessonState {
 /// back of the sitting and comes round once more. Every line is graded from
 /// its mistakes — Good when the quiz went clean, Again when not — unless
 /// the user rates reviews themselves ([TrainingOptions.rateReviews]); a line
-/// never trained is walked through first and always graded for them.
+/// never trained is walked through before its quiz.
 /// [lines] is never empty: the trainer starts no sitting with nothing in it.
 class Lesson extends ChangeNotifier {
   Lesson({
@@ -93,7 +93,6 @@ class Lesson extends ChangeNotifier {
         learn: learning,
         replayMistakes: options.replayMistakes,
       ) {
-    if (learning) _newHere.add(lines.first.key);
     _arm();
   }
 
@@ -106,10 +105,6 @@ class Lesson extends ChangeNotifier {
   /// Whether the line on the board began as one never trained, and so is
   /// walked through first and rated for the user.
   bool _learning;
-
-  /// The lines that came into this sitting never trained. Rated Again, one
-  /// comes round again as trained, and is still graded for the user.
-  final Set<LineKey> _newHere = {};
 
   /// The lines rated in this sitting, each once however often it came round.
   final Set<LineKey> _rated = {};
@@ -271,7 +266,7 @@ class Lesson extends ChangeNotifier {
     }
     final line = _left.removeAt(0);
     _learning = _isNew(_progress, line);
-    if (_learning) _newHere.add(line.key);
+
     _state = const Drilling();
     _drill = Drill.start(
       line,
@@ -355,7 +350,7 @@ class Lesson extends ChangeNotifier {
 
   /// Whether the line on the board is graded from its mistakes rather than
   /// rated by the user.
-  bool get _graded => !options.rateReviews || _newHere.contains(line.key);
+  bool get _graded => !options.rateReviews;
 
   static bool _isNew(TrainingProgress progress, TrainingLine line) =>
       progress.status(line) == LineStatus.untrained;

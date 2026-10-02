@@ -253,7 +253,7 @@ void main() {
   test('learning a new line: walked through, quizzed, rated Good for the '
       'user, written with its streaks and history', () {
     fakeAsync((async) {
-      final trainer = ready(async);
+      final trainer = ready(async, rateReviews: false);
       trainer.learn();
       final lesson = trainer.lesson!;
       expect(lesson.kind, SittingKind.learn);
@@ -290,6 +290,27 @@ void main() {
       });
       expect(lesson.line.name, 'Italian', reason: 'the next line is up');
       expect(lesson.tally, (lines: 1, right: 3, wrong: 0));
+    });
+  });
+
+  test('manual difficulty also lets a clean new line be rated Hard', () {
+    fakeAsync((async) {
+      final trainer = ready(async);
+      trainer.learn();
+      final lesson = trainer.lesson!;
+      for (final uci in ['e2e4', 'g1f3', 'f1b5']) {
+        lesson.next();
+        play(async, lesson, uci);
+      }
+      for (final uci in ['e2e4', 'g1f3', 'f1b5']) {
+        play(async, lesson, uci);
+      }
+      expect(lesson.state, isA<AwaitingRating>());
+      expect(files.reviews, isEmpty);
+      lesson.rate(Rating.hard);
+      async.flushMicrotasks();
+      expect(files.reviews.values.single.lastRating, 'hard');
+      expect(files.history.single.mistake, isFalse);
     });
   });
 
@@ -404,7 +425,7 @@ void main() {
 
   test('a line rated Again comes round once more in the same sitting', () {
     fakeAsync((async) {
-      final trainer = ready(async);
+      final trainer = ready(async, rateReviews: false);
       trainer.trainLine(readyState(trainer).lines.first);
       // A single-line sitting ends with the line whatever it is rated.
       expect(trainer.lesson!.kind, SittingKind.line);
@@ -425,8 +446,7 @@ void main() {
       expect(lesson.line.name, 'Italian');
       expect(lesson.left, 1, reason: 'the Ruy is back at the end');
 
-      // Back round, the Ruy is quizzed and still graded for the user, even
-      // with the user rating reviews: it came into the sitting new.
+      // Back round, the Ruy is quizzed and automatically graded again.
       lesson.skip();
       expect(lesson.learning, isFalse);
       for (final uci in ['e2e4', 'g1f3', 'f1b5']) {
