@@ -5,7 +5,7 @@ on:
     inputs:
       targets:
         type: string
-        default: '[{"os":"windows-2022","device":"windows"},{"os":"windows-2025","device":"windows"},{"os":"macos-latest","device":"macos"},{"os":"ubuntu-22.04","device":"linux"}]'
+        default: '[{"os":"windows-2022","device":"windows"},{"os":"windows-2025","device":"windows"},{"os":"macos-26","device":"macos"},{"os":"ubuntu-22.04","device":"linux"}]'
 
 jobs:
   desktop:

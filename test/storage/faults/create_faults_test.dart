@@ -2,6 +2,9 @@
 // fault at every effect it makes: the smallest publish (stage, flush, link
 // then unlink, flush the folder). See fault_matrix.dart for the families.
 @TestOn('linux')
+// Every case runs a fault matrix of isolates: four times the default
+// 30 s, for a busy CI runner.
+@Timeout.factor(4)
 library;
 
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';

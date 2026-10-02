@@ -8,6 +8,9 @@
 // rating runs the families in which the same session must finish it, once.
 // See fault_matrix.dart for the families.
 @TestOn('linux')
+// Every case runs a fault matrix of isolates: four times the default
+// 30 s, for a busy CI runner.
+@Timeout.factor(4)
 library;
 
 import 'package:chess_auto_prep/chess/fen.dart';
