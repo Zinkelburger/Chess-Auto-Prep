@@ -452,6 +452,14 @@ workers). Per search:
 and are what to use for research; the search is not bit-exact, so the same
 node count can still flip a move at low budgets.
 
+A [local budget study](../tools/experiments/bughouse_budgets_20261002/REPORT.md)
+compares the installed CPU engine at 100–8,000 nodes on 24 FICS positions and
+separately sweeps the root mate solver. It supports 800 nodes as a preliminary
+bulk score, deeper refinement for close decisions, and retaining a generous
+independent mate-probe allowance. This is a small consistency study, not an Elo
+calibration. Its two-core quota and machine load produced slower timings than
+the earlier throughput figures above; use its measured settings when comparing.
+
 ## The two books
 
 Two different databases, confusingly both called "the bughouse DB". They

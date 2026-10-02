@@ -1,0 +1,11 @@
+{
+  "cpu_model": "Intel(R) Core(TM) Ultra 7 165H",
+  "architecture": "x86_64",
+  "logical_cpus_on_host": 22,
+  "cpu_quota_per_engine_job": 2,
+  "memory_limit_gib_per_job": 8,
+  "concurrent_benchmark_jobs_at_most": 2,
+  "host_was_shared": true,
+  "timings_exclude_model_startup": true,
+  "search_timing_excludes_static_calibration": true
+}

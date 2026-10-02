@@ -1,0 +1,242 @@
+[
+  {
+    "id": "opening-01",
+    "fen": "rnbqkb1r/pppp1ppp/4pn2/8/4P3/2N5/PPPP1PPP/R1BQKBNR[] w KQkq - 2 3|rnbqkbnr/pppp1ppp/4p3/8/4P3/8/PPPP1PPP/RNBQKBNR[] w KQkq - 0 2",
+    "board": "B",
+    "group": "opening",
+    "game": "3645854",
+    "ply": 6,
+    "pockets": 0,
+    "legal": 30
+  },
+  {
+    "id": "opening-02",
+    "fen": "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR[Pn] w KQkq - 0 2|r1bqkb1r/ppp2ppp/2n2p2/3p4/3P4/2N5/PPP2PPP/R1BQKBNR[] b KQkq - 2 5",
+    "board": "B",
+    "group": "opening",
+    "game": "3666505",
+    "ply": 11,
+    "pockets": 0,
+    "legal": 32
+  },
+  {
+    "id": "opening-03",
+    "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[Bn] w KQkq - 0 1|rnbqk2r/pppp1ppp/4pb2/8/3P4/5N2/PPP1PPPP/RN1QKB1R[] w KQkq - 0 5",
+    "board": "B",
+    "group": "opening",
+    "game": "3676605",
+    "ply": 8,
+    "pockets": 0,
+    "legal": 26
+  },
+  {
+    "id": "opening-04",
+    "fen": "rn1qkb1r/1bpp1ppp/p3pn2/1p6/3PP3/P1NB4/1PP2PPP/R1BQK1NR[] w KQkq - 3 6|r1bqk1nr/pppp1ppp/2n1p3/8/1b1PP3/2N5/PPP2PPP/R1BQKBNR[] w KQkq - 2 4",
+    "board": "B",
+    "group": "opening",
+    "game": "3624473",
+    "ply": 16,
+    "pockets": 0,
+    "legal": 33
+  },
+  {
+    "id": "opening-05",
+    "fen": "rnbqkbnr/pppp1ppp/8/8/3Q4/5N2/PPP1PPPP/RNB1KB1R[] b KQkq - 0 3|rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR[Pp] b KQkq - 0 1",
+    "board": "A",
+    "group": "opening",
+    "game": "3655082",
+    "ply": 6,
+    "pockets": 0,
+    "legal": 29
+  },
+  {
+    "id": "opening-06",
+    "fen": "rnbqkb1r/ppp1pppp/5n2/3p4/3P4/5N2/PPP1PPPP/RNBQKB1R[] w KQkq - 0 3|rnbqkb1r/pppppppp/5n2/8/4P3/8/PPPP1PPP/RNBQKBNR[] w KQkq - 1 2",
+    "board": "A",
+    "group": "opening",
+    "game": "3642410",
+    "ply": 6,
+    "pockets": 0,
+    "legal": 29
+  },
+  {
+    "id": "opening-07",
+    "fen": "r1bqkb1r/ppp1pppp/2n2n2/3p4/3P1B2/5N2/PPP1PPPP/RN1QKB1R[] w KQkq - 2 4|r1bqkbnr/pppppppp/2n5/3P4/8/8/PPP1PPPP/RNBQKBNR[] b KQkq - 0 2",
+    "board": "B",
+    "group": "opening",
+    "game": "3586453",
+    "ply": 9,
+    "pockets": 0,
+    "legal": 21
+  },
+  {
+    "id": "opening-08",
+    "fen": "r1bqkbnr/ppp2ppp/2n1p3/7P/8/2pP4/PPP1PPP1/RN1QKBNR[] w KQkq - 0 6|rnbqkb1r/pppp1ppp/4pn2/8/3PP3/8/PPP2PPP/RNBQKBNR[B] w KQkq - 1 3",
+    "board": "A",
+    "group": "opening",
+    "game": "3576140",
+    "ply": 14,
+    "pockets": 0,
+    "legal": 23
+  },
+  {
+    "id": "reserves-01",
+    "fen": "r1bqk2r/ppp2ppp/2n2n2/3pP3/3P3B/8/P1PN1PPP/R2QKB1R[QNPqnpp] b KQkq - 0 11|r1b2rk1/1pp3pp/p1p1pb2/6P1/8/8/PPP2PPP/R1BNK2R[BNPbn] b KQ - 1 14",
+    "board": "A",
+    "group": "reserves",
+    "game": "3588670",
+    "ply": 48,
+    "pockets": 7,
+    "legal": 136
+  },
+  {
+    "id": "reserves-02",
+    "fen": "r2qkbnr/pppb1ppp/2n1p3/1B6/3P4/2N1P3/PP3PPP/R1BQK1NR[Pnp] w KQkq - 2 7|r1bqkbnr/pppp1ppp/2N1p3/8/4P3/8/PPP2PPP/RNBQKB1R[P] b KQkq - 0 5",
+    "board": "A",
+    "group": "reserves",
+    "game": "3676450",
+    "ply": 21,
+    "pockets": 3,
+    "legal": 71
+  },
+  {
+    "id": "reserves-03",
+    "fen": "r1bqkb1r/ppp1nppp/2n5/3p4/4P3/2NQ4/PPP2PPP/R1B1KBNR[Pp] w KQkq - 1 6|r1bqkb1r/ppp2ppp/4pn2/8/3nP3/3P4/PPP2PPP/RNBQKBNR[p] w KQkq - 0 7",
+    "board": "B",
+    "group": "reserves",
+    "game": "3668487",
+    "ply": 22,
+    "pockets": 1,
+    "legal": 31
+  },
+  {
+    "id": "reserves-04",
+    "fen": "r1b1kb1r/ppp1qppp/2nPp3/3N4/3P4/5N2/PPP1BPnP/R2Q1K1R[BNbp] b kq - 1 11|r1b1k2r/ppp1q1pp/2n1pp2/1B2Pn2/3P4/5NB1/PPP2PPP/R2QK2R[Pp] b KQkq - 5 12",
+    "board": "A",
+    "group": "reserves",
+    "game": "3610709",
+    "ply": 44,
+    "pockets": 4,
+    "legal": 97
+  },
+  {
+    "id": "reserves-05",
+    "fen": "rnb1k2r/ppp1qppp/4p3/3n4/3P1n2/2PB1N2/P1PB1PPP/R2Q1RK1[NPPn] b kq - 2 9|r1bqk2r/pp2bppp/3p4/3pp3/5p2/3P1N2/PP1BBPPP/R2Q1RK1[NPb] w kq - 0 12",
+    "board": "B",
+    "group": "reserves",
+    "game": "3583325",
+    "ply": 39,
+    "pockets": 3,
+    "legal": 96
+  },
+  {
+    "id": "reserves-06",
+    "fen": "4r2k/ppp2Rpp/6pp/8/3QP3/2N5/PPP3pP/R1B3K1[Bbp] b - - 0 39|r1b1kN2/ppbnqp2/4p3/5b2/4p3/2Pp1NP1/PPP1QPrP/R1B1K2R[BNPPPPqrnnnp] w KQq - 1 27",
+    "board": "B",
+    "group": "reserves",
+    "game": "3585754",
+    "ply": 129,
+    "pockets": 12,
+    "legal": 136
+  },
+  {
+    "id": "reserves-07",
+    "fen": "r4b1r/ppp1pppp/3k2q1/3PN3/8/4BB2/PP3PPP/2nQ1K1R[Qqbb] w - - 2 16|r2nkb1r/pppn2pp/3pp3/6N1/3PpB2/4P3/PPP2PPP/RN1K3R[RBNPPnp] b kq - 0 11",
+    "board": "B",
+    "group": "reserves",
+    "game": "3617947",
+    "ply": 51,
+    "pockets": 7,
+    "legal": 88
+  },
+  {
+    "id": "reserves-08",
+    "fen": "r4k2/p2p1pb1/1pp1p2p/8/3P1n2/3PN3/P1Q2PqP/q1NK4[n] b - - 1 30|r3k2r/pppbBppp/2p1p2r/4PnNP/3P2K1/2n3Q1/P1P2PbP/R1B2R2[RRBBNPPPPbp] b kq - 6 21",
+    "board": "A",
+    "group": "reserves",
+    "game": "3630316",
+    "ply": 100,
+    "pockets": 1,
+    "legal": 88
+  },
+  {
+    "id": "check-01",
+    "fen": "r4rk1/p4P1b/2p1Pppp/1npp4/8/5N1P/PPPN1PKB/2RQ1R2[Rbppp] b - - 1 32|r5k1/pp1b1Ppp/2p2p2/4rn1N/8/2N1B1P1/PPPB1PP1/R3K1b1[QBPPqqnn] b Q - 1 29",
+    "board": "A",
+    "group": "check",
+    "game": "3675559",
+    "ply": 120,
+    "pockets": 5,
+    "legal": 3
+  },
+  {
+    "id": "check-02",
+    "fen": "r1b2rk1/ppp1q1pp/4p3/3pP3/4p3/2P2PB1/P1P1BP1P/R2Q1RK1[Nbn] b - - 0 18|r1bqkr2/ppp2pQp/4pP2/3p1b2/3n1B2/2NP4/PP1NnPPP/R4RK1[BNPPnp] w q - 1 15",
+    "board": "B",
+    "group": "check",
+    "game": "3642436",
+    "ply": 63,
+    "pockets": 6,
+    "legal": 2
+  },
+  {
+    "id": "check-03",
+    "fen": "r6r/1ppkb2p/3p4/1p1q1nP1/8/2b5/PPP1QPPP/R1B1K2R[Bnnpp] w KQ - 0 26|rnb2k2/ppp1Rprp/4pP2/2NPB3/3P3b/2PPQ1P1/P2Np1PP/R4KBq[NNpp] w - - 1 28",
+    "board": "A",
+    "group": "check",
+    "game": "3639447",
+    "ply": 104,
+    "pockets": 5,
+    "legal": 5
+  },
+  {
+    "id": "check-04",
+    "fen": "4r3/ppp3kp/4pb1N/3p4/8/3K2PP/PP1B1P1P/4r3[QP] b - - 2 40|rn2Qb1r/ppp1pPpp/5kp1/3Np1n1/8/5N1b/PPPP2PP/RNB1KB1R[RRBPPqqbnnpp] b KQ - 1 22",
+    "board": "B",
+    "group": "check",
+    "game": "3641575",
+    "ply": 122,
+    "pockets": 12,
+    "legal": 2
+  },
+  {
+    "id": "check-05",
+    "fen": "r1kb3N/pppq4/3pp2p/1NrP2b1/1p1KPPn1/2P1pNP1/PqR1Bnn1/3R4[QBPPPrrbp] b - - 8 40|5Q2/1ppP1p2/pk1ppN2/2pP4/n7/PR2Bb2/1PPK1P1P/4R1B1[] b - - 1 42",
+    "board": "B",
+    "group": "check",
+    "game": "3629427",
+    "ply": 162,
+    "pockets": 0,
+    "legal": 2
+  },
+  {
+    "id": "check-06",
+    "fen": "rnbq1rk1/pp1p1ppp/2p2n2/4p3/2B1P3/2N2N2/PPPP1KPP/R1BQ1R2[] w - - 0 7|rnbqk2r/ppp1bppp/3ppn2/1B6/8/1P2PN2/PBPP1PPP/RN1QK2R[Pb] b KQkq - 2 5",
+    "board": "B",
+    "group": "check",
+    "game": "3674944",
+    "ply": 21,
+    "pockets": 2,
+    "legal": 9
+  },
+  {
+    "id": "check-07",
+    "fen": "rnbQk1nr/2p1bppp/p3p3/1p6/4P3/2N5/PPP2PPP/R1B1KBNR[Pp] b KQkq - 0 6|rnbqkb1r/ppp2ppp/4p3/3n4/8/2N2N2/PPPP1PPP/R1BQKB1R[Pqp] w KQkq - 0 5",
+    "board": "A",
+    "group": "check",
+    "game": "3626959",
+    "ply": 19,
+    "pockets": 2,
+    "legal": 2
+  },
+  {
+    "id": "check-08",
+    "fen": "r1kq3r/pppP1pNp/2n5/4pP2/3p4/3P1NNn/PPPbBPKP/R4R2[Bpp] b - - 0 18|r4rk1/pp1q2pp/2p1ppb1/5b2/3P1B1b/2N1P1R1/PPP2BPP/R2Q2K1[QPnn] b - - 4 20",
+    "board": "A",
+    "group": "check",
+    "game": "3575097",
+    "ply": 74,
+    "pockets": 3,
+    "legal": 3
+  }
+]

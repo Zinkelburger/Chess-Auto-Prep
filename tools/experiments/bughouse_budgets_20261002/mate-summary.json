@@ -1,0 +1,150 @@
+{
+  "cases": 60,
+  "calls": 1800,
+  "reference_budget": 300000,
+  "reference_proofs": 9,
+  "proofs_at_any_budget": 9,
+  "proofs_absent_at_reference": [],
+  "results": {
+    "100": {
+      "cases": 60,
+      "proved": 6,
+      "reference_proofs_retained": 6,
+      "missed_reference_proofs": [
+        "fixture-JointForcedMateBudgetExhaustionIsConservative-0-A",
+        "fixture-JointForcedMateWithOnlyOneBoardOnTurn-0-A",
+        "fixture-RootMateScanPrefersShortestDirectMateOverCaptureFeed-1-B"
+      ],
+      "timeouts": 0,
+      "non_playable_proofs": 0,
+      "median_ms": 0.0433985,
+      "p95_ms": 0.151063,
+      "max_ms": 2.39655,
+      "fics_median_ms": 0.042594999999999994
+    },
+    "300": {
+      "cases": 60,
+      "proved": 6,
+      "reference_proofs_retained": 6,
+      "missed_reference_proofs": [
+        "fixture-JointForcedMateBudgetExhaustionIsConservative-0-A",
+        "fixture-JointForcedMateWithOnlyOneBoardOnTurn-0-A",
+        "fixture-RootMateScanPrefersShortestDirectMateOverCaptureFeed-1-B"
+      ],
+      "timeouts": 0,
+      "non_playable_proofs": 0,
+      "median_ms": 0.060163999999999995,
+      "p95_ms": 0.20029,
+      "max_ms": 7.0529399999999995,
+      "fics_median_ms": 0.06503300000000001
+    },
+    "1000": {
+      "cases": 60,
+      "proved": 8,
+      "reference_proofs_retained": 8,
+      "missed_reference_proofs": [
+        "fixture-RootMateScanPrefersShortestDirectMateOverCaptureFeed-1-B"
+      ],
+      "timeouts": 0,
+      "non_playable_proofs": 0,
+      "median_ms": 0.1444555,
+      "p95_ms": 0.41477,
+      "max_ms": 19.8079,
+      "fics_median_ms": 0.164736
+    },
+    "2000": {
+      "cases": 60,
+      "proved": 8,
+      "reference_proofs_retained": 8,
+      "missed_reference_proofs": [
+        "fixture-RootMateScanPrefersShortestDirectMateOverCaptureFeed-1-B"
+      ],
+      "timeouts": 0,
+      "non_playable_proofs": 0,
+      "median_ms": 0.2704375,
+      "p95_ms": 0.737651,
+      "max_ms": 44.6302,
+      "fics_median_ms": 0.30872299999999997
+    },
+    "3000": {
+      "cases": 60,
+      "proved": 8,
+      "reference_proofs_retained": 8,
+      "missed_reference_proofs": [
+        "fixture-RootMateScanPrefersShortestDirectMateOverCaptureFeed-1-B"
+      ],
+      "timeouts": 0,
+      "non_playable_proofs": 0,
+      "median_ms": 0.3842055,
+      "p95_ms": 1.05766,
+      "max_ms": 61.3216,
+      "fics_median_ms": 0.44356300000000004
+    },
+    "8000": {
+      "cases": 60,
+      "proved": 8,
+      "reference_proofs_retained": 8,
+      "missed_reference_proofs": [
+        "fixture-RootMateScanPrefersShortestDirectMateOverCaptureFeed-1-B"
+      ],
+      "timeouts": 0,
+      "non_playable_proofs": 0,
+      "median_ms": 0.867541,
+      "p95_ms": 2.40135,
+      "max_ms": 170.15,
+      "fics_median_ms": 0.818173
+    },
+    "10000": {
+      "cases": 60,
+      "proved": 8,
+      "reference_proofs_retained": 8,
+      "missed_reference_proofs": [
+        "fixture-RootMateScanPrefersShortestDirectMateOverCaptureFeed-1-B"
+      ],
+      "timeouts": 0,
+      "non_playable_proofs": 0,
+      "median_ms": 1.06942,
+      "p95_ms": 3.27165,
+      "max_ms": 211.448,
+      "fics_median_ms": 0.9797605
+    },
+    "30000": {
+      "cases": 60,
+      "proved": 8,
+      "reference_proofs_retained": 8,
+      "missed_reference_proofs": [
+        "fixture-RootMateScanPrefersShortestDirectMateOverCaptureFeed-1-B"
+      ],
+      "timeouts": 0,
+      "non_playable_proofs": 0,
+      "median_ms": 1.973115,
+      "p95_ms": 8.618509999999999,
+      "max_ms": 588.048,
+      "fics_median_ms": 1.99965
+    },
+    "100000": {
+      "cases": 60,
+      "proved": 9,
+      "reference_proofs_retained": 9,
+      "missed_reference_proofs": [],
+      "timeouts": 0,
+      "non_playable_proofs": 0,
+      "median_ms": 4.5958950000000005,
+      "p95_ms": 26.3263,
+      "max_ms": 1506.85,
+      "fics_median_ms": 4.685635
+    },
+    "300000": {
+      "cases": 60,
+      "proved": 9,
+      "reference_proofs_retained": 9,
+      "missed_reference_proofs": [],
+      "timeouts": 0,
+      "non_playable_proofs": 0,
+      "median_ms": 13.9572,
+      "p95_ms": 66.4696,
+      "max_ms": 3013.23,
+      "fics_median_ms": 13.00235
+    }
+  }
+}

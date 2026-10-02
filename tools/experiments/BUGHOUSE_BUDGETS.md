@@ -62,7 +62,8 @@ with any report.
 
 `prepare_rankings` selects up to four cases where the 100- or 800-node move
 disagrees with 8,000 nodes, prioritizing the largest score discrepancies. It
-creates `rankings/cases.json` with the resulting positions after those moves,
+accepts `--include opening-07` to add a named disagreement. It creates
+`rankings/cases.json` with the resulting positions after those moves,
 including cross-board captures. Search those children at 8,000 nodes to compare
 the alternatives on a common horizon. These are deliberately selected case
 studies, not an unbiased estimate of move regret; terminal children require
