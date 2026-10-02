@@ -20,12 +20,19 @@ def main():
     compressed = asset.read_bytes()
     lock = json.loads((root / 'tools/assets.lock.json').read_text())
     digest = hashlib.sha256(compressed).hexdigest()
-    # The fetcher refreshes only this host's entry. Although both entries
-    # describe the same universal binary, zlib versions can change the gzip
-    # container's hash, leaving the other architecture's entry unchanged.
-    arch = 'arm64' if platform.machine().lower() in ('arm64', 'aarch64') else 'x86_64'
-    if digest != lock[f'stockfish-macos-{arch}']['output_sha256']:
-        raise RuntimeError('The macOS Stockfish does not match assets.lock.json')
+    # The fetcher refreshes only the entry it was asked for: the release job
+    # fetches the architecture it builds. Although both entries describe the
+    # same universal binary, zlib versions can change the gzip container's
+    # hash, leaving the other entry unchanged. So the check follows the
+    # architectures Xcode builds (ARCHS), not the machine it runs on: an
+    # Apple Silicon runner builds the Intel app too.
+    host = 'arm64' if platform.machine().lower() in ('arm64', 'aarch64') else 'x86_64'
+    archs = os.environ.get('ARCHS', '').split() or [host]
+    expected = {lock[f'stockfish-macos-{arch}']['output_sha256']
+                for arch in archs if f'stockfish-macos-{arch}' in lock}
+    if digest not in expected:
+        raise RuntimeError(
+            f'The macOS Stockfish does not match assets.lock.json for {" ".join(archs)}')
     contents = Path(os.environ['TARGET_BUILD_DIR']) / os.environ['CONTENTS_FOLDER_PATH']
     helper = contents / 'Helpers/stockfish-macos'
     helper.parent.mkdir(parents=True, exist_ok=True)
