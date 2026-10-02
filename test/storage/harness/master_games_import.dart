@@ -41,7 +41,9 @@ Future<void> main(List<String> args) async {
   switch (args) {
     case ['import', final database, final issue, final games]:
       final zip = issueZip(int.parse(issue), int.parse(games));
-      stdout.writeln('ready');
+      // `dart run` on Windows runs the script in a child of the process the
+      // test started, so the test kills this pid rather than the launcher.
+      stdout.writeln('ready $pid');
       importTwicIssue(database, int.parse(issue), zip);
       stdout.writeln('imported');
     case ['full', final folder]:
