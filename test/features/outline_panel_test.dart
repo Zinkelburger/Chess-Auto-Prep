@@ -140,6 +140,68 @@ void main() {
     );
   });
 
+  testWidgets('rooted chapter rows grow with text and reveal their full name', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    const name = "King's Indian Defence — Classical main line with 9.Ne1";
+    const chapter = ChapterRef(
+      repertoire: 'KID',
+      name: name,
+      path: '/repertoires/KID/long.pgn',
+      heading: ChapterHeading(rootMoves: ['d4', 'Nf6', 'c4', 'g6']),
+    );
+    ChapterRef? picked;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: listColumnWidth,
+              child: ChapterRow(
+                chapter: const OutlineChapter(ref: chapter, open: true),
+                onOpen: (ref) => picked = ref,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    final row = tester.getRect(find.byType(ChapterRow));
+    final root = tester.getRect(find.text(chapter.heading.rootText));
+    expect(row.bottom, greaterThanOrEqualTo(root.bottom));
+    expect(row.height, greaterThan(outlineRowHeight + outlineRootHeight));
+    await tester.longPress(find.text(name));
+    await tester.pumpAndSettle();
+    expect(find.text(name), findsNWidgets(2));
+    await tester.tap(find.byType(ChapterRow));
+    expect(picked, chapter);
+  });
+
+  testWidgets('line names and moves are available beyond a compact rail', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    const name = "Queen's Gambit Declined — exchange variation development";
+    await show(tester, text: twoLines.replaceFirst("Queen's", name));
+    final line = find.ancestor(
+      of: find.text(name),
+      matching: find.byType(LineRow),
+    );
+    expect(line, findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect(find.byTooltip(name), findsOneWidget);
+    await tester.longPress(find.text(name));
+    await tester.pumpAndSettle();
+    expect(find.text(name), findsNWidgets(2));
+  });
+
   testWidgets('the ⋯ menu moves a line to a chapter picked by name', (
     tester,
   ) async {

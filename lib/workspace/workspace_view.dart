@@ -3,7 +3,6 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:multi_split_view/multi_split_view.dart';
 
 import '../chess/explorer_answer.dart';
 import '../chess/explorer_choice.dart';
@@ -19,6 +18,7 @@ import '../ui/listening_state.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
 import 'board_claim.dart';
+import 'board_and_card.dart';
 import 'board_view.dart';
 import 'document_session.dart';
 import 'edit_strip.dart';
@@ -188,7 +188,7 @@ class WorkspaceView extends StatelessWidget {
   /// side leaves it.
   @override
   Widget build(BuildContext context) {
-    return _BoardAndCard(board: _board, card: _column);
+    return BoardAndCard(board: _board, card: _column, layout: layout);
   }
 
   Widget _board(BuildContext context) => Padding(
@@ -273,48 +273,6 @@ class WorkspaceView extends StatelessWidget {
     ),
   );
 }
-
-/// The board and the card side by side. The split view keeps its areas —
-/// and so the sizes the user dragged them to — in this state for the life
-/// of the window, while what fills them is built from the widget of the
-/// moment: an area's own builder would keep the first mode's panes.
-class _BoardAndCard extends StatefulWidget {
-  const _BoardAndCard({required this.board, required this.card});
-
-  final WidgetBuilder board;
-  final WidgetBuilder card;
-
-  @override
-  State<_BoardAndCard> createState() => _BoardAndCardState();
-}
-
-class _BoardAndCardState extends State<_BoardAndCard> {
-  final _split = MultiSplitViewController(
-    areas: [
-      Area(data: _Side.board, flex: boardShare, min: boardPaneMinWidth),
-      Area(data: _Side.card, flex: cardShare, min: readingPaneMinWidth),
-    ],
-  );
-
-  @override
-  void dispose() {
-    _split.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => MultiSplitViewTheme(
-    data: paneTheme(Theme.of(context).colorScheme),
-    child: MultiSplitView(
-      controller: _split,
-      builder: (context, area) => area.data == _Side.board
-          ? widget.board(context)
-          : widget.card(context),
-    ),
-  );
-}
-
-enum _Side { board, card }
 
 /// The moves, the opponent's replies, the explorer or the search, under
 /// the strip that says which. The tabs are the window's: the shell owns
@@ -607,7 +565,7 @@ class _BoardAndCounterState extends State<_BoardAndCounter>
     final onMove = widget.onMove;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final room = navRowHeight + Space.s + _engineRoom;
+        final room = navRowHeight + moveFeedbackHeight + Space.s + _engineRoom;
         final noteRoom = widget.editing != null || widget.noteEditable
             ? moveNoteMinHeight + Space.s
             : 0.0;
@@ -662,6 +620,7 @@ class _BoardAndCounterState extends State<_BoardAndCounter>
                   ),
                 ),
                 _navigation(),
+                MoveFeedback(entry: widget.moves),
                 if (below >= moveNoteMinHeight) _note(side, below),
               ],
             ),
@@ -728,7 +687,7 @@ class _ClaimedBoard extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        const room = navRowHeight + Space.s;
+        const room = navRowHeight + moveFeedbackHeight + Space.s;
         final side = min(constraints.maxWidth, constraints.maxHeight - room);
         return Align(
           alignment: Alignment.topCenter,
@@ -748,7 +707,7 @@ class _ClaimedBoard extends StatelessWidget {
                     coordinates: settings.value.boardCoordinates,
                   ),
                 ),
-                SizedBox(height: room - navRowHeight),
+                const SizedBox(height: Space.s),
                 SizedBox(
                   height: navRowHeight,
                   child: _Typed(
@@ -757,6 +716,7 @@ class _ClaimedBoard extends StatelessWidget {
                     onMove: claim.onMove,
                   ),
                 ),
+                MoveFeedback(entry: moves),
               ],
             ),
           ),

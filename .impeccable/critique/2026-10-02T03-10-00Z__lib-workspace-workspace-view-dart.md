@@ -140,3 +140,45 @@ Two choices can scope implementation:
 2. Implement the top three concrete behavior fixes first, or a coordinated pass across all five priorities?
 
 This report changes no app behavior.
+
+
+## Implementation follow-through — October 2, 2026
+
+The coordinated pass implements all five concrete priorities above, building on
+Claude's completed pane and reply-provenance work. The original score remains a
+historical review, not a new usability measurement.
+
+- Discard names the document and asks before clearing held edits; cancellation
+  retains the draft, and a changed document invalidates an old confirmation.
+- Training pauses across hidden tabs, modes and file detours. Resume returns the
+  same lesson and timers in the current training view. Pending ratings finish
+  saving; source changes invalidate stale lessons. Back to lines ends a sitting.
+- Tactics text search determines both the visible count and Play's queue; a
+  search with no matches disables Play.
+- Player failures offer adjacent Try again and Details, retain usable results
+  together with their source revisions, and distinguish failed updates. The top
+  bar names the active engine task and returns to its controls. Submitted move
+  errors have a reserved text row and an accessible announcement.
+- The board exposes named squares, turn/check state, orientation-aware keyboard
+  navigation, legal move selection and promotion choices. Selected tabs have
+  semantics, close controls have visible keyboard focus, and Shift+F10 opens
+  tab context actions. Settings lists the added keys.
+- Mode navigation is grouped and searchable. The PGN reading surface labels its
+  Tools menu. Actions offers layout reset and keyboard sizing. Layouts remember
+  open tools, active panes, split proportions, board width and builder book
+  visibility per mode and document; delayed saves participate in exit settling.
+- Fallback reply percentages have a visible explanatory legend. Training row
+  heights scale with larger text. Typed notation is cleared when replacing its
+  board position, including when a lesson takes over the board.
+
+Validation includes independent source review, regression tests for these
+interactions, semantic board actions and stale promotions, immediate-exit layout
+persistence, malformed saved layouts, and 1280×720/800 pane checks including 130%
+text. The production desktop app was also inspected headlessly at 1280×720 with
+disposable PGN data: builder, grouped modes, inline move refusal, training,
+Pause/Resume and Viewer Tools/Filter. Final check results are recorded in the
+implementation handoff.
+
+Native screen-reader behavior on each supported operating system and usability
+sessions with first-time players remain validation limits. No release-performance
+speedup or new design-health score is claimed from these debug checks.

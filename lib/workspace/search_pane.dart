@@ -247,10 +247,24 @@ class _SearchPaneState extends State<SearchPane>
   Widget _bar(BuildContext context) => LayoutBuilder(
     builder: (context, size) {
       final replies = _book ? null : _repliesField();
-      final inline = size.maxWidth >= searchBarInlineWidth;
-      // A narrow pane, such as half the card beside the moves, keeps the
-      // button and the gear on the bar and moves the depth down a line.
-      final depthInBar = size.maxWidth >= searchBarDepthWidth;
+      final fontSize = Theme.of(context).textTheme.labelLarge!.fontSize!;
+      final scale = math.max(
+        1.0,
+        MediaQuery.textScalerOf(context).scale(fontSize) / fontSize,
+      );
+      final available = size.maxWidth - Space.m - Space.xs;
+      final runWidth = math.min(
+        searchRunWidth * scale,
+        available - kMinInteractiveDimension,
+      );
+      final depthWidth = searchDepthWidth * scale;
+      final repliesWidth = searchRepliesWidth * scale;
+      final withDepth =
+          runWidth + Space.s + depthWidth + kMinInteractiveDimension;
+      // Account for the gear's whole hit target and scaled labels before
+      // keeping controls on the bar. Extra fields move to the next row.
+      final depthInBar = available >= withDepth;
+      final inline = available >= withDepth + Space.s + repliesWidth;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -260,14 +274,14 @@ class _SearchPaneState extends State<SearchPane>
               padding: const EdgeInsets.only(left: Space.m, right: Space.xs),
               child: Row(
                 children: [
-                  SizedBox(width: searchRunWidth, child: _runButton()),
+                  SizedBox(width: runWidth, child: _runButton()),
                   if (depthInBar) ...[
                     const SizedBox(width: Space.s),
-                    _depthBox(),
+                    _depthBox(width: depthWidth),
                   ],
                   if (inline && replies != null) ...[
                     const SizedBox(width: Space.s),
-                    SizedBox(width: searchRepliesWidth, child: replies),
+                    SizedBox(width: repliesWidth, child: replies),
                   ],
                   const Spacer(),
                   _gear(context),
@@ -282,7 +296,7 @@ class _SearchPaneState extends State<SearchPane>
                 padding: const EdgeInsets.symmetric(horizontal: Space.m),
                 child: Row(
                   children: [
-                    if (!depthInBar) _depthBox(),
+                    if (!depthInBar) _depthBox(width: depthWidth),
                     if (!depthInBar && replies != null)
                       const SizedBox(width: Space.s),
                     if (!inline && replies != null) Expanded(child: replies),
@@ -295,7 +309,7 @@ class _SearchPaneState extends State<SearchPane>
     },
   );
 
-  Widget _depthBox() => Tooltip(
+  Widget _depthBox({required double width}) => Tooltip(
     message: _book
         ? 'Follow the opponent\'s master replies this many '
               'half-moves from the board; past it every line runs '
@@ -309,7 +323,7 @@ class _SearchPaneState extends State<SearchPane>
       value: _options.depth,
       min: ExpectimaxOptions.minDepth,
       max: ExpectimaxOptions.maxDepth,
-      width: searchDepthWidth,
+      width: width,
       enabled: !widget.fill.running,
       onProblem: _problem,
       onChanged: (depth) => unawaited(

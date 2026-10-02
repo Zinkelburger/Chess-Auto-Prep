@@ -105,7 +105,7 @@ void main() {
     jobs.take(audit, 'Audit');
     await run.start(config(rules: {'maxMoves': 1}));
     expect(run.running, isFalse);
-    expect(run.problem, 'Wait for the engine job under way to finish.');
+    expect(run.problem, contains('is running.'));
     expect(launched, isEmpty);
     expect(run.history, isEmpty);
     jobs.release(audit);

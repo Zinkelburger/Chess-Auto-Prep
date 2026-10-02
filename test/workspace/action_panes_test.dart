@@ -55,6 +55,66 @@ Finder tabIn(int index, String name) =>
     find.descendant(of: pane(index), matching: find.text(name));
 
 void main() {
+  testWidgets(
+    'saved and keyboard-sized panes stay usable after window narrowing',
+    (tester) async {
+      final layout = await pumpPanes(tester);
+      layout.startBuilding();
+      layout.resize(layout.root as ActionPaneSplit, 0.1);
+      final saved = layout.snapshot();
+      await tester.binding.setSurfaceSize(const Size(600, 680));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(pane(0)).width,
+        greaterThanOrEqualTo(movesPaneComfortWidth),
+      );
+      expect(
+        tester.getRect(pane(1)).width,
+        greaterThanOrEqualTo(searchPaneMinWidth),
+      );
+      expect(layout.snapshot(), saved);
+      layout.select(1);
+      for (var i = 0; i < 12; i++) {
+        layout.resizeActive(-0.05);
+      }
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(pane(1)).width,
+        greaterThanOrEqualTo(searchPaneMinWidth),
+      );
+      final narrowed = layout.snapshot();
+      await tester.binding.setSurfaceSize(const Size(1400, 900));
+      await tester.pumpAndSettle();
+      expect(layout.snapshot(), narrowed);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'nested splits preserve each leaf minimum when room is available',
+    (tester) async {
+      final layout = await pumpPanes(tester);
+      layout.startBuilding();
+      layout.split(1, WorkspaceTab.explorer, PaneSplitDirection.right);
+      layout.resize(layout.root as ActionPaneSplit, 0.1);
+      await tester.binding.setSurfaceSize(const Size(1000, 680));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(pane(0)).width,
+        greaterThanOrEqualTo(movesPaneComfortWidth),
+      );
+      expect(
+        tester.getRect(pane(1)).width,
+        greaterThanOrEqualTo(searchPaneMinWidth),
+      );
+      expect(
+        tester.getRect(pane(2)).width,
+        greaterThanOrEqualTo(actionPaneMinWidth),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('the builder starts with Moves beside Expectimax and the '
       'book shut', (tester) async {
     final layout = await pumpPanes(tester);
@@ -110,7 +170,7 @@ void main() {
     'right clicking an Open tab action offers split and pane destinations',
     (tester) async {
       final layout = await pumpPanes(tester);
-      await tester.tap(find.byTooltip('Open tab'));
+      await tester.tap(find.byTooltip('Open tools and arrange panes'));
       await tester.pumpAndSettle();
       await rightClick(tester, find.widgetWithText(MenuItemButton, 'Replies'));
       await tester.tap(
@@ -314,7 +374,7 @@ void main() {
   testWidgets('a tab picked from + goes under a lone pane, and joins the '
       'pane it is picked in once there are two', (tester) async {
     final layout = await pumpPanes(tester, opensBeside: true);
-    await tester.tap(find.byTooltip('Open tab'));
+    await tester.tap(find.byTooltip('Open tools and arrange panes'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(MenuItemButton, 'Replies'));
     await tester.pumpAndSettle();
@@ -325,7 +385,7 @@ void main() {
       tester.getRect(pane(0)).bottom,
       lessThanOrEqualTo(tester.getRect(pane(1)).top),
     );
-    await tester.tap(find.byTooltip('Open tab').last);
+    await tester.tap(find.byTooltip('Open tools and arrange panes').last);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(MenuItemButton, 'Audit'));
     await tester.pumpAndSettle();
@@ -343,7 +403,7 @@ void main() {
     tester,
   ) async {
     final layout = await pumpPanes(tester);
-    await tester.tap(find.byTooltip('Open tab'));
+    await tester.tap(find.byTooltip('Open tools and arrange panes'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(MenuItemButton, 'Replies'));
     await tester.pumpAndSettle();
@@ -354,7 +414,7 @@ void main() {
   testWidgets('New pane adds an empty pane, filled from its + or by a tab '
       'moved to it, and closed like any other', (tester) async {
     final layout = await pumpPanes(tester);
-    await tester.tap(find.byTooltip('Open tab'));
+    await tester.tap(find.byTooltip('Open tools and arrange panes'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(MenuItemButton, 'New pane'));
     await tester.pumpAndSettle();
@@ -364,7 +424,7 @@ void main() {
     expect(find.textContaining('Body 1'), findsNothing);
     expect(layout.isOpen(WorkspaceTab.replies), isFalse);
 
-    await tester.tap(find.byTooltip('Open tab').last);
+    await tester.tap(find.byTooltip('Open tools and arrange panes').last);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(MenuItemButton, 'Replies'));
     await tester.pumpAndSettle();
@@ -459,7 +519,7 @@ void main() {
     expect(find.byKey(const ValueKey('tab-row-0')), findsNothing);
     expect(find.text('Moves'), findsNothing);
     expect(find.text('Body 0 Moves'), findsOneWidget);
-    await tester.tap(find.byTooltip('Open tab'));
+    await tester.tap(find.byTooltip('Open tools and arrange panes'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(MenuItemButton, 'Explorer'));
     await tester.pumpAndSettle();

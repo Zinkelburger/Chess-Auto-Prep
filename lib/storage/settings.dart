@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show setEquals;
+import 'package:flutter/foundation.dart' show setEquals, mapEquals;
 
 import '../chess/explorer_choice.dart';
 import '../chess/generation/expectimax_options.dart';
@@ -35,6 +35,7 @@ final class Settings {
     this.training = TrainingOptions.defaults,
     this.myGameSpeeds = allSpeeds,
     this.updates = UpdateChoices.defaults,
+    this.workspaceLayouts = const {},
     this._extra = const {},
   });
 
@@ -107,6 +108,9 @@ final class Settings {
   /// The update switches, the last check and the skipped version.
   final UpdateChoices updates;
 
+  /// Saved reading-tool arrangements, keyed by mode and document path.
+  final Map<String, String> workspaceLayouts;
+
   /// The file's keys this build does not read, written back as they were
   /// so a newer build's choices survive an older build saving. Not part of
   /// equality: nothing on screen can change them.
@@ -146,6 +150,7 @@ final class Settings {
     TrainingOptions? training,
     Set<GameSpeed>? myGameSpeeds,
     UpdateChoices? updates,
+    Map<String, String>? workspaceLayouts,
   }) => Settings(
     boardCoordinates: boardCoordinates ?? this.boardCoordinates,
     figurines: figurines ?? this.figurines,
@@ -168,6 +173,7 @@ final class Settings {
     training: training ?? this.training,
     myGameSpeeds: myGameSpeeds ?? this.myGameSpeeds,
     updates: updates ?? this.updates,
+    workspaceLayouts: workspaceLayouts ?? this.workspaceLayouts,
     extra: _extra,
   );
 
@@ -196,6 +202,7 @@ final class Settings {
         if (myGameSpeeds.contains(speed)) speed.name,
     ],
     'updates': updates.toJson(),
+    'workspaceLayouts': workspaceLayouts,
   });
 
   /// Reads [text]; a field that is missing or of the wrong type keeps its
@@ -239,6 +246,12 @@ final class Settings {
       training: TrainingOptions.fromJson(decoded['training']),
       myGameSpeeds: _speeds(decoded['myGameSpeeds']),
       updates: UpdateChoices.fromJson(decoded['updates']),
+      workspaceLayouts: {
+        if (decoded['workspaceLayouts'] case final Map entries)
+          for (final entry in entries.entries)
+            if (entry.key is String && entry.value is String)
+              entry.key as String: entry.value as String,
+      },
       extra: {
         for (final MapEntry(:key, :value) in decoded.entries)
           if (!_keys.contains(key)) key: value,
@@ -266,6 +279,7 @@ final class Settings {
     'training',
     'myGameSpeeds',
     'updates',
+    'workspaceLayouts',
   };
 
   /// The speeds [value] names; every speed when it names none, since no
@@ -301,7 +315,8 @@ final class Settings {
       other.acceptAlternativeAnswers == acceptAlternativeAnswers &&
       other.training == training &&
       setEquals(other.myGameSpeeds, myGameSpeeds) &&
-      other.updates == updates;
+      other.updates == updates &&
+      mapEquals(other.workspaceLayouts, workspaceLayouts);
 
   @override
   int get hashCode => Object.hash(
@@ -323,5 +338,8 @@ final class Settings {
     training,
     Object.hashAllUnordered(myGameSpeeds),
     updates,
+    Object.hashAllUnordered(
+      workspaceLayouts.entries.map((e) => Object.hash(e.key, e.value)),
+    ),
   );
 }

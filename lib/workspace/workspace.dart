@@ -1,4 +1,5 @@
 import 'board_book.dart';
+import 'engine_jobs.dart';
 import '../storage/settings_store.dart';
 import 'books.dart';
 import 'chapter_audit.dart';
@@ -31,6 +32,7 @@ final class Workspace {
   const Workspace({
     required this.session,
     this.inspection,
+    this.jobs,
     this.review,
     this.solitaire,
     this.audit,
@@ -53,6 +55,7 @@ final class Workspace {
   });
 
   final DocumentSession session;
+  final EngineJobs? jobs;
   final GameReview? review;
 
   /// The viewer's guess-the-move replay of the game on the board.
@@ -74,6 +77,7 @@ final class Workspace {
           saver: inspection!.saver,
           analysis: inspection!.engine,
           settings: settings,
+          jobs: jobs,
           explorer: explorer,
           games: games,
           replies: replies,

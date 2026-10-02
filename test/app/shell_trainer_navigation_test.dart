@@ -24,7 +24,7 @@ void main() {
     w.requests.switchTo(mode);
     await tester.pumpAndSettle();
     if (find.text('Train').evaluate().isEmpty) {
-      await tester.tap(find.byTooltip('Open tab').first);
+      await tester.tap(find.byTooltip('Open tools and arrange panes').first);
       await tester.pumpAndSettle();
     }
     await tester.tap(find.text('Train'));

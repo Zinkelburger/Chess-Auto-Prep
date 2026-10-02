@@ -177,8 +177,15 @@ class Trainer extends ChangeNotifier {
     if (_catalogInputs == catalog.inputsRevision) return;
     _catalogInputs = catalog.inputsRevision;
     final change = catalog.admittedChange;
+    if (change == null &&
+        _retained &&
+        _lesson != null &&
+        _state is TrainerReady) {
+      unawaited(_checkRetained(_lesson!, _state as TrainerReady));
+      return;
+    }
     if (change != null) {
-      final source = _session.source;
+      final source = _retained ? _read?.ref : _session.source;
       final inputs = switch (_scope) {
         TrainScope.book => _books.inputs(_books.active),
         TrainScope.chapter => {if (source != null) source.path},
@@ -188,7 +195,7 @@ class Trainer extends ChangeNotifier {
       };
       if (!inputs.any(change.touches)) return;
       final wholeFile =
-          _session.game == null &&
+          (_retained ? _read?.chapter?.game : _session.game) == null &&
           source?.section == null &&
           catalog.repertoires
                   .expand((folder) => folder.chapters)
@@ -196,12 +203,19 @@ class Trainer extends ChangeNotifier {
                   .length <=
               1;
       if (wholeFile &&
+          _session.source == source &&
           change.kind == DocumentChangeKind.saved &&
           change.path == source?.path) {
         return;
       }
     }
     unawaited(_load(force: true));
+  }
+
+  Future<void> _checkRetained(Lesson lesson, TrainerReady state) async {
+    final unchanged = await _chapters.unchanged(state.chapters);
+    if (_disposed || !identical(_lesson, lesson) || unchanged) return;
+    await _load(force: true);
   }
 
   /// The book in use as the last load saw it.
@@ -215,7 +229,12 @@ class Trainer extends ChangeNotifier {
   /// means the file changed some other way, and the scope is read again.
   void _saved() {
     final revision = _session.persistedRevision;
-    if (revision == _savedRevision &&
+    final returning =
+        _retained &&
+        _lesson != null &&
+        _session.source?.path == _read?.ref?.path;
+    if (!returning &&
+        revision == _savedRevision &&
         revision?.nativeIdentity == _savedRevision?.nativeIdentity)
       return;
     _savedRevision = revision;
@@ -223,6 +242,18 @@ class Trainer extends ChangeNotifier {
     if (_read?.ref?.path != path) return;
     final state = _state;
     final receipt = _session.persistedChange;
+    if (_retained &&
+        _lesson != null &&
+        state is TrainerReady &&
+        receipt == null) {
+      final original = state.chapters
+          .where((c) => c.ref.path == path)
+          .firstOrNull
+          ?.revision;
+      if (original == revision &&
+          original?.nativeIdentity == revision?.nativeIdentity)
+        return;
+    }
     if (path != null &&
         state is TrainerReady &&
         receipt != null &&
@@ -414,6 +445,25 @@ class Trainer extends ChangeNotifier {
   /// The waits [_loadsSettled] has open, which [dispose] ends.
   final _settling = <Completer<void>>{};
 
+  bool _retained = false;
+
+  /// A navigation detour releases the board and pauses delays, not progress.
+  void suspend() {
+    final lesson = _lesson;
+    if (lesson == null || lesson.suspended) return;
+    _retained = true;
+    lesson.suspend();
+    board.value = null;
+    _analysis.resume(this);
+  }
+
+  void resume() {
+    final lesson = _lesson;
+    if (lesson == null || !lesson.suspended) return;
+    _analysis.pause(this, _pauseReason);
+    lesson.resume();
+  }
+
   /// Ends the sitting. A line not yet rated is left as it was.
   void leave() {
     final lesson = _lesson;
@@ -422,6 +472,12 @@ class Trainer extends ChangeNotifier {
       ..removeListener(_lessonChanged)
       ..dispose();
     _lesson = null;
+    final retained = _retained;
+    _retained = false;
+    if (retained)
+      scheduleMicrotask(() {
+        if (!_disposed && _lesson == null) _follow();
+      });
     board.value = null;
     _analysis.resume(this);
     notifyListeners();
@@ -452,9 +508,11 @@ class Trainer extends ChangeNotifier {
 
   void _lessonChanged() {
     final lesson = _lesson;
-    board.value = lesson == null || lesson.state is SittingOver
+    board.value =
+        lesson == null || lesson.suspended || lesson.state is SittingOver
         ? null
         : lesson.claim;
+    if (board.value == null) _analysis.resume(this);
     notifyListeners();
   }
 
@@ -463,10 +521,17 @@ class Trainer extends ChangeNotifier {
   /// repertoire being trained whole is one already read — a line sent to be
   /// read from the list — so only its lines are worked out again. One game
   /// of the file on its own is another document. Studies retain all their
-  /// training lines, but changing the game still ends the current sitting.
+  /// training lines. With a sitting active, document detours suspend it and
+  /// preserve the original source until it changes or Back to lines is chosen.
   void _follow() {
     final read = _read;
     final chapter = _session.chapter;
+    if (_lesson != null &&
+        (_session.source != read?.ref ||
+            chapter?.game != read?.chapter?.game)) {
+      suspend();
+      return;
+    }
     if (read == null ||
         _session.source != read.ref ||
         chapter?.game != read.chapter?.game) {

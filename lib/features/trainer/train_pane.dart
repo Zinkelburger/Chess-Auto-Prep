@@ -57,9 +57,36 @@ class _TrainPaneState extends State<TrainPane> {
     );
   }
 
+  Widget _paused(Trainer trainer, String name) => Padding(
+    padding: const EdgeInsets.all(Space.m),
+    child: SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Paused · $name'),
+          const SizedBox(height: Space.s),
+          Wrap(
+            spacing: Space.s,
+            children: [
+              FilledButton(
+                onPressed: trainer.resume,
+                child: const Text('Resume lesson'),
+              ),
+              TextButton(
+                onPressed: trainer.leave,
+                child: const Text('Back to lines'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+
   Widget _content(BuildContext context) {
     final trainer = widget.trainer;
     if (trainer.lesson case final lesson?) {
+      if (lesson.suspended) return _paused(trainer, lesson.line.name);
       return LessonView(
         lesson: lesson,
         trainer: trainer,

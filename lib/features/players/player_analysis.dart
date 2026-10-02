@@ -6,6 +6,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../../diagnostics/log.dart';
 import '../../chess/pgn/game_text.dart';
 import '../../chess/pgn/games_written.dart';
 import '../../chess/tactics/game_ids.dart';
@@ -60,7 +61,15 @@ final class PlayerAnalysis extends ChangeNotifier {
   /// [TimeClass.unknown] is the Other choice.
   Set<TimeClass> speeds = {};
   bool busy = false;
-  String? status, error;
+  String? status, error, errorDetail;
+  bool _retryDownload = false;
+
+  Future<void> retry() async {
+    final current = player;
+    if (current != null && !busy)
+      await select(current, download: _retryDownload);
+  }
+
   List<String> warnings = const [];
   int _ticket = 0;
   bool _disposed = false;
@@ -122,11 +131,13 @@ final class PlayerAnalysis extends ChangeNotifier {
     final data = corpus;
     if (data == null) return const [];
     // Filtering statistics is done over the actual games, not by hiding rows
-    // after counts were taken from a broader corpus.
+    // after counts were taken from a broader corpus. Decide once per game;
+    // each game can occur at dozens of positions in the same projection.
+    final kept = gameIndexes.toSet();
     final result = <PlayerPosition>[];
     for (final at in data.positions) {
       if (at.side != side || at.ply < minPly) continue;
-      final included = at.games.where((i) => includes(data.games[i])).toList();
+      final included = at.games.where(kept.contains).toList();
       if (included.length < minGames) continue;
       final filtered = PlayerPosition(
         fen: at.fen,
@@ -136,19 +147,9 @@ final class PlayerAnalysis extends ChangeNotifier {
         ply: at.ply,
       );
       for (final index in included) {
-        final game = data.games[index];
-        filtered.games.add(index);
-        if (game.result == '1/2-1/2') {
-          filtered.draws++;
-        } else if (game.result == (side == Side.white ? '1-0' : '0-1')) {
-          filtered.wins++;
-        } else if (game.result == (side == Side.white ? '0-1' : '1-0')) {
-          filtered.losses++;
-        } else {
-          filtered.unknown++;
-        }
+        filtered.addGame(index, data.games[index].result);
       }
-      if (filtered.count >= minGames) result.add(filtered);
+      result.add(filtered);
     }
     result.sort((a, b) {
       final by = switch (order) {
@@ -179,15 +180,25 @@ final class PlayerAnalysis extends ChangeNotifier {
     busy = true;
     status = download ? 'Downloading games…' : 'Reading saved games…';
     error = null;
+    errorDetail = null;
+    _retryDownload = download;
     warnings = const [];
-    corpus = null;
-    if (!same) query = '';
-    evals.clear();
-    _revisions.clear();
+    if (!same) {
+      corpus = null;
+      query = '';
+      evals.clear();
+      _revisions.clear();
+    }
     changed();
     final notes = <String>[];
     try {
-      if (download) await _download(next, ticket, notes);
+      if (download) {
+        await _download(next, ticket, notes);
+        if (_current(ticket) && notes.isNotEmpty) {
+          error = 'Some games could not be updated. Showing saved games.';
+          errorDetail = notes.join('\n');
+        }
+      }
       if (!_current(ticket)) return;
       final (games, revisions) = await _readGames(next, ticket, notes);
       if (!_current(ticket)) return;
@@ -199,7 +210,10 @@ final class PlayerAnalysis extends ChangeNotifier {
       if (!await _validate(revisions, ticket))
         throw StateError('Games changed while being read. Reload this player.');
       corpus = result;
-      _revisions.addAll(revisions);
+      evals.clear();
+      _revisions
+        ..clear()
+        ..addAll(revisions);
       warnings = notes;
       if (!same &&
           !result.games.any((g) => g.side == side) &&
@@ -217,8 +231,12 @@ final class PlayerAnalysis extends ChangeNotifier {
             ].join(' · ');
     } on Object catch (e) {
       if (_current(ticket)) {
-        error = '$e';
-        corpus = null;
+        log.w('read player games', e);
+        status = null;
+        error = download
+            ? 'Could not update this player’s games.'
+            : 'Could not read this player’s games.';
+        errorDetail = '$e';
       }
     } finally {
       if (_current(ticket)) {
@@ -342,6 +360,8 @@ final class PlayerAnalysis extends ChangeNotifier {
             notes.add('${p.basename(path)} is missing. Link the file again.');
       }
     }
+    if (paths.isNotEmpty && revisions.isEmpty && notes.isNotEmpty)
+      throw StateError(notes.join('\n'));
     return (games, revisions);
   }
 

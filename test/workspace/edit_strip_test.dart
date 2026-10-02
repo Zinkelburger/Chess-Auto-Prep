@@ -361,7 +361,9 @@ void main() {
       await tester.tap(find.text('Save'));
       expect(asked, 1);
       await tester.tap(find.text('Discard'));
-      await tester.pump();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
       expect(fixture.session.hasHeldEdits, isFalse);
       expect(find.text('Save'), findsNothing);
     },

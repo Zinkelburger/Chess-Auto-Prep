@@ -113,6 +113,8 @@ void main() {
       expect(w.session.cursor, const NodePath.root());
       expect(find.byType(Dialog), findsNothing);
       expect(words(tester), 'Ke7', reason: 'left to be put right');
+      expect(find.text('That move is not legal here.'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('Esc clears the words and gives the keys back to the board', (
@@ -130,6 +132,24 @@ void main() {
       await key(tester, LogicalKeyboardKey.keyF);
       expect(w.session.flipped, isTrue, reason: 'the keys are back');
     });
+  });
+
+  testWidgets('a new training board clears notation refused on the document', (
+    tester,
+  ) async {
+    await openKid(tester);
+    await key(tester, LogicalKeyboardKey.slash);
+    await tester.enterText(field, 'Ke7');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(find.text('That move is not legal here.'), findsOneWidget);
+    w.requests.switchTo(Mode.trainer);
+    await tester.pumpAndSettle();
+    w.lineTrainer.learn();
+    await tester.pumpAndSettle();
+    expect(words(tester), isEmpty);
+    expect(find.text('That move is not legal here.'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('on the analysis board a typed move is taken back by Ctrl+Z', (
@@ -178,7 +198,7 @@ void main() {
   ) async {
     await openKid(tester);
     if (find.text('Train').evaluate().isEmpty) {
-      await tester.tap(find.byTooltip('Open tab').first);
+      await tester.tap(find.byTooltip('Open tools and arrange panes').first);
       await tester.pumpAndSettle();
     }
     await tester.tap(find.text('Train'));

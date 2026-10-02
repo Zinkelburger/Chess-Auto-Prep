@@ -73,6 +73,68 @@ void main() {
     expect(corpus.positions.first.count, 1);
     expect(corpus.positions.first.moves['g1f3'], 1);
   });
+  test('filtered statistics count results from either player side without '
+      'changing the corpus', () {
+    final store = ScriptedDocumentStore();
+    final owner = PlayerAnalysis(
+      documents: store,
+      archive: ScriptedGameStore(),
+      cache: GamesCache(store, folder: '/games'),
+      sites: const [],
+      pending: PendingWrites(),
+      archiveCopies: '/archive',
+    );
+    addTearDown(owner.dispose);
+    final sources = <PlayerGame>[];
+    for (final side in Side.values) {
+      for (final (opponent, result) in [
+        ('Keep win', side == Side.white ? '1-0' : '0-1'),
+        ('Keep draw', '1/2-1/2'),
+        ('Keep unfinished', '*'),
+        ('Drop loss', side == Side.white ? '0-1' : '1-0'),
+      ]) {
+        final white = side == Side.white ? 'Alex' : opponent;
+        final black = side == Side.black ? 'Alex' : opponent;
+        sources.add(
+          PlayerGame(
+            file: const DocumentRef('/games.pgn'),
+            index: sources.length,
+            text:
+                '[White "$white"]\n[Black "$black"]\n[Result "$result"]\n\n'
+                '1. e4 e5 2. Nf3 Nc6 $result',
+          ),
+        );
+      }
+    }
+    final corpus = owner.corpus = buildPlayerCorpus({'alex'}, sources);
+    owner.minPly = 0;
+    for (final side in Side.values) {
+      owner.setSide(side);
+      owner.search('Keep');
+      expect(owner.gameIndexes, hasLength(3));
+      for (final position in owner.positions) {
+        expect(position.games, owner.gameIndexes.toSet());
+        expect(
+          (position.wins, position.draws, position.losses, position.unknown),
+          (1, 1, 0, 1),
+        );
+        expect(position.score, 0.75);
+      }
+      owner.minGames = 4;
+      expect(owner.positions, isEmpty);
+      owner.search('');
+      expect(owner.positions, isNotEmpty);
+      expect(owner.positions.first.score, 0.5);
+      owner.minGames = 1;
+    }
+    for (final position in corpus.positions) {
+      expect(position.count, 4);
+      expect(
+        (position.wins, position.draws, position.losses, position.unknown),
+        (1, 1, 1, 1),
+      );
+    }
+  });
   test('pasted CSV quotes, TSV and opponent JSON preserve names', () {
     final csv = readPlayerList(
       'Name,Rating,Chess.com\n"Rivera, Alex",1900,alex_1',
@@ -321,6 +383,20 @@ void main() {
       );
       expect(owner.corpus!.games, hasLength(1));
       expect(await owner.currentSources(), true);
+      final corpus = owner.corpus;
+      final fingerprint = owner.fingerprint;
+      final revision = owner.revisionOf(ref);
+      store.documents[ref] = const Unreadable('permission denied');
+      await owner.select(owner.player!);
+      expect(owner.error, 'Could not read this player’s games.');
+      expect(owner.corpus, same(corpus));
+      expect(owner.fingerprint, fingerprint);
+      expect(owner.revisionOf(ref), revision);
+      expect(await owner.currentSources(), isFalse);
+      store.documents[ref] = Opened(game, scriptedRevision(game));
+      await owner.retry();
+      expect(owner.error, isNull);
+      expect(await owner.currentSources(), isTrue);
       final combined = '$game\n\n${game.replaceAll('Bob', 'Carol')}';
       store.documents[ref] = Opened(combined, scriptedRevision(combined));
       await owner.select(owner.player!);

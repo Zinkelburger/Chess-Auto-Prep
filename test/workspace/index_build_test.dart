@@ -93,4 +93,33 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 100));
     expect(progress, isEmpty);
   });
+
+  for (final onWorker in [false, true]) {
+    test(
+      'a progress failure closes the ${onWorker ? 'isolate' : 'incremental'} '
+      'build and is delivered through its result',
+      () async {
+        final text = bigChapter(games: 1500);
+        final lines = parseChapter(name: 'games', text: text).lines;
+        final failure = StateError('progress consumer failed');
+        var reports = 0;
+        void onProgress(int done) {
+          reports++;
+          throw failure;
+        }
+
+        final build = onWorker
+            ? IndexBuild.start([
+                for (final line in lines) line.text,
+              ], onProgress: onProgress)
+            : IndexBuild.ofLines(lines, onProgress: onProgress);
+        await expectLater(build.result, throwsA(same(failure)));
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        expect(reports, 1);
+        // Cancellation after failure cannot change the terminal result.
+        build.cancel();
+        await expectLater(build.result, throwsA(same(failure)));
+      },
+    );
+  }
 }

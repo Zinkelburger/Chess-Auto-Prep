@@ -113,7 +113,7 @@ void main() {
     expect(review.running, isTrue);
     expect(reviewLaunches, 1);
     expect(audit.canStart, isFalse);
-    expect(await audit.start(), 'Wait for the engine job under way to finish.');
+    expect(await audit.start(), contains('is running.'));
     expect(audit.running, isFalse);
 
     review.stop();

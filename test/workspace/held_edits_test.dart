@@ -194,12 +194,23 @@ void main() {
       expect(fixture.onDisk, contains('Nxd4 Nf6'));
     });
 
-    testWidgets('Discard puts the file back', (tester) async {
+    testWidgets('Discard confirms the scope and can be cancelled', (
+      tester,
+    ) async {
       await pump(tester);
       playTwoNewMoves();
       await tester.pump();
       await tester.tap(find.text('Discard'));
       await tester.pump();
+      expect(fixture.session.hasHeldEdits, isTrue);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(fixture.session.hasHeldEdits, isTrue);
+      await tester.tap(find.text('Discard'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
       expect(find.text('Unsaved changes'), findsNothing);
       expect(fixture.session.currentMove?.san, 'cxd4');
     });
