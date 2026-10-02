@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -158,10 +159,22 @@ class _ExplorerPaneState extends State<ExplorerPane>
             _OpeningName(session: widget.session, openings: widget.openings),
             Expanded(
               child: widget.explorer.choice.source == ExplorerSource.book
-                  ? TreePane(
-                      session: widget.session,
-                      tree: widget.tree,
-                      onOpen: widget.onOpenPlace,
+                  // The book's columns are fixed, and its file a link: a
+                  // pane narrower than they need, such as the moves' half
+                  // of the builder's card, scrolls them sideways.
+                  ? LayoutBuilder(
+                      builder: (context, room) => SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(
+                          width: math.max(actionPaneMinWidth, room.maxWidth),
+                          height: room.maxHeight,
+                          child: TreePane(
+                            session: widget.session,
+                            tree: widget.tree,
+                            onOpen: widget.onOpenPlace,
+                          ),
+                        ),
+                      ),
                     )
                   : _body(context),
             ),
