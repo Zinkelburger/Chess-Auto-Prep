@@ -201,8 +201,19 @@ final class _Reader {
     }
     final edges = _edges(children, depth);
     if (edges == null) return null;
-    return _branch(fen, evalForUs, edges, ourTurn: ourTurn);
+    return _branch(
+      fen,
+      evalForUs,
+      edges,
+      ourTurn: ourTurn,
+      repliesFrom: _repliesFrom(json['v2_replies_from']),
+    );
   }
+
+  /// Who gave an opponent node's shares, where the file says; a name this
+  /// reader does not know says nothing.
+  static RepliesFrom? _repliesFrom(Object? name) =>
+      RepliesFrom.values.where((from) => from.name == name).firstOrNull;
 
   /// A childless node. One the file says was [explored] is settled where it
   /// stands, scored or not: a mainline book ends a line wherever ChessDB
@@ -273,6 +284,7 @@ final class _Reader {
     Eval? evalForUs,
     List<_Edge> edges, {
     required bool ourTurn,
+    RepliesFrom? repliesFrom,
   }) {
     if (ourTurn) {
       return OurNode.over(
@@ -289,6 +301,7 @@ final class _Reader {
     return OpponentNode.over(
       fen: fen,
       evalForUs: evalForUs,
+      repliesFrom: repliesFrom,
       replies: [
         for (final edge in edges)
           ReplyMove(

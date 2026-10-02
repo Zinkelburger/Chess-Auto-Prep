@@ -249,10 +249,10 @@ final class _Search {
       OurNode(:final candidates) => OurMoves([
         for (final c in candidates) (c.move, await child(c.move, c.child, 1)),
       ]),
-      OpponentNode(:final replies) => Replies([
+      OpponentNode(:final replies, :final repliesFrom) => Replies([
         for (final r in replies)
           (r.move, r.probability, await child(r.move, r.child, r.probability)),
-      ]),
+      ], from: repliesFrom),
       _ => null,
     };
     // A deeper shortlist promoted to the root, or a root asked for more
@@ -517,7 +517,7 @@ final class _Search {
     return Replies([
       for (final (index, (move, share, _)) in played.indexed)
         (move, share, pendings[index]),
-    ]);
+    ], from: result is PolicyFound ? result.from : null);
   }
 
   /// Every reply in [shares], played, with the share it holds of the
@@ -658,9 +658,12 @@ final class OurMoves extends Expansion {
 }
 
 final class Replies extends Expansion {
-  const Replies(this.replies);
+  const Replies(this.replies, {this.from});
 
   final List<(MoveRef, double, PendingNode)> replies;
+
+  /// Who gave the shares, where a database is the opponent.
+  final RepliesFrom? from;
 
   @override
   Iterable<PendingNode> get children => replies.map((entry) => entry.$3);
@@ -679,9 +682,10 @@ SearchNode assembleTree(PendingNode pending) =>
             CandidateMove(move: move, child: assembleTree(child)),
         ],
       ),
-      Replies(:final replies) => OpponentNode.over(
+      Replies(:final replies, :final from) => OpponentNode.over(
         fen: pending.leaf.fen,
         evalForUs: pending.leaf.evalForUs,
+        repliesFrom: from,
         replies: [
           for (final (move, probability, child) in replies)
             ReplyMove(

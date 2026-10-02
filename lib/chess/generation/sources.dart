@@ -87,10 +87,19 @@ sealed class PolicyResult {
 }
 
 final class PolicyFound extends PolicyResult {
-  const PolicyFound(this.policy);
+  const PolicyFound(this.policy, {this.from});
 
   final Policy policy;
+
+  /// Who answered, where a database of games is the opponent; null where
+  /// the model is the opponent and alone answers.
+  final RepliesFrom? from;
 }
+
+/// Who answered for the opponent at one position of a search whose replies
+/// come from a database of games: its [games], or the [maia] model it falls
+/// back to where it has too few. The names are what a saved tree writes.
+enum RepliesFrom { games, maia }
 
 final class PolicyUnavailable extends PolicyResult {
   const PolicyUnavailable(this.reason);

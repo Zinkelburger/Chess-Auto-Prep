@@ -10,7 +10,11 @@ The C program is also what the chess-prep MCP expectimax tools launch.
 
 Pure searches every legal candidate within the explicit engine-loss constraint
 and every positive-probability opponent reply. No novelty/setup bonuses, MultiPV
-caps, probability cutoffs, or separate deep-verification promise.
+caps, probability cutoffs, or separate deep-verification promise. The app's
+opponent-reply cut is opt-in: `--reply-mass 0.9 --max-replies 5` keeps the
+likeliest replies to 90% of Maia's distribution, at most five, renormalized
+(the chess-prep MCP always passes these). A saved tree records its cut and
+resumes only with it.
 
 ## Requirements
 
