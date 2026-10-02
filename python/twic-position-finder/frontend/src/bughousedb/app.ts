@@ -15,7 +15,7 @@ import {
 } from '../bughouse/boards';
 import {
   ApiError, bookPosition, bookTicket, bookUpload,
-  type BookMove, type BookPosition, type BookScore, type Clock, type RawSearch, type Team,
+  type BookUpload, type BookMove, type BookPosition, type BookScore, type Clock, type RawSearch, type Team,
 } from '../lib/api';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1';
@@ -34,19 +34,15 @@ const START_DUAL = `${START}|${START}`;
  */
 const PRIORITIES: Clock[] = ['ahead', 'even', 'behind'];
 let priority: Clock = 'even';
-// The browser engine runs one network evaluation (about 80 ms) per node, so the
-// position's own search is far shallower than the desktop builder's 1500. The
-// time goes to each board's few moves the search liked most, searched as deeply
-// as the desktop builder searches every move; the rest stay unscored.
-const OWN_NODES = 200;    // each search of the position itself
-const CHILD_NODES = 200;  // each search after one of the top moves
+// Match the desktop bulk evaluation budget. Workers stay loaded between positions.
+const OWN_NODES = 800;
+const CHILD_NODES = 800;
 const TOP_MOVES = 4;      // per board
 const SECONDS_PER_NODE = 0.085;
 const ENGINE = 'hivemind-web';
 const BOTTOM: Record<BoardName, Colour> = { A: 'white', B: 'black' };
 
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const root = el('bughousedb');
 const pool = new EnginePool((message) => setStatus(message));
 
 const lines = new Lines(START_DUAL);
@@ -57,6 +53,7 @@ let hover: BookMove | null = null;
 let job: { fen: string; cancelled: boolean } | null = null;
 /** Positions this computer has already analysed; each computer counts once. */
 const analysedHere = new Set<string>();
+const pendingUploads = new Map<string, BookUpload>();
 /** The latest message from loading or analysing; empty shows the position's own note. */
 let status = { text: '', error: false };
 
@@ -110,6 +107,17 @@ function formatScore(s: BookScore | undefined): string {
 // ── Rendering ─────────────────────────────────────────────────────
 
 function renderTables() {
+  const shared = el('bdb-shared-eval');
+  shared.replaceChildren();
+  const evaluations = (cur?.evaluations ?? []).filter((e) => e.profile.endsWith(':even'));
+  shared.hidden = !evaluations.length;
+  shared.textContent = evaluations.map((e) => {
+    const team = e.profile.split(':')[1] === 'white' ? 'A + B' : 'C + D';
+    const a = e.analysis;
+    const value = a.mate !== null ? `mate ${a.mate}` : a.advantage === null ? 'move suggestion' : `${a.advantage >= 0 ? '+' : ''}${a.advantage.toFixed(3)} Q`;
+    return `Shared position eval: ${team} ${value} · ${e.nodes.toLocaleString()} nodes per team`;
+  }).join(' · ');
+
   if (cur) expectimax.render(cur.expectimax ?? { A: null, B: null }, cur.fen);
   for (const name of BOARDS) {
     const body = el(`bdb-moves-${name}`);
@@ -150,7 +158,7 @@ function renderMissing() {
   el('bdb-missing').dataset.shown = String(running || missing || confirmable);
   const analyse = el<HTMLButtonElement>('bdb-analyse');
   analyse.hidden = running;
-  analyse.textContent = missing ? 'Analyze locally' : 'Confirm locally';
+  analyse.textContent = cur && pendingUploads.has(cur.fen) ? 'Retry save' : missing ? 'Analyze locally' : 'Confirm locally';
   analyse.title = missing
     ? 'Run Hivemind in this browser and add the position to the book for everyone'
     : 'Run Hivemind in this browser too; the book counts every computer that has analysed a position';
@@ -384,6 +392,20 @@ async function search(engine: BrowserEngine, fen: string, team: Team, ahead: boo
   }
 }
 
+async function saveAnalysis(pos: BookPosition, payload: BookUpload) {
+  pendingUploads.set(pos.fen, payload);
+  setStatus('Saving to BughouseDB…');
+  const stored = await bookUpload(payload);
+  pendingUploads.delete(pos.fen);
+  job = null;
+  analysedHere.add(pos.fen);
+  if (cur?.fen === pos.fen) {
+    if (stored.position) { cur = stored.position; render(); }
+    else await load();
+  }
+  setStatus(stored.computers > 1 ? `Confirmed: ${computers(stored.computers)} have analysed this position. Thank you.` : 'Added to the book. Thank you.');
+}
+
 async function analyse() {
   if (!cur || job || (cur.found && !canConfirm())) return;
   const pos = cur;
@@ -403,6 +425,8 @@ async function analyse() {
   try {
     setStatus('Getting a ticket…');
     const { ticket } = await bookTicket(pos.fen);
+    const pending = pendingUploads.get(pos.fen);
+    if (pending) { await saveAnalysis(pos, { ...pending, ticket }); return; }
     setStatus('Starting Hivemind…');
     // The position's own searches first; they rank each board's moves.
     type Task = { fen: string; team: Team; ahead: boolean; nodes: number };
@@ -428,16 +452,12 @@ async function analyse() {
       const i = scored.indexOf(m);
       return { board: m.board, uci: m.uci, on: i < 0 ? null : raw(moveResults[2 * i]), off: i < 0 ? null : raw(moveResults[2 * i + 1]) };
     });
-    setStatus('Uploading…');
-    const stored = await bookUpload({ ticket, fen: pos.fen, engine: ENGINE, nodes: OWN_NODES, child_nodes: CHILD_NODES, own, moves });
-    job = null;
-    analysedHere.add(pos.fen);
-    if (cur?.fen === pos.fen) await load();
-    setStatus(stored.computers > 1 ? `Confirmed: ${computers(stored.computers)} have analysed this position. Thank you.` : 'Added to the book. Thank you.');
+    if (mine.cancelled) throw new Error('cancelled');
+    await saveAnalysis(pos, { ticket, fen: pos.fen, engine: ENGINE, nodes: OWN_NODES, child_nodes: CHILD_NODES, own, moves });
   } catch (e) {
     job = null;
     if (mine.cancelled) setStatus('Cancelled.');
-    else if (e instanceof ApiError && e.status === 409) { analysedHere.add(pos.fen); setStatus(e.message); await load(); }
+    else if (e instanceof ApiError && e.status === 409) { pendingUploads.delete(pos.fen); analysedHere.add(pos.fen); setStatus(e.message); await load(); }
     else setStatus(e instanceof Error && !(e instanceof ApiError) ? e.message : (e as ApiError).message, true);
     bar.style.width = '0';
     renderMissing();

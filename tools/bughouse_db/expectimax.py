@@ -84,6 +84,8 @@ def run(args):
     lock = open(str(args.db) + '.builder.lock', 'w')
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     db.execute("UPDATE job SET status='queued',worker=NULL WHERE status='running'")
+    if getattr(args, "retry_failed", False):
+        db.execute("UPDATE job SET status='queued',error=NULL WHERE status='failed'")
     if db.execute("SELECT 1 FROM sqlite_master WHERE name='analysis'").fetchone():
         db.execute('''UPDATE job SET status='queued',error=NULL WHERE status='done'
             AND NOT EXISTS (SELECT 1 FROM analysis a WHERE a.pos=job.pos AND a.board=job.board
@@ -190,11 +192,12 @@ if __name__ == '__main__':
     s.add_argument('--positions', type=int, default=1000)
     s.add_argument('--max-ply', type=int, default=12)
     r = commands.add_parser('run')
+    r.add_argument('--retry-failed', action='store_true')
     r.add_argument('--dart', default='dart')
     r.add_argument('--worker-bin', type=Path)
     r.add_argument('--workers', type=int, default=2)
     r.add_argument('--cores', type=int, default=4)
-    r.add_argument('--nodes', type=int, default=3000)
+    r.add_argument('--nodes', type=int, default=800)
     r.add_argument('--plies', type=int, default=2)
     r.add_argument('--hours', type=float, default=10)
     r.add_argument('--support', type=Path, default=Path.home() / '.local/share/chess-prep')

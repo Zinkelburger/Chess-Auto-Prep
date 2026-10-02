@@ -3,7 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import puppeteer from 'puppeteer-core';
 
-const [origin, output] = process.argv.slice(2);
+const [origin, output, apiOrigin] = process.argv.slice(2);
 const browser = await puppeteer.launch({ executablePath: process.env.CHROME_BIN || '/usr/bin/google-chrome', headless: true, args: ['--disable-dev-shm-usage'] });
 let page;
 try {
@@ -11,11 +11,12 @@ try {
   const clipboardPermission = (state) => context.setPermission(origin, { permission: { name: 'clipboard-read' }, state }, { permission: { name: 'clipboard-write', allowWithoutSanitization: false }, state });
   await clipboardPermission('granted');
   page = await browser.newPage();
+  page.setDefaultTimeout(300000);
   await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: 1 });
   const errors = [], forbidden = [], assets = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('request', (r) => {
-    if (r.method() !== 'GET' || r.url().includes('/api/')) forbidden.push(r.url());
+    if ((r.method() !== 'GET' || r.url().includes('/api/')) && !r.url().startsWith(apiOrigin + '/')) forbidden.push(r.url());
     if (r.url().includes('/bughouse-engine/')) assets.push(r.url());
   });
   const ready = () => page.waitForFunction(() => !document.querySelector('#bh-copy').disabled && document.querySelector('#bh-fen-A').value);
@@ -158,19 +159,19 @@ try {
   const loadedAssets = assets.length;
   const again = Date.now(); await analyze();
   assert.ok(Date.now() - again < 2000, 'completed analysis should be reused');
-  assert.match(await text('#bh-status'), /saved in this tab/);
+  assert.match(await text('#bh-status'), /Saved to BughouseDB/);
   assert.equal(assets.length, loadedAssets, 'repeat analysis must not fetch engine/model again');
   await page.click('.bh-table tbody tr'); await ready();
-  assert.equal(await page.$eval('#bh-analyse', (e) => e.disabled), true, 'unavailable team cannot start a search');
+  assert.equal(await page.$eval('#bh-analyse', (e) => e.disabled), false, 'the other team is selected after our move');
   await page.click('#bh-reset'); await ready();
   // New positions and cancellation work after all networking is disabled.
   await page.setOfflineMode(true);
   await enter('A', 'e4'); await enter('B', 'd4');
   await page.click('input[name="team"][value="black"] + span');
-  await page.click('input[name="budget"][value="30000"] + span');
+  await page.click('input[name="budget"][value="8000"] + span');
   await page.click('#bh-analyse'); await page.waitForFunction(() => document.querySelector('#bh-status').textContent.includes('searching for our team'));
   await page.click('#bh-stop'); await ready(); assert.match(await text('#bh-status'), /cancelled/);
-  await page.click('input[name="budget"][value="3000"] + span'); await analyze();
+  await page.click('input[name="budget"][value="800"] + span'); await analyze();
   assert.equal(assets.length, loadedAssets);
   await page.evaluate(() => scrollTo(0, 0));
   await page.screenshot({ path: path.join(output, 'bughouse-offline.png'), fullPage: true });

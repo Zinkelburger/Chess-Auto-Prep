@@ -162,7 +162,7 @@ async function request(id: number, action: EngineAction, payload: EnginePayload)
     const text = await engine.ccall('bh_search_nodes', 'string',
       ['string', 'number', 'number', 'number', 'number', 'number'],
       [payload.dual_fen ?? '', team, Number(payload.time_advantage ?? false), 0,
-        payload.nodes ?? 1000, payload.movetime_ms ?? 60000], { async: true });
+        payload.nodes ?? 800, payload.movetime_ms ?? 120000], { async: true });
     const answer: Search = JSON.parse(text as string);
     if (engine.inferenceError) { const error = engine.inferenceError; engine.inferenceError = undefined; throw new Error(error); }
     if (answer.error) throw new Error(answer.error);
@@ -170,8 +170,8 @@ async function request(id: number, action: EngineAction, payload: EnginePayload)
     return answer;
   }
   const search = async (side: number, ahead: boolean, required: number): Promise<Search> => {
-    const text = await engine.ccall('bh_search', 'string', ['string', 'number', 'number', 'number', 'number'],
-      [payload.dual_fen ?? '', side, Number(ahead), required, payload.movetime_ms ?? 1500], { async: true });
+    const text = await engine.ccall('bh_search_nodes', 'string', ['string', 'number', 'number', 'number', 'number', 'number'],
+      [payload.dual_fen ?? '', side, Number(ahead), required, payload.nodes ?? 800, payload.movetime_ms ?? 120000], { async: true });
     const answer: Search = JSON.parse(text);
     if (engine.inferenceError) { const error = engine.inferenceError; engine.inferenceError = undefined; throw new Error(error); }
     return answer;
@@ -188,10 +188,28 @@ async function request(id: number, action: EngineAction, payload: EnginePayload)
   const theirs = ours.mate === null ? await search(1 - team, payload.their_time_advantage ?? false, 0) : null;
   if (cancelled) throw new Error('Analysis cancelled.');
   const measured = theirs && !theirs.error && ours.mate === null && theirs.mate === null;
-  const result: Analysis = { ...ours, advantage: measured ? (ours.q - theirs.q) / 2 : null,
+  let staticValues: number[] | undefined;
+  if (theirs?.error?.startsWith('This team has no move available.')) {
+    const text = await engine.ccall('bh_values', 'string', ['string', 'number', 'number', 'number'],
+      [payload.dual_fen ?? '', team, Number(payload.time_advantage ?? false),
+        Number(payload.their_time_advantage ?? false)], { async: true });
+    const values = JSON.parse(text);
+    if (engine.inferenceError) { const error = engine.inferenceError; engine.inferenceError = undefined; throw new Error(error); }
+    if (values.error) throw new Error(values.error);
+    if (cancelled) throw new Error('Analysis cancelled.');
+    staticValues = values;
+  }
+  // Do not cache a time-capped result: Analyze must start a fresh attempt.
+  const complete = (s: Search) => s.mate !== null || s.nodes >= (payload.nodes ?? 800);
+  if (!complete(ours) || (theirs && !theirs.error && !complete(theirs)))
+    throw new Error('The search reached its time limit before finishing the node budget. Analyze again to retry.');
+  const result: Analysis = { ...ours,
+    advantage: measured ? (ours.q - theirs.q) / 2 : staticValues
+      ? Math.max(-1, Math.min(1, ours.q - (staticValues[0] + staticValues[1]) / 2)) : null,
     total_nodes: ours.nodes + (theirs?.nodes ?? 0),
     elapsed_ms: (ours.elapsed_ms ?? 0) + (theirs?.elapsed_ms ?? 0),
-    calibration: { source: measured ? 'measured' : 'unavailable' } };
+    calibration: { source: measured ? 'measured' : staticValues ? 'static' : 'unavailable' },
+    raw: { ours, theirs: theirs && !theirs.error ? theirs : null, static_values: staticValues } };
   if (analysisCache.size >= 32) analysisCache.delete(analysisCache.keys().next().value!);
   analysisCache.set(cacheKey, result);
   return result;

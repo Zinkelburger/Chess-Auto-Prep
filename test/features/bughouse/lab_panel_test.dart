@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/engines/hivemind_engine.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/features/bughouse/archive_moves.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_lab.dart';
@@ -50,7 +51,7 @@ void main() {
       book: outside.book,
       startEngine: () => outside.outside.launch(cores: 2),
       depth: (ownNodes: 50, childNodes: 20),
-      passes: const [Duration(seconds: 1)],
+      passes: const [TimeBudget(Duration(seconds: 1))],
     );
     tester.view.physicalSize = const Size(700, 900);
     tester.view.devicePixelRatio = 1;

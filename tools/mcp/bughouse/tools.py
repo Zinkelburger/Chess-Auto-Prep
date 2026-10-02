@@ -77,8 +77,7 @@ POSITION_ARGS = {
 
 BUDGET_ARGS = {
     "movetime_ms": _i(
-        f"Milliseconds per search (default {analysis.DEFAULT_MOVETIME_MS}). The "
-        "CPU build runs at roughly 350 nodes/s, so a second is about 350 nodes."
+        "Optional time budget in milliseconds. With neither budget supplied, use 800 nodes."
     ),
     "nodes": _i("Node budget instead of a time budget — reproducible; overrides movetime_ms."),
 }

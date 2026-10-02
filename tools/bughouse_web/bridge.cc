@@ -1,4 +1,5 @@
 #include "environment/board.h"
+#include "environment/planes.h"
 #include "common/globals.h"
 #include "search/searchthread.h"
 #include "Fairy-Stockfish/src/piece.h"
@@ -330,6 +331,29 @@ const char* bh_position(const char* fen, const char* moves, int team) {
             result += "]}";
         }
         result += "}}";
+    } catch (const std::exception& e) { result = "{\"error\":" + quote(e.what()) + '}'; }
+    return result.c_str();
+}
+
+// Static values remain defined when a team currently has no legal turn.
+// Their mean removes the network's shared value offset, as in native policy.
+const char* bh_values(const char* fen, int team, int ourAhead, int theirAhead) {
+    try {
+        auto board = load_board(fen);
+        Engine engine(0, 1);
+        std::vector<float> input(NB_INPUT_VALUES());
+        result = "[";
+        for (int i = 0; i < 2; i++) {
+            board_to_planes(*board, input.data(), static_cast<Color>(i ? !team : team),
+                            i ? theirAhead : ourAhead);
+            Engine::HalfInferenceOutputs output;
+            if (cancelled() || !engine.enqueueInferenceHalf(input.data())
+                || !engine.synchronizeInferenceHalf(output))
+                throw std::runtime_error("Static evaluation interrupted.");
+            if (i) result += ',';
+            result += std::to_string(output.value[0]);
+        }
+        result += ']';
     } catch (const std::exception& e) { result = "{\"error\":" + quote(e.what()) + '}'; }
     return result.c_str();
 }

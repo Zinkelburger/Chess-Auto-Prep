@@ -683,8 +683,8 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run", help="search queued positions, one at a time")
     r.add_argument("--root", default="", help="start line, board-tagged: 'A:e4 B:d4'")
-    r.add_argument("--nodes", type=int, default=1500, help="per search of the position itself")
-    r.add_argument("--child-nodes", type=int, default=200, help="per search of each move")
+    r.add_argument("--nodes", type=int, default=800, help="per search of the position itself")
+    r.add_argument("--child-nodes", type=int, default=800, help="per search of each move")
     r.add_argument("--max-ply", type=int, default=10)
     r.add_argument("--follow", choices=("fics", "engine"), default="fics",
                    help="queue the most-played FICS moves, or the engine's best")

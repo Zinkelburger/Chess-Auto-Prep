@@ -122,7 +122,7 @@ final class LinesOn extends EngineLines {
   final Map<Team, TeamLines> lines;
   final ZeroSource zero;
 
-  final Duration? thinking;
+  final HivemindBudget? thinking;
 }
 
 /// The engine is on but could not answer; it stays so until switched on
@@ -141,24 +141,16 @@ typedef TeamLines = ({
   List<({JointMove move, TableScore score})> rows,
 });
 
-/// How long each pass of the engine thinks for each team: Hivemind has no
-/// `go infinite` and keeps nothing between searches, so "on" is passes that
-/// each think longer than the last, up to the longest, which is kept.
-const enginePasses = [
-  Duration(seconds: 1),
-  Duration(seconds: 2),
-  Duration(seconds: 4),
-  Duration(seconds: 8),
-  Duration(seconds: 16),
-  Duration(seconds: 30),
-];
+/// The default live evaluation uses the same 800-node budget as the book.
+/// Explicit pass lists can still request progressively deeper analysis.
+const enginePasses = [NodeBudget(800)];
 
 /// How deep the engine scores a position for the book, as the builder
 /// does: each team's search of the position (for the zero and to order the
 /// moves), then a search after every legal move.
 typedef FillDepth = ({int ownNodes, int childNodes});
 
-const labFillDepth = (ownNodes: 1500, childNodes: 200);
+const labFillDepth = (ownNodes: 800, childNodes: 800);
 
 /// What Hivemind knows about the lab's table: the per-board tables' scores
 /// from the book, and, while the engine switch is on, the engine's lines.
@@ -177,7 +169,7 @@ final class TableSearch extends ChangeNotifier {
     required HivemindBook book,
     required Future<HivemindStart> Function() startEngine,
     FillDepth depth = labFillDepth,
-    List<Duration> passes = enginePasses,
+    List<HivemindBudget> passes = enginePasses,
   }) : pendingWrites = pendingWrites ?? PendingWrites(),
        _book = book,
        _startEngine = startEngine,
@@ -191,7 +183,7 @@ final class TableSearch extends ChangeNotifier {
   final HivemindBook _book;
   final Future<HivemindStart> Function() _startEngine;
   final FillDepth _depth;
-  final List<Duration> _passes;
+  final List<HivemindBudget> _passes;
 
   TableScores _scores = const ScoresWaiting();
   EngineLines _lines = const LinesOff();
@@ -630,7 +622,7 @@ final class TableSearch extends ChangeNotifier {
     TablePosition position,
     ClockCase clock,
     int index,
-    Duration time,
+    HivemindBudget time,
     bool Function() wanted,
   ) async {
     final teams = Team.values.where(position.hasMove).toList();
@@ -642,7 +634,7 @@ final class TableSearch extends ChangeNotifier {
         maySit: clock.maySit(team),
         mustMove: MustMove.either,
         lines: 3,
-        budget: TimeBudget(time),
+        budget: time,
       ), wanted);
       switch (asked) {
         case _Stale():

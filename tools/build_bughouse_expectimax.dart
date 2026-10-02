@@ -18,7 +18,7 @@ Future<void> main(List<String> args) async {
   }
 
   final path = File(option('db', 'bughouse_expectimax.db')).absolute.path;
-  final nodes = int.parse(option('nodes', '3000'));
+  final nodes = int.parse(option('nodes', '800'));
   final plies = int.parse(option('plies', '2'));
   final cores = int.parse(option('cores', '4'));
   final worker = option('worker', '$pid');

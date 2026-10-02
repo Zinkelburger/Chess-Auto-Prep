@@ -16,7 +16,8 @@ import '../styles/bughousedb.css';
 
     <div class="bb-right">
       <section id="bdb-expectimax" class="bh-expectimax" aria-label="Saved expectimax" aria-live="polite"></section>
-      <details class="bdb-engine-details">
+      <p id="bdb-shared-eval" class="dim" aria-live="polite" hidden></p>
+      <details class="bdb-engine-details" open>
         <summary>Engine analysis</summary>
       <div class="bdb-tables">
         {/* One row for the priority and the analyse controls, and one status line under

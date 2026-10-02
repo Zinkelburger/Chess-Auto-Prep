@@ -460,6 +460,13 @@ independent mate-probe allowance. This is a small consistency study, not an Elo
 calibration. Its two-core quota and machine load produced slower timings than
 the earlier throughput figures above; use its measured settings when comparing.
 
+Bulk and default live analysis now use **800 nodes**. Existing deeper saved
+results remain available. The manual
+[overnight command](../python/twic-position-finder/frontend/README.md#shared-analysis-and-manual-overnight-population)
+builds both colour expectimax values and publishes completed tables. This
+changes the neural budget only; the native root mate allowance still follows
+the engine's existing coupling described in the study.
+
 ## The two books
 
 Two different databases, confusingly both called "the bughouse DB". They
