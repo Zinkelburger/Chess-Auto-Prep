@@ -56,7 +56,8 @@ class _ActionPanesState extends State<ActionPanes> {
     return LayoutBuilder(
       builder: (context, room) {
         final total = across ? room.maxWidth : room.maxHeight;
-        final first = total * node.share;
+        final (minimum, maximum) = _bounds(node, total, across);
+        final first = (total * node.share).clamp(minimum, maximum);
         return Stack(
           children: [
             Flex(
@@ -87,11 +88,11 @@ class _ActionPanesState extends State<ActionPanes> {
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onHorizontalDragUpdate: across
-                      ? (drag) => _resize(node, drag.delta.dx, total)
+                      ? (drag) => _resize(node, drag.delta.dx, total, across)
                       : null,
                   onVerticalDragUpdate: across
                       ? null
-                      : (drag) => _resize(node, drag.delta.dy, total),
+                      : (drag) => _resize(node, drag.delta.dy, total, across),
                 ),
               ),
             ),
@@ -103,14 +104,42 @@ class _ActionPanesState extends State<ActionPanes> {
 
   /// Moves [node]'s divider by [by] pixels of [total], keeping each side
   /// at least a narrow pane's width.
-  void _resize(ActionPaneSplit node, double by, double total) {
-    if (total <= 2 * paneMinWidth) return;
+  // Render constraints do not change the saved proportions. Widening the
+  // window restores the user's allocation, including nested splits.
+  (double, double) _bounds(ActionPaneSplit node, double total, bool across) {
+    final first = _minimum(node.first, across);
+    final second = _minimum(node.second, across);
+    if (total < first + second) {
+      final fit = total * first / (first + second);
+      return (fit, fit);
+    }
+    return (first, total - second);
+  }
+
+  double _minimum(ActionPaneNode node, bool across) {
+    if (node is ActionPaneSplit) {
+      final first = _minimum(node.first, across);
+      final second = _minimum(node.second, across);
+      return (node.direction == PaneSplitDirection.right) == across
+          ? first + second
+          : math.max(first, second);
+    }
+    if (!across) return paneMinWidth;
+    final tab = layout.pane((node as ActionPaneLeaf).index).selected;
+    final width = tab == WorkspaceTab.moves
+        ? movesPaneComfortWidth
+        : _leastWidth(tab);
+    final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+    return width * scale + 2 * Space.xs;
+  }
+
+  void _resize(ActionPaneSplit node, double by, double total, bool across) {
+    if (total <= 0) return;
     final now = _current(node);
-    final first = (total * now.share + by).clamp(
-      paneMinWidth,
-      total - paneMinWidth,
-    );
-    layout.resize(now, first / total);
+    final (minimum, maximum) = _bounds(now, total, across);
+    if (minimum == maximum) return;
+    final first = (total * now.share).clamp(minimum, maximum);
+    layout.resize(now, (first + by).clamp(minimum, maximum) / total);
   }
 
   /// The split now in the layout that [node] was drawn from: a drag's

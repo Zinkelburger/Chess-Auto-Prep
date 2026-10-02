@@ -519,23 +519,32 @@ class ChapterRow extends StatelessWidget {
     final rooted = !heading.startsAtTheStart;
     return InkWell(
       onTap: () => onOpen(chapter.ref),
-      child: SizedBox(
-        height: rooted
-            ? outlineRowHeight + outlineRootHeight
-            : outlineRowHeight,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: rooted
+              ? outlineRowHeight + outlineRootHeight
+              : outlineRowHeight,
+        ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Space.m),
+          padding: const EdgeInsets.symmetric(
+            horizontal: Space.m,
+            vertical: Space.xs,
+          ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _nameRow(theme),
               if (rooted)
-                Text(
-                  heading.rootText,
-                  overflow: TextOverflow.ellipsis,
-                  style: outlineRootText.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                Tooltip(
+                  message: heading.rootText,
+                  child: Text(
+                    heading.rootText,
+                    overflow: TextOverflow.ellipsis,
+                    style: outlineRootText.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
             ],
@@ -550,16 +559,19 @@ class ChapterRow extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: Text(
-            chapter.name,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontWeight: chapter.open ? FontWeight.w600 : null,
-              color: chapter.open
-                  ? theme.colorScheme.primary
-                  : draft
-                  ? theme.colorScheme.onSurfaceVariant
-                  : null,
+          child: Tooltip(
+            message: chapter.name,
+            child: Text(
+              chapter.name,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontWeight: chapter.open ? FontWeight.w600 : null,
+                color: chapter.open
+                    ? theme.colorScheme.primary
+                    : draft
+                    ? theme.colorScheme.onSurfaceVariant
+                    : null,
+              ),
             ),
           ),
         ),
@@ -638,24 +650,30 @@ class LineRow extends StatelessWidget {
           : Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        child: SizedBox(
-          height: outlineRowHeight,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: outlineRowHeight),
           child: Padding(
             padding: const EdgeInsets.only(left: Space.m + outlineIndent),
             child: Row(
               children: [
                 if (!line.shared) ...[
                   Flexible(
-                    child: Text(line.name, overflow: TextOverflow.ellipsis),
+                    child: Tooltip(
+                      message: line.name,
+                      child: Text(line.name, overflow: TextOverflow.ellipsis),
+                    ),
                   ),
                   const SizedBox(width: Space.s),
                 ],
                 Expanded(
-                  child: Text(
-                    displaySan(context, line.moves),
-                    overflow: TextOverflow.ellipsis,
-                    style: monoText.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                  child: Tooltip(
+                    message: displaySan(context, line.moves),
+                    child: Text(
+                      displaySan(context, line.moves),
+                      overflow: TextOverflow.ellipsis,
+                      style: monoText.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 ),
