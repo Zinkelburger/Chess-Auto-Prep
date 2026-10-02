@@ -12,6 +12,52 @@ from unittest.mock import patch
 
 import dart_checks
 import release_assets
+import release_version
+
+
+class CandidateVersionTest(unittest.TestCase):
+    def test_rehearsals_use_the_embedded_version_including_manual_tag_runs(self):
+        for event, ref in (
+            ('push', 'refs/heads/release-check'),
+            ('workflow_dispatch', 'refs/heads/codex/candidate'),
+            ('workflow_dispatch', 'refs/tags/v2.0.2'),
+        ):
+            with self.subTest(event=event, ref=ref):
+                self.assertEqual(release_version.candidate_tag(
+                    'name: app\nversion: 2.0.2\n', event, ref), 'v2.0.2')
+
+    def test_a_release_tag_must_match_the_embedded_version(self):
+        self.assertEqual(release_version.candidate_tag(
+            'version: 2.0.2\n', 'push', 'refs/tags/v2.0.2'), 'v2.0.2')
+        with self.assertRaisesRegex(ValueError, 'must match'):
+            release_version.candidate_tag('version: 2.0.2\n', 'push', 'refs/tags/v2.0.1')
+
+    def test_bad_versions_and_unexpected_events_fail_before_building(self):
+        for pubspec in ('name: app\n', 'version: ../../bad\n',
+                        'version: 2.0.2\nversion: 2.0.3\n', 'version: $(id)\n'):
+            with self.subTest(pubspec=pubspec), self.assertRaises(ValueError):
+                release_version.candidate_tag(pubspec, 'workflow_dispatch', 'refs/heads/main')
+        for event, ref in (('push', 'refs/heads/main'), ('pull_request', 'refs/pull/1/merge')):
+            with self.subTest(event=event), self.assertRaises(ValueError):
+                release_version.candidate_tag('version: 2.0.2\n', event, ref)
+
+    def test_workflow_command_writes_only_a_validated_version(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'pubspec.yaml').write_text('version: 2.0.2\n')
+            output = root / 'output'
+            env = {**os.environ, 'GITHUB_EVENT_NAME': 'push',
+                   'GITHUB_REF': 'refs/heads/release-check', 'GITHUB_SHA': 'abc123',
+                   'GITHUB_OUTPUT': str(output)}
+            command = [sys.executable, str(Path(release_version.__file__).resolve())]
+            result = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(output.read_text(), 'tag=v2.0.2\n')
+            output.unlink()
+            env['GITHUB_REF'] = 'refs/tags/v2.0.1'
+            result = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(output.exists())
 
 
 class AssetsTest(unittest.TestCase):

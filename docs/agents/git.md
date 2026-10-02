@@ -34,10 +34,11 @@ without publishing it. Do not open PRs unless requested.
    a visible preview when requested.
 
 The helper does not run tests for you. Use the task's relevant local checks
-before integration. GitHub CI runs only as part of the `v*` release-tag
-workflow; development backups and PRs do not trigger it. The CI and bughouse
-workflows are reusable release gates, with no standalone dispatch trigger.
-Fix regressions from your task using focused local checks.
+before integration. GitHub release CI runs for `v*` tag pushes and deliberate
+non-publishing rehearsals (`release-check` branch or a manual Release dispatch). Development
+backups and PRs do not trigger it. The CI and bughouse workflows remain reusable
+release gates. Use focused local checks for routine development; use the complete
+rehearsal before tagging a release candidate.
 A failed backup push is recoverable: keep the worktrees and retry integration.
 Never force-push the backup to hide divergence from another machine.
 
@@ -46,7 +47,8 @@ optional diagnostic output (`scripts/ci.sh test --coverage`); there is no floor.
 Release Dart gates retain SDK, formatting, analysis and expanded test logs
 in `flutter-quality-results`, with a first-failure summary. Before tagging the
 final committed candidate, run `scripts/ci.sh preflight` in its clean checkout
-using the SDK in `.fvmrc`; see [release checks](../../README.md#development-and-release-checks).
+using the SDK in `.fvmrc`, then run the complete non-publishing rehearsal on
+that same commit; see [release checks](../../README.md#development-and-release-checks).
 
 ## Publish a batch only when requested
 

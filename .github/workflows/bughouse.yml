@@ -22,11 +22,12 @@
 #           where the two-board dialect, the joint-move parsing and the
 #           handshake timeout live.
 #
-# Runs as a required release gate on every supported engine platform.
+# Linux/Windows app-client checks run here. Both macOS architectures run the
+# dependency audit and real search in their release build jobs.
 
 name: Bughouse engine
 
-# Called only by release.yml when a v* release tag is pushed.
+# Called by release.yml for tagged releases and non-publishing rehearsals.
 on:
   workflow_call:
 
@@ -128,30 +129,3 @@ jobs:
         timeout-minutes: 20
         run: >-
           flutter test integration_test/v2_bughouse_first_run_test.dart -d windows
-
-  macos:
-    runs-on: macos-26
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
-        with:
-          python-version: '3.12'
-
-      - name: Cache bughouse engine
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: assets/bughouse
-          key: bughouse-${{ hashFiles('tools/assets.lock.json') }}-macos
-
-      - name: Fetch the engine for this platform
-        run: |
-          python3 tools/fetch_assets.py --only bughouse
-          python3 tools/fetch_assets.py --check --only bughouse
-
-      - name: Audit what the binaries need
-        run: python3 tools/test_bughouse_engine.py deps
-
-      - name: Load the network and search
-        timeout-minutes: 10
-        run: python3 tools/test_bughouse_engine.py run

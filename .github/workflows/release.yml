@@ -1,9 +1,17 @@
 name: Release
 
 on:
+  # The rehearsal uses these exact jobs, including both Mac builds and staging.
+  workflow_dispatch:
   push:
+    branches: [release-check]
     tags:
       - 'v*'
+
+# Do not cancel a tagged release midway through uploading its downloads.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -15,15 +23,33 @@ permissions:
 # matching Stockfish in the same stockfish-macos.gz slot.
 
 jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Check candidate version and release tag
+        id: version
+        run: python3 scripts/release_version.py
+
   quality-gate:
+    needs: prepare
     uses: ./.github/workflows/ci.yml
 
   bughouse-gate:
+    needs: prepare
     uses: ./.github/workflows/bughouse.yml
 
+  # Build alongside tests so platform packaging errors appear in the same run.
+  # validate-assets still requires every gate before anything can publish.
   build-linux:
-    needs: quality-gate
+    needs: prepare
     runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    env:
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -95,21 +121,21 @@ jobs:
           cd build/linux/x64/release/bundle
           # Only portable bundles carry the updater ownership marker.
           printf '1\n' > .chess-auto-prep-portable
-          zip -r ../../../../../chess-auto-prep-${{ github.ref_name }}-linux.zip .
+          zip -r ../../../../../chess-auto-prep-${{ needs.prepare.outputs.tag }}-linux.zip .
           rm .chess-auto-prep-portable
 
       - name: Build .deb
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${RELEASE_TAG#v}"
           packaging/deb/build_deb.sh "$VERSION" build/linux/x64/release/bundle .
           mv "chess-auto-prep-$VERSION-linux-amd64.deb" \
-             "chess-auto-prep-${{ github.ref_name }}-linux-amd64.deb"
+             "chess-auto-prep-${{ needs.prepare.outputs.tag }}-linux-amd64.deb"
 
       - name: Build .rpm
-        run: packaging/rpm/build_rpm.sh "${{ github.ref_name }}" build/linux/x64/release/bundle .
+        run: packaging/rpm/build_rpm.sh "${{ needs.prepare.outputs.tag }}" build/linux/x64/release/bundle .
 
       - name: Build AppImage
-        run: packaging/appimage/build_appimage.sh "${{ github.ref_name }}" build/linux/x64/release/bundle .
+        run: packaging/appimage/build_appimage.sh "${{ needs.prepare.outputs.tag }}" build/linux/x64/release/bundle .
 
       - name: Install flatpak-builder
         run: sudo apt-get install -y flatpak flatpak-builder
@@ -124,30 +150,31 @@ jobs:
           flatpak-builder --user --force-clean --disable-rofiles-fuse --repo=flatpak-repo flatpak-build \
             packaging/flatpak/com.example.chess_auto_prep.yml
           flatpak build-bundle flatpak-repo \
-            chess-auto-prep-${{ github.ref_name }}-linux.flatpak com.example.chess_auto_prep
+            chess-auto-prep-${{ needs.prepare.outputs.tag }}-linux.flatpak com.example.chess_auto_prep
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: linux-build
           path: |
-            chess-auto-prep-${{ github.ref_name }}-linux.zip
-            chess-auto-prep-${{ github.ref_name }}-linux.flatpak
-            chess-auto-prep-${{ github.ref_name }}-linux-amd64.deb
-            chess-auto-prep-${{ github.ref_name }}-linux-x86_64.rpm
-            chess-auto-prep-${{ github.ref_name }}-linux-x86_64.AppImage
+            chess-auto-prep-${{ needs.prepare.outputs.tag }}-linux.zip
+            chess-auto-prep-${{ needs.prepare.outputs.tag }}-linux.flatpak
+            chess-auto-prep-${{ needs.prepare.outputs.tag }}-linux-amd64.deb
+            chess-auto-prep-${{ needs.prepare.outputs.tag }}-linux-x86_64.rpm
+            chess-auto-prep-${{ needs.prepare.outputs.tag }}-linux-x86_64.AppImage
 
   build-windows:
-    needs: [quality-gate, bughouse-gate]
+    needs: prepare
     uses: ./.github/workflows/windows-build.yml
     with:
-      version: ${{ github.ref_name }}
+      version: ${{ needs.prepare.outputs.tag }}
 
   # Each app is built on a Mac of its own architecture, so the build and its
   # packaged-app test run natively: no cross-compiling, no Rosetta. Runner
   # versions are pinned so an image upgrade is a commit, not a surprise.
   build-macos:
-    needs: quality-gate
+    needs: prepare
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -205,7 +232,9 @@ jobs:
           FLUTTER_XCODE_ARCHS: ${{ matrix.arch }}
           FLUTTER_XCODE_EXCLUDED_ARCHS: ${{ matrix.excluded }}
           FLUTTER_XCODE_ONLY_ACTIVE_ARCH: "NO"
-        run: flutter build macos --release -t lib/main.dart
+        run: |
+          set -o pipefail
+          flutter build macos --release -t lib/main.dart 2>&1 | tee macos-build.log
 
       - name: Keep ${{ matrix.arch }} only
         run: |
@@ -252,31 +281,33 @@ jobs:
           cd build/macos/Build/Products/Release
           # -y keeps Versions/Current symlinks as links. zip -r follows them and
           # stores Stockfish + Maia + FlutterMacOS three times (~400 MB zips).
-          zip -ry ../../../../../chess-auto-prep-${{ github.ref_name }}-macos-${{ matrix.arch }}.zip *.app
-          ls -lh ../../../../../chess-auto-prep-${{ github.ref_name }}-macos-${{ matrix.arch }}.zip
+          zip -ry ../../../../../chess-auto-prep-${{ needs.prepare.outputs.tag }}-macos-${{ matrix.arch }}.zip *.app
+          ls -lh ../../../../../chess-auto-prep-${{ needs.prepare.outputs.tag }}-macos-${{ matrix.arch }}.zip
 
       - name: Packaged v2 documents, Stockfish, Maia and login sockets
         run: |
           APP=$(ls -d build/macos/Build/Products/Release/*.app)
           EXEC=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")
+          codesign --verify --deep --strict "$APP"
           python3 tools/test_desktop_bundle.py "$APP/Contents/MacOS/$EXEC" --report desktop-release.json
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
           name: macos-desktop-release-report-${{ matrix.arch }}
-          path: desktop-release.json
+          path: |
+            desktop-release.json
+            macos-build.log
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: macos-${{ matrix.arch }}-build
-          path: chess-auto-prep-${{ github.ref_name }}-macos-${{ matrix.arch }}.zip
+          path: chess-auto-prep-${{ needs.prepare.outputs.tag }}-macos-${{ matrix.arch }}.zip
 
-  release:
-    needs: [build-linux, build-windows, build-macos]
+  validate-assets:
+    needs: [prepare, quality-gate, bughouse-gate, build-linux, build-windows, build-macos]
     runs-on: ubuntu-24.04
-    permissions:
-      contents: write
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -302,8 +333,42 @@ jobs:
 
       - name: Verify all nine downloads and generate their checksums
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
         run: python3 scripts/release_assets.py "$RELEASE_TAG" artifacts build/release-assets
+
+      - name: Record the validated candidate
+        env:
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          {
+            echo '## Release candidate validated'
+            echo
+            echo "Version: $RELEASE_TAG"
+            echo "Commit: $GITHUB_SHA"
+            echo
+            echo 'All platform builds and release gates passed; all nine downloads have checksums.'
+            echo 'Only a v* tag push publishes. Branch and manual runs publish nothing.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-candidate
+          path: build/release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: validate-assets
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: release-candidate
+          path: build/release-assets
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
