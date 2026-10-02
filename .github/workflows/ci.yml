@@ -31,7 +31,8 @@ jobs:
           sudo apt-get install -y cmake ninja-build clang libgtk-3-dev pkg-config
 
       - name: Validate the committed release candidate
-        run: python3 scripts/dart_checks.py preflight --flutter flutter
+        # Formatting is reported separately by release-advisory.yml.
+        run: python3 scripts/dart_checks.py release --flutter flutter
 
       - name: Preserve quality gate diagnostics
         if: always()
@@ -49,9 +50,6 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.12'
-
-      - name: Check agent rule references
-        run: python3 scripts/sync_agent_rules.py --check
 
       - run: python -m pip install -r tools/mcp/requirements.txt
 

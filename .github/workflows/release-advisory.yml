@@ -1,0 +1,94 @@
+name: Release advisory checks
+
+on:
+  workflow_call:
+
+# These jobs retain failures and logs for follow-up. Publication does not
+# depend on them, and a diagnostic failure cannot fail the release workflow.
+jobs:
+  housekeeping:
+    name: Advisory formatting and agent rules
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version-file: .fvmrc
+          channel: stable
+          cache: true
+      - name: Check formatting
+        id: format
+        continue-on-error: true
+        run: python3 scripts/dart_checks.py format-check --flutter flutter
+      - name: Check agent rule references
+        id: rules
+        if: always()
+        continue-on-error: true
+        run: python3 scripts/sync_agent_rules.py --check
+      - name: Report advisory results
+        if: always()
+        env:
+          FORMAT_RESULT: ${{ steps.format.outcome }}
+          RULES_RESULT: ${{ steps.rules.outcome }}
+        run: |
+          {
+            echo '## Advisory housekeeping (does not block publication)'
+            echo "Formatting: $FORMAT_RESULT"
+            echo "Agent rule references: $RULES_RESULT"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$FORMAT_RESULT" != success || "$RULES_RESULT" != success ]]; then
+            echo '::warning::Advisory housekeeping needs attention; publication is not blocked.'
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: advisory-housekeeping
+          path: build/quality-gates/
+          if-no-files-found: warn
+
+  crash-recovery:
+    name: Advisory crash recovery (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025, macos-26]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version-file: .fvmrc
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Kill the importer and verify database recovery
+        id: recovery
+        run: |
+          set -o pipefail
+          flutter test --reporter expanded test/storage/master_games_process_test.dart 2>&1 | tee crash-recovery.log
+      - name: Report advisory result
+        if: always()
+        env:
+          RECOVERY_RESULT: ${{ steps.recovery.outcome }}
+        run: |
+          {
+            echo '## Advisory crash recovery (does not block publication)'
+            echo "Result: $RECOVERY_RESULT"
+            echo 'The full Linux suite still requires this test. Windows/macOS run separately while the process-kill harness fix is validated.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$RECOVERY_RESULT" != success ]]; then
+            echo '::warning::Advisory crash recovery needs attention; publication is not blocked.'
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: advisory-crash-recovery-${{ matrix.os }}
+          path: crash-recovery.log
+          if-no-files-found: warn

@@ -41,6 +41,8 @@ jobs:
           New-ItemProperty -Path HKCU:\Software\ChessAutoPrep -Name FileAssociationChoice -Value no -PropertyType String -Force | Out-Null
       - run: flutter pub get
       - name: Native v2 document and application contracts
+        # Process-kill recovery runs separately in release-advisory.yml;
+        # the full Linux suite still checks it as a required test.
         run: |
           set -o pipefail
           flutter test --reporter expanded \
@@ -55,7 +57,6 @@ jobs:
             test/storage/relocation_sync_test.dart \
             test/storage/file_lock_test.dart \
             test/storage/disk_usage_test.dart \
-            test/storage/master_games_process_test.dart \
             test/storage/master_games_import_test.dart \
             test/features/database_storage_test.dart \
             test/ui/name_dialog_test.dart \

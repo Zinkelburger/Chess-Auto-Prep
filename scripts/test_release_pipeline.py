@@ -157,6 +157,8 @@ elif args[0] == 'test' and os.environ.get('TEST_MUTATION'):
 elif args[0] == 'test' and os.environ.get('TEST_COMMIT'):
     subprocess.run(['git', '-c', 'user.name=Test', '-c', 'user.email=test@example.com',
                     'commit', '--allow-empty', '-qm', 'changed HEAD'], check=True)
+elif args[0] in ('analyze', 'test'):
+    sys.exit(int(os.environ.get('TEST_' + args[0].upper() + '_EXIT', '0')))
 '''
         for name in ('flutter', 'dart'):
             exe = bin_dir / name
@@ -181,6 +183,20 @@ elif args[0] == 'test' and os.environ.get('TEST_COMMIT'):
         head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
         self.assertIn(head, summary)
         self.assertIn('HEAD unchanged', summary)
+
+    def test_release_runs_behavioral_checks_despite_formatting_failure(self):
+        with patch.dict(os.environ, {'TEST_FORMAT_EXIT': '1'}):
+            self.assertEqual(self.run_gate('release'), 0)
+        self.assertEqual([args[0] for args in self.trace()], ['--version', 'pub', 'analyze', 'test'])
+        self.assertEqual((self.root / 'sample.dart').read_text(), 'unformatted sentinel')
+        self.assertIn('HEAD unchanged', (self.root / 'build/job-summary.md').read_text())
+
+    def test_release_still_rejects_analysis_and_test_failures(self):
+        for gate in ('analyze', 'test'):
+            with self.subTest(gate=gate), patch.dict(os.environ, {f'TEST_{gate.upper()}_EXIT': '1'}):
+                self.assertEqual(self.run_gate('release'), 1)
+                self.assertIn(f'First failed gate: {gate}',
+                              (self.root / 'build/quality-gates/failure.log').read_text())
 
     def test_format_failure_does_not_mutate_and_preserves_first_failure(self):
         with patch.dict(os.environ, {'TEST_FORMAT_EXIT': '1'}):
