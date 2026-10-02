@@ -18,6 +18,8 @@ import 'package:window_manager/window_manager.dart';
 import '../chess/fen.dart';
 import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
+import '../engines/bughouse_backend.dart';
+import '../engines/engine.dart';
 import '../engines/hivemind_engine.dart';
 import '../engines/hivemind_install.dart';
 import '../engines/maia/maia_model.dart';
@@ -147,6 +149,7 @@ final class AppEnvironment {
     this.viewerDrafts,
     required this.setFullScreen,
     required this.bughouse,
+    this.launchBughouseSearch = _noBughouseSearch,
     this.updates,
     this.now = DateTime.now,
     this.jitter = _noJitter,
@@ -290,6 +293,11 @@ final class AppEnvironment {
       savedPlayerList: () =>
           savedPlayers(Directory(p.join(documents.path, 'analysis_games'))),
       setFullScreen: _setFullScreen,
+      launchBughouseSearch: () => BughouseBackend.start(
+        crazyara: () => engines.startCrazyara(support.path),
+        hivemind: () =>
+            launchHivemind(support: support, engines: engines, cores: 2),
+      ),
       bughouse: (
         bundled: _bughouseBundled,
         launch: ({required cores}) =>
@@ -443,6 +451,8 @@ final class AppEnvironment {
 
   /// Closes what this opened: the network, the databases, the engines.
   final void Function() close;
+
+  final Future<BughouseBackend> Function() launchBughouseSearch;
 
   /// A Stockfish with the threads and the table the settings give it now.
   Future<EngineStart> startEngine() => launchEngine(
@@ -687,3 +697,6 @@ StoragePlaces nativeStoragePlaces({
     ],
   );
 }
+
+Future<BughouseBackend> _noBughouseSearch() async =>
+    throw const EngineFailure('Bughouse expectimax is unavailable.');

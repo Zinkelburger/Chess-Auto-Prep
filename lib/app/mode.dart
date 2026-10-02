@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../diagnostics/log.dart';
 import '../features/bughouse/archive_moves.dart';
 import '../features/bughouse/bughouse_lab.dart';
+import '../features/bughouse/expectimax_search.dart';
 import '../features/bughouse/matches.dart';
 import '../features/bughouse/table_search.dart';
 import '../features/library/chapter_outline.dart';
@@ -125,12 +126,14 @@ final class TrainingModes {
 final class LabModes {
   LabModes({
     required this.lab,
+    required this.expectimax,
     required this.search,
     required this.archive,
     required this.matches,
   });
 
   final BughouseLab lab;
+  final BughouseExpectimaxSearch expectimax;
   final TableSearch search;
   final ArchiveMoves archive;
 
@@ -152,6 +155,7 @@ final class LabModes {
   void dispose() {
     _disposed = true;
     offered.dispose();
+    expectimax.dispose();
     matches.dispose();
     archive.dispose();
     search.dispose();

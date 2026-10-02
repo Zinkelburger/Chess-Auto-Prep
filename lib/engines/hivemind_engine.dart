@@ -111,6 +111,11 @@ abstract interface class Hivemind {
   Future<void> quit();
 }
 
+/// Static, two-seat calibrated Q for A + B, with the clock input fixed off.
+abstract interface class HivemindValue {
+  Future<double> evaluate(TablePosition position);
+}
+
 /// The conversation with one Hivemind process. It speaks UCI with three
 /// differences, all read here: `position fen <board 1>|<board 2>`, moves
 /// with a board digit inside a joint action — `bestmove (d2d4,pass)` — and
@@ -119,7 +124,7 @@ abstract interface class Hivemind {
 /// After `bestmove` the engine goes on thinking in the background, so every
 /// search is followed by a `stop`, or the next one would share the cores
 /// with it.
-final class HivemindProcess implements Hivemind, EngineProcess {
+final class HivemindProcess implements Hivemind, HivemindValue, EngineProcess {
   HivemindProcess._(this._process) {
     _process.lines.listen(_onLine, onDone: _onExit);
   }
@@ -183,6 +188,44 @@ final class HivemindProcess implements Hivemind, EngineProcess {
     final answer = _queue.then((_) => _search(question));
     _queue = answer.then((_) {});
     return answer;
+  }
+
+  double? _policyValue;
+
+  @override
+  Future<double> evaluate(TablePosition position) {
+    final answer = _queue.then((_) => _evaluate(position));
+    _queue = answer.then((_) {}, onError: (Object _) {});
+    return answer;
+  }
+
+  Future<double> _evaluate(TablePosition position) async {
+    if (_exited.isCompleted) throw const EngineFailure(_gone);
+    try {
+      final values = <double>[];
+      for (final team in Team.values) {
+        _send('stop');
+        _send('setoption name Team value ${engineTeam(team)}');
+        _send('setoption name TimeAdvantage value false');
+        _send('position fen ${position.dualFen}');
+        _policyValue = null;
+        _send('policy');
+        await _ready(const Duration(seconds: 30));
+        final value = _policyValue;
+        if (value == null || !value.isFinite || value.abs() > 1.00001) {
+          throw const EngineFailure(
+            'Hivemind did not return a position value.',
+          );
+        }
+        values.add(value);
+      }
+      return (values[0] - values[1]) / 2;
+    } on TimeoutException {
+      await _process.kill();
+      throw const EngineFailure('Hivemind stopped answering.');
+    } finally {
+      _configured = null;
+    }
   }
 
   Future<HivemindAnswer> _search(HivemindQuestion question) async {
@@ -275,6 +318,9 @@ final class HivemindProcess implements Hivemind, EngineProcess {
       _provenance['engine_name'] = raw.substring(8).trim();
     }
     final line = raw.trim();
+    if (line.startsWith('Value: ')) {
+      _policyValue = double.tryParse(line.substring(7).trim());
+    }
     final awaited = _awaited;
     if (awaited != null && line == awaited.token) {
       _awaited = null;

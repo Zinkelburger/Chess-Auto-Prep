@@ -687,6 +687,7 @@ final class BughouseView extends ModeView {
         search: _labs.search,
         archive: _labs.archive,
         matches: _labs.matches,
+        expectimax: _labs.expectimax,
         windowKeys: windowKeys,
       );
 
@@ -706,6 +707,7 @@ final class BughouseView extends ModeView {
 
   @override
   void left() {
+    _labs.expectimax.stop();
     _labs.search.close();
     workspace.analysis.resume(this);
   }
