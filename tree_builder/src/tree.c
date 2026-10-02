@@ -169,6 +169,8 @@ TreeConfig tree_config_default(void) {
 
         .opp_max_children = 6,
         .opp_mass_target = 0.95,
+        .reply_mass = 0,
+        .max_replies = 0,
 
         .min_eval_cp = 0,
         .max_eval_cp = 200,

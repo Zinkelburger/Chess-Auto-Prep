@@ -51,7 +51,8 @@ Design notes: `docs/OPPONENT_PREP.md` (roster pipeline),
 Pass `chapter` (`~/Documents/repertoires/<repertoire>/<chapter>.pgn`):
 
 1. `expectimax_run {chapter, moves, plies, threads}` builds for the chapter's
-   `// Color:` side with the app's settings (depth 14, every move kept). The
+   `// Color:` side with the app's settings (depth 14, every own move kept,
+   the opponent's likeliest replies to 90%, at most five, renormalized). The
    root may be the opponent's move. On stop or finish the tree is published to
    `.cap-generation/<chapter>.pgn/v2-agent-<run id>/tree.json`; relay the
    result's `app.open_in_app` steps. A running build is invisible to the app
@@ -59,7 +60,8 @@ Pass `chapter` (`~/Documents/repertoires/<repertoire>/<chapter>.pgn`):
 2. `expectimax_list {chapter}` lists the app's and the agent's saved searches.
 3. `expectimax_resume {chapter, moves, plies}` continues the newest one at that
    root (including an app search) as a new run; the source tree is never
-   edited. `plies` is at most 64.
+   edited. `plies` is at most 64. A tree or run from before the reply cut
+   continues keeping every reply; `expectimax_list` says which (`replies`).
 
 Only the trees are shared; `tree.db` and the app's `eval_cache.db` stay
 separate. Never continue the same chapter search in the app and here at once.
