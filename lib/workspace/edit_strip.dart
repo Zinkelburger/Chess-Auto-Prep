@@ -4,6 +4,7 @@ import '../chess/pgn/comment_edits.dart' show isGlyph;
 import '../chess/pgn/comment_text.dart';
 import '../chess/pgn/game_tree.dart';
 import '../ui/listening_state.dart';
+import '../ui/confirm_dialog.dart';
 import '../ui/theme.dart';
 import 'comment_field.dart';
 import 'copy_name_dialog.dart';
@@ -70,6 +71,25 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
       _about = widget.session.source;
       _notice = null;
     });
+  }
+
+  Future<void> _discard() async {
+    final session = widget.session;
+    final chapter = session.chapter;
+    if (!session.hasHeldEdits) return;
+    final yes = await confirmAction(
+      context,
+      title: 'Discard unsaved changes?',
+      message:
+          'Discard all unsaved changes to “${chapter?.name ?? 'this document'}”? '
+          'This cannot be undone.',
+      confirm: 'Discard changes',
+    );
+    if (yes &&
+        mounted &&
+        identical(widget.session, session) &&
+        identical(session.chapter, chapter))
+      session.discardHeld();
   }
 
   Future<void> _undo() async {
@@ -217,7 +237,7 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
         ),
       if (widget.session.hasHeldEdits || widget.session.holdsEdits) ...[
         TextButton(
-          onPressed: widget.session.discardHeld,
+          onPressed: widget.session.hasHeldEdits ? _discard : null,
           child: const Text('Discard'),
         ),
         const SizedBox(width: Space.s),

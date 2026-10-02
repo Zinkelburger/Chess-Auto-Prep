@@ -551,30 +551,36 @@ class _MoveTokenState extends State<_MoveToken>
           size: IconSize.menu,
           color: scheme.onSurfaceVariant,
         ),
-      Text.rich(
-        TextSpan(
-          children: [
-            if (widget.label.isNotEmpty)
-              TextSpan(
-                text: '${widget.label} ',
-                style: TextStyle(color: scheme.onSurfaceVariant),
-              ),
-            TextSpan(text: displaySan(context, widget.san)),
-            for (final nag in widget.nags)
-              if (nagGlyph(nag) case final glyph?)
+      // A pane dragged narrower than one move cuts the move rather than
+      // spilling past its edge.
+      Flexible(
+        child: Text.rich(
+          softWrap: false,
+          overflow: TextOverflow.clip,
+          TextSpan(
+            children: [
+              if (widget.label.isNotEmpty)
                 TextSpan(
-                  text: glyph,
-                  style: switch (ReviewMark.ofNag(nag)) {
-                    final mark? => TextStyle(
-                      color: markColor(mark),
-                      fontWeight: FontWeight.w700,
-                    ),
-                    null => null,
-                  },
+                  text: '${widget.label} ',
+                  style: TextStyle(color: scheme.onSurfaceVariant),
                 ),
-          ],
+              TextSpan(text: displaySan(context, widget.san)),
+              for (final nag in widget.nags)
+                if (nagGlyph(nag) case final glyph?)
+                  TextSpan(
+                    text: glyph,
+                    style: switch (ReviewMark.ofNag(nag)) {
+                      final mark? => TextStyle(
+                        color: markColor(mark),
+                        fontWeight: FontWeight.w700,
+                      ),
+                      null => null,
+                    },
+                  ),
+            ],
+          ),
+          style: readingMoveText.copyWith(color: scheme.onSurface),
         ),
-        style: readingMoveText.copyWith(color: scheme.onSurface),
       ),
       if (widget.quizEnds)
         Icon(Icons.stop, size: IconSize.menu, color: scheme.onSurfaceVariant),

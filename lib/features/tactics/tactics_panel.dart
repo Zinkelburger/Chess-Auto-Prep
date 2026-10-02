@@ -21,8 +21,8 @@ import 'tactics_set.dart';
 /// are exactly what the button plays, in its order. A puzzle clicked in the
 /// list comes up on the board at once.
 ///
-/// The panel keeps what the user typed into the search box and whether the
-/// filters are open; everything else is the set's and the trainer's.
+/// The set owns the search shared by the list and Play. The panel keeps its
+/// text controller and whether the filter controls are open.
 class TacticsPanel extends StatefulWidget {
   const TacticsPanel({
     super.key,
@@ -64,12 +64,13 @@ class TacticsPanel extends StatefulWidget {
 
 class _TacticsPanelState extends State<TacticsPanel> {
   final _search = TextEditingController();
-  String _query = '';
+  String get _query => widget.set.query;
   bool _filtersOpen = false;
 
   @override
   void initState() {
     super.initState();
+    _search.text = widget.set.query;
     unawaited(widget.set.load());
   }
 
@@ -80,7 +81,7 @@ class _TacticsPanelState extends State<TacticsPanel> {
   }
 
   void _searched(String query) {
-    if (mounted) setState(() => _query = query);
+    widget.set.search(query);
   }
 
   void _toggleFilters() {
@@ -122,22 +123,17 @@ class _TacticsPanelState extends State<TacticsPanel> {
   /// filters when open, the search box and the rows — scrolls as one, so
   /// opening the filters in a short window never squeezes the list away.
   Widget _ready(BuildContext context) {
-    final queue = widget.set.queue;
-    final shown = _query.isEmpty
-        ? queue
-        : [
-            for (final puzzle in queue)
-              if (puzzle.matches(_query)) puzzle,
-          ];
+    final queue = widget.set.filteredQueue;
+    final shown = widget.set.queue;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, 0),
           child: FilledButton.icon(
-            onPressed: queue.isEmpty ? null : () => widget.onPlay(),
+            onPressed: shown.isEmpty ? null : () => widget.onPlay(),
             icon: const Icon(Icons.play_arrow, size: IconSize.action),
-            label: Text('Play (${queue.length})'),
+            label: Text('Play (${shown.length})'),
           ),
         ),
         Expanded(child: _list(queue, shown)),

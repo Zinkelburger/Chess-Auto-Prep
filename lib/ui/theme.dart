@@ -16,9 +16,18 @@ abstract final class Space {
 /// chapter's name on one row. The divider takes it down to [paneMinWidth].
 const listColumnWidth = 260.0;
 
+/// Below this width, library and chapters share a navigation column so the
+/// board and the builder's two reading/tool panes retain useful space.
+/// The breakpoint follows the text scale.
+const navigationSideBySideMinWidth = 1480.0;
+
+/// A reading pane needs room for a sentence, not only a legal move token.
+const movesPaneComfortWidth = 280.0;
+
 /// How wide the chapter outline between the list and the board starts out.
-/// The old app's column is 18% of the window's body clamped to 220–280.
-const outlineColumnWidth = 240.0;
+/// The old app's column is 18% of the window's body clamped to 220–280;
+/// the low end leaves the builder's two tool panes their room at 1280px.
+const outlineColumnWidth = 220.0;
 
 /// How tall one row of the outline is, and how far a line sits in under the
 /// chapter it belongs to. Both are the old app's values.
@@ -161,7 +170,21 @@ const paneTabUnderline = 2.0;
 
 /// The Search tab: its number fields, the table's header and rows, and
 /// the columns for how often a reply is played and for the two values.
+///
+/// A pane narrower than its tab's least width scrolls sideways rather than
+/// squeezing it: [actionPaneMinWidth] for most tabs, less for the two the
+/// builder shows side by side, which are laid out to fit narrower.
 const actionPaneMinWidth = 320.0;
+const searchPaneMinWidth = 240.0;
+
+/// How much of the builder's card the moves start with, beside Expectimax:
+/// at the default 1280px window with the outline open that leaves the
+/// Expectimax table its three value columns.
+const builderMovesShare = 0.45;
+
+/// The strip either side of the line between two panes that the divider
+/// is dragged by.
+const paneSplitGrab = Space.xs;
 const searchSettingsWidth = 380.0;
 const reviewGraphHeight = 160.0;
 
@@ -188,12 +211,11 @@ const searchStatusHeight = 32.0;
 const searchRunWidth = 148.0;
 const searchDepthWidth = 84.0;
 
-/// The bar's `Replies from` field: beside the depth where the pane is at
-/// least [searchBarInlineWidth] wide, on a line of its own under it where
-/// it is not. Which of the two depends on the pane's width alone.
+/// The bar's `Replies from` field sits beside the depth when the pane has
+/// room for all controls at the current text size; otherwise it moves below.
 const searchRepliesWidth = 176.0;
 const searchRepliesRowHeight = 52.0;
-const searchBarInlineWidth = 480.0;
+
 const searchHeaderHeight = 24.0;
 const searchRowHeight = 32.0;
 const searchShareWidth = 48.0;
@@ -369,13 +391,6 @@ const paneDividerGrab = 4.0;
 const paneMinWidth = 180.0;
 const boardPaneMinWidth = 320.0;
 
-/// How the workspace is first shared between the board and the card beside
-/// it: two parts to three, the card the wider. The split view reads a flex
-/// pane's `min` as a flex too, not as pixels, so the shares are written in
-/// the same units as [boardPaneMinWidth] and [readingPaneMinWidth] and the
-/// minimums keep the proportion they were meant to have.
-const boardShare = 400.0;
-const cardShare = 600.0;
 const readingPaneMinWidth = 300.0;
 
 /// One of the six glyph buttons in the edit strip.
@@ -599,7 +614,7 @@ const gameNumberWidth = 52.0;
 
 /// The typed-move field under the board: room for `exd8=Q+` and no more,
 /// so the game counter beside it keeps its place on the narrowest board.
-const moveFieldWidth = 96.0;
+const moveFieldWidth = 144.0;
 
 /// The Explorer tab's table: the move gutter, the games gutter, the header
 /// row over them, and the height of one filter chip. The result bar sits after the
@@ -737,3 +752,8 @@ Color mistakeColor(String glyph) => switch (glyph) {
 /// The move numbers of a game read in the card: there to count by, so a
 /// step quieter than the moves.
 const readingNumberColor = _muted;
+
+/// Keyboard cursor on a chessboard square.
+const boardFocusWidth = 3.0;
+
+const double moveFeedbackHeight = 36;

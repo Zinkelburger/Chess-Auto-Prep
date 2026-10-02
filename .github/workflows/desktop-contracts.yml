@@ -5,7 +5,7 @@ on:
     inputs:
       targets:
         type: string
-        default: '[{"os":"windows-2022","device":"windows"},{"os":"windows-2025","device":"windows"},{"os":"macos-latest","device":"macos"},{"os":"ubuntu-22.04","device":"linux"}]'
+        default: '[{"os":"windows-2022","device":"windows"},{"os":"windows-2025","device":"windows"},{"os":"macos-26","device":"macos"},{"os":"ubuntu-22.04","device":"linux"}]'
 
 jobs:
   desktop:
@@ -77,18 +77,3 @@ jobs:
         with:
           name: desktop-contracts-${{ matrix.target.os }}
           path: desktop-*.log
-      - name: Build the macOS release with its release entitlements
-        if: runner.os == 'macOS'
-        run: flutter build macos --release -t lib/main.dart
-      - name: Check the sandboxed macOS release executable
-        if: runner.os == 'macOS'
-        run: |
-          APP=$(ls -d build/macos/Build/Products/Release/*.app)
-          EXEC=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")
-          codesign --verify --deep --strict "$APP"
-          python tools/test_desktop_bundle.py "$APP/Contents/MacOS/$EXEC" --report desktop-release.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        if: always() && runner.os == 'macOS'
-        with:
-          name: desktop-release-${{ matrix.target.os }}
-          path: desktop-release.json

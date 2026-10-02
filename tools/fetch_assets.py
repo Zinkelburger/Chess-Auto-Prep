@@ -342,25 +342,38 @@ def write_gz(payload: bytes, dest: Path) -> None:
 
 
 def dest_is_current(key: str, dest: Path, lock: dict) -> bool:
-    """True if `dest` exists and matches the lockfile when it has an entry."""
+    """True if `dest` exists and matches the lockfile when it has an entry.
+
+    The pinned payload decides when there is one. A different container is
+    not a different file: recompressing on a machine with another zlib
+    changes the gzip bytes and nothing else, and treating that as staleness
+    re-downloaded 43 MB on every single run.
+    """
     if not dest.exists():
         return False
     entry = lock.get(key, {})
+    wanted_payload = entry.get("payload_sha256")
+    if wanted_payload:
+        try:
+            actual = payload_sha256(dest)
+        except (OSError, EOFError, gzip.BadGzipFile):
+            actual = "not a gzip stream"
+        if actual == wanted_payload:
+            return True
+        print(
+            f"[stale] {key}: {dest.relative_to(REPO_ROOT)} payload mismatch "
+            f"(have {actual[:12]}…, want {wanted_payload[:12]}…)"
+        )
+        return False
     expected = entry.get("output_sha256")
     if not expected:
         return True
     actual = sha256_file(dest)
     if actual == expected:
         return True
-    # A different container is not yet a different file. Recompressing on a
-    # machine with another zlib changes these bytes and nothing else, and
-    # treating that as staleness re-downloaded 43 MB on every single run.
-    wanted_payload = entry.get("payload_sha256")
-    if wanted_payload and payload_sha256(dest) == wanted_payload:
-        return True
     print(
         f"[stale] {key}: {dest.relative_to(REPO_ROOT)} hash mismatch "
-        f"(have {actual[:12]}…, want {expected[:12]}…) — re-fetching"
+        f"(have {actual[:12]}…, want {expected[:12]}…)"
     )
     return False
 
@@ -396,13 +409,26 @@ def fetch_stockfish(name: str, lock: dict, force: bool) -> None:
         tmp = Path(td) / os.path.basename(urllib.parse.urlparse(spec["url"]).path)
         download(spec["url"], tmp, "https://github.com/official-stockfish/Stockfish/releases")
         digest = verify_source(name, tmp, lock)
-        write_gz(extract_stockfish_binary(tmp), dest)
+        binary = extract_stockfish_binary(tmp)
+        engine = hashlib.sha256(binary).hexdigest()
+        pinned = lock.get(name, {}).get("payload_sha256")
+        if pinned and engine != pinned:
+            raise SystemExit(
+                f"ERROR: the engine inside {name} is not the pinned one\n"
+                f"  expected {pinned}\n  got      {engine}\n"
+                "  Verify the upstream release before trusting it, then "
+                "remove payload_sha256 from the lock and re-run."
+            )
+        write_gz(binary, dest)
 
+    # Only the engine is pinned: the app checks what it unpacks, so the gzip
+    # container may differ from machine to machine and the lock stays the
+    # same on every one.
     lock[name] = {
         "url": spec["url"],
         "source_sha256": digest,
-        "output_sha256": sha256_file(dest),
-        "output_bytes": dest.stat().st_size,
+        "payload_sha256": engine,
+        "uncompressed_bytes": len(binary),
     }
     print(f"       wrote {spec['dest']} ({human(dest.stat().st_size)})")
 
@@ -416,8 +442,7 @@ def check_stockfish(names: list[str], lock: dict) -> list[str]:
             print(f"[MISS] {n}: {rel}")
             problems.append(n)
             continue
-        expected = lock.get(n, {}).get("output_sha256")
-        if expected and sha256_file(dest) != expected:
+        if not dest_is_current(n, dest, lock):
             print(f"[HASH] {n}: {rel} does not match assets.lock.json")
             problems.append(n)
             continue

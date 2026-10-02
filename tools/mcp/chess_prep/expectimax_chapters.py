@@ -16,7 +16,9 @@ the same place and the same settings:
   * **settings** — the app resumes only a tree scored at its own engine depth
     (14), with no engine-loss window, for the chapter's side and the rating
     it is asked for (`readSearchSeed` in `lib/workspace/fill_gaps.dart`),
-    so a chapter run is held to exactly those;
+    so a chapter run is held to exactly those. Every run cuts the
+    opponent's replies as the app does (`APP_REPLY_MASS`); the app resumes
+    such a tree as it is, and cuts an older one that kept every reply;
   * **the other direction** — the app's own trees are read from the same
     folder and copied into a new run, never edited where they lie. A search
     the app ran without a depth limit records the horizon as 512, which the
@@ -41,6 +43,15 @@ AGENT_RUN_PREFIX = "agent-"
 
 #: `fillEvalDepth` in lib/workspace/fill_states.dart.
 APP_EVAL_DEPTH = 14
+
+#: The app's reply cut, `fillReplyMass` and `fillMaxReplies` in
+#: lib/workspace/fill_states.dart (the Dart owner; a test checks they agree):
+#: at each opponent position keep Maia's likeliest replies until they cover
+#: 90% of its distribution, at most five, renormalized to sum to one. Every
+#: build passes it to the builder; saved trees record it as
+#: `v2_reply_mass` / `v2_max_replies`, absent on trees that kept every reply.
+APP_REPLY_MASS = 0.9
+APP_MAX_REPLIES = 5
 
 #: `unboundedLossWire` and `unboundedDepthWire` in
 #: lib/chess/generation/tree_wire_v4.dart.
@@ -145,6 +156,7 @@ def saved_trees(chapter: Path) -> list[dict]:
                 "opponent_rating": config.get("maia_elo"),
                 "eval_depth": config.get("eval_depth"),
                 "evaluation_source": data.get("v2_evaluation_source", "stockfish"),
+                "replies": reply_cut_label(*reply_cut(config)),
                 "modified": time.strftime(
                     "%Y-%m-%dT%H:%M:%S", time.localtime(path.stat().st_mtime)
                 ),
@@ -162,6 +174,36 @@ def _horizon(config: dict) -> int | None:
     if not isinstance(depth, (int, float)) or depth >= UNBOUNDED_DEPTH:
         return None
     return int(depth)
+
+
+def reply_cut(config: dict) -> tuple[float | None, int | None]:
+    """The reply cut a saved tree records, read as the app reads it
+    (`_replyMass` / `_positive` in tree_wire_v4_reader.dart): a value out
+    of range means none, so `(None, None)` is a tree that kept every reply."""
+    mass = config.get("v2_reply_mass")
+    most = config.get("v2_max_replies")
+    mass = (
+        float(mass)
+        if isinstance(mass, (int, float)) and not isinstance(mass, bool) and 0 < mass <= 1
+        else None
+    )
+    most = (
+        int(most)
+        if isinstance(most, (int, float)) and not isinstance(most, bool) and most >= 1
+        else None
+    )
+    return mass, most
+
+
+def reply_cut_label(mass: float | None, most: int | None) -> str:
+    if mass is None and most is None:
+        return "every reply"
+    parts = []
+    if mass is not None:
+        parts.append(f"likeliest to {mass * 100:g}%")
+    if most is not None:
+        parts.append(f"at most {most}")
+    return ", ".join(parts) + ", renormalized"
 
 
 def newest_tree(chapter: Path, fen: str | None = None) -> dict:
@@ -221,6 +263,7 @@ def seed_document(data: dict, plies: int | None) -> tuple[dict, dict]:
     doc = dict(data)
     doc["config"] = dict(config, max_depth=plies)
     doc.pop("v2_evaluation_source", None)
+    mass, most = reply_cut(config)
     settings = {
         "fen": root["fen"],
         "color": "w" if config["play_as_white"] else "b",
@@ -228,6 +271,10 @@ def seed_document(data: dict, plies: int | None) -> tuple[dict, dict]:
         "eval_depth": config["eval_depth"],
         "maia_elo": config["maia_elo"],
         "max_eval_loss": loss,
+        # Continued with the cut it was built with: a tree saved before the
+        # cut keeps every reply rather than mixing two policies.
+        "reply_mass": mass or 0,
+        "max_replies": most or 0,
     }
     return doc, settings
 

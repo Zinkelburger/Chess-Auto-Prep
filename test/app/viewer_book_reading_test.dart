@@ -40,7 +40,7 @@ void main() {
     expect(find.text('Solitaire'), findsNothing);
     expect(find.text('Notes'), findsNothing);
     expect(find.text('Engine').hitTestable(), findsNothing);
-    expect(find.byTooltip('Open tab'), findsOneWidget);
+    expect(find.byTooltip('Open tools and arrange panes'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -48,7 +48,7 @@ void main() {
     tester,
   ) async {
     final app = await openViewer(tester);
-    await tester.tap(find.byTooltip('Open tab'));
+    await tester.tap(find.byTooltip('Open tools and arrange panes'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(MenuItemButton, 'Explorer'));
     await tester.pumpAndSettle();

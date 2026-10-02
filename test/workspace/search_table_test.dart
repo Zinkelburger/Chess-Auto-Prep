@@ -1,6 +1,7 @@
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/generation/eval.dart';
 import 'package:chess_auto_prep/chess/generation/search_node.dart';
+import 'package:chess_auto_prep/chess/generation/sources.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/search_table.dart';
 import 'package:dartchess/dartchess.dart' show Side;
@@ -110,6 +111,95 @@ void main() {
         isEmpty,
         reason: 'a leaf has no moves',
       );
+    });
+  });
+
+  group('who gave a share', () {
+    OpponentNode replies(RepliesFrom? from) => OpponentNode.over(
+      fen: _board,
+      evalForUs: const Eval(0),
+      repliesFrom: from,
+      replies: forWhite.replies,
+    );
+    String tip(RepliesFrom from) => repliesFromTip(
+      from,
+      database: 'Lichess masters',
+      elo: 2200,
+      fallbackUnder: 10,
+    );
+
+    test('each row carries the source of the search that gave its share', () {
+      final rows = searchRows(
+        side: Side.black,
+        mine: forBlack,
+        other: replies(RepliesFrom.maia),
+      );
+      expect(
+        [for (final r in rows) r.shareFrom],
+        [RepliesFrom.maia, RepliesFrom.maia, null, RepliesFrom.maia],
+        reason: 'Qc5 has no share, so no source',
+      );
+      expect(
+        searchRows(side: Side.white, mine: forWhite).map((r) => r.shareFrom),
+        everyElement(isNull),
+        reason: 'Maia alone, or a tree saved before sources were kept',
+      );
+      expect(tip(RepliesFrom.games), 'From Lichess masters');
+      expect(
+        tip(RepliesFrom.maia),
+        'Maia 2200; Lichess masters has under 10 games here',
+      );
+    });
+
+    Future<void> pumpFrom(WidgetTester tester, RepliesFrom? from) =>
+        tester.pumpWidget(
+          MaterialApp(
+            theme: darkTheme(),
+            home: Scaffold(
+              body: SizedBox(
+                width: 480,
+                height: 300,
+                child: SearchTable(
+                  rows: searchRows(side: Side.white, mine: replies(from)),
+                  ours: false,
+                  sides: const [Side.white, Side.black],
+                  engineDepthAt: (_) => null,
+                  shareTip: tip,
+                  onHover: (_, _) {},
+                  onLeave: () {},
+                  onPlay: (_) {},
+                ),
+              ),
+            ),
+          ),
+        );
+
+    testWidgets('Maia standing in is marked ~ and named on the share', (
+      tester,
+    ) async {
+      await pumpFrom(tester, RepliesFrom.maia);
+      expect(find.text('~60%'), findsOneWidget);
+      expect(find.text('60%'), findsNothing);
+      expect(
+        find.byTooltip('Maia 2200; Lichess masters has under 10 games here'),
+        findsNWidgets(3),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the database\'s own shares are unmarked, named on hover', (
+      tester,
+    ) async {
+      await pumpFrom(tester, RepliesFrom.games);
+      expect(find.text('60%'), findsOneWidget);
+      expect(find.byTooltip('From Lichess masters'), findsNWidgets(3));
+    });
+
+    testWidgets('an unknown source shows nothing extra', (tester) async {
+      await pumpFrom(tester, null);
+      expect(find.text('60%'), findsOneWidget);
+      expect(find.textContaining('~'), findsNothing);
+      expect(find.byTooltip('From Lichess masters'), findsNothing);
     });
   });
 

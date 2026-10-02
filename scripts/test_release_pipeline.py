@@ -12,6 +12,51 @@ from unittest.mock import patch
 
 import dart_checks
 import release_assets
+import release_version
+
+
+class CandidateVersionTest(unittest.TestCase):
+    def test_branch_and_manual_runs_cannot_release(self):
+        for event, ref in (
+            ('push', 'refs/heads/candidate'),
+            ('workflow_dispatch', 'refs/heads/main'),
+            ('workflow_dispatch', 'refs/tags/v2.0.2'),
+        ):
+            with self.subTest(event=event, ref=ref), self.assertRaises(ValueError):
+                release_version.candidate_tag('version: 2.0.2\n', event, ref)
+
+    def test_a_release_tag_must_match_the_embedded_version(self):
+        self.assertEqual(release_version.candidate_tag(
+            'version: 2.0.2\n', 'push', 'refs/tags/v2.0.2'), 'v2.0.2')
+        with self.assertRaisesRegex(ValueError, 'must match'):
+            release_version.candidate_tag('version: 2.0.2\n', 'push', 'refs/tags/v2.0.1')
+
+    def test_bad_versions_and_unexpected_events_fail_before_building(self):
+        for pubspec in ('name: app\n', 'version: ../../bad\n',
+                        'version: 2.0.2\nversion: 2.0.3\n', 'version: $(id)\n'):
+            with self.subTest(pubspec=pubspec), self.assertRaises(ValueError):
+                release_version.candidate_tag(pubspec, 'push', 'refs/tags/v2.0.2')
+        for event, ref in (('push', 'refs/heads/main'), ('pull_request', 'refs/pull/1/merge')):
+            with self.subTest(event=event), self.assertRaises(ValueError):
+                release_version.candidate_tag('version: 2.0.2\n', event, ref)
+
+    def test_workflow_command_writes_only_a_validated_version(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'pubspec.yaml').write_text('version: 2.0.2\n')
+            output = root / 'output'
+            env = {**os.environ, 'GITHUB_EVENT_NAME': 'push',
+                   'GITHUB_REF': 'refs/tags/v2.0.2', 'GITHUB_SHA': 'abc123',
+                   'GITHUB_OUTPUT': str(output)}
+            command = [sys.executable, str(Path(release_version.__file__).resolve())]
+            result = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(output.read_text(), 'tag=v2.0.2\n')
+            output.unlink()
+            env['GITHUB_REF'] = 'refs/tags/v2.0.1'
+            result = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(output.exists())
 
 
 class AssetsTest(unittest.TestCase):
@@ -99,6 +144,8 @@ args = sys.argv[1:]
 with open('build/trace.log', 'a') as log:
     log.write(json.dumps(args) + '\\n')
 if args == ['--version', '--machine']:
+    if os.environ.get('TEST_SDK_LOCKED'):
+        print('Waiting for another flutter command to release the startup lock...')
     print(json.dumps({'frameworkVersion': os.environ.get('TEST_SDK', '3.47.5')}))
 elif args[0] == 'format':
     if '--output=none' not in args:
@@ -142,6 +189,11 @@ elif args[0] == 'test' and os.environ.get('TEST_COMMIT'):
         self.assertEqual(self.trace()[-1][0], 'format')
         self.assertIn('format diagnostics', (self.root / 'build/quality-gates/format.log').read_text())
         self.assertIn('First failed gate: format', (self.root / 'build/job-summary.md').read_text())
+
+    def test_a_flutter_lock_message_before_the_version_is_ignored(self):
+        with patch.dict(os.environ, {'TEST_SDK_LOCKED': '1'}):
+            self.assertEqual(self.run_gate(), 0)
+        self.assertEqual([args[0] for args in self.trace()], ['--version', 'pub', 'format', 'analyze', 'test'])
 
     def test_sdk_mismatch_stops_before_format(self):
         with patch.dict(os.environ, {'TEST_SDK': '3.47.2'}):

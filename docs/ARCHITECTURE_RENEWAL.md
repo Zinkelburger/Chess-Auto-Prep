@@ -1212,20 +1212,38 @@ remove obsolete viewer claims that saved header slices are absent. No Light or
 System theme, old Organize screen, superseded generation controls, dropped
 bughouse clock tools or credential-vault migration is added by this update.
 
-**Maintainability.** At `613cab04`, `scripts/check_v2.py` passes and reports
-85,760 production lines in 361 files, about 43% above the 60k sanity target.
-That is a design-review trigger, not evidence that the architecture is broken
-or permission to raise the target. Review equivalent feature scope against the
-old implementation, keeping tests separate. Start with the shared document
-session/save lifecycle, composition/navigation and generation ownership; the
-999-line `document_session.dart` and 956-line `document_saver.dart` are useful
-review starting points, not automatic split instructions. Trace each mutable
-fact, required write and invalidation to its owner; remove duplicated rules,
-unused paths and forwarding-only layers, and test behavior across boundaries.
-Split only when responsibilities differ. Do not hide growth by moving files
-outside `v2`, fragmenting one job or loosening checker limits. Keep the
-production-widget catalog tied to real controls. Resolve the size review and
-any must-fix findings before declaring renewal complete.
+**Maintainability.** The October 2 review baseline (`9b5c1b64`) passes the
+architecture and write-ownership checks: 115,706 production lines in 445 files,
+about 93% above the original 60k sanity target. The analyzer reports 469
+informational diagnostics, with no warnings or errors. Passing these checks
+does not certify the whole codebase: the targeted review covered recent search
+control, background indexing/filtering, caches, layout settings and player
+statistics. Current storage ownership, immutable search nodes and fault-oriented
+tests are strengths worth preserving.
+
+The review reproduced stale saved-search starts after stop, navigation or a newer
+request; mismatched continuation caches after changing evaluation source/depth;
+and indexing progress errors escaping the result future. The fixes unify delayed
+start invalidation, evaluation-cache invalidation and index-job completion.
+Player result counting now has one owner, shared by the corpus and filtered views.
+Regression tests cover these orderings and the resulting draft/statistics behavior.
+
+The next cleanup should stay evidence-driven. The document session, document saver
+and search owner each approach the 1,000-line cap and combine several lifecycles;
+extract a collaborator when it can own a complete responsibility, such as draft
+publication, without duplicating mutable state or adding forwarding interfaces.
+Measure retained memory and responsiveness across repeated large-file navigation
+and searches: a text-size parse budget and a 32-tree history are not a measured
+whole-app memory bound. Address analyzer findings by category, prioritizing
+unobserved futures and lifecycle concerns before formatting hints; do not suppress
+them to obtain a cleaner count. Keep tests separate from production size and do
+not loosen caps or fragment files merely to pass them.
+
+This applies [DDIA's reliability, simplicity and evolvability criteria](https://www.oreilly.com/library/view/designing-data-intensive-applications/9781491903063/ch01.html)
+and [Knuth's emphasis on programs humans can understand](https://www-cs-faculty.stanford.edu/~knuth/lp.html)
+to this desktop app: explicit owners and invalidation rules, reproducible failure
+tests and documented invariants. These are review criteria, not a claim that a
+particular class layout or smaller line count proves correctness.
 
 **Platform, compatibility and scale (H8).** Run the existing [desktop
 contracts](../.github/workflows/desktop-contracts.yml) and required release

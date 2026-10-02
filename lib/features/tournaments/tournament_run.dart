@@ -189,8 +189,9 @@ final class TournamentRun extends ChangeNotifier {
 
   /// Takes the machine for this run, or says why it cannot start yet.
   bool _takeEngines() {
-    if (_jobs.take(this, 'Engine tournament')) return true;
-    problem = 'Wait for the engine job under way to finish.';
+    if (_jobs.take(this, 'Engine tournament', kind: EngineJobKind.tournament))
+      return true;
+    problem = _jobs.blockingMessage;
     _notify();
     return false;
   }

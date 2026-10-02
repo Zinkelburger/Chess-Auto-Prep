@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../diagnostics/log.dart';
 import '../features/bughouse/archive_moves.dart';
 import '../features/bughouse/bughouse_lab.dart';
+import '../features/bughouse/expectimax_search.dart';
 import '../features/bughouse/matches.dart';
 import '../features/bughouse/table_search.dart';
 import '../features/library/chapter_outline.dart';
@@ -39,6 +40,14 @@ enum Mode {
 
   final String label;
 }
+
+/// Task groups share their names and membership across navigation surfaces.
+const modeGroups = {
+  'Repertoires': [Mode.repertoires, Mode.books, Mode.trainer],
+  'Study & games': [Mode.pgnViewer, Mode.study, Mode.myGames, Mode.tactics],
+  'Opponent preparation': [Mode.playerAnalysis, Mode.players],
+  'Data & engines': [Mode.databases, Mode.engineTournament, Mode.bughouse],
+};
 
 /// The owners behind the lists of the modes that open documents: the
 /// repertoires and the open chapter's outline, the studies, the PGN
@@ -125,12 +134,14 @@ final class TrainingModes {
 final class LabModes {
   LabModes({
     required this.lab,
+    required this.expectimax,
     required this.search,
     required this.archive,
     required this.matches,
   });
 
   final BughouseLab lab;
+  final BughouseExpectimaxSearch expectimax;
   final TableSearch search;
   final ArchiveMoves archive;
 
@@ -152,6 +163,7 @@ final class LabModes {
   void dispose() {
     _disposed = true;
     offered.dispose();
+    expectimax.dispose();
     matches.dispose();
     archive.dispose();
     search.dispose();

@@ -49,10 +49,11 @@ V2 is the only app: `lib/main.dart`, production under `lib/`, tests under
   For instructions/docs-only changes, run `scripts/ci.sh lint` and check links.
 - For visible changes, use the `run-chess-auto-prep` skill and inspect a
   screenshot from the headless app. Stop your preview before testing its tree.
-- GitHub CI runs only through the `v*` release-tag workflow; branch pushes,
-  backup pushes and PRs do not trigger it. The one exception is pushing the
-  `windows-check` branch on purpose: it builds and tries the Windows setup on
-  Server 2022 and 2025 and publishes nothing. Releases require passing tests,
+- GitHub release CI runs for `v*` tags; routine branch pushes, backups and PRs
+  do not trigger it. The tag workflow builds, validates and publishes in one run;
+  do not add a separate rehearsal branch or require a rehearsal before releasing.
+  The `windows-check` branch is a focused Windows setup diagnostic on Server
+  2022 and 2025 and publishes nothing. Releases require passing tests,
   offline-tool, integration and engine gates. Use focused local checks during
   development; a full local suite before each commit is not required.
 - Before stopping, waiting for later or reporting completion, commit all

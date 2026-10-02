@@ -72,7 +72,10 @@ studies, Chessbook) do not offer in one place:
   already uses for that kind of work; a new mode needs a strong reason.
 - Dark theme only. There is no light or system theme and no appearance setting.
 - Search values are precomputed and stored. The app shows a stored value or
-  says the position is not in the tree; it does not compute expectimax live.
+  says the position is not in the tree. The Bughouse lab also has an explicit
+  local Expectimax action: it searches the selected board with CrazyAra policy
+  probabilities and Hivemind evaluations, saves both colour values together,
+  and automatically shows compatible saved results on later visits.
 - Saving follows the Obsidian model: debounced, one write per burst, backup
   then atomic replace. A problem affects only the item involved; data that
   cannot be read is quarantined and logged, never deleted, and never blocks

@@ -236,7 +236,7 @@ final class ChapterAudit extends ChangeNotifier {
       return running
           ? 'The audit is already running.'
           : _jobs.heldByOther(this)
-          ? 'Wait for the engine job under way to finish.'
+          ? _jobs.blockingMessage
           : 'Open a repertoire chapter to audit it.';
     }
     final chapter = _session.chapter!;
@@ -251,7 +251,7 @@ final class ChapterAudit extends ChangeNotifier {
       positions: positions,
       chessDb: askChessDb ? ChessDbMoves(_lookups.run()) : null,
     );
-    _jobs.take(run, 'Paused while auditing');
+    _jobs.take(run, 'Paused while auditing', kind: EngineJobKind.audit);
     _holding = run;
     try {
       final walk = await _gapWalk(ticket, chapter, source);
@@ -306,7 +306,7 @@ final class ChapterAudit extends ChangeNotifier {
       final judged = await _judge(run, position);
       if (_disposed || ticket != _ticket) return;
       if (judged == null) {
-        _set(AuditFailed(run.failure ?? 'Stockfish could not start.'));
+        _set(AuditFailed(run.failure ?? 'The engine could not start.'));
         return;
       }
       _found = [..._found, ...judged.found]..sort(byReach);

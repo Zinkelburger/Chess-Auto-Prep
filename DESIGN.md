@@ -190,9 +190,17 @@ from its button.
 
 Spacing is a five-step scale (4, 8, 12, 16, 24); every gap is one of them.
 The list column starts 260px wide (300px in Player analysis) and the outline
-240px; the dividers drag. Minimums keep content usable: 180px for any pane,
-320px for the board column, 300px for the reading card, 320px for an action
-pane. A pane shorter
+220px. Below 1480px, scaled with text size, the repertoire list and chapter
+outline share one 260px column with Repertoires/Chapters tabs; both remain
+available and keep their searches. Wider windows show both columns. The
+dividers drag, and so does the gap between two tool panes. The builder's Moves
+start at 45% of the card beside Expectimax, with a preferred 280px reading width
+before text scaling. Rendered pane widths respect their contents, including
+nested splits, while keeping the player's saved proportions for wider windows. Minimums keep
+content usable: 180px for any pane, 320px for the board column, 300px for the
+reading card, 320px for a tool pane (180px for Moves, 240px for Expectimax). A
+tool picked while the card is one pane opens under it, so a tool pane is laid
+out to work at half the card's height. A pane shorter
 than its content's minimum scrolls as a whole rather than squeezing a list to
 nothing. Rows are fixed: 34px list rows, 28px engine and reply rows, 32px
 search rows, 44px two-line trainer rows.

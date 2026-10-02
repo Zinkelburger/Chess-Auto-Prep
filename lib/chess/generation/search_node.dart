@@ -199,6 +199,7 @@ final class OpponentNode extends SearchNode {
     required super.evalForUs,
     required this.valuation,
     required this.replies,
+    this.repliesFrom,
   });
 
   /// [replies] are the ones the search kept — every reply with positive
@@ -208,6 +209,7 @@ final class OpponentNode extends SearchNode {
     required Fen fen,
     required Eval? evalForUs,
     required List<ReplyMove> replies,
+    RepliesFrom? repliesFrom,
   }) => OpponentNode._(
     fen: fen,
     evalForUs: evalForUs,
@@ -215,12 +217,18 @@ final class OpponentNode extends SearchNode {
       replies.map((r) => (r.probability, r.child.valuation)),
     ),
     replies: List.unmodifiable(replies),
+    repliesFrom: repliesFrom,
   );
 
   @override
   final Valuation valuation;
 
   final List<ReplyMove> replies;
+
+  /// Whether the shares came from a database's games or from Maia standing
+  /// in for it; null where the model alone is the opponent, or the tree was
+  /// saved before this was recorded.
+  final RepliesFrom? repliesFrom;
 }
 
 /// What a node is worth, and how far the answer could still move.
@@ -331,25 +339,32 @@ SearchNode cutReplies(SearchNode node, {double? mass, int? most}) =>
             ),
         ],
       ),
-      OpponentNode(:final fen, :final evalForUs, :final replies) => () {
-        final shares = likeliestReplies(
-          {for (final r in replies) r.move.uci: r.probability},
-          mass: mass,
-          most: most,
-        );
-        return OpponentNode.over(
-          fen: fen,
-          evalForUs: evalForUs,
-          replies: [
-            for (final r in replies)
-              if (shares[r.move.uci] case final share?)
-                ReplyMove(
-                  move: r.move,
-                  probability: share,
-                  child: cutReplies(r.child, mass: mass, most: most),
-                ),
-          ],
-        );
-      }(),
+      OpponentNode(
+        :final fen,
+        :final evalForUs,
+        :final replies,
+        :final repliesFrom,
+      ) =>
+        () {
+          final shares = likeliestReplies(
+            {for (final r in replies) r.move.uci: r.probability},
+            mass: mass,
+            most: most,
+          );
+          return OpponentNode.over(
+            fen: fen,
+            evalForUs: evalForUs,
+            repliesFrom: repliesFrom,
+            replies: [
+              for (final r in replies)
+                if (shares[r.move.uci] case final share?)
+                  ReplyMove(
+                    move: r.move,
+                    probability: share,
+                    child: cutReplies(r.child, mass: mass, most: most),
+                  ),
+            ],
+          );
+        }(),
       _ => node,
     };

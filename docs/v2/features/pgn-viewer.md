@@ -411,7 +411,8 @@ stuff, no extra buttons." This replaces the three buttons above.
   field. In a followed player's collection a row is the colour they had (a
   light or dark disc) and their opponent, not their own name on every row.
 
-Not built: remembering the open tabs per file, and resizing panes by dragging.
+Not built: remembering the open tabs per file. Panes resize by dragging the
+gap between them (since 2026-10-01).
 
 ## Opening names (2026-09-28)
 

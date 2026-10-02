@@ -36,6 +36,14 @@ void main() {
   tearDown(() => w.dispose());
   Future<void> pump(WidgetTester tester) => w.pumpShell(tester);
 
+  Future<void> showLibrary(WidgetTester tester) async {
+    final tab = find.widgetWithText(TextButton, 'Repertoires');
+    if (tab.evaluate().isNotEmpty) {
+      await tester.tap(tab);
+      await tester.pumpAndSettle();
+    }
+  }
+
   testWidgets(
     'Actions tool context menu opens a split without numbered controls',
     (tester) async {
@@ -62,6 +70,7 @@ void main() {
 
   testWidgets('opening a chapter puts it in the workspace', (tester) async {
     await pump(tester);
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).last);
     await tester.pump();
     expect(w.session.source, kid);
@@ -76,11 +85,12 @@ void main() {
     'training hides answer previews and restores the outline on leaving',
     (tester) async {
       await pump(tester);
+      await showLibrary(tester);
       await tester.tap(inLibrary(find.text('Main')).last);
       await tester.pumpAndSettle();
       expect(find.byType(OutlinePanel), findsOneWidget);
       if (find.text('Train').evaluate().isEmpty) {
-        await tester.tap(find.byTooltip('Open tab').first);
+        await tester.tap(find.byTooltip('Open tools and arrange panes').first);
         await tester.pumpAndSettle();
       }
       await tester.tap(find.text('Train'));
@@ -97,13 +107,14 @@ void main() {
     },
   );
 
-  testWidgets('a sitting ends when the mode it was started in is left', (
+  testWidgets('a sitting pauses across a mode detour and resumes on request', (
     tester,
   ) async {
     await pump(tester);
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Open tab').first);
+    await tester.tap(find.byTooltip('Open tools and arrange panes').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Train'));
     w.lineTrainer.show();
@@ -111,25 +122,29 @@ void main() {
     w.lineTrainer.learn();
     await tester.pump();
     expect(w.lineTrainer.board.value, isNotNull);
+    final lesson = w.lineTrainer.lesson!;
     w.requests.switchTo(Mode.tactics);
     await tester.pump();
-    expect(w.lineTrainer.lesson, isNull);
+    expect(w.lineTrainer.lesson, same(lesson));
+    expect(lesson.suspended, isTrue);
     expect(w.lineTrainer.board.value, isNull, reason: 'the board is back');
     expect(w.analysis.pausedFor, isNull);
-    // A sitting started afresh in another mode is that mode's.
-    w.requests.switchTo(Mode.repertoires);
+    w.requests.switchTo(Mode.trainer);
     await tester.pumpAndSettle();
-    w.lineTrainer.learn();
+    await tester.tap(find.text('Resume lesson'));
     await tester.pump();
-    expect(w.lineTrainer.lesson, isNotNull);
+    expect(w.lineTrainer.lesson, same(lesson));
+    expect(lesson.suspended, isFalse);
+    expect(w.lineTrainer.board.value, isNotNull);
   });
 
-  testWidgets('a sitting ends with its Train tab closed', (tester) async {
+  testWidgets('a sitting pauses with its Train tab closed', (tester) async {
     await pump(tester);
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
     if (find.text('Train').evaluate().isEmpty) {
-      await tester.tap(find.byTooltip('Open tab').first);
+      await tester.tap(find.byTooltip('Open tools and arrange panes').first);
       await tester.pumpAndSettle();
     }
     await tester.tap(find.text('Train'));
@@ -142,7 +157,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyW);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pump();
-    expect(w.lineTrainer.lesson, isNull);
+    expect(w.lineTrainer.lesson?.suspended, isTrue);
     expect(w.lineTrainer.board.value, isNull);
   });
 
@@ -151,7 +166,9 @@ void main() {
   ) async {
     await pump(tester);
     w.store.hold = true;
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).last); // KID
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).first); // benko
     expect(w.store.waiting, 2);
     w.store.releaseAll(); // KID's read answers before benko's
@@ -167,6 +184,7 @@ void main() {
   ) async {
     await pump(tester);
     w.store.documents.clear();
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).last);
     await tester.pump();
     expect(w.session.isScratch, isTrue);
@@ -175,6 +193,7 @@ void main() {
   testWidgets('another chapter is not opened over a frozen document until '
       'the user says so', (tester) async {
     await pump(tester);
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
     w.store.saves.add(
@@ -185,6 +204,7 @@ void main() {
     expect(w.saver.state, isA<SaveStopped>());
 
     w.question.answer = DraftChoice.keepWaiting;
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).first); // benko
     await tester.pumpAndSettle();
     expect(w.question.asked.single, contains('was stopped'));
@@ -198,6 +218,7 @@ void main() {
     log.install(collect);
     addTearDown(() => log.remove(collect));
     await pump(tester);
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
     w.store.saves.add(const SaveRefused('game 3 would change'));
@@ -205,6 +226,7 @@ void main() {
     await tester.pumpAndSettle();
 
     w.question.answer = DraftChoice.closeAnyway;
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).first); // benko
     await tester.pumpAndSettle();
     expect(w.session.source, benko);
@@ -219,6 +241,7 @@ void main() {
     tester,
   ) async {
     await pump(tester);
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
     w.store.saves.add(const SaveRefused('game 3 would change'));
@@ -226,6 +249,7 @@ void main() {
     await tester.pumpAndSettle();
     w.question.asked.clear();
 
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).last); // KID again
     await tester.pumpAndSettle();
     expect(w.question.asked, isEmpty);
@@ -236,6 +260,7 @@ void main() {
     tester,
   ) async {
     await pump(tester);
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
     w.store.saves.add(const SaveRefused('game 3 would change'));
@@ -243,6 +268,7 @@ void main() {
     await tester.pumpAndSettle();
 
     w.question.answer = DraftChoice.saveACopy;
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).first); // benko
     await tester.pumpAndSettle();
     expect(w.session.source, benko, reason: 'the click still went through');
@@ -290,6 +316,7 @@ void main() {
     tester,
   ) async {
     await pump(tester);
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).last);
     await tester.pumpAndSettle();
 
@@ -331,9 +358,10 @@ void main() {
     tester,
   ) async {
     await pump(tester);
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).last);
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Open tab').first);
+    await tester.tap(find.byTooltip('Open tools and arrange panes').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Replies'));
     await tester.pumpAndSettle();
@@ -382,6 +410,7 @@ void main() {
     }
 
     await searchFromHere();
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).last);
     await tester.pumpAndSettle();
     await searchFromHere();
@@ -442,10 +471,11 @@ void main() {
     tester,
   ) async {
     await pump(tester);
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).last);
     await tester.pumpAndSettle();
     if (find.text('Train').evaluate().isEmpty) {
-      await tester.tap(find.byTooltip('Open tab').first);
+      await tester.tap(find.byTooltip('Open tools and arrange panes').first);
       await tester.pumpAndSettle();
     }
     await tester.tap(find.text('Train'));
@@ -504,6 +534,7 @@ void main() {
     tester,
   ) async {
     await pump(tester);
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).last);
     await tester.pumpAndSettle();
     expect(find.byType(SegmentedButton<Side>), findsNothing);
@@ -523,6 +554,7 @@ void main() {
     const unsaid = '[Event "Open"]\n[Result "*"]\n\n1. e4 e5 *\n';
     w.store.documents[benko] = Opened(unsaid, scriptedRevision(unsaid));
     await pump(tester);
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).first);
     await tester.pumpAndSettle();
     expect(find.text('Which side is Main for?'), findsOneWidget);
@@ -537,6 +569,7 @@ void main() {
       startsWith('// Color: Black\n'),
     );
     // The stated chapter is not asked.
+    await showLibrary(tester);
     await tester.tap(inLibrary(find.text('Main')).last);
     await tester.pumpAndSettle();
     expect(find.text('Which side is Main for?'), findsNothing);

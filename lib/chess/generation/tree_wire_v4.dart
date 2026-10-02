@@ -19,7 +19,9 @@ import 'search_node.dart';
 /// reader of this format tells the unscored from the level —, its
 /// `move_probability` and `cumulative_probability`, its
 /// `value_lower` and `value_upper`, and `terminal_value` when the game ended
-/// there. Everything else a node may carry belongs to a mode this search does
+/// there. An opponent node whose replies a database of games gave writes
+/// `v2_replies_from`: `games`, or `maia` where Maia stood in for it.
+/// Everything else a node may carry belongs to a mode this search does
 /// not have — master-game counts, book sources, trap and ease scores, prune
 /// reasons, rolling-search commitments, transposition rings — and is read
 /// past, never written.
@@ -205,6 +207,7 @@ final class _Writer {
       'move_probability': probability,
       'cumulative_probability': cumulative,
       if (node is TerminalNode) 'terminal_value': valuation.value,
+      if (node is OpponentNode) 'v2_replies_from': ?node.repliesFrom?.name,
       'value_lower': valuation.lower,
       'value_upper': valuation.upper,
       // The old app shows a node's value from these two and reads them as a

@@ -11,6 +11,8 @@ import 'package:chess_auto_prep/workspace/engine_jobs.dart';
 import 'package:chess_auto_prep/workspace/fill_gaps.dart';
 import 'package:chess_auto_prep/workspace/fill_states.dart';
 import 'package:chess_auto_prep/workspace/finds.dart';
+import 'package:chess_auto_prep/workspace/search_opponents.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../chess/generation/scripted_sources.dart';
@@ -245,6 +247,80 @@ void main() {
     );
   });
 
+  test('a saved search keeps who gave each position\'s replies, through '
+      'Resume; a tree saved before that was kept says nothing', () async {
+    // Masters played after 1.e4 here; everywhere else they have too few
+    // games, and Maia answers.
+    final masters = DatabaseOpponent(
+      name: 'Lichess masters',
+      played: (fen) async => PlayedFound(
+        fen.value.startsWith('4k3/8/8/8/4P3/')
+            ? const [(uci: 'e8d8', games: 70), (uci: 'e8f7', games: 30)]
+            : const [(uci: 'e8d8', games: 2)],
+      ),
+      fallback: const ScriptedPolicy({'e8d8': 2, 'e8e7': 1}),
+      fallbackUnder: 10,
+    );
+    Map<String, RepliesFrom?> fromIn(SearchNode tree) => {
+      for (final c in (tree as OurNode).candidates)
+        if (c.child case final OpponentNode node) c.move.uci: node.repliesFrom,
+    };
+    const request = FillRequest(
+      elo: 2200,
+      depthPlies: 2,
+      rootMoves: 6,
+      replies: ReplySource.masters,
+      fallbackUnder: 10,
+    );
+    String? saved;
+    final first = fillWith(
+      ScriptedEvaluator(),
+      keepTree: (_, text, {required runId}) async {
+        saved = text;
+      },
+      tools: (_) async => FillReady(
+        evaluator: ScriptedEvaluator(),
+        policy: masters,
+        release: () async {},
+      ),
+    );
+    await first.start(request);
+    final searched = fromIn(first.found!.tree);
+    expect(searched['e2e4'], RepliesFrom.games);
+    expect(
+      searched.values.where((from) => from == RepliesFrom.maia),
+      isNotEmpty,
+    );
+    expect(saved, contains('"v2_replies_from": "maia"'));
+
+    // Resumed with a model that names no source: the saved positions keep
+    // theirs.
+    final restarted = fillWith(
+      ScriptedEvaluator(),
+      loadTree: (_, _) => Stream.value(saved!),
+    );
+    expect(
+      await restarted.resume(
+        const FillRequest(
+          elo: 2200,
+          depthPlies: 3,
+          rootMoves: 6,
+          replies: ReplySource.masters,
+          fallbackUnder: 10,
+        ),
+      ),
+      isNull,
+    );
+    expect(fromIn(restarted.found!.tree), searched);
+
+    final older = saved!.replaceAll(
+      RegExp(r'\n *"v2_replies_from": "\w+",'),
+      '',
+    );
+    final seed = await savedSeed(Stream.value(older), request, Side.white);
+    expect(fromIn(seed as SearchNode).values.toSet(), {null});
+  });
+
   group('resume passes over newer saved searches it cannot use', () {
     Future<String> savedAt(int elo) async {
       String? saved;
@@ -373,4 +449,105 @@ void main() {
     expect(toolsTaken, 0);
     expect(store.all(), isEmpty);
   });
+
+  for (final stop in <String, void Function(FillGaps)>{
+    'cancel': (fill) => fill.cancel(),
+    'finish': (fill) => fill.finish(),
+    'finish level': (fill) => fill.finishLevel(),
+  }.entries) {
+    test('${stop.key} invalidates a saved search still loading', () async {
+      final reading = Completer<void>();
+      final gate = Completer<void>();
+      final evaluator = ScriptedEvaluator();
+      final fill = fillWith(
+        evaluator,
+        loadTree: (_, _) async* {
+          if (!reading.isCompleted) reading.complete();
+          await gate.future;
+        },
+      );
+      final loading = fill.resume(request, orAfresh: true);
+      await reading.future;
+      stop.value(fill);
+      gate.complete();
+      expect(await loading, isNotNull);
+      expect(evaluator.asked, isEmpty);
+      expect(fill.state, isA<FillIdle>());
+    });
+  }
+
+  test(
+    'leaving and returning to the board invalidates a pending resume',
+    () async {
+      final reading = Completer<void>();
+      final gate = Completer<void>();
+      final evaluator = ScriptedEvaluator();
+      final fill = fillWith(
+        evaluator,
+        loadTree: (_, _) async* {
+          if (!reading.isCompleted) reading.complete();
+          await gate.future;
+        },
+      );
+      final loading = fill.resume(request, orAfresh: true);
+      await reading.future;
+      fixture.session.playMove('e2e4');
+      fixture.session.back();
+      gate.complete();
+      expect(await loading, isNotNull);
+      expect(evaluator.asked, isEmpty);
+      expect(fill.state, isA<FillIdle>());
+    },
+  );
+
+  test('an older resume cannot replace a newer completed search', () async {
+    final reading = Completer<void>();
+    final gate = Completer<void>();
+    final fill = fillWith(
+      ScriptedEvaluator(),
+      loadTree: (_, _) async* {
+        if (!reading.isCompleted) reading.complete();
+        await gate.future;
+      },
+    );
+    final loading = fill.resume(request, orAfresh: true);
+    await reading.future;
+    const newer = FillRequest(elo: 1800, depthPlies: 1);
+    await fill.start(newer);
+    final found = fill.found;
+    gate.complete();
+    expect(await loading, isNotNull);
+    expect(fill.found, same(found));
+    expect(fill.found!.request, same(newer));
+  });
+
+  test(
+    'the most recent resume wins even if the older load finishes first',
+    () async {
+      final gates = [Completer<void>(), Completer<void>()];
+      final reads = [Completer<void>(), Completer<void>()];
+      var loads = 0;
+      final fill = fillWith(
+        ScriptedEvaluator(),
+        loadTree: (_, _) async* {
+          final at = loads++;
+          if (at < gates.length) {
+            reads[at].complete();
+            await gates[at].future;
+          }
+        },
+      );
+      final older = fill.resume(request, orAfresh: true);
+      await reads[0].future;
+      const newerRequest = FillRequest(elo: 1800, depthPlies: 1);
+      final newer = fill.resume(newerRequest, orAfresh: true);
+      await reads[1].future;
+      gates[0].complete();
+      expect(await older, isNotNull);
+      expect(fill.state, isA<FillIdle>());
+      gates[1].complete();
+      expect(await newer, isNull);
+      expect(fill.found!.request, same(newerRequest));
+    },
+  );
 }

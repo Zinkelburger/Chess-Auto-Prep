@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import 'listening_state.dart';
+import 'app_keys.dart';
 import 'theme.dart';
 
 /// One thing a pane can show, by an identity that never changes — an enum
@@ -79,6 +80,16 @@ class PaneTabs<K extends Object> extends ChangeNotifier {
   bool isOpen(K id) => _open.contains(id);
 
   bool _known(K id) => tabs.any((tab) => tab.id == id);
+
+  /// Restores one final state, retaining pinned tabs and ignoring stale IDs.
+  void restore(Iterable<K> open, K? selected) {
+    final next = _opening(tabs, open);
+    _open
+      ..clear()
+      ..addAll(next);
+    _selected = next.contains(selected) ? selected! : next.first;
+    notifyListeners();
+  }
 
   /// Brings [id] up, opening it at the right end first if it was closed.
   void show(K id) {
@@ -389,19 +400,32 @@ class _TabSlot<K extends Object> extends StatelessWidget {
     );
   }
 
-  Widget _tab() => GestureDetector(
-    onSecondaryTapUp: onContextMenu == null
-        ? null
-        : (details) => onContextMenu!(tab.id, details.globalPosition),
-    child: _Tab(
-      title: tab.title,
-      connected: connected,
-      closeButton: closeButton,
-      selected: tabs.selected == tab.id,
-      onTap: () => (onSelect ?? tabs.show)(tab.id),
-      onClose: tab.pinned || (tabs.open.length == 1 && onClose == null)
-          ? null
-          : () => (onClose ?? tabs.close)(tab.id),
+  Widget _tab() => Builder(
+    builder: (context) => Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (node, event) {
+        if (onContextMenu == null || !AppKey.tabMenu.accepts(event))
+          return KeyEventResult.ignored;
+        final box = context.findRenderObject() as RenderBox;
+        onContextMenu!(tab.id, box.localToGlobal(Offset(0, box.size.height)));
+        return KeyEventResult.handled;
+      },
+      child: GestureDetector(
+        onSecondaryTapUp: onContextMenu == null
+            ? null
+            : (details) => onContextMenu!(tab.id, details.globalPosition),
+        child: _Tab(
+          title: tab.title,
+          connected: connected,
+          closeButton: closeButton,
+          selected: tabs.selected == tab.id,
+          onTap: () => (onSelect ?? tabs.show)(tab.id),
+          onClose: tab.pinned || (tabs.open.length == 1 && onClose == null)
+              ? null
+              : () => (onClose ?? tabs.close)(tab.id),
+        ),
+      ),
     ),
   );
 }
@@ -434,67 +458,74 @@ class _Tab extends StatelessWidget {
     final shape = connected
         ? const BorderRadius.vertical(top: Radius.circular(paneTabRadius))
         : BorderRadius.circular(paneTabRadius);
-    return Listener(
-      onPointerDown: onClose == null ? null : _pointerDown,
-      child: Padding(
-        padding: connected
-            ? const EdgeInsets.only(top: paneTabInset, right: Space.xs)
-            : const EdgeInsets.all(paneTabInset),
-        child: Material(
-          color: selected
-              ? scheme.surfaceContainerHigh
-              : scheme.surfaceContainerLow,
-          shape: RoundedRectangleBorder(
-            borderRadius: shape,
-            side: BorderSide(
-              color: selected ? scheme.outline : Colors.transparent,
+    return Semantics(
+      selected: selected,
+      child: Listener(
+        onPointerDown: onClose == null ? null : _pointerDown,
+        child: Padding(
+          padding: connected
+              ? const EdgeInsets.only(top: paneTabInset, right: Space.xs)
+              : const EdgeInsets.all(paneTabInset),
+          child: Material(
+            color: selected
+                ? scheme.surfaceContainerHigh
+                : scheme.surfaceContainerLow,
+            shape: RoundedRectangleBorder(
+              borderRadius: shape,
+              side: BorderSide(
+                color: selected ? scheme.outline : Colors.transparent,
+              ),
             ),
-          ),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: shape,
-            splashFactory: NoSplash.splashFactory,
-            highlightColor: Colors.transparent,
-            hoverColor: scheme.onSurface.withValues(alpha: 0.06),
-            focusColor: scheme.onSurface.withValues(alpha: 0.10),
-            child: Padding(
-              padding: const EdgeInsets.only(left: Space.m, right: Space.xs),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      title,
-                      textAlign: TextAlign.left,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontWeight: selected ? FontWeight.w600 : null,
-                        color: selected
-                            ? scheme.onSurface
-                            : scheme.onSurfaceVariant,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: shape,
+              splashFactory: NoSplash.splashFactory,
+              highlightColor: Colors.transparent,
+              hoverColor: scheme.onSurface.withValues(alpha: 0.06),
+              focusColor: scheme.onSurface.withValues(alpha: 0.10),
+              child: Padding(
+                padding: const EdgeInsets.only(left: Space.m, right: Space.xs),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        title,
+                        textAlign: TextAlign.left,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: selected ? FontWeight.w600 : null,
+                          color: selected
+                              ? scheme.onSurface
+                              : scheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
-                  ),
-                  if (onClose != null && closeButton)
-                    IconButton(
-                      tooltip: 'Close $title',
-                      onPressed: onClose,
-                      style: const ButtonStyle(
-                        overlayColor: WidgetStatePropertyAll(
-                          Colors.transparent,
+                    if (onClose != null && closeButton)
+                      IconButton(
+                        tooltip: 'Close $title',
+                        onPressed: onClose,
+                        style: ButtonStyle(
+                          overlayColor: WidgetStateProperty.resolveWith(
+                            (states) => states.contains(WidgetState.focused)
+                                ? scheme.primary.withValues(alpha: 0.25)
+                                : Colors.transparent,
+                          ),
+                          minimumSize: const WidgetStatePropertyAll(
+                            Size(paneTabCloseSize, paneTabCloseSize),
+                          ),
+                          padding: const WidgetStatePropertyAll(
+                            EdgeInsets.zero,
+                          ),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        minimumSize: WidgetStatePropertyAll(
-                          Size(paneTabCloseSize, paneTabCloseSize),
-                        ),
-                        padding: WidgetStatePropertyAll(EdgeInsets.zero),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      icon: const Icon(Icons.close, size: IconSize.menu),
-                    )
-                  else
-                    const SizedBox(width: Space.m),
-                ],
+                        icon: const Icon(Icons.close, size: IconSize.menu),
+                      )
+                    else
+                      const SizedBox(width: Space.m),
+                  ],
+                ),
               ),
             ),
           ),

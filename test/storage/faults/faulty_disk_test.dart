@@ -167,6 +167,33 @@ void main() {
       );
     });
 
+    test('kept-versions ids are numbered, even one of decimal digits only, '
+        'which reads like a time', () {
+      // An import's staging folder is named by the clock, so the ids of its
+      // chapter's kept versions, hashes of that path, differ every run; about
+      // one in 1850 has no hex letter in it.
+      final root = p.join(Directory.systemTemp.path, 'profile');
+      final recorder = TraceRecorder(root);
+      String key(String path, {String? to}) =>
+          '${recorder.add(IoKind.stat, p.join(root, path), to: to == null ? null : p.join(root, to))!.key}';
+      expect(
+        key('Support/backups/1234567890123456/20260929T101112123456Z-0a1b.pgn'),
+        'stat:Support/backups/<doc1>/<time>-0a1b.pgn#0',
+      );
+      expect(
+        key('Support/backups/0123456789abcdef'),
+        'stat:Support/backups/<doc2>#0',
+      );
+      expect(
+        key(
+          'Support/backup-moves/1234567890123456-0123456789abcdef.json',
+          to: 'Support/backups/9876543210987654',
+        ),
+        'stat:Support/backup-moves/<doc1>-<doc2>.json'
+        '->Support/backups/<doc3>#0',
+      );
+    });
+
     test('quarantine', () async {
       await _expectStableTrace(
         _seedJournal,

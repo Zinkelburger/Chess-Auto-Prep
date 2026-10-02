@@ -30,6 +30,7 @@ import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/player_files.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
+import 'package:chess_auto_prep/ui/navigation_pages.dart';
 import 'package:chess_auto_prep/workspace/document_saver.dart';
 import 'package:chess_auto_prep/workspace/document_session.dart';
 import 'package:chess_auto_prep/workspace/engine_analysis.dart';
@@ -282,6 +283,15 @@ final class WindowFixture {
     await library.refresh();
     await parts.labs.offer(parts.env.bughouse.bundled);
     await tester.pumpAndSettle();
+    // An already-open chapter selects Chapters in compact navigation.
+    // Reveal the repertoire list before opening its fixture folders.
+    final navigation = find.byType(NavigationPages);
+    if (navigation.evaluate().isNotEmpty) {
+      await tester.tap(
+        find.descendant(of: navigation, matching: find.text('Repertoires')),
+      );
+      await tester.pumpAndSettle();
+    }
     await tester.tap(find.text('benko'));
     await tester.tap(find.text('KID'));
     await tester.pumpAndSettle();

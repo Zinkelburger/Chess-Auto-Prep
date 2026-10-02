@@ -40,7 +40,9 @@ final class IndexBuild {
       // walking them now would read each one here instead.
       unawaited(
         read.whenComplete(() {
-          if (!build._cancelled) build._nextTurn(lines, index, 0, onProgress);
+          if (!build._done.isCompleted) {
+            build._nextTurn(lines, index, 0, onProgress);
+          }
         }),
       );
     } else {
@@ -80,19 +82,13 @@ final class IndexBuild {
   ReceivePort? _port;
   Isolate? _isolate;
   Timer? _turn;
-  bool _cancelled = false;
 
   /// The index, or null when the build was cancelled. Fails with what went
   /// wrong when indexing threw.
   Future<OpeningIndex?> get result => _done.future;
 
   /// Stops the build; [result] answers null if it had not finished.
-  void cancel() {
-    _cancelled = true;
-    _isolate?.kill(priority: Isolate.immediate);
-    _turn?.cancel();
-    _finish(null);
-  }
+  void cancel() => _finish(null);
 
   /// Indexes [lines] from [done] on for one [turn], or for
   /// [OpeningIndex.progressEvery] games if that is sooner, once the event
@@ -113,7 +109,7 @@ final class IndexBuild {
         _finish(index.build());
       } else {
         onProgress?.call(done);
-        if (!_cancelled) _nextTurn(lines, index, done, onProgress);
+        if (!_done.isCompleted) _nextTurn(lines, index, done, onProgress);
       }
     }
 
@@ -121,6 +117,7 @@ final class IndexBuild {
   }
 
   void _guarded(void Function() work) {
+    if (_done.isCompleted) return;
     try {
       work();
     } on Object catch (error, stack) {
@@ -134,19 +131,24 @@ final class IndexBuild {
     void Function(int done)? onProgress,
   ) async {
     final port = _port = ReceivePort();
-    port.listen((message) {
-      switch (message) {
-        case int done:
-          onProgress?.call(done);
-        case OpeningIndex index:
-          _finish(index);
-        case [Object error, Object? stack]:
-          _fail(error, stack);
-        default:
-          // The isolate went without a word: killed, or out of memory.
-          if (!_done.isCompleted) _fail('the indexing stopped', null);
-      }
-    });
+    port.listen(
+      (message) => _guarded(() {
+        switch (message) {
+          case int done:
+            onProgress?.call(done);
+          case OpeningIndex index:
+            _finish(index);
+          case [Object error, Object? stack]:
+            _fail(error, stack);
+          default:
+            // The isolate went without a word: killed, or out of memory.
+            _fail(
+              StateError('The indexing worker exited without an answer.'),
+              null,
+            );
+        }
+      }),
+    );
     try {
       final isolate = await Isolate.spawn(
         _index,
@@ -156,24 +158,36 @@ final class IndexBuild {
         debugName: 'opening index',
       );
       _isolate = isolate;
-      if (_cancelled) isolate.kill(priority: Isolate.immediate);
+      // Completion can win the race with spawn, including a progress
+      // callback that cancels or fails before we receive the handle.
+      if (_done.isCompleted) isolate.kill(priority: Isolate.immediate);
     } on Object catch (error, stack) {
       _fail(error, stack);
     }
   }
 
   void _finish(OpeningIndex? index) {
-    _port?.close();
-    if (!_done.isCompleted) _done.complete(index);
+    if (_done.isCompleted) return;
+    _close();
+    _done.complete(index);
   }
 
   void _fail(Object error, Object? stack) {
-    _port?.close();
     if (_done.isCompleted) return;
+    _close();
     _done.completeError(
       error,
       stack is StackTrace ? stack : StackTrace.fromString('$stack'),
     );
+  }
+
+  /// Success, failure and cancellation all end the same lifetime. The
+  /// completer is the terminal-state flag; no separate cancellation state
+  /// can drift away from what callers observe through [result].
+  void _close() {
+    _turn?.cancel();
+    _port?.close();
+    _isolate?.kill(priority: Isolate.immediate);
   }
 }
 

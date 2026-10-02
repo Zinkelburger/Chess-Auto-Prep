@@ -6,6 +6,7 @@
 
 #include "serialization.h"
 #include "cJSON.h"
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -180,6 +181,11 @@ static char* tree_to_json_internal(const Tree *tree, const SerializationOptions 
         cJSON_AddNumberToObject(config, "maia_elo", tree->config.maia_elo);
         cJSON_AddNumberToObject(config, "min_probability", tree->config.min_probability);
         cJSON_AddNumberToObject(config, "max_depth", tree->config.max_depth);
+        /* The app's key names (tree_wire_v4.dart); absent means every reply. */
+        if (tree->config.reply_mass > 0)
+            cJSON_AddNumberToObject(config, "v2_reply_mass", tree->config.reply_mass);
+        if (tree->config.max_replies > 0)
+            cJSON_AddNumberToObject(config, "v2_max_replies", tree->config.max_replies);
         if (tree->config.rating_range) {
             cJSON_AddStringToObject(config, "rating_range", tree->config.rating_range);
         }
@@ -660,6 +666,18 @@ Tree* tree_load_from_buffer(const char *buffer, size_t size) {
             tree->config.max_depth = (int)cfg_max_d->valuedouble;
         }
         
+        /* Read as the app does (_replyMass, _positive): out of range = none. */
+        item = cJSON_GetObjectItem(config, "v2_reply_mass");
+        tree->config.reply_mass = cJSON_IsNumber(item) && isfinite(item->valuedouble) &&
+                                          item->valuedouble > 0 && item->valuedouble <= 1
+                                      ? item->valuedouble
+                                      : 0;
+        item = cJSON_GetObjectItem(config, "v2_max_replies");
+        tree->config.max_replies =
+            cJSON_IsNumber(item) && item->valuedouble >= 1 && item->valuedouble < 1e6
+                ? (int)item->valuedouble
+                : 0;
+
         cJSON *min_g = cJSON_GetObjectItem(config, "min_games");
         if (min_g && cJSON_IsNumber(min_g)) {
             tree->config.min_games = (int)min_g->valuedouble;

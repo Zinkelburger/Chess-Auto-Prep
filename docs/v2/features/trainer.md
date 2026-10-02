@@ -61,6 +61,12 @@ reveal answers; it returns when the lesson finishes or is left. For the same
 reason every other card tab (Moves, Replies, Explorer, Search) reads
 `Hidden while training` until then.
 
+A tab picked from `+` while the card is one pane opens under the lesson, as in
+the PGN Viewer. The lesson fits that half of the card: the heading, prompt,
+control and footer keep their places, the moves so far take the height left
+and keep the latest move in view, and a short pane drops the rating question
+over the four buttons. A pane too short for even that scrolls whole.
+
 **Space** advances a learning step or takes the offered grade, **1–4** rate,
 **↓** skips, **Escape** returns to the list. Skip and Restart line are available during the lesson,
 and its **Line actions** menu (`⋯`) offers **View moves and notes** — the

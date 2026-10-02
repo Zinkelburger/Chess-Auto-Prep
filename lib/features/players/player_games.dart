@@ -1,8 +1,9 @@
+import 'dart:collection';
+import 'dart:convert';
 import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:crypto/crypto.dart';
-import 'dart:convert';
 
 import '../../chess/fen.dart';
 import '../../chess/opening_index.dart';
@@ -52,10 +53,34 @@ final class PlayerPosition {
   final List<String> line;
   final int game;
   final int ply;
-  final Set<int> games = {};
-  final Map<String, int> moves = {};
-  int wins = 0, draws = 0, losses = 0, unknown = 0;
-  int get count => games.length;
+  final Set<int> _games = {};
+  final Map<String, int> _moves = {};
+  int _wins = 0, _draws = 0, _losses = 0, _unknown = 0;
+
+  Set<int> get games => UnmodifiableSetView(_games);
+  Map<String, int> get moves => UnmodifiableMapView(_moves);
+  int get wins => _wins;
+  int get draws => _draws;
+  int get losses => _losses;
+  int get unknown => _unknown;
+  int get count => _games.length;
+
+  /// Each game contributes once, from the player's side. Both corpus
+  /// construction and filtered statistics use this same scoring rule.
+  void addGame(int index, String result, {String? move}) {
+    if (!_games.add(index)) return;
+    if (move != null) _moves.update(move, (n) => n + 1, ifAbsent: () => 1);
+    if (result == '1/2-1/2') {
+      _draws++;
+    } else if (result == (side == Side.white ? '1-0' : '0-1')) {
+      _wins++;
+    } else if (result == (side == Side.white ? '0-1' : '1-0')) {
+      _losses++;
+    } else {
+      _unknown++;
+    }
+  }
+
   double? get score => wins + draws + losses == 0
       ? null
       : (wins + draws / 2) / (wins + draws + losses);
@@ -146,7 +171,7 @@ PlayerCorpus buildPlayerCorpus(Set<String> names, List<PlayerGame> sources) {
             ply: ply,
           ),
         );
-        _count(at, index, node?.uci, result);
+        at.addGame(index, result, move: node?.uci);
       }
       if (node == null) break;
       line.add(node.san);
@@ -168,19 +193,5 @@ Iterable<String> _moves(GameTree tree) sync* {
   while (node != null) {
     yield node.uci;
     node = node.children.firstOrNull;
-  }
-}
-
-void _count(PlayerPosition at, int index, String? uci, String result) {
-  at.games.add(index);
-  if (uci != null) at.moves.update(uci, (n) => n + 1, ifAbsent: () => 1);
-  if (result == '1/2-1/2') {
-    at.draws++;
-  } else if (result == (at.side == Side.white ? '1-0' : '0-1')) {
-    at.wins++;
-  } else if (result == (at.side == Side.white ? '0-1' : '1-0')) {
-    at.losses++;
-  } else {
-    at.unknown++;
   }
 }

@@ -105,6 +105,20 @@ final class TacticsSet extends ChangeNotifier {
     _ => const [],
   };
 
+  String _query = '';
+  String get query => _query;
+
+  void search(String value) {
+    if (_query == value) return;
+    _query = value;
+    notifyListeners();
+  }
+
+  /// Text search and filter controls describe the same playable scope.
+  List<Puzzle> get queue => _query.isEmpty
+      ? filteredQueue
+      : filteredQueue.where((puzzle) => puzzle.matches(_query)).toList();
+
   PuzzleFilter get filter => _settings.value.puzzles;
 
   /// How many of the user's moves the review marked in each game it went
@@ -124,7 +138,7 @@ final class TacticsSet extends ChangeNotifier {
 
   /// The puzzles a session plays, in its order. Worked out again only when
   /// the puzzles, the filter or the day changes.
-  List<Puzzle> get queue {
+  List<Puzzle> get filteredQueue {
     final now = _now();
     final day = DateTime(now.year, now.month, now.day);
     final memo = _queued;

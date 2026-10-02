@@ -33,6 +33,30 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('Play uses the searched puzzles and zero results disable it', (
+    tester,
+  ) async {
+    await toTactics(tester);
+    final search = find.byWidgetPredicate(
+      (w) => w is TextField && w.decoration?.hintText == 'Search',
+    );
+    await tester.enterText(search, 'no such opponent');
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Play (0)'))
+          .onPressed,
+      isNull,
+    );
+    await tester.enterText(search, 'Rival');
+    await tester.pumpAndSettle();
+    final expected = w.tactics.queue.map((p) => p.fen).toList();
+    expect(expected, isNotEmpty);
+    await tester.tap(find.text('Play (${expected.length})'));
+    await tester.pumpAndSettle();
+    expect(w.parts.training.puzzles.run!.queue, expected);
+  });
+
   testWidgets('the list shows what Play plays, and the filters change it', (
     tester,
   ) async {

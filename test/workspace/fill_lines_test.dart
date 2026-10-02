@@ -1,6 +1,7 @@
 import 'package:chess_auto_prep/chess/generation/draft_lines.dart'
     show continuationPlies;
 import 'package:chess_auto_prep/chess/generation/eval.dart';
+import 'package:chess_auto_prep/chess/generation/evaluation_source.dart';
 import 'package:chess_auto_prep/chess/generation/legal_moves.dart';
 import 'package:chess_auto_prep/chess/generation/sources.dart';
 import 'package:chess_auto_prep/chess/fen.dart';
@@ -100,6 +101,56 @@ void main() {
       continuationPlies,
     );
   });
+
+  for (final (label, next, reusable) in const [
+    (
+      'same evaluation settings',
+      FillRequest(elo: 2200, depthPlies: 3, evalDepth: 14),
+      true,
+    ),
+    (
+      'changed depth',
+      FillRequest(elo: 2200, depthPlies: 3, evalDepth: 20),
+      false,
+    ),
+    (
+      'changed source',
+      FillRequest(
+        elo: 2200,
+        depthPlies: 3,
+        evalDepth: 14,
+        source: EvaluationSource.lichess,
+      ),
+      false,
+    ),
+  ]) {
+    test('draft continuations respect $label', () async {
+      final first = _FirstLegalLine();
+      final continuations = _FirstLegalLine();
+      var useFirst = true;
+      final fill = FillGaps(
+        session: fixture.session,
+        jobs: EngineJobs(analysis),
+        documents: fixture.store,
+        tools: (_) async => FillReady(
+          evaluator: useFirst ? first : ScriptedEvaluator(),
+          policy: const ScriptedPolicy({'e8d8': 1}),
+          continuations: continuations,
+          release: () async {},
+        ),
+      );
+      addTearDown(fill.dispose);
+      await fill.start(
+        const FillRequest(elo: 2200, depthPlies: 3, evalDepth: 14),
+      );
+      expect(first.asked, isNotEmpty);
+      useFirst = false;
+      await fill.start(next);
+      await fill.makeLines();
+      expect(fill.lines, isA<LinesWritten>());
+      expect(continuations.asked, reusable ? isEmpty : isNotEmpty);
+    });
+  }
 
   group('lines are not written for a chapter that has moved since the '
       'search', () {

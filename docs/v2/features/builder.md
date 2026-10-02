@@ -20,7 +20,8 @@ audit and the Findings pane are [checks.md](checks.md).
 
 Builder opens Moves on the left and Expectimax on the right, with Expectimax
 selected; the book button under the moves opens the Explorer there (shut at
-first, since 2026-10-01). Train and
+first, since 2026-10-01). Moves start at 45% of the card so both fit a 1280px
+window with the outline open; drag the gap between them to change it. Train and
 Replies remain available from the inner tab menu but are not initially open.
 The **Action Tabs** layout control offers 1, 2, 3 or 4 fixed panes: one pane,
 two side by side, one on the left and two on the right, or four quadrants.

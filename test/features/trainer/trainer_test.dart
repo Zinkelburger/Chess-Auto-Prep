@@ -176,6 +176,43 @@ void main() {
     },
   );
 
+  test('file detours retain a paused lesson and freeze its delayed reply', () {
+    fakeAsync((async) {
+      final trainer = ready(async)..learn();
+      final lesson = trainer.lesson!;
+      lesson.next();
+      lesson.play('e2e4');
+      final shown = lesson.drill.shown;
+      final other = chapterRef('Other', 'Other');
+      fixture.store.documents[other] = Opened(_other, scriptedRevision(_other));
+      fixture.session.open(other);
+      async.flushMicrotasks();
+      expect(trainer.lesson, same(lesson));
+      expect(lesson.suspended, isTrue);
+      expect(trainer.board.value, isNull);
+      async.elapse(const Duration(seconds: 20));
+      expect(lesson.drill.shown, shown);
+      fixture.session.open(fixture.ref);
+      async.flushMicrotasks();
+      expect(trainer.lesson, same(lesson));
+      trainer.resume();
+      expect(lesson.suspended, isFalse);
+      async.elapse(const Duration(seconds: 2));
+      expect(lesson.drill.shown, greaterThan(shown));
+      trainer.suspend();
+      fixture.session.open(other);
+      async.flushMicrotasks();
+      fixture.externalEdit(_other);
+      fixture.session.open(fixture.ref);
+      async.flushMicrotasks();
+      expect(
+        trainer.lesson,
+        isNull,
+        reason: 'changed source cannot resume stale moves',
+      );
+    });
+  });
+
   test('nothing is read until the tab asks', () {
     fakeAsync((async) {
       final trainer = trainerOver();
@@ -738,6 +775,9 @@ void main() {
     fakeAsync((async) {
       final trainer = ready(async)..learn();
       unawaited(fixture.session.open(fixture.ref, game: 0));
+      async.flushMicrotasks();
+      expect(trainer.lesson?.suspended, isTrue);
+      trainer.leave();
       async.flushMicrotasks();
       expect((trainer.state as TrainerEmpty).why, NothingToTrain.studyChapter);
       expect(trainer.lesson, isNull);

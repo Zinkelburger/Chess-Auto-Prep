@@ -41,7 +41,7 @@ final class AlternativeAnswer {
     } catch (error) {
       if (!_cancelled) log.w('Check alternative puzzle answer', error);
       return const AlternativeUnavailable(
-        'Stockfish could not finish the check.',
+        'The engine could not finish the check.',
       );
     } finally {
       await cancel();

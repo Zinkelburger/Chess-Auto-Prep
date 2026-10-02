@@ -56,12 +56,37 @@ dependency, formatting, analysis and unit/widget gates as release CI. It records
 the commit and rejects uncommitted/untracked files or a changed HEAD at the end.
 Inspect `build/quality-gates/summary.md` and the per-gate logs on failure;
 GitHub retains these in `flutter-quality-results`, including formatting failures.
-Tag only that validated commit, matching the version in `pubspec.yaml`; after a
-failed release, use a new version and tag rather than moving an existing tag.
 
-Preflight covers the shared Dart job. The release still requires the separate
-offline-tool, desktop integration, engine, installer and platform build gates.
-Publication accepts only the four named build artifacts, verifies all eight
-nonempty downloads, and generates `SHA256SUMS` for precisely those downloads.
-Diagnostic artifacts stay in Actions. Only the publication job has write access;
-actions are pinned to commits and Dependabot proposes weekly updates.
+Push the matching `v*` tag to release. The [Release workflow](.github/workflows/release.yml)
+automatically runs offline tests, desktop integration, engine checks, both native
+Mac builds, the Windows installer and five Linux package formats. Builds run
+alongside tests, so a test failure cannot hide the next packaging failure. Once
+all gates pass, the same run validates all nine downloads, generates
+`SHA256SUMS` and publishes the GitHub release. No separate rehearsal is required.
+The `windows-check` branch remains an optional focused Windows diagnostic.
+After a failed release, use a new version and tag rather than moving an existing tag.
+
+Only a `v*` **tag push** can enter the publication job, and only after every gate
+and artifact check passes. Diagnostic artifacts stay in Actions. Only the
+publication job has write access; actions are pinned to commits and Dependabot
+proposes weekly updates. Each Mac release bundle is checked in its packaging
+job. The duplicate Apple Silicon release build and standalone Mac engine job
+have been removed.
+
+The failures that prompted this setup:
+
+| Candidate | GitHub evidence | Cause and prevention |
+|---|---|---|
+| 2.0.0 | [Failed run](https://github.com/Zinkelburger/Chess-Auto-Prep/actions/runs/36754478934) | Linux fault tests found inconsistent book references after delete/restore and an interleaving timeout. Windows tests exposed directory-sync assumptions, a missing-warning assertion and a database handle left open during cleanup. These gates passed on 2.0.1; retain them and run them before tagging. |
+| 2.0.1 | [Failed run](https://github.com/Zinkelburger/Chess-Auto-Prep/actions/runs/36931974043) | Intel Mac packaging rejected Stockfish's gzip checksum. The existing fix pins the uncompressed engine and uses a native Intel runner. The tag workflow exercises both native Mac release builds, including their packaged engines. |
+
+Verification of the packaging fixes also [caught an Intel startup crash](https://github.com/Zinkelburger/Chess-Auto-Prep/actions/runs/36969225369)
+after the checksum fix. Stockfish 19 stores the Intel network data in the
+arm64 slice of its universal executable ([upstream implementation](https://github.com/official-stockfish/Stockfish/blob/sf_19/src/universal/patch_x86_slice.sh)).
+The app and frameworks may be thinned; the signed Stockfish helper must retain
+both slices. Signing also repacks those slices: the inspected artifact moved
+the network by 64 KiB without updating the Intel pointer. Packaging now
+preserves the complete helper, rebases that pointer against the signed layout,
+verifies every network byte against the pinned input, then signs again and
+checks that the layout is stable. Both architectures are asserted before
+running the packaged app on its native runner.

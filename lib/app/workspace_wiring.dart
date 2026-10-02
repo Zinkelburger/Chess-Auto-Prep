@@ -68,6 +68,7 @@ final class WorkspaceWiring {
   bool _disposed = false;
 
   late final workspace = Workspace(
+    jobs: _jobs,
     session: _session,
     inspection: _inspection,
     review: _review,

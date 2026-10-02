@@ -149,8 +149,8 @@ final class GameReview extends ChangeNotifier {
       return;
     }
     final positions = _mainlineFens(chapter.tree);
-    if (!_jobs.take(this, 'Reviewing the game')) {
-      problem = 'Wait for the engine job under way to finish.';
+    if (!_jobs.take(this, 'Reviewing the game', kind: EngineJobKind.review)) {
+      problem = _jobs.blockingMessage;
       notifyListeners();
       return;
     }

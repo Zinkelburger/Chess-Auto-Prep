@@ -123,6 +123,27 @@ class Lesson extends ChangeNotifier {
   ProgressWrite? _notExcluded;
   Timer? _timer;
   bool _disposed = false;
+  bool _suspended = false, _advanceOnResume = false;
+  bool get suspended => _suspended;
+
+  void suspend() {
+    if (_disposed || _suspended) return;
+    _suspended = true;
+    _timer?.cancel();
+    notifyListeners();
+  }
+
+  void resume() {
+    if (_disposed || !_suspended) return;
+    _suspended = false;
+    if (_advanceOnResume) {
+      _advanceOnResume = false;
+      _nextLine();
+    } else {
+      _arm();
+    }
+    notifyListeners();
+  }
 
   TrainingLine get line => _drill.line;
   Drill get drill => _drill;
@@ -150,11 +171,14 @@ class Lesson extends ChangeNotifier {
     fen: _drill.fen,
     orientation: line.side,
     lastMove: _drill.lastMove,
-    onMove: _state is Drilling && _drill.stage is Asking ? play : null,
+    onMove: !_suspended && _state is Drilling && _drill.stage is Asking
+        ? play
+        : null,
   );
 
   /// The user's move on the board.
   void play(String uci) {
+    if (_disposed || _suspended) return;
     if (_state is! Drilling) return;
     final answered = _drill.answer(uci);
     if (answered == null) return;
@@ -171,18 +195,21 @@ class Lesson extends ChangeNotifier {
 
   /// Goes on from a move being shown.
   void next() {
+    if (_disposed || _suspended) return;
     if (_state is Drilling && _drill.stage is Showing) _changed(_drill.next());
   }
 
   /// Space: goes on from a move being shown, or takes the grade the line's
   /// mistakes earned when a rating is asked for.
   void proceed() {
+    if (_disposed || _suspended) return;
     if (_state case AwaitingRating(:final graded)) return rate(graded);
     next();
   }
 
   /// The user's rating of the line just reviewed.
   void rate(Rating rating) {
+    if (_disposed || _suspended) return;
     if (_state case AwaitingRating(:final clean)) {
       unawaited(_save(rating, clean: clean));
     }
@@ -190,6 +217,7 @@ class Lesson extends ChangeNotifier {
 
   /// The rating that could not be written, again.
   void retry() {
+    if (_disposed || _suspended) return;
     if (_state case LineNotSaved(:final rating, :final clean)) {
       unawaited(_save(rating, clean: clean, again: true));
     }
@@ -197,6 +225,7 @@ class Lesson extends ChangeNotifier {
 
   /// Drops the line from the sitting, unrated and unwritten.
   void skip() {
+    if (_disposed || _suspended) return;
     if (_state is SavingLine || _state is SittingOver) return;
     _nextLine();
     notifyListeners();
@@ -206,6 +235,7 @@ class Lesson extends ChangeNotifier {
   /// of every queue until included again — and goes on without it, unrated.
   /// The sitting goes on at once; a write that fails is said on the lesson.
   Future<void> exclude() async {
+    if (_disposed || _suspended) return;
     if (_state is SavingLine || _state is SittingOver) return;
     final line = this.line;
     _left.removeWhere((later) => later.key == line.key);
@@ -221,6 +251,7 @@ class Lesson extends ChangeNotifier {
 
   /// The line again from its start, walkthrough and all if it is still new.
   void restart() {
+    if (_disposed || _suspended) return;
     if (_state is SavingLine || _state is SittingOver) return;
     _state = const Drilling();
     _changed(
@@ -261,6 +292,7 @@ class Lesson extends ChangeNotifier {
 
   void _arm() {
     _timer?.cancel();
+    if (_disposed || _suspended) return;
     final wait = switch (_drill.stage) {
       Finished() => _graded && _state is Drilling ? finishedPause : null,
       Missed() => correctionDelay,
@@ -271,7 +303,7 @@ class Lesson extends ChangeNotifier {
     };
     if (wait == null) return;
     _timer = Timer(wait, () {
-      if (_disposed) return;
+      if (_disposed || _suspended) return;
       if (_drill.stage case Finished(:final clean)) {
         unawaited(_save(gradeOf(clean: clean), clean: clean));
       } else {
@@ -313,7 +345,11 @@ class Lesson extends ChangeNotifier {
     if (rating == Rating.again &&
         (kind == SittingKind.learn || kind == SittingKind.review))
       _left.add(line);
-    _nextLine();
+    if (_suspended) {
+      _advanceOnResume = true;
+    } else {
+      _nextLine();
+    }
     notifyListeners();
   }
 

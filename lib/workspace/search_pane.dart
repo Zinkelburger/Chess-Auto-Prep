@@ -247,7 +247,24 @@ class _SearchPaneState extends State<SearchPane>
   Widget _bar(BuildContext context) => LayoutBuilder(
     builder: (context, size) {
       final replies = _book ? null : _repliesField();
-      final inline = size.maxWidth >= searchBarInlineWidth;
+      final fontSize = Theme.of(context).textTheme.labelLarge!.fontSize!;
+      final scale = math.max(
+        1.0,
+        MediaQuery.textScalerOf(context).scale(fontSize) / fontSize,
+      );
+      final available = size.maxWidth - Space.m - Space.xs;
+      final runWidth = math.min(
+        searchRunWidth * scale,
+        available - kMinInteractiveDimension,
+      );
+      final depthWidth = searchDepthWidth * scale;
+      final repliesWidth = searchRepliesWidth * scale;
+      final withDepth =
+          runWidth + Space.s + depthWidth + kMinInteractiveDimension;
+      // Account for the gear's whole hit target and scaled labels before
+      // keeping controls on the bar. Extra fields move to the next row.
+      final depthInBar = available >= withDepth;
+      final inline = available >= withDepth + Space.s + repliesWidth;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -257,12 +274,14 @@ class _SearchPaneState extends State<SearchPane>
               padding: const EdgeInsets.only(left: Space.m, right: Space.xs),
               child: Row(
                 children: [
-                  SizedBox(width: searchRunWidth, child: _runButton()),
-                  const SizedBox(width: Space.s),
-                  _depthBox(),
+                  SizedBox(width: runWidth, child: _runButton()),
+                  if (depthInBar) ...[
+                    const SizedBox(width: Space.s),
+                    _depthBox(width: depthWidth),
+                  ],
                   if (inline && replies != null) ...[
                     const SizedBox(width: Space.s),
-                    SizedBox(width: searchRepliesWidth, child: replies),
+                    SizedBox(width: repliesWidth, child: replies),
                   ],
                   const Spacer(),
                   _gear(context),
@@ -270,12 +289,19 @@ class _SearchPaneState extends State<SearchPane>
               ),
             ),
           ),
-          if (!inline && replies != null)
+          if (!depthInBar || (!inline && replies != null))
             SizedBox(
               height: searchRepliesRowHeight,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: Space.m),
-                child: Align(child: replies),
+                child: Row(
+                  children: [
+                    if (!depthInBar) _depthBox(width: depthWidth),
+                    if (!depthInBar && replies != null)
+                      const SizedBox(width: Space.s),
+                    if (!inline && replies != null) Expanded(child: replies),
+                  ],
+                ),
               ),
             ),
         ],
@@ -283,7 +309,7 @@ class _SearchPaneState extends State<SearchPane>
     },
   );
 
-  Widget _depthBox() => Tooltip(
+  Widget _depthBox({required double width}) => Tooltip(
     message: _book
         ? 'Follow the opponent\'s master replies this many '
               'half-moves from the board; past it every line runs '
@@ -297,7 +323,7 @@ class _SearchPaneState extends State<SearchPane>
       value: _options.depth,
       min: ExpectimaxOptions.minDepth,
       max: ExpectimaxOptions.maxDepth,
-      width: searchDepthWidth,
+      width: width,
       enabled: !widget.fill.running,
       onProblem: _problem,
       onChanged: (depth) => unawaited(
@@ -543,6 +569,12 @@ class _SearchPaneState extends State<SearchPane>
             ? [side]
             : const [Side.white, Side.black],
         engineDepthAt: widget.fill.engineDepthAt,
+        shareTip: (from) => repliesFromTip(
+          from,
+          database: found.request.replies.label,
+          elo: found.request.elo,
+          fallbackUnder: found.request.fallbackUnder,
+        ),
         onHover: (row, anchor) => _hover(row.after, row.move.uci, anchor),
         onLeave: _leave,
         onPlay: (row) => _play(row.move.uci),

@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
 import '../ui/app_action.dart';
+import '../ui/theme.dart' show builderMovesShare;
 import '../ui/pane_tabs.dart';
 import 'explorer.dart';
 import 'workspace_tabs.dart';
@@ -20,10 +23,19 @@ final class ActionPaneLeaf extends ActionPaneNode {
 }
 
 final class ActionPaneSplit extends ActionPaneNode {
-  const ActionPaneSplit(this.direction, this.first, this.second);
+  const ActionPaneSplit(
+    this.direction,
+    this.first,
+    this.second, {
+    this.share = 0.5,
+  });
   final PaneSplitDirection direction;
   final ActionPaneNode first;
   final ActionPaneNode second;
+
+  /// How much of the split [first] has, from 0 to 1: half until the mode
+  /// starts otherwise or the user drags the divider.
+  final double share;
   @override
   Iterable<int> get indices => [...first.indices, ...second.indices];
 }
@@ -62,6 +74,115 @@ final class ActionLayout extends ChangeNotifier {
   final _empty = <int>{};
   ActionPaneNode _root = const ActionPaneLeaf(0);
   int _active = 0;
+
+  bool _restoring = false;
+  bool get restoring => _restoring;
+  double _boardFraction = 0.4;
+  double get boardFraction => _boardFraction;
+
+  void resizeBoard(double share) {
+    if (!share.isFinite) return;
+    final next = share.clamp(0.2, 0.8);
+    if (next == _boardFraction) return;
+    _boardFraction = next;
+    notifyListeners();
+  }
+
+  @override
+  void notifyListeners() {
+    if (!_restoring) super.notifyListeners();
+  }
+
+  String snapshot() => jsonEncode({
+    'tree': _writeNode(_root),
+    'active': _active,
+    'board': _boardFraction,
+    'book': _book?.value,
+    'panes': {
+      for (final i in visible)
+        '$i': {
+          'open': [
+            for (final tab in openIn(i))
+              if (tab != WorkspaceTab.analysis) tab.name,
+          ],
+          'selected': pane(i).selected.name,
+          'empty': isEmpty(i),
+        },
+    },
+  });
+
+  /// Invalid saved layouts leave the current arrangement intact.
+  bool restore(String saved) {
+    Map<String, Object?> data;
+    ActionPaneNode tree;
+    try {
+      final raw = jsonDecode(saved);
+      if (raw is! Map<String, Object?> || raw['panes'] is! Map) return false;
+      data = raw;
+      tree = _readNode(data['tree']);
+      final leaves = tree.indices.toList();
+      if (!leaves.contains(0) ||
+          leaves.length > 4 ||
+          leaves.toSet().length != leaves.length)
+        return false;
+      final panes = data['panes'] as Map;
+      if (leaves.any((i) => panes['$i'] is! Map)) return false;
+    } on Object {
+      return false;
+    }
+    final panes = data['panes'] as Map;
+    final fallback = pane(
+      0,
+    ).tabs.firstWhere((t) => t.id != WorkspaceTab.analysis).id;
+    _restoring = true;
+    try {
+      _root = tree;
+      _empty.clear();
+      for (final i in visible) {
+        _ensure(i, fallback);
+        final entry = panes['$i'] as Map;
+        final names = entry['open'];
+        final open = names is List ? names.whereType<String>() : <String>[];
+        final known = {for (final t in pane(i).tabs) t.id.name: t.id};
+        pane(i).restore([
+          for (final name in open)
+            if (name != 'analysis' && known.containsKey(name)) known[name]!,
+        ], entry['selected'] == 'analysis' ? null : known[entry['selected']]);
+        if (entry['empty'] == true && !pane(i).tabs.any((t) => t.pinned))
+          _empty.add(i);
+      }
+      _active = data['active'] is int && visible.contains(data['active'])
+          ? data['active'] as int
+          : visible.first;
+      final share = data['board'];
+      _boardFraction = share is num && share.isFinite
+          ? share.toDouble().clamp(0.2, 0.8)
+          : 0.4;
+      if (_book != null) _book!.value = data['book'] == true;
+    } finally {
+      _restoring = false;
+    }
+    notifyListeners();
+    return true;
+  }
+
+  void resizeActive(double change) {
+    ActionPaneSplit? parent(ActionPaneNode node) {
+      if (node is! ActionPaneSplit) return null;
+      return parent(node.first) ??
+          parent(node.second) ??
+          (node.indices.contains(active) ? node : null);
+    }
+
+    final split = parent(_root);
+    if (split != null)
+      resize(
+        split,
+        (split.share +
+                (split.first.indices.contains(active) ? change : -change))
+            .clamp(0.1, 0.9),
+      );
+  }
 
   ActionPaneNode get root => _root;
   List<int> get visible => _root.indices.toList();
@@ -186,6 +307,7 @@ final class ActionLayout extends ChangeNotifier {
       node.direction,
       _replace(node.first, index, replacement),
       _replace(node.second, index, replacement),
+      share: node.share,
     ),
   };
 
@@ -288,6 +410,7 @@ final class ActionLayout extends ChangeNotifier {
       node.direction,
       _swapped(node.first, a, b),
       _swapped(node.second, a, b),
+      share: node.share,
     ),
   };
 
@@ -333,7 +456,31 @@ final class ActionLayout extends ChangeNotifier {
     final second = _without(split.second, index);
     if (first == null) return second;
     if (second == null) return first;
-    return ActionPaneSplit(split.direction, first, second);
+    return ActionPaneSplit(split.direction, first, second, share: split.share);
+  }
+
+  /// [split] with [share] of its room for its first side, as the divider
+  /// was dragged to. The layout keeps it while the panes stay.
+  void resize(ActionPaneSplit split, double share) {
+    final clamped = share.clamp(0.1, 0.9);
+    if (clamped == split.share) return;
+    ActionPaneNode reshared(ActionPaneNode node) => switch (node) {
+      ActionPaneLeaf() => node,
+      ActionPaneSplit() when identical(node, split) => ActionPaneSplit(
+        node.direction,
+        node.first,
+        node.second,
+        share: clamped,
+      ),
+      ActionPaneSplit() => ActionPaneSplit(
+        node.direction,
+        reshared(node.first),
+        reshared(node.second),
+        share: node.share,
+      ),
+    };
+    _root = reshared(_root);
+    notifyListeners();
   }
 
   void closePane(int index) {
@@ -414,13 +561,17 @@ final class ActionLayout extends ChangeNotifier {
   ValueNotifier<bool>? get book => _book;
   ValueNotifier<bool>? _book;
 
-  /// The builder's start: Moves on the left, Expectimax on the right. The
+  /// The builder's start: Moves on the left, Expectimax on the right, the
+  /// moves a little narrower ([builderMovesShare]) since they wrap and the
+  /// Expectimax table's columns do not. The
   /// book starts shut and opens under the moves from its button; it is the
   /// main pane's Explorer, whose database and filters are the remembered
   /// ones. The main pane keeps the other tabs to be shown by name.
   void startBuilding() {
     if (count > 1) return;
-    _book ??= ValueNotifier(false);
+    if (_book == null) {
+      _book = ValueNotifier(false)..addListener(notifyListeners);
+    }
     _ensure(1, WorkspaceTab.search);
     pane(0)
       ..show(WorkspaceTab.moves)
@@ -430,6 +581,7 @@ final class ActionLayout extends ChangeNotifier {
       PaneSplitDirection.right,
       ActionPaneLeaf(0),
       ActionPaneLeaf(1),
+      share: builderMovesShare,
     );
     _active = 1;
     notifyListeners();
@@ -475,4 +627,30 @@ final class ActionLayout extends ChangeNotifier {
     _book?.dispose();
     super.dispose();
   }
+}
+
+Object _writeNode(ActionPaneNode node) => switch (node) {
+  ActionPaneLeaf(:final index) => index,
+  ActionPaneSplit() => {
+    'direction': node.direction.name,
+    'share': node.share,
+    'first': _writeNode(node.first),
+    'second': _writeNode(node.second),
+  },
+};
+
+ActionPaneNode _readNode(Object? raw, [int depth = 0]) {
+  if (raw is int && raw >= 0 && raw < 4) return ActionPaneLeaf(raw);
+  if (depth >= 3 || raw is! Map) throw const FormatException('Invalid pane');
+  final direction = PaneSplitDirection.values.asNameMap()[raw['direction']];
+  final share = raw['share'];
+  if (direction == null || share is! num || !share.isFinite) {
+    throw const FormatException('Invalid split');
+  }
+  return ActionPaneSplit(
+    direction,
+    _readNode(raw['first'], depth + 1),
+    _readNode(raw['second'], depth + 1),
+    share: share.toDouble().clamp(0.1, 0.9),
+  );
 }

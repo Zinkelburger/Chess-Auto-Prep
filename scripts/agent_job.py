@@ -20,6 +20,7 @@ import signal
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 
@@ -235,6 +236,52 @@ def display(env: dict, headless: bool):
                 proc.kill(); proc.wait()
 
 
+JOB_TEMP_PREFIX = 'job-tmp-'
+
+
+@contextlib.contextmanager
+def job_temp(env: dict):
+    """A temporary folder of the job's own, removed when the job ends.
+
+    /tmp is a tmpfs with a fixed number of files, and tests leave files
+    behind on purpose: the app's folder lock keeps one lock file for every
+    folder it ever locked, and every test locks fresh folders. Hundreds of
+    thousands of them once filled /tmp for every session on the machine.
+    With TMPDIR pointing here, nothing a job makes outlives it; the folder of
+    a job that was killed is swept by the next job once its worker is gone.
+    """
+    sweep_job_temps()
+    token = process_token(os.getpid())
+    path = Path(tempfile.mkdtemp(prefix=f'{JOB_TEMP_PREFIX}{os.getpid()}-{token}-', dir=STATE))
+    try:
+        yield dict(env, TMPDIR=str(path))
+    finally:
+        remove_tree(path)
+
+
+def sweep_job_temps() -> None:
+    """Removes job folders whose worker is no longer running."""
+    for folder in STATE.glob(JOB_TEMP_PREFIX + '*'):
+        try:
+            pid, token = folder.name[len(JOB_TEMP_PREFIX):].split('-')[:2]
+            if process_token(int(pid)) != token:
+                remove_tree(folder)
+        except ValueError:
+            continue
+
+
+def remove_tree(path: Path) -> None:
+    """Removes [path], making read-only folders a test left writable first."""
+    def writable(function, target, _):
+        try:
+            os.chmod(os.path.dirname(target), 0o700)
+            function(target)
+        except OSError:
+            pass
+    shutil.rmtree(path, onexc=writable) if sys.version_info >= (3, 12) else \
+        shutil.rmtree(path, onerror=writable)
+
+
 def run_child(command: list[str], env: dict, owner: int, token: str) -> int:
     proc = subprocess.Popen(command, env=env, start_new_session=True)
     try:
@@ -291,7 +338,7 @@ def worker(args) -> int:
             stack.callback(slot.close)
         active = wait_for(slots)
         print(f'agent-job: {active.path.stem}, 2 CPUs, 8 GiB maximum', file=sys.stderr, flush=True)
-        env = profile_env(Path.cwd())
+        env = stack.enter_context(job_temp(profile_env(Path.cwd())))
         if args.headless:
             env = headless_env(env)
         with display(env, args.headless) as child_env:
