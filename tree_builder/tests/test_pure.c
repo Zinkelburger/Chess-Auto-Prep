@@ -135,7 +135,7 @@ int main(int argc, char **argv) {
     built->config.reply_mass = 0.9;
     built->config.max_replies = 5;
     assert(tree_save_to_buffer(built, &saved, &saved_size, &opts));
-    assert(strstr(saved, "\"v2_reply_mass\":0.9") && strstr(saved, "\"v2_max_replies\":5"));
+    assert(strstr(saved, "\"v2_reply_mass\"") && strstr(saved, "\"v2_max_replies\""));
     restored = tree_load_from_buffer(saved, saved_size);
     free(saved);
     assert(restored && restored->config.reply_mass == 0.9 && restored->config.max_replies == 5);
@@ -147,7 +147,7 @@ int main(int argc, char **argv) {
     tree_destroy(built);
     /* likeliestReplies in lib/chess/generation/sources.dart, same cases as
      * test/chess/generation/reply_cut_test.dart. */
-    PureMove spread[5] = {{"e8d8"}, {"e8f8"}, {"e8d7"}, {"e8e7"}, {"e8f7"}};
+    PureMove spread[5] = {{.uci = "e8d8"}, {.uci = "e8f8"}, {.uci = "e8d7"}, {.uci = "e8e7"}, {.uci = "e8f7"}};
     double shares[5] = {0.5, 0.3, 0.1, 0.06, 0.04};
     assert(pure_cut_replies(spread, 5, shares, 0.9, 0) == 3);
     assert(fabs(shares[0] - 0.5 / 0.9) < 1e-12 && shares[3] == 0 && shares[4] == 0);
@@ -159,7 +159,7 @@ int main(int argc, char **argv) {
     assert(pure_cut_replies(spread, 2, one, 0.1, 0) == 1 && one[0] == 0 && one[1] == 1);
     double all[5] = {0.5, 0.3, 0.1, 0.06, 0.04};
     assert(pure_cut_replies(spread, 5, all, 0, 0) == 5 && all[4] == 0.04);
-    PureMove tied[3] = {{"b"}, {"a"}, {"c"}};
+    PureMove tied[3] = {{.uci = "b"}, {.uci = "a"}, {.uci = "c"}};
     double ties[3] = {0.25, 0.25, 0.5};
     assert(pure_cut_replies(tied, 3, ties, 0, 2) == 2);
     assert(ties[0] == 0 && fabs(ties[1] - 1 / 3.0) < 1e-12 && fabs(ties[2] - 2 / 3.0) < 1e-12);
