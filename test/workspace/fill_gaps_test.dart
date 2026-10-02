@@ -395,6 +395,17 @@ void main() {
   });
 
   test(
+    'the current root stays preferred when the result history is full',
+    () async {
+      final fill = fillWith(ScriptedEvaluator());
+      for (var rating = 1800; rating < 1820; rating++) {
+        await fill.start(FillRequest(elo: rating, depthPlies: 1));
+        expect(fill.nodeAtBoard(), same(fill.found!.tree));
+      }
+    },
+  );
+
+  test(
     'rapid board navigation during save follows only the latest root',
     () async {
       final gate = Completer<void>();

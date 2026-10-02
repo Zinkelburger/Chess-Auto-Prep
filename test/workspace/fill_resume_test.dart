@@ -449,4 +449,105 @@ void main() {
     expect(toolsTaken, 0);
     expect(store.all(), isEmpty);
   });
+
+  for (final stop in <String, void Function(FillGaps)>{
+    'cancel': (fill) => fill.cancel(),
+    'finish': (fill) => fill.finish(),
+    'finish level': (fill) => fill.finishLevel(),
+  }.entries) {
+    test('${stop.key} invalidates a saved search still loading', () async {
+      final reading = Completer<void>();
+      final gate = Completer<void>();
+      final evaluator = ScriptedEvaluator();
+      final fill = fillWith(
+        evaluator,
+        loadTree: (_, _) async* {
+          if (!reading.isCompleted) reading.complete();
+          await gate.future;
+        },
+      );
+      final loading = fill.resume(request, orAfresh: true);
+      await reading.future;
+      stop.value(fill);
+      gate.complete();
+      expect(await loading, isNotNull);
+      expect(evaluator.asked, isEmpty);
+      expect(fill.state, isA<FillIdle>());
+    });
+  }
+
+  test(
+    'leaving and returning to the board invalidates a pending resume',
+    () async {
+      final reading = Completer<void>();
+      final gate = Completer<void>();
+      final evaluator = ScriptedEvaluator();
+      final fill = fillWith(
+        evaluator,
+        loadTree: (_, _) async* {
+          if (!reading.isCompleted) reading.complete();
+          await gate.future;
+        },
+      );
+      final loading = fill.resume(request, orAfresh: true);
+      await reading.future;
+      fixture.session.playMove('e2e4');
+      fixture.session.back();
+      gate.complete();
+      expect(await loading, isNotNull);
+      expect(evaluator.asked, isEmpty);
+      expect(fill.state, isA<FillIdle>());
+    },
+  );
+
+  test('an older resume cannot replace a newer completed search', () async {
+    final reading = Completer<void>();
+    final gate = Completer<void>();
+    final fill = fillWith(
+      ScriptedEvaluator(),
+      loadTree: (_, _) async* {
+        if (!reading.isCompleted) reading.complete();
+        await gate.future;
+      },
+    );
+    final loading = fill.resume(request, orAfresh: true);
+    await reading.future;
+    const newer = FillRequest(elo: 1800, depthPlies: 1);
+    await fill.start(newer);
+    final found = fill.found;
+    gate.complete();
+    expect(await loading, isNotNull);
+    expect(fill.found, same(found));
+    expect(fill.found!.request, same(newer));
+  });
+
+  test(
+    'the most recent resume wins even if the older load finishes first',
+    () async {
+      final gates = [Completer<void>(), Completer<void>()];
+      final reads = [Completer<void>(), Completer<void>()];
+      var loads = 0;
+      final fill = fillWith(
+        ScriptedEvaluator(),
+        loadTree: (_, _) async* {
+          final at = loads++;
+          if (at < gates.length) {
+            reads[at].complete();
+            await gates[at].future;
+          }
+        },
+      );
+      final older = fill.resume(request, orAfresh: true);
+      await reads[0].future;
+      const newerRequest = FillRequest(elo: 1800, depthPlies: 1);
+      final newer = fill.resume(newerRequest, orAfresh: true);
+      await reads[1].future;
+      gates[0].complete();
+      expect(await older, isNotNull);
+      expect(fill.state, isA<FillIdle>());
+      gates[1].complete();
+      expect(await newer, isNull);
+      expect(fill.found!.request, same(newerRequest));
+    },
+  );
 }

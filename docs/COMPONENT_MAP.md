@@ -69,7 +69,11 @@ Bughouse mode is offered when its engine assets are present.
   a supervised finite engine job; unavailable checks do not invent grades.
 - Players/prep owns identities, groups, downloads, findings, prepared flags and
   linked prep studies. Failed analysis offers Try again and diagnostic Details;
-  an unsuccessful refresh retains the previous corpus and its source revisions. Cross-mode wiring lives in `app/`, not panel imports.
+  an unsuccessful refresh retains the previous corpus and its source revisions.
+  `PlayerPosition.addGame` owns result counting for both the corpus and filtered
+  statistics; its game and move collections are read-only to consumers. Filtering
+  chooses the included games once per statistics calculation before aggregating
+  their positions. Cross-mode wiring lives in `app/`, not panel imports.
 - Databases browses/imports/downloads master games and reports storage usage.
   Cleanup is limited to explicitly selected derived data.
 - Generation owns search trees and draft publication; Replies/gaps and Audit
@@ -77,7 +81,15 @@ Bughouse mode is offered when its engine assets are present.
   board (`workspace/fill_gaps.dart`) builds two trees in one run, the board's
   side and the other; `FillGaps.nodeAtBoard(side:)` reads either, and
   `workspace/search_table.dart` merges them into the Expectimax table's
-  White, Black and Engine columns.
+  White, Black and Engine columns. Saved-tree loading and automatic board-follow
+  restarts share one start generation: navigation, a newer accepted start/resume,
+  or any stop command invalidates earlier pending starts, including an away-and-back
+  navigation. Exact-root results take precedence while preserving newest-first
+  order. Engine depths and continuation lines share the same source/depth scope.
+- `workspace/index_build.dart` owns each opening-index build. Incremental work
+  and isolate messages use the same guarded completion: success, failure and
+  cancellation close the timer, receive port and worker. Progress-consumer failures
+  reach the result future, and late worker handles are stopped after completion.
 - The Repertoire builder starts with two panes: Moves on the left, Expectimax
   on the right (`ActionLayout.startBuilding`), the moves at 45% of the card
   (`builderMovesShare`) so the Expectimax table keeps its value columns at a

@@ -1,6 +1,4 @@
 import 'dart:async';
-
-import '../../diagnostics/log.dart';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -8,6 +6,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../../diagnostics/log.dart';
 import '../../chess/pgn/game_text.dart';
 import '../../chess/pgn/games_written.dart';
 import '../../chess/tactics/game_ids.dart';
@@ -132,11 +131,13 @@ final class PlayerAnalysis extends ChangeNotifier {
     final data = corpus;
     if (data == null) return const [];
     // Filtering statistics is done over the actual games, not by hiding rows
-    // after counts were taken from a broader corpus.
+    // after counts were taken from a broader corpus. Decide once per game;
+    // each game can occur at dozens of positions in the same projection.
+    final kept = gameIndexes.toSet();
     final result = <PlayerPosition>[];
     for (final at in data.positions) {
       if (at.side != side || at.ply < minPly) continue;
-      final included = at.games.where((i) => includes(data.games[i])).toList();
+      final included = at.games.where(kept.contains).toList();
       if (included.length < minGames) continue;
       final filtered = PlayerPosition(
         fen: at.fen,
@@ -146,19 +147,9 @@ final class PlayerAnalysis extends ChangeNotifier {
         ply: at.ply,
       );
       for (final index in included) {
-        final game = data.games[index];
-        filtered.games.add(index);
-        if (game.result == '1/2-1/2') {
-          filtered.draws++;
-        } else if (game.result == (side == Side.white ? '1-0' : '0-1')) {
-          filtered.wins++;
-        } else if (game.result == (side == Side.white ? '0-1' : '1-0')) {
-          filtered.losses++;
-        } else {
-          filtered.unknown++;
-        }
+        filtered.addGame(index, data.games[index].result);
       }
-      if (filtered.count >= minGames) result.add(filtered);
+      result.add(filtered);
     }
     result.sort((a, b) {
       final by = switch (order) {
