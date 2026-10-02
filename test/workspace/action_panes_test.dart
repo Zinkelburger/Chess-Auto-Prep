@@ -55,6 +55,66 @@ Finder tabIn(int index, String name) =>
     find.descendant(of: pane(index), matching: find.text(name));
 
 void main() {
+  testWidgets(
+    'saved and keyboard-sized panes stay usable after window narrowing',
+    (tester) async {
+      final layout = await pumpPanes(tester);
+      layout.startBuilding();
+      layout.resize(layout.root as ActionPaneSplit, 0.1);
+      final saved = layout.snapshot();
+      await tester.binding.setSurfaceSize(const Size(600, 680));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(pane(0)).width,
+        greaterThanOrEqualTo(movesPaneComfortWidth),
+      );
+      expect(
+        tester.getRect(pane(1)).width,
+        greaterThanOrEqualTo(searchPaneMinWidth),
+      );
+      expect(layout.snapshot(), saved);
+      layout.select(1);
+      for (var i = 0; i < 12; i++) {
+        layout.resizeActive(-0.05);
+      }
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(pane(1)).width,
+        greaterThanOrEqualTo(searchPaneMinWidth),
+      );
+      final narrowed = layout.snapshot();
+      await tester.binding.setSurfaceSize(const Size(1400, 900));
+      await tester.pumpAndSettle();
+      expect(layout.snapshot(), narrowed);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'nested splits preserve each leaf minimum when room is available',
+    (tester) async {
+      final layout = await pumpPanes(tester);
+      layout.startBuilding();
+      layout.split(1, WorkspaceTab.explorer, PaneSplitDirection.right);
+      layout.resize(layout.root as ActionPaneSplit, 0.1);
+      await tester.binding.setSurfaceSize(const Size(1000, 680));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(pane(0)).width,
+        greaterThanOrEqualTo(movesPaneComfortWidth),
+      );
+      expect(
+        tester.getRect(pane(1)).width,
+        greaterThanOrEqualTo(searchPaneMinWidth),
+      );
+      expect(
+        tester.getRect(pane(2)).width,
+        greaterThanOrEqualTo(actionPaneMinWidth),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('the builder starts with Moves beside Expectimax and the '
       'book shut', (tester) async {
     final layout = await pumpPanes(tester);

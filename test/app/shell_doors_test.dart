@@ -270,6 +270,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Could not fetch that game.'), findsOneWidget);
     expect(w.session.source, kid);
-    expect(find.byType(LibraryPanel), findsOneWidget);
+    expect(find.byType(LibraryPanel, skipOffstage: false), findsOneWidget);
   });
 }

@@ -361,6 +361,40 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  for (final width in [275.1, 320.0, 480.0]) {
+    testWidgets('the bar fits ${width}px at 130% text', (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: darkTheme(),
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: width,
+                height: 480,
+                child: SearchPane(
+                  fill: fill,
+                  session: fixture.session,
+                  settings: settings,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.enterText(find.widgetWithText(TextField, 'Depth'), '4');
+      await tester.pumpAndSettle();
+      expect(settings.value.expectimax.depth, 4);
+      await tester.tap(find.byTooltip('Expectimax settings'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Show results'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   /// Runs a search two plies deep from the board, on real time.
   Future<void> searched(WidgetTester tester) async {
     await pump(tester);

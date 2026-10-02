@@ -18,7 +18,6 @@ import '../features/tactics/my_games_block.dart';
 import '../features/tactics/puzzle_trainer.dart';
 import '../features/trainer/train_pane.dart';
 import '../features/trainer/trainer.dart';
-import '../storage/settings_store.dart';
 import '../ui/app_action.dart';
 import '../ui/app_keys.dart';
 import '../ui/choice_dialog.dart';
@@ -27,6 +26,7 @@ import '../ui/status_bar.dart';
 import '../ui/listening_state.dart';
 import '../ui/move_notation.dart';
 import '../ui/pane_tabs.dart';
+import '../ui/navigation_pages.dart';
 import '../ui/theme.dart';
 import '../workspace/board_claim.dart';
 import '../workspace/engine_jobs.dart';
@@ -34,17 +34,15 @@ import '../workspace/document_actions.dart';
 import '../workspace/book_chip.dart';
 import '../workspace/copy_name_dialog.dart';
 import '../storage/finds_store.dart';
-import '../workspace/fill_gaps.dart';
-import '../workspace/fill_states.dart';
 import '../workspace/finds_panel.dart';
 import '../workspace/move_field.dart';
 import '../workspace/workspace.dart';
 import '../workspace/workspace_keys.dart';
-import '../workspace/action_layout.dart';
 import '../workspace/workspace_tabs.dart';
 import '../workspace/workspace_view.dart';
 import 'full_screen.dart';
 import 'layout_memory.dart';
+import 'search_door.dart';
 import 'mode_view.dart';
 import 'mode.dart';
 import 'player_wiring.dart';
@@ -141,6 +139,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
 
   void _resetLayout() {
     _layoutMemory.reset();
+    _navigationPage = 1;
     _list.size = listColumnWidth;
     _playerList.size = playerColumnWidth;
     _outline.size = outlineColumnWidth;
@@ -289,6 +288,10 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     flex: 1,
     min: boardPaneMinWidth,
   );
+  bool _compactNavigation = false;
+  int _navigationPage = 1;
+  final _listContentKey = GlobalKey();
+  final _outlineContentKey = GlobalKey();
   bool _outlineShown = false;
   bool _listShown = true;
 
@@ -341,7 +344,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
 
   void _arrange() => _panes.areas = [
     if (_listShown) _requests.mode == Mode.playerAnalysis ? _playerList : _list,
-    if (_outlineShown) _outline,
+    if (_outlineShown && !_compactNavigation) _outline,
     _workspace,
   ];
 
@@ -451,7 +454,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// games.
   void _walk(int by) {
     if (_inspecting) _tabs.show(WorkspaceTab.moves);
-    if (_listShown && _positionsShown) {
+    if (_listShown &&
+        _positionsShown &&
+        (!_compactNavigation || !_outlineShown || _navigationPage == 0)) {
       if (_ws.finds.step(by) case final next?) _openFind(next);
       return;
     }
@@ -476,6 +481,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     if (!mounted) return;
     setState(() {
       _positionsShown = !_positionsShown || !_listShown;
+      _navigationPage = 0;
       _listShown = true;
     });
     _arrange();
@@ -808,31 +814,56 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// The columns the mode puts side by side, under one set of keys: the
   /// mode's own list, the outline when a repertoire chapter is open, and the
   /// workspace filling the rest, with a divider to drag between each pair.
-  Widget _columns() {
-    return MultiSplitViewTheme(
-      data: paneTheme(Theme.of(context).colorScheme),
-      child: MultiSplitView(controller: _panes, builder: _pane),
-    );
-  }
+  Widget _columns() => LayoutBuilder(
+    builder: (context, room) {
+      final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+      final compact = room.maxWidth < navigationSideBySideMinWidth * scale;
+      if (compact != _compactNavigation) {
+        _compactNavigation = compact;
+        _arrange();
+      }
+      return MultiSplitViewTheme(
+        data: paneTheme(Theme.of(context).colorScheme),
+        child: MultiSplitView(controller: _panes, builder: _pane),
+      );
+    },
+  );
+
+  Widget _navigationList(Widget trailing) => KeyedSubtree(
+    key: _listContentKey,
+    child: _positionsShown
+        ? FindsPanel(
+            finds: _ws.finds,
+            onOpen: _openFind,
+            onTrain: _trainFind,
+            trailing: trailing,
+          )
+        : _view.list(trailing),
+  );
+
+  Widget _navigationOutline() => OutlinePanel(
+    key: _outlineContentKey,
+    outline: _docs.outline,
+    library: _docs.library,
+    session: _ws.session,
+    onOpen: (ref) => unawaited(_requests.open(ref)),
+  );
 
   Widget _pane(BuildContext context, Area area) => switch (area.data) {
     // The mode's list or the Positions, with the `«` that hides the
     // column in its top right corner.
     _Pane.list =>
-      _positionsShown
-          ? FindsPanel(
-              finds: _ws.finds,
-              onOpen: _openFind,
-              onTrain: _trainFind,
+      _compactNavigation && _outlineShown
+          ? NavigationPages(
+              list: _navigationList(const SizedBox.shrink()),
+              outline: _navigationOutline(),
               trailing: ListToggle(shown: true, onPressed: _toggleList),
+              listLabel: _positionsShown ? 'Positions' : 'Repertoires',
+              selected: _navigationPage,
+              onSelected: (page) => setState(() => _navigationPage = page),
             )
-          : _view.list(ListToggle(shown: true, onPressed: _toggleList)),
-    _Pane.outline => OutlinePanel(
-      outline: _docs.outline,
-      library: _docs.library,
-      session: _ws.session,
-      onOpen: (ref) => unawaited(_requests.open(ref)),
-    ),
+          : _navigationList(ListToggle(shown: true, onPressed: _toggleList)),
+    _Pane.outline => _navigationOutline(),
     _ => WorkspaceView(
       workspace: _boardWorkspace,
       tabs: _tabs,
@@ -958,36 +989,5 @@ final class PuzzleInView {
     for (final owner in _owners) {
       owner.removeListener(check);
     }
-  }
-}
-
-/// The way into a search from outside the Search tab — the Actions entry
-/// and Ctrl+G: the tab comes up and the search starts with the numbers it
-/// last had, the Replies tab's rating and the tab's depth.
-final class SearchDoor {
-  SearchDoor({
-    required this.fill,
-    required this.settings,
-    required this.requests,
-  });
-
-  final FillGaps fill;
-  final SettingsStore settings;
-  final WorkspaceRequests requests;
-
-  /// What refused the search goes in the bar. A mode without a Search tab
-  /// (Tactics, My games) starts nothing: the search would run where it
-  /// cannot be seen or stopped, with the engine pane paused for it.
-  Future<void> search(ActionLayout layout) async {
-    if (!fill.canStart) return;
-    if (!layout.pane(0).tabs.any((tab) => tab.id == WorkspaceTab.search)) {
-      return;
-    }
-    layout.reveal(WorkspaceTab.search);
-    final refusal = await fill.resume(
-      FillRequest.of(settings.value),
-      orAfresh: true,
-    );
-    if (refusal != null) requests.say(refusal);
   }
 }
