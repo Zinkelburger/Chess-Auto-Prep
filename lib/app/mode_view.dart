@@ -274,8 +274,11 @@ abstract base class _DocumentModeView extends ModeView {
 
 /// The two modes with the user's repertoires on the left: the builder and
 /// the trainer. A file opened or pasted in either becomes a repertoire.
+/// As in the viewer, a tool picked while the card is one pane opens under
+/// it, so the moves or the lesson stay in view.
 abstract base class _LibraryView extends _DocumentModeView {
-  _LibraryView(super.workspace, super.tabs, super.requests, this._modes);
+  _LibraryView(super.workspace, super.tabs, super.requests, this._modes)
+    : super(opensBeside: true);
 
   final DocumentModes _modes;
 

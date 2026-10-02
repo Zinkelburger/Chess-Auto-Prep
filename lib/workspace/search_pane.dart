@@ -248,6 +248,9 @@ class _SearchPaneState extends State<SearchPane>
     builder: (context, size) {
       final replies = _book ? null : _repliesField();
       final inline = size.maxWidth >= searchBarInlineWidth;
+      // A narrow pane, such as half the card beside the moves, keeps the
+      // button and the gear on the bar and moves the depth down a line.
+      final depthInBar = size.maxWidth >= searchBarDepthWidth;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -258,8 +261,10 @@ class _SearchPaneState extends State<SearchPane>
               child: Row(
                 children: [
                   SizedBox(width: searchRunWidth, child: _runButton()),
-                  const SizedBox(width: Space.s),
-                  _depthBox(),
+                  if (depthInBar) ...[
+                    const SizedBox(width: Space.s),
+                    _depthBox(),
+                  ],
                   if (inline && replies != null) ...[
                     const SizedBox(width: Space.s),
                     SizedBox(width: searchRepliesWidth, child: replies),
@@ -270,12 +275,19 @@ class _SearchPaneState extends State<SearchPane>
               ),
             ),
           ),
-          if (!inline && replies != null)
+          if (!depthInBar || (!inline && replies != null))
             SizedBox(
               height: searchRepliesRowHeight,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: Space.m),
-                child: Align(child: replies),
+                child: Row(
+                  children: [
+                    if (!depthInBar) _depthBox(),
+                    if (!depthInBar && replies != null)
+                      const SizedBox(width: Space.s),
+                    if (!inline && replies != null) Expanded(child: replies),
+                  ],
+                ),
               ),
             ),
         ],

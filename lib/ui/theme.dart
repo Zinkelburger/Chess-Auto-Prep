@@ -17,8 +17,9 @@ abstract final class Space {
 const listColumnWidth = 260.0;
 
 /// How wide the chapter outline between the list and the board starts out.
-/// The old app's column is 18% of the window's body clamped to 220–280.
-const outlineColumnWidth = 240.0;
+/// The old app's column is 18% of the window's body clamped to 220–280;
+/// the low end leaves the builder's two tool panes their room at 1280px.
+const outlineColumnWidth = 220.0;
 
 /// How tall one row of the outline is, and how far a line sits in under the
 /// chapter it belongs to. Both are the old app's values.
@@ -161,7 +162,21 @@ const paneTabUnderline = 2.0;
 
 /// The Search tab: its number fields, the table's header and rows, and
 /// the columns for how often a reply is played and for the two values.
+///
+/// A pane narrower than its tab's least width scrolls sideways rather than
+/// squeezing it: [actionPaneMinWidth] for most tabs, less for the two the
+/// builder shows side by side, which are laid out to fit narrower.
 const actionPaneMinWidth = 320.0;
+const searchPaneMinWidth = 240.0;
+
+/// How much of the builder's card the moves start with, beside Expectimax:
+/// at the default 1280px window with the outline open that leaves the
+/// Expectimax table its three value columns.
+const builderMovesShare = 0.45;
+
+/// The strip either side of the line between two panes that the divider
+/// is dragged by.
+const paneSplitGrab = Space.xs;
 const searchSettingsWidth = 380.0;
 const reviewGraphHeight = 160.0;
 
@@ -194,6 +209,10 @@ const searchDepthWidth = 84.0;
 const searchRepliesWidth = 176.0;
 const searchRepliesRowHeight = 52.0;
 const searchBarInlineWidth = 480.0;
+
+/// Narrower than this the depth joins `Replies from` on the line under the
+/// bar, and the bar keeps the button and the gear.
+const searchBarDepthWidth = 300.0;
 const searchHeaderHeight = 24.0;
 const searchRowHeight = 32.0;
 const searchShareWidth = 48.0;

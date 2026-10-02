@@ -74,7 +74,17 @@ Bughouse mode is offered when its engine assets are present.
   `workspace/search_table.dart` merges them into the Expectimax table's
   White, Black and Engine columns.
 - The Repertoire builder starts with two panes: Moves on the left, Expectimax
-  on the right (`ActionLayout.startBuilding`). As on Lichess, a book button
+  on the right (`ActionLayout.startBuilding`), the moves at 45% of the card
+  (`builderMovesShare`) so the Expectimax table keeps its value columns at a
+  1280px window with the outline open. The gap between two panes is a
+  divider: dragged, it sets `ActionPaneSplit.share`, which the mode's layout
+  keeps for the window. A pane narrower than its tab's least width scrolls
+  sideways: 320px for most tabs, 180px for Moves, 240px for Expectimax, whose
+  bar moves the depth down a line below 300px. The builder, the trainer and
+  the viewer open a tab picked from `+` under a lone pane
+  (`ActionLayout.opensBeside`); the trainer's lesson (`LessonView`) fits half
+  the card, its moves taking the height left and scrolling to the latest
+  move. As on Lichess, a book button
   leading the nav row shows the main Explorer under the moves
   (`ActionLayout.book`, shut until pressed). Requests for a tab
   (`ActionLayout.reveal`) bring it up in the pane that already has it. The

@@ -245,8 +245,15 @@ class _Header extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
+              // Narrow enough to lose Played, the move column is too
+              // narrow for the long names too.
               child: Text(
-                ours ? 'Your move' : 'Their reply',
+                switch ((ours, played)) {
+                  (true, true) => 'Your move',
+                  (false, true) => 'Their reply',
+                  (true, false) => 'Move',
+                  (false, false) => 'Reply',
+                },
                 style: style,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

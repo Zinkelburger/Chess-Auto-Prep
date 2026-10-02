@@ -68,6 +68,11 @@ void main() {
     final search = tester.getRect(pane(1));
     expect(search.left, greaterThanOrEqualTo(moves.right));
     expect(search.height, moves.height);
+    expect(
+      search.width,
+      greaterThan(moves.width),
+      reason: 'the moves wrap; the table keeps its columns',
+    );
     expect(layout.pane(0).isOpen(WorkspaceTab.explorer), isFalse);
     expect(layout.pane(0).isOpen(WorkspaceTab.search), isFalse);
     layout.reveal(WorkspaceTab.search);
@@ -276,6 +281,33 @@ void main() {
     await tester.pumpAndSettle();
     expect(layout.pane(1).open, [WorkspaceTab.explorer, WorkspaceTab.search]);
     expect(layout.pane(0).isOpen(WorkspaceTab.search), isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the divider between two panes is dragged, and the size is '
+      'kept while the panes change', (tester) async {
+    final layout = await pumpPanes(tester);
+    layout.startBuilding();
+    await tester.pumpAndSettle();
+    final before = tester.getRect(pane(0)).width;
+    final divider = find.byKey(const ValueKey('pane-divider-0-1'));
+    await tester.drag(divider, const Offset(60, 0));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(pane(0)).width, closeTo(before + 60, 1));
+    final share = (layout.root as ActionPaneSplit).share;
+    layout.addPane(1);
+    await tester.pumpAndSettle();
+    expect(layout.count, 3);
+    expect((layout.root as ActionPaneSplit).share, share);
+    layout.closePane(2);
+    await tester.pumpAndSettle();
+    await tester.drag(divider, const Offset(-2000, 0));
+    await tester.pumpAndSettle();
+    expect(
+      tester.getRect(pane(0)).width,
+      greaterThanOrEqualTo(paneMinWidth - 2 * Space.xs),
+      reason: 'never dragged narrower than a pane can be',
+    );
     expect(tester.takeException(), isNull);
   });
 

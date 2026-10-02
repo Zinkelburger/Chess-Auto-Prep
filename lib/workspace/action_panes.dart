@@ -46,16 +46,87 @@ class _ActionPanesState extends State<ActionPanes> {
 
   Widget _grid(ActionPaneNode node) => switch (node) {
     ActionPaneLeaf() => _pane(context, node.index),
-    ActionPaneSplit() => Flex(
-      direction: node.direction == PaneSplitDirection.right
-          ? Axis.horizontal
-          : Axis.vertical,
-      children: [
-        Expanded(child: _grid(node.first)),
-        Expanded(child: _grid(node.second)),
-      ],
-    ),
+    ActionPaneSplit() => _split(node),
   };
+
+  /// Two panes at the split's share, with the gap between them as the
+  /// divider: dragged, it moves the share, which the layout keeps.
+  Widget _split(ActionPaneSplit node) {
+    final across = node.direction == PaneSplitDirection.right;
+    return LayoutBuilder(
+      builder: (context, room) {
+        final total = across ? room.maxWidth : room.maxHeight;
+        final first = total * node.share;
+        return Stack(
+          children: [
+            Flex(
+              direction: across ? Axis.horizontal : Axis.vertical,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  width: across ? first : null,
+                  height: across ? null : first,
+                  child: _grid(node.first),
+                ),
+                Expanded(child: _grid(node.second)),
+              ],
+            ),
+            Positioned(
+              key: ValueKey(
+                'pane-divider-${node.first.indices.first}-'
+                '${node.second.indices.first}',
+              ),
+              left: across ? first - paneSplitGrab : 0,
+              top: across ? 0 : first - paneSplitGrab,
+              width: across ? 2 * paneSplitGrab : room.maxWidth,
+              height: across ? room.maxHeight : 2 * paneSplitGrab,
+              child: MouseRegion(
+                cursor: across
+                    ? SystemMouseCursors.resizeColumn
+                    : SystemMouseCursors.resizeRow,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onHorizontalDragUpdate: across
+                      ? (drag) => _resize(node, drag.delta.dx, total)
+                      : null,
+                  onVerticalDragUpdate: across
+                      ? null
+                      : (drag) => _resize(node, drag.delta.dy, total),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Moves [node]'s divider by [by] pixels of [total], keeping each side
+  /// at least a narrow pane's width.
+  void _resize(ActionPaneSplit node, double by, double total) {
+    if (total <= 2 * paneMinWidth) return;
+    final now = _current(node);
+    final first = (total * now.share + by).clamp(
+      paneMinWidth,
+      total - paneMinWidth,
+    );
+    layout.resize(now, first / total);
+  }
+
+  /// The split now in the layout that [node] was drawn from: a drag's
+  /// updates each rebuild the tree.
+  ActionPaneSplit _current(ActionPaneSplit node) {
+    ActionPaneSplit? find(ActionPaneNode at) => switch (at) {
+      ActionPaneLeaf() => null,
+      ActionPaneSplit()
+          when at.direction == node.direction &&
+              at.first.indices.first == node.first.indices.first &&
+              at.second.indices.first == node.second.indices.first =>
+        at,
+      ActionPaneSplit() => find(at.first) ?? find(at.second),
+    };
+    return find(layout.root) ?? node;
+  }
 
   /// Moves alone on the card is the page of a book: no strip and no frame,
   /// the `+` in its corner.
@@ -129,12 +200,20 @@ class _ActionPanesState extends State<ActionPanes> {
         builder: (context, size) => SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: SizedBox(
-            width: math.max(actionPaneMinWidth, size.maxWidth),
+            width: math.max(_leastWidth(tab), size.maxWidth),
             height: size.maxHeight,
             child: widget.body(context, index, tab),
           ),
         ),
       );
+
+  /// The width under which [tab] scrolls sideways: the moves wrap and
+  /// the Expectimax pane folds its bar, so both go narrower than the rest.
+  static double _leastWidth(WorkspaceTab tab) => switch (tab) {
+    WorkspaceTab.moves || WorkspaceTab.analysis => paneMinWidth,
+    WorkspaceTab.search => searchPaneMinWidth,
+    _ => actionPaneMinWidth,
+  };
 
   List<AppAction> _tabActions(int index, WorkspaceTab tab) => [
     if (!layout.pane(index).tabOf(tab).pinned)

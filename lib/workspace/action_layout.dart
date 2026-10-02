@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../ui/app_action.dart';
+import '../ui/theme.dart' show builderMovesShare;
 import '../ui/pane_tabs.dart';
 import 'explorer.dart';
 import 'workspace_tabs.dart';
@@ -20,10 +21,19 @@ final class ActionPaneLeaf extends ActionPaneNode {
 }
 
 final class ActionPaneSplit extends ActionPaneNode {
-  const ActionPaneSplit(this.direction, this.first, this.second);
+  const ActionPaneSplit(
+    this.direction,
+    this.first,
+    this.second, {
+    this.share = 0.5,
+  });
   final PaneSplitDirection direction;
   final ActionPaneNode first;
   final ActionPaneNode second;
+
+  /// How much of the split [first] has, from 0 to 1: half until the mode
+  /// starts otherwise or the user drags the divider.
+  final double share;
   @override
   Iterable<int> get indices => [...first.indices, ...second.indices];
 }
@@ -186,6 +196,7 @@ final class ActionLayout extends ChangeNotifier {
       node.direction,
       _replace(node.first, index, replacement),
       _replace(node.second, index, replacement),
+      share: node.share,
     ),
   };
 
@@ -288,6 +299,7 @@ final class ActionLayout extends ChangeNotifier {
       node.direction,
       _swapped(node.first, a, b),
       _swapped(node.second, a, b),
+      share: node.share,
     ),
   };
 
@@ -333,7 +345,31 @@ final class ActionLayout extends ChangeNotifier {
     final second = _without(split.second, index);
     if (first == null) return second;
     if (second == null) return first;
-    return ActionPaneSplit(split.direction, first, second);
+    return ActionPaneSplit(split.direction, first, second, share: split.share);
+  }
+
+  /// [split] with [share] of its room for its first side, as the divider
+  /// was dragged to. The layout keeps it while the panes stay.
+  void resize(ActionPaneSplit split, double share) {
+    final clamped = share.clamp(0.1, 0.9);
+    if (clamped == split.share) return;
+    ActionPaneNode reshared(ActionPaneNode node) => switch (node) {
+      ActionPaneLeaf() => node,
+      ActionPaneSplit() when identical(node, split) => ActionPaneSplit(
+        node.direction,
+        node.first,
+        node.second,
+        share: clamped,
+      ),
+      ActionPaneSplit() => ActionPaneSplit(
+        node.direction,
+        reshared(node.first),
+        reshared(node.second),
+        share: node.share,
+      ),
+    };
+    _root = reshared(_root);
+    notifyListeners();
   }
 
   void closePane(int index) {
@@ -414,7 +450,9 @@ final class ActionLayout extends ChangeNotifier {
   ValueNotifier<bool>? get book => _book;
   ValueNotifier<bool>? _book;
 
-  /// The builder's start: Moves on the left, Expectimax on the right. The
+  /// The builder's start: Moves on the left, Expectimax on the right, the
+  /// moves a little narrower ([builderMovesShare]) since they wrap and the
+  /// Expectimax table's columns do not. The
   /// book starts shut and opens under the moves from its button; it is the
   /// main pane's Explorer, whose database and filters are the remembered
   /// ones. The main pane keeps the other tabs to be shown by name.
@@ -430,6 +468,7 @@ final class ActionLayout extends ChangeNotifier {
       PaneSplitDirection.right,
       ActionPaneLeaf(0),
       ActionPaneLeaf(1),
+      share: builderMovesShare,
     );
     _active = 1;
     notifyListeners();

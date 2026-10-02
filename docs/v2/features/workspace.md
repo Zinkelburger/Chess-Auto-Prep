@@ -87,6 +87,9 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   below in the plus menu; both remain in a tab's right-click menu and as
   docking targets). When the main pane's last tab is dragged to another pane
   or closed, that pane's tabs come to the main pane, so the two become one.
+  Since 2026-10-01 this rule is on in the Repertoire builder and trainer as
+  well as the viewer, and the gap between two panes drags to resize them; the
+  size lasts for the window.
   Moves alone on the card has no tab strip and no frame. The game or chapter
   heading is the top of the Moves text, not a block above the tabs.
   Replies retains the Maia-3 table and Next gap described in `repertoires.md`.

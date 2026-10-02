@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../../chess/pgn/comment_text.dart';
@@ -196,64 +197,67 @@ class _OnLine extends StatelessWidget {
     final moves = peeking
         ? _LinePeek(drill: drill, onClose: () => onPeek(false))
         : _MovesSoFar(drill: drill);
-    // A narrow or short pane scrolls the lesson, the moves inline, rather
-    // than squeezing the moves to nothing.
+    // One layout at every size: the heading, the prompt, the control and
+    // the way out keep their places and the moves take the height left.
+    // A short pane, such as the half of the card a second pane leaves,
+    // tightens the gaps; one too short for even a line of moves scrolls
+    // whole rather than spilling past its edge.
     return LayoutBuilder(
       builder: (context, room) {
-        final compact =
-            room.maxHeight < _roomyHeight || room.maxWidth < _roomyWidth;
-        final column = Column(
-          mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (compact) ...[
-              _Heading(lesson: lesson),
-              Align(alignment: Alignment.centerLeft, child: openInBuilder),
-            ] else
-              Row(
+        final short = room.maxHeight < _roomyHeight;
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: room.maxHeight),
+            child: IntrinsicHeight(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(child: _Heading(lesson: lesson)),
-                  openInBuilder,
+                  Row(
+                    children: [
+                      Expanded(child: _Heading(lesson: lesson)),
+                      openInBuilder,
+                    ],
+                  ),
+                  SizedBox(height: short ? Space.s : Space.l),
+                  Text(
+                    displaySan(context, prompt(lesson)),
+                    style: text.titleLarge?.copyWith(
+                      color: wrong ? Theme.of(context).colorScheme.error : null,
+                    ),
+                  ),
+                  SizedBox(height: short ? Space.xs : Space.m),
+                  Expanded(child: _Squeezable(child: moves)),
+                  for (final (failure, doing) in [
+                    (lesson.unlogged, 'save that answer'),
+                    (lesson.notExcluded, 'exclude that line'),
+                  ])
+                    if (failure != null)
+                      Text(
+                        progressProblem(failure, doing: doing),
+                        style: text.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                  const SizedBox(height: Space.s),
+                  _Control(lesson: lesson, short: short),
+                  Divider(height: short ? Space.s : Space.l),
+                  _Footer(
+                    lesson: lesson,
+                    trainer: trainer,
+                    onPeek: peeking ? null : () => onPeek(true),
+                  ),
                 ],
               ),
-            const SizedBox(height: Space.l),
-            Text(
-              displaySan(context, prompt(lesson)),
-              style: text.titleLarge?.copyWith(
-                color: wrong ? Theme.of(context).colorScheme.error : null,
-              ),
             ),
-            const SizedBox(height: Space.m),
-            compact ? moves : Expanded(child: moves),
-            for (final (failure, doing) in [
-              (lesson.unlogged, 'save that answer'),
-              (lesson.notExcluded, 'exclude that line'),
-            ])
-              if (failure != null)
-                Text(
-                  progressProblem(failure, doing: doing),
-                  style: text.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                ),
-            const SizedBox(height: Space.s),
-            _Control(lesson: lesson),
-            const Divider(height: Space.l),
-            _Footer(
-              lesson: lesson,
-              trainer: trainer,
-              onPeek: peeking ? null : () => onPeek(true),
-            ),
-          ],
+          ),
         );
-        return compact ? SingleChildScrollView(child: column) : column;
       },
     );
   }
 
-  /// The room the lesson needs to give the moves the height left over.
-  static const _roomyHeight = 560.0;
-  static const _roomyWidth = 400.0;
+  /// The height under which the gaps tighten and the ratings lose their
+  /// question: about half the card at the default window.
+  static const _roomyHeight = 360.0;
 
   void _read() {
     if (trainer.lesson != lesson) return;
@@ -262,6 +266,32 @@ class _OnLine extends StatelessWidget {
     trainer.leave();
     onRead(target);
   }
+}
+
+/// [child] counted as one line high when the lesson works out how tall it
+/// must be: the moves take what the rest leaves and scroll in it, so they
+/// never push the control or the way out off the pane.
+class _Squeezable extends SingleChildRenderObjectWidget {
+  const _Squeezable({required super.child});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderSqueezable();
+}
+
+class _RenderSqueezable extends RenderProxyBox {
+  static const _line = Space.xl;
+
+  @override
+  double computeMinIntrinsicHeight(double width) => _line;
+
+  @override
+  double computeMaxIntrinsicHeight(double width) => _line;
+
+  @override
+  double computeMinIntrinsicWidth(double height) => 0;
+
+  @override
+  double computeMaxIntrinsicWidth(double height) => 0;
 }
 
 /// The line, its chapter, and how far the sitting has to go.
@@ -277,11 +307,18 @@ class _Heading extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(line.name, style: text.titleMedium),
+        Text(
+          line.name,
+          style: text.titleMedium,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         Text(
           '${line.chapter} · ${lesson.learning ? 'Learning' : 'Reviewing'}'
           '${lesson.left > 0 ? ' · ${lesson.left} more after this' : ''}',
           style: text.bodySmall,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
       ],
     );
@@ -301,19 +338,30 @@ class _MovesSoFar extends StatelessWidget {
     final note = drill.shown == 0
         ? null
         : displayComment(moves[drill.shown - 1].comment ?? '');
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            displaySan(context, numberedMoves(moves.take(drill.shown))),
-            style: monoText,
+    // Anchored at the end: in a short pane the move just played and its
+    // note are what stays in view, the first moves scroll off the top.
+    return LayoutBuilder(
+      builder: (context, room) => SingleChildScrollView(
+        reverse: true,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: room.maxHeight),
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  displaySan(context, numberedMoves(moves.take(drill.shown))),
+                  style: monoText,
+                ),
+                if (note != null && note.isNotEmpty) ...[
+                  const SizedBox(height: Space.s),
+                  Text(note, style: Theme.of(context).textTheme.bodyMedium),
+                ],
+              ],
+            ),
           ),
-          if (note != null && note.isNotEmpty) ...[
-            const SizedBox(height: Space.s),
-            Text(note, style: Theme.of(context).textTheme.bodyMedium),
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -351,21 +399,27 @@ class _LinePeek extends StatelessWidget {
         spans.add(TextSpan(text: ' $note', style: text.bodyMedium));
       }
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Expanded(child: Text('Moves and notes', style: text.labelSmall)),
-            TextButton(onPressed: onClose, child: const Text('Hide')),
-          ],
-        ),
-        Expanded(
-          child: SingleChildScrollView(
-            child: SelectableText.rich(TextSpan(children: spans)),
+    // Its label scrolls with it, so a pane only a few lines high still
+    // shows the line rather than the label alone.
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text('Moves and notes', style: text.labelSmall)),
+              TextButton(
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: onClose,
+                child: const Text('Hide'),
+              ),
+            ],
           ),
-        ),
-      ],
+          SelectableText.rich(TextSpan(children: spans)),
+        ],
+      ),
     );
   }
 
@@ -378,9 +432,12 @@ class _LinePeek extends StatelessWidget {
 /// The one control the moment needs: Next while a move is being shown, the
 /// ratings when a review is done, the retry when its rating did not save.
 class _Control extends StatelessWidget {
-  const _Control({required this.lesson});
+  const _Control({required this.lesson, required this.short});
 
   final Lesson lesson;
+
+  /// Whether the pane is short: the ratings go without their question.
+  final bool short;
 
   @override
   Widget build(BuildContext context) {
@@ -396,7 +453,11 @@ class _Control extends StatelessWidget {
           ),
         ),
       ),
-      AwaitingRating(:final graded) => _Ratings(lesson: lesson, graded: graded),
+      AwaitingRating(:final graded) => _Ratings(
+        lesson: lesson,
+        graded: graded,
+        asked: !short,
+      ),
       SavingLine() => Text('Saving…', style: text.bodySmall),
       LineNotSaved(:final failure) => Row(
         children: [
@@ -420,20 +481,29 @@ class _Control extends StatelessWidget {
 /// The grade the line's mistakes earned is the filled one, and Space takes
 /// it.
 class _Ratings extends StatelessWidget {
-  const _Ratings({required this.lesson, required this.graded});
+  const _Ratings({
+    required this.lesson,
+    required this.graded,
+    required this.asked,
+  });
 
   final Lesson lesson;
   final Rating graded;
+
+  /// Whether the question stands over the buttons, where there is room.
+  final bool asked;
 
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(
-        'How well did you know this?',
-        style: Theme.of(context).textTheme.bodySmall,
-      ),
-      const SizedBox(height: Space.s),
+      if (asked) ...[
+        Text(
+          'How well did you know this?',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: Space.s),
+      ],
       Wrap(
         spacing: Space.s,
         runSpacing: Space.s,
@@ -533,19 +603,21 @@ class _Over extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final tally = lesson.tally;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(sittingOver(lesson.kind), style: text.titleMedium),
-        const SizedBox(height: Space.s),
-        Text(
-          '${tally.lines} ${tally.lines == 1 ? 'line' : 'lines'} · '
-          '${tally.right} right · ${tally.wrong} wrong',
-          style: text.bodySmall,
-        ),
-        const SizedBox(height: Space.l),
-        Wrap(spacing: Space.s, runSpacing: Space.s, children: _ways()),
-      ],
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(sittingOver(lesson.kind), style: text.titleMedium),
+          const SizedBox(height: Space.s),
+          Text(
+            '${tally.lines} ${tally.lines == 1 ? 'line' : 'lines'} · '
+            '${tally.right} right · ${tally.wrong} wrong',
+            style: text.bodySmall,
+          ),
+          const SizedBox(height: Space.l),
+          Wrap(spacing: Space.s, runSpacing: Space.s, children: _ways()),
+        ],
+      ),
     );
   }
 
