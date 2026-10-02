@@ -555,6 +555,12 @@ class _SearchPaneState extends State<SearchPane>
             ? [side]
             : const [Side.white, Side.black],
         engineDepthAt: widget.fill.engineDepthAt,
+        shareTip: (from) => repliesFromTip(
+          from,
+          database: found.request.replies.label,
+          elo: found.request.elo,
+          fallbackUnder: found.request.fallbackUnder,
+        ),
         onHover: (row, anchor) => _hover(row.after, row.move.uci, anchor),
         onLeave: _leave,
         onPlay: (row) => _play(row.move.uci),

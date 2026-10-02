@@ -105,7 +105,9 @@ Bughouse mode is offered when its engine assets are present.
   search reads `FillRequest.of(settings)`. `opponentFor` in
   `workspace/search_opponents.dart` turns the request's reply source into the
   search's opponent: Maia, or a games database (Lichess explorer, local master
-  book) with Maia behind it.
+  book) with Maia behind it. Each opponent node keeps who answered it
+  (`OpponentNode.repliesFrom`, saved as `v2_replies_from`), and the table's
+  Played share marks a Maia stand-in `~` with a tooltip naming the source.
 
 Unported conveniences remain in the feature specs/backlog; the presence of a
 mode is not a claim of every historical v1 control being reproduced.

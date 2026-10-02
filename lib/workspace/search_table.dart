@@ -5,6 +5,7 @@ import '../chess/fen.dart';
 import '../chess/generation/draft_lines.dart' show expectimaxText;
 import '../chess/generation/eval.dart';
 import '../chess/generation/search_node.dart';
+import '../chess/generation/sources.dart' show RepliesFrom;
 import '../engines/engine_line.dart' show Centipawns;
 import '../ui/move_notation.dart';
 import '../ui/theme.dart';
@@ -25,6 +26,7 @@ final class SearchRow {
     required this.after,
     required this.engineCp,
     this.share,
+    this.shareFrom,
     this.white,
     this.black,
     this.trap = false,
@@ -38,6 +40,11 @@ final class SearchRow {
   /// How often the move is expected, where a search modelled the side
   /// that plays it.
   final double? share;
+
+  /// Who gave [share], where a database of games was the opponent: its
+  /// games, or Maia where it had too few. Null where Maia alone was, or
+  /// the tree was saved before this was kept.
+  final RepliesFrom? shareFrom;
 
   /// The move's value in the search made for White, and in the one made
   /// for Black; null where that search does not hold the move.
@@ -67,6 +74,7 @@ List<SearchRow> searchRows({
   final rows = <String, SearchRow>{};
   for (final (prepared, node) in [(side, mine), (side.opposite, other)]) {
     final white = prepared == Side.white;
+    final from = node is OpponentNode ? node.repliesFrom : null;
     for (final (move, child, share, trap) in _movesOf(node)) {
       final value = child.valuation.value;
       final SideValue worth = (
@@ -82,6 +90,7 @@ List<SearchRow> searchRows({
         // White's is shown, whichever way the board is turned.
         engineCp: white ? cp : held?.engineCp ?? -cp,
         share: held?.share ?? share,
+        shareFrom: held?.share != null ? held?.shareFrom : from,
         white: white ? worth : held?.white,
         black: white ? held?.black : worth,
         trap: (held?.trap ?? false) || (prepared == side && trap),
@@ -135,6 +144,7 @@ class SearchTable extends StatelessWidget {
     required this.onHover,
     required this.onLeave,
     required this.onPlay,
+    this.shareTip,
   });
 
   final List<SearchRow> rows;
@@ -151,6 +161,9 @@ class SearchTable extends StatelessWidget {
   final void Function(SearchRow row, Offset anchor) onHover;
   final VoidCallback onLeave;
   final ValueChanged<SearchRow> onPlay;
+
+  /// What a share's tooltip says about who gave it ([repliesFromTip]).
+  final String Function(RepliesFrom from)? shareTip;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -177,6 +190,10 @@ class SearchTable extends StatelessWidget {
                   sides: sides,
                   played: played,
                   engineDepth: engineDepthAt(row.after),
+                  shareTip: switch (row.shareFrom) {
+                    final from? => shareTip?.call(from),
+                    null => null,
+                  },
                   onHover: (anchor) => onHover(row, anchor),
                   onLeave: onLeave,
                   onTap: () => onPlay(row),
@@ -291,12 +308,14 @@ class _RowView extends StatelessWidget {
     required this.onHover,
     required this.onLeave,
     required this.onTap,
+    this.shareTip,
   });
 
   final SearchRow row;
   final List<Side> sides;
   final bool played;
   final int? engineDepth;
+  final String? shareTip;
   final ValueChanged<Offset> onHover;
   final VoidCallback onLeave;
   final VoidCallback onTap;
@@ -304,6 +323,22 @@ class _RowView extends StatelessWidget {
   Offset _anchor(BuildContext context) {
     final box = context.findRenderObject() as RenderBox;
     return box.localToGlobal(Offset(box.size.width / 2, box.size.height));
+  }
+
+  /// The share, marked `~` where Maia stood in for the database; the
+  /// tooltip says who gave it.
+  Widget _shareCell(double? share, TextStyle style) {
+    final cell = _Cell(
+      share == null
+          ? ''
+          : '${row.shareFrom == RepliesFrom.maia ? '~' : ''}${_percent(share)}',
+      width: searchShareWidth,
+      style: style,
+    );
+    final tip = shareTip;
+    return share == null || tip == null
+        ? cell
+        : Tooltip(message: tip, child: cell);
   }
 
   @override
@@ -333,12 +368,7 @@ class _RowView extends StatelessWidget {
                   overflow: TextOverflow.clip,
                 ),
               ),
-              if (played)
-                _Cell(
-                  share == null ? '' : _percent(share),
-                  width: searchShareWidth,
-                  style: muted,
-                ),
+              if (played) _shareCell(share, muted),
               for (final side in sides)
                 switch (row.valueFor(side)) {
                   null => const SizedBox(width: searchValueWidth),
@@ -384,3 +414,18 @@ String _percent(double share) {
   final percent = (share * 100).round();
   return percent < 1 ? '<1%' : '$percent%';
 }
+
+/// Who gave a share, for its tooltip: the [database]'s games, or Maia at
+/// [elo] where the database had fewer than [fallbackUnder] games.
+///
+/// Example: `Maia 2200; Lichess masters has under 10 games here`.
+String repliesFromTip(
+  RepliesFrom from, {
+  required String database,
+  required int elo,
+  required int? fallbackUnder,
+}) => switch (from) {
+  RepliesFrom.games => 'From $database',
+  RepliesFrom.maia =>
+    'Maia $elo; $database has under ${fallbackUnder ?? 1} games here',
+};

@@ -845,6 +845,10 @@ def builder_argv(chain: dict, base: Path, position: dict, args: dict) -> list[st
     add("-t", "threads", 1)
     add("--max-eval-loss", "max_eval_loss", 40)
     add("--maia-elo", "maia_elo", 2200)
+    # The app's reply cut, unless a caller continuing a tree passes the one
+    # that tree records (0 = it kept every reply, so no flag, as before).
+    add("--reply-mass", "reply_mass", chapters.APP_REPLY_MASS, _positive_float)
+    add("--max-replies", "max_replies", chapters.APP_MAX_REPLIES, _positive_int)
 
     argv.append("--maia-only")  # Legacy master arguments cannot change this policy.
 
@@ -853,6 +857,27 @@ def builder_argv(chain: dict, base: Path, position: dict, args: dict) -> list[st
         argv.extend(["-n", name])
     argv.append(str(base))
     return argv
+
+
+def _positive_float(value: Any) -> float | None:
+    value = float(value)
+    return value if value > 0 else None
+
+
+def _positive_int(value: Any) -> int | None:
+    value = int(value)
+    return value if value > 0 else None
+
+
+def reply_cut_of_argv(argv: list[str]) -> str:
+    """How a run's command line cuts the opponent's replies, for status."""
+    def value(flag: str) -> str | None:
+        return argv[argv.index(flag) + 1] if flag in argv[:-1] else None
+
+    mass, most = value("--reply-mass"), value("--max-replies")
+    return chapters.reply_cut_label(
+        float(mass) if mass else None, int(most) if most else None
+    )
 
 
 def argv_with(argv: list[str], *extra: str) -> list[str]:
@@ -1041,6 +1066,8 @@ def register_expectimax_tools(registry: Any) -> None:
     # ── run ────────────────────────────────────────────────────────────────
 
     def expectimax_run(args: dict) -> dict:
+        # The reply cut is the app's constant, not a knob (the app has none).
+        args = {k: v for k, v in args.items() if k not in ("reply_mass", "max_replies")}
         chapter = None
         color = args.get("color")
         if args.get("chapter"):
@@ -1086,6 +1113,7 @@ def register_expectimax_tools(registry: Any) -> None:
             "color": "White" if position["color"] == "w" else "Black",
             "root_candidates": "every legal move, then the explicit engine-loss constraint",
             "opponent_model": "Maia throughout",
+            "opponent_replies": reply_cut_of_argv(argv),
             "score_kind": "committed Fast policy estimate" if args.get("search") in ("fast", "rolling") else "expected-score estimate, not calibrated win probability",
             "search_method": "rolling" if args.get("search") in ("fast", "rolling") else "pure",
             "search_label": "Fast (4-ply, approximate)" if args.get("search") in ("fast", "rolling") else "Pure",
@@ -1116,6 +1144,9 @@ def register_expectimax_tools(registry: Any) -> None:
             "color": (state.get("position") or {}).get("color"),
             "directory": str(directory),
         }
+        argv = state.get("build_argv") or state.get("argv")
+        if isinstance(argv, list) and argv:
+            out["opponent_replies"] = reply_cut_of_argv([str(a) for a in argv])
         out.update(_progress(directory))
         out.update(_tree_summary(directory))
         # "Finished" means the build reached the depth it was asked for.
@@ -1290,6 +1321,8 @@ def register_expectimax_tools(registry: Any) -> None:
                 "eval_depth": settings["eval_depth"],
                 "max_eval_loss": settings["max_eval_loss"],
                 "maia_elo": settings["maia_elo"],
+                "reply_mass": settings["reply_mass"],
+                "max_replies": settings["max_replies"],
                 "threads": args.get("threads"),
                 "name": args.get("name"),
             },
@@ -1317,6 +1350,7 @@ def register_expectimax_tools(registry: Any) -> None:
             "pid": process.pid,
             "plies": settings["plies"],
             "opponent_rating": settings["maia_elo"],
+            "opponent_replies": reply_cut_of_argv(argv),
             "app": _chapter_info(state, directory),
             "next": "Poll expectimax_status; expectimax_result for the ranking.",
         }
@@ -1350,6 +1384,7 @@ def register_expectimax_tools(registry: Any) -> None:
             "resumed": True,
             "pid": process.pid,
             "plies": args.get("plies"),
+            "opponent_replies": reply_cut_of_argv(argv),
             "app": _chapter_info(state, directory),
             "next": "Poll expectimax_status; expectimax_result for the ranking.",
         }
@@ -1360,13 +1395,16 @@ def register_expectimax_tools(registry: Any) -> None:
         "expectimax_run",
         "Start an expectimax build: pure (full horizon) or fast (approximate, "
         "four-ply lookahead at each own turn, committing only our next move). Scores every legal own move "
-        "at fixed Stockfish depth, retains those within max_eval_loss, and explores "
-        "every positive-probability opponent reply. Opponent replies come only from Maia; master databases are not used. Values are expected-score estimates, not calibrated "
+        "at fixed Stockfish depth, retains those within max_eval_loss, and at each "
+        f"opponent position explores Maia's likeliest replies until they cover "
+        f"{chapters.APP_REPLY_MASS:.0%} of its probability, at most "
+        f"{chapters.APP_MAX_REPLIES}, renormalized to sum to one (the app's "
+        "Expectimax cut; not adjustable). Opponent replies come only from Maia; master databases are not used. Values are expected-score estimates, not calibrated "
         "human win rates. Exponential cost: start with 4 plies. Interrupted trees "
         "are incomplete and resumable, not solved answers. Draws are immediately "
         "claimed at threefold/100 half-moves; repetition history starts at the root. "
         "With chapter (a repertoire .pgn), the build uses the app's Search-tab "
-        "settings (engine depth 14, every move kept, pure) for the chapter's side, "
+        "settings (engine depth 14, every own move kept, the same reply cut, pure) for the chapter's side, "
         "may start on the opponent's move, and its tree is published beside the "
         "chapter when the build stops or finishes, where the app's Resume opens "
         "and continues it.",
@@ -1392,7 +1430,7 @@ def register_expectimax_tools(registry: Any) -> None:
                 ),
                 "name": _s("Label for the run and the PGN headers."),
                 "search": _s("pure (default) or fast (rolling is a compatibility alias). Fast commits short-lookahead choices; it is not a full-horizon optimum."),
-                "plies": _i("Preparation length in half-moves, 1–64 (default 4). Fast still branches on every modeled opponent reply."),
+                "plies": _i("Preparation length in half-moves, 1–64 (default 4). Fast still branches on every kept opponent reply."),
                 "eval_depth": _i("Stockfish search depth per node (default 16)."),
 
                 "max_eval_loss": _i(
@@ -1470,7 +1508,9 @@ def register_expectimax_tools(registry: Any) -> None:
         "than starting over. With chapter and no id, continues the newest "
         "search saved beside that chapter — including one the app ran — as a "
         "new run with that tree's settings, publishing the result back beside "
-        "the chapter; the tree it started from is not changed.",
+        "the chapter; the tree it started from is not changed. A run or tree "
+        "saved before the reply cut continues keeping every reply; one built "
+        "with the cut continues with it.",
         _obj(
             {
                 "id": _s("Run id (default: the most recent)."),

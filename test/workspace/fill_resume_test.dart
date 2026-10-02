@@ -11,6 +11,8 @@ import 'package:chess_auto_prep/workspace/engine_jobs.dart';
 import 'package:chess_auto_prep/workspace/fill_gaps.dart';
 import 'package:chess_auto_prep/workspace/fill_states.dart';
 import 'package:chess_auto_prep/workspace/finds.dart';
+import 'package:chess_auto_prep/workspace/search_opponents.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../chess/generation/scripted_sources.dart';
@@ -243,6 +245,80 @@ void main() {
       ),
       isNull,
     );
+  });
+
+  test('a saved search keeps who gave each position\'s replies, through '
+      'Resume; a tree saved before that was kept says nothing', () async {
+    // Masters played after 1.e4 here; everywhere else they have too few
+    // games, and Maia answers.
+    final masters = DatabaseOpponent(
+      name: 'Lichess masters',
+      played: (fen) async => PlayedFound(
+        fen.value.startsWith('4k3/8/8/8/4P3/')
+            ? const [(uci: 'e8d8', games: 70), (uci: 'e8f7', games: 30)]
+            : const [(uci: 'e8d8', games: 2)],
+      ),
+      fallback: const ScriptedPolicy({'e8d8': 2, 'e8e7': 1}),
+      fallbackUnder: 10,
+    );
+    Map<String, RepliesFrom?> fromIn(SearchNode tree) => {
+      for (final c in (tree as OurNode).candidates)
+        if (c.child case final OpponentNode node) c.move.uci: node.repliesFrom,
+    };
+    const request = FillRequest(
+      elo: 2200,
+      depthPlies: 2,
+      rootMoves: 6,
+      replies: ReplySource.masters,
+      fallbackUnder: 10,
+    );
+    String? saved;
+    final first = fillWith(
+      ScriptedEvaluator(),
+      keepTree: (_, text, {required runId}) async {
+        saved = text;
+      },
+      tools: (_) async => FillReady(
+        evaluator: ScriptedEvaluator(),
+        policy: masters,
+        release: () async {},
+      ),
+    );
+    await first.start(request);
+    final searched = fromIn(first.found!.tree);
+    expect(searched['e2e4'], RepliesFrom.games);
+    expect(
+      searched.values.where((from) => from == RepliesFrom.maia),
+      isNotEmpty,
+    );
+    expect(saved, contains('"v2_replies_from": "maia"'));
+
+    // Resumed with a model that names no source: the saved positions keep
+    // theirs.
+    final restarted = fillWith(
+      ScriptedEvaluator(),
+      loadTree: (_, _) => Stream.value(saved!),
+    );
+    expect(
+      await restarted.resume(
+        const FillRequest(
+          elo: 2200,
+          depthPlies: 3,
+          rootMoves: 6,
+          replies: ReplySource.masters,
+          fallbackUnder: 10,
+        ),
+      ),
+      isNull,
+    );
+    expect(fromIn(restarted.found!.tree), searched);
+
+    final older = saved!.replaceAll(
+      RegExp(r'\n *"v2_replies_from": "\w+",'),
+      '',
+    );
+    final seed = await savedSeed(Stream.value(older), request, Side.white);
+    expect(fromIn(seed as SearchNode).values.toSet(), {null});
   });
 
   group('resume passes over newer saved searches it cannot use', () {

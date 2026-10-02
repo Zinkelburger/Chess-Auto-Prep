@@ -239,7 +239,7 @@ List<SettingGroup> settingGroups({
           onChanged: (on) =>
               change((now) => now.copyWith(acceptAlternativeAnswers: on)),
         ),
-        hint: 'Stockfish checks alternative answers at depth 14',
+        hint: 'Checks alternative answers at depth 14',
       ),
     ]),
     SettingGroup('Engine', [

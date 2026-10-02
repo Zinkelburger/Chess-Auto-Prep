@@ -99,6 +99,8 @@ args = sys.argv[1:]
 with open('build/trace.log', 'a') as log:
     log.write(json.dumps(args) + '\\n')
 if args == ['--version', '--machine']:
+    if os.environ.get('TEST_SDK_LOCKED'):
+        print('Waiting for another flutter command to release the startup lock...')
     print(json.dumps({'frameworkVersion': os.environ.get('TEST_SDK', '3.47.5')}))
 elif args[0] == 'format':
     if '--output=none' not in args:
@@ -142,6 +144,11 @@ elif args[0] == 'test' and os.environ.get('TEST_COMMIT'):
         self.assertEqual(self.trace()[-1][0], 'format')
         self.assertIn('format diagnostics', (self.root / 'build/quality-gates/format.log').read_text())
         self.assertIn('First failed gate: format', (self.root / 'build/job-summary.md').read_text())
+
+    def test_a_flutter_lock_message_before_the_version_is_ignored(self):
+        with patch.dict(os.environ, {'TEST_SDK_LOCKED': '1'}):
+            self.assertEqual(self.run_gate(), 0)
+        self.assertEqual([args[0] for args in self.trace()], ['--version', 'pub', 'format', 'analyze', 'test'])
 
     def test_sdk_mismatch_stops_before_format(self):
         with patch.dict(os.environ, {'TEST_SDK': '3.47.2'}):

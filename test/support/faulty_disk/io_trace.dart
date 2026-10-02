@@ -88,8 +88,8 @@ final class TraceRecorder {
 
   IoOp? add(IoKind kind, String path, {String? to}) {
     if (!covers(path) && (to == null || !covers(to))) return null;
-    final name = _numbered(normalisedPath(root, path));
-    final destination = to == null ? null : _numbered(normalisedPath(root, to));
+    final name = _keyName(path);
+    final destination = to == null ? null : _keyName(to);
     final effect = '${kind.name}:$name->$destination';
     final occurrence = _seen[effect] ?? 0;
     _seen[effect] = occurrence + 1;
@@ -98,6 +98,13 @@ final class TraceRecorder {
     ops.add(op);
     return op;
   }
+
+  /// [path] as a key names it: relative to the root, its kept-versions
+  /// folder ids numbered, then its stamps made the same. Numbered first: an
+  /// id is 16 hex digits, and about one in 1850 is decimal digits only,
+  /// which the time stamp pattern would otherwise take for a time.
+  String _keyName(String path) =>
+      withoutStamps(_numbered(relativeName(root, path)));
 
   /// [name] with each kept-versions folder id, a hash of its document's
   /// path, as the order it was first seen in (`<doc1>`, `<doc2>`…): the
@@ -112,12 +119,6 @@ final class TraceRecorder {
 final _folderId = RegExp(
   r'(?<=(?:backups|backup-moves)/(?:[0-9a-f]{16}-)?)[0-9a-f]{16}(?![0-9a-f])',
 );
-
-/// [path] relative to [root] with `/` separators, and with the names the
-/// stores stamp with the clock, their process id or a random number made
-/// the same on every run.
-String normalisedPath(String root, String path) =>
-    withoutStamps(relativeName(root, path));
 
 /// [text] with the times, process ids and random stamps the stores write
 /// made the same on every run: for a name, or for a record that holds one.

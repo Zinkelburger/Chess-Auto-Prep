@@ -50,6 +50,16 @@ probabilities are normalized to sum to one; every positive-probability legal
 reply remains in the search. There are no master counts, database fallbacks,
 blends, probability-temperature changes, or hidden reply caps.
 
+The C builder can instead apply the app's reply cut (see
+[V2 interactive Expectimax](#v2-interactive-expectimax)) when asked:
+`--reply-mass <share>` keeps the likeliest replies until they cover that share
+and `--max-replies <N>` caps their number; the kept shares are renormalized to
+sum to one (`pure_cut_replies`, mirroring `likeliestReplies`). The chess-prep
+MCP `expectimax_run` always passes the app's values (90%, at most five). A
+saved tree records the cut as `v2_reply_mass` / `v2_max_replies`; the builder
+continues a tree with its own cut when no flag is given and refuses a
+different one, so a tree built before the cut keeps every reply.
+
 A missing or invalid Maia policy is an error. It never triggers a switch to a
 game database. Master targeting and automatic downloads are unavailable for
 Stockfish expectimax, including when an old preset enables their legacy flags.
@@ -219,6 +229,14 @@ turns into a Maia search. A saved tree records the choice
 (`v2_reply_source`, such as `masters+maia<10` or
 `lichess:Blitz,Rapid:2200,2500`; absent means Maia), and Resume only continues
 a tree whose source, narrowing and fallback match.
+
+Each opponent position also keeps who answered it (`PolicyFound.from`,
+`OpponentNode.repliesFrom`, written per node as `v2_replies_from`: `games` or
+`maia`), so a resumed or reopened tree still knows. The Expectimax table shows
+it on the Played share only: a database share is plain, a Maia stand-in reads
+`~38%`, and the share's tooltip names the source (`From Lichess masters`, or
+`Maia 2200; Lichess masters has under 10 games here`). A Maia-only search and a
+tree saved before sources were kept show neither marker nor tooltip.
 
 Opponent nodes keep Maia's likeliest replies until they cover 90% of its
 distribution, at most five, and renormalize the kept shares to sum to one

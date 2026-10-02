@@ -4,6 +4,9 @@
 // after a failed write is books_owner_faults_test.dart's. See
 // fault_matrix.dart for the families.
 @TestOn('linux')
+// Every case runs a fault matrix of isolates: four times the default
+// 30 s, for a busy CI runner.
+@Timeout.factor(4)
 library;
 
 import 'package:chess_auto_prep/storage/book_list.dart';

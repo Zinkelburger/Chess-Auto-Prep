@@ -56,7 +56,10 @@ def run(gate, flutter, extra=()):
         if not executable:
             raise RuntimeError(f'Flutter executable not found: {flutter}')
         command('sdk', [executable, '--version', '--machine'])
-        actual = json.loads((logs / 'sdk.log').read_text())['frameworkVersion']
+        # Flutter may print a line before the JSON, such as "Waiting for
+        # another flutter command to release the startup lock...".
+        text = (logs / 'sdk.log').read_text()
+        actual = json.JSONDecoder().raw_decode(text, text.index('{'))[0]['frameworkVersion']
         if actual != expected:
             raise RuntimeError(
                 f'Flutter {expected} required by .fvmrc; found {actual}. '

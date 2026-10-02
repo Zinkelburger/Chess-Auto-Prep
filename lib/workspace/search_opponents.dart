@@ -58,11 +58,12 @@ typedef PlayedAt = Future<PlayedLookup> Function(Fen fen);
 /// A database of games as the search's opponent: at each position the
 /// replies played there, weighted by their games.
 ///
-/// One position has one source. Where the database has fewer than
-/// [fallbackUnder] games and there is a [fallback], the fallback answers
-/// that position whole; the two are never blended, and the search turns
-/// whichever answered into shares of one. With no fallback the database
-/// answers wherever it has a game and the search stops where it has none.
+/// One position has one source, and its answer says which ([RepliesFrom]).
+/// Where the database has fewer than [fallbackUnder] games and there is a
+/// [fallback], the fallback answers that position whole; the two are never
+/// blended, and the search turns whichever answered into shares of one.
+/// With no fallback the database answers wherever it has a game and the
+/// search stops where it has none.
 /// A database that cannot be asked stops the search: a lost connection is
 /// not a reason to change the opponent.
 ///
@@ -94,12 +95,18 @@ final class DatabaseOpponent implements OpponentPolicy {
     final (:policy, :games) = playedPolicy(position, lookup.moves);
     final fallback = this.fallback;
     if (fallback != null && games < fallbackUnder) {
-      return fallback.policyFor(position);
+      return switch (await fallback.policyFor(position)) {
+        PolicyFound(:final policy) => PolicyFound(
+          policy,
+          from: RepliesFrom.maia,
+        ),
+        final PolicyUnavailable unavailable => unavailable,
+      };
     }
     if (games == 0) {
       return PolicyUnavailable('$name has no games at this position');
     }
-    return PolicyFound(policy);
+    return PolicyFound(policy, from: RepliesFrom.games);
   }
 }
 

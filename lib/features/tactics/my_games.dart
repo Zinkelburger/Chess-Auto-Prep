@@ -554,7 +554,7 @@ final class MyGames extends ChangeNotifier {
           } on Object catch (error) {
             ended = MyGamesFailed(
               MyGamesProblem.engine,
-              detail: 'Could not confirm Stockfish stopped: $error',
+              detail: 'Could not confirm the engine stopped: $error',
               added: newPuzzles,
             );
           } finally {
@@ -581,7 +581,7 @@ final class MyGames extends ChangeNotifier {
       if (found == null) {
         return MyGamesFailed(
           MyGamesProblem.engine,
-          detail: 'Stockfish stopped answering',
+          detail: 'The engine stopped answering',
           added: added,
         );
       }

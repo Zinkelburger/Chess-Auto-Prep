@@ -142,17 +142,22 @@ jobs:
     with:
       version: ${{ github.ref_name }}
 
+  # Each app is built on a Mac of its own architecture, so the build and its
+  # packaged-app test run natively: no cross-compiling, no Rosetta. Runner
+  # versions are pinned so an image upgrade is a commit, not a surprise.
   build-macos:
     needs: quality-gate
-    runs-on: macos-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - arch: arm64
+            runner: macos-26
             stockfish: stockfish-macos-arm64
             excluded: x86_64
           - arch: x86_64
+            runner: macos-26-intel
             stockfish: stockfish-macos-x86_64
             excluded: arm64
     steps:
@@ -269,7 +274,7 @@ jobs:
 
   release:
     needs: [build-linux, build-windows, build-macos]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:

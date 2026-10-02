@@ -80,6 +80,12 @@ const _importRetry =
 const _pasteKnown = {
   'transient/*/O8': _importRetry,
   'lostAck/*/O8': _importRetry,
+  // The relocation findings of recoveryLedger that a full run
+  // (CAP_FAULT_DEPTH=full) shows for the staging folder's move.
+  'recoveryFault/*/read:Support/relocation-writes/*/O4': recordReadFailed,
+  'recoveryMissing/*/read:Support/relocation-writes/*/O4': recordReadFailed,
+  'recoveryMissing/*/stat:Support#*/O7': journalMissingSkipped,
+  'recoveryMissing/*/stat:Support/relocation-writes*/O7': journalMissingSkipped,
 };
 
 const _pasteImport = StorageScenario<Stores, LibraryResult>(
