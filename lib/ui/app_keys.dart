@@ -7,6 +7,8 @@ import 'app_action.dart';
 enum KeyPlace {
   window('Window'),
   board('Board and moves'),
+  squares('Chessboard square focus'),
+  tabs('Focused tabs'),
   comment('Comment box'),
   moveBox('Move box'),
   trainer('Repertoire trainer'),
@@ -85,6 +87,30 @@ enum AppKey {
   /// closes on it. Listed so its close button and Shortcuts name it.
   closeDialog('Close the dialog', KeyPlace.window, [
     SingleActivator(LogicalKeyboardKey.escape),
+  ]),
+
+  squareLeft('Explore left', KeyPlace.squares, [
+    SingleActivator(LogicalKeyboardKey.arrowLeft),
+  ]),
+  squareRight('Explore right', KeyPlace.squares, [
+    SingleActivator(LogicalKeyboardKey.arrowRight),
+  ]),
+  squareUp('Explore up', KeyPlace.squares, [
+    SingleActivator(LogicalKeyboardKey.arrowUp),
+  ]),
+  squareDown('Explore down', KeyPlace.squares, [
+    SingleActivator(LogicalKeyboardKey.arrowDown),
+  ]),
+  squareChoose('Select piece or destination', KeyPlace.squares, [
+    SingleActivator(LogicalKeyboardKey.enter),
+    SingleActivator(LogicalKeyboardKey.space),
+  ]),
+  squareClear('Clear selected piece', KeyPlace.squares, [
+    SingleActivator(LogicalKeyboardKey.escape),
+  ]),
+  tabMenu('Open tab menu', KeyPlace.tabs, [
+    SingleActivator(LogicalKeyboardKey.f10, shift: true),
+    SingleActivator(LogicalKeyboardKey.contextMenu),
   ]),
 
   // The workspace: the board, the moves and the card beside them.

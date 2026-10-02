@@ -104,6 +104,22 @@ void main() {
 
     String onDisk() => (store.documents[tacticsRef]! as Opened).text;
 
+    test(
+      'text search is part of the queue and clearing restores its order',
+      () async {
+        await set.load();
+        final original = set.queue.map((p) => p.index).toList();
+        set.search('Rival');
+        expect(set.queue, isNotEmpty);
+        expect(set.queue.every((p) => p.matches('Rival')), isTrue);
+        expect(set.queue.length, lessThan(original.length));
+        set.search('no such opponent');
+        expect(set.queue, isEmpty);
+        set.search('');
+        expect(set.queue.map((p) => p.index), original);
+      },
+    );
+
     test('with the set closed, the file is written without the puzzle and '
         'the list follows', () async {
       await set.load();

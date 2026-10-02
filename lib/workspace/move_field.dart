@@ -15,6 +15,7 @@ import '../ui/theme.dart';
 /// lesson that is asking for one.
 final class MoveEntry {
   final words = TextEditingController();
+  final problem = ValueNotifier<String?>(null);
   final focus = FocusNode(debugLabel: 'move field');
 
   /// [character] after the words, and the focus in the field, as if it had
@@ -29,6 +30,7 @@ final class MoveEntry {
   }
 
   void dispose() {
+    problem.dispose();
     words.dispose();
     focus.dispose();
   }
@@ -42,7 +44,7 @@ final class MoveEntry {
 /// typed move is saved, taken back and judged as a dragged one is. Enter
 /// plays what the words still leave; Esc clears them and gives the keys
 /// back to whatever had them before. Words no move is written as turn the
-/// field the error colour, and nothing more is said.
+/// field the error colour; a submitted refusal explains what to change.
 class MoveField extends StatefulWidget {
   const MoveField({
     super.key,
@@ -110,6 +112,7 @@ class _MoveFieldState extends State<MoveField> {
     final text = _words.text;
     if (text == _heard) return;
     _heard = text;
+    widget.entry.problem.value = null;
     if (_refused) setState(() => _refused = false);
     if (readTypedMove(widget.fen, text) case Resolved(:final uci)) _play(uci);
   }
@@ -125,6 +128,13 @@ class _MoveFieldState extends State<MoveField> {
     final uci = enteredMove(widget.fen, text);
     if (uci != null && widget.onMove != null) return _play(uci);
     setState(() => _refused = text.trim().isNotEmpty);
+    widget.entry.problem.value = !_refused
+        ? null
+        : widget.onMove == null
+        ? 'Moves are unavailable right now.'
+        : readTypedMove(widget.fen, text) is StillTyping
+        ? 'Specify the full move, such as Ngf3.'
+        : 'That move is not legal here.';
   }
 
   KeyEventResult _key(FocusNode node, KeyEvent event) {
@@ -202,4 +212,31 @@ class _MoveFieldState extends State<MoveField> {
 
   /// `exd8=Q+!` is eight; nothing a move is written as is longer.
   static const _longestMove = 8;
+}
+
+/// A stable full-width line below board controls, also announced on refusal.
+class MoveFeedback extends StatelessWidget {
+  const MoveFeedback({super.key, required this.entry});
+  final MoveEntry entry;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: moveFeedbackHeight,
+    child: ValueListenableBuilder(
+      valueListenable: entry.problem,
+      builder: (context, problem, _) => Semantics(
+        liveRegion: true,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            problem ?? '',
+            maxLines: 2,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.error,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }

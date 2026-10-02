@@ -26,6 +26,28 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('larger text and extreme board resizing keep controls readable', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await open(tester, Mode.repertoires, const Size(1280, 720));
+    final divider = find.byKey(const ValueKey('board-card-divider'));
+    await tester.drag(divider, const Offset(-600, 0));
+    await tester.pumpAndSettle();
+    final board = tester.getRect(find.byKey(const ValueKey('board-area')));
+    expect(board.width, greaterThanOrEqualTo(boardPaneMinWidth));
+    await tester.drag(divider, const Offset(600, 0));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    w.requests.switchTo(Mode.trainer);
+    await tester.pumpAndSettle();
+    w.lineTrainer.learn();
+    await tester.pumpAndSettle();
+    expect(find.text('Back to lines'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   // The default window, and the height the release notes quote.
   for (final window in [const Size(1280, 720), const Size(1280, 800)]) {
     final name = '${window.width.round()}×${window.height.round()}';
@@ -54,7 +76,7 @@ void main() {
       w.lineTrainer.learn();
       await tester.pumpAndSettle();
       expect(find.byType(LessonView), findsOneWidget);
-      await tester.tap(find.byTooltip('Open tab'));
+      await tester.tap(find.byTooltip('Open tools and arrange panes'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(MenuItemButton, 'Explorer'));
       await tester.pumpAndSettle();

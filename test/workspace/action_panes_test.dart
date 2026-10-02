@@ -110,7 +110,7 @@ void main() {
     'right clicking an Open tab action offers split and pane destinations',
     (tester) async {
       final layout = await pumpPanes(tester);
-      await tester.tap(find.byTooltip('Open tab'));
+      await tester.tap(find.byTooltip('Open tools and arrange panes'));
       await tester.pumpAndSettle();
       await rightClick(tester, find.widgetWithText(MenuItemButton, 'Replies'));
       await tester.tap(
@@ -314,7 +314,7 @@ void main() {
   testWidgets('a tab picked from + goes under a lone pane, and joins the '
       'pane it is picked in once there are two', (tester) async {
     final layout = await pumpPanes(tester, opensBeside: true);
-    await tester.tap(find.byTooltip('Open tab'));
+    await tester.tap(find.byTooltip('Open tools and arrange panes'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(MenuItemButton, 'Replies'));
     await tester.pumpAndSettle();
@@ -325,7 +325,7 @@ void main() {
       tester.getRect(pane(0)).bottom,
       lessThanOrEqualTo(tester.getRect(pane(1)).top),
     );
-    await tester.tap(find.byTooltip('Open tab').last);
+    await tester.tap(find.byTooltip('Open tools and arrange panes').last);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(MenuItemButton, 'Audit'));
     await tester.pumpAndSettle();
@@ -343,7 +343,7 @@ void main() {
     tester,
   ) async {
     final layout = await pumpPanes(tester);
-    await tester.tap(find.byTooltip('Open tab'));
+    await tester.tap(find.byTooltip('Open tools and arrange panes'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(MenuItemButton, 'Replies'));
     await tester.pumpAndSettle();
@@ -354,7 +354,7 @@ void main() {
   testWidgets('New pane adds an empty pane, filled from its + or by a tab '
       'moved to it, and closed like any other', (tester) async {
     final layout = await pumpPanes(tester);
-    await tester.tap(find.byTooltip('Open tab'));
+    await tester.tap(find.byTooltip('Open tools and arrange panes'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(MenuItemButton, 'New pane'));
     await tester.pumpAndSettle();
@@ -364,7 +364,7 @@ void main() {
     expect(find.textContaining('Body 1'), findsNothing);
     expect(layout.isOpen(WorkspaceTab.replies), isFalse);
 
-    await tester.tap(find.byTooltip('Open tab').last);
+    await tester.tap(find.byTooltip('Open tools and arrange panes').last);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(MenuItemButton, 'Replies'));
     await tester.pumpAndSettle();
@@ -459,7 +459,7 @@ void main() {
     expect(find.byKey(const ValueKey('tab-row-0')), findsNothing);
     expect(find.text('Moves'), findsNothing);
     expect(find.text('Body 0 Moves'), findsOneWidget);
-    await tester.tap(find.byTooltip('Open tab'));
+    await tester.tap(find.byTooltip('Open tools and arrange panes'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(MenuItemButton, 'Explorer'));
     await tester.pumpAndSettle();

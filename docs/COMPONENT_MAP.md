@@ -51,7 +51,10 @@ Bughouse mode is offered when its engine assets are present.
 - Library and chapter outline share guarded PGN storage; edits, moves, deletes,
   restore and accepted training outcomes use the existing recovery owners.
 - Trainer Learn/Review and the shared Train tab use the same scheduling and
-  lesson owners. Training records remain under Documents.
+  lesson owners. A mode, tab or file detour suspends the current lesson and its
+  timers; Resume reclaims the board in the visible Train pane. Back to lines
+  ends it explicitly. Accepted ratings finish saving while paused; a changed
+  source invalidates the retained lesson. Training records remain under Documents.
 - Viewer owns collections, selection/filter/sort and held edits; analysis tabs
   preserve their source draft. Export uses the exclusive PGN exporter. It opens
   on the moves alone (`viewerTabs`), has its own Explorer starting on `This
@@ -61,10 +64,12 @@ Bughouse mode is offered when its engine assets are present.
 - Study uses the same document session for chapters, tags, starts, cleanup,
   quiz markers, import/export and retained retry commands.
 - Tactics mines downloaded games into `tactics_sets/Default.pgn`, trains puzzles
-  on the shared board and can inspect the source game. Alternative answers use
+  on the shared board and can inspect the source game. Text search and filters
+  define both the visible puzzle list and Play's counted queue. Alternative answers use
   a supervised finite engine job; unavailable checks do not invent grades.
 - Players/prep owns identities, groups, downloads, findings, prepared flags and
-  linked prep studies. Cross-mode wiring lives in `app/`, not panel imports.
+  linked prep studies. Failed analysis offers Try again and diagnostic Details;
+  an unsuccessful refresh retains the previous corpus and its source revisions. Cross-mode wiring lives in `app/`, not panel imports.
 - Databases browses/imports/downloads master games and reports storage usage.
   Cleanup is limited to explicitly selected derived data.
 - Generation owns search trees and draft publication; Replies/gaps and Audit
@@ -94,6 +99,19 @@ Bughouse mode is offered when its engine assets are present.
 - Engine tournaments use the shared supervisor, retryable checkpoints, saved
   history, ratings/crosstables and viewer handoff. Bughouse keeps its own two-board
   screen, Hivemind analysis, archive/book reads and saved matches.
+- `AccessibleBoard` adds named squares, side-to-move/check announcements,
+  orientation-aware arrow navigation, Enter/Space selection and keyboard promotion
+  to the shared pointer board. Modified history shortcuts still pass through.
+  Submitted notation errors use a stable feedback row below the board controls.
+- `LayoutMemory` stores deliberate tool/split/board-width choices in Settings,
+  per mode and, for document views, per file. Auxiliary modes keep their layout
+  while browsing source games. Writes participate in exit settling. Actions offers
+  Reset workspace layout, board width and active pane sizing; tab context menus
+  also open with Shift+F10. Mode navigation is grouped and searchable through
+  Find a mode and the Actions palette. The reading surface names its Tools menu.
+- Engine jobs publish a named kind through `EngineJobs`; the top bar's running
+  task button returns to the owning tool without starting a second job. Discard
+  of held edits confirms the named document and refuses stale dialog callbacks.
 - Settings includes accounts, engine/training controls, diagnostics, shortcuts,
   licenses and verified update downloads/install-on-close.
   The engine pane's gear swaps its lines in place for Lines, CPU cores and
@@ -107,7 +125,8 @@ Bughouse mode is offered when its engine assets are present.
   search's opponent: Maia, or a games database (Lichess explorer, local master
   book) with Maia behind it. Each opponent node keeps who answered it
   (`OpponentNode.repliesFrom`, saved as `v2_replies_from`), and the table's
-  Played share marks a Maia stand-in `~` with a tooltip naming the source.
+  Played share marks a Maia stand-in `~` with a tooltip naming the source
+  and a visible legend explaining the marker.
 
 Unported conveniences remain in the feature specs/backlog; the presence of a
 mode is not a claim of every historical v1 control being reproduced.

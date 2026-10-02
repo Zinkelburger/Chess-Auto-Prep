@@ -29,6 +29,7 @@ import '../ui/move_notation.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
 import '../workspace/board_claim.dart';
+import '../workspace/engine_jobs.dart';
 import '../workspace/document_actions.dart';
 import '../workspace/book_chip.dart';
 import '../workspace/copy_name_dialog.dart';
@@ -43,6 +44,7 @@ import '../workspace/action_layout.dart';
 import '../workspace/workspace_tabs.dart';
 import '../workspace/workspace_view.dart';
 import 'full_screen.dart';
+import 'layout_memory.dart';
 import 'mode_view.dart';
 import 'mode.dart';
 import 'player_wiring.dart';
@@ -124,6 +126,29 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     tournaments: widget.tournaments,
   );
 
+  late final _layoutMemory = LayoutMemory(_ws.settings, {
+    for (final entry in _views.entries) entry.key: entry.value.layout,
+  });
+
+  void _selectLayout() =>
+      _layoutMemory.select(_requests.mode, switch (_requests.mode) {
+        Mode.repertoires ||
+        Mode.trainer ||
+        Mode.study ||
+        Mode.pgnViewer => _ws.session.source?.path,
+        _ => null,
+      }, _view.layout);
+
+  void _resetLayout() {
+    _layoutMemory.reset();
+    _list.size = listColumnWidth;
+    _playerList.size = playerColumnWidth;
+    _outline.size = outlineColumnWidth;
+    _listShown = true;
+    _arrange();
+    setState(() {});
+  }
+
   ModeView get _view => _views[_requests.mode]!;
 
   /// The mode on screen as last seen, so the one left and the one come to
@@ -143,10 +168,48 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     }
     _ws.inspection?.hide();
     _shown = mode;
+    _selectLayout();
     _views[mode]!.entered();
     _innerTabChanged();
     _outlineShown = _wantsOutline;
     _arrange();
+  }
+
+  Mode? _jobMode;
+  EngineJobKind? _jobKind;
+
+  void _jobChanged() {
+    final kind = _ws.jobs?.activeKind;
+    if (kind != _jobKind) {
+      _jobKind = kind;
+      _jobMode = kind == null ? null : _requests.mode;
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _showJob() {
+    final kind = _ws.jobs?.activeKind;
+    if (kind == null) return;
+    if (kind == EngineJobKind.tournament) {
+      _requests.switchTo(Mode.engineTournament);
+      final run = widget.tournaments;
+      final active = run?.history
+          .where((t) => t.id == run.activeId)
+          .firstOrNull;
+      if (active != null) run!.select(active);
+      return;
+    }
+    final tab = switch (kind) {
+      EngineJobKind.search || EngineJobKind.makingLines => WorkspaceTab.search,
+      EngineJobKind.audit => WorkspaceTab.audit,
+      _ => WorkspaceTab.review,
+    };
+    var mode = _jobMode ?? Mode.repertoires;
+    if (!_views[mode]!.layout.pane(0).tabs.any((t) => t.id == tab)) {
+      mode = Mode.repertoires;
+    }
+    _requests.switchTo(mode);
+    _views[mode]!.layout.reveal(tab);
   }
 
   /// The reading card's tabs of the mode on screen.
@@ -188,7 +251,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   late final _sitting = SittingInView(
     trainer: _train.lines,
     requests: _requests,
-    trainTabOpen: () => _view.layout.isOpen(WorkspaceTab.train),
+    trainTabOpen: () => _view.layout.visible.any(
+      (i) =>
+          !_view.layout.isEmpty(i) &&
+          _view.layout.pane(i).selected == WorkspaceTab.train,
+    ),
   );
   late final _puzzle = PuzzleInView(
     puzzles: _train.puzzles,
@@ -238,6 +305,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   @override
   void initState() {
     super.initState();
+    _selectLayout();
     _outlineShown = _wantsOutline;
     _arrange();
     for (final view in _views.values) {
@@ -249,12 +317,15 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     _shown = _requests.mode;
     _requests.addListener(_modeMayHaveChanged);
     _ws.inspection?.addListener(_analysisChanged);
+    _ws.jobs?.addListener(_jobChanged);
   }
 
   @override
   void dispose() {
     _requests.removeListener(_modeMayHaveChanged);
+    _ws.jobs?.removeListener(_jobChanged);
     _ws.inspection?.removeListener(_analysisChanged);
+    _layoutMemory.dispose();
     _sitting.dispose();
     _puzzle.dispose();
     _editing.dispose();
@@ -295,6 +366,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// list keeps its width and whatever it has open.
   @override
   void changed() {
+    _selectLayout();
     if (_wantsOutline == _outlineShown) return;
     _outlineShown = _wantsOutline;
     _arrange();
@@ -496,6 +568,29 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// Everything the Actions menu offers now, in the mode on screen.
   List<AppAction> _actions() => [
     ..._modeActions(),
+    AppAction('Reset workspace layout', _resetLayout, group: 'Layout'),
+    AppAction(
+      'Widen board',
+      () => _view.layout.resizeBoard(_view.layout.boardFraction + 0.05),
+      group: 'Layout',
+    ),
+    AppAction(
+      'Widen reading area',
+      () => _view.layout.resizeBoard(_view.layout.boardFraction - 0.05),
+      group: 'Layout',
+    ),
+    if (_view.layout.count > 1) ...[
+      AppAction(
+        'Give this pane more room',
+        () => _view.layout.resizeActive(0.05),
+        group: 'Layout',
+      ),
+      AppAction(
+        'Give this pane less room',
+        () => _view.layout.resizeActive(-0.05),
+        group: 'Layout',
+      ),
+    ],
     if (_view is! ViewerView)
       AppAction(
         _listShown && _positionsShown ? 'Back to the list' : 'Positions',
@@ -561,6 +656,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// takes the one match of.
   Future<void> _palette() async {
     final actions = [
+      for (final mode in Mode.values)
+        if (mode != Mode.bughouse || widget.labs.offered.value)
+          AppAction('Go to ${mode.label}', () => _requests.switchTo(mode)),
       for (final a in _actions())
         if (a.run != null) a,
     ];
@@ -651,6 +749,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       TopBar(
         mode: _requests.mode,
         onMode: _requests.switchTo,
+        activity: _ws.jobs?.activeKind?.label,
+        onActivity: _showJob,
         backTo: _requests.backTo?.label,
         forwardTo: _requests.forwardTo?.label,
         onBack: _back,
@@ -778,7 +878,7 @@ enum _Pane { list, outline, workspace }
 /// Keeps the Train tab's sitting beside its controls: in the mode it was
 /// started in, with the Train tab open. Anywhere else the board would go on
 /// showing the lesson and taking moves for it with nothing to answer or
-/// leave it by, so the sitting ends.
+/// leave it by, so the sitting pauses.
 final class SittingInView {
   SittingInView({
     required Trainer trainer,
@@ -801,17 +901,22 @@ final class SittingInView {
 
   /// The mode the sitting runs in, while one does.
   Mode? _mode;
+  bool _wasSuspended = false;
 
   List<Listenable> get _owners => [_trainer, _requests];
 
-  /// Ends the sitting if it is out of view; also listens to the tabs.
+  /// Suspends the sitting out of view; returning offers explicit Resume.
   void check() {
     if (_trainer.lesson == null) {
       _mode = null;
+      _wasSuspended = false;
       return;
     }
+    final suspended = _trainer.lesson!.suspended;
+    if (_wasSuspended && !suspended) _mode = _requests.mode;
+    _wasSuspended = suspended;
     final mode = _mode ??= _requests.mode;
-    if (_requests.mode != mode || !_trainTabOpen()) _trainer.leave();
+    if (_requests.mode != mode || !_trainTabOpen()) _trainer.suspend();
   }
 
   void dispose() {

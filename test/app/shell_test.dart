@@ -80,7 +80,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(OutlinePanel), findsOneWidget);
       if (find.text('Train').evaluate().isEmpty) {
-        await tester.tap(find.byTooltip('Open tab').first);
+        await tester.tap(find.byTooltip('Open tools and arrange panes').first);
         await tester.pumpAndSettle();
       }
       await tester.tap(find.text('Train'));
@@ -97,13 +97,13 @@ void main() {
     },
   );
 
-  testWidgets('a sitting ends when the mode it was started in is left', (
+  testWidgets('a sitting pauses across a mode detour and resumes on request', (
     tester,
   ) async {
     await pump(tester);
     await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Open tab').first);
+    await tester.tap(find.byTooltip('Open tools and arrange panes').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Train'));
     w.lineTrainer.show();
@@ -111,25 +111,28 @@ void main() {
     w.lineTrainer.learn();
     await tester.pump();
     expect(w.lineTrainer.board.value, isNotNull);
+    final lesson = w.lineTrainer.lesson!;
     w.requests.switchTo(Mode.tactics);
     await tester.pump();
-    expect(w.lineTrainer.lesson, isNull);
+    expect(w.lineTrainer.lesson, same(lesson));
+    expect(lesson.suspended, isTrue);
     expect(w.lineTrainer.board.value, isNull, reason: 'the board is back');
     expect(w.analysis.pausedFor, isNull);
-    // A sitting started afresh in another mode is that mode's.
-    w.requests.switchTo(Mode.repertoires);
+    w.requests.switchTo(Mode.trainer);
     await tester.pumpAndSettle();
-    w.lineTrainer.learn();
+    await tester.tap(find.text('Resume lesson'));
     await tester.pump();
-    expect(w.lineTrainer.lesson, isNotNull);
+    expect(w.lineTrainer.lesson, same(lesson));
+    expect(lesson.suspended, isFalse);
+    expect(w.lineTrainer.board.value, isNotNull);
   });
 
-  testWidgets('a sitting ends with its Train tab closed', (tester) async {
+  testWidgets('a sitting pauses with its Train tab closed', (tester) async {
     await pump(tester);
     await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
     if (find.text('Train').evaluate().isEmpty) {
-      await tester.tap(find.byTooltip('Open tab').first);
+      await tester.tap(find.byTooltip('Open tools and arrange panes').first);
       await tester.pumpAndSettle();
     }
     await tester.tap(find.text('Train'));
@@ -142,7 +145,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyW);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pump();
-    expect(w.lineTrainer.lesson, isNull);
+    expect(w.lineTrainer.lesson?.suspended, isTrue);
     expect(w.lineTrainer.board.value, isNull);
   });
 
@@ -333,7 +336,7 @@ void main() {
     await pump(tester);
     await tester.tap(inLibrary(find.text('Main')).last);
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Open tab').first);
+    await tester.tap(find.byTooltip('Open tools and arrange panes').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Replies'));
     await tester.pumpAndSettle();
@@ -445,7 +448,7 @@ void main() {
     await tester.tap(inLibrary(find.text('Main')).last);
     await tester.pumpAndSettle();
     if (find.text('Train').evaluate().isEmpty) {
-      await tester.tap(find.byTooltip('Open tab').first);
+      await tester.tap(find.byTooltip('Open tools and arrange panes').first);
       await tester.pumpAndSettle();
     }
     await tester.tap(find.text('Train'));

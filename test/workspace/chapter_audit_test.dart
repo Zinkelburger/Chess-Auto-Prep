@@ -310,7 +310,7 @@ void main() {
     await fixture.session.open(sibling);
     expect(audit.state, isA<AuditIdle>());
     expect(audit.canStart, isFalse, reason: "the old run's engine still runs");
-    expect(await audit.start(), 'Wait for the engine job under way to finish.');
+    expect(await audit.start(), contains('is running.'));
     expect(jobs.heldByOther(Object()), isTrue);
     expect(analysis.paused, isTrue);
 

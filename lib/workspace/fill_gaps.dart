@@ -309,7 +309,7 @@ final class FillGaps extends ChangeNotifier {
     if (_disposed) return 'The search owner is closed.';
     if (_active || running) return 'A search is already running.';
     if (_jobs.heldByOther(this)) {
-      return 'Wait for the engine job under way to finish.';
+      return _jobs.blockingMessage;
     }
     if (canRetryTree) return 'Finish saving the previous search tree first.';
     if (_draftSave != null || _lines is LinesWriting) {
@@ -369,7 +369,7 @@ final class FillGaps extends ChangeNotifier {
         of: request.depthPlies,
       ),
     );
-    _jobs.take(this, 'Paused while searching');
+    _jobs.take(this, 'Paused while searching', kind: EngineJobKind.search);
     try {
       await _run(request, target, root, seed, mirrorSeed);
     } on Object catch (error) {
@@ -840,7 +840,12 @@ final class FillGaps extends ChangeNotifier {
     ];
     // Another job holding the machine keeps it: the lines are written as
     // they are.
-    if (missing.isEmpty || !_jobs.take(this, 'Paused while making lines')) {
+    if (missing.isEmpty ||
+        !_jobs.take(
+          this,
+          'Paused while making lines',
+          kind: EngineJobKind.makingLines,
+        )) {
       return;
     }
     try {

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../chess/fen.dart';
+import 'accessible_board.dart';
 import '../chess/pgn/board_shapes.dart';
 import '../chess/pgn/tree_edit.dart';
 import '../ui/theme.dart';
@@ -121,8 +122,7 @@ class _BoardViewState extends State<BoardView> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
+  ChessboardSettings _settings(BuildContext context) {
     final theme = BoardTheme.of(context);
     final base = theme.settings(coordinates: widget.coordinates);
     // chessground has no public selection callback. Keep this read-only
@@ -138,61 +138,72 @@ class _BoardViewState extends State<BoardView> {
           color: theme.validMove,
         );
     final colors = base.colorScheme;
-    final settings = base.copyWith(
+    return base.copyWith(
       colorScheme: colors.copyWith(
         background: hints(colors.background),
         whiteCoordBackground: hints(colors.whiteCoordBackground),
         blackCoordBackground: hints(colors.blackCoordBackground),
       ),
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = _settings(context);
     return AspectRatio(
       aspectRatio: 1,
-      child: LayoutBuilder(
-        builder: (context, constraints) => Listener(
-          onPointerDown: (event) => _down(event, constraints.maxWidth),
-          onPointerMove: (event) => _move(event, constraints.maxWidth),
-          onPointerUp: (_) => _up(),
-          onPointerCancel: (_) => _cancel(),
-          child: Stack(
-            children: [
-              Chessboard(
-                size: constraints.maxWidth,
-                controller: _controller,
-                orientation: widget.orientation,
-                settings: settings,
-                shapes: {
-                  for (final shape in _shown())
-                    if (shape.isCircle) _circleOf(shape),
-                },
-                onMove: (move, {viaDragAndDrop}) {
-                  if (!mounted) return;
-                  widget.onMove(move.uci);
-                },
-              ),
-              // Arrows go over the pieces, as on Lichess, and away while a
-              // pawn waits for the piece it becomes. The promotion has no
-              // public listenable; setting it does not notify the controller.
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: ValueListenableBuilder(
-                    // ignore: invalid_use_of_internal_member
-                    valueListenable: _controller.pendingPromotionNotifier,
-                    builder: (context, promotion, _) => promotion != null
-                        ? const SizedBox.shrink()
-                        : BoardArrows(
-                            arrows: [
-                              for (final shape in _shown())
-                                if (!shape.isCircle) shape,
-                            ],
-                            drawing: _drawing?.isCircle ?? true
-                                ? null
-                                : _drawing,
-                            orientation: widget.orientation,
-                          ),
+      child: AccessibleBoard(
+        fen: widget.fen,
+        orientation: widget.orientation,
+        movable: widget.movable,
+        onMove: widget.onMove,
+        child: LayoutBuilder(
+          builder: (context, constraints) => Listener(
+            onPointerDown: (event) => _down(event, constraints.maxWidth),
+            onPointerMove: (event) => _move(event, constraints.maxWidth),
+            onPointerUp: (_) => _up(),
+            onPointerCancel: (_) => _cancel(),
+            child: Stack(
+              children: [
+                Chessboard(
+                  size: constraints.maxWidth,
+                  controller: _controller,
+                  orientation: widget.orientation,
+                  settings: settings,
+                  shapes: {
+                    for (final shape in _shown())
+                      if (shape.isCircle) _circleOf(shape),
+                  },
+                  onMove: (move, {viaDragAndDrop}) {
+                    if (!mounted) return;
+                    widget.onMove(move.uci);
+                  },
+                ),
+                // Arrows go over the pieces, as on Lichess, and away while a
+                // pawn waits for the piece it becomes. The promotion has no
+                // public listenable; setting it does not notify the controller.
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: ValueListenableBuilder(
+                      // ignore: invalid_use_of_internal_member
+                      valueListenable: _controller.pendingPromotionNotifier,
+                      builder: (context, promotion, _) => promotion != null
+                          ? const SizedBox.shrink()
+                          : BoardArrows(
+                              arrows: [
+                                for (final shape in _shown())
+                                  if (!shape.isCircle) shape,
+                              ],
+                              drawing: _drawing?.isCircle ?? true
+                                  ? null
+                                  : _drawing,
+                              orientation: widget.orientation,
+                            ),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

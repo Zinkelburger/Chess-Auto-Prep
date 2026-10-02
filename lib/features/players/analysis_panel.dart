@@ -431,7 +431,35 @@ class _Status extends StatelessWidget {
             const LinearProgressIndicator(minHeight: progressLineHeight),
           ] else if (status != null)
             Text(status, style: theme.textTheme.labelSmall),
-          if (analysis.error case final error?) Text(error, style: wrong),
+          if (analysis.error case final error?) ...[
+            Text(error, style: wrong),
+            Wrap(
+              spacing: Space.s,
+              children: [
+                TextButton(
+                  onPressed: analysis.busy ? null : analysis.retry,
+                  child: const Text('Try again'),
+                ),
+                if (analysis.errorDetail case final detail?)
+                  TextButton(
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Problem details'),
+                        content: SelectableText(detail),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Close'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    child: const Text('Details'),
+                  ),
+              ],
+            ),
+          ],
           for (final warning in analysis.warnings) Text(warning, style: wrong),
         ],
       ),

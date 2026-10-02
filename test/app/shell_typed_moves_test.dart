@@ -113,6 +113,8 @@ void main() {
       expect(w.session.cursor, const NodePath.root());
       expect(find.byType(Dialog), findsNothing);
       expect(words(tester), 'Ke7', reason: 'left to be put right');
+      expect(find.text('That move is not legal here.'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('Esc clears the words and gives the keys back to the board', (
@@ -178,7 +180,7 @@ void main() {
   ) async {
     await openKid(tester);
     if (find.text('Train').evaluate().isEmpty) {
-      await tester.tap(find.byTooltip('Open tab').first);
+      await tester.tap(find.byTooltip('Open tools and arrange panes').first);
       await tester.pumpAndSettle();
     }
     await tester.tap(find.text('Train'));

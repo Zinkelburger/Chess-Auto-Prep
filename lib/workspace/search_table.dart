@@ -178,6 +178,14 @@ class SearchTable extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _Header(ours: ours, sides: sides, played: played),
+          if (played && rows.any((row) => row.shareFrom == RepliesFrom.maia))
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Space.m),
+              child: Text(
+                '~ Estimated by Maia where database games are sparse.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
           Expanded(
             child: ListView.builder(
               itemCount: rows.length,

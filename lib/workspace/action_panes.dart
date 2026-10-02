@@ -145,7 +145,11 @@ class _ActionPanesState extends State<ActionPanes> {
         fit: StackFit.expand,
         children: [
           _body(context, index, tabs.selected),
-          Positioned(top: Space.xs, right: Space.xs, child: _paneMenu(index)),
+          Positioned(
+            top: Space.xs,
+            right: Space.xs,
+            child: _paneMenu(index, labeled: true),
+          ),
         ],
       );
     }
@@ -299,7 +303,7 @@ class _ActionPanesState extends State<ActionPanes> {
 
   /// The pane's `+`: every tab the mode has, opened as the layout opens a
   /// picked tab, then an empty pane and the ways to have fewer.
-  Widget _paneMenu(int index) {
+  Widget _paneMenu(int index, {bool labeled = false}) {
     final tabs = layout.pane(index);
     return MenuAnchor(
       menuChildren: [
@@ -334,6 +338,16 @@ class _ActionPanesState extends State<ActionPanes> {
             ),
         ],
         const Divider(height: 1),
+        if (layout.count > 1) ...[
+          MenuItemButton(
+            onPressed: () => layout.resizeActive(0.05),
+            child: const Text('More room'),
+          ),
+          MenuItemButton(
+            onPressed: () => layout.resizeActive(-0.05),
+            child: const Text('Less room'),
+          ),
+        ],
         MenuItemButton(
           onPressed: layout.canAddPane ? () => layout.addPane(index) : null,
           leadingIcon: const Icon(
@@ -353,14 +367,28 @@ class _ActionPanesState extends State<ActionPanes> {
             child: const Text('Join all panes'),
           ),
       ],
-      builder: (context, menu, _) => IconButton(
-        tooltip: 'Open tab',
-        icon: const Icon(Icons.add, size: IconSize.menu),
-        onPressed: () {
-          layout.select(index);
-          menu.isOpen ? menu.close() : menu.open();
-        },
-      ),
+      builder: (context, menu, _) => _menuButton(menu, index, labeled),
+    );
+  }
+
+  Widget _menuButton(MenuController menu, int index, bool labeled) {
+    void toggle() {
+      layout.select(index);
+      menu.isOpen ? menu.close() : menu.open();
+    }
+
+    return Tooltip(
+      message: 'Open tools and arrange panes',
+      child: labeled
+          ? TextButton.icon(
+              icon: const Icon(Icons.add, size: IconSize.menu),
+              label: const Text('Tools'),
+              onPressed: toggle,
+            )
+          : IconButton(
+              icon: const Icon(Icons.add, size: IconSize.menu),
+              onPressed: toggle,
+            ),
     );
   }
 

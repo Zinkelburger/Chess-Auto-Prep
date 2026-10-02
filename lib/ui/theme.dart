@@ -388,13 +388,6 @@ const paneDividerGrab = 4.0;
 const paneMinWidth = 180.0;
 const boardPaneMinWidth = 320.0;
 
-/// How the workspace is first shared between the board and the card beside
-/// it: two parts to three, the card the wider. The split view reads a flex
-/// pane's `min` as a flex too, not as pixels, so the shares are written in
-/// the same units as [boardPaneMinWidth] and [readingPaneMinWidth] and the
-/// minimums keep the proportion they were meant to have.
-const boardShare = 400.0;
-const cardShare = 600.0;
 const readingPaneMinWidth = 300.0;
 
 /// One of the six glyph buttons in the edit strip.
@@ -756,3 +749,8 @@ Color mistakeColor(String glyph) => switch (glyph) {
 /// The move numbers of a game read in the card: there to count by, so a
 /// step quieter than the moves.
 const readingNumberColor = _muted;
+
+/// Keyboard cursor on a chessboard square.
+const boardFocusWidth = 3.0;
+
+const double moveFeedbackHeight = 36;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/app_action.dart';
+import '../ui/choice_dialog.dart';
 import '../ui/action_context_menu.dart';
 import '../ui/theme.dart';
 import 'mode.dart';
@@ -29,9 +30,13 @@ class TopBar extends StatelessWidget {
     required this.onToggleList,
     required this.actions,
     required this.actionsChange,
+    this.activity,
+    this.onActivity,
   });
 
   final Mode mode;
+  final String? activity;
+  final VoidCallback? onActivity;
   final ValueChanged<Mode> onMode;
 
   /// Where Back and Forward go. Empty history disables the controls while
@@ -87,6 +92,17 @@ class TopBar extends StatelessWidget {
           const SizedBox(width: Space.s),
           _ActionsMenu(actions: actions, changes: actionsChange),
           const Spacer(),
+          if (activity != null)
+            Flexible(
+              child: TextButton(
+                onPressed: onActivity,
+                child: Text(
+                  '$activity · running',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.settings_outlined, size: IconSize.action),
             tooltip: AppKey.settings.tip('Settings'),
@@ -98,24 +114,6 @@ class TopBar extends StatelessWidget {
     );
   }
 }
-
-/// Modes not yet in v2 are listed but disabled, so the menu shows the whole
-/// product from day one and each step turns one entry on. The library and
-/// the builder are one mode, named for the building (owner, 2026-09-22).
-const _modes = [
-  'Repertoire builder',
-  'Books',
-  'PGN Viewer',
-  'Repertoire trainer',
-  'Study',
-  'Tactics',
-  'My games',
-  'Player analysis',
-  'Players & prep',
-  'Databases',
-  'Engine tournament',
-  'Bughouse lab',
-];
 
 /// The modes, and nothing else: the settings are the gear at the other end
 /// of the row.
@@ -130,34 +128,45 @@ class _ModeMenu extends StatelessWidget {
   final ValueChanged<Mode> onMode;
   final bool Function(Mode mode) offered;
 
-  /// The mode this entry switches to, or null when `v2` does not have it yet
-  /// and the entry is there only to show that the product does.
-  Mode? _modeNamed(String name) =>
-      Mode.values.where((mode) => mode.label == name).firstOrNull;
-
-  /// Every entry is listed — `v2`'s modes and the ones still to come — but
-  /// a mode this build cannot offer.
-  bool _listed(String name) => switch (_modeNamed(name)) {
-    null => true,
-    final named => offered(named),
-  };
+  Future<void> _find(BuildContext context) async {
+    final chosen = await showChoiceDialog<Mode>(
+      context,
+      title: 'Find a mode',
+      options: Mode.values.where(offered).toList(),
+      label: (mode) => mode.label,
+      hint: 'Type a mode name',
+      empty: 'No modes available',
+    );
+    if (context.mounted && chosen != null) onMode(chosen);
+  }
 
   @override
   Widget build(BuildContext context) {
     return MenuAnchor(
       menuChildren: [
-        for (final name in _modes)
-          if (_listed(name))
-            MenuItemButton(
-              onPressed: switch (_modeNamed(name)) {
-                null => null,
-                final named => () => onMode(named),
-              },
-              leadingIcon: name == mode.label
-                  ? const Icon(Icons.check, size: IconSize.menu)
-                  : const SizedBox(width: IconSize.menu),
-              child: Text(name),
+        MenuItemButton(
+          onPressed: () => _find(context),
+          child: const Text('Find a mode…'),
+        ),
+        for (final group in modeGroups.entries) ...[
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.all(Space.s),
+            child: Text(
+              group.key,
+              style: Theme.of(context).textTheme.labelSmall,
             ),
+          ),
+          for (final named in group.value)
+            if (offered(named))
+              MenuItemButton(
+                onPressed: () => onMode(named),
+                leadingIcon: named == mode
+                    ? const Icon(Icons.check, size: IconSize.menu)
+                    : const SizedBox(width: IconSize.menu),
+                child: Text(named.label),
+              ),
+        ],
       ],
       builder: (context, controller, _) => TextButton.icon(
         onPressed: controller.isOpen ? controller.close : controller.open,

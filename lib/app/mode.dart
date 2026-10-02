@@ -40,6 +40,14 @@ enum Mode {
   final String label;
 }
 
+/// Task groups share their names and membership across navigation surfaces.
+const modeGroups = {
+  'Repertoires': [Mode.repertoires, Mode.books, Mode.trainer],
+  'Study & games': [Mode.pgnViewer, Mode.study, Mode.myGames, Mode.tactics],
+  'Opponent preparation': [Mode.playerAnalysis, Mode.players],
+  'Data & engines': [Mode.databases, Mode.engineTournament, Mode.bughouse],
+};
+
 /// The owners behind the lists of the modes that open documents: the
 /// repertoires and the open chapter's outline, the studies, the PGN
 /// Viewer's files and autoplay, and the filter over the open file's games.
