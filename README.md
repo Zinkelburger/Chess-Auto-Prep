@@ -94,3 +94,10 @@ The failures that prompted this setup:
 |---|---|---|
 | 2.0.0 | [Failed run](https://github.com/Zinkelburger/Chess-Auto-Prep/actions/runs/36754478934) | Linux fault tests found inconsistent book references after delete/restore and an interleaving timeout. Windows tests exposed directory-sync assumptions, a missing-warning assertion and a database handle left open during cleanup. These gates passed on 2.0.1; retain them and run them before tagging. |
 | 2.0.1 | [Failed run](https://github.com/Zinkelburger/Chess-Auto-Prep/actions/runs/36931974043) | Intel Mac packaging rejected Stockfish's gzip checksum. The existing fix pins the uncompressed engine and uses a native Intel runner. A full rehearsal now exercises both Mac release builds, which a green Windows check did not cover. |
+
+The first full rehearsal also [caught an Intel startup crash](https://github.com/Zinkelburger/Chess-Auto-Prep/actions/runs/36969225369)
+after the checksum fix. Stockfish 19 stores the Intel network data in the
+arm64 slice of its universal executable ([upstream implementation](https://github.com/official-stockfish/Stockfish/blob/sf_19/src/universal/patch_x86_slice.sh)).
+The app and frameworks may be thinned; the signed Stockfish helper must retain
+both slices. Packaging now preserves that helper and asserts both architectures
+before running the packaged app on its native runner.

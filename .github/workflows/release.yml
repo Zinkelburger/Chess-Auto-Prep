@@ -174,7 +174,7 @@ jobs:
   build-macos:
     needs: prepare
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -255,6 +255,12 @@ jobs:
           THIN="${APP%.app}-${ARCH}.app"
           rm -rf "$THIN"
           ditto --arch "$ARCH" "$APP" "$THIN"
+          # Stockfish 19's Intel slice reads NNUE data from its arm64 slice
+          # using offsets into the complete universal file. Thinning that
+          # helper makes the Intel engine SIGBUS even though codesign passes.
+          # Preserve its signed bytes; thin only the app and other frameworks.
+          cp -p "$APP/Contents/Helpers/stockfish-macos" "$THIN/Contents/Helpers/stockfish-macos"
+          lipo "$THIN/Contents/Helpers/stockfish-macos" -verify_arch x86_64 arm64
           rm -rf "$APP"
           mv "$THIN" "$APP"
           echo "Main: $(lipo -info "$APP/Contents/MacOS/$EXEC")"
