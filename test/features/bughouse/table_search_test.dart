@@ -36,7 +36,10 @@ void main() {
       book: outside.book,
       startEngine: () => outside.outside.launch(cores: 2),
       depth: (ownNodes: 50, childNodes: 20),
-      passes: const [Duration(seconds: 1), Duration(seconds: 2)],
+      passes: const [
+        TimeBudget(Duration(seconds: 1)),
+        TimeBudget(Duration(seconds: 2)),
+      ],
     );
   });
 
@@ -260,7 +263,7 @@ void main() {
         book: outside.book,
         startEngine: () => outside.outside.launch(cores: 2),
         pendingWrites: pending,
-        passes: const [Duration(seconds: 1)],
+        passes: const [TimeBudget(Duration(seconds: 1))],
       );
       final write = Completer<HivemindSave>();
       final attempted = <HivemindEntry>[];
@@ -325,7 +328,7 @@ void main() {
         book: outside.book,
         startEngine: () => outside.outside.launch(cores: 2),
         pendingWrites: pending,
-        passes: const [Duration(seconds: 1)],
+        passes: const [TimeBudget(Duration(seconds: 1))],
       );
       outside.book.saving = (_) async => const HivemindSaveFailed('disk full');
       search

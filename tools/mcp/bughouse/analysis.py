@@ -38,9 +38,6 @@ from .board import BOARD_NAMES, DualBoard, IllegalMove, board_index, parse_move_
 from .calibration import assumed_offset, evaluate, measure_offset, to_q
 from .engine import HivemindEngine, JointMove, Line, SearchResult, shared
 
-DEFAULT_MOVETIME_MS = 5000
-
-
 @dataclass(frozen=True)
 class Budget:
     """How hard to think. Nodes are reproducible; movetime is wall-clock."""
@@ -52,7 +49,7 @@ class Budget:
     def of(cls, movetime_ms: int | None = None, nodes: int | None = None) -> "Budget":
         if nodes:
             return cls(nodes=int(nodes))
-        return cls(movetime_ms=int(movetime_ms or DEFAULT_MOVETIME_MS))
+        return cls(movetime_ms=int(movetime_ms)) if movetime_ms else cls(nodes=800)
 
     def run(self, engine: HivemindEngine) -> SearchResult:
         return engine.search(movetime_ms=self.movetime_ms, nodes=self.nodes)

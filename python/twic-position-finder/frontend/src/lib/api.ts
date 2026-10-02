@@ -124,6 +124,7 @@ function detailMessage(data: unknown, fallback: string): string {
 }
 
 interface RequestOptions {
+  timeoutMs?: number;
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   body?: unknown;
   token?: string | null;
@@ -139,6 +140,7 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   try {
     res = await fetch(`${API}${path}`, {
       method: opts.method ?? 'GET',
+      signal: opts.timeoutMs ? AbortSignal.timeout(opts.timeoutMs) : undefined,
       headers,
       body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
     });
@@ -296,6 +298,7 @@ export interface BookPosition {
   moves: BookMove[];
   picks: BookPick[];
   expectimax?: BughouseExpectimaxTables;
+  evaluations?: { profile: string; nodes: number; analysis: import('../bughouse/types').Analysis }[];
   /** `computers`: how many computers have analysed it; the first one's scores are shown. */
   meta: { source: string; engine: string; nodes: number; child_nodes: number; created_at: number; computers: number } | null;
 }
@@ -322,7 +325,7 @@ export function bookTicket(fen: string): Promise<{ ticket: string; key: string; 
   return request('/api/bughousedb/ticket', { method: 'POST', body: { fen }, fallback: 'Could not start the analysis.' });
 }
 
-export function bookUpload(body: BookUpload): Promise<{ key: string; moves: number; computers: number }> {
+export function bookUpload(body: BookUpload): Promise<{ key: string; moves: number; computers: number; position?: BookPosition }> {
   return request('/api/bughousedb/position', { method: 'POST', body, fallback: 'Could not upload the analysis.' });
 }
 
@@ -360,4 +363,24 @@ export interface BughouseExpectimax {
 export type BughouseExpectimaxTables = Record<'A' | 'B', BughouseExpectimax | null>;
 export function bughouseExpectimax(fen: string): Promise<BughouseExpectimaxTables> {
   return request(`/api/bughousedb/expectimax?fen=${encodeURIComponent(fen)}`);
+}
+
+// Shared Lab evaluations are distinct from a completed expectimax tree.
+export interface EvaluationSettings {
+  fen: string; team: 'white' | 'black'; required: string; clock: string; nodes: number;
+}
+export function savedEvaluation(settings: EvaluationSettings): Promise<{ analysis: import('../bughouse/types').Analysis | null }> {
+  const query = new URLSearchParams(Object.entries(settings).map(([k, v]) => [k, String(v)]));
+  return request(`/api/bughousedb/evaluation?${query}`, { timeoutMs: 5000 });
+}
+export function evaluationTicket(fen: string): Promise<{ ticket: string }> {
+  return request('/api/bughousedb/evaluation/ticket', { timeoutMs: 10000, method: 'POST', body: { fen } });
+}
+export function uploadEvaluation(settings: EvaluationSettings, ticket: string, result: import('../bughouse/types').Analysis): Promise<{ analysis: import('../bughouse/types').Analysis }> {
+  const raw = (s: import('../bughouse/types').RawEvaluation | null) => s ? {
+    q: s.q, mate: s.mate, nodes: s.nodes, best: s.best?.uci ?? null, pv: s.pv ?? [],
+  } : null;
+  return request('/api/bughousedb/evaluation', { timeoutMs: 10000, method: 'POST', body: {
+    ...settings, ticket, ours: raw(result.raw!.ours), theirs: raw(result.raw!.theirs),
+  } });
 }

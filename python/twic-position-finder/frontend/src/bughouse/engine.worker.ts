@@ -162,7 +162,7 @@ async function request(id: number, action: EngineAction, payload: EnginePayload)
     const text = await engine.ccall('bh_search_nodes', 'string',
       ['string', 'number', 'number', 'number', 'number', 'number'],
       [payload.dual_fen ?? '', team, Number(payload.time_advantage ?? false), 0,
-        payload.nodes ?? 1000, payload.movetime_ms ?? 60000], { async: true });
+        payload.nodes ?? 800, payload.movetime_ms ?? 120000], { async: true });
     const answer: Search = JSON.parse(text as string);
     if (engine.inferenceError) { const error = engine.inferenceError; engine.inferenceError = undefined; throw new Error(error); }
     if (answer.error) throw new Error(answer.error);
@@ -170,8 +170,8 @@ async function request(id: number, action: EngineAction, payload: EnginePayload)
     return answer;
   }
   const search = async (side: number, ahead: boolean, required: number): Promise<Search> => {
-    const text = await engine.ccall('bh_search', 'string', ['string', 'number', 'number', 'number', 'number'],
-      [payload.dual_fen ?? '', side, Number(ahead), required, payload.movetime_ms ?? 1500], { async: true });
+    const text = await engine.ccall('bh_search_nodes', 'string', ['string', 'number', 'number', 'number', 'number', 'number'],
+      [payload.dual_fen ?? '', side, Number(ahead), required, payload.nodes ?? 800, payload.movetime_ms ?? 120000], { async: true });
     const answer: Search = JSON.parse(text);
     if (engine.inferenceError) { const error = engine.inferenceError; engine.inferenceError = undefined; throw new Error(error); }
     return answer;
@@ -191,7 +191,8 @@ async function request(id: number, action: EngineAction, payload: EnginePayload)
   const result: Analysis = { ...ours, advantage: measured ? (ours.q - theirs.q) / 2 : null,
     total_nodes: ours.nodes + (theirs?.nodes ?? 0),
     elapsed_ms: (ours.elapsed_ms ?? 0) + (theirs?.elapsed_ms ?? 0),
-    calibration: { source: measured ? 'measured' : 'unavailable' } };
+    calibration: { source: measured ? 'measured' : 'unavailable' },
+    raw: { ours, theirs: theirs && !theirs.error ? theirs : null } };
   if (analysisCache.size >= 32) analysisCache.delete(analysisCache.keys().next().value!);
   analysisCache.set(cacheKey, result);
   return result;

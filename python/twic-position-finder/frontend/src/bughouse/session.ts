@@ -4,7 +4,7 @@ import type { Colour } from './types';
 export const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1';
 export const START_DUAL = `${START}|${START}`;
 export const SESSION_KEY = 'bughouse-lab-session-v1';
-export interface Settings { team: Colour; required: string; budget: string; clock: string; flipped: boolean }
+export interface Settings { team: Colour; required: string; budget: string; clock: string; flipped: boolean; budgetUnit?: 'nodes' }
 export interface SavedSession { version: 1; line: ReturnType<Lines['snapshot']>; settings: Settings }
 
 /** Treat local storage and shared links as untrusted input; legality is checked by WASM. */
@@ -28,8 +28,9 @@ export function parseSession(text: string): SavedSession {
         line.upto[board] > line.moves.filter((m) => m.board === board).length)
       throw new Error('Invalid saved move cursor.');
   }
+  if (settings.budgetUnit !== 'nodes') { settings.budget = '800'; settings.budgetUnit = 'nodes'; }
   if (!['white', 'black'].includes(settings.team) || !['none', 'A', 'B'].includes(settings.required) ||
-      !['3000', '10000', '30000'].includes(settings.budget) || !['even', 'AB', 'CD'].includes(settings.clock) ||
+      !['800', '3000', '8000'].includes(settings.budget) || !['even', 'AB', 'CD'].includes(settings.clock) ||
       typeof settings.flipped !== 'boolean') throw new Error('Invalid saved settings.');
   return s;
 }

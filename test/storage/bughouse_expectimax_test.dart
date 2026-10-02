@@ -30,6 +30,15 @@ void main() {
       );
       expect(calls, 1);
       expect(known.depth, 9);
+      final reused = await book.evaluate(
+        root,
+        BoardNumber.one,
+        800,
+        'engine1',
+        run,
+      );
+      expect(reused.nodes, 1500);
+      expect(calls, 1);
       await book.evaluate(root, BoardNumber.one, 1500, 'engine2', run);
       expect(calls, 2);
       final played = root.play(BoardNumber.one, 'e2e4')!;

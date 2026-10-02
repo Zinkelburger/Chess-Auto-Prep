@@ -7,7 +7,7 @@ import '../styles/bughouse.css';
 const CHOICES = [
   { name: 'team', label: 'Our team', checked: 0, options: [['white', 'A + B'], ['black', 'C + D']] },
   { name: 'required', label: 'Must move on', checked: 0, options: [['none', 'Either'], ['A', 'Board 1'], ['B', 'Board 2']] },
-  { name: 'budget', label: 'Per team', checked: 0, options: [['3000', '3 s'], ['10000', '10 s'], ['30000', '30 s']] },
+  { name: 'budget', label: 'Nodes per team', checked: 0, options: [['800', '800'], ['3000', '3,000'], ['8000', '8,000']] },
   // Hivemind's only clock inputs are the two diagonals, A vs D and C vs B:
   // the team that is up may choose not to move.
   { name: 'clock', label: 'Time', checked: 1, options: [['AB', 'A + B may sit', 'A + B are up on the diagonal clock, so they can wait rather than move'], ['even', 'Even', 'Neither team is up on the clock: both have to move'], ['CD', 'C + D may sit', 'C + D are up on the diagonal clock, so they can wait rather than move']] },
@@ -75,7 +75,7 @@ const CHOICES = [
       </form>
       </details>
       <p class="bh-links dim">
-        Runs in your browser; nothing is uploaded. ·
+        Runs in your browser. Completed evaluations are shared in BughouseDB. ·
         <a href="/bughouse-engine/hivemind-source.tar.gz">Engine source</a> ·
         <a href="/bughouse-engine/HIVEMIND_LICENSE.txt">Hivemind license</a> ·
         <a href="/bughouse-engine/ONNXRUNTIME_THIRD_PARTY_NOTICES.txt">Runtime notices</a>

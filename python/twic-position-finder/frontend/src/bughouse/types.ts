@@ -8,9 +8,12 @@ export interface Board {
 }
 export interface Position { dual_fen: string; boards: Record<BoardName, Board> }
 export interface JointMove { A: string; B: string; uci: string }
+export interface RawEvaluation { q: number; mate: number | null; nodes: number; best: JointMove | null; pv?: string[] }
 export interface Analysis {
   best: JointMove | null; advantage: number | null; mate: number | null;
   calibration: { source: 'measured' | 'unavailable' | 'pending' };
+  raw?: { ours: RawEvaluation; theirs: RawEvaluation | null };
+  shared?: boolean;
   nodes: number; total_nodes?: number; elapsed_ms?: number; cached?: boolean;
   lines: { best: JointMove | null }[];
 }

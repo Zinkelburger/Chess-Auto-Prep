@@ -33,6 +33,7 @@ import math
 import os
 import re
 import secrets
+import json
 import sqlite3
 import time
 from pathlib import Path
@@ -427,12 +428,17 @@ def read_position(conn: sqlite3.Connection, fen: str, moves: str = "") -> dict:
             picks.append({"clock": p["clock"], "team": p["team"], "best": p["best"], "q": p["q"],
                           "cp": centipawns(p["q"]) if p["mate"] is None else None,
                           "mate": p["mate"], "pv": p["pv"]})
+    evaluations = []
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE name='lab_evaluation'").fetchone():
+        evaluations = [dict(profile=e['profile'], nodes=e['nodes'], analysis=json.loads(e['data']))
+                       for e in conn.execute('SELECT profile,nodes,data FROM lab_evaluation WHERE pos=? AND fen=?',
+                       (key, bughouse_expectimax.canonical(boards)))]
     moves = [{**m, "scores": scores.get((m["board"], m["uci"]))} for m in legal_moves(boards)]
     return {
         "key": str(key), "fen": dual_fen(boards), "found": bool(row),
         "turn": {"A": "white" if boards[0].turn else "black", "B": "white" if boards[1].turn else "black"},
         "teams": [t for t in TEAMS if team_can_move(boards, t)],
-        "moves": moves, "picks": picks,
+        "moves": moves, "picks": picks, "evaluations": evaluations,
         "expectimax": bughouse_expectimax.read(key, bughouse_expectimax.canonical(boards)),
         "meta": None if not row else {
             "source": row["source"], "engine": row["engine"], "nodes": row["nodes"],
@@ -584,7 +590,8 @@ def store_upload(conn: sqlite3.Connection, up: PositionUpload, contributor: str)
             conn.executemany("INSERT INTO pick VALUES(?,?,?,?,?,?,?)", [(key, *p) for p in picks])
             conn.executemany("INSERT INTO move VALUES(?,?,?,?,?,?,?)", [(key, *r) for r in rows])
         computers = conn.execute("SELECT COUNT(*) FROM submission WHERE pos=?", (key,)).fetchone()[0]
-    return {"key": str(key), "moves": len(moves), "computers": computers}
+    return {"key": str(key), "moves": len(moves), "computers": computers,
+            "position": read_position(conn, up.fen)}
 
 
 # ── Owner imports (desktop builder) ───────────────────────────────────

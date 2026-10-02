@@ -29,8 +29,11 @@ custom.play({ board: 'A', colour: 'white', num: 1, uci: 'a7a8n', san: 'a8=N' });
 assert.match(exportBpgn(custom), /\[SetUp "1"\]/);
 assert.match(exportBpgn(custom), /\[FEN "7k\/P7/);
 assert.match(exportBpgn(custom), /1A\. a8=N/);
-const saved: SavedSession = { version: 1, line: line.snapshot(), settings: { team: 'black', required: 'A', budget: '10000', clock: 'CD', flipped: true } };
+const saved: SavedSession = { version: 1, line: line.snapshot(), settings: { team: 'black', required: 'A', budget: '800', budgetUnit: 'nodes', clock: 'CD', flipped: true } };
 assert.deepEqual(parseSession(decodeURIComponent(sessionHash(saved).slice(5))), saved);
+const legacy = structuredClone(saved); delete legacy.settings.budgetUnit; legacy.settings.budget = '10000';
+assert.equal(parseSession(JSON.stringify(legacy)).settings.budget, '800');
+assert.deepEqual(parseSession(JSON.stringify(legacy)).line, saved.line);
 for (const mutate of [
   (s: SavedSession) => { s.line.upto.A = 999; },
   (s: SavedSession) => { s.line.moves[0].san = '\n[Event "injected"]'; },

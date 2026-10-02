@@ -26,6 +26,7 @@ from models import (
 from email_sender import send_verification_email, send_login_email
 from booking import router as booking_router, init_booking_db
 import bughousedb
+import bughouse_evaluation
 
 log = logging.getLogger(__name__)
 
@@ -540,6 +541,35 @@ def bughousedb_upload(up: bughousedb.PositionUpload, request: Request):
     conn = bughousedb.connect()
     try:
         return bughousedb.store_upload(conn, up, bughousedb.contributor_of(request))
+    finally:
+        conn.close()
+
+
+@app.get("/api/bughousedb/evaluation")
+def lab_evaluation(settings: bughouse_evaluation.Settings = Depends()):
+    conn = bughousedb.connect()
+    try:
+        return bughouse_evaluation.read(conn, settings)
+    finally:
+        conn.close()
+
+
+@app.post("/api/bughousedb/evaluation/ticket")
+@limiter.limit("20/minute", key_func=bughousedb.client_ip)
+def lab_evaluation_ticket(req: bughousedb.TicketRequest, request: Request):
+    conn = bughousedb.connect()
+    try:
+        return bughouse_evaluation.ticket(conn, req.fen, bughousedb.contributor_of(request))
+    finally:
+        conn.close()
+
+
+@app.post("/api/bughousedb/evaluation")
+@limiter.limit("20/minute", key_func=bughousedb.client_ip)
+def lab_evaluation_upload(up: bughouse_evaluation.Upload, request: Request):
+    conn = bughousedb.connect()
+    try:
+        return bughouse_evaluation.store(conn, up, bughousedb.contributor_of(request))
     finally:
         conn.close()
 
