@@ -99,5 +99,9 @@ The first full rehearsal also [caught an Intel startup crash](https://github.com
 after the checksum fix. Stockfish 19 stores the Intel network data in the
 arm64 slice of its universal executable ([upstream implementation](https://github.com/official-stockfish/Stockfish/blob/sf_19/src/universal/patch_x86_slice.sh)).
 The app and frameworks may be thinned; the signed Stockfish helper must retain
-both slices. Packaging now preserves that helper and asserts both architectures
-before running the packaged app on its native runner.
+both slices. Signing also repacks those slices: the inspected artifact moved
+the network by 64 KiB without updating the Intel pointer. Packaging now
+preserves the complete helper, rebases that pointer against the signed layout,
+verifies every network byte against the pinned input, then signs again and
+checks that the layout is stable. Both architectures are asserted before
+running the packaged app on its native runner.
