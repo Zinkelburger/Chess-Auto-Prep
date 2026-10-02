@@ -74,8 +74,9 @@ answer-bearing panes start concealed. **Study position**, or **Reveal help and
 study** in an adjacent pane, suspends the lesson and opens a scratch copy of
 its line at the current position. Analysis and Explorer can then be used
 alongside Train, with the normal database choices and resizable pane controls.
-The dedicated trainer's Analysis tab uses the shared engine on that board;
-exploration never edits the repertoire. **Return to training** restores the
+The dedicated trainer's Analysis tab is its only engine surface and uses the
+shared engine on that board; exploration never edits the repertoire.
+**Return to training** restores the
 retained lesson position and conceals answers again. Engine startup failure
 stays in the normal engine controls and does not prevent returning.
 
@@ -101,9 +102,12 @@ The app settings also contain it. New-line and review limits accept
 difficulty myself are optional. Preferences persist in the existing settings file and
 are captured for a sitting, so changing them does not alter an active lesson.
 
-The training home shows learned/total and due counts. Per-line actions read a
-line, open it in Builder, mark it known/untrained or include/exclude it. Bulk
-marking acts on the scope. Mistakes are searchable and open their position.
+The training home shows learned/total and due counts. Its outline offers
+reading and training actions, Learned checkboxes and line pauses. Bulk marking
+acts on the scope. The builder's contextual Train tab also offers opening a
+line in Builder and searchable mistakes. The dedicated trainer's home lists
+mistakes for its current scope without a search field; selecting a mistake
+opens its position.
 
 The four existing Documents files remain the source of truth:
 `repertoire_reviews.csv`, `repertoire_review_history.csv`,
