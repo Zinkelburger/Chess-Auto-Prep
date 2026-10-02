@@ -6,6 +6,9 @@
 // profile, a section rename and a move produce, and the save discipline
 // lints hold on those real traces.
 @TestOn('linux')
+// Every case runs a fault matrix of isolates: four times the default
+// 30 s, for a busy CI runner.
+@Timeout.factor(4)
 library;
 
 import 'dart:convert';

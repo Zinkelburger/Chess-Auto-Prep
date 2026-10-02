@@ -2,7 +2,9 @@
 
 These programs have separate responsibilities; read only the relevant row's
 skill or README. Commands below run from the repo root unless stated otherwise;
-heavy checks/builds use `scripts/ci.sh with -- COMMAND`.
+heavy checks/builds use `scripts/ci.sh with -- COMMAND`. Each job gets its
+own `TMPDIR`, deleted when the job ends, so test leftovers such as the folder
+lock's files cannot fill the shared `/tmp`.
 
 | Area | Responsibility and entrypoint |
 |---|---|

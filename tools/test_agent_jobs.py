@@ -101,6 +101,36 @@ class JobTests(unittest.TestCase):
             self.assertTrue(docs.startswith(directory))
             self.assertTrue(Path(docs).is_dir())
 
+    def test_a_job_temp_folder_holds_everything_and_goes_with_the_job(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(jobs, 'STATE', Path(directory)):
+            with jobs.job_temp({'KEEP': '1'}) as env:
+                temp = Path(env['TMPDIR'])
+                self.assertEqual(env['KEEP'], '1')
+                self.assertTrue(temp.is_relative_to(directory))
+                made = subprocess.check_output(
+                    [sys.executable, '-c', 'import tempfile; print(tempfile.mkdtemp())'],
+                    env=dict(os.environ, **env), text=True).strip()
+                self.assertTrue(Path(made).is_relative_to(temp))
+                locked = temp / 'locked'
+                locked.mkdir()
+                (locked / 'file').write_text('x')
+                locked.chmod(0o500)
+            self.assertFalse(temp.exists())
+
+    def test_a_killed_jobs_temp_folder_is_swept_and_a_running_one_kept(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(jobs, 'STATE', Path(directory)):
+            dead = Path(directory) / f'{jobs.JOB_TEMP_PREFIX}2147483646-1-abc'
+            (dead / 'leftover').mkdir(parents=True)
+            alive = Path(directory) / (f'{jobs.JOB_TEMP_PREFIX}{os.getpid()}-'
+                                       f'{jobs.process_token(os.getpid())}-abc')
+            alive.mkdir()
+            other = Path(directory) / 'slot-0.lock'
+            other.write_text('')
+            jobs.sweep_job_temps()
+            self.assertFalse(dead.exists())
+            self.assertTrue(alive.exists())
+            self.assertTrue(other.exists())
+
     def test_missing_xvfb_fails_without_using_desktop(self):
         with patch.object(jobs, 'xvfb_binary', side_effect=RuntimeError('missing')):
             with self.assertRaisesRegex(RuntimeError, 'missing'):

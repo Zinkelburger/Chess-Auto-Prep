@@ -17,11 +17,11 @@ void main() {
   final problems = <LogEntry>[];
   void collect(LogEntry entry) => problems.add(entry);
 
-  String lockWith({required String assetSha, String source = 'src1'}) =>
+  String lockWith({required String engineSha, String source = 'src1'}) =>
       jsonEncode({
         'stockfish-linux': {
           'source_sha256': source,
-          'output_sha256': assetSha,
+          'payload_sha256': engineSha,
           'url': 'https://example.invalid/sf.tar.gz',
         },
       });
@@ -33,7 +33,7 @@ void main() {
     log.install(collect);
     assets = {
       'tools/assets.lock.json': Uint8List.fromList(
-        utf8.encode(lockWith(assetSha: sha256.convert(compressed).toString())),
+        utf8.encode(lockWith(engineSha: sha256.convert(engine).toString())),
       ),
       'assets/executables/stockfish-linux.gz': compressed,
     };
@@ -88,10 +88,7 @@ void main() {
     await install().locate();
     assets['tools/assets.lock.json'] = Uint8List.fromList(
       utf8.encode(
-        lockWith(
-          assetSha: sha256.convert(compressed).toString(),
-          source: 'src2',
-        ),
+        lockWith(engineSha: sha256.convert(engine).toString(), source: 'src2'),
       ),
     );
     final again = await install().locate() as StockfishReady;
@@ -103,7 +100,7 @@ void main() {
 
   test('a bundle that does not match its checksums is refused', () async {
     assets['tools/assets.lock.json'] = Uint8List.fromList(
-      utf8.encode(lockWith(assetSha: 'not-it')),
+      utf8.encode(lockWith(engineSha: 'not-it')),
     );
     final result = await install().locate();
     expect((result as StockfishMissing).reason, contains('does not match'));
@@ -111,6 +108,19 @@ void main() {
       await Directory(p.join(support.path, 'app')).list().toList(),
       isEmpty,
     );
+  });
+
+  test('the engine is checked, not its gzip container: an asset packed by '
+      "another machine's zlib still installs", () async {
+    final repacked = Uint8List.fromList(GZipCodec(level: 1).encode(engine));
+    expect(
+      '${sha256.convert(repacked)}',
+      isNot('${sha256.convert(compressed)}'),
+      reason: 'the containers differ',
+    );
+    assets['assets/executables/stockfish-linux.gz'] = repacked;
+    final found = await install().locate() as StockfishReady;
+    expect(await File(found.path).readAsBytes(), engine);
   });
 
   test('a build without the engine says what to run', () async {
@@ -128,7 +138,7 @@ void main() {
     final rubbish = Uint8List.fromList(utf8.encode('not a gzip stream'));
     assets['assets/executables/stockfish-linux.gz'] = rubbish;
     assets['tools/assets.lock.json'] = Uint8List.fromList(
-      utf8.encode(lockWith(assetSha: sha256.convert(rubbish).toString())),
+      utf8.encode(lockWith(engineSha: sha256.convert(rubbish).toString())),
     );
     final result = await install().locate();
     expect((result as StockfishMissing).reason, contains('Could not install'));
@@ -145,7 +155,7 @@ void main() {
     assets['assets/executables/stockfish-linux.gz'] = rubbish;
     assets['tools/assets.lock.json'] = Uint8List.fromList(
       utf8.encode(
-        lockWith(assetSha: sha256.convert(rubbish).toString(), source: 'src2'),
+        lockWith(engineSha: sha256.convert(rubbish).toString(), source: 'src2'),
       ),
     );
 
@@ -167,7 +177,7 @@ void main() {
     // Which is what makes the next launch of the good release free again.
     assets['assets/executables/stockfish-linux.gz'] = compressed;
     assets['tools/assets.lock.json'] = Uint8List.fromList(
-      utf8.encode(lockWith(assetSha: sha256.convert(compressed).toString())),
+      utf8.encode(lockWith(engineSha: sha256.convert(engine).toString())),
     );
     reads.clear();
     final back = await install().locate() as StockfishReady;
@@ -178,7 +188,7 @@ void main() {
   test('a bundle whose checksum is wrong keeps the engine too', () async {
     final first = await install().locate() as StockfishReady;
     assets['tools/assets.lock.json'] = Uint8List.fromList(
-      utf8.encode(lockWith(assetSha: 'not-it', source: 'src2')),
+      utf8.encode(lockWith(engineSha: 'not-it', source: 'src2')),
     );
 
     final result = await install().locate() as StockfishReady;
@@ -202,7 +212,7 @@ void main() {
     await app.create(recursive: true);
     await File(p.join(app.path, 'stockfish-linux')).writeAsString('rubbish');
     assets['tools/assets.lock.json'] = Uint8List.fromList(
-      utf8.encode(lockWith(assetSha: 'not-it')),
+      utf8.encode(lockWith(engineSha: 'not-it')),
     );
 
     final result = await install().locate();
@@ -214,7 +224,7 @@ void main() {
     final rubbish = Uint8List.fromList(utf8.encode('not a gzip stream'));
     assets['assets/executables/stockfish-linux.gz'] = rubbish;
     assets['tools/assets.lock.json'] = Uint8List.fromList(
-      utf8.encode(lockWith(assetSha: sha256.convert(rubbish).toString())),
+      utf8.encode(lockWith(engineSha: sha256.convert(rubbish).toString())),
     );
 
     expect(await install().locate(), isA<StockfishMissing>());

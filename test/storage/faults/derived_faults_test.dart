@@ -8,6 +8,9 @@
 // never locks the chapter or changes what the user owns. See
 // fault_matrix.dart and owner_faults.dart for the families.
 @TestOn('linux')
+// Every case runs a fault matrix of isolates: four times the default
+// 30 s, for a busy CI runner.
+@Timeout.factor(4)
 library;
 
 import 'dart:io';

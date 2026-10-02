@@ -138,9 +138,13 @@ final class StockfishInstall {
     final entry = lock is Map ? lock[_lockKey] : null;
     if (entry is! Map) return null;
     final source = entry['source_sha256'];
-    final asset = entry['output_sha256'];
-    if (source is! String || asset is! String) return null;
-    return _Release(key: _lockKey, sourceSha256: source, assetSha256: asset);
+    final payload = entry['payload_sha256'];
+    if (source is! String || payload is! String) return null;
+    return _Release(
+      key: _lockKey,
+      sourceSha256: source,
+      payloadSha256: payload,
+    );
   }
 
   Future<StockfishLocation> _install(
@@ -184,7 +188,7 @@ final class StockfishInstall {
     // name would let one rename the other's half-written file into place.
     final partial = File('$target.$pid.part');
     try {
-      final expected = release.assetSha256;
+      final expected = release.payloadSha256;
       final problem = await Isolate.run(
         () => _unpack(compressed, expected, partial.path),
       );
@@ -243,16 +247,19 @@ final class StockfishInstall {
   }
 }
 
-/// Hashes and inflates 80 MB, so it runs in its own isolate. Returns the
-/// problem, or null; anything else it hits is thrown to [StockfishInstall],
-/// which turns it into a [StockfishMissing]. Writes to [partial], which is
-/// nothing the app runs, so a failure here leaves the installed engine and
-/// its stamp exactly as they were.
+/// Inflates and hashes 80 MB, so it runs in its own isolate. The engine
+/// itself is checked, not its gzip container: the container's bytes depend
+/// on the zlib of whichever machine packed it. Returns the problem, or null;
+/// anything else it hits, such as a stream that is not gzip, is thrown to
+/// [StockfishInstall], which turns it into a [StockfishMissing]. Writes to
+/// [partial], which is nothing the app runs, so a failure here leaves the
+/// installed engine and its stamp exactly as they were.
 String? _unpack(Uint8List compressed, String expectedSha256, String partial) {
-  if (sha256.convert(compressed).toString() != expectedSha256) {
+  final engine = gzip.decode(compressed);
+  if (sha256.convert(engine).toString() != expectedSha256) {
     return 'The bundled Stockfish does not match tools/assets.lock.json';
   }
-  File(partial).writeAsBytesSync(gzip.decode(compressed), flush: true);
+  File(partial).writeAsBytesSync(engine, flush: true);
   return null;
 }
 
@@ -263,7 +270,7 @@ final class _Release {
   const _Release({
     required this.key,
     required this.sourceSha256,
-    required this.assetSha256,
+    required this.payloadSha256,
   });
 
   final String key;
@@ -271,8 +278,8 @@ final class _Release {
   /// SHA-256 of the upstream archive: the release's identity.
   final String sourceSha256;
 
-  /// SHA-256 of the bundled `.gz` asset.
-  final String assetSha256;
+  /// SHA-256 of the engine inside the bundled `.gz` asset.
+  final String payloadSha256;
 
   /// What the `.origin` stamp beside the installed binary says.
   String get identity => '$key:$sourceSha256';
