@@ -20,7 +20,7 @@ final class BughouseBackend {
   static Future<BughouseBackend> start({
     required Future<CrazyaraProcess> Function() crazyara,
     required Future<HivemindStart> Function() hivemind,
-    int nodes = 1500,
+    int nodes = 800,
   }) async {
     final policy = await crazyara();
     try {

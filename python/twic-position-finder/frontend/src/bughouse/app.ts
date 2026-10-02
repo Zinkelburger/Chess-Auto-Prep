@@ -1,4 +1,5 @@
 import { ExpectimaxTables } from './expectimax';
+import { savedEvaluation, evaluationTicket, uploadEvaluation, type EvaluationSettings } from '../lib/api';
 /** Bughouse Lab's UI. Rules and inference remain in one reusable worker. */
 import {
   BOARDS, Boards, LineView, Lines, PIECE_NAMES, SEAT, SetupBoxes, squaresOf,
@@ -33,7 +34,7 @@ function status(text: string, error = false) {
 }
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : 'Something went wrong. Please try again.'; }
 function settings(): Settings {
-  return { team: choice('team') as Colour, required: choice('required'), budget: choice('budget'), clock: choice('clock'), flipped };
+  return { team: choice('team') as Colour, required: choice('required'), budget: choice('budget'), clock: choice('clock'), flipped, budgetUnit: 'nodes' };
 }
 function savedSession(): SavedSession { return { version: 1, line: accepted, settings: settings() }; }
 function persist() {
@@ -67,7 +68,7 @@ function canMove(name: BoardName) {
   return !!board && board.turn === colour && board.legal_moves.length > 0;
 }
 function availability() {
-  el('bh-budget-note').textContent = `About ${Number(choice('budget')) / 500} seconds total. First analysis downloads ~44 MB; later searches reuse the engine.`;
+  el('bh-budget-note').textContent = `${Number(choice('budget')).toLocaleString()} nodes per team, up to two minutes each. First analysis downloads ~44 MB; later searches reuse the engine.`;
   for (const name of BOARDS) {
     const input = document.querySelector<HTMLInputElement>(`input[name="required"][value="${name}"]`)!;
     input.disabled = busy || !canMove(name);
@@ -120,10 +121,15 @@ async function load(): Promise<boolean> {
   try {
     const next = await position();
     state = next; accepted = asked;
+    if (!BOARDS.some(canMove) && BOARDS.some((b) => state!.boards[b].legal_moves.length)) {
+      const nextTeam = choice('team') === 'white' ? 'black' : 'white';
+      document.querySelector<HTMLInputElement>(`input[name="team"][value="${nextTeam}"]`)!.checked = true;
+    }
     void expectimax.load(state.dual_fen);
     boards.deselect(); setup.error(''); clearResult();
     setup.fill(state.dual_fen);
     status('Move on either board, or ask Hivemind for a move.');
+    void restoreEvaluation();
     return true;
   } catch (error) {
     lines.restore(accepted);
@@ -204,20 +210,44 @@ function renderAnalysis(result: Analysis) {
   });
   container.append(table);
   const note = document.createElement('p'); note.className = 'bh-note dim';
-  note.textContent = `${(result.total_nodes ?? result.nodes).toLocaleString()} nodes${result.cached ? ' · saved analysis' : ''}. ${searching ? 'Stop to use these moves now.' : 'Select a row to play it.'} Scores are approximate, not material counts or measured win probabilities.`;
+  note.textContent = `${(result.total_nodes ?? result.nodes).toLocaleString()} nodes${result.shared ? ' · saved in BughouseDB' : result.cached ? ' · saved analysis' : ''}. ${searching ? 'Stop to use these moves now.' : 'Select a row to play it.'} Scores are approximate, not material counts or measured win probabilities.`;
   container.append(note);
+}
+function evaluationSettings(): EvaluationSettings {
+  return { fen: state!.dual_fen, team: choice('team') as Colour, required: choice('required'),
+    clock: choice('clock'), nodes: Number(choice('budget')) };
+}
+async function restoreEvaluation() {
+  if (!state) return;
+  const asked = evaluationSettings();
+  try {
+    const { analysis } = await savedEvaluation(asked);
+    if (analysis && !searching && JSON.stringify(asked) === JSON.stringify(evaluationSettings())) {
+      lastAnalysis = analysis; renderAnalysis(analysis);
+    }
+  } catch { /* Shared cache is optional; local analysis still works offline. */ }
 }
 el('bh-analyse-form').onsubmit = async (event) => {
   event.preventDefault();
   if (busy || !state || !BOARDS.some(canMove)) return;
+  const asked = evaluationSettings();
   searching = true; lock(true); clearResult();
   status('Hivemind is comparing both teams…');
   try {
     lastAnalysis = await engine.request<Analysis>('analyse', {
-      dual_fen: state.dual_fen, team: choice('team'), ...clockBits(),
-      require_move_on: choice('required'), movetime_ms: Number(choice('budget')),
+      dual_fen: asked.fen, team: asked.team, ...clockBits(),
+      require_move_on: asked.required, nodes: asked.nodes,
     }, (partial) => { lastAnalysis = partial; renderAnalysis(partial); });
-    status(lastAnalysis.cached ? 'Using analysis saved in this tab.' : 'Analysis complete. Select a move below.');
+    renderAnalysis(lastAnalysis);
+    try {
+      status('Analysis complete · saving to BughouseDB…');
+      const { ticket } = await evaluationTicket(asked.fen);
+      const stored = await uploadEvaluation(asked, ticket, lastAnalysis);
+      lastAnalysis = stored.analysis;
+      status('Saved to BughouseDB. Select a move below.');
+    } catch (error) {
+      status(`Analysis ready; not saved: ${errorMessage(error)} Analyze again to retry using the cached result.`, true);
+    }
   } catch (error) { const message = errorMessage(error); status(message, !message.includes('cancelled')); }
   finally { searching = false; lock(false); if (lastAnalysis) renderAnalysis(lastAnalysis); }
 };
@@ -238,7 +268,7 @@ el('bh-edit').onclick = () => {
 el('bh-promotion-cancel').onclick = () => promotion.close();
 promotion.addEventListener('close', () => { boards.deselect(); boards.render(); });
 for (const input of document.querySelectorAll<HTMLInputElement>('#bh-analyse-form input')) {
-  input.addEventListener('change', () => { boards.deselect(); clearResult(); render(); persist(); });
+  input.addEventListener('change', () => { boards.deselect(); clearResult(); render(); persist(); void restoreEvaluation(); });
 }
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') boards.deselect(); });
 

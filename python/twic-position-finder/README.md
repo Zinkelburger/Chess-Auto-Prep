@@ -140,7 +140,10 @@ clock has; the tables show one column for the case picked above them —
 `both`, is never offered: no clock gives both teams the choice, and it lands
 within about a tenth of a pawn of `equal`. `bughousedb.py` owns it, in its
 own SQLite file (`BUGHOUSEDB_PATH`, default `bughousedb.db` beside the app).
-The server runs no engine:
+The server runs no engine. Lab evaluations also live in this database, in
+`lab_evaluation`, with one-time `lab_ticket` uploads. See the
+[shared analysis and overnight controls](frontend/README.md#shared-analysis-and-manual-overnight-population).
+The browser defaults to 800 nodes and renders saved results without a reload:
 
 - `GET /api/bughousedb/position?fen=&moves=` — the position after `moves`
   (optional, board-tagged UCI such as `A:e2e4 B:P@e6`), its legal moves (SAN,

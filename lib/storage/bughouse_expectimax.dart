@@ -47,7 +47,7 @@ final class BughouseExpectimaxBook {
       budget,
     ];
     final found = _db.select(
-      'SELECT value,best,nodes,depth FROM evaluation WHERE fen=? AND board=? AND engine=? AND budget=?',
+      'SELECT value,best,nodes,depth FROM evaluation WHERE fen=? AND board=? AND engine=? AND budget>=? ORDER BY budget DESC LIMIT 1',
       args,
     );
     if (found.isNotEmpty) {

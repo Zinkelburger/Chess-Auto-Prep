@@ -28,7 +28,7 @@ final class BughouseExpectimaxSearch extends ChangeNotifier {
   String _position = '';
   BoardNumber board = BoardNumber.one;
   int plies = 2;
-  int nodes = 1500;
+  int nodes = 800;
   bool running = false;
   bool complete = false;
   bool _disposed = false;

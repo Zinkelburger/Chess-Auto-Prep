@@ -19,7 +19,7 @@ typedef BughouseValue =
 final class BughouseSearchOptions {
   const BughouseSearchOptions({
     this.plies = 2,
-    this.nodes = 1500,
+    this.nodes = 800,
     this.maxPositions = 10000,
   });
   final int plies;

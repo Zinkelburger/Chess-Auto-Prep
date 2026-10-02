@@ -1,8 +1,10 @@
 # Static Bughouse Lab
 
 `/bughouse` runs **entirely in the visitor's browser**. Cloudflare Pages only
-serves static files. There is no analysis API, paid compute service, Pages
-Function, R2 bucket, database or account. Positions are never uploaded.
+serves static files. The API stores completed position evaluations; it runs no engine. No account
+is needed. Analyze shares the position and raw results with BughouseDB.
+The server validates moves and derives the displayed evaluation. A failed
+upload leaves the result available and can be retried without searching again.
 
 The page supports both boards, captures sent to the partner's reserve, legal
 drops (click or drag), promotions, board flipping, a move list and step
@@ -89,7 +91,7 @@ can be reopened offline: there is no page-caching service worker.
 
 * `bridge.cc`: validated position/SAN/UCI interface and bounded MCTS searches.
   It uses the existing `Board`, `SearchThread` and `Node` implementations.
-  `bh_search` is the Lab's time-bounded search (10,000-node cap).
+  `bh_search` remains available for explicit time-bounded callers.
   `bh_search_nodes(fen, team, timeAdvantage, required, nodes, millisCap)`
   stops at a node budget (up to 100,000) or time cap (up to 120 s) and adds
   a `pv` in the native UCI format (`"(d2d4,pass)"`). Its `q` is the value
@@ -107,23 +109,26 @@ can be reopened offline: there is no page-caching service worker.
 The frontend's `engine.worker.ts` loads the module, prepares the model, feeds
 74×8×8 input tensors to the same network, and copies value, policy, WDL and
 moves-left outputs back to the C++ search. It yields between evaluations so
-Stop can be processed. All HTTP traffic is static GETs; move/analysis
-requests are local worker messages.
+Stop can be processed. Engine inference requests are local worker messages. Shared evaluations use
+GET/POST `/api/bughousedb/evaluation` and one-time upload tickets.
 
-The web search uses batch size one, one worker and a 10,000-node cap. It
+The web search uses batch size one and one worker. It
 shares the engine's MCTS and terminal logic, but does not run the desktop
 agent's separate root mate-search helper, background pondering or shared
 transposition table. Results and speed can differ from the native app;
-search strength depends on the visitor's device and chosen time budget.
-The UI offers 3, 10 or 30 seconds per team, plus model initialization time.
+search strength depends on the node allowance and the time cap.
+The UI defaults to 800 nodes per team (3,000 and 8,000 are optional), with a
+two-minute safety cap per search. The shared API rejects an unfinished node
+budget unless the engine returned a mate proof. Old time-budget settings
+migrate to 800 nodes while retaining the played line.
 Stop finishes the current inference rather than terminating the worker and
 throwing away the loaded model. The same worker and inference session survive
 moves, setup changes, New game, repeated searches and Stop. A bounded cache
 keeps the last 32 completed analyses for the exact position/settings/budget;
 returning to one does not search or download again. Suggestions appear after
 the first search while the second calibrates the score; stopping at that point
-keeps the suggestions. The UI labels the time as **per team** and explains
-the approximate total.
+keeps the suggestions. The UI labels nodes **per team** and explains the time cap. When a move leaves
+the selected team with no legal move, the Lab selects the other team.
 
 A full page reload necessarily recreates worker memory and the inference
 session, but verified model chunks are read from Cache Storage when available.
@@ -131,11 +136,14 @@ Private mode, storage eviction or quota limits can require another download.
 Stop aborts an active manifest/model transfer, completed chunks remain cached,
 and transfers have timeouts. Inference tensors are disposed even on errors.
 Long played lines are replayed in batches within the WASM parser's 256-move
-limit; the compiled rules and engine port are unchanged.
+limit.
 
 Advantage is `(q_ours - q_theirs) / 2`, using two searches at the same budget.
-It is displayed only when both teams have usable evaluations; otherwise the
-page shows suggestions without an estimate. Raw Hivemind values are not
+When the other team has no legal turn on either board, `bh_values` evaluates
+both static seats and the score is `clamp(q_ours - (v_ours + v_theirs) / 2, -1, 1)`,
+matching native static-offset calibration. This fallback needs two extra
+inferences, not another search. The API checks that the other team cannot move
+before accepting it; saved results retain their calibration source and shortlist. Raw Hivemind values are not
 Stockfish pawn scores or measured win probabilities. With no live clocks,
 having no legal move does not automatically declare the match over: a
 partner may still deliver a rescue piece.
@@ -179,12 +187,12 @@ python-chess bughouse model, including en passant, castling, every promotion,
 promoted captures and invalid input recovery. It needs the development
 `python-chess` dependency, already used by the bughouse MCP server.
 
-The browser check uses a **plain Python static file server**, Chrome via the
+The browser check uses a temporary FastAPI/SQLite book plus a static file server, Chrome via the
 existing `puppeteer-core` dependency (`CHROME_BIN` selects the executable),
 and the real WASM engine/neural model. It tests moves, cross-board capture
 and drops, per-board stepping, promotion, invalid input, real recommendations/play,
 download failure/retry, cancellation/recovery, phone layout and analysis with all networking off.
-It fails if the page makes an API request or sends any POST. The server and
+Shared API checks must use an isolated database, never the public book. The server and
 browser are closed afterward. Screenshots go to ignored
 `build/bughouse-web/` for visual inspection.
 

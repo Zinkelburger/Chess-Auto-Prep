@@ -24,7 +24,7 @@ npm run test:bughouse  # state, export, persistence and worker lifecycle regress
 
 Environment (build-time): `PUBLIC_API_URL` (default `https://api.chessautoprep.com`),
 `PUBLIC_TURNSTILE_SITE_KEY` (empty disables the CAPTCHA widget).
-Bughouse needs no API URL, Worker binding or server. Its C++ engine runs as
+Bughouse inference needs no server; shared evaluations use PUBLIC_API_URL. Its C++ engine runs as
 WebAssembly in a browser worker and ONNX Runtime Web runs the neural network
 locally. `npm run build` prepares checksum-pinned model chunks and the ONNX
 runtime automatically; all files fit Cloudflare Pages' 25 MiB asset limit.
@@ -117,3 +117,33 @@ records to `/api/bughousedb/expectimax/import` with the existing admin API key.
 Saved expectimax requires the API; the existing in-browser Hivemind analysis
 continues to work without it. Set `PUBLIC_API_URL=https://api.chessautoprep.com`
 when building for the public site.
+
+## Shared analysis and manual overnight population
+
+Both browser entry points and desktop bulk analysis default to 800 Hivemind
+nodes. Lab Analyze submits raw two-seat searches to `/api/bughousedb/evaluation`
+using `/evaluation/ticket`; the server derives the calibrated value, validates
+legal moves and budget completion, and preserves a deeper result. Exact
+position/team/required-board/clock profiles stay separate. Saved results load
+on navigation. A single position evaluation is not an expectimax tree.
+BughouseDB's move-table upload returns the stored position, which renders
+immediately; a failed upload keeps its payload for Retry save.
+
+From the repository root, manually start a resumable, eight-core overnight run:
+
+```sh
+python3 tools/bughouse_db/overnight.py start --hours 8 --cores 8
+python3 tools/bughouse_db/overnight.py status
+python3 tools/bughouse_db/overnight.py stop
+```
+
+This creates one bounded systemd user service, not a timer. It queues up to
+10,000 popular FICS positions, prioritizes positions contributed from the Lab,
+then runs the existing clock-free two-ply builder at 800 nodes. It retains
+Hivemind's best move plus the top four CrazyAra probabilities above 1%, saves
+both colour columns, reuses deeper compatible evaluations, and publishes
+completed tables every five minutes. Interrupted work resumes on the next
+start; failed jobs are retried once per new run. Defaults use the owner's
+`twic-vps` SSH alias and existing website database paths; `--local-only`
+disables remote reads/writes. `--help` lists path, worker and budget overrides.
+No population job starts merely by updating or opening the app.

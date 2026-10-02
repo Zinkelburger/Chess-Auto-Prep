@@ -35,12 +35,16 @@ jobs:
     needs: prepare
     uses: ./.github/workflows/ci.yml
 
+  advisory:
+    needs: prepare
+    uses: ./.github/workflows/release-advisory.yml
+
   bughouse-gate:
     needs: prepare
     uses: ./.github/workflows/bughouse.yml
 
   # Build alongside tests so platform packaging errors appear in the same run.
-  # The release job still requires every gate before anything can publish.
+  # The release job requires the behavioral/build gates, not advisory checks.
   build-linux:
     needs: prepare
     runs-on: ubuntu-22.04
@@ -352,7 +356,8 @@ jobs:
             echo "Version: $RELEASE_TAG"
             echo "Commit: $GITHUB_SHA"
             echo
-            echo 'All platform builds and release gates passed; all nine downloads have checksums.'
+            echo 'All required platform builds and release gates passed; all nine downloads have checksums.'
+            echo 'Formatting, agent-rule consistency and Windows/macOS crash recovery are advisory; see their separate jobs.'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create GitHub Release
