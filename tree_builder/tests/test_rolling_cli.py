@@ -49,3 +49,62 @@ for method in ('pure', 'fast'):
             assert abs(sum(reply['move_probability'] for reply in replies) - 1) < 1e-12
             assert all(reply.get('total_games', 0) == 0 for reply in replies)
         print(f'{method}: real Maia policy normalized, legacy master/Lichess flags ignored.')
+
+# The app's reply cut (lib/workspace/fill_states.dart: fillReplyMass,
+# fillMaxReplies), as the chess-prep MCP passes it.
+def opponent_nodes(node, white):
+    stm_white = ' w ' in node['fen']
+    if stm_white != white and node.get('children'):
+        yield node
+    for child in node.get('children', []):
+        yield from opponent_nodes(child, white)
+
+
+for method in ('pure', 'fast'):
+    with tempfile.TemporaryDirectory(prefix='reply-cut-cli-') as temp:
+        base = Path(temp) / 'tree'
+        command = [str(root / 'bin/tree_builder'), '--search', method,
+                   '-S', str(root / 'tests/fake_uci.py'), '-d', '2', '-e', '2', '-t', '1',
+                   '-c', 'w', '-f', '8/8/8/8/8/4k3/P7/4K3 w - - 0 1',
+                   '--max-eval-loss', '20000']
+        cut = ['--reply-mass', '0.9', '--max-replies', '5']
+        run = subprocess.run(command + cut + [str(base)], cwd=root, capture_output=True,
+                             text=True, timeout=30)
+        assert run.returncode == 0, run.stdout + run.stderr
+        data = json.loads(Path(str(base) + '.tree.json').read_text())
+        assert data['build_complete']
+        assert data['config']['v2_reply_mass'] == 0.9
+        assert data['config']['v2_max_replies'] == 5
+        nodes = list(opponent_nodes(data['tree'], True))
+        assert nodes
+        for node in nodes:
+            shares = [reply['move_probability'] for reply in node['children']]
+            assert 1 <= len(shares) <= 5
+            assert abs(sum(shares) - 1) < 1e-12
+        # Without flags a saved tree goes on with its own cut; another cut,
+        # including none, is refused rather than mixed into it.
+        deeper = list(command)
+        deeper[deeper.index('-d') + 1] = '3'
+        run = subprocess.run(command + ['--reply-mass', '0', str(base)], cwd=root,
+                             capture_output=True, text=True, timeout=30)
+        assert run.returncode != 0 and 'reply cut' in run.stderr, run.stdout + run.stderr
+        run = subprocess.run(deeper + [str(base)], cwd=root, capture_output=True, text=True,
+                             timeout=60)
+        assert run.returncode == 0, run.stdout + run.stderr
+        data = json.loads(Path(str(base) + '.tree.json').read_text())
+        assert data['config']['v2_reply_mass'] == 0.9 and data['config']['max_depth'] == 3
+        # A tree saved before the cut keeps every reply when continued.
+        old = Path(temp) / 'old'
+        run = subprocess.run(command + [str(old)], cwd=root, capture_output=True, text=True,
+                             timeout=30)
+        assert run.returncode == 0, run.stdout + run.stderr
+        run = subprocess.run(command + cut + [str(old)], cwd=root, capture_output=True,
+                             text=True, timeout=30)
+        assert run.returncode != 0 and 'reply cut' in run.stderr, run.stdout + run.stderr
+        run = subprocess.run(deeper + [str(old)], cwd=root, capture_output=True, text=True,
+                             timeout=60)
+        assert run.returncode == 0, run.stdout + run.stderr
+        data = json.loads(Path(str(old) + '.tree.json').read_text())
+        assert 'v2_reply_mass' not in data['config'] and data['config']['max_depth'] == 3
+        assert any(len(node['children']) > 5 for node in opponent_nodes(data['tree'], True))
+        print(f'{method}: reply cut kept, renormalized, recorded and enforced on resume.')

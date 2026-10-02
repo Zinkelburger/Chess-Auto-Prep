@@ -114,10 +114,14 @@ void main() {
           fallback: model,
           fallbackUnder: 10,
         );
-        final fromGames = _shares(await opponent.policyFor(afterE4), afterE4)!;
+        final games = await opponent.policyFor(afterE4);
+        expect((games as PolicyFound).from, RepliesFrom.games);
+        final fromGames = _shares(games, afterE4)!;
         expect(fromGames, {'e8d8': 0.7, 'e8f7': 0.3});
         expect(model.asked, isEmpty);
-        final fromMaia = _shares(await opponent.policyFor(afterE3), afterE3)!;
+        final maia = await opponent.policyFor(afterE3);
+        expect((maia as PolicyFound).from, RepliesFrom.maia);
+        final fromMaia = _shares(maia, afterE3)!;
         expect(model.asked, [afterE3.fen]);
         expect(fromMaia.keys, isNot(contains('e8e7')), reason: 'not blended');
         expect(

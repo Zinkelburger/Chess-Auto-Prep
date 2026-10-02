@@ -232,6 +232,107 @@ class ArgvTest(unittest.TestCase):
         self.assertEqual(argv[argv.index("-n") + 1], "London")
 
 
+class ReplyCutTest(unittest.TestCase):
+    """The opponent's replies are cut as the app's Expectimax cuts them."""
+
+    def _chain(self) -> dict:
+        return ArgvTest._chain(self)
+
+    def test_the_cut_matches_the_apps_constants(self):
+        dart = (ex.REPO_ROOT / "lib" / "workspace" / "fill_states.dart").read_text(
+            encoding="utf-8"
+        )
+        import re
+
+        mass = re.search(r"const fillReplyMass = ([0-9.]+);", dart)
+        most = re.search(r"const fillMaxReplies = ([0-9]+);", dart)
+        self.assertIsNotNone(mass, "fillReplyMass moved; update APP_REPLY_MASS's source")
+        self.assertIsNotNone(most, "fillMaxReplies moved; update APP_MAX_REPLIES's source")
+        self.assertEqual(float(mass.group(1)), ex.chapters.APP_REPLY_MASS)
+        self.assertEqual(int(most.group(1)), ex.chapters.APP_MAX_REPLIES)
+
+    def test_every_new_build_cuts_the_replies(self):
+        for search in ("pure", "fast"):
+            argv = ex.builder_argv(
+                self._chain(), Path("/x"), ex.resolve_position(LONDON), {"search": search}
+            )
+            self.assertEqual(argv[argv.index("--reply-mass") + 1], "0.9")
+            self.assertEqual(argv[argv.index("--max-replies") + 1], "5")
+            self.assertEqual(argv[-1], "/x")
+            self.assertEqual(
+                ex.reply_cut_of_argv(argv), "likeliest to 90%, at most 5, renormalized"
+            )
+
+    def test_a_tree_that_kept_every_reply_continues_without_the_cut(self):
+        argv = ex.builder_argv(
+            self._chain(), Path("/x"), ex.resolve_position(LONDON),
+            {"reply_mass": 0, "max_replies": 0},
+        )
+        self.assertNotIn("--reply-mass", argv)
+        self.assertNotIn("--max-replies", argv)
+        # A run started before the cut resumes on its stored command line,
+        # which has no cut flags; deepening it adds none.
+        old = ["/bin/tree_builder", "-c", "b", "-d", "4", "--maia-only", "/runs/x/tree"]
+        for out in (ex.argv_with_plies(old, 6), ex.argv_with_threads(old, 2)):
+            self.assertNotIn("--reply-mass", out)
+            self.assertNotIn("--max-replies", out)
+        self.assertEqual(ex.reply_cut_of_argv(old), "every reply")
+
+    def test_a_caller_cannot_change_the_cut(self):
+        registry = Registry()
+        started = []
+
+        def popen(command, **_kwargs):
+            started.append(command)
+            raise OSError("no build in a test")
+
+        try:
+            with tempfile.TemporaryDirectory() as runs, mock.patch.dict(
+                os.environ, {"CHESS_PREP_EXPECTIMAX_DIR": runs}
+            ), mock.patch.object(
+                ex, "prepare_toolchain",
+                return_value=dict(self._chain(), env={}, built_now=False),
+            ), mock.patch.object(ex.subprocess, "Popen", side_effect=popen):
+                with self.assertRaises(ToolError):
+                    registry.call(
+                        "expectimax_run",
+                        {"moves": LONDON, "reply_mass": 0.5, "max_replies": 9},
+                    )
+            schema = registry.tools["expectimax_run"]["inputSchema"]["properties"]
+        finally:
+            registry.close()
+        (argv,) = started
+        self.assertEqual(argv[argv.index("--reply-mass") + 1], "0.9")
+        self.assertEqual(argv[argv.index("--max-replies") + 1], "5")
+        self.assertNotIn("reply_mass", schema)
+        self.assertNotIn("max_replies", schema)
+
+    def test_a_seed_continues_with_the_cut_it_records(self):
+        cut = _saved(LONDON_FEN)
+        cut["config"].update(v2_reply_mass=0.9, v2_max_replies=5)
+        _, settings = ex.chapters.seed_document(cut, None)
+        self.assertEqual((settings["reply_mass"], settings["max_replies"]), (0.9, 5))
+        _, settings = ex.chapters.seed_document(_saved(LONDON_FEN), None)
+        self.assertEqual((settings["reply_mass"], settings["max_replies"]), (0, 0))
+        odd = _saved(LONDON_FEN)
+        odd["config"].update(v2_reply_mass=1.5, v2_max_replies=0)
+        self.assertEqual(ex.chapters.reply_cut(odd["config"]), (None, None))
+
+    def test_saved_trees_say_how_replies_were_cut(self):
+        with tempfile.TemporaryDirectory() as root:
+            chapter = Path(root) / "Main.pgn"
+            chapter.write_text("// Color: Black\n", encoding="utf-8")
+            for run, extra in (("v2-old", {}), ("v2-new", {"v2_reply_mass": 0.9, "v2_max_replies": 5})):
+                doc = _saved(LONDON_FEN)
+                doc["config"].update(extra)
+                folder = ex.chapters.trees_dir(chapter) / run
+                folder.mkdir(parents=True)
+                (folder / "tree.json").write_text(json.dumps(doc), encoding="utf-8")
+            rows = {r["run"]: r["replies"] for r in ex.chapters.saved_trees(chapter)}
+        self.assertEqual(rows["v2-old"], "every reply")
+        self.assertEqual(rows["v2-new"], "likeliest to 90%, at most 5, renormalized")
+
+
 class ArgvReuseTest(unittest.TestCase):
     """Resuming re-runs the original command line rather than `--resume`.
 

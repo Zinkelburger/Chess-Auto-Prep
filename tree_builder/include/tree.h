@@ -221,6 +221,15 @@ typedef struct TreeConfig {
     int opp_max_children;           /* Hard cap on opponent responses (0 = unlimited) */
     double opp_mass_target;         /* Covered-mass target at every depth */
 
+    /* Pure/Fast reply cut (the app's `likeliestReplies`): at each opponent
+     * position keep Maia's likeliest replies until they cover reply_mass
+     * of its distribution, at most max_replies, and renormalize the kept
+     * shares to sum to one.  0 for both keeps every positive-probability
+     * reply (the default).  Saved as v2_reply_mass / v2_max_replies; a
+     * Pure resume requires the cut the tree was built with. */
+    double reply_mass;
+    int max_replies;
+
     /* Eval window pruning — stop exploring outside this range */
     int min_eval_cp;                /* Prune if our eval drops below this */
     int max_eval_cp;                /* Prune if our eval exceeds this (already won) */

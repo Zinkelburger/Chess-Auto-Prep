@@ -85,6 +85,39 @@ static bool policy(TreeNode *node, const TreeConfig *cfg,
         p[i] /= mass;
     return true;
 }
+typedef struct {
+    double p;
+    const char *uci;
+    int index;
+} RankedReply;
+static int ranked_reply_order(const void *a, const void *b) {
+    const RankedReply *x = a, *y = b;
+    if (x->p != y->p)
+        return x->p > y->p ? -1 : 1;
+    return strcmp(x->uci, y->uci);
+}
+int pure_cut_replies(const PureMove *moves, int n, double *p, double mass, int most) {
+    RankedReply ranked[PURE_MAX_MOVES];
+    int count = 0;
+    for (int i = 0; i < n && i < PURE_MAX_MOVES; i++)
+        if (p[i] > 0)
+            ranked[count++] = (RankedReply){p[i], moves[i].uci, i};
+    if (!(mass > 0) && most <= 0)
+        return count;
+    qsort(ranked, (size_t)count, sizeof(*ranked), ranked_reply_order);
+    int kept = 0;
+    double covered = 0;
+    while (kept < count) {
+        if (kept > 0 && ((most > 0 && kept >= most) || (mass > 0 && covered >= mass - 1e-12)))
+            break;
+        covered += ranked[kept++].p;
+    }
+    for (int i = 0; i < n; i++)
+        p[i] = 0;
+    for (int k = 0; k < kept; k++)
+        p[ranked[k].index] = ranked[k].p / covered;
+    return kept;
+}
 static bool search_window(Tree *, TreeNode *, const TreeConfig *, LichessExplorer *, int);
 static bool rolling_build(Tree *, const TreeConfig *, LichessExplorer *);
 
@@ -114,6 +147,18 @@ bool pure_tree_build(Tree *tree, const char *fen, const TreeConfig *cfg,
          tree->config.max_depth > cfg->max_depth || strcmp(tree->root->fen, fen) != 0)) {
         fprintf(stderr,
                 "Pure resume requires the same position and model; horizon may only increase.\n");
+        return false;
+    }
+    /* A tree's opponent positions were cut (or not) as it records; going on
+     * with another cut would mix two policies in one tree. */
+    if (tree->root && tree->root->children_count &&
+        (tree->config.reply_mass != cfg->reply_mass ||
+         tree->config.max_replies != cfg->max_replies)) {
+        fprintf(stderr,
+                "Pure resume requires the reply cut the tree was built with "
+                "(saved: mass %g, at most %d; asked: mass %g, at most %d; 0 = none).\n",
+                tree->config.reply_mass, tree->config.max_replies, cfg->reply_mass,
+                cfg->max_replies);
         return false;
     }
     engine_pool_set_depth(cfg->engine_pool, cfg->eval_depth);
@@ -195,6 +240,8 @@ static bool search_window(Tree *tree, TreeNode *root, const TreeConfig *cfg,
                 ok = false;
                 break;
             }
+            if (!ours)
+                pure_cut_replies(moves, n, probs, cfg->reply_mass, cfg->max_replies);
             int count = 0;
             for (int i = 0; i < n; i++)
                 if (ours || probs[i] > 0)
