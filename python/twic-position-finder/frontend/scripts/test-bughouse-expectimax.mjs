@@ -36,6 +36,7 @@ try {
   await page.evaluateOnNewDocument(() => localStorage.clear());
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
+  page.on('requestfailed', request => console.error('Request failed:', request.url(), request.failure()?.errorText));
   await page.setRequestInterception(true);
   page.on('request', request => {
     const url = new URL(request.url());
@@ -48,7 +49,7 @@ try {
       await page.setViewport({ width, height, deviceScaleFactor: 1 });
       await page.goto(`http://127.0.0.1:18764/${route}/`, { waitUntil: 'networkidle0' });
       try { await page.waitForSelector('.bh-expectimax-table tbody tr'); } catch (error) {
-        console.error(route, device, await page.$eval('.bh-expectimax', x => x.textContent), errors);
+        console.error(route, device, await page.$eval('body', x => x.innerText), errors);
         throw error;
       }
       assert.equal(await page.$$eval('.bh-expectimax-table', x => x.length), 2);
