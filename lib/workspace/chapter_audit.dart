@@ -306,7 +306,7 @@ final class ChapterAudit extends ChangeNotifier {
       final judged = await _judge(run, position);
       if (_disposed || ticket != _ticket) return;
       if (judged == null) {
-        _set(AuditFailed(run.failure ?? 'Stockfish could not start.'));
+        _set(AuditFailed(run.failure ?? 'The engine could not start.'));
         return;
       }
       _found = [..._found, ...judged.found]..sort(byReach);
