@@ -94,3 +94,26 @@ BPGN download and Copy link. Its worker retains Hivemind between analyses and
 Stop; model chunks survive reload when browser storage is available. See the
 [static Bughouse guide](../../../tools/bughouse_web/README.md) for the export
 format, cache boundaries and real-engine browser verification command.
+
+## Bughouse expectimax
+
+The lab and BughouseDB display saved `Exp White` and `Exp Black` tables from
+`GET /api/bughousedb/expectimax?fen=<dual FEN>` (also included in `/position`).
+Both are White's perspective on the selected board. CrazyAra probabilities are
+an FICS-calibrated proxy for human moves, not a human-trained model. Each tree
+retains Hivemind's best move plus the top four probabilities strictly above 1%.
+No clocks or sitting enter the tree; captures still transfer to the partner.
+
+The shared desktop builder lives in `tools/bughouse_db/expectimax.py`; see
+[the algorithm](../../../docs/ALGORITHM.md#bughouse-expectimax). The API reads
+`BUGHOUSE_EXPECTIMAX_PATH` (default `bughouse_expectimax.db` beside the server).
+The builder's `run --publish-to SSH_HOST --publish-path /absolute/book.db`
+publishes completed snapshots every five minutes by transactional SQLite merge.
+An interrupted build preserves each engine evaluation locally. Only completed
+trees are published, and old profiles remain available. `publish` also runs one
+sync immediately. Alternatively, POST batches of up to 20 `{fen,board,data}`
+records to `/api/bughousedb/expectimax/import` with the existing admin API key.
+
+Saved expectimax requires the API; the existing in-browser Hivemind analysis
+continues to work without it. Set `PUBLIC_API_URL=https://api.chessautoprep.com`
+when building for the public site.

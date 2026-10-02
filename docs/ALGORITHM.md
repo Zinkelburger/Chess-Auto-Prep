@@ -257,3 +257,91 @@ the root was shortlisted (no `v2_root_moves`) are refused; start a new search.
 Raising Root moves, or starting from a deeper node of an earlier search, evaluates
 only the root moves that are missing and keeps the work below the others. Engine evaluations continue to use the shared
 persistent cache independently of these in-memory search roots.
+
+## Bughouse expectimax
+
+Bughouse Lab's Expectimax tab and the website's `/bughouse` and `/bughousedb`
+views share `bughouse_expectimax.db`. This is a single-board approximation:
+ordinary moves and drops alternate on the selected board; captures feed the
+partner's pocket, but no partner moves, clocks or sitting are expanded.
+
+`chess/bughouse/expectimax.dart` computes both prepared colours in one tree.
+All stored numbers are Q from White's side on the selected board. At a White
+turn, White expectimax takes the maximum and Black expectimax averages the
+children; at a Black turn, Black takes the minimum and White averages. Thus
+White/Black columns are different decision models, not complements. The normal
+repertoire builder already shows both columns in Practical mode; its deliberate
+Mainline mode remains a single-side book.
+
+At each node, retain Hivemind's best legal move plus the four highest CrazyAra
+probabilities **strictly above 1%**, deduplicated. Only Hivemind's best move may
+survive below that floor. Chance nodes use the original probabilities; omitted
+mass retains the current searched evaluation. Coverage is stored and shown, so
+this approximation never silently pretends the selected replies exhaust the
+human distribution. Root rankings use the mover's prepared-colour value. This
+is a candidate search, not a proof that every excluded move is worse.
+
+CrazyAra 1.0.5 / OS-96 v1.0 supplies the legal root Policy column, with search
+noise disabled, temperature 1, then legal normalization and FICS-fitted
+postprocessing temperature 1.5. Diagnostic probabilities rounded to zero get a
+1e-8 floor before this adjustment. This self-play model is an approximate human
+policy: the held-out FICS experiment predicted 47.9% of moves; calibration does
+not make its probabilities exact for every position or rating.
+
+Hivemind searches each evaluated position (desktop default 1,500 nodes; overnight
+builder default 3,000), with TimeAdvantage false and RequireMoveOn set to the
+selected board. Since the opposite team can have neither board on move, its
+searched value is not always available. The evaluator measures the position's
+offset from both teams' static `policy` values, then subtracts that offset from
+the selected mover's searched Q. This is approximate static-seat calibration,
+not a claim that MCTS and static offsets are identical. Actual nodes and depth
+are saved. Checkmate on either board is terminal under this no-waiting model.
+Values are averaged in Q, then displayed on the existing Hivemind scale; they
+are not pawns or empirically calibrated winning percentages.
+
+The storage owner checkpoints every engine evaluation, keyed by full dual
+position, selected board, binary/network hashes and node budget. Complete root
+trees are stored separately, versioned by policy/search method, plies and node
+budget. A partial or interrupted root is never published as complete. Both the
+interactive lab and `tools/build_bughouse_expectimax.dart` use this same search
+and cache. The lab stops on position changes or leaving the mode; completed
+snapshots survive app restarts.
+
+### Install and build the book
+
+The optional CrazyAra installer currently supports Linux x86-64. It verifies
+pinned hashes and installs private OpenVINO/TBB libraries and the OS-96 network.
+It does not modify system libraries. Other platforms can supply a compatible
+OS-96 installation through `CRAZYARA_BIN`; those platforms are not validated by
+this installer. Upstream sources: [CrazyAra](https://github.com/QueensGambit/CrazyAra)
+and [oneTBB](https://github.com/uxlfoundation/oneTBB).
+
+```sh
+scripts/ci.sh with -- python3 tools/setup_crazyara.py --destination "$HOME/.local/share/chess-prep/crazyara"
+python3 tools/bughouse_db/expectimax.py seed --positions 1000
+python3 tools/bughouse_db/expectimax.py run --workers 2 --cores 4 --nodes 3000 --plies 2 --hours 10
+python3 tools/bughouse_db/expectimax.py stats
+```
+
+`seed` walks popular FICS continuations, reconstructing both boards. Each worker
+atomically claims a board/position job, writes complete trees, and records
+failures. Restart recovers interrupted jobs. The build is an explicitly
+requested product job; run it under CPU/memory limits rather than an unrestricted
+shell. Desktop checks still use the normal bounded CI runner and disposable data.
+
+The API's `BUGHOUSE_EXPECTIMAX_PATH` points to the same SQLite format. Its public
+read endpoint is `/api/bughousedb/expectimax?fen=...`; missing positions are shown
+as missing, never replaced by ordinary engine scores. Admin import uses
+`POST /api/bughousedb/expectimax/import` with `X-API-Key`, validates legal child
+positions and bounded finite values, and accepts only the current model version.
+The old clock-based evaluation book remains independent.
+
+For a frozen overnight worker, build with `dart build cli --target tools/build_bughouse_expectimax.dart --output build/expectimax-cli` (through
+`scripts/ci.sh with --`). Keep the entire generated `bundle/`, including its
+native libraries, and pass `run --worker-bin /path/bundle/bin/build_bughouse_expectimax`.
+The coordinator assigns disjoint CPU affinities to workers. A service can cap
+combined CPU and memory, and `--hours` stops cleanly after its allotted run.
+`--publish-to SSH_HOST --publish-path /absolute/bughouse_expectimax.db` merges
+completed tables into the website database every five minutes; local engine
+checkpoints are never uploaded. Network failures log and retry without losing
+local results. Re-running with a larger node/ply budget requeues older jobs.

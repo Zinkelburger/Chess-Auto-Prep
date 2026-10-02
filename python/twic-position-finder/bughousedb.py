@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Iterator
 
 import chess
+import bughouse_expectimax
 from chess.variant import CrazyhouseBoard
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -432,6 +433,7 @@ def read_position(conn: sqlite3.Connection, fen: str, moves: str = "") -> dict:
         "turn": {"A": "white" if boards[0].turn else "black", "B": "white" if boards[1].turn else "black"},
         "teams": [t for t in TEAMS if team_can_move(boards, t)],
         "moves": moves, "picks": picks,
+        "expectimax": bughouse_expectimax.read(key, bughouse_expectimax.canonical(boards)),
         "meta": None if not row else {
             "source": row["source"], "engine": row["engine"], "nodes": row["nodes"],
             "child_nodes": row["child_nodes"], "created_at": row["created_at"],
@@ -445,6 +447,29 @@ def get_position(fen: str = Query(..., max_length=400), moves: str = Query("", m
     """The position after `moves` (board-tagged UCI) from `fen`: each board
     can be stepped through on its own by replaying the moves kept."""
     return read_position(conn, fen, moves)
+
+
+@router.get("/expectimax")
+def get_expectimax(fen: str = Query(..., max_length=400)):
+    try:
+        boards = parse_dual(fen)
+        return bughouse_expectimax.read(position_key(boards), bughouse_expectimax.canonical(boards))
+    except BadPosition as error:
+        raise HTTPException(400, str(error)) from None
+
+
+class ExpectimaxImport(BaseModel):
+    positions: list[dict] = Field(max_length=20)
+
+
+@router.post("/expectimax/import")
+def import_expectimax(batch: ExpectimaxImport, x_api_key: str = Header(default="")):
+    if not ADMIN_KEY or not secrets.compare_digest(x_api_key, ADMIN_KEY):
+        raise HTTPException(401, "Invalid API key")
+    try:
+        return bughouse_expectimax.store(batch.positions, parse_dual, position_key, push)
+    except (ValueError, KeyError, TypeError) as error:
+        raise HTTPException(400, f"Invalid expectimax snapshot: {error}") from None
 
 
 # ── Browser uploads ───────────────────────────────────────────────────

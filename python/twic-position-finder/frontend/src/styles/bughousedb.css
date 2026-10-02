@@ -43,3 +43,16 @@
   .bdb-table-wrap { overflow: visible; }
 }
 @media (prefers-reduced-motion: reduce) { .bdb-progress i { transition: none; } }
+
+/* Keep saved practical tables separate from the older clock-aware analysis. */
+#bughousedb .bb-right { overflow-y: auto; }
+#bughousedb .bh-expectimax { flex: none; overflow: visible; }
+.bdb-engine-details { margin-top: 16px; flex: none; }
+.bdb-engine-details summary { cursor: pointer; color: var(--text-dim); margin-bottom: 12px; }
+.bdb-engine-details .bdb-table-wrap { max-height: 360px; }
+@media (max-width: 1000px), (max-height: 600px) {
+  #bughousedb { --board: min(calc(100vw - 48px), 460px); }
+  body:has(#bughousedb) { height: auto !important; min-height: 100dvh !important; }
+  #bughousedb .bb-right { overflow: visible; }
+  .bdb-engine-details .bdb-table-wrap { max-height: none; }
+}
