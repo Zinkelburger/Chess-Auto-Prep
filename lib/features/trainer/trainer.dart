@@ -330,7 +330,7 @@ class Trainer extends ChangeNotifier {
         _session.source?.path == _read?.ref?.path;
     if (!returning &&
         revision == _savedRevision &&
-        revision?.nativeIdentity == _savedRevision?.nativeIdentity)
+        revision.nativeIdentity == _savedRevision?.nativeIdentity)
       return;
     _savedRevision = revision;
     final path = _session.source?.path;
@@ -346,7 +346,7 @@ class Trainer extends ChangeNotifier {
           .firstOrNull
           ?.revision;
       if (original == revision &&
-          original?.nativeIdentity == revision?.nativeIdentity)
+          original?.nativeIdentity == revision.nativeIdentity)
         return;
     }
     if (path != null &&

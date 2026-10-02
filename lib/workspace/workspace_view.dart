@@ -207,6 +207,7 @@ class WorkspaceView extends StatelessWidget {
               noteEditable: hooks.builder,
               editing: hooks.noteEditing ? editing : null,
               quiet: hooks.quietBoard,
+              engineInBoard: !hooks.trainingTools,
               settings: workspace.settings,
               analysis: workspace.analysis,
               onMove: hooks.onBoardMove ?? workspace.session.playMove,
@@ -514,6 +515,7 @@ class _BoardAndCounter extends StatefulWidget {
     this.noteEditable = false,
     this.editing,
     this.quiet = false,
+    this.engineInBoard = true,
   });
 
   final DocumentSession session;
@@ -525,6 +527,9 @@ class _BoardAndCounter extends StatefulWidget {
   /// Whether the engine's row, the move field and an empty note stay away
   /// until they are used ([WorkspaceHooks.quietBoard]).
   final bool quiet;
+
+  /// Training provides the shared engine in its Analysis tool pane.
+  final bool engineInBoard;
 
   /// Where a move made on the board or typed into the field goes.
   final ValueChanged<String> onMove;
@@ -566,10 +571,17 @@ class _BoardAndCounterState extends State<_BoardAndCounter>
   /// The engine's room: none while part of the game is hidden, and none on
   /// a quiet board until the engine is on.
   double _room() =>
-      widget.session.shownTo != null ||
+      !widget.engineInBoard ||
+          widget.session.shownTo != null ||
           (widget.quiet && !widget.analysis.enabled)
       ? 0
       : enginePaneHeight(widget.analysis, settingsOpen: _engineSettings.value);
+
+  @override
+  void didUpdateWidget(_BoardAndCounter oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _engineRoom = _room();
+  }
 
   @override
   Listenable listenableOf(_BoardAndCounter widget) =>
