@@ -112,7 +112,7 @@ moves-left outputs back to the C++ search. It yields between evaluations so
 Stop can be processed. Engine inference requests are local worker messages. Shared evaluations use
 GET/POST `/api/bughousedb/evaluation` and one-time upload tickets.
 
-The web search uses batch size one, one worker and a 10,000-node cap. It
+The web search uses batch size one and one worker. It
 shares the engine's MCTS and terminal logic, but does not run the desktop
 agent's separate root mate-search helper, background pondering or shared
 transposition table. Results and speed can differ from the native app;
@@ -136,11 +136,14 @@ Private mode, storage eviction or quota limits can require another download.
 Stop aborts an active manifest/model transfer, completed chunks remain cached,
 and transfers have timeouts. Inference tensors are disposed even on errors.
 Long played lines are replayed in batches within the WASM parser's 256-move
-limit; the compiled rules and engine port are unchanged.
+limit.
 
 Advantage is `(q_ours - q_theirs) / 2`, using two searches at the same budget.
-It is displayed only when both teams have usable evaluations; otherwise the
-page shows suggestions without an estimate. Raw Hivemind values are not
+When the other team has no legal turn on either board, `bh_values` evaluates
+both static seats and the score is `clamp(q_ours - (v_ours + v_theirs) / 2, -1, 1)`,
+matching native static-offset calibration. This fallback needs two extra
+inferences, not another search. The API checks that the other team cannot move
+before accepting it; saved results retain their calibration source and shortlist. Raw Hivemind values are not
 Stockfish pawn scores or measured win probabilities. With no live clocks,
 having no legal move does not automatically declare the match over: a
 partner may still deliver a rescue piece.
@@ -184,7 +187,7 @@ python-chess bughouse model, including en passant, castling, every promotion,
 promoted captures and invalid input recovery. It needs the development
 `python-chess` dependency, already used by the bughouse MCP server.
 
-The browser check uses a **plain Python static file server**, Chrome via the
+The browser check uses a temporary FastAPI/SQLite book plus a static file server, Chrome via the
 existing `puppeteer-core` dependency (`CHROME_BIN` selects the executable),
 and the real WASM engine/neural model. It tests moves, cross-board capture
 and drops, per-board stepping, promotion, invalid input, real recommendations/play,

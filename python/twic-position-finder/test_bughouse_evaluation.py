@@ -36,6 +36,25 @@ class EvaluationTests(unittest.TestCase):
         self.assertIsNone(ev.read(self.db, ev.Settings(fen=DUAL, team='black'))['analysis'])
         self.assertIsNone(ev.read(self.db, ev.Settings(fen=DUAL, nodes=3000))['analysis'])
 
+    def test_saved_shortlist_is_preserved_and_validated(self):
+        result = ev.store(self.db, self.upload(candidates=['(d2d4,pass)', '(g1f3,pass)']), 'test')['analysis']
+        self.assertEqual([line['best']['A'] for line in result['lines']], ['d4', 'Nf3'])
+        with self.assertRaises(HTTPException):
+            ev.store(self.db, self.upload(candidates=['(e2e5,pass)']), 'test')
+
+    def test_static_calibration_when_only_one_team_can_move(self):
+        boards = bh.parse_dual(DUAL)
+        moved = bh.dual_fen(bh.push(boards, 0, boards[0].parse_uci('d2d4')))
+        upload = self.upload(fen=moved, team='black',
+                             ticket=ev.ticket(self.db, moved, 'test')['ticket'],
+                             ours=bh.Search(q=-.4, nodes=801, best='(d7d5,e2e4)'),
+                             theirs=None, static_values=[-.5, -.6])
+        result = ev.store(self.db, upload, 'test')['analysis']
+        self.assertAlmostEqual(result['advantage'], .15)
+        self.assertEqual(result['calibration']['source'], 'static')
+        with self.assertRaises(HTTPException):
+            ev.store(self.db, self.upload(theirs=None, static_values=[-.5, -.6]), 'test')
+
     def test_ticket_is_bound_to_contributor_and_single_use(self):
         upload = self.upload()
         with self.assertRaises(HTTPException): ev.store(self.db, upload, 'other')

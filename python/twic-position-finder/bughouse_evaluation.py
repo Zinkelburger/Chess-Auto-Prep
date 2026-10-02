@@ -2,7 +2,7 @@
 import json
 import secrets
 import time
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
@@ -35,6 +35,8 @@ class Upload(Settings):
     ticket: str = Field(max_length=64)
     ours: bh.Search
     theirs: bh.Search | None = None
+    static_values: list[Annotated[float, Field(ge=-1, le=1)]] | None = Field(default=None, min_length=2, max_length=2)
+    candidates: list[str] = Field(default_factory=list, max_length=3)
 
 
 def identify(fen):
@@ -111,15 +113,22 @@ def store(conn, upload, contributor):
         if search.mate is None and (search.nodes or 0) < upload.nodes:
             raise HTTPException(422, 'The search stopped before its node budget. Retry to finish it.')
         bh._check_joints(search.pv)
-    if ours.mate is None and theirs is None:
+    fallback = theirs is None and upload.static_values is not None
+    if fallback and bh.team_can_move(boards, 'CD' if upload.team == 'white' else 'AB'):
+        raise HTTPException(422, 'Search the other team when it has a legal move.')
+    if ours.mate is None and theirs is None and not fallback:
         raise HTTPException(422, 'The other team is needed to calibrate the evaluation.')
     if theirs and theirs.best:
         joint(boards, theirs.best, 'black' if upload.team == 'white' else 'white')
     measured = theirs is not None and ours.mate is None and theirs.mate is None
-    result = dict(best=best, lines=[], advantage=(ours.q - theirs.q) / 2 if measured else None,
+    advantage = (ours.q - theirs.q) / 2 if measured else None
+    if fallback and ours.mate is None:
+        advantage = max(-1, min(1, ours.q - sum(upload.static_values) / 2))
+    lines = [{"best": joint(boards, move, upload.team, upload.required)} for move in upload.candidates]
+    result = dict(best=best, lines=lines, advantage=advantage,
                   mate=ours.mate, nodes=ours.nodes or 0,
                   total_nodes=(ours.nodes or 0) + (theirs.nodes or 0 if theirs else 0),
-                  calibration={'source': 'measured' if measured else 'unavailable'}, shared=True)
+                  calibration={'source': 'measured' if measured else 'static' if fallback else 'unavailable'}, shared=True)
     now = time.time()
     with conn:
         # Claim in the write transaction: overlapping POSTs cannot reuse a ticket.

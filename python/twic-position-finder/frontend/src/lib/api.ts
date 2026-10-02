@@ -382,5 +382,6 @@ export function uploadEvaluation(settings: EvaluationSettings, ticket: string, r
   } : null;
   return request('/api/bughousedb/evaluation', { timeoutMs: 10000, method: 'POST', body: {
     ...settings, ticket, ours: raw(result.raw!.ours), theirs: raw(result.raw!.theirs),
+    static_values: result.raw!.static_values, candidates: result.lines.flatMap(line => line.best ? [line.best.uci] : []),
   } });
 }

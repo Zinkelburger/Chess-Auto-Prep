@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT / 'tools'))
 from bughouse_db import expectimax
 
 UNIT = 'bughouse-populate'
-HOME = Path.home() / '.local/share/chess-prep'
+SUPPORT_ROOT = Path.home() / '.local/share/chess-prep'
 REMOTE = '/opt/twic/repo/python/twic-position-finder'
 
 
@@ -33,9 +33,9 @@ def parser():
     p.add_argument('--positions', type=int, default=10000, help='Popular FICS positions to enqueue (resumable)')
     p.add_argument('--nodes', type=int, default=800)
     p.add_argument('--plies', type=int, default=2)
-    p.add_argument('--db', type=Path, default=HOME / 'bughouse-db/bughouse_expectimax.db')
-    p.add_argument('--fics', type=Path, default=HOME / 'bughouse-db/bughouse_book.db')
-    p.add_argument('--support', type=Path, default=HOME)
+    p.add_argument('--db', type=Path, default=SUPPORT_ROOT / 'bughouse-db/bughouse_expectimax.db')
+    p.add_argument('--fics', type=Path, default=SUPPORT_ROOT / 'bughouse-db/bughouse_book.db')
+    p.add_argument('--support', type=Path, default=SUPPORT_ROOT)
     p.add_argument('--dart', default=shutil.which('dart') or 'dart')
     p.add_argument('--worker-bin', type=Path)
     p.add_argument('--publish-to', default='twic-vps')

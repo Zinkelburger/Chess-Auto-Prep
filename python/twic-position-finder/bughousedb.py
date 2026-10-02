@@ -688,9 +688,15 @@ def main(argv: list[str] | None = None) -> int:
         for r in conn.execute("SELECT source, contributor, COUNT(*) n FROM position "
                               "GROUP BY source, contributor ORDER BY n DESC LIMIT 30"):
             print(f"{r['source']:8} {r['contributor']:18} {r['n']}")
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE name='lab_evaluation'").fetchone():
+            for r in conn.execute('SELECT contributor,COUNT(*) n FROM lab_evaluation GROUP BY contributor'):
+                print(f"lab-eval {r['contributor']:18} {r['n']}")
         return 0
     keys = [r[0] for r in conn.execute("SELECT pos FROM position WHERE contributor=?", (args.contributor,))]
     with conn:
+        for table in ('lab_evaluation', 'lab_ticket'):
+            if conn.execute('SELECT 1 FROM sqlite_master WHERE name=?', (table,)).fetchone():
+                conn.execute(f'DELETE FROM {table} WHERE contributor=?', (args.contributor,))
         for table in ("position", "pick", "move", "submission"):
             conn.executemany(f"DELETE FROM {table} WHERE pos=?", [(k,) for k in keys])
         confirmations = conn.execute("DELETE FROM submission WHERE contributor=?",
