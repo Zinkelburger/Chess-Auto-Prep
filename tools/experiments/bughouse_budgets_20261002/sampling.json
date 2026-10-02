@@ -1,0 +1,12 @@
+{
+  "seed": 20261002,
+  "source": "/home/anbernal/.local/share/chess-prep/research/crazyhouse-vs-bughouse-20261002/bughouse-sample.json",
+  "source_sha256": "a6d11f1cbc37634f4c11f6f05ab22227acd304499f26ee66a6b2aea2bd422105",
+  "groups": {
+    "opening": 8,
+    "reserves": 8,
+    "check": 8
+  },
+  "rejected_games": 0,
+  "limits": "Small stratified pilot; not a population estimate or Elo measurement."
+}

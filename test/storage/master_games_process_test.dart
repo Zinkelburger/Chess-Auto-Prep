@@ -35,21 +35,25 @@ void main() {
       '20000',
     ], workingDirectory: Directory.current.path);
     final output = StringBuffer();
-    final ready = Completer<void>();
+    final ready = Completer<int>();
     final lines = child.stdout
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen((line) {
           output.writeln(line);
-          if (line == 'ready' && !ready.isCompleted) ready.complete();
+          if (line.startsWith('ready ') && !ready.isCompleted) {
+            ready.complete(int.parse(line.substring(6)));
+          }
         });
     final errors = child.stderr.transform(utf8.decoder).listen(output.write);
+    int? importer;
     addTearDown(() async {
+      if (importer != null) Process.killPid(importer, ProcessSignal.sigkill);
       child.kill(ProcessSignal.sigkill);
       await lines.cancel();
       await errors.cancel();
     });
-    await ready.future.timeout(const Duration(minutes: 2));
+    importer = await ready.future.timeout(const Duration(minutes: 2));
 
     // The first issue's checkpoint left the write-ahead log empty; it fills
     // again only while the next issue's transaction is open, long before
@@ -62,7 +66,9 @@ void main() {
       }
       await Future<void>.delayed(const Duration(milliseconds: 2));
     }
-    expect(child.kill(ProcessSignal.sigkill), isTrue);
+    // Kill the importer itself: on Windows, killing the `dart run` launcher
+    // leaves it running and still writing the database.
+    expect(Process.killPid(importer, ProcessSignal.sigkill), isTrue);
     await child.exitCode.timeout(const Duration(seconds: 20));
     expect('$output', isNot(contains('imported')));
 

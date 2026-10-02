@@ -1,0 +1,76 @@
+{
+  "reference_is_ground_truth": false,
+  "selection": "Four largest 100/800 value discrepancies among move disagreements, plus opening-07",
+  "results": [
+    {
+      "parent": "reserves-08",
+      "child_q_from_parent_team": {
+        "g2f3": 0.9463957314021456,
+        "g2g1": 0.936729510389323
+      },
+      "preferred_child": "g2f3",
+      "chosen_by_root": {
+        "100": "g2g1",
+        "800": "g2g1",
+        "8000": "g2f3"
+      },
+      "child_value_gap": 0.009666221012822662
+    },
+    {
+      "parent": "reserves-07",
+      "child_q_from_parent_team": {
+        "P@d3": 0.6467027770148334,
+        "P@f7": 0.6956817723967725
+      },
+      "preferred_child": "P@f7",
+      "chosen_by_root": {
+        "100": "P@f7",
+        "800": "P@d3",
+        "8000": "P@d3"
+      },
+      "child_value_gap": 0.04897899538193917
+    },
+    {
+      "parent": "reserves-04",
+      "child_q_from_parent_team": {
+        "e6d5": 0.5899878229121175,
+        "e7d6": 0.6309416012030982
+      },
+      "preferred_child": "e7d6",
+      "chosen_by_root": {
+        "100": "e6d5",
+        "800": "e7d6",
+        "8000": "e7d6"
+      },
+      "child_value_gap": 0.04095377829098068
+    },
+    {
+      "parent": "reserves-01",
+      "child_q_from_parent_team": {
+        "P@b2": 0.6576674054392784,
+        "P@c3": 0.562063780708569
+      },
+      "preferred_child": "P@b2",
+      "chosen_by_root": {
+        "100": "P@c3",
+        "800": "P@c3",
+        "8000": "P@b2"
+      },
+      "child_value_gap": 0.09560362473070938
+    },
+    {
+      "parent": "opening-07",
+      "child_q_from_parent_team": {
+        "c6b4": 0.0004914772893229724,
+        "c6e5": 0.024019476515503735
+      },
+      "preferred_child": "c6e5",
+      "chosen_by_root": {
+        "100": "c6e5",
+        "800": "c6e5",
+        "8000": "c6b4"
+      },
+      "child_value_gap": 0.023527999226180762
+    }
+  ]
+}

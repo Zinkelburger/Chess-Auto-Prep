@@ -1,0 +1,9 @@
+{
+  "source_commit": "5508ba9",
+  "fixture_source": "/home/anbernal/Projects/hivemind/engine/tests/test_move_gen.cc",
+  "fixture_sha256": "8a7dc2ded521cf3c9c59d9158f3075317e635a4fa0b82e67304423ae9df622ae",
+  "library_sha256": "d22b7c35c736b5dc99bf1b963be1acd5f569eff681eba470b1c2edcdf290d025",
+  "note": "Separate direct-solver build; bundled UCI binary differs. No time advantage; selected board required to move. Both teams for regression fixtures; not all are known mates.",
+  "probe_sha256": "d468156344cf2c499376648764ab249b7589aa92c451c38a65b30e62a24aa041",
+  "cpu_quota_cores": 2
+}
