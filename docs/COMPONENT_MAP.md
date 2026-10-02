@@ -80,12 +80,20 @@ Bughouse mode is offered when its engine assets are present.
   White, Black and Engine columns.
 - The Repertoire builder starts with two panes: Moves on the left, Expectimax
   on the right (`ActionLayout.startBuilding`), the moves at 45% of the card
-  (`builderMovesShare`) so the Expectimax table keeps its value columns at a
-  1280px window with the outline open. The gap between two panes is a
-  divider: dragged, it sets `ActionPaneSplit.share`, which the mode's layout
-  keeps for the window. A pane narrower than its tab's least width scrolls
+  (`builderMovesShare`). Below 1480px (scaled with text size), library and
+  chapter navigation share one column with Repertoires/Chapters tabs
+  (`NavigationPages`); wider windows show both columns. Both pages retain their
+  search and selection while switching or resizing. Hiding the compact column
+  hides both pages; Positions selects the list page. Full names remain available
+  in tooltips, and outline rows grow with larger text.
+  The gap between two panes is a divider: dragged, it sets
+  `ActionPaneSplit.share`, which the mode's layout remembers. Rendering clamps
+  allocations to the selected tools' widths, including nested splits, without
+  overwriting saved proportions. Moves reserves 280px before text scaling when
+  space permits; insufficient space divides proportionally. A pane narrower than
+  its tab's least width scrolls
   sideways: 320px for most tabs, 180px for Moves, 240px for Expectimax, whose
-  bar moves the depth down a line below 300px. The builder, the trainer and
+  bar moves fields down when their text-scaled widths and the gear no longer fit. The builder, the trainer and
   the viewer open a tab picked from `+` under a lone pane
   (`ActionLayout.opensBeside`); the trainer's lesson (`LessonView`) fits half
   the card, its moves taking the height left and scrolling to the latest

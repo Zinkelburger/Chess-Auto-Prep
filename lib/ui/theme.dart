@@ -16,6 +16,14 @@ abstract final class Space {
 /// chapter's name on one row. The divider takes it down to [paneMinWidth].
 const listColumnWidth = 260.0;
 
+/// Below this width, library and chapters share a navigation column so the
+/// board and the builder's two reading/tool panes retain useful space.
+/// The breakpoint follows the text scale.
+const navigationSideBySideMinWidth = 1480.0;
+
+/// A reading pane needs room for a sentence, not only a legal move token.
+const movesPaneComfortWidth = 280.0;
+
 /// How wide the chapter outline between the list and the board starts out.
 /// The old app's column is 18% of the window's body clamped to 220–280;
 /// the low end leaves the builder's two tool panes their room at 1280px.
@@ -203,16 +211,11 @@ const searchStatusHeight = 32.0;
 const searchRunWidth = 148.0;
 const searchDepthWidth = 84.0;
 
-/// The bar's `Replies from` field: beside the depth where the pane is at
-/// least [searchBarInlineWidth] wide, on a line of its own under it where
-/// it is not. Which of the two depends on the pane's width alone.
+/// The bar's `Replies from` field sits beside the depth when the pane has
+/// room for all controls at the current text size; otherwise it moves below.
 const searchRepliesWidth = 176.0;
 const searchRepliesRowHeight = 52.0;
-const searchBarInlineWidth = 480.0;
 
-/// Narrower than this the depth joins `Replies from` on the line under the
-/// bar, and the bar keeps the button and the gear.
-const searchBarDepthWidth = 300.0;
 const searchHeaderHeight = 24.0;
 const searchRowHeight = 32.0;
 const searchShareWidth = 48.0;
@@ -611,7 +614,7 @@ const gameNumberWidth = 52.0;
 
 /// The typed-move field under the board: room for `exd8=Q+` and no more,
 /// so the game counter beside it keeps its place on the narrowest board.
-const moveFieldWidth = 96.0;
+const moveFieldWidth = 144.0;
 
 /// The Explorer tab's table: the move gutter, the games gutter, the header
 /// row over them, and the height of one filter chip. The result bar sits after the

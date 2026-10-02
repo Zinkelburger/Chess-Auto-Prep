@@ -27,6 +27,7 @@ void main() {
     WidgetTester tester,
     List<RepertoireFolder> folders, {
     ChapterRef? selected,
+    double? width,
   }) async {
     fixture = await openLibrary(folders);
     await tester.pumpWidget(
@@ -34,10 +35,13 @@ void main() {
         theme: darkTheme(),
         home: Scaffold(
           body: StatusHost(
-            child: LibraryPanel(
-              library: fixture.library,
-              selected: selected,
-              onOpen: opened.add,
+            child: SizedBox(
+              width: width,
+              child: LibraryPanel(
+                library: fixture.library,
+                selected: selected,
+                onOpen: opened.add,
+              ),
             ),
           ),
         ),
@@ -69,6 +73,30 @@ void main() {
     expect(find.text('Classical'), findsOneWidget);
     await tester.tap(find.text('Classical'));
     expect(opened.single.name, 'Classical');
+  });
+
+  testWidgets('compact library reveals long names at larger text', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    const repertoire = "King's Indian Defence complete Black repertoire";
+    const chapter = 'Classical variation — main line with 9.Ne1';
+    await show(tester, [
+      folder(repertoire, [chapter]),
+    ], width: listColumnWidth);
+    await tester.longPress(find.text(repertoire));
+    await tester.pumpAndSettle();
+    expect(find.text(repertoire), findsNWidgets(2));
+    await tester.tap(find.byTooltip(repertoire));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip(chapter), findsOneWidget);
+    await tester.longPress(find.text(chapter));
+    await tester.pumpAndSettle();
+    expect(find.text(chapter), findsNWidgets(2));
+    await tester.tap(find.byTooltip(chapter));
+    expect(opened.single.name, chapter);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('search filters the rows and says when nothing matches', (

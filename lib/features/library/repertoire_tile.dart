@@ -172,7 +172,10 @@ class _RepertoireRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(folder.name, overflow: TextOverflow.ellipsis),
+                  Tooltip(
+                    message: folder.name,
+                    child: Text(folder.name, overflow: TextOverflow.ellipsis),
+                  ),
                   Text(_subtitle, style: text.labelSmall),
                 ],
               ),
@@ -284,7 +287,10 @@ class _ChapterRow extends StatelessWidget {
           child: Row(
             children: [
               Expanded(
-                child: Text(chapter.name, overflow: TextOverflow.ellipsis),
+                child: Tooltip(
+                  message: chapter.name,
+                  child: Text(chapter.name, overflow: TextOverflow.ellipsis),
+                ),
               ),
               RowActions(
                 children: [
