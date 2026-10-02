@@ -13,11 +13,10 @@ def candidate_tag(pubspec, event, ref):
         raise ValueError('Expected one version in pubspec.yaml')
     tag = f'v{versions[0]}'
     expected_assets(tag)  # Apply the same filename rules as final staging.
-    if event == 'push' and ref.startswith('refs/tags/'):
-        if ref != f'refs/tags/{tag}':
-            raise ValueError(f'Release tag must match pubspec.yaml: expected {tag}, got {ref}')
-    elif event != 'workflow_dispatch' and (event, ref) != ('push', 'refs/heads/release-check'):
+    if event != 'push' or not ref.startswith('refs/tags/v'):
         raise ValueError(f'Unsupported release event: {event} {ref}')
+    if ref != f'refs/tags/{tag}':
+        raise ValueError(f'Release tag must match pubspec.yaml: expected {tag}, got {ref}')
     return tag
 
 

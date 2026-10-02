@@ -16,15 +16,14 @@ import release_version
 
 
 class CandidateVersionTest(unittest.TestCase):
-    def test_rehearsals_use_the_embedded_version_including_manual_tag_runs(self):
+    def test_branch_and_manual_runs_cannot_release(self):
         for event, ref in (
-            ('push', 'refs/heads/release-check'),
-            ('workflow_dispatch', 'refs/heads/codex/candidate'),
+            ('push', 'refs/heads/candidate'),
+            ('workflow_dispatch', 'refs/heads/main'),
             ('workflow_dispatch', 'refs/tags/v2.0.2'),
         ):
-            with self.subTest(event=event, ref=ref):
-                self.assertEqual(release_version.candidate_tag(
-                    'name: app\nversion: 2.0.2\n', event, ref), 'v2.0.2')
+            with self.subTest(event=event, ref=ref), self.assertRaises(ValueError):
+                release_version.candidate_tag('version: 2.0.2\n', event, ref)
 
     def test_a_release_tag_must_match_the_embedded_version(self):
         self.assertEqual(release_version.candidate_tag(
@@ -36,7 +35,7 @@ class CandidateVersionTest(unittest.TestCase):
         for pubspec in ('name: app\n', 'version: ../../bad\n',
                         'version: 2.0.2\nversion: 2.0.3\n', 'version: $(id)\n'):
             with self.subTest(pubspec=pubspec), self.assertRaises(ValueError):
-                release_version.candidate_tag(pubspec, 'workflow_dispatch', 'refs/heads/main')
+                release_version.candidate_tag(pubspec, 'push', 'refs/tags/v2.0.2')
         for event, ref in (('push', 'refs/heads/main'), ('pull_request', 'refs/pull/1/merge')):
             with self.subTest(event=event), self.assertRaises(ValueError):
                 release_version.candidate_tag('version: 2.0.2\n', event, ref)
@@ -47,7 +46,7 @@ class CandidateVersionTest(unittest.TestCase):
             (root / 'pubspec.yaml').write_text('version: 2.0.2\n')
             output = root / 'output'
             env = {**os.environ, 'GITHUB_EVENT_NAME': 'push',
-                   'GITHUB_REF': 'refs/heads/release-check', 'GITHUB_SHA': 'abc123',
+                   'GITHUB_REF': 'refs/tags/v2.0.2', 'GITHUB_SHA': 'abc123',
                    'GITHUB_OUTPUT': str(output)}
             command = [sys.executable, str(Path(release_version.__file__).resolve())]
             result = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True)

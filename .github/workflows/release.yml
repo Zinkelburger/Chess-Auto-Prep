@@ -1,10 +1,7 @@
 name: Release
 
 on:
-  # The rehearsal uses these exact jobs, including both Mac builds and staging.
-  workflow_dispatch:
   push:
-    branches: [release-check]
     tags:
       - 'v*'
 
@@ -43,7 +40,7 @@ jobs:
     uses: ./.github/workflows/bughouse.yml
 
   # Build alongside tests so platform packaging errors appear in the same run.
-  # validate-assets still requires every gate before anything can publish.
+  # The release job still requires every gate before anything can publish.
   build-linux:
     needs: prepare
     runs-on: ubuntu-22.04
@@ -310,8 +307,11 @@ jobs:
           name: macos-${{ matrix.arch }}-build
           path: chess-auto-prep-${{ needs.prepare.outputs.tag }}-macos-${{ matrix.arch }}.zip
 
-  validate-assets:
+  release:
     needs: [prepare, quality-gate, bughouse-gate, build-linux, build-windows, build-macos]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -342,39 +342,18 @@ jobs:
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
         run: python3 scripts/release_assets.py "$RELEASE_TAG" artifacts build/release-assets
 
-      - name: Record the validated candidate
+      - name: Record the validated release
         env:
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           {
-            echo '## Release candidate validated'
+            echo '## Release assets validated'
             echo
             echo "Version: $RELEASE_TAG"
             echo "Commit: $GITHUB_SHA"
             echo
             echo 'All platform builds and release gates passed; all nine downloads have checksums.'
-            echo 'Only a v* tag push publishes. Branch and manual runs publish nothing.'
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: release-candidate
-          path: build/release-assets/*
-          if-no-files-found: error
-          retention-days: 7
-
-  release:
-    needs: validate-assets
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: release-candidate
-          path: build/release-assets
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3

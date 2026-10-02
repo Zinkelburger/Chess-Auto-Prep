@@ -57,29 +57,14 @@ the commit and rejects uncommitted/untracked files or a changed HEAD at the end.
 Inspect `build/quality-gates/summary.md` and the per-gate logs on failure;
 GitHub retains these in `flutter-quality-results`, including formatting failures.
 
-Local preflight covers the shared Dart job. Before tagging, push the candidate
-commit to the deliberate rehearsal branch:
-
-```sh
-git push origin HEAD:refs/heads/release-check
-```
-
-The [Release workflow](.github/workflows/release.yml) runs the **same** offline
-tests, desktop integration, engine checks, both native Mac builds, Windows
-installer and five Linux package formats as a tag push. Builds run alongside
-tests, so a test failure cannot hide the next packaging failure. It validates all nine
-downloads and their `SHA256SUMS`, then saves `release-candidate` in Actions for
-seven days. It publishes nothing. Inspect the `validate-assets` job summary for
-the validated commit SHA; only tag that commit, with the version already in
-`pubspec.yaml`. If any source changes, rehearse the new commit. After a failed
-release, use a new version and tag rather than moving an existing tag. Do not
-force-update a rehearsal branch belonging to somebody else's active candidate.
-
-Once this workflow is on the default branch, a manual rehearsal can target any
-pushed candidate branch with `gh workflow run release.yml --ref BRANCH`
-([GitHub's manual-run documentation](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)).
-Even a manual run against a tag cannot publish. The existing `windows-check`
-branch remains a focused Windows diagnostic, not a complete release rehearsal.
+Push the matching `v*` tag to release. The [Release workflow](.github/workflows/release.yml)
+automatically runs offline tests, desktop integration, engine checks, both native
+Mac builds, the Windows installer and five Linux package formats. Builds run
+alongside tests, so a test failure cannot hide the next packaging failure. Once
+all gates pass, the same run validates all nine downloads, generates
+`SHA256SUMS` and publishes the GitHub release. No separate rehearsal is required.
+The `windows-check` branch remains an optional focused Windows diagnostic.
+After a failed release, use a new version and tag rather than moving an existing tag.
 
 Only a `v*` **tag push** can enter the publication job, and only after every gate
 and artifact check passes. Diagnostic artifacts stay in Actions. Only the
@@ -93,9 +78,9 @@ The failures that prompted this setup:
 | Candidate | GitHub evidence | Cause and prevention |
 |---|---|---|
 | 2.0.0 | [Failed run](https://github.com/Zinkelburger/Chess-Auto-Prep/actions/runs/36754478934) | Linux fault tests found inconsistent book references after delete/restore and an interleaving timeout. Windows tests exposed directory-sync assumptions, a missing-warning assertion and a database handle left open during cleanup. These gates passed on 2.0.1; retain them and run them before tagging. |
-| 2.0.1 | [Failed run](https://github.com/Zinkelburger/Chess-Auto-Prep/actions/runs/36931974043) | Intel Mac packaging rejected Stockfish's gzip checksum. The existing fix pins the uncompressed engine and uses a native Intel runner. A full rehearsal now exercises both Mac release builds, which a green Windows check did not cover. |
+| 2.0.1 | [Failed run](https://github.com/Zinkelburger/Chess-Auto-Prep/actions/runs/36931974043) | Intel Mac packaging rejected Stockfish's gzip checksum. The existing fix pins the uncompressed engine and uses a native Intel runner. The tag workflow exercises both native Mac release builds, including their packaged engines. |
 
-The first full rehearsal also [caught an Intel startup crash](https://github.com/Zinkelburger/Chess-Auto-Prep/actions/runs/36969225369)
+Verification of the packaging fixes also [caught an Intel startup crash](https://github.com/Zinkelburger/Chess-Auto-Prep/actions/runs/36969225369)
 after the checksum fix. Stockfish 19 stores the Intel network data in the
 arm64 slice of its universal executable ([upstream implementation](https://github.com/official-stockfish/Stockfish/blob/sf_19/src/universal/patch_x86_slice.sh)).
 The app and frameworks may be thinned; the signed Stockfish helper must retain

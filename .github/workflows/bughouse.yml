@@ -27,7 +27,7 @@
 
 name: Bughouse engine
 
-# Called by release.yml for tagged releases and non-publishing rehearsals.
+# Called by release.yml for tagged releases.
 on:
   workflow_call:
 
