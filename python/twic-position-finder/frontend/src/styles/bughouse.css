@@ -63,7 +63,8 @@ body:has(#bughouse-lab) { height: auto !important; min-height: 100dvh !important
 @media (max-width: 1100px) {
   #bughouse-lab { --board: min(420px, calc((100vw - 76px) / 2)); grid-template-columns: minmax(0, 1fr); }
   #bughouse-lab .bb-boards { flex-direction: row; }
-  #bughouse-lab .bh-panel { grid-row: 2; }
+  #bughouse-lab .bb-left { grid-row: 2; }
+  #bughouse-lab .bh-panel { grid-row: 3; }
   #bughouse-lab .bh-row { grid-template-columns: 100px 1fr; }
 }
 @media (max-width: 560px) {

@@ -85,7 +85,7 @@ def run(args):
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     db.execute("UPDATE job SET status='queued',worker=NULL WHERE status='running'")
     if db.execute("SELECT 1 FROM sqlite_master WHERE name='analysis'").fetchone():
-        db.execute('''UPDATE job SET status='queued',error=NULL WHERE status IN ('done','failed')
+        db.execute('''UPDATE job SET status='queued',error=NULL WHERE status='done'
             AND NOT EXISTS (SELECT 1 FROM analysis a WHERE a.pos=job.pos AND a.board=job.board
             AND a.profile LIKE ? AND a.plies>=? AND a.nodes>=?)''',
             (MODEL + ':%', args.plies, args.nodes))

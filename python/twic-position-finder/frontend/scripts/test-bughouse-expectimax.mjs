@@ -33,6 +33,7 @@ try {
   }
   browser = await puppeteer.launch({ executablePath: process.env.CHROME_BIN || '/usr/bin/google-chrome', headless: true, args: ['--disable-dev-shm-usage'] });
   const page = await browser.newPage();
+  await page.evaluateOnNewDocument(() => localStorage.clear());
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.setRequestInterception(true);
@@ -46,7 +47,10 @@ try {
     for (const [device, width, height] of [['desktop', 1360, 1000], ['mobile', 390, 844]]) {
       await page.setViewport({ width, height, deviceScaleFactor: 1 });
       await page.goto(`http://127.0.0.1:18764/${route}/`, { waitUntil: 'networkidle0' });
-      await page.waitForSelector('.bh-expectimax-table tbody tr');
+      try { await page.waitForSelector('.bh-expectimax-table tbody tr'); } catch (error) {
+        console.error(route, device, await page.$eval('.bh-expectimax', x => x.textContent), errors);
+        throw error;
+      }
       assert.equal(await page.$$eval('.bh-expectimax-table', x => x.length), 2);
       assert.ok(await page.$eval('.bh-expectimax', x => x.textContent.includes('Exp White') && x.textContent.includes('Exp Black')));
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${route} ${device}: no horizontal page overflow`);
