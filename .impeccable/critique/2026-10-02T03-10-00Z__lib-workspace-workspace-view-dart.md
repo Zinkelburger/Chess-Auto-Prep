@@ -35,14 +35,14 @@ Already delivered: the PGN Viewer opens as a reading surface, defaults its Explo
 
 ## What Claude's agents are currently doing
 
-Status is a point-in-time observation, not a completion claim. At the inspected checkpoint, these follow-ups were not integrated into the reviewed main.
+Status is a point-in-time observation. During report preparation, the wording and MCP cutoff tasks integrated into main at e17a5001; the two major UI tasks remained in progress. The design assessments used the earlier 85a3d6af baseline.
 
 | Task branch | Observed work | What still needs acceptance checking |
 |---|---|---|
 | codex/builder-trainer-two-panes | Active edits for trainer short panes, narrow Expectimax, and draggable internal dividers. | 1280×720 with both lists, long notes, errors, training ratings, and larger text. Preserve dragged proportions. |
 | codex/expectimax-reply-source-shown | Active edits add a quiet ~ fallback marker and source tooltip, with saved provenance. | Reopen/resume, old results without provenance, and a non-hover way to understand the marker. |
-| codex/drop-stockfish-word | Committed at 9bc363c7 on its task branch. | Verify integration; retain engine names where they distinguish choices. |
-| codex/mcp-expectimax-reply-cutoff | Committed at 4e8fbea5 with further test edits. | Backend alignment; this is not a UI redesign. |
+| codex/drop-stockfish-word | Integrated into local main; task commit 9bc363c7. | Retains engine names where they distinguish choices. |
+| codex/mcp-expectimax-reply-cutoff | Integrated into local main; task commits 4e8fbea5 and 1bfbd2bf. | Backend alignment; this is not a UI redesign. |
 | codex/fix-import-faults-flake | Investigation underway; no edits at inspection. | Reliability work; no demonstrated UI change yet. |
 
 A separate release-robustness task is working on packaging. Do not duplicate these tasks.
