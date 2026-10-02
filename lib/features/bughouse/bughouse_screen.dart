@@ -8,7 +8,8 @@ import '../../ui/theme.dart';
 import 'archive_moves.dart';
 import 'board_setup.dart';
 import 'bughouse_lab.dart';
-import 'lab_panel.dart';
+import 'analysis_panel.dart';
+import 'expectimax_search.dart';
 import 'matches.dart';
 import 'match_panel.dart';
 import 'table_boards.dart';
@@ -29,6 +30,7 @@ class BughouseScreen extends StatelessWidget {
     required this.search,
     required this.archive,
     required this.matches,
+    this.expectimax,
     this.windowKeys = const {},
   });
 
@@ -36,6 +38,7 @@ class BughouseScreen extends StatelessWidget {
   final TableSearch search;
   final ArchiveMoves archive;
   final Matches matches;
+  final BughouseExpectimaxSearch? expectimax;
 
   /// The window's own keys, which the shell binds in every mode.
   final Map<ShortcutActivator, VoidCallback> windowKeys;
@@ -97,10 +100,11 @@ class BughouseScreen extends StatelessWidget {
                         listenable: lab,
                         builder: (context, _) => lab.showMatches
                             ? MatchPanel(matches: matches, lab: lab)
-                            : LabPanel(
+                            : BughouseAnalysisPanel(
                                 lab: lab,
                                 search: search,
                                 archive: archive,
+                                expectimax: expectimax,
                               ),
                       ),
                     ),

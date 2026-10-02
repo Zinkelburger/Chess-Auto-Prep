@@ -20,6 +20,8 @@ final class BughouseLab extends ChangeNotifier {
   ClockCase _clock = ClockCase.even;
   bool _flipped = false;
   bool _showMatches = false;
+  bool expectimaxOn = false;
+  void showExpectimax(bool value) => _change(() => expectimaxOn = value);
   bool get showMatches => _showMatches;
   void toggleMatches() => _change(() => _showMatches = !_showMatches);
   TableRefusal? _problem;

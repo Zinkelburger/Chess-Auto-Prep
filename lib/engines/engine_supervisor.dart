@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 
 import '../diagnostics/log.dart';
 import 'engine.dart';
+import 'crazyara_engine.dart';
 import 'hivemind_engine.dart';
 import 'hivemind_install.dart';
 import 'uci_engine.dart';
@@ -251,6 +252,54 @@ final class EngineSupervisor {
       await process.kill();
       log.e('start the bughouse engine', error);
       return HivemindStartFailed('Could not start the bughouse engine: $error');
+    } finally {
+      _handshakes.remove(process);
+    }
+  }
+
+  /// The optional CrazyAra installation, kept under the same supervisor as
+  /// Stockfish and Hivemind, including a launch interrupted by app shutdown.
+  Future<CrazyaraProcess> startCrazyara(String support) =>
+      _own(_startCrazyara(support));
+
+  Future<CrazyaraProcess> _startCrazyara(String support) async {
+    if (_disposed) throw const EngineFailure('The app is closing.');
+    final env = Platform.environment;
+    final home = env['HOME'] ?? env['USERPROFILE'] ?? '';
+    final data = env['XDG_DATA_HOME'] ?? p.join(home, '.local', 'share');
+    final candidates = [
+      if (env['CRAZYARA_BIN'] case final path?) path,
+      p.join(support, 'crazyara', 'crazyara'),
+      p.join(data, 'chess-prep', 'crazyara', 'crazyara'),
+    ];
+    String? executable;
+    for (final candidate in candidates) {
+      if (await File(candidate).exists()) {
+        executable = candidate;
+        break;
+      }
+    }
+    if (executable == null) {
+      throw const EngineFailure(
+        'CrazyAra is not installed. See the Bughouse Lab setup guide.',
+      );
+    }
+    final process = await SpawnedProcess.start(
+      executable,
+      workingDirectory: p.dirname(executable),
+    );
+    _handshakes.add(process);
+    try {
+      if (_disposed) throw const EngineFailure('The app is closing.');
+      final engine = await CrazyaraProcess.start(process);
+      if (!_keep(engine, process)) {
+        await engine.quit();
+        throw const EngineFailure('The app is closing.');
+      }
+      return engine;
+    } on Object {
+      await process.kill();
+      rethrow;
     } finally {
       _handshakes.remove(process);
     }

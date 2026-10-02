@@ -1,10 +1,11 @@
 ---
 import Base from '../layouts/Base.astro';
+import '../styles/bughouse-expectimax.css';
 import BughouseBoards from '../components/BughouseBoards.astro';
 import '../styles/bughouse-board.css';
 import '../styles/bughousedb.css';
 ---
-<Base title="BughouseDB" description="Every legal bughouse move scored by Hivemind for three clock situations. Click through positions; analyse missing ones in your browser." fill>
+<Base title="BughouseDB" description="Practical bughouse moves with White and Black expectimax, plus Hivemind analysis." fill>
   <div id="bughousedb" class="bb-app">
     <h1 class="visually-hidden">BughouseDB</h1>
     <noscript><p class="alert alert-error">Enable JavaScript to browse the book.</p></noscript>
@@ -14,6 +15,9 @@ import '../styles/bughousedb.css';
     </form>
 
     <div class="bb-right">
+      <section id="bdb-expectimax" class="bh-expectimax" aria-label="Saved expectimax" aria-live="polite"></section>
+      <details class="bdb-engine-details">
+        <summary>Engine analysis</summary>
       <div class="bdb-tables">
         {/* One row for the priority and the analyse controls, and one status line under
             it that is always there: nothing above the tables moves as a position is
@@ -53,6 +57,7 @@ import '../styles/bughousedb.css';
           </section>
         ))}
       </div>
+      </details>
     </div>
   </div>
 </Base>

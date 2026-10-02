@@ -1,3 +1,4 @@
+import { ExpectimaxTables } from '../bughouse/expectimax';
 /**
  * BughouseDB: browse Hivemind's precomputed bughouse book, and analyse a
  * missing position in this browser (the /bughouse WASM engine) for everyone.
@@ -62,6 +63,7 @@ let status = { text: '', error: false };
 const boards = new Boards('bdb', { view, play: playUci });
 const lineView = new LineView('bdb', lines, () => { void load(); });
 const setup = new SetupBoxes('bdb');
+const expectimax = new ExpectimaxTables(el('bdb-expectimax'), (board, uci) => { void playUci(board, [uci]); });
 
 function view(name: BoardName): BoardView {
   const data = readBoard((cur?.fen ?? lines.root).split('|')[name === 'A' ? 0 : 1] ?? '');
@@ -108,6 +110,7 @@ function formatScore(s: BookScore | undefined): string {
 // ── Rendering ─────────────────────────────────────────────────────
 
 function renderTables() {
+  if (cur) expectimax.render(cur.expectimax ?? { A: null, B: null }, cur.fen);
   for (const name of BOARDS) {
     const body = el(`bdb-moves-${name}`);
     body.replaceChildren();

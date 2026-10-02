@@ -1,6 +1,7 @@
 import '../chess/tactics/game_ids.dart' show GameSite;
 import '../features/bughouse/archive_moves.dart';
 import '../features/bughouse/bughouse_lab.dart';
+import '../features/bughouse/expectimax_search.dart';
 import '../features/bughouse/matches.dart';
 import '../features/bughouse/table_search.dart';
 import '../features/library/chapter_outline.dart';
@@ -227,6 +228,14 @@ LabModes wireLabModes(AppEnvironment env) {
   );
   return LabModes(
     lab: lab,
+    expectimax: BughouseExpectimaxSearch(
+      lab: lab,
+      book: env.bughouseExpectimaxBook,
+      startBackend: (nodes) {
+        if (search.engineOn) search.toggleEngine();
+        return env.launchBughouseSearch(nodes);
+      },
+    ),
     search: search,
     archive: ArchiveMoves(lab: lab, book: env.bughouse.ficsBook),
     // A Hivemind of its own for each run, so the tables keep theirs.

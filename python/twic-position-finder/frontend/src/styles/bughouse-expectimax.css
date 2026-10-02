@@ -1,0 +1,9 @@
+.bh-expectimax { scroll-margin-top: 135px; overflow: auto; border-top: 1px solid var(--border); margin-top: 1rem; padding-top: .75rem; }
+.bh-expectimax-table { font-size: .875rem; width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.bh-expectimax-table th, .bh-expectimax-table td { padding: .45rem .3rem; text-align: right; border-bottom: 1px solid var(--border); }
+.bh-expectimax-table th:first-child, .bh-expectimax-table td:first-child { text-align: left; }
+.bh-expectimax-table tr[tabindex] { cursor: pointer; }
+.bh-expectimax-table tr[tabindex]:hover, .bh-expectimax-table tr[tabindex]:focus { background: var(--bg-raised); }
+.bh-expectimax p { font-size: .8125rem; }
+
+.bh-expectimax h3 { margin-top: 12px; margin-bottom: 4px; }
