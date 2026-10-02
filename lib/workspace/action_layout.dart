@@ -180,7 +180,7 @@ final class ActionLayout extends ChangeNotifier {
         split,
         (split.share +
                 (split.first.indices.contains(active) ? change : -change))
-            .clamp(0.15, 0.85),
+            .clamp(0.1, 0.9),
       );
   }
 
@@ -651,6 +651,6 @@ ActionPaneNode _readNode(Object? raw, [int depth = 0]) {
     direction,
     _readNode(raw['first'], depth + 1),
     _readNode(raw['second'], depth + 1),
-    share: share.toDouble().clamp(0.15, 0.85),
+    share: share.toDouble().clamp(0.1, 0.9),
   );
 }

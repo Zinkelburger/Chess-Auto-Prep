@@ -16,6 +16,37 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'retained training follows its origin when the detour file changes',
+    () async {
+      final app = WindowFixture();
+      addTearDown(app.dispose);
+      await app.library.refresh();
+      await app.session.open(kidMain);
+      await app.lineTrainer.reload();
+      app.lineTrainer.learn();
+      final lesson = app.lineTrainer.lesson!;
+      await app.session.open(benkoMain);
+      expect(lesson.suspended, isTrue);
+      expect(
+        await app.library.renameChapter(benkoMain, 'Detour'),
+        isA<LibraryDone>(),
+      );
+      await pumpEventQueue();
+      expect(app.lineTrainer.lesson, same(lesson));
+      expect(
+        await app.library.renameChapter(kidMain, 'Origin'),
+        isA<LibraryDone>(),
+      );
+      await pumpEventQueue();
+      expect(
+        app.lineTrainer.lesson,
+        isNull,
+        reason: 'the training source changed',
+      );
+    },
+  );
+
+  test(
     'a sibling section rename refreshes training and nested outline membership',
     () async {
       final app = WindowFixture();

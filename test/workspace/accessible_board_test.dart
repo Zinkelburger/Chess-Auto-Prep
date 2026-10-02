@@ -101,6 +101,10 @@ void main() {
       await activate(tester, 'e2');
       await activate(tester, 'e5');
       expect(played, isEmpty);
+      expect(
+        find.bySemanticsLabel('That move is not legal here.'),
+        findsOneWidget,
+      );
       await activate(tester, 'e4');
       expect(played, ['e2e4']);
       played.clear();

@@ -173,15 +173,16 @@ class _AccessibleBoardState extends State<AccessibleBoard> {
         label: position == null
             ? 'Chessboard, position unavailable'
             : 'Chessboard, $turn to move${position.isCheck ? ', check' : ''}',
-        hint:
-            'Arrow keys explore squares. Enter selects a piece and its destination. Escape clears selection.',
+        hint: widget.movable
+            ? 'Arrow keys explore squares. Enter selects a piece and its destination. Escape clears selection.'
+            : 'Read-only position. Arrow keys explore squares.',
         child: LayoutBuilder(
           builder: (context, size) => Stack(
             children: [
               ExcludeSemantics(child: widget.child),
               for (var index = 0; index < 64; index++)
                 _cell(context, Square(index), size.maxWidth / 8),
-              if (_focused)
+              if (_focused || _notice != null)
                 Positioned.fill(
                   child: IgnorePointer(
                     child: Semantics(

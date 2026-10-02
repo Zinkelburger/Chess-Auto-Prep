@@ -134,6 +134,24 @@ void main() {
     });
   });
 
+  testWidgets('a new training board clears notation refused on the document', (
+    tester,
+  ) async {
+    await openKid(tester);
+    await key(tester, LogicalKeyboardKey.slash);
+    await tester.enterText(field, 'Ke7');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(find.text('That move is not legal here.'), findsOneWidget);
+    w.requests.switchTo(Mode.trainer);
+    await tester.pumpAndSettle();
+    w.lineTrainer.learn();
+    await tester.pumpAndSettle();
+    expect(words(tester), isEmpty);
+    expect(find.text('That move is not legal here.'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('on the analysis board a typed move is taken back by Ctrl+Z', (
     tester,
   ) async {

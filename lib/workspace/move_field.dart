@@ -17,6 +17,15 @@ final class MoveEntry {
   final words = TextEditingController();
   final problem = ValueNotifier<String?>(null);
   final focus = FocusNode(debugLabel: 'move field');
+  Fen? _position;
+
+  /// The entry survives board widgets; notation belongs to its position.
+  void follow(Fen fen) {
+    if (_position == fen) return;
+    _position = fen;
+    words.clear();
+    problem.value = null;
+  }
 
   /// [character] after the words, and the focus in the field, as if it had
   /// been typed there.
@@ -78,6 +87,11 @@ class _MoveFieldState extends State<MoveField> {
   @override
   void initState() {
     super.initState();
+    // A replaced board may still have an inactive field listening to the
+    // shared controller. Clear only after that old element has detached.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.entry.follow(widget.fen);
+    });
     _heard = _words.text;
     _words.addListener(_changed);
   }
@@ -91,7 +105,7 @@ class _MoveFieldState extends State<MoveField> {
       _words.addListener(_changed);
     }
     // Words typed for another position mean nothing in this one.
-    if (old.fen != widget.fen) _words.clear();
+    widget.entry.follow(widget.fen);
     // A board that stops taking moves gives the keys back.
     final focus = widget.entry.focus;
     if (widget.onMove == null && focus.hasFocus) {

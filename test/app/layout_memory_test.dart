@@ -85,6 +85,13 @@ void main() {
       expect(layout.restore(jsonEncode(data)), isFalse);
       expect(layout.snapshot(), original);
       expect(layout.restore('{broken'), isFalse);
+      layout.split(0, WorkspaceTab.explorer, PaneSplitDirection.right);
+      for (final share in [0.1, 0.9]) {
+        layout.resize(layout.root as ActionPaneSplit, share);
+        final saved = layout.snapshot();
+        expect(layout.restore(saved), isTrue);
+        expect((layout.root as ActionPaneSplit).share, share);
+      }
     },
   );
 }

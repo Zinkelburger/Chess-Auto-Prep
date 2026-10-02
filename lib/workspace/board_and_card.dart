@@ -5,10 +5,9 @@ import 'package:flutter/material.dart';
 import '../ui/theme.dart';
 import 'action_layout.dart';
 
-/// The board and the card side by side. The split view keeps its areas —
-/// and so the sizes the user dragged them to — in this state for the life
-/// of the window, while what fills them is built from the widget of the
-/// moment: an area's own builder would keep the first mode's panes.
+/// The board and reading card share the width recorded by the layout.
+/// Pixel minima keep both usable as the window changes; the current mode
+/// supplies their content without replacing the retained layout owner.
 class BoardAndCard extends StatefulWidget {
   const BoardAndCard({required this.board, required this.card, this.layout});
 

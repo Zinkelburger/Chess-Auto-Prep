@@ -21,8 +21,8 @@ import 'tactics_set.dart';
 /// are exactly what the button plays, in its order. A puzzle clicked in the
 /// list comes up on the board at once.
 ///
-/// The panel keeps what the user typed into the search box and whether the
-/// filters are open; everything else is the set's and the trainer's.
+/// The set owns the search shared by the list and Play. The panel keeps its
+/// text controller and whether the filter controls are open.
 class TacticsPanel extends StatefulWidget {
   const TacticsPanel({
     super.key,

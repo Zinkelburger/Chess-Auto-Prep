@@ -27,6 +27,22 @@ final class ScopeReader {
   final ChapterFiles _files;
   final PgnDocumentStore _documents;
 
+  /// A retained sitting may survive a catalog refresh only while every
+  /// source still matches the snapshot its progress was read against.
+  Future<bool> unchanged(List<ChapterLines> chapters) async {
+    final revisions = {
+      for (final chapter in chapters) chapter.ref.path: chapter.revision,
+    };
+    for (final entry in revisions.entries) {
+      final read = await _documents.open(DocumentRef(entry.key));
+      if (read is! Opened ||
+          read.revision != entry.value ||
+          read.revision.nativeIdentity != entry.value?.nativeIdentity)
+        return false;
+    }
+    return true;
+  }
+
   /// The chapters of the repertoire [open] is in, in the folder's order,
   /// with [open] itself taken as it is on the board rather than read again.
   Future<List<ChapterLines>> repertoireOf(ChapterLines open) async {

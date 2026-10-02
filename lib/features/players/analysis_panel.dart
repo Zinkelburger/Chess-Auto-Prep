@@ -446,7 +446,9 @@ class _Status extends StatelessWidget {
                       context: context,
                       builder: (context) => AlertDialog(
                         title: const Text('Problem details'),
-                        content: SelectableText(detail),
+                        content: SingleChildScrollView(
+                          child: SelectableText(detail),
+                        ),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(context),
