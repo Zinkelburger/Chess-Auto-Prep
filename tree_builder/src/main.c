@@ -735,7 +735,12 @@ static void print_usage(const char *prog_name) {
     printf("  Every legal own move is scored at --eval-depth. All moves within\n");
     printf("  --max-eval-loss <cp> of the best are searched [default: 50].\n");
     printf("  Every positive-probability opponent move is searched; no novelty,\n");
-    printf("  setup, mass cutoff, MultiPV cap, eval-window or confidence bonuses.\n");
+    printf("  setup, mass cutoff, MultiPV cap, eval-window or confidence bonuses,\n");
+    printf("  unless a reply cut is asked for:\n");
+    printf("  --reply-mass <share>  Keep Maia's likeliest replies until they cover this\n");
+    printf("                        share (0-1), renormalized [default: 0 = all; a\n");
+    printf("                        loaded tree keeps its own]\n");
+    printf("  --max-replies <N>     At most N replies per opponent position [0 = no cap]\n");
     printf("  -m, --masters         Master practice for database modes only\n");
     printf("  --maia-only           Maia throughout [always used by Stockfish expectimax]\n");
     printf("  --maia-model <path>   Maia model (required for Stockfish expectimax)\n");
@@ -1242,6 +1247,10 @@ int main(int argc, char *argv[]) {
     int opp_max_children_arg = -1;
     double opp_mass_target_arg = -1.0;
 
+    /* Pure/Fast reply cut (-1 = as the loaded tree records, else none) */
+    double reply_mass_arg = -1.0;
+    int max_replies_arg = -1;
+
     /* Frontier discipline overrides (-1 = use defaults) */
     int best_first_arg = -1;        /* 1 = best-first (default), 0 = FIFO BFS */
     double alt_discount_arg = -1.0;
@@ -1297,6 +1306,8 @@ int main(int argc, char *argv[]) {
         /* Opponent-move */
         {"opp-max-children", required_argument, 0, 2010},
         {"opp-mass",         required_argument, 0, 2011},
+        {"reply-mass",       required_argument, 0, 2012},
+        {"max-replies",      required_argument, 0, 2013},
         /* Frontier discipline */
         {"best-first",       no_argument,       0, 2050},
         {"bfs",              no_argument,       0, 2051},
@@ -1419,6 +1430,20 @@ int main(int argc, char *argv[]) {
             case 2011:
                 if (!parse_double(optarg, "opp-mass", &opp_mass_target_arg)) return 1;
                 cli_exp.opp_mass = true;
+                break;
+            case 2012:
+                if (!parse_double(optarg, "reply-mass", &reply_mass_arg)) return 1;
+                if (!(reply_mass_arg >= 0 && reply_mass_arg <= 1)) {
+                    fprintf(stderr, "Error: --reply-mass must be between 0 and 1\n");
+                    return 1;
+                }
+                break;
+            case 2013:
+                if (!parse_int(optarg, "max-replies", &max_replies_arg)) return 1;
+                if (max_replies_arg < 0) {
+                    fprintf(stderr, "Error: --max-replies must not be negative\n");
+                    return 1;
+                }
                 break;
             /* Frontier discipline */
             case 2050: best_first_arg = 1; break;
@@ -2533,6 +2558,11 @@ int main(int argc, char *argv[]) {
         if (max_eval_loss_arg >= 0) config.max_eval_loss_cp = max_eval_loss_arg;
         if (opp_max_children_arg >= 0) config.opp_max_children = opp_max_children_arg;
         if (opp_mass_target_arg >= 0.0) config.opp_mass_target = opp_mass_target_arg;
+        /* Unspecified, the cut is the one the loaded tree was built with, so a
+         * plain re-run or --resume goes on as the tree began (none for a new
+         * tree or one saved before the cut existed). */
+        config.reply_mass = reply_mass_arg >= 0.0 ? reply_mass_arg : tree->config.reply_mass;
+        config.max_replies = max_replies_arg >= 0 ? max_replies_arg : tree->config.max_replies;
         if (min_eval_arg != -99999) config.min_eval_cp = min_eval_arg;
         if (max_eval_arg != -99999) config.max_eval_cp = max_eval_arg;
         config.relative_eval = relative_eval;
@@ -2566,7 +2596,13 @@ int main(int argc, char *argv[]) {
         config.progress_callback = progress_callback;  /* Always show progress */
 
         if (build_mode == BUILD_MODE_STOCKFISH_EXPECTIMAX) {
-            printf("  %s: every legal own move, %dcp loss limit, full opponent policy.\n",config.rolling_search?"Fast (4-ply, approximate)":"Pure",config.max_eval_loss_cp);
+            if (config.reply_mass > 0 || config.max_replies > 0)
+                printf("  %s: every legal own move, %dcp loss limit, likeliest replies to %g%% of the policy%s%.0d (renormalized).\n",
+                       config.rolling_search?"Fast (4-ply, approximate)":"Pure",config.max_eval_loss_cp,
+                       config.reply_mass > 0 ? config.reply_mass * 100 : 100.0,
+                       config.max_replies > 0 ? ", at most " : "", config.max_replies);
+            else
+                printf("  %s: every legal own move, %dcp loss limit, full opponent policy.\n",config.rolling_search?"Fast (4-ply, approximate)":"Pure",config.max_eval_loss_cp);
         }
 
         memset(&build_stats, 0, sizeof(build_stats));
