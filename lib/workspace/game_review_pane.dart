@@ -68,7 +68,7 @@ class GameReviewPane extends StatelessWidget {
                 child: Text(
                   review.running
                       ? '${review.completed} / ${review.total} positions'
-                      : 'Stockfish · depth ${review.depth}',
+                      : 'Depth ${review.depth}',
                   style: theme.textTheme.bodySmall,
                   overflow: TextOverflow.ellipsis,
                 ),
