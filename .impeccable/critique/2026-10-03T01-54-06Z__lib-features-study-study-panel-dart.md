@@ -17,7 +17,7 @@ Method: dual-agent (A: /root/study_design_review · B: /root/study_evidence_revi
 
 **No: we do not have full Lichess Studies parity, and common study-authoring workflows are not yet equally usable.** We have a capable local reader/editor and useful preparation integration. The largest opportunity is making existing capabilities discoverable and connected.
 
-Compared Chess Auto Prep application code at f7d85a5bf21aba53e9d7afc615c3ddbc2d843917 with saved lila at e3f1982528. Main advanced to d1c5a263 during review, changing instructions only. Six native screenshots at 1280×720 covered empty, loaded, chapter menu, Train, annotation editing and chapter creation. The sample used the repository's Lichess PGN fixture, extended to 32 chapters in a disposable profile. This is a heuristic review, not measured user research or a percentage of feature parity.
+Compared Chess Auto Prep application code at f7d85a5bf21aba53e9d7afc615c3ddbc2d843917 with saved lila at e3f1982528. Main advanced during review: d1c5a263 changed instructions; 35665ff5 brought an Opening books rename and quieter input fields. That later diff was checked and does not resolve the workflow findings below. Screenshots retain the earlier input hints and chapter-name suggestion. Six native screenshots at 1280×720 covered empty, loaded, chapter menu, Train, annotation editing and chapter creation. The sample used the repository's Lichess PGN fixture, extended to 32 chapters in a disposable profile. This is a heuristic review, not measured user research or a percentage of feature parity.
 
 ## Design specificity and strengths
 
