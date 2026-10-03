@@ -7,6 +7,7 @@ import '../styles/alerts.css';
   description="Puzzles mined from your own Lichess and Chess.com games. Stockfish runs in your browser and finds the moves you missed."
   wide
 >
+  <p id="tactics-save" class="hint" role="status"></p>
   <!-- ── Setup ─────────────────────────────────────────────────── -->
   <div id="view-setup">
     <header class="page-header">
@@ -23,6 +24,17 @@ import '../styles/alerts.css';
       <form id="setup-form" class="card setup-card" novalidate>
         <div id="setup-alert" class="alert alert-error" hidden></div>
 
+        <div class="form-row">
+          <label for="tactics-pgn">Or open a PGN from your device</label>
+          <input id="tactics-pgn" type="file" accept=".pgn,text/plain,application/x-chess-pgn" />
+          <p id="tactics-pgn-name" class="hint"></p>
+          <div class="choice-row" role="group" aria-label="Side to train from PGN">
+            <label><input type="radio" name="pgn-side" value="w" checked /> White</label>
+            <label><input type="radio" name="pgn-side" value="b" /> Black</label>
+            <button id="clear-tactics-pgn" class="btn btn-text" type="button" hidden>Remove PGN</button>
+          </div>
+        </div>
+        <div class="form-row"><button id="resume-tactics" type="button" class="btn btn-outline" hidden>Resume saved training</button></div>
         <div class="form-grid">
           <div class="form-row">
             <label for="f-lichess">Lichess username</label>
@@ -71,7 +83,7 @@ import '../styles/alerts.css';
 
         <div class="setup-actions">
           <button type="submit" class="btn btn-primary btn-lg" id="btn-start">Find my mistakes</button>
-          <span id="engine-status" class="engine-status">Engine loading…</span>
+          <span id="engine-status" class="engine-status">Engine loads when you start.</span>
         </div>
       </form>
 

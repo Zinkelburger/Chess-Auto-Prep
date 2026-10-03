@@ -11,9 +11,11 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "prebuild": "npm run test:bughouse && astro check && python3 ../../../tools/bughouse_web/prepare_assets.py",
-    "predev": "python3 ../../../tools/bughouse_web/prepare_assets.py",
-    "test:bughouse": "node scripts/test-bughouse-state.mjs"
+    "prebuild": "npm run test:bughouse && npm run test:prep && astro check && python3 ../../../tools/bughouse_web/prepare_assets.py && python3 ../../../tools/prepare_prep_web.py",
+    "predev": "python3 ../../../tools/bughouse_web/prepare_assets.py && python3 ../../../tools/prepare_prep_web.py",
+    "test:bughouse": "node scripts/test-bughouse-state.mjs",
+    "test:prep": "node scripts/test-prep.mjs",
+    "test:prep:browser": "node scripts/test-prep-browser.mjs"
   },
   "dependencies": {
     "@lichess-org/chessground": "10.2.0",

@@ -1,0 +1,73 @@
+@import 'chessground/assets/chessground.base.css';
+@import 'chessground/assets/chessground.brown.css';
+@import 'chessground/assets/chessground.cburnett.css';
+#prep { --reading: #11151a; max-width: 1320px; margin: auto; }
+#prep button, #prep input, #prep textarea { font: inherit; }
+#prep input, #prep textarea { caret-color: var(--pick); }
+#prep textarea { width: 100%; resize: vertical; }
+#prep label { display: block; color: var(--text-dim); font-size: 14px; margin-bottom: 4px; }
+#prep .btn { font-size: 14px; }
+.prep-heading, .prep-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.prep-actions { justify-content: flex-start; }
+.prep-heading h1 { font-size: 26px; margin-bottom: 6px; }
+.prep-save { color: var(--text-dim); font-size: 13px; min-height: 24px; margin-top: 12px; }
+.prep-import { border-block: 1px solid var(--border); padding: 12px 0; margin: 8px 0 24px; }
+.prep-import summary, .prep-limits summary { cursor: pointer; margin-bottom: 8px; }
+.prep-import .prep-actions { margin-top: 12px; }
+.prep-fen { display: flex; align-items: center; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+.prep-fen input { flex: 1; min-width: 180px; }
+.prep-workspace { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(340px, 1.05fr); gap: 24px; align-items: start; }
+.prep-board-column { position: sticky; top: 80px; min-width: 0; }
+.prep-board { width: 100%; aspect-ratio: 1; position: relative; }
+.prep-board cg-container { width: 100%; height: 100%; }
+.prep-board cg-board { background-image: url('/board/brown.webp'); }
+.prep-board #promotion-choice { position: absolute; inset: 0; background: #0008; z-index: 30; }
+.prep-board #promotion-choice square { position: absolute; width: 12.5%; height: 12.5%; cursor: pointer; background: var(--text-dim); }
+.prep-board #promotion-choice square:hover { background: var(--pick); }
+.prep-board #promotion-choice piece { position: absolute; width: 100%; height: 100%; pointer-events: none; }
+.prep-navigation { display: flex; gap: 4px; margin: 12px 0; flex-wrap: wrap; }
+.prep-navigation button { flex: 1; padding-inline: 8px; }
+.prep-move-entry { display: flex; gap: 8px; }
+.prep-move-entry input { min-width: 0; flex: 1; }
+.prep-engine-row { display: flex; gap: 12px; align-items: center; min-height: 48px; }
+.prep-comment { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 12px; max-height: 160px; overflow: auto; }
+.prep-reading { background: var(--reading); border: 1px solid var(--border); border-radius: 8px; min-width: 0; min-height: 580px; }
+.prep-tabs { display: flex; border-bottom: 1px solid var(--border); padding: 8px; gap: 8px; }
+.prep-tabs button { border: 0; background: transparent; color: var(--text-dim); padding: 8px 16px; cursor: pointer; border-radius: 6px; }
+.prep-tabs button[aria-selected=true] { color: var(--text); background: var(--bg-raised); }
+#moves-panel, #search-panel { padding: 20px; }
+.prep-reading h2 { font-size: 18px; margin: 16px 0 8px; }
+.prep-game-list { max-height: 142px; overflow: auto; margin: 12px 0; border-bottom: 1px solid var(--border); }
+.prep-game-list button { display: block; text-align: left; width: 100%; border: 0; background: transparent; color: var(--text-dim); padding: 8px; cursor: pointer; }
+.prep-game-list button[aria-current=true] { background: var(--bg-raised); color: var(--text); }
+.prep-moves { font-family: var(--mono); font-size: 16px; line-height: 2; padding: 12px 0; max-height: 390px; overflow: auto; overflow-wrap: anywhere; }
+#prep .move-button { font-family: var(--mono); font-size: 15px; color: var(--text); background: transparent; border: 0; border-radius: 4px; padding: 4px 6px; cursor: pointer; }
+#prep .move-button[aria-current=true] { background: var(--pick-bg); outline: 1px solid var(--pick); }
+#prep .move-button:hover { background: var(--bg-raised); }
+.prep-variation { color: var(--text-dim); }
+.prep-move-comment { font-family: var(--sans); font-size: 14px; color: var(--text-dim); }
+.prep-settings { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+.prep-settings input[type=number] { width: 100%; }
+#prep fieldset { border: 0; min-width: 0; }
+#prep .prep-side { display: flex; gap: 16px; min-height: 42px; align-items: center; }
+#prep .prep-side label { display: flex; gap: 6px; align-items: center; color: var(--text); margin: 0; }
+.prep-limits { margin-bottom: 16px; }
+.prep-help, .prep-storage-note { color: var(--text-dim); font-size: 13px; line-height: 1.6; margin-top: 16px; }
+.prep-search-status { min-height: 52px; padding: 16px 0 8px; font-size: 14px; }
+.prep-error { color: var(--danger); padding: 12px 0; }
+.prep-results-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.prep-results-table th { text-align: right; color: var(--text-dim); font-size: 12px; font-weight: 400; padding: 8px 4px; }
+.prep-results-table td { text-align: right; font-family: var(--mono); font-size: 14px; padding: 6px 4px; border-top: 1px solid var(--border); }
+.prep-results-table th:first-child, .prep-results-table td:first-child { text-align: left; }
+.prep-results-table caption { text-align: left; font-size: 14px; margin-bottom: 8px; }
+#prep :focus-visible { outline: 2px solid var(--pick); outline-offset: 3px; }
+#prep ::selection { background: var(--pick-bg); color: var(--text); }
+#prep * { scrollbar-color: var(--border-strong) var(--reading); scrollbar-width: thin; }
+@media (max-width: 1000px) { .prep-workspace { gap: 16px; grid-template-columns: minmax(260px, 1fr) minmax(300px, 1fr); } }
+@media (max-width: 760px) { .prep-workspace { grid-template-columns: 1fr; } .prep-board-column { position: static; } .prep-reading { min-height: 0; } #moves-panel, #search-panel { padding: 16px; } .prep-heading h1 { font-size: 24px; } .prep-moves { max-height: 300px; } }
+
+#prep label.btn-primary { color: var(--accent-ink); margin: 0; }
+#prep label.btn:focus-within { outline: 2px solid var(--pick); outline-offset: 3px; }
+.prep-board coords.files { left: 0; bottom: 0; text-align: right; padding-right: 3px; }
+.prep-board coords.ranks { top: 0; left: 3px; }
+.prep-board coords.ranks coord { transform: none; }

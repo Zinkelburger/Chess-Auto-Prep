@@ -213,3 +213,14 @@ save/reopen, conflict, process-kill and recovery tests remain.
   The API reader/importer is `python/twic-position-finder/bughouse_expectimax.py`;
   `frontend/src/bughouse/expectimax.ts` renders the shared snapshots on both
   bughouse web pages.
+
+## Static browser preparation
+
+The separately deployed Astro frontend now exposes `/pgn`, `/expectimax`,
+`/tactics` and `/bughouse` from one site navigation. The PGN/expectimax workspace
+is `python/twic-position-finder/frontend/src/prep/`, with worker-owned parsing,
+Stockfish/Maia search and transactional browser storage. Local PGNs can move
+from the viewer into tactics; both accept custom FEN starts. These browser
+owners do not import Flutter/native storage. See the
+[frontend guide](../python/twic-position-finder/frontend/README.md#pgn-workspace-and-browser-expectimax)
+for persistence, search semantics, asset preparation and browser verification.

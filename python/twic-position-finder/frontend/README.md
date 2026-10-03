@@ -1,10 +1,12 @@
 # chessautoprep.com — frontend
 
-Static Astro site deployed to Cloudflare Pages. Four tools, one shared shell:
+Static Astro site deployed to Cloudflare Pages. Browser preparation tools, one shared shell:
 
 | Route                 | What                                                                 | Code                                   |
 | --------------------- | -------------------------------------------------------------------- | -------------------------------------- |
 | `/twic-notifications` | TWIC Alerts — create alerts anonymously, or manage them signed in    | `src/lib/alerts-page.ts` + `src/lib/*` |
+| `/pgn`               | PGN viewer, variations, comments, move entry, local save and export     | `src/prep/*` |
+| `/expectimax`        | Stockfish + Maia expectimax computed on this device                    | `src/prep/*` |
 | `/tactics`            | Tactics Trainer — Stockfish in the browser mines puzzles from games  | `src/tactics/*`                        |
 | `/bughouse`           | Two linked boards and Hivemind running entirely in the browser | `src/bughouse/*`, `../../../tools/bughouse_web/` |
 | `/bughousedb`         | BughouseDB — the shared Hivemind book; missing positions analysed in the browser | `src/bughousedb/*`, `src/bughouse/boards.ts` |
@@ -147,3 +149,61 @@ start; failed jobs are retried once per new run. Defaults use the owner's
 `twic-vps` SSH alias and existing website database paths; `--local-only`
 disables remote reads/writes. `--help` lists path, worker and budget overrides.
 No population job starts merely by updating or opening the app.
+
+## PGN workspace and browser expectimax
+
+`/pgn` and `/expectimax` share `PrepWorkspace.astro`. PGN parsing runs in a
+worker; 10 MiB / 40,000-move limits bound imports. Variations, comments, NAGs,
+headers and custom FEN starts survive PGN export. Illegal imports leave the
+accepted workspace intact. Board moves extend the current variation, including
+underpromotions through SAN/UCI entry. The workspace saves to IndexedDB after
+transactions commit; the cursor is a move path so export ordering cannot change
+its meaning. Save failures remain visible. This is device-local storage: export
+PGN for backups and desktop interchange; it is not account sync.
+
+The search worker owns one Stockfish worker and one lazy ONNX Runtime Web Maia
+session. `tools/prepare_prep_web.py` compresses the committed Maia model into
+three checksum-verified chunks below Pages' 25 MiB limit (about 40 MiB total).
+Maia uses the desktop encoder, mirrored black positions, rating inputs and
+legal-move softmax. It runs with one WASM thread using the runtime already
+prepared for bughouse, without cross-origin-isolation headers. Failed downloads
+can be retried; verified chunks are cached when browser storage allows it.
+
+Search expands breadth first. Every legal own move is retained; opponent
+replies are ranked by Maia, cut to the configured coverage and count, and
+renormalized. Leaves use Stockfish at the requested depth, converted to the
+prepared side and the desktop logistic expected-score scale. Own turns take a
+maximum; opponent turns take a weighted average. Engine scores shown in the
+table also use the prepared side. These values are estimates, not empirical
+win probabilities. Checkmate, stalemate, insufficient material and the 50-move
+rule terminate search; threefold repetition is not inferred from FEN-only nodes.
+The browser search does not claim identical trees or performance to desktop.
+
+Expansions commit atomically. Stop/budget results are explicitly partial and
+save along with the PGN; Resume accepts the same settings and an increased
+position budget. Export JSON preserves the tree and search configuration.
+Stockfish's in-memory evaluation cache survives repeated searches in the tab;
+full result snapshots survive reload. Closing the tab ends computation. There
+is no service worker: an already-loaded worker can analyse offline, but reopening
+the website offline is not promised.
+
+Tactics accepts local PGNs (choose White or Black), including custom starts,
+as well as the existing account downloads. Uploaded PGNs stay on the device.
+The viewer sends its PGN to Tactics through same-tab session storage. Puzzle
+sets, outcomes and the selected puzzle save in IndexedDB and can be resumed;
+the current puzzle restarts rather than restoring a half-played solution.
+
+Focused checks from the repository root:
+
+```sh
+scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test:prep
+scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run build
+scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test:prep:browser
+```
+
+The browser check serves the static build on loopback, uses a fresh headless
+Chrome profile, blocks external requests, and exercises actual Stockfish/Maia,
+PGN export/reload, cancellation, budgets/resume, offline inference and uploaded
+PGN tactics. Desktop/phone screenshots are under `build/prep-web/`. It does not
+access personal files or public shared analysis. The existing bughouse browser
+suite uses its own isolated API database; see the static Bughouse guide above.

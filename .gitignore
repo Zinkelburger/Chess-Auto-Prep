@@ -163,3 +163,6 @@ packaging/windows/prerequisites/VC_redist.x64.exe
 # Each is a full second checkout (hundreds of MB) with its own branch; they are
 # per-session scratch, never repository content.
 .claude/worktrees/
+
+# Generated browser Maia assets
+python/twic-position-finder/frontend/public/prep-engine/

@@ -19,6 +19,8 @@ const {
 const path = Astro.url.pathname.replace(/\/$/, '') || '/';
 
 const NAV = [
+  { href: '/pgn', label: 'PGN Viewer', match: ['/pgn'] },
+  { href: '/expectimax', label: 'Expectimax', match: ['/expectimax'] },
   { href: '/twic-notifications', label: 'TWIC Alerts', match: ['/twic-notifications', '/dashboard', '/verify', '/unsubscribe'] },
   { href: '/tactics', label: 'Tactics Trainer', match: ['/tactics'] },
   { href: '/bughouse', label: 'Bughouse Lab', match: ['/bughouse'] },
@@ -180,7 +182,7 @@ const NAV = [
   }
   .nav-links a:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
   .nav-links a.active { color: var(--accent); background: var(--accent-bg); }
-  @media (max-width: 760px) {
+  @media (max-width: 1180px) {
     .nav-inner { flex-direction: column; height: auto; padding: 10px 16px; gap: 6px; }
     .nav-links { flex-wrap: wrap; justify-content: center; }
     .nav-links a { font-size: 0.82rem; padding: 5px 10px; }
