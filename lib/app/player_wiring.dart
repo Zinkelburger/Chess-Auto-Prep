@@ -295,15 +295,18 @@ final class PlayerModes {
     _sayLeftOut(made.leftOut);
   }
 
-  /// The group study in the Repertoire trainer, every chapter as a line
+  /// The group study in Study’s Train pane, every chapter as a line
   /// trained from its own side, created first when the group has none.
-  Future<void> trainGroupStudy(PlayerGroup group) async {
+  Future<void> trainGroupStudy(
+    PlayerGroup group, {
+    VoidCallback? onOpened,
+  }) async {
     final made = await _groupStudy(group);
     if (_disposed || made == null) return;
-    final opened = await requests.open(made.ref, game: 0);
+    final opened = await requests.openStudy(made.ref);
     if (_disposed || opened is! RequestDone) return;
     trainer.setScope(TrainScope.chapter);
-    requests.switchTo(Mode.trainer);
+    onOpened?.call();
     _sayLeftOut(made.leftOut);
   }
 

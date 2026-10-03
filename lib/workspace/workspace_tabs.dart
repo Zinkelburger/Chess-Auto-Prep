@@ -69,6 +69,18 @@ PaneTabs<WorkspaceTab> readingTabs() => PaneTabs(
   open: const [WorkspaceTab.moves, WorkspaceTab.explorer, WorkspaceTab.review],
 );
 
+/// Study keeps its quiz entry beside the reading tools.
+PaneTabs<WorkspaceTab> studyTabs() => PaneTabs(
+  [
+    WorkspaceTab.moves.tab,
+    WorkspaceTab.train.tab,
+    WorkspaceTab.explorer.tab,
+    WorkspaceTab.analysis.tab,
+    WorkspaceTab.review.tab,
+  ],
+  open: const [WorkspaceTab.moves, WorkspaceTab.train],
+);
+
 /// The PGN Viewer's tabs. A file opens as a book does, on its moves alone;
 /// the explorer, the engine's review, Solitaire, what the user's books say
 /// about the game and the filter over the file's games are opened when
@@ -112,16 +124,16 @@ PaneTabs<WorkspaceTab> puzzleTabs() => PaneTabs(
   open: const [WorkspaceTab.source],
 );
 
-/// The card's tabs in My games: the book's verdict on the game first and
-/// always there, the game beside it, and the explorer, whose Book shows
-/// what else the book plays.
+/// My games starts on the game, with book comparison and review beside it.
+/// Browsing and engine review remain useful without a selected book.
 PaneTabs<WorkspaceTab> bookTabs() => PaneTabs(
   const [
-    PaneTab(WorkspaceTab.book, 'Book', pinned: true),
-    PaneTab(WorkspaceTab.moves, 'Game'),
+    PaneTab(WorkspaceTab.moves, 'Game', pinned: true),
+    PaneTab(WorkspaceTab.book, 'Book'),
+    PaneTab(WorkspaceTab.review, 'Game review'),
     PaneTab(WorkspaceTab.explorer, 'Explorer'),
   ],
-  open: const [WorkspaceTab.moves, WorkspaceTab.explorer],
+  open: const [WorkspaceTab.book, WorkspaceTab.review],
 );
 
 /// The card's tabs as a browser's menu has them: each one that can be

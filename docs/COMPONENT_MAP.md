@@ -73,13 +73,19 @@ Bughouse mode is offered when its engine assets are present.
   edits. The final PGN can be copied or added to a study. See
   [Solitaire behavior](v2/features/pgn-viewer.md#game-buttons-and-solitaire-2026-09-28).
 - Study uses the same document session for chapters, tags, starts, cleanup,
-  quiz markers, import/export and retained retry commands.
+  quiz markers, import/export and retained retry commands. `studyTabs` and
+  `Train study` expose the shared trainer without leaving Study.
 - Tactics mines downloaded games into `tactics_sets/Default.pgn`, trains puzzles
   on the shared board and can inspect the source game. Text search and filters
-  define both the visible puzzle list and Play's counted queue. Alternative answers use
+  define both the visible puzzle list and Play's counted queue.
+  `PuzzleTrainer.continueSession` restores a parked run without clearing results. Alternative answers use
   a supervised finite engine job; unavailable checks do not invent grades.
+- My games reads saved games independently of the selected comparison book;
+  `BookChecked.hasBook` distinguishes browsing from opening comparison. Its
+  initial Game tab has Book and Game review beside it.
 - Players/prep owns identities, groups, downloads, findings, prepared flags and
-  linked prep studies. Failed analysis offers Try again and diagnostic Details;
+  linked prep studies. Player analysis exposes My book beside Game, and Player
+  openings offers saving the current line to a prep study. Failed analysis offers Try again and diagnostic Details;
   an unsuccessful refresh retains the previous corpus and its source revisions.
   `PlayerPosition.addGame` owns result counting for both the corpus and filtered
   statistics; its game and move collections are read-only to consumers. Filtering

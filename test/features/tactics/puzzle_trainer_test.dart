@@ -52,6 +52,26 @@ void main() {
   }
 
   test(
+    'continuing a parked session preserves its puzzle and scored results',
+    () => sitting((async) {
+      begin(async);
+      w.trainer.play('f7f6');
+      final first = w.trainer.up!.puzzle.fen;
+      final results = Map.of(w.trainer.run!.outcomes);
+      expect(results[first], Outcome.failed);
+      w.trainer.putDown();
+      unawaited(w.trainer.continueSession());
+      async.flushMicrotasks();
+      expect(w.trainer.up!.puzzle.fen, first);
+      expect(w.trainer.run!.outcomes, results);
+      final up = w.trainer.up;
+      unawaited(w.trainer.continueSession());
+      async.flushMicrotasks();
+      expect(w.trainer.up, same(up), reason: 'a visible puzzle is not reset');
+    }),
+  );
+
+  test(
     'play puts the first of the queue on the board with its answer '
     'hidden',
     () => sitting((async) {

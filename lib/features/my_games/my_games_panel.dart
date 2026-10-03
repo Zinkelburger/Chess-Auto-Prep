@@ -118,9 +118,6 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
                 'Reading your games and repertoires…',
               ),
               BookNoAccounts() => const SizedBox.shrink(),
-              BookNotSet() => const _Message(
-                'No book set. Pick the book to compare your games with.',
-              ),
               BookChecked(:final games) when games.isEmpty => const _Message(
                 'No games saved yet. Get games above to download them.',
               ),
@@ -347,6 +344,11 @@ class _Openings extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!checked.hasBook) {
+      return const _Message(
+        'Choose a book above to compare openings. Your saved games are in Games.',
+      );
+    }
     final items = <Widget>[];
     for (final kind in Deviation.values) {
       final ways = checked.waysOf(kind);

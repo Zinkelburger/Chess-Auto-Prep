@@ -68,7 +68,13 @@ final class TacticsView extends ModeView {
   void _play({Puzzle? first}) {
     tabs.show(WorkspaceTab.puzzle);
     final puzzles = _training.puzzles;
-    unawaited(first == null ? puzzles.start() : puzzles.show(first));
+    unawaited(
+      first != null
+          ? puzzles.show(first)
+          : puzzles.run != null
+          ? puzzles.continueSession()
+          : puzzles.start(),
+    );
   }
 
   /// The solved puzzle's game with the engine on: the Game tab, not
@@ -120,9 +126,13 @@ final class TacticsView extends ModeView {
 
   @override
   Widget? tab(BuildContext context, WorkspaceTab tab) => switch (tab) {
-    WorkspaceTab.puzzle => PuzzlePane(
-      trainer: _training.puzzles,
-      onAnalyze: _analyze,
+    WorkspaceTab.puzzle => ListenableBuilder(
+      listenable: _training.tactics,
+      builder: (context, _) => PuzzlePane(
+        trainer: _training.puzzles,
+        onAnalyze: _analyze,
+        available: _training.tactics.queue.length,
+      ),
     ),
     WorkspaceTab.source => SourceGamePane(
       sources: _training.sources,
@@ -206,7 +216,7 @@ final class MyGamesView extends ModeView {
   Widget list(Widget toggle) => MyGamesPanel(
     book: _book,
     session: workspace.session,
-    accounts: MyGamesBlock(games: _training.myGames),
+    accounts: MyGamesBlock(games: _training.myGames, forPuzzles: false),
     bookChip: BookChip(books: workspace.books, onEdit: _requests.editBooks),
     onOpen: _open,
     trailing: toggle,

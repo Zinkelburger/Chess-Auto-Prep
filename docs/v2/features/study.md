@@ -44,6 +44,14 @@ to park on). Board, movetext reader, annotation panel and engine bar are the sha
 - **Chapter manager** — a 520 × 600 dialog with the same list, inline edit/delete buttons, `Open now`
   under the active chapter, the hint `Drag to reorder` / `Reordering is off while searching`, `Done`.
 
+### Training from Study
+
+`New study` and `Import PGN…` are visible when no study is open. An open study
+shows `Train study`; its Train tab uses the shared trainer in place, with each
+chapter's playing side and quiz markers. It does not replace the repertoire
+selected in Repertoire trainer. Study training offers reading its lines in the
+same workspace without sending a study into the repertoire builder.
+
 ## Actions
 **New study** — Actions → a name prompt, refused in the field when nothing filename-safe is left (`That
 name has no characters a file can use.`) or on a clash (`A study with this name already exists.`). It

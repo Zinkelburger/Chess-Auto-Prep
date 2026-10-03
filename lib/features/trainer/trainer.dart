@@ -431,7 +431,11 @@ class Trainer extends ChangeNotifier {
     if (lesson == null || state is! TrainerReady) return null;
     final line = state.lineOf(lesson.line.key);
     if (line == null) return null;
-    return state.toRead(lesson.line, ReadIn.builder, ply: lesson.drill.shown);
+    return state.toRead(
+      lesson.line,
+      state.study ? ReadIn.moves : ReadIn.builder,
+      ply: lesson.drill.shown,
+    );
   }
 
   /// How the tab lists the lines. Kept here, not in the list, so a sitting

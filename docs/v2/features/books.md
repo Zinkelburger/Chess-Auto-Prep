@@ -20,7 +20,7 @@ scope). A screen of its own, no board.
   `Rename…`, `Stop using` and `Delete…`. Under it `Search repertoires and chapters`, then every
   repertoire: a box (ticked, part-ticked or empty), its name and `2 of 5` chapters; open to show its
   chapters, each with a box and `Open in the builder`. Draft chapters are not listed.
-- **Empty** — `No books yet.` with `New book`; `No repertoires yet.`; `Nothing matches "q".`
+- **Empty** — `No books yet.` with `New book`; `Open repertoire builder` when the book has no repertoires to choose from; `Nothing matches "q".`
 - **Book chip** — elsewhere: the book in use by name (`No book set`), which opens a typeable
   `Use book` list, and a pencil (`Edit books`) into this mode.
 

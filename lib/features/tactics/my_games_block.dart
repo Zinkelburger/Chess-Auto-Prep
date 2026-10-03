@@ -13,9 +13,15 @@ import 'my_games_words.dart';
 /// that fetches and reviews them, and one line saying where that stands.
 /// With no username yet it is only the way to add one.
 class MyGamesBlock extends StatelessWidget {
-  const MyGamesBlock({super.key, required this.games, this.primary = true});
+  const MyGamesBlock({
+    super.key,
+    required this.games,
+    this.primary = true,
+    this.forPuzzles = true,
+  });
 
   final MyGames games;
+  final bool forPuzzles;
 
   /// Whether getting the games is the thing to do in the column. Where
   /// there are puzzles to play it is not, and its button steps back so
@@ -49,8 +55,9 @@ class MyGamesBlock extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       Text(
-        'Add your Lichess or Chess.com username to turn your mistakes into '
-        'puzzles.',
+        forPuzzles
+            ? 'Add your Lichess or Chess.com username to turn your mistakes into puzzles.'
+            : 'Add your Lichess or Chess.com username to browse and review your games.',
         style: Theme.of(context).textTheme.bodySmall,
       ),
       const SizedBox(height: Space.s),

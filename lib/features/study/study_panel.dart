@@ -38,12 +38,14 @@ class StudyPanel extends StatefulWidget {
     required this.studies,
     required this.session,
     required this.onOpen,
+    this.onTrain,
     this.trailing,
   });
 
   final Studies studies;
   final DocumentSession session;
   final OpenChapter onOpen;
+  final VoidCallback? onTrain;
 
   /// What sits in the toolbar's corner: the host's toggle for the pane.
   final Widget? trailing;
@@ -322,6 +324,7 @@ class _StudyPanelState extends State<StudyPanel> {
               if (open != null) unawaited(_deleteStudy(open));
             },
             onNewChapter: _newChapter,
+            onTrain: widget.onTrain,
             trailing: widget.trailing,
           ),
           Expanded(child: _body(context)),
@@ -396,6 +399,7 @@ class _Toolbar extends StatelessWidget {
     required this.onCopyStudy,
     required this.onDeleteStudy,
     required this.onNewChapter,
+    required this.onTrain,
     required this.trailing,
   });
 
@@ -410,6 +414,7 @@ class _Toolbar extends StatelessWidget {
   final VoidCallback onCopyStudy;
   final VoidCallback onDeleteStudy;
   final VoidCallback onNewChapter;
+  final VoidCallback? onTrain;
   final Widget? trailing;
 
   /// Making and removing whole studies, and taking one away as text. The
@@ -493,6 +498,22 @@ class _Toolbar extends StatelessWidget {
             hint: 'Search studies',
             onChanged: onSearch,
           ),
+          const SizedBox(height: Space.s),
+          if (!hasOpenStudy)
+            FilledButton(
+              onPressed: busy ? null : onNewStudy,
+              child: const Text('New study'),
+            ),
+          if (!hasOpenStudy)
+            TextButton(
+              onPressed: busy ? null : onImportPgn,
+              child: const Text('Import PGN…'),
+            ),
+          if (hasOpenStudy && onTrain != null)
+            OutlinedButton(
+              onPressed: busy ? null : onTrain,
+              child: const Text('Train study'),
+            ),
           if (hasOpenStudy)
             Align(
               alignment: Alignment.centerLeft,

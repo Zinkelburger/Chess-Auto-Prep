@@ -151,6 +151,16 @@ games` / `Prepare`; **Players & prep** from the mode menu, the picker and either
   automatically · Separate accounts with commas`, and an add panel with `New player row` and `Or add
   someone from your saved players:` (`Add <name>` each).
 
+### Preparation handoffs
+
+Player analysis opens with `Player openings`, `Game`, `My book` and `Explorer`.
+The current line can be saved to the player's prep study directly from Player
+openings, including a line beyond their recorded games. My book explains when
+no player or matching games are available and keeps its actions usable in a
+narrow pane. `Train group study` opens the group's study in Study's Train pane,
+with each chapter's own playing side, independent of the trainer's last selected
+repertoire.
+
 ## Actions
 **Download a player** — `Online…` → `Download a player’s games` asks site (`Chess.com` / `Lichess`),
 `Username`, `How many games` (`Recent months`, default 6, or `Last N games`, default 100 — remembered

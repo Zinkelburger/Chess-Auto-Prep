@@ -49,6 +49,14 @@ state. No screenshot.
   12s total · avg 21s per puzzle`, then `Retry mistakes ({n})` and `Done`.
 - **Board pane** — the shared board during a session, see `workspace.md`.
 
+### Returning to a session
+
+Leaving Tactics keeps the session's results. On return, `Continue session`
+reopens the last puzzle without starting a new run; `End session` shows its recap.
+An already visible puzzle is not reset by Continue. Before a first session the
+Puzzle pane explains how to get puzzles and reports the playable count.
+Play and Continue session stay in the list; the Actions menu also offers Continue. An unreadable puzzle set offers `Try again` beside the error.
+
 ## Actions
 **Set up accounts** — `Set up my accounts` or the Accounts block → usernames are saved and nothing
 downloads while typing. The download needs no OAuth; a connected Lichess token is only attached as a

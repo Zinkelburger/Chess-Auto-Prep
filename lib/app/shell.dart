@@ -431,7 +431,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
           onStudy: _requests.mode == Mode.trainer
               ? () => unawaited(_studyLesson())
               : null,
-          onImport: () => unawaited(_importTrainingCourse()),
+          onImport: _requests.mode == Mode.study
+              ? null
+              : () => unawaited(_importTrainingCourse()),
           onSettings: () => unawaited(
             showSettingsDialog(
               context,

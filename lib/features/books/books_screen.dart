@@ -23,6 +23,7 @@ class BooksScreen extends StatelessWidget {
     required this.books,
     required this.catalog,
     required this.onOpenChapter,
+    this.onAddRepertoire,
   });
 
   final Books books;
@@ -32,6 +33,7 @@ class BooksScreen extends StatelessWidget {
 
   /// Opens a chapter in the builder.
   final ValueChanged<ChapterRef> onOpenChapter;
+  final VoidCallback? onAddRepertoire;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -55,6 +57,7 @@ class BooksScreen extends StatelessWidget {
                     book: editing,
                     catalog: catalog,
                     onOpenChapter: onOpenChapter,
+                    onAddRepertoire: onAddRepertoire,
                   ),
           ),
         ],
@@ -248,12 +251,14 @@ class _BookEditor extends StatefulWidget {
     required this.book,
     required this.catalog,
     required this.onOpenChapter,
+    this.onAddRepertoire,
   });
 
   final Books books;
   final Book book;
   final RepertoireCatalog catalog;
   final ValueChanged<ChapterRef> onOpenChapter;
+  final VoidCallback? onAddRepertoire;
 
   @override
   State<_BookEditor> createState() => _BookEditorState();
@@ -367,11 +372,24 @@ class _BookEditorState extends State<_BookEditor> {
           child: rows.isEmpty
               ? Padding(
                   padding: const EdgeInsets.all(Space.l),
-                  child: Text(
-                    widget.catalog.repertoires.isEmpty
-                        ? 'No repertoires yet.'
-                        : 'Nothing matches "${_search.text.trim()}".',
-                    style: theme.textTheme.bodySmall,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.catalog.repertoires.isEmpty
+                            ? 'Create or import a repertoire, then choose its chapters for this book.'
+                            : 'Nothing matches "${_search.text.trim()}".',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                      if (widget.catalog.repertoires.isEmpty &&
+                          widget.onAddRepertoire != null) ...[
+                        const SizedBox(height: Space.m),
+                        OutlinedButton(
+                          onPressed: widget.onAddRepertoire,
+                          child: const Text('Open repertoire builder'),
+                        ),
+                      ],
+                    ],
                   ),
                 )
               : ListView(children: rows),

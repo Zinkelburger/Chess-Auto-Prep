@@ -24,10 +24,12 @@ class PlayerTreePane extends StatelessWidget {
     required this.session,
     required this.onOpen,
     required this.onStart,
+    this.onSave,
   });
   final PlayerAnalysis analysis;
   final DocumentSession session;
   final ValueChanged<int> onOpen;
+  final VoidCallback? onSave;
 
   /// Puts the player's games on the board from their first move: the way
   /// out of a position none of them reached.
@@ -63,6 +65,14 @@ class PlayerTreePane extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
+          if (onSave != null && session.cursor.indexes.isNotEmpty)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: onSave,
+                child: const Text('Save line to prep study'),
+              ),
+            ),
           const _TableHeader(),
           for (final move in answer.moves)
             _MoveRow(
@@ -94,9 +104,20 @@ class PlayerTreePane extends StatelessWidget {
         : 'None of these games reached the position on the board.',
     action: analysis.gameIndexes.isEmpty
         ? null
-        : OutlinedButton(
-            onPressed: onStart,
-            child: const Text('Go to the first move'),
+        : Wrap(
+            spacing: Space.s,
+            runSpacing: Space.s,
+            children: [
+              OutlinedButton(
+                onPressed: onStart,
+                child: const Text('Go to the first move'),
+              ),
+              if (onSave != null && session.cursor.indexes.isNotEmpty)
+                TextButton(
+                  onPressed: onSave,
+                  child: const Text('Save line to prep study'),
+                ),
+            ],
           ),
   );
 }

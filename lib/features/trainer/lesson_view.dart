@@ -197,7 +197,13 @@ class _OnLine extends StatelessWidget {
           : 'Explore this position with analysis and databases, then return to training',
       child: TextButton(
         onPressed: onStudy ?? (trainer.lessonToRead == null ? null : _read),
-        child: Text(onStudy == null ? 'Open in Builder' : 'Study position'),
+        child: Text(
+          onStudy != null
+              ? 'Study position'
+              : trainer.lessonToRead?.place == ReadIn.moves
+              ? 'Read line'
+              : 'Open in Builder',
+        ),
       ),
     );
     final moves = peeking

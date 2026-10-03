@@ -162,6 +162,21 @@ final class PuzzleTrainer extends ChangeNotifier {
     await _bringUp(puzzle.fen);
   }
 
+  Fen? _parkedAt;
+
+  /// Returns to a parked session without discarding its results.
+  Future<void> continueSession() async {
+    if (_disposed || _suspended || _run == null || _up != null) return;
+    final run = _run!;
+    final available = {for (final puzzle in _set.puzzles) puzzle.fen};
+    final wanted = _parkedAt ?? run.seen.lastOrNull;
+    final next = available.contains(wanted)
+        ? wanted
+        : run.queue.where(available.contains).firstOrNull;
+    if (next == null) return end();
+    await _bringUp(next);
+  }
+
   /// Plays the failed and skipped puzzles of the last run again.
   Future<void> retryMistakes() async {
     if (_disposed || _suspended) return;
@@ -195,6 +210,7 @@ final class PuzzleTrainer extends ChangeNotifier {
   void putDown() {
     _parked = true;
     if (_up == null) return;
+    _parkedAt = _up!.puzzle.fen;
     _cancelTimers();
     _up = null;
     _session.showOnlyTo(null);
@@ -476,6 +492,7 @@ final class PuzzleTrainer extends ChangeNotifier {
 
   Future<void> _begin(PuzzleRun run) async {
     _finished = null;
+    _parkedAt = null;
     _run = run;
     notifyListeners();
     await _bringUp(run.queue.first);
