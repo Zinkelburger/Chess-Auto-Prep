@@ -6,6 +6,7 @@ import 'directory_entries.dart';
 import 'chapter_files.dart';
 import 'recovery_gate.dart';
 import 'recovery_files.dart';
+import 'relocation_notes.dart' show recoveryFolder;
 
 /// The study files under `Documents/studies/`: one `.pgn` per study, one
 /// game in it per chapter.
@@ -17,6 +18,7 @@ import 'recovery_files.dart';
 /// through the document store like every other PGN.
 abstract interface class StudyFiles {
   Future<StudyListing> list();
+  Future<DeletedListing> deleted();
 }
 
 sealed class StudyListing {
@@ -48,6 +50,30 @@ final class StudyDirectory implements StudyFiles {
 
   /// The `studies` directory itself.
   final Directory root;
+
+  @override
+  Future<DeletedListing> deleted() async {
+    try {
+      return await _recovery.run(_listDeleted);
+    } on RecoveryRequired catch (error) {
+      return DeletedUnreadable(error.detail);
+    } on FileSystemException catch (error) {
+      return DeletedUnreadable(error.message);
+    }
+  }
+
+  Future<DeletedListing> _listDeleted() async {
+    final trash = Directory(p.join(root.path, recoveryFolder));
+    if (!await trash.exists()) return const DeletedChapters([]);
+    final found = <DeletedChapter>[];
+    await for (final entry in directoryEntries(trash, followLinks: false)) {
+      if (entry is! File) continue;
+      final record = readRecoveryName(entry.path, folder: root.path);
+      if (record != null) found.add(record);
+    }
+    found.sort((a, b) => b.deletedAt.compareTo(a.deletedAt));
+    return DeletedChapters(List.unmodifiable(found));
+  }
 
   @override
   Future<StudyListing> list() async {

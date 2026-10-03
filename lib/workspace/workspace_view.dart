@@ -50,6 +50,7 @@ final class WorkspaceHooks {
     this.header = true,
     this.builder = false,
     this.noteEditing = false,
+    this.onAnnotate,
     this.gameCounter = true,
     this.gameOrdering,
     this.moveMenu,
@@ -73,6 +74,7 @@ final class WorkspaceHooks {
     this.underHeading,
   });
 
+  final VoidCallback? onAnnotate;
   final bool trainingTools;
   final VoidCallback? onStudyLesson;
 
@@ -263,6 +265,7 @@ class WorkspaceView extends StatelessWidget {
             editing: editing,
             onSave: hooks.onSaveHeld,
             commentInNote: hooks.noteEditing,
+            studyTools: hooks.onAnnotate != null,
           ),
           // While part of the game is hidden the arrows would walk into it.
           _UnlessHidden(
@@ -354,17 +357,51 @@ class _Tabbed extends StatelessWidget {
     final solitaire = workspace.solitaire;
     Widget reader() => MoveTreeView(
       session: workspace.session,
-      moveMenu: hooks.moveMenu,
+      moveMenu: (path) => [
+        if (hooks.onAnnotate != null)
+          MenuItemButton(
+            onPressed: () {
+              workspace.session.goTo(path);
+              hooks.onAnnotate!();
+            },
+            child: const Text('Comment this move'),
+          ),
+        ...?hooks.moveMenu?.call(path),
+      ],
       heading: hooks.header ? _heading() : null,
       preview: solitaire?.active == true && solitaire?.record != null
           ? (tree: solitaire!.record!, onRead: solitaire.inspect)
           : null,
     );
-    return solitaire == null
+    Widget annotatedReader() => hooks.onAnnotate == null
         ? reader()
         : ListenableBuilder(
+            listenable: workspace.session,
+            builder: (context, _) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (workspace.session.chapter != null &&
+                    workspace.session.shownTo == null)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Tooltip(
+                      message: AppKey.edit.tip('Annotate the selected move'),
+                      child: TextButton(
+                        onPressed: hooks.onAnnotate,
+                        child: const Text('Annotate'),
+                      ),
+                    ),
+                  ),
+                Expanded(child: reader()),
+              ],
+            ),
+          );
+    return solitaire == null
+        ? annotatedReader()
+        : ListenableBuilder(
             listenable: solitaire,
-            builder: (context, _) => reader(),
+            builder: (context, _) =>
+                solitaire.active ? reader() : annotatedReader(),
           );
   }
 

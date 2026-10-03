@@ -96,23 +96,32 @@ CommentResult setComment(
 /// annotations 1 to 6) on the move at [at], in place of any of those six it
 /// had, or takes them all away when [nag] is null. Other annotation numbers
 /// stay: they say things these six do not.
-CommentResult setGlyph(Chapter chapter, {required NodePath at, int? nag}) {
+CommentResult setGlyph(
+  Chapter chapter, {
+  required NodePath at,
+  int? nag,
+  bool position = false,
+}) {
   if (at.isRoot) return _unchanged(chapter);
   return _edited(
     chapter,
     at,
-    (node) => _glyphed(node, nag),
-    holds: (node) => node.nags.any(isGlyph),
+    (node) => _glyphed(node, nag, position: position),
+    holds: (node) => node.nags.any(position ? isPositionGlyph : isGlyph),
   );
 }
 
 /// Whether [nag] is one of the six glyphs a reader prints after a move.
 bool isGlyph(int nag) => nag >= 1 && nag <= 6;
 
-MoveNode _glyphed(MoveNode node, int? nag) {
+bool isPositionGlyph(int nag) =>
+    const {10, 13, 14, 15, 16, 17, 18, 19}.contains(nag);
+
+MoveNode _glyphed(MoveNode node, int? nag, {bool position = false}) {
+  final inGroup = position ? isPositionGlyph : isGlyph;
   final kept = [
     for (final old in node.nags)
-      if (!isGlyph(old)) old,
+      if (!inGroup(old)) old,
   ];
   final nags = [?nag, ...kept];
   return _sameNags(nags, node.nags) ? node : withNags(node, nags);

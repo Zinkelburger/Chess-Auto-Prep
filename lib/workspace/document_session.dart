@@ -584,9 +584,9 @@ final class DocumentSession extends ChangeNotifier {
   /// Puts the glyph [nag] on the move at [at] in place of the one it had, or
   /// takes it away when [nag] is null: the six marks a reader prints after a
   /// move, and nothing else about it.
-  void setGlyph(NodePath at, int? nag) => _commentEdit(
+  void setGlyph(NodePath at, int? nag, {bool position = false}) => _commentEdit(
     'glyph',
-    (chapter) => edits.setGlyph(chapter, at: at, nag: nag),
+    (chapter) => edits.setGlyph(chapter, at: at, nag: nag, position: position),
   );
 
   /// Puts the bare token [marker] on the move at [at], or takes it away. A

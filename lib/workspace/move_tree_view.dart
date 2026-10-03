@@ -13,6 +13,7 @@ import '../chess/pgn/move_label.dart';
 import '../chess/pgn/move_text.dart';
 import '../chess/pgn/study.dart';
 import '../ui/listening_state.dart';
+import '../ui/app_keys.dart';
 import '../ui/selection.dart';
 import '../ui/theme.dart';
 import 'chapter_commands.dart';
@@ -628,18 +629,24 @@ class _MoveTokenState extends State<_MoveToken>
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: widget.onTap,
-      onSecondaryTap: _openMenu,
-      onLongPress: _openMenu,
-      borderRadius: BorderRadius.circular(3),
-      child: Container(
-        padding: moveTokenPadding,
-        decoration: BoxDecoration(
-          color: _selected ? scheme.primary.withValues(alpha: 0.35) : null,
+    return CallbackShortcuts(
+      bindings: AppKey.moveActions.bind(_openMenu),
+      child: Semantics(
+        selected: _selected,
+        child: InkWell(
+          onTap: widget.onTap,
+          onSecondaryTap: _openMenu,
+          onLongPress: _openMenu,
           borderRadius: BorderRadius.circular(3),
+          child: Container(
+            padding: moveTokenPadding,
+            decoration: BoxDecoration(
+              color: _selected ? scheme.primary.withValues(alpha: 0.35) : null,
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: _label(scheme),
+          ),
         ),
-        child: _label(scheme),
       ),
     );
   }

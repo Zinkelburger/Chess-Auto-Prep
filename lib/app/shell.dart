@@ -930,6 +930,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       moves: _moves,
       hooks: WorkspaceHooks(
         builder: _view is RepertoiresView,
+        onAnnotate: !_inspecting && _view is StudyView
+            ? () => _editing.value = true
+            : null,
         noteEditing: _view is RepertoiresView || _view is ViewerView,
         header: _view.header,
         underHeading: _inspecting ? null : _view.underHeading,

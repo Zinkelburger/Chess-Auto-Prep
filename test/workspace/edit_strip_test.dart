@@ -43,6 +43,20 @@ void main() {
 
   void edit(String words) => fixture.session.setComment(sicilian, words);
 
+  testWidgets('annotation glyphs remain usable in a narrow pane', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(276, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    fixture.session.goTo(sicilian);
+    await tester.pumpWidget(strip(fixture));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Black is winning'));
+    await tester.pumpAndSettle();
+    expect(fixture.session.currentMove!.nags, contains(19));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('while reading, with nothing to report, there is no strip', (
     tester,
   ) async {

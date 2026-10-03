@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../chess/pgn/comment_edits.dart' show isGlyph;
+import '../chess/pgn/comment_edits.dart' show isGlyph, isPositionGlyph;
 import '../chess/pgn/comment_text.dart';
 import '../chess/pgn/game_tree.dart';
+import '../chess/pgn/study.dart';
+import '../ui/toggle_chip.dart';
 import '../ui/listening_state.dart';
 import '../ui/confirm_dialog.dart';
 import '../ui/theme.dart';
@@ -33,10 +35,12 @@ class EditStrip extends StatefulWidget {
     required this.editing,
     this.onSave,
     this.commentInNote = false,
+    this.studyTools = false,
   });
 
   final DocumentSession session;
   final bool commentInNote;
+  final bool studyTools;
   final DocumentSaver saver;
   final ValueNotifier<bool> editing;
 
@@ -127,6 +131,7 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
     return ListenableBuilder(
       listenable: Listenable.merge([
         widget.session,
+        widget.session.cursorListenable,
         widget.saver,
         widget.editing,
       ]),
@@ -178,7 +183,16 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
               if (_notice case final notice?) _Notice(notice),
               if (editing) ...[
                 const SizedBox(height: Space.s),
-                _Glyphs(session: widget.session),
+                Wrap(
+                  spacing: Space.m,
+                  runSpacing: Space.xs,
+                  children: [
+                    _Glyphs(session: widget.session),
+                    _Glyphs(session: widget.session, position: true),
+                  ],
+                ),
+                if (widget.studyTools && !widget.session.cursor.isRoot)
+                  _QuizControls(session: widget.session),
                 const SizedBox(height: Space.s),
                 if (!widget.commentInNote)
                   CommentField(session: widget.session),
@@ -224,7 +238,7 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
           DocumentSession(holdsEdits: true) => const _Notice(
             'Edits stay unsaved until you save them',
           ),
-          _ => _SaveLine(state: state),
+          _ => Semantics(liveRegion: true, child: _SaveLine(state: state)),
         },
       ),
       if (state is SaveFailed)
@@ -370,11 +384,13 @@ class _Notice extends StatelessWidget {
 /// one the move has takes it off. Off at the start position, which is not a
 /// move. It follows the cursor itself; the strip around it does not.
 class _Glyphs extends StatelessWidget {
-  const _Glyphs({required this.session});
+  const _Glyphs({required this.session, this.position = false});
+  final bool position;
 
   final DocumentSession session;
 
-  static const _nags = [3, 1, 5, 6, 2, 4];
+  List<int> get _nags =>
+      position ? [10, 13, 14, 15, 16, 17, 18, 19] : [3, 1, 5, 6, 2, 4];
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder(
@@ -384,21 +400,93 @@ class _Glyphs extends StatelessWidget {
 
   Widget _buttons(NodePath at) {
     final move = session.currentMove;
-    final current = move?.nags.where(isGlyph).firstOrNull;
+    final current = move?.nags
+        .where(position ? isPositionGlyph : isGlyph)
+        .firstOrNull;
+    if (position) {
+      return Wrap(
+        spacing: Space.xs,
+        runSpacing: Space.xs,
+        children: [
+          for (final nag in _nags)
+            Tooltip(
+              message: _glyphMeaning(nag),
+              child: ToggleChip(
+                label: nagGlyph(nag)!,
+                selected: nag == current,
+                onSelected: move == null
+                    ? null
+                    : (on) =>
+                          session.setGlyph(at, on ? nag : null, position: true),
+              ),
+            ),
+        ],
+      );
+    }
     return ToggleButtons(
       isSelected: [for (final nag in _nags) nag == current],
       onPressed: move == null
           ? null
           : (index) {
               final nag = _nags[index];
-              session.setGlyph(at, nag == current ? null : nag);
+              session.setGlyph(
+                at,
+                nag == current ? null : nag,
+                position: position,
+              );
             },
       constraints: const BoxConstraints(
         minWidth: glyphButtonWidth,
         minHeight: glyphButtonHeight,
       ),
       children: [
-        for (final nag in _nags) Text(nagGlyph(nag)!, style: monoText),
+        for (final nag in _nags)
+          Tooltip(
+            message: _glyphMeaning(nag),
+            child: Text(nagGlyph(nag)!, style: monoText),
+          ),
+      ],
+    );
+  }
+}
+
+String _glyphMeaning(int nag) => switch (nag) {
+  1 => 'Good move',
+  2 => 'Mistake',
+  3 => 'Brilliant move',
+  4 => 'Blunder',
+  5 => 'Interesting move',
+  6 => 'Dubious move',
+  10 => 'Equal position',
+  13 => 'Unclear position',
+  14 => 'White is slightly better',
+  15 => 'Black is slightly better',
+  16 => 'White is better',
+  17 => 'Black is better',
+  18 => 'White is winning',
+  19 => 'Black is winning',
+  _ => '',
+};
+
+class _QuizControls extends StatelessWidget {
+  const _QuizControls({required this.session});
+  final DocumentSession session;
+  @override
+  Widget build(BuildContext context) {
+    final at = session.cursor;
+    final comment = session.commentAt(at);
+    return Wrap(
+      spacing: Space.s,
+      children: [
+        for (final (marker, label) in [
+          (quizStartMarker, 'Quiz starts here'),
+          (quizEndMarker, 'Quiz ends here'),
+        ])
+          ToggleChip(
+            label: label,
+            selected: hasToken(comment, marker),
+            onSelected: (on) => session.setMarker(at, marker, on: on),
+          ),
       ],
     );
   }

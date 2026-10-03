@@ -99,17 +99,20 @@ List<TrainingLine> trainingLines(Chapter chapter, {required String source}) {
   // A study read whole keeps each chapter's own side; a repertoire file,
   // or a study given a `// Color:` line, has one side for every line.
   final ownSides =
-      statedSide(chapter.preamble) == null && sidesPerChapter(chapter.lines);
+      chapter.game != null ||
+      (statedSide(chapter.preamble) == null &&
+          studyNameIn(chapter.lines) != null);
   return [
     for (final (index, line) in chapter.lines.indexed)
-      if (ids[index] case final id?)
-        _lineOf(
-          line,
-          index,
-          chapter: chapter.name,
-          key: (source: source, id: id),
-          side: ownSides ? studyOrientation(line) : chapter.side,
-        ),
+      if (!ownSides || (studyTrainingSide(line) != null && line.isWhole))
+        if (ids[index] case final id?)
+          _lineOf(
+            line,
+            index,
+            chapter: chapter.name,
+            key: (source: source, id: id),
+            side: ownSides ? studyTrainingSide(line)! : chapter.side,
+          ),
   ];
 }
 

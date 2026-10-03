@@ -74,7 +74,12 @@ Bughouse mode is offered when its engine assets are present.
   [Solitaire behavior](v2/features/pgn-viewer.md#game-buttons-and-solitaire-2026-09-28).
 - Study uses the same document session for chapters, tags, starts, cleanup,
   quiz markers, import/export and retained retry commands. `studyTabs` and
-  `Train study` expose the shared trainer without leaving Study.
+  `Train study` expose the shared trainer without leaving Study. The chapter
+  list has search, drag ordering and move-to-position; the import preview joins
+  PGN files, pasted PGN and Lichess URLs with new/current-study destinations.
+  `TrainingSide` separates practice choices from board orientation, with chapter
+  or whole-study scope. Deleted-study restoration retains uncertain moves for
+  exact retry. See [Study](v2/features/study.md).
 - Tactics mines downloaded games into `tactics_sets/Default.pgn`, trains puzzles
   on the shared board and can inspect the source game. Text search and filters
   define both the visible puzzle list and Play's counted queue.

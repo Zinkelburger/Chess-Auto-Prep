@@ -62,6 +62,19 @@ const twoLines = '''
 ''';
 
 void main() {
+  testWidgets('Shift+F10 opens the focused move menu', (tester) async {
+    final fixture = await openSession(twoLines);
+    addTearDown(fixture.dispose);
+    await pumpTree(tester, fixture);
+    Focus.of(tester.element(find.textContaining('Nf6').first)).requestFocus();
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.f10);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pumpAndSettle();
+    expect(find.text('Copy line PGN'), findsOneWidget);
+  });
+
   testWidgets('a move copies the line that leads to it, or its position', (
     tester,
   ) async {

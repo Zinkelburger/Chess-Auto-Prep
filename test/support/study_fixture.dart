@@ -29,6 +29,9 @@ final class ScriptedStudyFiles implements StudyFiles {
   StudyListing listing;
 
   var listings = 0;
+  DeletedListing deletedListing = const DeletedChapters([]);
+  @override
+  Future<DeletedListing> deleted() async => deletedListing;
 
   @override
   Future<StudyListing> list() async {

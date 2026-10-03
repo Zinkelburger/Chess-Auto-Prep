@@ -142,7 +142,10 @@ class _TrainPaneState extends State<TrainPane> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TrainScopeButtons(trainer: trainer),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: TrainScopeButtons(trainer: trainer),
+            ),
             if (widget.onImport != null) ...[
               const SizedBox(height: Space.m),
               FilledButton.icon(

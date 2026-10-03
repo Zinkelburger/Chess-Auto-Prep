@@ -15,6 +15,7 @@ import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'progress.dart';
 import 'trainer.dart';
+import 'study_training_controls.dart';
 import 'trainer_words.dart';
 import '../../ui/move_notation.dart';
 
@@ -650,9 +651,8 @@ class TrainScopeButtons extends StatelessWidget {
   final Trainer trainer;
 
   @override
-  Widget build(BuildContext context) =>
-      trainer.state is TrainerReady && (trainer.state as TrainerReady).study
-      ? const Text('Study chapters · quiz markers set the moves to practice')
+  Widget build(BuildContext context) => trainer.studyDocument != null
+      ? StudyTrainingControls(trainer: trainer)
       : SegmentedButton<TrainScope>(
           segments: const [
             ButtonSegment(value: TrainScope.chapter, label: Text('Chapter')),

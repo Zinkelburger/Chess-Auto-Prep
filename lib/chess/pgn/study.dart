@@ -79,7 +79,19 @@ String? studyNameIn(List<ChapterLine> lines) {
 bool sidesPerChapter(List<ChapterLine> lines) =>
     lines.isNotEmpty &&
     studyNameIn(lines) != null &&
-    lines.every((line) => tagValue(line.tags, 'Orientation') != null);
+    lines.every((line) => studyTrainingSide(line) != null);
+
+/// An explicit practice side, falling back to imported Lichess orientation.
+/// Missing or invalid metadata needs a choice, not an assumed White side.
+Side? studyTrainingSide(ChapterLine line) =>
+    switch ((tagValue(line.tags, 'TrainingSide') ??
+            tagValue(line.tags, 'Orientation'))
+        ?.trim()
+        .toLowerCase()) {
+      'white' => Side.white,
+      'black' => Side.black,
+      _ => null,
+    };
 
 /// What the chapter at [index] is called: `ChapterName`, else `Event` with
 /// the study's own name peeled off the front, else the players, else

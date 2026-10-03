@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/storage/pgn_file_import.dart';
+import '../../support/viewer_fixture.dart';
 import 'package:chess_auto_prep/features/study/study_panel.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/study_files.dart';
@@ -128,39 +130,155 @@ void main() {
     expect(study.onDisk, contains('[ChapterName "Rooks"]'));
   });
 
-  testWidgets('the import dialog says what it recognised, and what it did '
-      'not', (tester) async {
+  testWidgets('invalid Lichess links explain how to recover', (tester) async {
     await pump(tester);
-    await tester.tap(find.byTooltip('Study actions'));
+    await tester.tap(find.text('Import…'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Import from URL…'));
+    await tester.tap(find.text('Lichess URL'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'nonsense');
+    await tester.tap(find.text('Preview chapters'));
     await tester.pumpAndSettle();
-    expect(find.text('Not a Lichess study link.'), findsOneWidget);
-    await tester.enterText(
-      find.byType(TextField).last,
-      'lichess.org/study/abcd1234',
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Lichess study · abcd1234'), findsOneWidget);
+    expect(find.text('Use a Lichess study or chapter link.'), findsOneWidget);
+    expect(study.lichess.asked, isEmpty);
   });
 
-  testWidgets('an import that cannot reach Lichess says so in plain English', (
+  testWidgets('an unavailable Lichess import keeps its URL for retry', (
     tester,
   ) async {
     await pump(tester);
-    await tester.tap(find.byTooltip('Study actions'));
+    await tester.tap(find.text('Import…'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Import from URL…'));
+    await tester.tap(find.text('Lichess URL'));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byType(TextField).last,
       'lichess.org/study/abcd1234',
     );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Import'));
+    await tester.tap(find.text('Preview chapters'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Lichess did not respond'), findsOneWidget);
+    expect(find.text('lichess.org/study/abcd1234'), findsOneWidget);
+  });
+
+  testWidgets('chapter search preserves original chapter indexes', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.enterText(find.byType(TextField), 'pawn');
+    await tester.pumpAndSettle();
+    expect(find.text('Rook endings'), findsNothing);
+    expect(find.text('2'), findsOneWidget);
+    await tester.tap(find.text('Pawn endings'));
+    expect(opened, [(study.ref, 1)]);
+  });
+
+  testWidgets('study picker is separate from chapter navigation', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(find.byTooltip('All studies'));
+    await tester.pumpAndSettle();
+    expect(find.text('Your studies'), findsOneWidget);
+    expect(find.text('Pawn endings'), findsNothing);
+    await tester.tap(find.text('Endgames'));
+    await tester.pumpAndSettle();
+    expect(find.text('Pawn endings'), findsOneWidget);
+  });
+
+  testWidgets('move to position moves the selected chapter and its identity', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(find.byTooltip('Chapter actions').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Move to position…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, '2');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.tap(find.text('Move'));
+    await tester.pumpAndSettle();
+    expect(study.studies.chapters.first.name, 'Pawn endings');
+    expect(study.session.game, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a failed replacement file clears the previous import preview', (
+    tester,
+  ) async {
+    study.dispose();
+    final picker = ScriptedPicker('/valid.pgn');
+    final importer = ScriptedImport()
+      ..picked['/valid.pgn'] = const PickedText(twoChapterStudy);
+    study = await openStudy(
+      twoChapterStudy,
+      picker: picker,
+      importer: importer,
+    );
+    await pump(tester);
+    await tester.tap(find.text('Import…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose PGN file…'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Add chapters'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    picker.answer = '/missing.pgn';
+    await tester.tap(find.text('Choose PGN file…'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('That PGN could not be read'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Add chapters'),
+          )
+          .onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('a hidden new-study name does not block appending pasted PGN', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(find.text('Import…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Paste PGN'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'PGN'),
+      '[Event "Added"]\n\n1. c4 *\n',
+    );
+    await tester.tap(find.text('Preview chapters'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New study'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Study name (optional)'),
+      'bad/name',
+    );
+    await tester.tap(find.text('Current study'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add chapters'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(opened.last, (study.ref, 2));
+    expect(study.session.chapter!.lines, hasLength(3));
+  });
+
+  testWidgets('deleted studies remain reachable even when none are deleted', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(find.text('Deleted studies'));
+    await tester.pumpAndSettle();
+    expect(find.text('No deleted studies.'), findsOneWidget);
+    expect(find.text('Refresh'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

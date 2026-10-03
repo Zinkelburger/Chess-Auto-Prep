@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:dartchess/dartchess.dart' show Side;
+import '../../chess/pgn/study_training.dart';
 
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/study.dart';
@@ -27,7 +29,7 @@ import 'training_selection.dart';
 
 /// How much the trainer takes in: the chapter on the board, every chapter
 /// of its repertoire, or every chapter of the book in use.
-enum TrainScope { chapter, repertoire, book }
+enum TrainScope { chapter, repertoire, book, studyChapter }
 
 /// Where a line sent to be read goes: the board alone, the tab staying
 /// where it is; the Moves tab; or the builder.
@@ -280,7 +282,8 @@ class Trainer extends ChangeNotifier {
       final source = _retained ? _read?.ref : _session.source;
       final inputs = switch (_scope) {
         TrainScope.book => _books.inputs(_books.active),
-        TrainScope.chapter => {if (source != null) source.path},
+        TrainScope.chapter ||
+        TrainScope.studyChapter => {if (source != null) source.path},
         TrainScope.repertoire => {
           if (source != null) ?catalog.repertoireOf(source.path),
         },
@@ -420,6 +423,17 @@ class Trainer extends ChangeNotifier {
   }
 
   TrainScope get scope => _scope;
+
+  /// A study is a file opened one game at a time, independent of readiness.
+  Chapter? get studyDocument =>
+      !selection.active && _session.game != null ? _session.chapter : null;
+  int? get studyChapter => _session.game;
+  String? setStudySides(Chapter expected, Map<int, Side> sides) {
+    if (!identical(expected, studyDocument))
+      return 'The study changed. Choose the sides again.';
+    return _session.apply((chapter) => setStudyTrainingSides(chapter, sides));
+  }
+
   Lesson? get lesson => _lesson;
 
   /// The shown lesson position in its source chapter. Resolve membership by
@@ -675,6 +689,7 @@ class Trainer extends ChangeNotifier {
     final state = _state;
     return ref != null &&
         _scope != TrainScope.chapter &&
+        _scope != TrainScope.studyChapter &&
         _session.chapter?.game == null &&
         state is TrainerReady &&
         state.chapters.any((c) => c.ref == ref);
@@ -687,7 +702,7 @@ class Trainer extends ChangeNotifier {
     final ref = _session.source;
     if (state is! TrainerReady || chapter == null || ref == null) return;
     _read = (ref: ref, scope: _scope, chapter: chapter);
-    final lines = trainingLines(chapter, source: ref.path);
+    final lines = _studyLines(chapter, ref);
     _state = TrainerReady(
       chapters: [
         for (final c in state.chapters)
@@ -705,10 +720,21 @@ class Trainer extends ChangeNotifier {
     notifyListeners();
   }
 
+  List<TrainingLine> _studyLines(Chapter chapter, ChapterRef ref) =>
+      trainingLines(chapter, source: ref.path)
+          .where(
+            (line) =>
+                _scope != TrainScope.studyChapter || line.game == chapter.game,
+          )
+          .toList();
+
   Future<void> _load({bool force = false}) async {
     if (_disposed) return;
     final chapter = _session.chapter;
     final ref = _session.source;
+    if (_scope == TrainScope.studyChapter && chapter?.game == null) {
+      _scope = TrainScope.chapter;
+    }
     final wanted = (ref: ref, scope: _scope, chapter: chapter);
     if (!force && _read == wanted && _state is! TrainerIdle) return;
     _read = wanted;
@@ -725,12 +751,13 @@ class Trainer extends ChangeNotifier {
     if (chapter == null || ref == null) {
       return _become(const TrainerEmpty(NothingToTrain.noChapter));
     }
-    if (chapter.game != null && !sidesPerChapter(chapter.lines)) {
+    if (chapter.game != null &&
+        !chapter.lines.any((line) => studyTrainingSide(line) != null)) {
       return _become(const TrainerEmpty(NothingToTrain.studyChapter));
     }
     final open = (
       ref: ref,
-      lines: trainingLines(chapter, source: ref.path),
+      lines: _studyLines(chapter, ref),
       revision: _session.trainingSourceRevision,
     );
     final chapters = _scope == TrainScope.chapter || chapter.game != null

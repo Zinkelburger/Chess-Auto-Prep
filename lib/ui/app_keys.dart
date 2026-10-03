@@ -27,6 +27,10 @@ enum KeyPlace {
 /// Ctrl bindings carry a Cmd twin for macOS; the first key of each is the
 /// one a tooltip names.
 enum AppKey {
+  moveActions('Actions for the focused move', KeyPlace.board, [
+    SingleActivator(LogicalKeyboardKey.f10, shift: true),
+    SingleActivator(LogicalKeyboardKey.contextMenu),
+  ]),
   // The window: the shell binds these over every mode.
   settings('Settings', KeyPlace.window, [
     SingleActivator(LogicalKeyboardKey.comma, control: true),

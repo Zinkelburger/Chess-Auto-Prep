@@ -23,7 +23,7 @@ String progressProblem(Object failure, {required String doing}) =>
 String emptyReason(NothingToTrain why) => switch (why) {
   NothingToTrain.noChapter => 'Open a repertoire chapter to train it.',
   NothingToTrain.studyChapter =>
-    'Open a repertoire chapter or a study with a playing side for each chapter.',
+    'Choose training sides to practice this study.',
   NothingToTrain.noBook => 'No book set.',
   NothingToTrain.emptyBook => 'Your book has no chapters yet.',
 };
