@@ -1,5 +1,6 @@
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../ui/theme.dart';
 import 'solitaire.dart';
@@ -66,11 +67,10 @@ class _Setup extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Guess the game’s moves one at a time. The other side’s moves are '
-          'played for you.',
+          'Good alternatives count. Play follows the original game.',
           style: text.bodyMedium,
         ),
-        const SizedBox(height: Space.l),
+        const SizedBox(height: Space.s),
         _Row(
           label: 'Guess for',
           child: SegmentedButton<Side>(
@@ -84,28 +84,39 @@ class _Setup extends StatelessWidget {
             onSelectionChanged: (value) => solitaire.setSide(value.first),
           ),
         ),
-        const SizedBox(height: Space.m),
+        const SizedBox(height: Space.s),
         _Row(
           label: 'Start at',
           child: SegmentedButton<bool>(
             key: const ValueKey('solitaire-start'),
             showSelectedIcon: false,
             segments: const [
-              ButtonSegment(value: true, label: Text('Move 1')),
-              ButtonSegment(value: false, label: Text('This move')),
+              ButtonSegment(value: true, label: Text('Beginning')),
+              ButtonSegment(value: false, label: Text('Current position')),
             ],
             selected: {solitaire.fromStart},
             onSelectionChanged: (value) => solitaire.setFromStart(value.first),
           ),
         ),
-        const SizedBox(height: Space.m),
+        const SizedBox(height: Space.s),
         Text(
           count == 1
               ? '1 $side move to guess.'
               : '$count $side moves to guess.',
           style: text.bodySmall,
         ),
-        const SizedBox(height: Space.m),
+        const SizedBox(height: Space.s),
+        if (!solitaire.fromStart) ...[
+          Text(
+            'Follows the main line; variations start at their branch point.',
+            style: text.bodySmall,
+          ),
+          const SizedBox(height: Space.s),
+        ],
+        if (solitaire.problem case final problem?) ...[
+          Text(problem, style: text.bodyMedium),
+          const SizedBox(height: Space.s),
+        ],
         FilledButton.icon(
           key: const ValueKey('solitaire-begin'),
           onPressed: count == 0 ? null : solitaire.start,
@@ -147,60 +158,83 @@ class _Guessing extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Find $side’s move', style: text.titleMedium),
+        Text(
+          solitaire.waitingForReply
+              ? 'Opponent replying…'
+              : solitaire.checking
+              ? 'Checking your move…'
+              : 'Find $side’s move',
+          style: text.titleMedium,
+        ),
         const SizedBox(height: Space.s),
-        // Each line keeps its height whether it has words or not, so the
-        // buttons never move under the pointer.
-        SizedBox(
-          height: 20,
-          child: Text(
-            displaySan(context, feedback ?? ''),
-            style: text.bodyMedium?.copyWith(
-              color: solitaire.lastWrong ? scheme.error : null,
+        Semantics(
+          liveRegion: true,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 40),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (solitaire.betterMove) const _Crown(label: 'Better move!'),
+                Text(
+                  displaySan(context, feedback ?? ''),
+                  style: text.bodyMedium?.copyWith(
+                    color: solitaire.lastWrong ? scheme.error : null,
+                  ),
+                ),
+                if (solitaire.hint case final hint?)
+                  Text(displaySan(context, hint), style: text.bodyMedium),
+              ],
             ),
           ),
         ),
-        SizedBox(
-          height: 20,
-          child: Text(
-            displaySan(context, solitaire.hint ?? ''),
-            style: text.bodyMedium,
+        if (solitaire.problem case final problem?)
+          Text(problem, style: text.bodySmall),
+        if (!solitaire.atCurrentMove)
+          TextButton(
+            onPressed: solitaire.returnToGuess,
+            child: const Text('Return to current move'),
           ),
-        ),
         const SizedBox(height: Space.m),
-        Wrap(
-          spacing: Space.s,
-          runSpacing: Space.s,
-          children: [
-            OutlinedButton.icon(
-              key: const ValueKey('solitaire-hint'),
-              onPressed: solitaire.hint == null ? solitaire.showHint : null,
-              icon: const Icon(Icons.lightbulb_outline),
-              label: const Text('Hint'),
-            ),
-            OutlinedButton.icon(
-              key: const ValueKey('solitaire-reveal'),
-              onPressed: solitaire.reveal,
-              icon: const Icon(Icons.visibility_outlined),
-              label: const Text('Show move'),
-            ),
-            Tooltip(
-              message: AppKey.leave.tip('Stop solitaire'),
-              child: TextButton(
-                onPressed: solitaire.stop,
-                child: const Text('Stop'),
-              ),
-            ),
-          ],
-        ),
+        _actions(context),
         const SizedBox(height: Space.l),
         Text(
-          '${solitaire.guessed} guessed · ${solitaire.firstTry} first try',
+          '${solitaire.guessed} of ${solitaire.total} completed · '
+          '${solitaire.firstTry} unaided · ${solitaire.revealed} revealed',
           style: text.bodySmall,
         ),
+        if (solitaire.preparing && !solitaire.checking)
+          Text('Preparing move check…', style: text.bodySmall),
       ],
     );
   }
+
+  Widget _actions(BuildContext context) => Wrap(
+    spacing: Space.s,
+    runSpacing: Space.s,
+    children: [
+      Tooltip(
+        message:
+            'Names the piece played in the game. '
+            'This move will count as assisted.',
+        child: OutlinedButton.icon(
+          key: const ValueKey('solitaire-hint'),
+          onPressed: solitaire.canHint ? solitaire.showHint : null,
+          icon: const Icon(Icons.lightbulb_outline),
+          label: const Text('Hint'),
+        ),
+      ),
+      OutlinedButton.icon(
+        key: const ValueKey('solitaire-reveal'),
+        onPressed: solitaire.canReveal ? solitaire.reveal : null,
+        icon: const Icon(Icons.visibility_outlined),
+        label: const Text('Give up this move'),
+      ),
+      Tooltip(
+        message: AppKey.leave.tip('Stop solitaire'),
+        child: TextButton(onPressed: solitaire.stop, child: const Text('Stop')),
+      ),
+    ],
+  );
 }
 
 class _Done extends StatelessWidget {
@@ -213,39 +247,40 @@ class _Done extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final parts = [
-      '${solitaire.firstTry}/${solitaire.guessed} first try',
+      '${solitaire.accepted}/${solitaire.guessed} solved',
+      '${solitaire.firstTry} unaided',
       if (solitaire.hinted > 0) '${solitaire.hinted} hinted',
       if (solitaire.revealed > 0) '${solitaire.revealed} shown',
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Complete — ${parts.join(', ')}', style: text.titleMedium),
-        const SizedBox(height: Space.m),
-        Wrap(
-          spacing: Space.s,
-          runSpacing: Space.s,
-          children: [
-            OutlinedButton(
-              onPressed: solitaire.again,
-              child: const Text('Play again'),
-            ),
-            if (onNextGame != null)
-              OutlinedButton(
-                onPressed: onNextGame,
-                child: const Text('Next game'),
-              ),
-            if (onAddToStudy != null)
-              OutlinedButton(
-                onPressed: onAddToStudy,
-                child: const Text('Add to study…'),
-              ),
-            TextButton(onPressed: solitaire.stop, child: const Text('Done')),
-          ],
+        Semantics(
+          liveRegion: true,
+          child: Text(
+            'Complete — ${parts.join(', ')}',
+            style: text.titleMedium,
+          ),
         ),
+        if (solitaire.crowns > 0) ...[
+          const SizedBox(height: Space.s),
+          _Crown(
+            label:
+                '${solitaire.crowns} better '
+                '${solitaire.crowns == 1 ? 'move' : 'moves'} found',
+          ),
+        ],
+        const SizedBox(height: Space.s),
+        Text(
+          'The full game above includes your attempts and assistance. '
+          'Select a move to review it on the board.',
+          style: text.bodySmall,
+        ),
+        const SizedBox(height: Space.m),
+        _actions(context),
         if (solitaire.misses.isNotEmpty) ...[
           const SizedBox(height: Space.l),
-          Text('Moves you missed', style: text.bodySmall),
+          Text('Review assisted moves and retries', style: text.bodySmall),
           const SizedBox(height: Space.xs),
           for (final miss in solitaire.misses)
             InkWell(
@@ -260,7 +295,7 @@ class _Done extends StatelessWidget {
                         : '${solitaire.moveLabel(miss.at)}  ·  you tried '
                               '${miss.tried.join(', ')}',
                   ),
-                  style: text.bodyMedium,
+                  style: readingMoveText,
                 ),
               ),
             ),
@@ -268,4 +303,57 @@ class _Done extends StatelessWidget {
       ],
     );
   }
+
+  Widget _actions(BuildContext context) => Wrap(
+    spacing: Space.s,
+    runSpacing: Space.s,
+    children: [
+      FilledButton.icon(
+        key: const ValueKey('solitaire-copy-pgn'),
+        onPressed: () async {
+          final pgn = solitaire.reviewPgn;
+          if (pgn == null) return;
+          await Clipboard.setData(ClipboardData(text: pgn));
+          if (context.mounted)
+            ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+              const SnackBar(content: Text('Session PGN copied')),
+            );
+        },
+        icon: const Icon(Icons.copy_outlined),
+        label: const Text('Copy session PGN'),
+      ),
+      OutlinedButton(
+        onPressed: solitaire.again,
+        child: const Text('Play again'),
+      ),
+      if (onNextGame != null)
+        OutlinedButton(onPressed: onNextGame, child: const Text('Next game')),
+      if (onAddToStudy != null)
+        OutlinedButton(
+          onPressed: onAddToStudy,
+          child: const Text('Add to study…'),
+        ),
+      TextButton(onPressed: solitaire.stop, child: const Text('Done')),
+    ],
+  );
+}
+
+class _Crown extends StatelessWidget {
+  const _Crown({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Icon(
+        Icons.emoji_events_outlined,
+        size: IconSize.menu,
+        color: Theme.of(context).colorScheme.primary,
+      ),
+      const SizedBox(width: Space.s),
+      Flexible(
+        child: Text(label, style: Theme.of(context).textTheme.titleSmall),
+      ),
+    ],
+  );
 }

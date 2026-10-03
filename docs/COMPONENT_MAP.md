@@ -66,6 +66,12 @@ Bughouse mode is offered when its engine assets are present.
   file` (`Explorer.independent(starting:)`), and supplies the Filter tab
   (`ViewerFilterPane`) and the followed player's colour choice
   (`PlayerSideChoice`) through `ModeView`.
+- Viewer Solitaire uses `engines/solitaire_evaluator.dart` for depth-14,
+  five-line comparisons, with a 50-centipawn tolerance and better-move badges.
+  `chess/pgn/solitaire_record.dart` builds a spoiler-free progress tree and
+  full annotated review; `MoveTreeView.preview` reads these without document
+  edits. The final PGN can be copied or added to a study. See
+  [Solitaire behavior](v2/features/pgn-viewer.md#game-buttons-and-solitaire-2026-09-28).
 - Study uses the same document session for chapters, tags, starts, cleanup,
   quiz markers, import/export and retained retry commands.
 - Tactics mines downloaded games into `tactics_sets/Default.pgn`, trains puzzles

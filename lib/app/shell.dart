@@ -208,6 +208,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     final tab = switch (kind) {
       EngineJobKind.search || EngineJobKind.makingLines => WorkspaceTab.search,
       EngineJobKind.audit => WorkspaceTab.audit,
+      EngineJobKind.solitaire => WorkspaceTab.solitaire,
       _ => WorkspaceTab.review,
     };
     var mode = _jobMode ?? Mode.repertoires;

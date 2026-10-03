@@ -39,9 +39,14 @@ class MoveTreeView extends StatefulWidget {
     required this.session,
     this.moveMenu,
     this.heading,
+    this.preview,
   });
 
   final DocumentSession session;
+
+  /// A read-only tree owned by an activity, such as a Solitaire record.
+  /// Its caller handles board navigation; document edits stay unavailable.
+  final ({GameTree tree, ValueChanged<NodePath> onRead})? preview;
 
   /// What heads the moves, as a book heads a game: it is the top of the
   /// text and scrolls away with it. It is kept with the lines built for a
@@ -106,13 +111,24 @@ class _MoveTreeViewState extends State<MoveTreeView>
     onRead: (moves, at) => readFrom(from, moves, at),
   );
 
+  Widget _readComment(String comment, Fen at, NodePath from) =>
+      widget.preview == null
+      ? _comment(comment, at, from)
+      : Padding(
+          padding: const EdgeInsets.symmetric(vertical: Space.xs),
+          child: Text(
+            displaySan(context, displayComment(comment)),
+            style: readingGlossText,
+          ),
+        );
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: widget.session,
       builder: (context, _) {
-        final tree = widget.session.tree;
-        final shownTo = widget.session.shownTo;
+        final tree = widget.preview?.tree ?? widget.session.tree;
+        final shownTo = widget.preview == null ? widget.session.shownTo : null;
         if (tree == null || tree.isEmpty || shownTo?.isRoot == true) {
           _built = null;
           return Column(
@@ -128,7 +144,9 @@ class _MoveTreeViewState extends State<MoveTreeView>
               Expanded(
                 child: Center(
                   child: Text(
-                    'No moves',
+                    widget.preview == null
+                        ? 'No moves'
+                        : 'Make your first move',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
@@ -163,7 +181,7 @@ class _MoveTreeViewState extends State<MoveTreeView>
       _selection,
       (path) => const [],
       _deleteFrom,
-      _comment,
+      _readComment,
       _showMenu,
     );
     return SingleChildScrollView(
@@ -187,8 +205,9 @@ class _MoveTreeViewState extends State<MoveTreeView>
       _selection,
       (path) => widget.moveMenu?.call(path) ?? const [],
       _deleteFrom,
-      _comment,
+      _readComment,
       _showMenu,
+      preview: widget.preview,
     );
     return LinePreviewOverlay(
       preview: preview,
@@ -211,7 +230,7 @@ class _MoveTreeViewState extends State<MoveTreeView>
               if (widget.heading case final heading?)
                 SizedBox(width: double.infinity, child: heading),
               if (displayComment(tree.rootComment ?? '').isNotEmpty)
-                _comment(
+                _readComment(
                   tree.rootComment!,
                   tree.rootFen,
                   const NodePath.root(),
@@ -245,10 +264,12 @@ final class _LineBuilder {
     this.moveMenu,
     this.onDeleteFrom,
     this.comment,
-    this.showMenu,
-  );
+    this.showMenu, {
+    this.preview,
+  });
 
   final DocumentSession session;
+  final ({GameTree tree, ValueChanged<NodePath> onRead})? preview;
   final Selection<NodePath> selection;
 
   /// Asked when a move's menu opens, not when the lines are built, so the
@@ -292,7 +313,11 @@ final class _LineBuilder {
       if (displayComment(node.startingComment ?? '').isNotEmpty) {
         breakRow();
         blocks.add(
-          comment(node.startingComment!, at.parent.fenIn(session), at.parent),
+          comment(
+            node.startingComment!,
+            preview?.tree.fenAt(at.parent) ?? at.parent.fenIn(session),
+            at.parent,
+          ),
         );
       }
       tokens.add(_token(node, path, numbered: numbered));
@@ -344,34 +369,45 @@ final class _LineBuilder {
       selected: selection.of(path),
       quizStarts: hasToken(node.comment, quizStartMarker),
       quizEnds: hasToken(node.comment, quizEndMarker),
-      onTap: () => session.goTo(path),
-      actions: () => [
-        MenuItemButton(
-          onPressed: () => promoteVariation(session, path),
-          child: const Text('Promote variation'),
-        ),
-        MenuItemButton(
-          onPressed: () => makeMainLine(session, path),
-          child: const Text('Make main line'),
-        ),
-        MenuItemButton(
-          onPressed: () => onDeleteFrom(path),
-          leadingIcon: const Icon(Icons.delete_outline, size: IconSize.menu),
-          child: const Text('Delete from here'),
-        ),
-        const Divider(),
-        MenuItemButton(
-          onPressed: () => _copy(writeLineTo(session.tree!, path)),
-          leadingIcon: const Icon(Icons.content_copy, size: IconSize.menu),
-          child: const Text('Copy line PGN'),
-        ),
-        MenuItemButton(
-          onPressed: () => _copy(node.fen.value),
-          leadingIcon: const Icon(Icons.content_copy, size: IconSize.menu),
-          child: const Text('Copy FEN'),
-        ),
-        ...moveMenu(path),
-      ],
+      onTap: () => preview == null ? session.goTo(path) : preview!.onRead(path),
+      actions: () => preview != null
+          ? const []
+          : [
+              MenuItemButton(
+                onPressed: () => promoteVariation(session, path),
+                child: const Text('Promote variation'),
+              ),
+              MenuItemButton(
+                onPressed: () => makeMainLine(session, path),
+                child: const Text('Make main line'),
+              ),
+              MenuItemButton(
+                onPressed: () => onDeleteFrom(path),
+                leadingIcon: const Icon(
+                  Icons.delete_outline,
+                  size: IconSize.menu,
+                ),
+                child: const Text('Delete from here'),
+              ),
+              const Divider(),
+              MenuItemButton(
+                onPressed: () => _copy(writeLineTo(session.tree!, path)),
+                leadingIcon: const Icon(
+                  Icons.content_copy,
+                  size: IconSize.menu,
+                ),
+                child: const Text('Copy line PGN'),
+              ),
+              MenuItemButton(
+                onPressed: () => _copy(node.fen.value),
+                leadingIcon: const Icon(
+                  Icons.content_copy,
+                  size: IconSize.menu,
+                ),
+                child: const Text('Copy FEN'),
+              ),
+              ...moveMenu(path),
+            ],
       showMenu: showMenu,
     );
   }

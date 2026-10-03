@@ -7,6 +7,7 @@ enum EngineJobKind {
   makingLines('Preparing repertoire lines'),
   audit('Chapter audit'),
   review('Game review'),
+  solitaire('Solitaire chess'),
   tournament('Engine tournament');
 
   const EngineJobKind(this.label);

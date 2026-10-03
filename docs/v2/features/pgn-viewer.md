@@ -354,8 +354,8 @@ and Save dialogs still offer Save a copy when needed. Independent scratch
 
 ## Game buttons and solitaire (2026-09-28)
 
-(The three buttons were removed on 2026-10-01; see the next section. The
-Solitaire tab itself is unchanged.)
+(The three buttons were removed on 2026-10-01; see the next section.
+Solitaire's engine judging and session record were added on 2026-10-02.)
 
 The owner could not find editing, analysis or solitaire in the v2 viewer. A
 game's heading now has three outlined buttons under it: **Edit** (Ctrl+E,
@@ -367,18 +367,35 @@ off while a review runs.
 
 **Solitaire** is a `Solitaire` tab of the viewer (`workspace/solitaire.dart`,
 `solitaire_pane.dart`). The setup asks `Guess for` White/Black (default: the
-side at the bottom) and `Start at` Move 1 / This move, and counts the moves to
-guess. While guessing, the game is shown only up to the move being guessed
-(`DocumentSession.showOnlyTo`), so the move list, note, keys and the review
-graph cannot give it away; the engine is switched off. A board move is judged
-against the main line: right advances and the other side's reply plays 400 ms
-later; wrong says `Not the game move. Try again.` and writes nothing. `Hint`
-names the piece, `Show move` plays it. The end reads `Complete — 12/18 first
-try, 2 hinted, 1 shown` with `Play again`, `Next game`, `Done` and a clickable
-list of missed moves with what was tried. Esc, another game or leaving the
-mode ends it. Solitaire never writes the file. Not built from the old
-viewer: the reveal timer, sideline guessing, keeping wrong guesses as
-variations, and trophies.
+side at the bottom) and `Start at` Beginning / Current position, and counts
+the moves to guess. Play follows the original main line, with the other
+side's reply 400 ms later. The board faces the chosen side. `Hint` names the
+piece and counts the move as assisted; `Give up this move` reveals it and
+works even while an engine check is pending.
+
+A private engine checks five candidate moves at depth 14 at each guessing
+position. An alternative counts when its evaluation is no more than half a
+pawn (50 centipawns) worse than the game's move, from the guessing side's
+perspective. Moves outside the five candidates, including the game move,
+are evaluated separately from their resulting position at depth 13. Mate
+scores compare outcome and distance rather than a centipawn tolerance. A
+better move earns a trophy badge. Unavailable or incomplete analysis asks
+the player to retry, play the game move, or give up; it never labels an
+unjudged alternative a mistake. The exact game move remains acceptable.
+
+The Moves pane fills in the revealed main line and completed attempts as
+variations. It hides future moves, original notes and original variations
+until completion, alongside the note, keyboard and review-graph concealment
+in `DocumentSession.showOnlyTo`. Visible engine analysis is off during play;
+the private evaluator owns the shared engine job slot.
+
+At completion the full original PGN returns with mistakes, accepted
+alternatives, hints, reveals and evaluations annotated. `Copy session PGN`
+and `Add to study…` carry this separate record, including original headers,
+comments and starting FEN. The player can inspect attempts on the board,
+play again, go to the next game or finish. Esc, another game or leaving the
+mode ends the session and cancels its engine. Solitaire never writes the
+source file. A reveal timer and sideline-based guessing remain unbuilt.
 
 ## Book reading, Filter tab and This file (2026-10-01)
 

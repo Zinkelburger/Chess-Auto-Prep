@@ -439,7 +439,10 @@ final class ViewerView extends _DocumentModeView {
     WorkspaceTab.solitaire when _solitaire != null => SolitairePane(
       solitaire: _solitaire!,
       onNextGame: _modes.viewer.file == null ? null : () => walk(1),
-      onAddToStudy: _addGame,
+      onAddToStudy: () {
+        final draft = _solitaire!.reviewDraft;
+        if (draft != null) unawaited(requests.addToStudy([draft]));
+      },
     ),
     WorkspaceTab.filter => ViewerFilterPane(
       viewer: _modes.viewer,

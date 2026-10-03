@@ -350,11 +350,23 @@ class _Tabbed extends StatelessWidget {
     WorkspaceTab.player || WorkspaceTab.playerBook => _supplied(context, tab),
   };
 
-  Widget _moves() => MoveTreeView(
-    session: workspace.session,
-    moveMenu: hooks.moveMenu,
-    heading: hooks.header ? _heading() : null,
-  );
+  Widget _moves() {
+    final solitaire = workspace.solitaire;
+    Widget reader() => MoveTreeView(
+      session: workspace.session,
+      moveMenu: hooks.moveMenu,
+      heading: hooks.header ? _heading() : null,
+      preview: solitaire?.active == true && solitaire?.record != null
+          ? (tree: solitaire!.record!, onRead: solitaire.inspect)
+          : null,
+    );
+    return solitaire == null
+        ? reader()
+        : ListenableBuilder(
+            listenable: solitaire,
+            builder: (context, _) => reader(),
+          );
+  }
 
   // At a puzzle the table would tick the answer, or list it as the only
   // move with This file, so it goes while the answer is hidden, as the

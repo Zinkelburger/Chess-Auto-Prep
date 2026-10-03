@@ -49,7 +49,7 @@ ChapterDraft? lineDraft(DocumentSession session, NodePath path) {
 /// The game of the file the board shows, when it shows one game of it.
 ChapterLine? _lineOnBoard(Chapter chapter) {
   final game = chapter.game;
-  return game == null || game >= chapter.lines.length
-      ? null
-      : chapter.lines[game];
+  if (game == null)
+    return chapter.lines.length == 1 ? chapter.lines.single : null;
+  return game >= chapter.lines.length ? null : chapter.lines[game];
 }
