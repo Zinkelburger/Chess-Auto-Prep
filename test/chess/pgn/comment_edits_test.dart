@@ -36,6 +36,23 @@ Chapter white() => parseChapter(name: 'Gambit', text: whiteChapter);
 Chapter black() => parseChapter(name: 'Sicilian', text: blackChapter);
 
 void main() {
+  test('position and move glyphs coexist in conventional display order', () {
+    final before = white();
+    final at = NodePath.of([0]);
+    final quality =
+        (setGlyph(before, at: at, nag: 1) as CommentWritten).chapter;
+    final position =
+        (setGlyph(quality, at: at, nag: 16, position: true) as CommentWritten)
+            .chapter;
+    expect(position.tree.nodeAt(at)!.nags, [1, 16]);
+    final changed =
+        (setGlyph(position, at: at, nag: 2) as CommentWritten).chapter;
+    expect(changed.tree.nodeAt(at)!.nags, [2, 16]);
+    final cleared =
+        (setGlyph(changed, at: at, position: true) as CommentWritten).chapter;
+    expect(cleared.tree.nodeAt(at)!.nags, [2]);
+  });
+
   test('a comment on a shared move with no comment yet goes in one game', () {
     final before = white();
     // 1. d4 d5, played by the first two games but not the third, and

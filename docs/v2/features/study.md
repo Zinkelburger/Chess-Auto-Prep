@@ -98,3 +98,23 @@ Lichess collaboration, member permissions, chat, publication/discovery, and
 interactive lesson authoring are outside this local study editor. This work
 improves local authoring and practice usability; it does not claim full parity
 with the Lichess study service.
+
+## Verification evidence
+
+The 2026-10-03 usability pass used a headless Linux production build at
+1280×720 with a disposable profile and a synthetic three-chapter Queen's Gambit
+PGN. The walkthrough covered pasted import, side setup, chapter-only training,
+annotation, narrow-pane layout, drag reordering, and delete/restore. The native
+preview was stopped after inspection. Automated coverage also exercises the
+276px annotation strip, keyboard move menus, partial imports, stale previews,
+unsaved edits, hidden-field validation, restore collisions and retained retries.
+
+Screenshots: [import](../../../.impeccable/review/study-usability/study-import.png),
+[side setup](../../../.impeccable/review/study-usability/study-sides.png),
+[training](../../../.impeccable/review/study-usability/study-training.png),
+[annotation](../../../.impeccable/review/study-usability/study-annotate-final.png),
+[narrow pane](../../../.impeccable/review/study-usability/study-narrow-final.png),
+[recovery](../../../.impeccable/review/study-usability/study-recovery.png).
+All captures are app-rendered evidence using repository assets, not mockups.
+The isolated profile's unconfigured online explorer returned HTTP 401; no live
+Lichess download or online-explorer success is claimed by this walkthrough.

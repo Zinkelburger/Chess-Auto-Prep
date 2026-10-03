@@ -229,8 +229,10 @@ class _StudyChapterListState extends State<StudyChapterList> {
           child: SearchField(
             controller: _search,
             hint: 'Search chapters',
-            onChanged: (value) =>
-                setState(() => _query = value.trim().toLowerCase()),
+            onChanged: (value) {
+              setState(() => _query = value.trim().toLowerCase());
+              if (_query.isEmpty) _reveal();
+            },
           ),
         ),
         Expanded(

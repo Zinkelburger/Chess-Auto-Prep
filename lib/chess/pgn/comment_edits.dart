@@ -123,7 +123,7 @@ MoveNode _glyphed(MoveNode node, int? nag, {bool position = false}) {
     for (final old in node.nags)
       if (!inGroup(old)) old,
   ];
-  final nags = [?nag, ...kept];
+  final nags = position ? [...kept, ?nag] : [?nag, ...kept];
   return _sameNags(nags, node.nags) ? node : withNags(node, nags);
 }
 
