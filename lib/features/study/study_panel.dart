@@ -91,7 +91,6 @@ class _StudyPanelState extends State<StudyPanel> {
       context,
       title: 'New study',
       label: 'Study name',
-      hint: 'Opening ideas',
       confirm: 'Create',
     );
     if (name == null || !mounted) return;
@@ -222,10 +221,7 @@ class _StudyPanelState extends State<StudyPanel> {
   }
 
   Future<void> _newChapter() async {
-    final wanted = await showNewChapterDialog(
-      context,
-      suggested: nextChapterName(_studies.chapters),
-    );
+    final wanted = await showNewChapterDialog(context);
     if (wanted == null || !mounted) return;
     _edited(
       addStudyChapter(
@@ -810,7 +806,6 @@ class _ImportDialogState extends State<_ImportDialog> {
               onSubmitted: (_) => _import(),
               decoration: const InputDecoration(
                 labelText: 'Study link',
-                hintText: 'lichess.org/study/abcd1234',
                 border: OutlineInputBorder(),
                 isDense: true,
               ),

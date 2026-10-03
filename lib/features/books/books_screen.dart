@@ -78,9 +78,8 @@ Future<void> newBook(
   final status = say ?? StatusScope.of(context);
   final name = await showNameDialog(
     context,
-    title: 'New book',
-    label: 'Book name',
-    hint: 'Spring Equinox Open',
+    title: 'New opening book',
+    label: 'Opening book name',
     confirm: 'Create',
   );
   if (name == null) return;
@@ -101,8 +100,8 @@ Future<void> _rename(BuildContext context, Books books, Book book) async {
   final say = StatusScope.of(context);
   final name = await showNameDialog(
     context,
-    title: 'Rename book',
-    label: 'Book name',
+    title: 'Rename opening book',
+    label: 'Opening book name',
     initial: book.name,
     confirm: 'Rename',
   );
@@ -132,7 +131,7 @@ Future<void> _delete(BuildContext context, Books books, Book book) async {
   final say = StatusScope.of(context);
   final yes = await confirmAction(
     context,
-    title: 'Delete book "${book.name}"?',
+    title: 'Delete opening book "${book.name}"?',
     message: 'Its repertoires and chapters stay where they are.',
     confirm: 'Delete',
   );
@@ -162,13 +161,15 @@ class _BookList extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.s, 0),
           child: Row(
             children: [
-              Expanded(child: Text('Books', style: theme.textTheme.titleSmall)),
-              TextButton.icon(
+              Expanded(
+                child: Text('Opening books', style: theme.textTheme.titleSmall),
+              ),
+              IconButton(
                 onPressed: books.changingReferences
                     ? null
                     : () => unawaited(newBook(context, books)),
                 icon: const Icon(Icons.add, size: IconSize.menu),
-                label: const Text('New book'),
+                tooltip: 'New opening book',
               ),
             ],
           ),
@@ -229,13 +230,16 @@ class _NoBooks extends StatelessWidget {
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('No books yet.', style: Theme.of(context).textTheme.bodyMedium),
+        Text(
+          'No opening books yet.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
         const SizedBox(height: Space.m),
         FilledButton(
           onPressed: books.loaded && !books.changingReferences
               ? () => unawaited(newBook(context, books))
               : null,
-          child: const Text('New book'),
+          child: const Text('New opening book'),
         ),
       ],
     ),

@@ -33,7 +33,7 @@ class _NewMatchDialog extends StatefulWidget {
 }
 
 class _NewMatchDialogState extends State<_NewMatchDialog> {
-  late final _name = TextEditingController(text: _defaultName);
+  final _name = TextEditingController();
   final _fen = TextEditingController();
   final _games = TextEditingController(text: '10');
   final _first = TextEditingController(text: '800');
@@ -54,8 +54,6 @@ class _NewMatchDialogState extends State<_NewMatchDialog> {
           '${board.label}: ${moves.map((m) => m.san).join(' ')}',
     ].join(' · ');
   }
-
-  String get _defaultName => _opening.isEmpty ? 'Bughouse match' : _opening;
 
   /// The lab's clock case until the user picks another.
   ClockCase get _clock => _chosenClock ?? widget.lab.clock;

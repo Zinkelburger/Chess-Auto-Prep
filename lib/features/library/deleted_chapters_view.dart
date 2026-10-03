@@ -62,7 +62,6 @@ class _DeletedChaptersViewState extends State<DeletedChaptersView> {
         title: '"$name" is already in ${chapter.repertoire}',
         label: 'Restore as',
         confirm: 'Restore',
-        initial: '$name (restored)',
       );
       if (other == null || !mounted) return;
       name = other;

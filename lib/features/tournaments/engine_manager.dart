@@ -108,9 +108,7 @@ class _Editor extends StatefulWidget {
 }
 
 class _EditorState extends State<_Editor> {
-  late final _name = TextEditingController(
-    text: widget.engine?.name ?? 'Stockfish settings',
-  );
+  late final _name = TextEditingController(text: widget.engine?.name ?? '');
   late final _path = TextEditingController(
     text: widget.engine?.executable ?? '',
   );

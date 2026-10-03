@@ -46,6 +46,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.widget<ChoiceChip>(blitz).selected, isTrue);
     expect(find.text('Initial clock (ms)'), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Name'),
+      'Test match',
+    );
     await tester.tap(find.text('Start new run'));
     await tester.pumpAndSettle();
     expect((await config)!.timeLabel, 'Blitz · 60 s + 0.6 s');

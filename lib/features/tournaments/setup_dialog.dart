@@ -33,9 +33,7 @@ class _Setup extends StatefulWidget {
 }
 
 class _SetupState extends State<_Setup> {
-  late final _name = TextEditingController(
-    text: widget.previous?.name ?? 'Engine match',
-  );
+  late final _name = TextEditingController(text: widget.previous?.name ?? '');
   late final _fen = TextEditingController(
     text: widget.previous?.root.value ?? Fen.initial.value,
   );
