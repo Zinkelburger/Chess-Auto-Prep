@@ -43,6 +43,16 @@ try {
   await page.$eval('#import-panel', el => el.open = true); await fill('#pgn-text', '1. e9'); await page.click('#import-pgn');
   await page.waitForFunction(() => !document.querySelector('#prep-error').hidden);
   assert.equal(await page.$eval('#prep-board', el => el.getAttribute('aria-label')), accepted, 'bad import retains accepted game');
+  const handoff = '7k/6pp/8/8/8/8/6PP/7K b - - 0 1';
+  await page.goto(origin + '/pgn/?fen=' + encodeURIComponent(handoff)); await saved();
+  assert.equal(await page.$$eval('#game-list button', nodes => nodes.length), 3, 'FEN handoff preserves both existing games');
+  assert.equal(new URL(page.url()).searchParams.has('fen'), false);
+  await fill('#move-input', 'g5'); await page.click('#move-form button'); await saved();
+  const scratch = await page.$eval('#prep-board', el => el.getAttribute('aria-label'));
+  await page.reload(); await page.waitForFunction(() => document.querySelector('#save-status').textContent.includes('Restored'));
+  assert.equal(await page.$eval('#prep-board', el => el.getAttribute('aria-label')), scratch, 'reload does not reset the handoff analysis');
+  await page.click('#game-list button');
+  assert.match(await text('#move-tree'), /Nf6/, 'edited variation remains available after tactics handoff');
   await importPgn(pgn);
   // Capture an export through the native download mechanism and inspect its bytes.
   const session = await page.createCDPSession();
@@ -70,6 +80,9 @@ try {
   assert.ok(await page.$$eval('.prep-results-table tbody tr', rows => rows.length > 0));
   const shares = await page.$$eval('.prep-results-table tbody tr', rows => rows.map(row => Number(row.cells[3].textContent.replace('%',''))));
   assert.ok(Math.abs(shares.reduce((a,b) => a+b,0) - 100) < .3, 'Maia reply shares sum to 100');
+  await page.click('.prep-results-table tbody button');
+  assert.ok(await page.$('.prep-results-table'), 'following a searched move shows its subtree');
+  await page.click('#previous-move');
   await saved();
   await page.screenshot({ path: path.join(output, 'expectimax-desktop.png'), fullPage: true });
   await page.setViewport({ width: 390, height: 844 });

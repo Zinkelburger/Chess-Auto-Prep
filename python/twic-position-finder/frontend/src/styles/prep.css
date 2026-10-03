@@ -71,3 +71,5 @@
 .prep-board coords.files { left: 0; bottom: 0; text-align: right; padding-right: 3px; }
 .prep-board coords.ranks { top: 0; left: 3px; }
 .prep-board coords.ranks coord { transform: none; }
+
+#prep input::placeholder, #prep textarea::placeholder { color: var(--text-dim); opacity: 1; }

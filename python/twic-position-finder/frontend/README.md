@@ -158,7 +158,9 @@ headers and custom FEN starts survive PGN export. Illegal imports leave the
 accepted workspace intact. Board moves extend the current variation, including
 underpromotions through SAN/UCI entry. The workspace saves to IndexedDB after
 transactions commit; the cursor is a move path so export ordering cannot change
-its meaning. Save failures remain visible. This is device-local storage: export
+its meaning. Opening a tactics FEN adds an analysis game while preserving the
+existing workspace, and consumes the URL parameter so reload retains edits.
+Save failures remain visible. This is device-local storage: export
 PGN for backups and desktop interchange; it is not account sync.
 
 The search worker owns one Stockfish worker and one lazy ONNX Runtime Web Maia
@@ -181,7 +183,8 @@ The browser search does not claim identical trees or performance to desktop.
 
 Expansions commit atomically. Stop/budget results are explicitly partial and
 save along with the PGN; Resume accepts the same settings and an increased
-position budget. Export JSON preserves the tree and search configuration.
+position budget. Following a searched line displays its saved subtree. Export
+JSON preserves the tree and search configuration.
 Stockfish's in-memory evaluation cache survives repeated searches in the tab;
 full result snapshots survive reload. Closing the tab ends computation. There
 is no service worker: an already-loaded worker can analyse offline, but reopening

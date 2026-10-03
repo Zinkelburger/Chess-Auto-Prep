@@ -52,7 +52,18 @@ export class PrepApp {
         $('save-status').textContent = 'Restored from this browser.';
       } else $('save-status').textContent = 'Open a PGN or play moves to begin. No account needed.';
       const fen = new URL(location.href).searchParams.get('fen');
-      if (fen) { new Chess(fen); this.games = readPgn(`[SetUp "1"]\n[FEN "${fen}"]\n*`); this.gameIndex = this.cursor = 0; this.changed(); }
+      if (fen) {
+        const position = new Chess(fen).fen();
+        const existing = this.games.findIndex(game => game.nodes[0].fen === position);
+        if (existing >= 0) this.gameIndex = existing;
+        else {
+          this.games.push(...readPgn(`[Event "Analysis position"]\n[SetUp "1"]\n[FEN "${position}"]\n*`));
+          this.gameIndex = this.games.length - 1;
+        }
+        this.cursor = 0;
+        const url = new URL(location.href); url.searchParams.delete('fen'); history.replaceState(null, '', url);
+        this.changed();
+      }
       this.render();
     } catch (error) { this.fail(error); $('save-status').textContent = 'Work in this tab; export PGN to keep a copy.'; }
   }
@@ -236,7 +247,10 @@ export class PrepApp {
     if (!this.result) return;
     const r = this.result;
     $('search-status').textContent = `${this.busy ? 'Searching' : r.reason === 'complete' ? 'Complete within the selected limits' : r.reason === 'budget' ? 'Position budget reached · partial result' : 'Stopped · partial result'} · ${r.nodes} positions · ${r.expanded} expanded`;
-    if (r.root.fen !== this.node.fen) {
+    const nodes = [r.root];
+    let selected: SearchNode | undefined;
+    for (let i = 0; i < nodes.length; i++) { if (nodes[i].fen === this.node.fen) { selected = nodes[i]; break; } nodes.push(...nodes[i].children); }
+    if (!selected) {
       const p = document.createElement('p'); p.className = 'dim'; p.textContent = 'Saved results belong to another position.';
       const button = document.createElement('button'); button.className = 'btn btn-text'; button.textContent = 'Return to search position';
       button.onclick = () => {
@@ -245,17 +259,18 @@ export class PrepApp {
       }; el.append(p, button); return;
     }
     const table = document.createElement('table'); table.className = 'prep-results-table';
-    const caption = table.createCaption(); caption.textContent = `Expected score for ${r.options.side === 'w' ? 'White' : 'Black'}: ${r.root.value.toFixed(3)} · ${r.options.plies} plies · depth ${r.options.depth} · Maia ${r.options.elo}`;
+    const caption = table.createCaption(); caption.textContent = `Expected score for ${r.options.side === 'w' ? 'White' : 'Black'}: ${selected.value.toFixed(3)} · ${Math.max(0, r.options.plies - selected.ply)} plies remaining · depth ${r.options.depth} · Maia ${r.options.elo}`;
     const row = table.createTHead().insertRow();
     for (const title of ['Move', 'Expected', 'Engine', 'Reply share']) { const th = document.createElement('th'); th.textContent = title; th.scope = 'col'; row.append(th); }
-    const body = table.createTBody(), ours = r.root.fen.split(' ')[1] === r.options.side;
-    const children = [...r.root.children].sort((a, b) => ours ? b.value - a.value : b.probability - a.probability);
+    const body = table.createTBody(), ours = selected.fen.split(' ')[1] === r.options.side;
+    const children = [...selected.children].sort((a, b) => ours ? b.value - a.value : b.probability - a.probability);
     for (const child of children) {
       const tr = body.insertRow(), button = document.createElement('button'); button.className = 'move-button'; button.textContent = child.san; button.disabled = this.busy; button.onclick = () => this.play(child.uci); tr.insertCell().append(button);
       tr.insertCell().textContent = child.value.toFixed(3); tr.insertCell().textContent = this.cp(child);
       tr.insertCell().textContent = ours ? '—' : `${(child.probability * 100).toFixed(1)}%`;
     }
     el.append(table);
+    if (!children.length) { const p = document.createElement('p'); p.className = 'prep-help'; p.textContent = selected.terminal ? 'This branch ends in a terminal position.' : 'This position is a search leaf. Its value comes from Stockfish; run a new search here to look deeper.'; el.append(p); }
     if (r.reason === 'budget') { const p = document.createElement('p'); p.className = 'prep-help'; p.textContent = 'Increase the position budget and resume, or reduce the look-ahead and start a new search.'; el.append(p); }
   }
   private cp(node: SearchNode) { return Math.abs(node.cp) > 9000 ? (node.cp > 0 ? 'Mate' : '−Mate') : `${node.cp >= 0 ? '+' : ''}${(node.cp / 100).toFixed(2)}`; }

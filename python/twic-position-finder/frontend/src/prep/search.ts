@@ -19,6 +19,7 @@ export async function search(fen: string, options: SearchOptions, deps: SearchDe
     return { fen: position, san, uci, ply, probability, cp, value: utility(cp), children: [], expanded: terminal, terminal };
   };
   const result: SearchResult = seed ? structuredClone(seed) : { root: await evaluate(fen), nodes: 1, expanded: 0, reason: 'complete', options };
+  if (seed && options.maxNodes < seed.options.maxNodes) throw new Error('Keep or increase the saved position budget to resume.');
   if (seed && (seed.root.fen !== fen || JSON.stringify({ ...seed.options, maxNodes: options.maxNodes }) !== JSON.stringify(options))) throw new Error('Saved search settings do not match. Start a new search.');
   const queue: { node: SearchNode; ancestors: SearchNode[] }[] = [{ node: result.root, ancestors: [] }];
   result.reason = 'complete'; result.options = options;

@@ -213,6 +213,9 @@ export class Boards {
         const pickUp = (e: MouseEvent | TouchEvent) => {
           if (e instanceof MouseEvent && e.button !== 0) return;
           e.preventDefault();
+          // The reserve may have scrolled into view since the last board event.
+          // Refresh before dragNewPiece tests the release against the board.
+          this.cg[name].state.dom.bounds.clear();
           this.cg[name].dragNewPiece({ role: ROLES[p], color: colour } as Piece, e);
         };
         button.addEventListener('mousedown', pickUp);

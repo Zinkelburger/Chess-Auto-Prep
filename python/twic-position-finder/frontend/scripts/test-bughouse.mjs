@@ -43,7 +43,7 @@ try {
     const target = await square(board, squareName);
     await page.waitForFunction((board, colour, target) => [...document.querySelectorAll(`#bh-board-${board} piece.${colour}.pawn`)].some((e) => {
       const b = e.getBoundingClientRect(); return Math.abs(b.x + b.width / 2 - target.x) < 2 && Math.abs(b.y + b.height / 2 - target.y) < 2;
-    }), {}, board, colour, target);
+    }), { timeout: 15000 }, board, colour, target);
   }
   async function setup(a, b = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1') {
     if (await page.$eval('#bh-edit', (e) => e.getAttribute('aria-expanded')) !== 'true') await page.click('#bh-edit');

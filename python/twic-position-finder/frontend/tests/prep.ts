@@ -48,6 +48,7 @@ assert.equal(budget.reason, 'budget'); assert.equal(budget.nodes, 1); assert.equ
 result = await search(initial, options, deps, budget);
 assert.equal(result.nodes, 21); assert.equal(result.reason, 'complete');
 await assert.rejects(search(initial, { ...options, elo: 2000 }, deps, budget), /settings/);
+await assert.rejects(search(initial, { ...options, maxNodes: 5 }, deps, budget), /increase/);
 let stop = false;
 result = await search(initial, options, { ...deps, evaluate: async () => { stop = true; return 0; }, stopped: () => stop });
 assert.equal(result.reason, 'stopped'); assert.equal(result.root.children.length, 0);
