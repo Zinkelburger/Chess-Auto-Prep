@@ -25,7 +25,7 @@ import 'trap_training.dart';
 enum Mode {
   repertoires('Repertoire builder'),
   trainer('Repertoire trainer'),
-  books('Books'),
+  books('Opening books'),
   pgnViewer('PGN Viewer'),
   study('Study'),
   tactics('Tactics'),

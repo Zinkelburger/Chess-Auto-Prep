@@ -694,7 +694,7 @@ final class BooksView extends ModeView {
 
   @override
   List<AppAction> actions(ModeMenu menu) => [
-    AppAction('New book', menu.dialogs.newBook, group: 'Books'),
+    AppAction('New opening book', menu.dialogs.newBook, group: 'Opening books'),
   ];
 }
 
@@ -933,10 +933,7 @@ Future<void> saveHeld(
   if (where == null || !context.mounted) return;
   switch (where) {
     case _HeldTarget.copy:
-      final name = await showCopyNameDialog(
-        context,
-        session.chapter?.name ?? 'Chapter',
-      );
+      final name = await showCopyNameDialog(context);
       if (name == null) return;
       sayCopy(requests.say, await session.saveCopy(name, into: collections));
     case _HeldTarget.study:

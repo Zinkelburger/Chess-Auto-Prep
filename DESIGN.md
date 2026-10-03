@@ -240,6 +240,7 @@ active pane's a brighter grey. Dividers between panes are 1px lines with a
 - **Style:** 34px tall, up to 220px wide, 6px radius; the chosen tab filled in Selection Grey; a 2px line shows where a dragged tab will land. Tabs close from the right-click menu.
 
 ### Inputs / Fields
+- Empty fields contain no example text or typing prompts. Keep names on labels, search purposes in accessible names and hover help, and required formats in labels. New names start blank; saved values and functional settings remain visible.
 - **Style:** shared `search_field`, `choice_field`, `number_field` controls with a label above and an underline; search always shows its magnifier and clear action.
 - **Choices:** typeable ChoiceField, NumberStepper or a segmented button. Never a dropdown the player cannot type into.
 - **Filters:** compact Field / Rule / Value rows; selected sets as removable chips.

@@ -48,7 +48,6 @@ Future<NewChapter?> showNewChapterDialog(
     context,
     title: 'New chapter',
     label: 'Chapter name',
-    hint: fromBoard == null ? null : "King's Gambit",
     confirm: 'Create',
     extra: fromBoard == null
         ? null

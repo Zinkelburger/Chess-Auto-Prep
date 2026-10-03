@@ -19,7 +19,6 @@ Future<void> exportViewerPgn(
     title: 'Export visible games',
     label: 'PGN file name',
     confirm: 'Choose folder',
-    initial: '${viewer.file!.name} selection.pgn',
   );
   if (name == null) return;
   final result = await viewer.export(

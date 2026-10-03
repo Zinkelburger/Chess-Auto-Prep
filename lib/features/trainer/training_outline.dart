@@ -63,7 +63,7 @@ class _TrainingOutlineState extends State<TrainingOutline> {
                 ChoiceField(
                   text: selection.repertoire?.name ?? '',
                   options: [for (final r in selection.repertoires) r.name],
-                  hint: 'Choose a repertoire',
+                  hint: 'Repertoire',
                   onSubmitted: (name) {
                     final next = selection.repertoires
                         .where((r) => r.name == name)

@@ -169,20 +169,19 @@ class _CommentFieldState extends State<CommentField>
         ],
         CallbackShortcuts(
           bindings: AppKey.commitComment.bind(_commit),
-          child: TextField(
-            controller: _controller,
-            focusNode: _focus,
-            enabled: _at != null,
-            minLines: 2,
-            maxLines: 4,
-            style: text.bodyMedium,
-            decoration: InputDecoration(
-              isDense: true,
-              border: const OutlineInputBorder(),
-              hintText: _at?.isRoot ?? true
-                  ? 'About this chapter'
-                  : 'About this move',
-              hintStyle: text.bodySmall,
+          child: Semantics(
+            label: _at?.isRoot ?? true ? 'Chapter notes' : 'Move notes',
+            child: TextField(
+              controller: _controller,
+              focusNode: _focus,
+              enabled: _at != null,
+              minLines: 2,
+              maxLines: 4,
+              style: text.bodyMedium,
+              decoration: InputDecoration(
+                isDense: true,
+                border: const OutlineInputBorder(),
+              ),
             ),
           ),
         ),

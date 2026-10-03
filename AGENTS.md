@@ -6,6 +6,22 @@ repertoires, training, player analysis and studies.
 V2 is the only app: `lib/main.dart`, production under `lib/`, tests under
 `test/`. V1 and backward-compatibility parity are retired (owner, 2026-09-30).
 
+## Working with the owner
+
+- Once the owner says what they want, choose sensible details and build. Ask
+  at most one question, and only when it truly blocks; never send a quiz.
+- Put new capability inside the mode or panel already used for that kind of
+  work; do not add a mode or top-level page unless asked. Data crunching and
+  agent-driven research belong in Python/MCP tooling under `tools/`.
+- [DESIGN.md](DESIGN.md) is the visual and copy specification; read it before
+  changing anything the player sees.
+- Fail open: a broken file or record affects only itself. Move unreadable user
+  data aside and log it; never delete it and never lock the app or other work.
+- Never compute expectimax or similar search values while the player browses.
+  Show stored values; a missing one says so and offers a run on request.
+- Debug from evidence: reproduce the failure and find its cause before
+  changing code. A change that only hides the symptom is not a fix.
+
 ## Local-first workflow
 
 - The user's working checkout on local `main` is where completed changes belong.
@@ -49,13 +65,8 @@ V2 is the only app: `lib/main.dart`, production under `lib/`, tests under
   For instructions/docs-only changes, run `scripts/ci.sh lint` and check links.
 - For visible changes, use the `run-chess-auto-prep` skill and inspect a
   screenshot from the headless app. Stop your preview before testing its tree.
-- GitHub release CI runs for `v*` tags; routine branch pushes, backups and PRs
-  do not trigger it. The tag workflow builds, validates and publishes in one run;
-  do not add a separate rehearsal branch or require a rehearsal before releasing.
-  The `windows-check` branch is a focused Windows setup diagnostic on Server
-  2022 and 2025 and publishes nothing. Releases require passing tests,
-  offline-tool, integration and engine gates. Use focused local checks during
-  development; a full local suite before each commit is not required.
+- GitHub CI runs only for `v*` release tags; see [git.md](docs/agents/git.md).
+  Use focused local checks; a full local suite before each commit is not required.
 - Before stopping, waiting for later or reporting completion, commit all
   intended files and push. Push checkpoint commits during long tasks.
 - Keep useful local commits/checkpoints; do not rewrite shared local main to
