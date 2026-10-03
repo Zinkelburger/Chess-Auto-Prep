@@ -40,7 +40,7 @@ class ChoiceField extends StatefulWidget {
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
 
-  /// What goes in the box, such as `Field` or `Value`.
+  /// Fallback field label, such as `Field` or `Value`.
   final String hint;
 
   /// The field's name, written on its border where nothing beside it
@@ -141,11 +141,8 @@ class _ChoiceFieldState extends State<ChoiceField> {
               style: Theme.of(context).textTheme.bodyMedium,
               decoration: InputDecoration(
                 isDense: true,
-                hintText: widget.hint,
-                labelText: widget.label,
-                floatingLabelBehavior: widget.label == null
-                    ? null
-                    : FloatingLabelBehavior.always,
+                labelText: widget.label ?? widget.hint,
+                floatingLabelBehavior: FloatingLabelBehavior.always,
                 prefixIcon: value.text.isEmpty
                     ? const Icon(Icons.search, size: IconSize.menu)
                     : null,

@@ -74,6 +74,12 @@ void main() {
         previous: previous,
       );
       await tester.pumpAndSettle();
+      if (previous == null) {
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Name'),
+          'Test match',
+        );
+      }
       if (preset != null) {
         await tester.tap(find.widgetWithText(ChoiceChip, preset));
         await tester.pumpAndSettle();

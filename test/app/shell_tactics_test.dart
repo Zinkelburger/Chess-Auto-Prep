@@ -37,8 +37,9 @@ void main() {
     tester,
   ) async {
     await toTactics(tester);
-    final search = find.byWidgetPredicate(
-      (w) => w is TextField && w.decoration?.hintText == 'Search',
+    final search = find.descendant(
+      of: find.byTooltip('Search'),
+      matching: find.byType(TextField),
     );
     await tester.enterText(search, 'no such opponent');
     await tester.pumpAndSettle();

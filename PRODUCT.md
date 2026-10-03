@@ -56,7 +56,7 @@ studies, Chessbook) do not offer in one place:
   player's own and opponents' games, the Lichess opening explorer (needs the
   player's token), ChessDB, and TWIC for master games. Downloaded games are
   cached, so the app keeps working offline.
-- Modes, by their exact names: Repertoire builder, Books, PGN Viewer,
+- Modes, by their exact names: Repertoire builder, Opening books, PGN Viewer,
   Repertoire trainer, Study, Tactics, My games, Player analysis, Players &
   prep, Databases, Engine tournament, and Bughouse lab (shown only when its
   engine assets are present).

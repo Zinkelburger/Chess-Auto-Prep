@@ -34,7 +34,7 @@ void main() {
     tester,
   ) async {
     await w.pumpShell(tester);
-    await toMode(tester, 'Books');
+    await toMode(tester, 'Opening books');
     expect(w.requests.mode, Mode.books);
     expect(find.byType(BooksScreen), findsOneWidget);
     expect(find.text('In use'), findsWidgets);
@@ -72,7 +72,7 @@ void main() {
       final books = w.parts.books;
       books.setRepertoire(books.active!, kid, false);
       books.setChapter(books.active!, kid, nested, true);
-      await toMode(tester, 'Books');
+      await toMode(tester, 'Opening books');
       expect(books.includes(nested), isTrue);
       final kidRow = find.ancestor(
         of: find.text('KID'),
@@ -121,7 +121,7 @@ void main() {
     await tester.tap(find.text('Book').last);
     await tester.pumpAndSettle();
     expect(find.text('Test book'), findsOneWidget);
-    await tester.tap(find.byTooltip('Edit books'));
+    await tester.tap(find.byTooltip('Edit opening books'));
     await tester.pumpAndSettle();
     expect(w.requests.mode, Mode.books);
     expect(w.requests.backTo?.mode, Mode.repertoires);

@@ -104,10 +104,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   Future<CopyResult?> _copyOnLeave(DocumentSession session) async {
     final context = _navigator.currentContext;
     if (context == null) return null;
-    final name = await showCopyNameDialog(
-      context,
-      session.chapter?.name ?? 'Chapter',
-    );
+    final name = await showCopyNameDialog(context);
     if (name == null) return null;
     return session.copyAside(name);
   }

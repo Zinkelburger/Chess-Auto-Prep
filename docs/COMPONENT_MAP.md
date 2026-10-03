@@ -43,7 +43,7 @@ and [tooling map](agents/tooling.md) for details and remaining product scope.
 
 ## Modes and shared workflows
 
-All mode names are defined in `app/mode.dart`: Repertoire builder, Books,
+All mode names are defined in `app/mode.dart`: Repertoire builder, Opening books,
 PGN Viewer, Repertoire trainer, Study, Tactics, My games, Player analysis,
 Players & prep, Databases, Engine tournament and Bughouse lab. The optional
 Bughouse mode is offered when its engine assets are present.
@@ -136,6 +136,10 @@ Bughouse mode is offered when its engine assets are present.
 - Engine tournaments use the shared supervisor, retryable checkpoints, saved
   history, ratings/crosstables and viewer handoff. Bughouse keeps its own two-board
   screen, Hivemind analysis, archive/book reads and saved matches.
+- Text fields leave the typing area blank until the user enters a value.
+  `SearchField` keeps its magnifier, clear action, accessible name and hover
+  help; `ChoiceField` uses persistent labels. New-name dialogs start empty,
+  while rename/edit dialogs retain saved values.
 - `AccessibleBoard` adds named squares, side-to-move/check announcements,
   orientation-aware arrow navigation, Enter/Space selection and keyboard promotion
   to the shared pointer board. Modified history shortcuts still pass through.

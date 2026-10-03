@@ -70,7 +70,6 @@ class _LibraryPanelState extends State<LibraryPanel> {
       context,
       title: 'Create repertoire',
       label: 'Repertoire name',
-      hint: 'My Sicilian',
       confirm: 'Create',
     );
     if (name == null || !mounted) return;

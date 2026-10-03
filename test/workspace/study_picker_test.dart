@@ -48,7 +48,10 @@ void main() {
       'Najdorf trap',
     );
     await tester.enterText(
-      find.widgetWithText(TextField, 'Type a study'),
+      find.descendant(
+        of: find.byTooltip('Type a study'),
+        matching: find.byType(TextField),
+      ),
       'end',
     );
     await tester.pumpAndSettle();

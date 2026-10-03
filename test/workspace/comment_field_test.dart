@@ -208,7 +208,7 @@ void main() {
         home: Scaffold(body: CommentField(session: empty.session)),
       ),
     );
-    expect(find.text('About this chapter'), findsOneWidget);
+    expect(find.text('About this chapter'), findsNothing);
   });
 
   testWidgets('shows the note the file wrote before the move, read only', (

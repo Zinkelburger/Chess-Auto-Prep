@@ -198,8 +198,6 @@ class _MoveFieldState extends State<MoveField> {
               ),
               decoration: InputDecoration(
                 isDense: true,
-                hintText: 'Type a move',
-                hintStyle: theme.textTheme.bodySmall,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: Space.s,
                   vertical: Space.s,

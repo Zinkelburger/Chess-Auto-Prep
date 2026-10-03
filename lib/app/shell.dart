@@ -602,10 +602,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   }
 
   Future<void> _saveCopy() async {
-    final name = await showCopyNameDialog(
-      context,
-      _ws.session.chapter?.name ?? 'Chapter',
-    );
+    final name = await showCopyNameDialog(context);
     if (name == null || !mounted) return;
     // A file this app may not write cannot have a copy beside it either.
     final result = await _ws.session.saveCopy(

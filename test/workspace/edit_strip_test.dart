@@ -278,6 +278,10 @@ void main() {
     fixture.store.creates.add(const Collision());
     await tester.tap(find.text('Save a copy…'));
     await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'File name'),
+      'Taken copy',
+    );
     await tester.tap(find.widgetWithText(FilledButton, 'Save a copy'));
     await tester.pumpAndSettle();
     expect(

@@ -71,8 +71,7 @@ class _GroupDialogState extends State<_GroupDialog> {
             TextFormField(
               controller: date,
               decoration: const InputDecoration(
-                labelText: 'Event date (optional)',
-                hintText: 'YYYY-MM-DD',
+                labelText: 'Event date (YYYY-MM-DD, optional)',
               ),
               validator: (v) {
                 if (v == null || v.trim().isEmpty) return null;
