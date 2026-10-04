@@ -15,7 +15,8 @@ Stdlib only. Talks to `flutter run --machine` over its JSON-RPC stdio, and to
 the app through the `ext.chessprep.*` service extensions registered by
 lib/debug/agent_driver.dart (only with --dart-define=AGENT_DRIVER=true).
 
-State and isolated app data are per checkout (CHESS_PREP_DRIVER_DIR overrides driver state):
+Control state is per checkout; logs, screenshots and snapshots use disk cache.
+CHESS_PREP_DRIVER_DIR isolates all driver files in an explicit disk-backed directory.
   app.log      everything flutter/the app printed        state.json  pid, appId…
   driver.sock  unix socket the daemon listens on          shots/      screenshots
 """
@@ -42,8 +43,11 @@ REPO = Path(__file__).resolve().parent.parent
 STATE_DIR = Path(os.environ.get("CHESS_PREP_DRIVER_DIR", str(agent_job.driver_dir(REPO))))
 SOCK = STATE_DIR / "driver.sock"
 STATE = STATE_DIR / "state.json"
-APP_LOG = STATE_DIR / "app.log"
-SHOTS = STATE_DIR / "shots"
+OUTPUT_DIR = (STATE_DIR if "CHESS_PREP_DRIVER_DIR" in os.environ else
+              agent_job.storage_dir() / "drivers" / agent_job.checkout_key(REPO))
+APP_LOG = OUTPUT_DIR / "app.log"
+SHOTS = OUTPUT_DIR / "shots"
+DAEMON_LOG = OUTPUT_DIR / "daemon.out"
 START_LOCK = STATE_DIR / "start.lock"
 BUILD_TIMEOUT = int(os.environ.get("CHESS_PREP_BUILD_TIMEOUT", "900"))
 
@@ -72,6 +76,20 @@ def read_state() -> dict:
         return json.loads(STATE.read_text())
     except (OSError, ValueError):
         return {}
+
+
+def prepare_output_dir() -> None:
+    OUTPUT_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    agent_job.require_disk_storage(OUTPUT_DIR)
+
+
+def session_log() -> Path:
+    """Old daemons retain their files until stopped; new sessions record theirs."""
+    output = read_state().get("outputDir")
+    if output:
+        return Path(output) / "app.log"
+    legacy = STATE_DIR / "app.log"
+    return legacy if legacy.exists() else APP_LOG
 
 
 def write_state(**kw) -> None:
@@ -118,6 +136,7 @@ class Daemon:
         self.next_id = 1
         self.pending: dict[int, dict] = {}
         self.lock = threading.Lock()
+        prepare_output_dir()
         self.log = open(APP_LOG, "a", buffering=1)
 
     def logline(self, s: str) -> None:
@@ -208,7 +227,7 @@ class Daemon:
         self.logline(f"launch: {shlex.join(cmd)} (cwd {self.src})")
         write_state(status="starting", pid=os.getpid(), token=agent_job.process_token(os.getpid()), src=str(self.src),
                     appId=None, vmService=None, headless=not self.visible, target=self.target,
-                    profile=str(agent_job.profile_dir(self.src)))
+                    profile=str(agent_job.profile_dir(self.src)), outputDir=str(OUTPUT_DIR))
         self.proc = subprocess.Popen(
             launch_cmd, cwd=self.src, env=env, text=True, bufsize=1,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.log,
@@ -295,6 +314,8 @@ class Daemon:
         if cmd == "ss":
             SHOTS.mkdir(parents=True, exist_ok=True)
             name = args.get("name") or time.strftime("%H%M%S")
+            if Path(name).name != name or name in (".", ".."):
+                return {"error": "Screenshot name must be a filename, not a path"}
             path = SHOTS / (name if name.endswith(".png") else f"{name}.png")
             r = self.ext("screenshot", {"path": str(path)})
             return {"result": r}
@@ -384,6 +405,13 @@ def cmd_start(argv: list[str]) -> None:
     start_lock_fd = os.open(START_LOCK, os.O_WRONLY | os.O_CREAT, 0o644)
     fcntl.flock(start_lock_fd, fcntl.LOCK_EX)
     try:
+        st = read_state()
+        if SOCK.exists() and pid_alive(st.get("pid")):
+            print(
+                f"already running (pid {st['pid']}, src {st.get('src')}); "
+                "use it or `driver.py stop`"
+            )
+            return
         src = REPO
         if "--src" in rest:
             src = Path(rest[rest.index("--src") + 1]).resolve()
@@ -400,28 +428,24 @@ def cmd_start(argv: list[str]) -> None:
             if not candidate.is_relative_to(src) or candidate.suffix != '.dart' or not candidate.is_file():
                 raise SystemExit('--target must name a Dart file inside the source checkout')
             target = candidate.relative_to(src).as_posix()
-        st = read_state()
-        if SOCK.exists() and pid_alive(st.get("pid")):
-            print(
-                f"already running (pid {st['pid']}, src {st.get('src')}); "
-                "use it or `driver.py stop`"
-            )
-            return
+        prepare_output_dir()
         for f in (SOCK, STATE):
             try:
                 f.unlink()
             except OSError:
                 pass
         APP_LOG.write_text("")
-        child = subprocess.Popen(
-            [sys.executable, str(Path(__file__).resolve()), "_serve", str(src), "--target", target,
-             *(["--visible"] if "--visible" in rest else []),
-             *(["--offline"] if "--offline" in rest else [])],
-            start_new_session=True,
-            stdin=subprocess.DEVNULL,
-            stdout=open(STATE_DIR / "daemon.out", "w"),
-            stderr=subprocess.STDOUT,
-        )
+        write_state(outputDir=str(OUTPUT_DIR))
+        with DAEMON_LOG.open("w") as daemon_log:
+            child = subprocess.Popen(
+                [sys.executable, str(Path(__file__).resolve()), "_serve", str(src), "--target", target,
+                 *(["--visible"] if "--visible" in rest else []),
+                 *(["--offline"] if "--offline" in rest else [])],
+                start_new_session=True,
+                stdin=subprocess.DEVNULL,
+                stdout=daemon_log,
+                stderr=subprocess.STDOUT,
+            )
         print(
             f"building + launching from {src} (daemon pid {child.pid}); "
             f"log: {APP_LOG}"
@@ -439,7 +463,7 @@ def cmd_start(argv: list[str]) -> None:
                 return
             if status in ("failed", "stopped") or child.poll() is not None:
                 print(tail(APP_LOG, 40))
-                print(tail(STATE_DIR / "daemon.out", 20))
+                print(tail(DAEMON_LOG, 20))
                 sys.exit("launch failed — see above")
             time.sleep(1)
         sys.exit(f"gave up after {BUILD_TIMEOUT}s; see {APP_LOG}")
@@ -450,10 +474,14 @@ def cmd_start(argv: list[str]) -> None:
 
 def make_worktree() -> Path:
     # A fresh snapshot per invocation; never reset another agent's checkout.
-    wt = Path(tempfile.mkdtemp(prefix="chess-prep-preview-"))
+    snapshots = agent_job.storage_dir() / "snapshots"
+    snapshots.mkdir(mode=0o700, parents=True, exist_ok=True)
+    agent_job.require_disk_storage(snapshots)
+    wt = Path(tempfile.mkdtemp(prefix="chess-prep-preview-", dir=snapshots))
     subprocess.run(["git", "-C", str(REPO), "worktree", "add", "--detach", str(wt), "HEAD"], check=True)
-    subprocess.run([sys.executable, str(REPO / "scripts/agent_worktree.py"),
-                    "--prepare", str(wt), "--assets-from", str(REPO)], check=True)
+    prepare = [sys.executable, str(REPO / "scripts/agent_worktree.py"),
+               "--prepare", str(wt), "--assets-from", str(REPO)]
+    subprocess.run(resource_scoped_command(prepare, visible=True), cwd=wt, check=True)
     return wt
 
 
@@ -483,7 +511,7 @@ def main(argv: list[str]) -> None:
         return
     if cmd == "log":
         kv, _ = parse_args(rest)
-        print(tail(APP_LOG, int(kv.get("n", "80"))))
+        print(tail(session_log(), int(kv.get("n", "80"))))
         return
     if cmd == "status":
         st = read_state()

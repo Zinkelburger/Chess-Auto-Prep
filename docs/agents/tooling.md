@@ -8,7 +8,12 @@ build files and disposable app profiles live under `~/.cache/chess-prep-jobs`
 (override with `CHESS_PREP_JOB_CACHE`, an absolute, owned mode-0700 directory).
 The runner rejects RAM-backed checkouts and caches: moving only `TMPDIR`
 does not move a checkout's `.dart_tool` and `build` outputs off RAM.
-Small admission locks and driver control files retain their existing `/tmp`
+Driver logs and screenshots also live in this disk cache; `start --worktree`
+creates its detached snapshot there and prepares dependencies through the
+bounded runner. `CHESS_PREP_DRIVER_DIR` still isolates all driver files at an
+explicit path, which must be disk-backed for new launches. Existing sessions
+keep their old outputs; `log` reads that session's recorded location.
+Small admission locks, sockets and driver state retain their existing `/tmp`
 paths so old and new runners still share the same limits. Never delete these
 locks while jobs may be running. The next job sweeps abandoned temporary
 directories only after their worker and service children have exited.
