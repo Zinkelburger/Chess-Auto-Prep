@@ -43,8 +43,9 @@ V2 is the only app: `lib/main.dart`, production under `lib/`, tests under
   It branches from current local `main` and pushes the task branch before work.
 - Prepare an existing agent-created worktree with
   `python3 scripts/agent_worktree.py --prepare . --assets-from /path/to/main-checkout`.
-- Branch-backed worktrees must never live under `/tmp`. Detached `/tmp`
-  snapshots are disposable and only for tests, previews or bisects.
+- Keep all worktrees and detached snapshots on disk, including tests, previews
+  and bisects. Never build in `/tmp` or another RAM-backed filesystem; the
+  bounded runner rejects RAM-backed checkouts and temporary build storage.
 - Never reset another checkout, change another agent's unfinished edits, or
   kill its jobs. If the environment is unfamiliar or a command fails, run
   `scripts/doctor.sh --quiet` and address findings relevant to your task.
