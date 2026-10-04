@@ -208,7 +208,7 @@ class Daemon:
         self.logline(f"launch: {shlex.join(cmd)} (cwd {self.src})")
         write_state(status="starting", pid=os.getpid(), token=agent_job.process_token(os.getpid()), src=str(self.src),
                     appId=None, vmService=None, headless=not self.visible, target=self.target,
-                    profile=str(agent_job.driver_dir(self.src) / "profile"))
+                    profile=str(agent_job.profile_dir(self.src)))
         self.proc = subprocess.Popen(
             launch_cmd, cwd=self.src, env=env, text=True, bufsize=1,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.log,

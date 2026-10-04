@@ -3,8 +3,17 @@
 These programs have separate responsibilities; read only the relevant row's
 skill or README. Commands below run from the repo root unless stated otherwise;
 heavy checks/builds use `scripts/ci.sh with -- COMMAND`. Each job gets its
-own `TMPDIR`, deleted when the job ends, so test leftovers such as the folder
-lock's files cannot fill the shared `/tmp`.
+own disk-backed `TMPDIR`/`TMP`/`TEMP`, deleted when the job ends. Temporary
+build files and disposable app profiles live under `~/.cache/chess-prep-jobs`
+(override with `CHESS_PREP_JOB_CACHE`, an absolute, owned mode-0700 directory).
+The runner rejects RAM-backed checkouts and caches: moving only `TMPDIR`
+does not move a checkout's `.dart_tool` and `build` outputs off RAM.
+Small admission locks and driver control files retain their existing `/tmp`
+paths so old and new runners still share the same limits. Never delete these
+locks while jobs may be running. The next job sweeps abandoned temporary
+directories only after their worker and service children have exited.
+App profiles persist across runs for fixtures; the driver reports the current
+profile path. Existing driver sessions retain their old profile until restarted.
 
 | Area | Responsibility and entrypoint |
 |---|---|
