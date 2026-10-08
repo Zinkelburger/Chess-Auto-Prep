@@ -425,6 +425,14 @@ in the visitor's browser more cheaply: 200-node searches of the position, then
 200-node searches after only each board's four most-visited moves; every other
 legal move is stored unscored and shows "—".
 
+`tools/bughouse_db/puzzles.py` (`python3 -m bughouse_db puzzles`) mines the
+site's Bughouse Puzzles (`/bughouse-puzzles`) from one archive year:
+Fairy-Stockfish's single-board `bughouse` variant, where a capture leaves for
+the partner, scans every position for a short forced mate, then keeps lines in
+which each solver move is check and the only one that keeps the mate. It writes
+`frontend/public/bughouse-puzzles.json`; the page is described in the
+[site README](../python/twic-position-finder/frontend/README.md#bughouse-puzzles).
+
 The v2 lab puts FICS continuations under the actual boards, keeps FEN/reserve editing collapsed,
 and opens Matches through Actions. Compact engine tables use board/seat headers, aligned scores,
 alternating row backgrounds and a highlighted best move. Its `Saved scores` details show engine

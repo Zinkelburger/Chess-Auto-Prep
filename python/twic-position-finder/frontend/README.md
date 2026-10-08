@@ -1,12 +1,13 @@
 # chessautoprep.com — frontend
 
-Static Astro site deployed to Cloudflare Pages. Four tools, one shared shell:
+Static Astro site deployed to Cloudflare Pages. Its tools share one shell:
 
 | Route                 | What                                                                 | Code                                   |
 | --------------------- | -------------------------------------------------------------------- | -------------------------------------- |
 | `/twic-notifications` | TWIC Alerts — create alerts anonymously, or manage them signed in    | `src/lib/alerts-page.ts` + `src/lib/*` |
 | `/tactics`            | Tactics Trainer — Stockfish in the browser mines puzzles from games  | `src/tactics/*`                        |
 | `/bughouse`           | Two linked boards and Hivemind running entirely in the browser | `src/bughouse/*`, `../../../tools/bughouse_web/` |
+| `/bughouse-puzzles`   | Bughouse Puzzles — forced drop mates mined from FICS games, reserves frozen | `src/bughouse-puzzles/*`, `public/bughouse-puzzles.json` |
 | `/bughousedb`         | BughouseDB — the shared Hivemind book; missing positions analysed in the browser | `src/bughousedb/*`, `src/bughouse/boards.ts` |
 | `/charles-clock`      | Charles Clock — a full-screen phone clock with its own `<html>`      | `src/pages/charles-clock.astro`        |
 
@@ -80,6 +81,26 @@ Speed comes from the same tricks as the Dart app's tactics import:
 
 Verdicts use lila's winning-chances model and thresholds (`win-chances.ts`),
 so this trainer, the Dart app, and Lichess agree on what a mistake is.
+
+## Bughouse puzzles
+
+`public/bughouse-puzzles.json` is generated, not hand-edited:
+`python3 -m bughouse_db puzzles --year 2017 --games 1000 --engine PATH` from
+`tools/` (Fairy-Stockfish binary; see `tools/bughouse_db/puzzles.py`). Each
+puzzle is one board of a real game with the reserves frozen: captures go to the
+partner and nothing arrives. Every solver move but the last is check and the only
+move that keeps a forced mate; the last accepts any mate. The file carries the
+SAN line, the legal moves at each solver step (the page has no move generator),
+and both boards so **Both boards in Bughouse Lab** opens the real position.
+
+```
+puzzle.ts       data types, frozen-reserve moves, one Attempt (pure, tested in tests/bughouse-state.ts)
+board.ts        one chessground board with both reserves (drag or click to drop, as in Bughouse Lab)
+app.ts          page controller: filter by mate length, play, reply, View solution, results in localStorage
+```
+
+The training view's styles are shared with the Tactics Trainer in
+`src/styles/trainer.css`.
 
 ## Smoke-testing
 

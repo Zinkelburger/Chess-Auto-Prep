@@ -3,6 +3,7 @@ import { Lines } from '../src/bughouse/lines';
 import { exportBpgn, parseSession, sessionHash, START_DUAL, type SavedSession } from '../src/bughouse/session';
 import { parseReserve } from '../src/bughouse/setup';
 import { BrowserEngine } from '../src/bughouse/engine';
+import { Attempt, applyMove, inCheck, labLink, startPosition, type Puzzle } from '../src/bughouse-puzzles/puzzle';
 
 const line = new Lines(START_DUAL);
 line.play({ board: 'A', colour: 'white', num: 1, uci: 'e2e4', san: 'e4' });
@@ -73,4 +74,40 @@ const third = client.request('analyse', {});
 worker.onmessage!({ data: { id: 3, result: 'reused' } });
 assert.equal(await third, 'reused');
 assert.equal(FakeWorker.all.length, 1);
-console.log('Bughouse state, BPGN export, saved links, reserve validation and worker reuse passed.');
+
+// Bughouse Puzzles: reserves are frozen, so a capture never reaches a hand.
+const frozen = applyMove(startPosition('rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR[Nn] w KQkq - 0 2'), 'e4d5');
+assert.equal(frozen.pockets.white, 'N', 'a capture goes to the partner, not the capturer');
+assert.equal(frozen.pieces.d5, 'P');
+const dropped = applyMove(frozen, 'N@f6');
+assert.equal(dropped.pockets.black, '', 'a drop spends the reserve piece');
+assert.equal(dropped.pieces.f6, 'n');
+const puzzle: Puzzle = {
+  id: '1-B-101', fen: 'r4k1r/ppN2ppp/3Pp3/2Np4/1n1P4/4Pq2/PPPKBb1P/R2Q1Bq1[Nrnp] w - - 4 27',
+  dual: `${START_DUAL.split('|')[0]}|r4k1r/ppN2ppp/3Pp3/2Np4/1n1P4/4Pq2/PPPKBb1P/R2Q1Bq1[Nrnp] w - - 4 27`,
+  board: 'B', last: 'e8f8', mate: 2, line: ['c5d7', 'f8g8', 'N@e7'], san: ['Nd7+', 'Kg8', 'N@e7#'],
+  legal: ['c5d7 c5b7 N@e7', 'N@e7 N@f6'], mates: ['N@e7'], played: 'Nd7+', found: true,
+  game: 1, date: '2017.12.31', tc: '120+0', white: 'W', black: 'B', welo: 1853, belo: 1666,
+};
+const attempt = new Attempt(puzzle);
+assert.deepEqual(attempt.last, ['e8', 'f8']);
+assert.equal(attempt.play('c5b7'), 'wrong');
+assert.ok(attempt.failed, 'a wrong move fails the attempt');
+assert.equal(attempt.ply, 0, 'a wrong move is not played');
+assert.equal(attempt.play('c5d7'), 'right');
+assert.ok(inCheck(attempt.pos), 'Nd7 gives check');
+assert.deepEqual(attempt.legal(), [], 'the board is locked while the defender replies');
+assert.equal(attempt.reply(), 'f8g8');
+assert.deepEqual(attempt.legal(), ['N@e7', 'N@f6']);
+assert.equal(attempt.play('n@e7'), 'solved', 'drop letters match in either case');
+assert.ok(attempt.done && inCheck(attempt.pos));
+assert.equal(attempt.pos.pockets.white, '', 'the mating knight came from the reserve');
+const revealed = new Attempt(puzzle);
+while (revealed.step()) { /* play the line out */ }
+assert.ok(revealed.failed && revealed.done, 'showing the solution counts as a miss');
+// The Lab's team is the colour held on board A; partners hold opposite colours.
+const lab = JSON.parse(decodeURIComponent(labLink(puzzle, 'white').split('#lab=')[1])) as SavedSession;
+assert.equal(lab.settings.team, 'black');
+assert.equal(lab.line.root, puzzle.dual);
+assert.doesNotThrow(() => parseSession(JSON.stringify(lab)), 'Bughouse Lab accepts the puzzle link');
+console.log('Bughouse state, BPGN export, saved links, reserve validation, worker reuse and puzzles passed.');

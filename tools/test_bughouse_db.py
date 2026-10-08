@@ -509,6 +509,64 @@ class SnapshotTests(unittest.TestCase):
             con.close()
 
 
+class TestPuzzleExport(unittest.TestCase):
+    """The puzzle miner's engine-free half: frozen reserves and the web JSON."""
+
+    FEN = "r4k1r/ppN2ppp/3Pp3/2Np4/1n1P4/4Pq2/PPPKBb1P/R2Q1Bq1[Nrnp] w - - 4 27"
+
+    def candidate(self, **over):
+        from bughouse_db.puzzles import Candidate
+
+        base = dict(
+            fen=self.FEN, dual=f"{START}|{self.FEN}", board="B", ply=101, last="e8f8",
+            played="Nd7+", game=3677428, date="2017.12.31", tc="120+0", white="W",
+            black="B", welo=1853, belo=1666, line=["c5d7", "f8g8", "N@e7"], mates=["N@e7"],
+        )
+        base.update(over)
+        return Candidate(**base)
+
+    def test_capture_does_not_reach_the_capturers_hand(self):
+        from chess.variant import CrazyhouseBoard
+        from bughouse_db.puzzles import frozen_push
+
+        board = CrazyhouseBoard("rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR[Nn] w KQkq - 0 2")
+        self.assertEqual(frozen_push(board, "e4d5"), "exd5")
+        self.assertEqual(board.fen().split()[0].split("[")[1], "Nn]")
+        frozen_push(board, "N@f6")
+        self.assertEqual(board.fen().split()[0].split("[")[1], "N]")
+
+    def test_web_puzzle_carries_san_legal_moves_and_whether_it_was_found(self):
+        from bughouse_db.puzzles import web_puzzle
+
+        p = web_puzzle(self.candidate())
+        self.assertIsNotNone(p)
+        self.assertEqual(p["san"], ["Nd7+", "Kg8", "N@e7#"])
+        self.assertEqual(p["mate"], 2)
+        self.assertEqual(len(p["legal"]), 2, "one legal-move list per solver step")
+        self.assertIn("c5d7", p["legal"][0].split())
+        self.assertIn("N@e7", p["legal"][1].split())
+        self.assertTrue(p["found"])
+        self.assertFalse(web_puzzle(self.candidate(played="Nb7"))["found"])
+
+    def test_a_line_that_does_not_end_in_mate_is_dropped(self):
+        from bughouse_db.puzzles import web_puzzle
+
+        self.assertIsNone(web_puzzle(self.candidate(line=["c5d7", "f8g8", "N@e6"])))
+
+    def test_export_puts_longer_mates_first(self):
+        import json
+        from bughouse_db.puzzles import export_web
+
+        one = self.candidate(fen="6k1/5ppp/8/8/8/8/8/K3R3[] w - - 0 30", dual="x|y",
+                             line=["e1e8"], mates=["e1e8"], played="Re8#", ply=7)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "p.json"
+            self.assertEqual(export_web([one, self.candidate()], out, "test"), 2)
+            data = json.loads(out.read_text())
+        self.assertEqual([p["mate"] for p in data["puzzles"]], [2, 1])
+        self.assertTrue(data["puzzles"][1]["found"], "any mate counts in a mate-in-one")
+
+
 if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).resolve().parent / "mcp"))
     unittest.main(verbosity=2)

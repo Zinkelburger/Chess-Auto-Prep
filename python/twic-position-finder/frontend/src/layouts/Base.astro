@@ -14,7 +14,7 @@ const {
   title,
   wide = false,
   fill = false,
-  description = 'Chess Auto Prep — TWIC alerts, tactics from your games, Bughouse Lab, and the Charles Clock.',
+  description = 'Chess Auto Prep — TWIC alerts, tactics from your games, Bughouse Lab and puzzles, and the Charles Clock.',
 } = Astro.props;
 const path = Astro.url.pathname.replace(/\/$/, '') || '/';
 
@@ -22,6 +22,7 @@ const NAV = [
   { href: '/twic-notifications', label: 'TWIC Alerts', match: ['/twic-notifications', '/dashboard', '/verify', '/unsubscribe'] },
   { href: '/tactics', label: 'Tactics Trainer', match: ['/tactics'] },
   { href: '/bughouse', label: 'Bughouse Lab', match: ['/bughouse'] },
+  { href: '/bughouse-puzzles', label: 'Bughouse Puzzles', match: ['/bughouse-puzzles'] },
   { href: '/bughousedb', label: 'BughouseDB', match: ['/bughousedb'] },
   { href: '/charles-clock', label: 'Charles Clock', match: ['/charles-clock'] },
 ];
