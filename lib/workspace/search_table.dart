@@ -6,12 +6,11 @@ import '../chess/generation/draft_lines.dart' show expectimaxText;
 import '../chess/generation/eval.dart';
 import '../chess/generation/search_node.dart';
 import '../chess/generation/sources.dart' show RepliesFrom;
+import '../chess/generation/traps.dart'
+    show trapMinLossCp, trapMinShare, trapRepliesAt;
 import '../engines/engine_line.dart' show Centipawns;
 import '../ui/move_notation.dart';
 import '../ui/theme.dart';
-
-/// A reply that loses this much against the opponent's best is a trap.
-const trapLossCp = 50;
 
 /// What a move is worth in the search made for one side, as White's
 /// expected score; not [searched] while that search has only the engine's
@@ -29,7 +28,7 @@ final class SearchRow {
     this.shareFrom,
     this.white,
     this.black,
-    this.trap = false,
+    this.trapLossCp,
   });
 
   final MoveRef move;
@@ -55,9 +54,11 @@ final class SearchRow {
   /// packed centipawns.
   final int engineCp;
 
-  /// A reply to the board's side that loses [trapLossCp] or more against
-  /// their best.
-  final bool trap;
+  /// What the reply throws away against the opponent's best, where it is a
+  /// trap for the board's side by [trapRepliesAt]'s rule; null otherwise.
+  final int? trapLossCp;
+
+  bool get trap => trapLossCp != null;
 
   SideValue? valueFor(Side side) => side == Side.white ? white : black;
 }
@@ -93,7 +94,7 @@ List<SearchRow> searchRows({
         shareFrom: held?.share != null ? held?.shareFrom : from,
         white: white ? worth : held?.white,
         black: white ? held?.black : worth,
-        trap: (held?.trap ?? false) || (prepared == side && trap),
+        trapLossCp: held?.trapLossCp ?? (prepared == side ? trap : null),
       );
     }
   }
@@ -101,26 +102,20 @@ List<SearchRow> searchRows({
 }
 
 /// The moves under [node] in table order, each with where it leads, its
-/// share when it is a reply, and whether that reply loses half a pawn or
-/// more against the best of them.
-List<(MoveRef, SearchNode, double?, bool)> _movesOf(SearchNode? node) {
+/// share when it is a reply, and what it throws away when it is a trap.
+List<(MoveRef, SearchNode, double?, int?)> _movesOf(SearchNode? node) {
   switch (node) {
     case OurNode(:final candidates):
-      return [for (final c in candidates) (c.move, c.child, null, false)];
+      return [for (final c in candidates) (c.move, c.child, null, null)];
     case OpponentNode(:final replies):
-      final best = replies
-          .map((r) => r.child.evalForUs.cp)
-          .reduce((a, b) => a < b ? a : b);
+      final traps = {
+        for (final (reply, loss) in trapRepliesAt(node)) reply.move.uci: loss,
+      };
       final sorted = [...replies]
         ..sort((a, b) => b.probability.compareTo(a.probability));
       return [
         for (final r in sorted)
-          (
-            r.move,
-            r.child,
-            r.probability,
-            r.child.evalForUs.cp - best >= trapLossCp,
-          ),
+          (r.move, r.child, r.probability, traps[r.move.uci]),
       ];
     default:
       return const [];
@@ -272,16 +267,24 @@ class _Header extends StatelessWidget {
             Expanded(
               // Narrow enough to lose Played, the move column is too
               // narrow for the long names too.
-              child: Text(
-                switch ((ours, played)) {
-                  (true, true) => 'Your move',
-                  (false, true) => 'Their reply',
-                  (true, false) => 'Move',
-                  (false, false) => 'Reply',
-                },
-                style: style,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              child: Tooltip(
+                message: ours
+                    ? 'Click a move to play it'
+                    : '? marks a trap: a reply played in at least '
+                          '${(trapMinShare * 100).round()}% of games that '
+                          'loses ${(trapMinLossCp / 100).toStringAsFixed(1)} '
+                          'or more against their best',
+                child: Text(
+                  switch ((ours, played)) {
+                    (true, true) => 'Your move',
+                    (false, true) => 'Their reply',
+                    (true, false) => 'Move',
+                    (false, false) => 'Reply',
+                  },
+                  style: style,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
             if (played) _Cell('Played', width: searchShareWidth, style: style),
@@ -349,6 +352,29 @@ class _RowView extends StatelessWidget {
         : Tooltip(message: tip, child: cell);
   }
 
+  /// The move, a trap's marked `?` and saying on hover what it costs.
+  Widget _move(BuildContext context, TextStyle style) {
+    final text = Text(
+      displaySan(context, row.trap ? '${row.move.san}?' : row.move.san),
+      style: style,
+      maxLines: 1,
+      softWrap: false,
+      overflow: TextOverflow.clip,
+    );
+    final loss = row.trapLossCp;
+    if (loss == null) return text;
+    final played = row.share == null ? '' : 'Played ${_percent(row.share!)}, ';
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Tooltip(
+        message:
+            'Trap: ${played}loses ${(loss / 100).toStringAsFixed(1)} '
+            'against their best',
+        child: text,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -364,22 +390,11 @@ class _RowView extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: Space.m),
           child: Row(
             children: [
-              Expanded(
-                child: Text(
-                  displaySan(
-                    context,
-                    row.trap ? '${row.move.san}?' : row.move.san,
-                  ),
-                  style: ink,
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.clip,
-                ),
-              ),
+              Expanded(child: _move(context, ink)),
               if (played) _shareCell(share, muted),
               for (final side in sides)
                 switch (row.valueFor(side)) {
-                  null => const SizedBox(width: searchValueWidth),
+                  null => _Cell('–', width: searchValueWidth, style: muted),
                   // An unexpanded move is worth only what the engine says;
                   // the search's own value is not in yet.
                   (searched: false, forWhite: _) => _Cell(

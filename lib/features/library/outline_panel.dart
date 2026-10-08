@@ -739,9 +739,11 @@ class LineDragChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Material(
-      elevation: 4,
       color: scheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(4),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(4),
+        side: BorderSide(color: scheme.outline),
+      ),
       child: Padding(
         padding: const EdgeInsets.symmetric(
           horizontal: Space.m,

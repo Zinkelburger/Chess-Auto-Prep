@@ -205,6 +205,7 @@ class _ExplorerPaneState extends State<ExplorerPane>
                 widget.onLogIn != null
             ? _logIn
             : null,
+        offline: _offline(),
         download:
             explorer.recovery == ExplorerRecovery.download &&
                 widget.onDownloadTwic != null
@@ -219,6 +220,18 @@ class _ExplorerPaneState extends State<ExplorerPane>
     final loggedIn = await widget.onLogIn!(context);
     if (!mounted || !loggedIn) return;
     await widget.explorer.retry();
+  }
+
+  /// Beside a login Lichess asks for: the master games on this machine,
+  /// which need none.
+  Future<void> Function()? _offline() {
+    final explorer = widget.explorer;
+    if (explorer.recovery != ExplorerRecovery.login ||
+        explorer.choice.source == ExplorerSource.twic) {
+      return null;
+    }
+    return () async =>
+        explorer.choose(explorer.choice.copyWith(source: ExplorerSource.twic));
   }
 
   Future<void> _downloadTwic() async {
@@ -241,6 +254,7 @@ class _ExplorerPaneState extends State<ExplorerPane>
                   widget.onLogIn != null
               ? _logIn
               : null,
+          offline: _offline(),
           download:
               explorer.recovery == ExplorerRecovery.download &&
                   widget.onDownloadTwic != null
@@ -276,13 +290,20 @@ class _ExplorerPaneState extends State<ExplorerPane>
 }
 
 /// A sentence where the table would be, with `Try again` when that is a
-/// thing to do.
+/// thing to do, and TWIC beside a Lichess login.
 class _Sentence extends StatelessWidget {
-  const _Sentence(this.words, {this.retry, this.logIn, this.download});
+  const _Sentence(
+    this.words, {
+    this.retry,
+    this.logIn,
+    this.offline,
+    this.download,
+  });
 
   final String words;
   final Future<void> Function()? retry;
   final Future<void> Function()? logIn;
+  final Future<void> Function()? offline;
   final Future<void> Function()? download;
 
   @override
@@ -296,9 +317,21 @@ class _Sentence extends StatelessWidget {
         children: [
           Text(words, style: text.bodySmall),
           if (logIn case final login?)
-            TextButton(
-              onPressed: () => unawaited(login()),
-              child: const Text('Log in to Lichess'),
+            Wrap(
+              children: [
+                TextButton(
+                  onPressed: () => unawaited(login()),
+                  child: const Text('Log in to Lichess'),
+                ),
+                if (offline case final twic?)
+                  Tooltip(
+                    message: 'Master games on this machine; no login needed',
+                    child: TextButton(
+                      onPressed: () => unawaited(twic()),
+                      child: const Text('Use TWIC'),
+                    ),
+                  ),
+              ],
             )
           else if (download case final start?)
             TextButton(

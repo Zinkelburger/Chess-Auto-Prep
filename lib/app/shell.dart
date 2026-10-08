@@ -1,3 +1,4 @@
+import '../chess/pgn/tree_edit.dart' show pathOfSans;
 import '../features/pgn_viewer/export_dialog.dart';
 import '../features/tournaments/tournament_run.dart';
 import '../features/databases/database_library.dart';
@@ -541,9 +542,31 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     _arrange();
   }
 
-  /// A find's line on an analysis board at its position.
+  /// The Positions in the list column, whatever was there.
+  void _showPositions() {
+    if (_listShown && _positionsShown) return;
+    _togglePositions();
+  }
+
+  /// A find's position in the open chapter when the chapter plays its line
+  /// that far, else its line on an analysis board at its position.
   void _openFind(KeptFind kept) {
     _ws.finds.select(kept.id);
+    final session = _ws.session;
+    final tree = session.tree;
+    if (!_inspecting &&
+        session.source != null &&
+        tree != null &&
+        tree.rootFen.position == kept.rootFen.position) {
+      final path = pathOfSans(
+        tree,
+        kept.find.sans.take(kept.find.ply).toList(),
+      );
+      if (path != null) {
+        session.goTo(path);
+        return;
+      }
+    }
     unawaited(
       _requests.openLine(
         root: kept.rootFen,
@@ -885,6 +908,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     child: _positionsShown
         ? FindsPanel(
             finds: _ws.finds,
+            session: _ws.session,
             onOpen: _openFind,
             onTrain: _trainFind,
             trailing: trailing,
@@ -958,6 +982,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
           _requests.openExplorerGame(game, source: source, ply: ply),
         ),
         onOpenChapter: (ref) => unawaited(_requests.readInBuilder(ref, [])),
+        onShowPositions: _showPositions,
         // The chapter a book move was found in: in the builder, at the
         // position the move leads to.
         onOpenPlace: (place) =>

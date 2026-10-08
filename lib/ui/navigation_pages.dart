@@ -53,24 +53,32 @@ class _NavigationPagesState extends State<NavigationPages> {
     final scheme = Theme.of(context).colorScheme;
     final selected = _selected == index;
     return Expanded(
-      child: Semantics(
-        selected: selected,
-        child: Tooltip(
-          message: label,
-          excludeFromSemantics: true,
-          child: TextButton(
-            onPressed: () => _select(index),
-            style: TextButton.styleFrom(
-              foregroundColor: selected
-                  ? scheme.onSurface
-                  : scheme.onSurfaceVariant,
-              backgroundColor: selected ? scheme.surfaceContainerHigh : null,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(paneTabRadius),
+      child: Padding(
+        padding: const EdgeInsets.all(paneTabInset),
+        child: Semantics(
+          selected: selected,
+          child: Tooltip(
+            message: label,
+            excludeFromSemantics: true,
+            child: TextButton(
+              onPressed: () => _select(index),
+              style: TextButton.styleFrom(
+                foregroundColor: selected
+                    ? scheme.onSurface
+                    : scheme.onSurfaceVariant,
+                backgroundColor: selected ? scheme.surfaceContainerHigh : null,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(paneTabRadius),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: Space.s),
+                minimumSize: const Size(0, paneTabHeight - 2 * paneTabInset),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: selected ? FontWeight.w600 : null,
+                ),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: Space.s),
+              child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
-            child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
           ),
         ),
       ),
@@ -80,12 +88,17 @@ class _NavigationPagesState extends State<NavigationPages> {
   @override
   Widget build(BuildContext context) => Column(
     children: [
-      Row(
-        children: [
-          _tab(context, 0, widget.listLabel),
-          _tab(context, 1, 'Chapters'),
-          widget.trailing,
-        ],
+      // The pane tabs' height and inset, so the column's tabs line up with
+      // the document tabs beside them.
+      SizedBox(
+        height: paneTabHeight,
+        child: Row(
+          children: [
+            _tab(context, 0, widget.listLabel),
+            _tab(context, 1, 'Chapters'),
+            widget.trailing,
+          ],
+        ),
       ),
       const Divider(height: 1),
       Expanded(

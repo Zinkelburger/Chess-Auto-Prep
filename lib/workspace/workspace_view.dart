@@ -65,6 +65,7 @@ final class WorkspaceHooks {
     this.onExplorerLogin,
     this.onDownloadTwic,
     this.onOpenChapter,
+    this.onShowPositions,
     this.onOpenPlace,
     this.onEditBooks,
     this.onSaveHeld,
@@ -125,6 +126,9 @@ final class WorkspaceHooks {
 
   /// Opens a chapter in the builder: the draft a search's lines went to.
   final ValueChanged<ChapterRef>? onOpenChapter;
+
+  /// Shows the Positions in the list column: where a search's finds are.
+  final VoidCallback? onShowPositions;
 
   /// Where a move made on the board goes when not into the document: a
   /// puzzle judges it. Null plays it into the document.
@@ -342,6 +346,7 @@ class _Tabbed extends StatelessWidget {
       session: workspace.session,
       settings: workspace.settings,
       onOpenChapter: hooks.onOpenChapter,
+      onShowPositions: hooks.onShowPositions,
     ),
     WorkspaceTab.audit =>
       workspace.audit == null

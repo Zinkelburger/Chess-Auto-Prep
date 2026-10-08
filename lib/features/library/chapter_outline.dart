@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
@@ -406,20 +407,25 @@ bool _extends(NodePath path, NodePath from) {
 /// no place in the tree the board is showing, so the outline leaves it out
 /// rather than offering a row that goes nowhere; the header counts it.
 ///
-/// A row shows its line from the move where it leaves the line above it. A
-/// generated chapter's lines share their whole opening — often every move a
-/// row has room for — so rows that all began at the first move would read
-/// the same and tell the user nothing about which line is which.
+/// A row shows its line from the move where it leaves every line above it.
+/// A generated chapter's lines share their whole opening — often every move
+/// a row has room for — so rows that all began at the first move would read
+/// the same and tell the user nothing about which line is which; and lines
+/// of one branch need not sit together, so leaving only the line just above
+/// would still start two rows at the same move.
 List<OutlineLine> _linesOf(Chapter chapter) {
   final rows = <OutlineLine>[];
   final names = <String>{};
-  var above = const <String>[];
+  final above = <List<String>>[];
   for (final (index, line) in chapter.lines.indexed) {
     final tree = chapter.treeInChapter(line);
     if (tree == null) continue;
     final sans = mainlineSans(tree);
-    final shared = _sharedWith(above, sans);
-    above = sans;
+    final shared = above.fold(
+      0,
+      (most, other) => math.max(most, _sharedWith(other, sans)),
+    );
+    above.add(sans);
     final name = tagValue(line.tags, 'Event')?.trim();
     if (name != null) names.add(name);
     rows.add(

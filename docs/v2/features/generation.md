@@ -308,7 +308,9 @@ are trivial — do not go straight to lines*. Supersedes the two sections above 
   406 positions`, then `Searched …` or `Stopped at depth 3 …`), the position on the board is
   looked up in the search tree by the moves from the document's root. At our move: `Your move ·
   Expectimax · Engine`, best first. At theirs: `Their reply · Played · Expectimax · Engine`,
-  most played first, a reply losing ≥ 50 cp against their best reply marked `?` (a trap).
+  most played first, a reply marked `?` when it is a trap by the Positions' own rule
+  (`trapRepliesAt`: played at least 20% of the time and losing ≥ 50 cp against their best reply;
+  one rule since 2026-10-08, when the table stopped marking rarely played replies).
   Hovering an Engine value shows the recorded engine depth (`Depth 22`); older saved or
   database results without one say the depth is unknown rather than showing the target.
   Values are White-relative, as the engine pane's; a move not expanded yet reads `…` in the
@@ -361,17 +363,20 @@ Supersedes the Search tab section where they differ.
   per kind, side and position: found again, replaced by the newer finding. Each keeps its line
   from the document's root, the ply of the position, the key move, the scores, the rating and
   when. Opened on first use.
-- **The Positions column.** `Positions` under Actions ▸ Panels (Ctrl+P) swaps the
-  list column's content for the finds, in every mode with a list; pressed again it gives the
-  mode's list back. `Top | Often | New` orders them, a typeable `Kind` field narrows to one
-  kind. A row reads `4.d4 Bc5?  Trap` over `played 29%, loses 1.7 · 1 in 3 · as White`; hover
+- **The Positions column.** `Positions` under Actions ▸ Panels (Ctrl+P), or the list
+  button beside the Expectimax gear, swaps the list column's content for the finds, in every
+  mode with a list; Ctrl+P again gives the mode's list back. `Top | Often | New` orders them, a
+  typeable `Kind` field narrows to one kind. With a chapter open, `This chapter` (on by default)
+  keeps only the finds whose key move is played from one of the chapter's positions; an
+  analysis board opened from a find keeps that chapter's list. A row reads `4.d4 Bc5?  Trap` over `played 29%, loses 1.7 · 1 in 3 · as White`; hover
   floats the position, `⋯ ▸ Remove` forgets it. A trap row's `⋯ ▸ Train this line` trains the
   trap's whole line in the builder's Train tab: in the open repertoire chapter of that side, or
   another chapter of its repertoire, that plays it; else, asked once, it is played into
-  `<chapter> (draft)` (made if missing) and trained there. A click (or ↑/↓ while the column is up) puts
-  the whole line on a new analysis board at the position, seen from the side searched for, so
-  the move list, engine and Search tab read it as any line and it can be played on or saved.
-  The Search tab's status says `… · 4 found, listed in Positions (Ctrl+P)`.
+  `<chapter> (draft)` (made if missing) and trained there. A click (or ↑/↓ while the column is up)
+  goes to the position in the open chapter when the chapter plays the line that far (2026-10-08);
+  otherwise it puts the whole line on a new analysis board at the position, seen from the side
+  searched for, so the move list, engine and Expectimax read it as any line and it can be played
+  on or saved. After a run the Expectimax status line ends with `4 found`, which opens the column.
 - Owner-facing open items: whether finds from a sharper, deeper search are the right ones;
   whether the column should also list other
   result sets (My games mistakes, TWIC scan hits) through the same `FindsPanel` shape.

@@ -5,11 +5,14 @@ import 'package:flutter/material.dart';
 
 import '../chess/fen.dart';
 import '../chess/generation/finds.dart';
+import '../chess/pgn/game_tree.dart';
 import '../chess/pgn/tree_edit.dart' show positionOf;
 import '../storage/finds_store.dart';
 import '../ui/choice_field.dart';
 import '../ui/row_actions.dart';
 import '../ui/theme.dart';
+import '../ui/toggle_chip.dart';
+import 'document_session.dart';
 import 'finds.dart';
 import 'line_preview.dart';
 import '../ui/move_notation.dart';
@@ -21,16 +24,24 @@ import '../ui/move_notation.dart';
 /// the board, the move list and the engine all read it as they would any
 /// line, and it can be played on, edited or saved. ↑ and ↓ walk the rows
 /// the same way. Resting on a row floats the position beside it.
+///
+/// With a chapter open, `This chapter` narrows the list to the finds whose
+/// move is played from one of the chapter's positions: what comes up in it.
+/// An analysis board opened from a find keeps the chapter's list.
 class FindsPanel extends StatefulWidget {
   const FindsPanel({
     super.key,
     required this.finds,
     required this.onOpen,
+    this.session,
     this.onTrain,
     this.trailing,
   });
 
   final Finds finds;
+
+  /// The document on the board, whose chapter `This chapter` narrows to.
+  final DocumentSession? session;
 
   /// Puts the find's line on the board at its position.
   final ValueChanged<KeptFind> onOpen;
@@ -50,25 +61,70 @@ class _FindsPanelState extends State<FindsPanel> {
   Side _previewSide = Side.white;
   Timer? _settle;
 
+  /// Whether only the chapter's finds are listed, while one is open.
+  bool _thisChapter = true;
+
+  /// The chapter last read for its positions, and what they were.
+  GameTree? _readTree;
+  Set<String>? _chapterPositions;
+
   @override
   void initState() {
     super.initState();
+    widget.session?.addListener(_narrow);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) widget.finds.load();
+      if (!mounted) return;
+      _narrow();
+      widget.finds.load();
     });
   }
 
   @override
   void didUpdateWidget(FindsPanel old) {
     super.didUpdateWidget(old);
-    if (old.finds != widget.finds) widget.finds.load();
+    if (old.session != widget.session) {
+      old.session?.removeListener(_narrow);
+      widget.session?.addListener(_narrow);
+    }
+    if (old.finds != widget.finds) {
+      final gone = old.finds;
+      WidgetsBinding.instance.addPostFrameCallback((_) => gone.within(null));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.finds.load();
+      });
+    }
+    // The list is built under this: telling its owner now would rebuild the
+    // other views of it in the middle of the frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _narrow();
+    });
   }
 
   @override
   void dispose() {
+    widget.session?.removeListener(_narrow);
+    final finds = widget.finds;
+    WidgetsBinding.instance.addPostFrameCallback((_) => finds.within(null));
     _settle?.cancel();
     _preview.dispose();
     super.dispose();
+  }
+
+  /// Follows the open chapter: a file's tree, never the analysis board a
+  /// find was opened on, which would narrow the list to that one line.
+  void _narrow() {
+    final session = widget.session;
+    final tree = session?.tree;
+    if (session != null && session.source != null && tree != _readTree) {
+      _readTree = tree;
+      _chapterPositions = tree == null ? null : _positionsOf(tree);
+    }
+    widget.finds.within(_thisChapter ? _chapterPositions : null);
+  }
+
+  void _showThisChapter(bool on) {
+    setState(() => _thisChapter = on);
+    _narrow();
   }
 
   void _hover(KeptFind kept, Offset anchor) {
@@ -107,7 +163,16 @@ class _FindsPanelState extends State<FindsPanel> {
         builder: (context, _) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Toolbar(trailing: widget.trailing),
+            _Toolbar(
+              chapter: _chapterPositions == null
+                  ? null
+                  : ToggleChip(
+                      label: 'This chapter',
+                      selected: _thisChapter,
+                      onSelected: _showThisChapter,
+                    ),
+              trailing: widget.trailing,
+            ),
             _Order(finds: finds),
             _Kinds(finds: finds),
             _CountLine(finds: finds),
@@ -132,6 +197,8 @@ class _FindsPanelState extends State<FindsPanel> {
           finds.all.isEmpty
               ? 'Nothing found yet. Run a search from the Expectimax tab; '
                     'what it points out is listed here.'
+              : finds.narrowed
+              ? 'None in this chapter.'
               : 'None of these kinds.',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
@@ -159,10 +226,12 @@ class _FindsPanelState extends State<FindsPanel> {
   }
 }
 
-/// The column's name and the host's controls in the corner.
+/// The column's name, the chapter switch and the host's controls in the
+/// corner.
 class _Toolbar extends StatelessWidget {
-  const _Toolbar({required this.trailing});
+  const _Toolbar({required this.chapter, required this.trailing});
 
+  final Widget? chapter;
   final Widget? trailing;
 
   @override
@@ -177,6 +246,7 @@ class _Toolbar extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
         ),
+        ?chapter,
         ?trailing,
       ],
     ),
@@ -449,4 +519,18 @@ String? _lastMove(KeptFind kept) {
     position = position.play(move);
   }
   return uci;
+}
+
+/// Every position [tree] holds, its root's included, as four FEN fields.
+Set<String> _positionsOf(GameTree tree) {
+  final positions = {tree.rootFen.position};
+  void walk(List<MoveNode> nodes) {
+    for (final node in nodes) {
+      positions.add(node.fen.position);
+      walk(node.children);
+    }
+  }
+
+  walk(tree.children);
+  return positions;
 }

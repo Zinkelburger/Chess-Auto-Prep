@@ -171,7 +171,12 @@ class _Suggestions extends StatelessWidget {
     return Align(
       alignment: Alignment.topLeft,
       child: Material(
-        elevation: 4,
+        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(readingCardRadius),
+          side: BorderSide(color: Theme.of(context).colorScheme.outline),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: ConstrainedBox(
           constraints: const BoxConstraints(
             maxHeight: listRowHeight * 8,

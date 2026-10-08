@@ -333,14 +333,14 @@ Quirks worth a verdict:
   Sections gather contributions once even when their actions come from different owners.
   Repertoire keeps Search from here, Train this chapter, Next gap and the playing side together.
   Ctrl+K still searches the complete flat action list. Menus use 13px labels, 32px minimum
-  rows and a 260px minimum width. The accent is brighter cornflower blue (`80B4FF`),
-  with one shared blue for all filled action buttons (`2459C4`) and contrasting white labels;
-  Get games, Play, Skip and Show solution use the same fill.
+  rows and a 260px minimum width. Colours follow [DESIGN.md](../../../DESIGN.md): the slate
+  accent (`8EAAD2`) for what can be clicked and one slate fill (`3A5A85`) for the one filled
+  button on a surface.
 - **The settings gear sits at the right end of the top bar**, the old app's place, and is the one
   way in besides Ctrl+,; the mode menu lists modes only.
 - **The list column holds one of two lists**: the mode's own, or the `Positions` the searches
-  found (2026-09-23). Ctrl+P or Actions ▸ Panels ▸ `Positions` swaps them in every mode
-  with a list; the `«` still hides the column. Another result set that
+  found (2026-09-23). Ctrl+P, Actions ▸ Panels ▸ `Positions` or the list button on
+  the Expectimax bar swaps them in every mode with a list; the `«` still hides the column. Another result set that
   wants the column should become a second list there, not a new mode or dialog
   (`generation.md`, last section).
 - **No eval bar** (question 1; the viewer's decision of 2026-09-21). **One move list** for reading

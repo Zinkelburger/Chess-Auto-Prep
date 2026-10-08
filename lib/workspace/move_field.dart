@@ -198,6 +198,16 @@ class _MoveFieldState extends State<MoveField> {
               ),
               decoration: InputDecoration(
                 isDense: true,
+                // What the box is for, as the search fields show their
+                // magnifier: an empty box says nothing by itself.
+                prefixIcon: Icon(
+                  Icons.keyboard_outlined,
+                  size: IconSize.menu,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                prefixIconConstraints: const BoxConstraints(
+                  minWidth: IconSize.menu + 2 * Space.s,
+                ),
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: Space.s,
                   vertical: Space.s,
