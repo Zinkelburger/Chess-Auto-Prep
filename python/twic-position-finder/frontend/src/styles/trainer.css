@@ -1,0 +1,70 @@
+/* The puzzle-training view shared by the Tactics Trainer and Bughouse
+   Puzzles: board on the left; turn box, line, controls, game card and the
+   session strip on the right. Global because the pages build the move tokens
+   and session cells at runtime. */
+.train-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.train-bar-mid { display: flex; align-items: baseline; gap: 12px; }
+.train-counter { font-family: var(--mono); font-weight: 600; font-size: 1rem; }
+.analysing-banner { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.train-layout { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 800px) { .train-layout { grid-template-columns: 1fr; } }
+.board-col { width: 100%; }
+.trainer-board { position: relative; width: 100%; aspect-ratio: 1; border-radius: 4px; overflow: hidden; box-shadow: var(--shadow); }
+.side-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.side-card { margin-bottom: 0; padding: 18px 20px; }
+
+/* lila's "your turn" box */
+.turn-box {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px; border-radius: var(--radius);
+  background: var(--bg-card); border: 1px solid var(--border);
+  transition: background 0.2s, border-color 0.2s;
+}
+.turn-icon { width: 44px; height: 44px; flex: none; }
+.turn-title { font-size: 1.15rem; font-weight: 700; line-height: 1.2; }
+.turn-sub { font-size: 0.9rem; color: var(--text-dim); margin-top: 2px; }
+.turn-good, .turn-win { background: var(--ok-bg); border-color: var(--ok); }
+.turn-good .turn-title, .turn-win .turn-title { color: var(--ok); }
+.turn-bad, .turn-fail { background: var(--danger-bg); border-color: var(--danger); }
+.turn-bad .turn-title, .turn-fail .turn-title { color: var(--danger); }
+
+.played-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.played { display: inline-flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.win-shift { font-size: 0.85rem; color: var(--text-dim); }
+
+.san-token {
+  font-family: var(--mono); font-size: 0.98rem; font-weight: 600;
+  background: none; border: none; color: var(--text);
+  border-radius: 4px; padding: 3px 6px; line-height: 1.3; cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.san-token.played { cursor: default; padding-left: 0; }
+button.san-token:hover, button.san-token:focus-visible { background: var(--bg-raised); color: var(--text); outline: none; }
+.san-token.best { color: var(--ok); }
+.san-token.active { background: var(--pick-bg); color: var(--text); }
+
+.line { margin-bottom: 16px; }
+.line-moves { display: flex; flex-wrap: wrap; gap: 2px; margin: 6px 0 8px; }
+.line-nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+.controls { display: grid; grid-template-columns: auto 1fr auto auto; gap: 8px; }
+.controls .btn { justify-content: center; }
+@media (max-width: 480px) { .controls { grid-template-columns: 1fr 1fr; } }
+
+.game-card { padding: 14px 20px; }
+.game-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+.game-links { display: flex; gap: 14px; }
+.game-players { font-size: 0.95rem; }
+.game-result { font-weight: 600; margin-left: 6px; color: var(--text-dim); }
+.game-sub { font-size: 0.8rem; color: var(--text-dim); margin-top: 2px; }
+
+.session { padding: 0 2px; }
+.session-strip { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.session-cell {
+  width: 14px; height: 14px; border-radius: 3px; padding: 0; border: 1px solid var(--border);
+  background: var(--bg-input); cursor: pointer; transition: transform 0.1s;
+}
+.session-cell:hover { transform: scale(1.25); }
+.session-cell.win { background: var(--ok); border-color: var(--ok); }
+.session-cell.fail { background: var(--danger); border-color: var(--danger); }
+.session-cell.current { outline: 2px solid var(--text); outline-offset: 1px; }

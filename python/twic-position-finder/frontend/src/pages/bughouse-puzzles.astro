@@ -1,0 +1,110 @@
+---
+import Base from '../layouts/Base.astro';
+import '../styles/trainer.css';
+import '../styles/bughouse-board.css';
+---
+<Base
+  title="Bughouse Puzzles"
+  description="Forced mates with drops from real FICS bughouse games. Your reserve is frozen and captures go to your partner."
+  wide
+>
+  <header class="page-header">
+    <div>
+      <h1>Bughouse Puzzles</h1>
+      <p class="lede">
+        Forced mates from real FICS bughouse games. Your reserve is frozen: captures go to your partner, and
+        nothing new arrives. Every move but the mate is check, because a quiet move lets your opponent sit
+        and wait for pieces.
+      </p>
+    </div>
+  </header>
+
+  <div id="bp-loading" class="card empty-state">
+    <p class="empty-title">Loading puzzles…</p>
+  </div>
+
+  <div id="bp-train" hidden>
+    <div class="train-bar">
+      <div id="bp-filters" class="choice-row" role="radiogroup" aria-label="Mate length"></div>
+      <div class="train-bar-mid">
+        <span class="num train-counter" id="bp-counter">0 / 0</span>
+        <span class="dim num" id="bp-score"></span>
+      </div>
+    </div>
+
+    <div class="train-layout">
+      <div class="board-col">
+        <div id="bp-player-top" class="bb-player"></div>
+        <div class="trainer-board">
+          <div id="bp-board" class="bb-board" role="group" aria-label="Puzzle board"></div>
+        </div>
+        <div id="bp-player-bottom" class="bb-player"></div>
+      </div>
+
+      <div class="side-col">
+        <div class="turn-box turn-turn" id="bp-turn" aria-live="polite">
+          <img class="turn-icon" id="bp-turn-icon" src="/piece/wK.svg" alt="" width="44" height="44" />
+          <div class="turn-text">
+            <div class="turn-title" id="bp-turn-title">Your move</div>
+            <div class="turn-sub" id="bp-turn-sub"></div>
+          </div>
+        </div>
+
+        <div class="card side-card">
+          <div class="played-row">
+            <span class="bp-task" id="bp-task"></span>
+            <span class="badge" id="bp-board-badge"></span>
+          </div>
+          <div class="line">
+            <span class="eyebrow">Moves</span>
+            <div class="line-moves" id="bp-line"></div>
+          </div>
+          <div class="controls">
+            <button type="button" class="btn btn-outline" id="bp-prev" title="Previous puzzle (P or ↑)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+              Previous
+            </button>
+            <button type="button" class="btn btn-outline" id="bp-solution" title="Show the solution (space)">View solution</button>
+            <button type="button" class="btn btn-outline" id="bp-retry" title="Reset the position (R)">Retry</button>
+            <button type="button" class="btn btn-primary" id="bp-next" title="Next puzzle (S or ↓)">
+              Next
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="card side-card game-card">
+          <div class="game-head">
+            <span class="eyebrow">From a FICS game</span>
+            <div class="game-links">
+              <a id="bp-lab-link" class="link-ext" href="/bughouse">Both boards in Bughouse Lab ↗</a>
+            </div>
+          </div>
+          <div class="game-players" id="bp-players"></div>
+          <div class="game-sub" id="bp-game-sub"></div>
+          <div class="game-sub" id="bp-in-game"></div>
+        </div>
+
+        <div class="session">
+          <span class="eyebrow">Puzzles</span>
+          <div class="session-strip" id="bp-session" role="list"></div>
+        </div>
+      </div>
+    </div>
+    <p class="dim bp-source" id="bp-source"></p>
+  </div>
+</Base>
+
+<style is:global>
+  .board-col .bb-player { height: 44px; }
+  .bp-empty { color: var(--text-faint); font-size: 13px; }
+  .trainer-board .bb-board cg-container { width: 100%; height: 100%; }
+  .bp-task { font-size: 1.15rem; font-weight: 700; }
+  .bp-source { font-size: 0.8rem; margin-top: 28px; max-width: 60em; }
+  .san-token.wrong { color: var(--danger); text-decoration: line-through; }
+</style>
+
+<script>
+  import { BughousePuzzlesApp } from '../bughouse-puzzles/app';
+  new BughousePuzzlesApp();
+</script>

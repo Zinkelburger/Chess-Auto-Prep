@@ -6,9 +6,11 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 
 from . import book as book_api
 from . import fetch as fetch_api
+from . import puzzles as puzzles_api
 from .index import DEFAULT_MAX_PLY, build
 from .paths import book_path, corpus_dir
 
@@ -56,6 +58,15 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("status", help="what is downloaded and built")
 
+    p_puzzles = sub.add_parser("puzzles", help="mine mate puzzles for the website")
+    p_puzzles.add_argument("--year", type=int, default=2017)
+    p_puzzles.add_argument("--games", type=int, default=1000)
+    p_puzzles.add_argument("--min-elo", type=int, default=1800)
+    p_puzzles.add_argument("--jobs", type=int, default=0)
+    p_puzzles.add_argument("--engine", help="Fairy-Stockfish binary (or FAIRY_STOCKFISH)")
+    p_puzzles.add_argument("--out", type=Path, default=puzzles_api.WEB_OUT)
+    p_puzzles.add_argument("--raw-out", type=Path, help="also keep the verified candidates")
+
     args = parser.parse_args(argv)
 
     if args.command == "fetch":
@@ -69,6 +80,10 @@ def main(argv: list[str] | None = None) -> int:
             args.min_games,
             args.min_elo,
             args.jobs,
+        )
+    if args.command == "puzzles":
+        return puzzles_api.run(
+            args.year, args.games, args.min_elo, args.jobs, args.engine, args.out, args.raw_out
         )
     if args.command == "explore":
         con = book_api.open_book()
