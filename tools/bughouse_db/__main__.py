@@ -58,14 +58,19 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("status", help="what is downloaded and built")
 
-    p_puzzles = sub.add_parser("puzzles", help="mine mate puzzles for the website")
+    p_puzzles = sub.add_parser("puzzles", help="mine mate and tactic puzzles for the website")
     p_puzzles.add_argument("--year", type=int, default=2017)
     p_puzzles.add_argument("--games", type=int, default=1000)
     p_puzzles.add_argument("--min-elo", type=int, default=1800)
     p_puzzles.add_argument("--jobs", type=int, default=0)
     p_puzzles.add_argument("--engine", help="Fairy-Stockfish binary (or FAIRY_STOCKFISH)")
-    p_puzzles.add_argument("--out", type=Path, default=puzzles_api.WEB_OUT)
+    p_puzzles.add_argument("--out", type=Path, default=puzzles_api.WEB_OUT,
+                           help="output directory: index.json plus hashed shards")
     p_puzzles.add_argument("--raw-out", type=Path, help="also keep the verified candidates")
+    p_puzzles.add_argument("--from-raw", type=Path,
+                           help="re-export a --raw-out file instead of mining (no engine needed)")
+    p_puzzles.add_argument("--kinds", default=",".join(puzzles_api.KINDS),
+                           help="puzzle kinds to mine, e.g. mate or mate,advantage")
 
     args = parser.parse_args(argv)
 
@@ -82,8 +87,10 @@ def main(argv: list[str] | None = None) -> int:
             args.jobs,
         )
     if args.command == "puzzles":
+        kinds = frozenset(k.strip() for k in args.kinds.split(",") if k.strip())
         return puzzles_api.run(
-            args.year, args.games, args.min_elo, args.jobs, args.engine, args.out, args.raw_out
+            args.year, args.games, args.min_elo, args.jobs, args.engine, args.out, args.raw_out,
+            kinds, args.from_raw,
         )
     if args.command == "explore":
         con = book_api.open_book()

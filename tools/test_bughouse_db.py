@@ -509,25 +509,51 @@ class SnapshotTests(unittest.TestCase):
             con.close()
 
 
+class FakeEngine:
+    """Scripted search results, consumed in call order."""
+
+    def __init__(self, results):
+        self.results = list(results)
+        self.calls = []
+
+    def new_game(self):
+        pass
+
+    def search(self, fen, nodes, multipv=1):
+        self.calls.append((fen, nodes, multipv))
+        ranks = self.results.pop(0)
+        return ranks, ranks[1][2][0] if ranks else "(none)"
+
+
+def cp(move, value, second=None):
+    """A two-rank result: `move` at `value` cp, and the second-best if given."""
+    ranks = {1: ("cp", value, [move])}
+    if second:
+        ranks[2] = second
+    return ranks
+
+
 class TestPuzzleExport(unittest.TestCase):
-    """The puzzle miner's engine-free half: frozen reserves and the web JSON."""
+    """The puzzle miner's engine-free half: frozen reserves, policy and the web layout."""
 
     FEN = "r4k1r/ppN2ppp/3Pp3/2Np4/1n1P4/4Pq2/PPPKBb1P/R2Q1Bq1[Nrnp] w - - 4 27"
+    PREV = "r4rk1/ppN2ppp/3Pp3/2Np4/1n1P4/4Pq2/PPPKBb1P/R2Q1Bq1[Nrnp] b - - 3 26"
 
     def candidate(self, **over):
         from bughouse_db.puzzles import Candidate
 
         base = dict(
-            fen=self.FEN, dual=f"{START}|{self.FEN}", board="B", ply=101, last="e8f8",
+            fen=self.FEN, dual=f"{START}|{self.FEN}", board="B", ply=101, last="f8g8",
             played="Nd7+", game=3677428, date="2017.12.31", tc="120+0", white="W",
             black="B", welo=1853, belo=1666, line=["c5d7", "f8g8", "N@e7"], mates=["N@e7"],
+            prev=self.PREV,
         )
         base.update(over)
         return Candidate(**base)
 
     def test_capture_does_not_reach_the_capturers_hand(self):
         from chess.variant import CrazyhouseBoard
-        from bughouse_db.puzzles import frozen_push
+        from bughouse_db.frozen import frozen_push
 
         board = CrazyhouseBoard("rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR[Nn] w KQkq - 0 2")
         self.assertEqual(frozen_push(board, "e4d5"), "exd5")
@@ -535,36 +561,269 @@ class TestPuzzleExport(unittest.TestCase):
         frozen_push(board, "N@f6")
         self.assertEqual(board.fen().split()[0].split("[")[1], "N]")
 
+    def test_pawn_drops_are_written_with_the_piece_letter(self):
+        from chess.variant import CrazyhouseBoard
+        from bughouse_db.frozen import frozen_push
+        from bughouse_db.puzzles import web_puzzle
+
+        board = CrazyhouseBoard("rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR[Pp] w KQkq - 0 2")
+        self.assertEqual(frozen_push(board, "P@f6"), "P@f6")
+        p = web_puzzle(self.candidate(fen="6rk/6pp/8/8/8/8/8/K7[PN] w - - 0 1",
+                                      line=["P@g6", "h7g6", "N@f7"], mates=[], kind="advantage",
+                                      cp=900, played="P@g6"))
+        self.assertEqual(p["san"], ["P@g6", "hxg6", "N@f7+"])
+        self.assertTrue(p["found"], "a FICS pawn drop matches the line's first move")
+
     def test_web_puzzle_carries_san_legal_moves_and_whether_it_was_found(self):
         from bughouse_db.puzzles import web_puzzle
 
         p = web_puzzle(self.candidate())
         self.assertIsNotNone(p)
         self.assertEqual(p["san"], ["Nd7+", "Kg8", "N@e7#"])
-        self.assertEqual(p["mate"], 2)
+        self.assertEqual((p["kind"], p["mate"], p["moves"]), ("mate", 2, 2))
         self.assertEqual(len(p["legal"]), 2, "one legal-move list per solver step")
         self.assertIn("c5d7", p["legal"][0].split())
         self.assertIn("N@e7", p["legal"][1].split())
         self.assertTrue(p["found"])
+        self.assertEqual(p["prev"], self.PREV)
+        self.assertIn("mateIn2", p["themes"])
+        self.assertIn("dropMate", p["themes"])
+        self.assertIn(p["difficulty"], (1, 2, 3))
         self.assertFalse(web_puzzle(self.candidate(played="Nb7"))["found"])
 
-    def test_a_line_that_does_not_end_in_mate_is_dropped(self):
+    def test_a_mate_line_that_does_not_end_in_mate_is_dropped(self):
         from bughouse_db.puzzles import web_puzzle
 
         self.assertIsNone(web_puzzle(self.candidate(line=["c5d7", "f8g8", "N@e6"])))
 
-    def test_export_puts_longer_mates_first(self):
-        import json
-        from bughouse_db.puzzles import export_web
+    def test_advantage_record_has_no_mate_and_keeps_cp(self):
+        from bughouse_db.puzzles import web_puzzle
 
-        one = self.candidate(fen="6k1/5ppp/8/8/8/8/8/K3R3[] w - - 0 30", dual="x|y",
-                             line=["e1e8"], mates=["e1e8"], played="Re8#", ply=7)
+        p = web_puzzle(self.candidate(kind="advantage", line=["c5d7", "f8g8", "d7b8"],
+                                      mates=[], cp=850, played="Nxe6"))
+        self.assertEqual((p["kind"], p["mate"], p["moves"], p["cp"]), ("advantage", 0, 2, 850))
+        self.assertEqual(p["mates"], [])
+        self.assertFalse(p["found"])
+        self.assertIn("crushing", p["themes"])
+
+    def test_advantage_line_may_end_in_mate_and_stays_advantage(self):
+        from bughouse_db.puzzles import web_puzzle
+
+        # The solver kept this line as an advantage (e.g. the mate rules failed):
+        # its mating last move is accepted as-is, not re-verified or rejected.
+        p = web_puzzle(self.candidate(kind="advantage", mates=[], cp=None, played="Nb7"))
+        self.assertIsNotNone(p)
+        self.assertEqual((p["kind"], p["mate"], p["moves"]), ("advantage", 0, 2))
+        self.assertIn("mateIn2", p["themes"])
+        self.assertEqual(p["san"][-1], "N@e7#")
+
+    def test_export_from_raw_rebuilds_the_directory_without_an_engine(self):
+        import json
+        from bughouse_db import puzzles as api
+        from dataclasses import asdict
+
         with tempfile.TemporaryDirectory() as tmp:
-            out = Path(tmp) / "p.json"
-            self.assertEqual(export_web([one, self.candidate()], out, "test"), 2)
-            data = json.loads(out.read_text())
-        self.assertEqual([p["mate"] for p in data["puzzles"]], [2, 1])
-        self.assertTrue(data["puzzles"][1]["found"], "any mate counts in a mate-in-one")
+            raw = Path(tmp) / "raw.json"
+            raw.write_text(json.dumps([asdict(self.candidate())]))
+            out = Path(tmp) / "out"
+            self.assertEqual(api.run(2017, 5, 1800, 0, None, out, None, from_raw=raw), 0)
+            index = json.loads((out / "index.json").read_text())
+        self.assertEqual(index["count"], 1)
+        self.assertIn("5 rated FICS bughouse games from 2017", index["source"])
+
+    # ── Scores and triggers ─────────────────────────────────────────
+
+    def test_win_chances_follow_lila(self):
+        from bughouse_db.puzzles import win_chances
+
+        self.assertEqual(win_chances(("mate", 3)), 1.0)
+        self.assertEqual(win_chances(("mate", -1)), -1.0)
+        self.assertAlmostEqual(win_chances(("cp", 0)), 0.0)
+        self.assertAlmostEqual(win_chances(("cp", 200)), 0.3522, places=3)
+        self.assertAlmostEqual(win_chances(("cp", -200)), -0.3522, places=3)
+
+    def test_advantage_trigger_needs_a_jump_from_a_not_yet_winning_position(self):
+        from bughouse_db.puzzles import wants_advantage
+
+        self.assertTrue(wants_advantage(("cp", 450), ("cp", 20)))
+        self.assertFalse(wants_advantage(("cp", 250), ("cp", 20)), "not enough of a jump")
+        self.assertFalse(wants_advantage(("cp", 900), ("cp", 350)), "already winning")
+        self.assertTrue(wants_advantage(("mate", 9), ("cp", -100)), "a long mate counts")
+        self.assertFalse(wants_advantage(("cp", 150), ("cp", -900)), "not winning enough")
+
+    # ── Mate-in-one policy ──────────────────────────────────────────
+
+    def test_mate_in_one_policy(self):
+        from bughouse_db.puzzles import keep_mate_in_one
+
+        self.assertTrue(keep_mate_in_one(found=False, drop=False, legal=5))
+        self.assertTrue(keep_mate_in_one(found=True, drop=True, legal=20))
+        self.assertFalse(keep_mate_in_one(found=True, drop=True, legal=19))
+        self.assertFalse(keep_mate_in_one(found=True, drop=False, legal=40))
+
+    def test_found_plain_mate_in_one_is_not_exported(self):
+        from bughouse_db.puzzles import web_puzzle
+
+        one = self.candidate(fen="6k1/5ppp/8/8/8/8/8/K3R3[] w - - 0 30", line=["e1e8"],
+                             mates=["e1e8"], played="Re8#")
+        self.assertIsNone(web_puzzle(one))
+        missed = web_puzzle(self.candidate(fen="6k1/5ppp/8/8/8/8/8/K3R3[] w - - 0 30",
+                                           line=["e1e8"], mates=["e1e8"], played="Re7"))
+        self.assertIsNotNone(missed)
+        self.assertIn("backRankMate", missed["themes"])
+
+    # ── Advantage solving ───────────────────────────────────────────
+
+    ROOK = "k7/ppp5/8/8/8/8/8/K6R[] w - - 0 1"
+
+    def test_advantage_line_is_trimmed_to_moves_with_an_alternative(self):
+        from bughouse_db.puzzles import solve_advantage
+
+        engine = FakeEngine([
+            cp("h1h2", 450, ("cp", -50, ["h1g1"])),   # valid: 0.68 vs -0.09
+            cp("c7c6", -450),                           # defender
+            cp("h2h3", 500, ("cp", -100, ["h2g2"])),
+            cp("a8b8", -500),
+            cp("h3h4", 520),                            # no alternative: trimmed
+            cp("b8a8", -520),
+            cp("h4h5", 300, ("cp", 250, ["h4g4"])),    # not a valid attack: stop
+        ])
+        s = solve_advantage(engine, self.ROOK)
+        self.assertEqual((s.kind, s.line, s.cp), ("advantage", ["h1h2", "c7c6", "h2h3"], 500))
+        self.assertEqual(engine.calls[0][2], 2, "solver moves use two principal variations")
+        self.assertEqual(engine.calls[1][1], engine.calls[0][1] // 2, "defender at half the nodes")
+
+    def test_one_mover_is_discarded(self):
+        from bughouse_db.puzzles import solve_advantage
+
+        engine = FakeEngine([
+            cp("h1h2", 450, ("cp", -50, ["h1g1"])),
+            cp("c7c6", -450),
+            cp("h2h3", 300, ("cp", 250, ["h2g2"])),
+        ])
+        self.assertIsNone(solve_advantage(engine, self.ROOK))
+
+    def test_a_later_move_below_200_busts_the_puzzle(self):
+        from bughouse_db.puzzles import solve_advantage
+
+        engine = FakeEngine([
+            cp("h1h2", 450, ("cp", -50, ["h1g1"])),
+            cp("c7c6", -450),
+            cp("h2h3", 150, ("cp", -500, ["h2g2"])),
+        ])
+        self.assertIsNone(solve_advantage(engine, self.ROOK))
+
+    def test_advantage_line_ending_in_mate_becomes_a_mate_puzzle(self):
+        from bughouse_db.puzzles import solve_advantage
+
+        engine = FakeEngine([{1: ("mate", 1, ["h1h8"]), 2: ("cp", 350, ["h1h7"])}])
+        s = solve_advantage(engine, self.ROOK)
+        self.assertEqual((s.kind, s.line, s.mates), ("mate", ["h1h8"], ["h1h8"]))
+
+    def test_mate_in_one_with_a_strong_quiet_alternative_is_not_a_valid_attack(self):
+        from bughouse_db.puzzles import is_valid_mate_in_one
+        from chess.variant import CrazyhouseBoard
+
+        board = CrazyhouseBoard(self.ROOK)
+        self.assertTrue(is_valid_mate_in_one(FakeEngine([]), board, ("mate", 1), ("cp", 300)))
+        self.assertFalse(is_valid_mate_in_one(FakeEngine([]), board, ("mate", 1), ("cp", 900)))
+        self.assertFalse(is_valid_mate_in_one(FakeEngine([]), board, ("mate", 1), ("mate", 2)))
+
+    # ── Themes ──────────────────────────────────────────────────────
+
+    def themes(self, fen, line, cp=None):
+        from bughouse_db.themes import tag_themes
+
+        return tag_themes(fen, line, cp)
+
+    def test_smothered_and_drop_mates(self):
+        t = self.themes("6rk/6pp/3N4/8/8/8/8/K7[] w - - 0 1", ["d6f7"])
+        self.assertEqual(t[:3], ["mateIn1", "mate", "smotheredMate"])
+        self.assertNotIn("drop", t)
+        t = self.themes("6rk/6pp/8/8/8/8/8/K7[N] w - - 0 1", ["N@f7"])
+        self.assertIn("smotheredMate", t)
+        self.assertIn("drop", t)
+        self.assertIn("dropMate", t)
+        self.assertNotIn("contactMate", t)
+
+    def test_back_rank_and_contact_mates(self):
+        t = self.themes("6k1/5ppp/8/8/8/8/8/K3R3[] w - - 0 1", ["e1e8"])
+        self.assertIn("backRankMate", t)
+        self.assertNotIn("contactMate", t)
+        t = self.themes("6k1/5ppp/8/8/8/Q7/8/K7[R] w - - 0 1", ["R@f8"])
+        self.assertIn("contactMate", t)
+        self.assertIn("dropMate", t)
+
+    def test_double_and_discovered_check(self):
+        fen = "4k3/8/8/8/4B3/8/8/K3R3[] w - - 0 1"
+        t = self.themes(fen, ["e4c6", "e8d8", "e1e7"], cp=700)
+        self.assertIn("doubleCheck", t)
+        self.assertIn("crushing", t)
+        t = self.themes(fen, ["e4d3", "e8d8", "e1e7"], cp=700)
+        self.assertIn("discoveredCheck", t)
+        self.assertNotIn("doubleCheck", t)
+
+    def test_sacrifice_counts_a_dropped_piece_that_is_taken(self):
+        fen = "6k1/5ppp/8/8/8/8/8/K6R[N] w - - 0 1"
+        self.assertIn("sacrifice", self.themes(fen, ["N@f6", "g7f6", "h1g1"], cp=300))
+        self.assertNotIn("sacrifice", self.themes(fen, ["N@f6", "g8h8", "f6h7"], cp=300))
+        self.assertIn("advantage", self.themes(fen, ["N@f6", "g8h8", "f6h7"], cp=300))
+
+    def test_quiet_move_and_long(self):
+        t = self.themes("k7/ppp5/8/8/8/8/8/K6R[] w - - 0 1",
+                        ["h1h2", "c7c6", "h2h3", "c6c5", "h3h4", "c5c4", "h4h8"])
+        self.assertIn("quietMove", t)
+        self.assertIn("long", t)
+        self.assertIn("mateIn4", t)
+
+    # ── Difficulty ──────────────────────────────────────────────────
+
+    def test_difficulty_adds_points_for_length_drops_and_misses(self):
+        from chess.variant import CrazyhouseBoard
+        from bughouse_db.puzzles import rate_difficulty
+
+        start = CrazyhouseBoard(self.FEN)
+        self.assertEqual(rate_difficulty("mate", 1, [], True, start, "c5d7"), 1)
+        self.assertEqual(rate_difficulty("mate", 2, [], False, start, "c5d7"), 2)
+        self.assertEqual(rate_difficulty("mate", 3, ["sacrifice"], False, start, "N@e7"), 3)
+
+    # ── Layout ──────────────────────────────────────────────────────
+
+    def test_export_writes_an_index_and_hashed_shards(self):
+        import hashlib
+        import json
+        from bughouse_db import puzzles as api
+
+        adv = self.candidate(kind="advantage", line=["c5d7", "f8g8", "d7b8"], mates=[],
+                             cp=850, played="Nxe6", ply=55)
+        missed = self.candidate(fen="6k1/5ppp/8/8/8/8/8/K3R3[] w - - 0 30", dual="x|y",
+                                line=["e1e8"], mates=["e1e8"], played="Re7", ply=7, prev=None)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "bughouse-puzzles"
+            out.mkdir()
+            (out / "s00-stale00000.json").write_text("{}")
+            with mock.patch.object(api, "SHARD_SIZE", 2):
+                self.assertEqual(api.export_web([adv, self.candidate(), missed], out, "test"), 3)
+            index = json.loads((out / "index.json").read_text())
+            files = sorted(p.name for p in out.iterdir())
+            self.assertEqual(len(index["shards"]), 2)
+            self.assertEqual(files, sorted(["index.json", *index["shards"]]), "stale shards are gone")
+            for n, name in enumerate(index["shards"]):
+                text = (out / name).read_text()
+                self.assertEqual(name, f"s{n:02d}-{hashlib.sha256(text.encode()).hexdigest()[:10]}.json")
+                records = json.loads(text)["puzzles"]
+                self.assertTrue(all(e["shard"] == n for e in index["puzzles"] if e["id"] in {r["id"] for r in records}))
+            self.assertEqual((index["version"], index["count"], index["source"]), (2, 3, "test"))
+            self.assertRegex(index["generated"], r"^\d{4}-\d{2}-\d{2}$")
+            self.assertEqual(set(index["puzzles"][0]), {"id", "kind", "mate", "moves", "themes",
+                                                        "difficulty", "side", "board", "found", "shard"})
+            by_id = {e["id"]: e for e in index["puzzles"]}
+            self.assertEqual(by_id["3677428-B-55"]["kind"], "advantage")
+            self.assertEqual(by_id["3677428-B-55"]["side"], "w")
+            full = [r for name in index["shards"] for r in json.loads((out / name).read_text())["puzzles"]]
+            prevs = {r["id"]: r["prev"] for r in full}
+            self.assertEqual(prevs["3677428-B-101"], self.PREV)
+            self.assertIsNone(prevs["3677428-B-7"])
 
 
 if __name__ == "__main__":

@@ -2,107 +2,135 @@
 import Base from '../layouts/Base.astro';
 import '../styles/trainer.css';
 import '../styles/bughouse-board.css';
+import '../styles/bughouse-puzzles.css';
+
+const chevronLeft = 'M15 18l-6-6 6-6';
+const chevronRight = 'M9 18l6-6-6-6';
 ---
 <Base
   title="Bughouse Puzzles"
-  description="Forced mates with drops from real FICS bughouse games. Your reserve is frozen and captures go to your partner."
+  description="Mates and tactics from real FICS bughouse games. Your reserve is frozen: captures go to your partner and nothing new arrives."
   wide
 >
-  <header class="page-header">
-    <div>
-      <h1>Bughouse Puzzles</h1>
-      <p class="lede">
-        Forced mates from real FICS bughouse games. Your reserve is frozen: captures go to your partner, and
-        nothing new arrives. Every move but the mate is check, because a quiet move lets your opponent sit
-        and wait for pieces.
-      </p>
-    </div>
-  </header>
-
-  <div id="bp-loading" class="card empty-state">
-    <p class="empty-title">Loading puzzles…</p>
-  </div>
-
-  <div id="bp-train" hidden>
-    <div class="train-bar">
-      <div id="bp-filters" class="choice-row" role="radiogroup" aria-label="Mate length"></div>
-      <div class="train-bar-mid">
-        <span class="num train-counter" id="bp-counter">0 / 0</span>
-        <span class="dim num" id="bp-score"></span>
+  <div class="bp" id="bp" data-state="loading">
+    <header class="page-header bp-header">
+      <div>
+        <h1>Bughouse Puzzles</h1>
+        <p class="lede">
+          Mates and tactics from real FICS bughouse games. Your reserve is frozen: captures go to your partner and
+          nothing new arrives, so every drop has to count.
+        </p>
       </div>
-    </div>
+    </header>
 
-    <div class="train-layout">
-      <div class="board-col">
-        <div id="bp-player-top" class="bb-player"></div>
-        <div class="trainer-board">
-          <div id="bp-board" class="bb-board" role="group" aria-label="Puzzle board"></div>
+    <!-- Filters: two rows on desktop, a collapsed panel on phones. -->
+    <div class="bp-filters" id="bp-filters">
+      <div class="bp-filter-bar">
+        <button type="button" class="btn btn-outline btn-sm" id="bp-filters-toggle" aria-expanded="false" aria-controls="bp-filter-rows">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+          Filters<b class="bp-filter-active num" id="bp-filter-active" hidden></b>
+        </button>
+        <div class="bp-filter-count">
+          <span class="num train-counter bp-counter">— / —</span>
+          <span class="dim num bp-score"></span>
         </div>
-        <div id="bp-player-bottom" class="bb-player"></div>
       </div>
+      <div class="bp-filter-rows" id="bp-filter-rows">
+        <div class="bp-filter-row">
+          <div class="bp-facet" id="bp-kind" role="radiogroup" aria-label="Kind"></div>
+          <div class="bp-facet" id="bp-length" role="radiogroup" aria-label="Length"></div>
+          <div class="bp-facet" id="bp-missed" aria-label="In the game"></div>
+          <div class="bp-filter-count bp-filter-count-wide">
+            <span class="num train-counter bp-counter" aria-live="polite">— / —</span>
+            <span class="dim num bp-score"></span>
+          </div>
+        </div>
+        <div class="bp-filter-row">
+          <div class="bp-facet" id="bp-difficulty" role="radiogroup" aria-label="Difficulty"></div>
+          <div class="bp-facet bp-facet-themes scroll-thin" id="bp-theme" role="radiogroup" aria-label="Theme" hidden></div>
+        </div>
+      </div>
+    </div>
 
-      <div class="side-col">
-        <div class="turn-box turn-turn" id="bp-turn" aria-live="polite">
+    <div class="bp-layout">
+      <section class="bp-board-col" aria-label="Board">
+        <div id="bp-seat-top" class="bp-seat bp-seat-top"></div>
+        <div class="trainer-board bp-board-wrap">
+          <div id="bp-board" class="bb-board" role="group" aria-label="Puzzle board"></div>
+          <div class="bp-skeleton" aria-hidden="true"></div>
+          <div class="bp-board-note bp-note-error" role="alert">
+            <p class="bp-note-title">Could not load the puzzles</p>
+            <p class="bp-note-copy" id="bp-error-copy">The network answered with an error.</p>
+            <button type="button" class="btn btn-outline" id="bp-retry-load">Try again</button>
+          </div>
+          <div class="bp-board-note bp-note-empty">
+            <p class="bp-note-title">No puzzles match</p>
+            <p class="bp-note-copy">Nothing in the set has every selected filter.</p>
+            <button type="button" class="btn btn-outline" id="bp-clear-filters">Clear filters</button>
+          </div>
+        </div>
+        <div id="bp-seat-bottom" class="bp-seat bp-seat-bottom"></div>
+      </section>
+
+      <aside class="bp-side" aria-label="Puzzle">
+        <div class="turn-box turn-turn bp-feedback" id="bp-turn" aria-live="polite">
           <img class="turn-icon" id="bp-turn-icon" src="/piece/wK.svg" alt="" width="44" height="44" />
           <div class="turn-text">
-            <div class="turn-title" id="bp-turn-title">Your move</div>
-            <div class="turn-sub" id="bp-turn-sub"></div>
+            <div class="turn-title" id="bp-turn-title">Loading</div>
+            <div class="turn-sub" id="bp-turn-sub">Fetching the puzzle set.</div>
           </div>
         </div>
 
-        <div class="card side-card">
-          <div class="played-row">
-            <span class="bp-task" id="bp-task"></span>
-            <span class="badge" id="bp-board-badge"></span>
+        <div class="bp-task-block">
+          <div class="bp-task-row">
+            <h2 class="bp-task" id="bp-task">&nbsp;</h2>
+            <div class="bp-tags" id="bp-tags"></div>
           </div>
-          <div class="line">
-            <span class="eyebrow">Moves</span>
-            <div class="line-moves" id="bp-line"></div>
-          </div>
-          <div class="controls">
-            <button type="button" class="btn btn-outline" id="bp-prev" title="Previous puzzle (P or ↑)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-              Previous
-            </button>
-            <button type="button" class="btn btn-outline" id="bp-solution" title="Show the solution (space)">View solution</button>
-            <button type="button" class="btn btn-outline" id="bp-retry" title="Reset the position (R)">Retry</button>
-            <button type="button" class="btn btn-primary" id="bp-next" title="Next puzzle (S or ↓)">
-              Next
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
-            </button>
-          </div>
+          <div class="line-moves bp-line" id="bp-line" aria-label="Moves played"></div>
         </div>
 
-        <div class="card side-card game-card">
-          <div class="game-head">
-            <span class="eyebrow">From a FICS game</span>
-            <div class="game-links">
+        <div class="controls bp-controls">
+          <button type="button" class="btn btn-outline" id="bp-prev" title="Previous puzzle (P or ↑)" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={chevronLeft}/></svg>
+            Previous
+          </button>
+          <button type="button" class="btn btn-outline" id="bp-solution" title="Show the solution (space)" disabled>View solution</button>
+          <button type="button" class="btn btn-outline" id="bp-retry" title="Reset the position (R)" disabled>Retry</button>
+          <button type="button" class="btn btn-primary" id="bp-next" title="Next puzzle (S or ↓)" disabled>
+            Next
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={chevronRight}/></svg>
+          </button>
+        </div>
+
+        <div class="bp-themes" id="bp-puzzle-themes" hidden>
+          <span class="bp-label">Themes</span>
+          <div class="bp-chip-row" id="bp-puzzle-theme-chips"></div>
+        </div>
+
+        <div class="bp-game" id="bp-game">
+          <div class="bp-game-head">
+            <span class="bp-label">From a FICS game</span>
+            <div class="bp-game-actions">
               <a id="bp-lab-link" class="link-ext" href="/bughouse">Both boards in Bughouse Lab ↗</a>
+              <button type="button" class="btn btn-text btn-sm" id="bp-copy-link" title="Copy a link to this puzzle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7L12 19"/></svg>
+                <span id="bp-copy-label">Copy link</span>
+              </button>
             </div>
           </div>
-          <div class="game-players" id="bp-players"></div>
-          <div class="game-sub" id="bp-game-sub"></div>
-          <div class="game-sub" id="bp-in-game"></div>
+          <div class="bp-game-players" id="bp-players"></div>
+          <div class="bp-game-sub" id="bp-game-sub"></div>
         </div>
 
-        <div class="session">
-          <span class="eyebrow">Puzzles</span>
-          <div class="session-strip" id="bp-session" role="list"></div>
+        <div class="session bp-session">
+          <span class="bp-label">Puzzles</span>
+          <div class="session-strip scroll-thin" id="bp-session" role="list"></div>
         </div>
-      </div>
+      </aside>
     </div>
     <p class="dim bp-source" id="bp-source"></p>
   </div>
 </Base>
-
-<style is:global>
-  .board-col .bb-player { height: 44px; }
-  .bp-empty { color: var(--text-faint); font-size: 13px; }
-  .trainer-board .bb-board cg-container { width: 100%; height: 100%; }
-  .bp-task { font-size: 1.15rem; font-weight: 700; }
-  .bp-source { font-size: 0.8rem; margin-top: 28px; max-width: 60em; }
-  .san-token.wrong { color: var(--danger); text-decoration: line-through; }
-</style>
 
 <script>
   import { BughousePuzzlesApp } from '../bughouse-puzzles/app';

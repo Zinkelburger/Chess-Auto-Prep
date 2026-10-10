@@ -6,3 +6,9 @@
 
 /board/*
   Cache-Control: public, max-age=31536000, immutable
+
+/bughouse-puzzles/s*.json
+  Cache-Control: public, max-age=31536000, immutable
+
+/bughouse-puzzles/index.json
+  Cache-Control: public, max-age=600
