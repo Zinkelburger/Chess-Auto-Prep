@@ -5,12 +5,21 @@
  * `python3 -m bughouse_db puzzles`. The board's reserves are frozen: nothing
  * arrives from the partner, and a capture goes to the partner instead of the
  * capturer's hand. So a move here only ever removes pieces from a reserve.
+ *
+ * Two kinds: a `mate` puzzle is a forced mate (every solver move but the last
+ * is check; the last accepts any mate), an `advantage` puzzle is a lila-style
+ * tactic with one best move at each step and the engine's reply for the
+ * defender. The set's index and shards are described in set.ts.
  */
 import { readBoard } from '../bughouse/setup';
 import type { BoardName, Colour } from '../bughouse/types';
 
+export type PuzzleKind = 'mate' | 'advantage';
+export type Difficulty = 1 | 2 | 3;
+
 export interface Puzzle {
   id: string;
+  kind: PuzzleKind;
   /** This board's FEN with both reserves, solver to move. */
   fen: string;
   /** Both boards at the puzzle, for opening it in Bughouse Lab. */
@@ -18,13 +27,23 @@ export interface Puzzle {
   board: BoardName;
   /** The opponent's move that led here, as UCI. */
   last: string | null;
+  /** The board before `last`, so the page can animate the opponent's move in; null when unknown. */
+  prev: string | null;
+  /** Solver moves to mate; 0 for an advantage puzzle. */
   mate: number;
+  /** Solver moves in the line. */
+  moves: number;
+  /** Final evaluation in centipawns for an advantage puzzle, from the solver's side. */
+  cp: number | null;
+  /** lila's camelCase theme vocabulary (mateIn2, dropMate, fork, ...). */
+  themes: string[];
+  difficulty: Difficulty;
   /** Solver and defender moves alternately, as UCI; ends with the mate. */
   line: string[];
   san: string[];
   /** Legal moves at each solver step, space-separated UCI. */
   legal: string[];
-  /** Every mating move at the last step; any of them solves it. */
+  /** Every mating move at the last step; any of them solves a mate puzzle. Empty for advantage. */
   mates: string[];
   /** What the player actually played here, and whether it was the solution. */
   played: string | null;
@@ -37,8 +56,6 @@ export interface Puzzle {
   welo: number;
   belo: number;
 }
-
-export interface PuzzleSet { version: 1; source: string; puzzles: Puzzle[] }
 
 export interface Position {
   pieces: Record<string, string>;
@@ -155,9 +172,22 @@ export class Attempt {
     return this.solverToMove ? (this.puzzle.legal[this.ply / 2] ?? '').split(' ').filter(Boolean) : [];
   }
 
-  /** The moves that count as right at this step. */
+  /** The moves that count as right at this step: the line's move, or any mate at the end of a mate puzzle. */
   accepted(): string[] {
-    return this.finalStep ? this.puzzle.mates.map(norm) : [norm(this.puzzle.line[this.ply])];
+    const line = [norm(this.puzzle.line[this.ply])];
+    if (!this.finalStep || this.puzzle.kind !== 'mate' || !this.puzzle.mates.length) return line;
+    const mates = this.puzzle.mates.map(norm);
+    return mates.includes(line[0]) ? mates : [...line, ...mates];
+  }
+
+  /**
+   * The board to show for a moment before the opponent's last move animates
+   * in: the position before `last`. Null without `prev` or once play started.
+   */
+  intro(): Position | null {
+    const { prev, last } = this.puzzle;
+    if (!prev || !last || this.ply > 0) return null;
+    return startPosition(prev);
   }
 
   play(uci: string): Verdict {

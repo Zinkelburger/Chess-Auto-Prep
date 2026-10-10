@@ -426,11 +426,18 @@ in the visitor's browser more cheaply: 200-node searches of the position, then
 legal move is stored unscored and shows "—".
 
 `tools/bughouse_db/puzzles.py` (`python3 -m bughouse_db puzzles`) mines the
-site's Bughouse Puzzles (`/bughouse-puzzles`) from one archive year:
+site's Bughouse Puzzles (`/bughouse-puzzles`) from one archive year with
 Fairy-Stockfish's single-board `bughouse` variant, where a capture leaves for
-the partner, scans every position for a short forced mate, then keeps lines in
-which each solver move is check and the only one that keeps the mate. It writes
-`frontend/public/bughouse-puzzles.json`; the page is described in the
+the partner and nothing arrives. It follows lichess-puzzler's generator with
+two kinds: *mate* puzzles keep lines in which each solver move is check and the
+only one that keeps the mate (mate-in-one only when the player missed it or
+the mate is a drop with many legal moves), and *advantage* puzzles start at a
+lila-style eval swing and keep the unique best move at each step while the
+line stays decisively winning. A port of lila's tagger adds themes (mate
+patterns, sacrifice, double check, drop, drop mate) and a static three-step
+difficulty replaces lila's play-based rating. It writes
+`frontend/public/bughouse-puzzles/` as a small `index.json` plus
+content-hashed shards of 50 puzzles; the page is described in the
 [site README](../python/twic-position-finder/frontend/README.md#bughouse-puzzles).
 
 The v2 lab puts FICS continuations under the actual boards, keeps FEN/reserve editing collapsed,

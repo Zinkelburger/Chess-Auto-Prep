@@ -1,8 +1,8 @@
 /**
- * The puzzle board: one chessground board with a player row above and below,
- * each holding that side's frozen reserve. The look, the move dots, dragging
- * a reserve piece on and click-to-drop work as in Bughouse Lab
- * (../bughouse/boards.ts), on one board instead of two.
+ * The puzzle board: one chessground board with a seat row above and below,
+ * each naming the player and holding that side's frozen reserve. The look,
+ * the move dots, dragging a reserve piece on and click-to-drop work as in
+ * Bughouse Lab (../bughouse/boards.ts), on one board instead of two.
  */
 import { Chessground } from '@lichess-org/chessground';
 import type { Api } from '@lichess-org/chessground/api';
@@ -13,6 +13,8 @@ import type { Position } from './puzzle';
 
 const ROLES: Record<string, Role> = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
 
+export interface Seat { name: string; rating: number }
+
 export interface BoardState {
   pos: Position;
   bottom: Colour;
@@ -20,8 +22,12 @@ export interface BoardState {
   legal: string[];
   last: string[];
   check: boolean;
-  players: Record<Colour, string>;
+  players: Record<Colour, Seat>;
+  /** The solver's colour, marked "you" on its seat. */
+  solver: Colour;
 }
+
+const LOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
 
 export class PuzzleBoard {
   private readonly cg: Api;
@@ -91,16 +97,32 @@ export class PuzzleBoard {
     dot.className = `turn ${colour}`;
     dot.title = `${colour === 'white' ? 'White' : 'Black'} to move`;
     const who = document.createElement('span');
-    who.className = 'who';
-    who.textContent = state.players[colour];
-    box.append(dot, who);
-    const pocket = state.pos.pockets[colour];
-    if (!pocket) {
-      const none = document.createElement('span');
-      none.className = 'bp-empty';
-      none.textContent = 'No reserve';
-      box.append(none);
+    who.className = 'bp-seat-who';
+    const name = document.createElement('span');
+    name.className = 'bp-seat-name';
+    name.textContent = state.players[colour].name;
+    const rating = document.createElement('span');
+    rating.className = 'bp-seat-rating';
+    rating.textContent = String(state.players[colour].rating);
+    who.append(name, rating);
+    if (colour === state.solver) {
+      const you = document.createElement('span');
+      you.className = 'bp-seat-you';
+      you.textContent = 'you';
+      who.append(you);
     }
+    const reserve = document.createElement('span');
+    reserve.className = 'bp-reserve';
+    reserve.setAttribute('role', 'group');
+    reserve.setAttribute('aria-label', `${colour === 'white' ? 'White' : 'Black'} reserve, frozen`);
+    box.append(dot, who, reserve);
+    const pocket = state.pos.pockets[colour];
+    const frozen = document.createElement('span');
+    frozen.className = 'bp-frozen';
+    frozen.innerHTML = `${LOCK}<span>${pocket ? 'frozen' : 'empty'}</span>`;
+    frozen.title = pocket
+      ? 'Frozen: nothing arrives from the partner and captures go to them, so drops only spend what is here.'
+      : 'No reserve, and nothing arrives from the partner.';
     for (const p of ['p', 'n', 'b', 'r', 'q']) {
       const count = [...pocket].filter((c) => c.toLowerCase() === p).length;
       if (!count) continue;
@@ -126,8 +148,9 @@ export class PuzzleBoard {
           this.render(state);
         };
       }
-      box.append(button);
+      reserve.append(button);
     }
+    reserve.append(frozen);
   }
 
   private dropTargets(letter: string): string[] {

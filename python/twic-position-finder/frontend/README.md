@@ -7,7 +7,7 @@ Static Astro site deployed to Cloudflare Pages. Its tools share one shell:
 | `/twic-notifications` | TWIC Alerts — create alerts anonymously, or manage them signed in    | `src/lib/alerts-page.ts` + `src/lib/*` |
 | `/tactics`            | Tactics Trainer — Stockfish in the browser mines puzzles from games  | `src/tactics/*`                        |
 | `/bughouse`           | Two linked boards and Hivemind running entirely in the browser | `src/bughouse/*`, `../../../tools/bughouse_web/` |
-| `/bughouse-puzzles`   | Bughouse Puzzles — forced drop mates mined from FICS games, reserves frozen | `src/bughouse-puzzles/*`, `public/bughouse-puzzles.json` |
+| `/bughouse-puzzles`   | Bughouse Puzzles — mates and tactics mined from FICS games, reserves frozen | `src/bughouse-puzzles/*`, `public/bughouse-puzzles/` |
 | `/bughousedb`         | BughouseDB — the shared Hivemind book; missing positions analysed in the browser | `src/bughousedb/*`, `src/bughouse/boards.ts` |
 | `/charles-clock`      | Charles Clock — a full-screen phone clock with its own `<html>`      | `src/pages/charles-clock.astro`        |
 
@@ -84,23 +84,45 @@ so this trainer, the Dart app, and Lichess agree on what a mistake is.
 
 ## Bughouse puzzles
 
-`public/bughouse-puzzles.json` is generated, not hand-edited:
-`python3 -m bughouse_db puzzles --year 2017 --games 1000 --engine PATH` from
+`public/bughouse-puzzles/` is generated, not hand-edited:
+`python3 -m bughouse_db puzzles --year 2017 --games 1500 --engine PATH` from
 `tools/` (Fairy-Stockfish binary; see `tools/bughouse_db/puzzles.py`). Each
 puzzle is one board of a real game with the reserves frozen: captures go to the
-partner and nothing arrives. Every solver move but the last is check and the only
-move that keeps a forced mate; the last accepts any mate. The file carries the
-SAN line, the legal moves at each solver step (the page has no move generator),
-and both boards so **Both boards in Bughouse Lab** opens the real position.
+partner and nothing arrives. Two kinds: a **mate** puzzle is a forced mate
+(every solver move but the last is check and the only move that keeps the mate;
+the last accepts any mate) and an **advantage** puzzle is a lila-style tactic
+(one best move at each step, the engine's reply for the defender, the last move
+of the line is the only accepted one). Themes use lila's camelCase vocabulary
+and a static difficulty 1–3 (Easy / Medium / Hard).
+
+The set is served as a small index plus immutable shards (`public/_headers`
+caches `index.json` for ten minutes and `s*.json` for a year):
 
 ```
+index.json          {version: 2, source, generated, count, shards: [...],
+                     puzzles: [{id, kind, mate, moves, themes, difficulty, side, board, found, shard}]}
+s00-<10 hex>.json   {puzzles: [full records]}, 50 per shard, named by content hash
+```
+
+A full record carries the FEN with reserves (`fen`), the board before the
+opponent's last move (`prev`, animated in at the start when present), both
+boards (`dual`, for **Both boards in Bughouse Lab**), the UCI and SAN line, the
+legal moves at each solver step (the page has no move generator), `mates` at
+the last step of a mate puzzle, `cp` for an advantage puzzle, and the game
+context (players, ratings, FICS game number, date, time control, what was
+played and whether the player found it).
+
+```
+set.ts          index/shard types, pure filtering + facet counts, theme/difficulty labels,
+                deep-link hash parsing, PuzzleStore (index once, shards on demand, prefetch of the next)
 puzzle.ts       data types, frozen-reserve moves, one Attempt (pure, tested in tests/bughouse-state.ts)
-board.ts        one chessground board with both reserves (drag or click to drop, as in Bughouse Lab)
-app.ts          page controller: filter by mate length, play, reply, View solution, results in localStorage
+board.ts        one chessground board with a seat row per side: player, rating and the frozen reserve
+app.ts          page controller: filter bar (kind, length, difficulty, theme, missed in the game), play,
+                reply, View solution, Copy link, #<id> deep links, results in localStorage (bughouse-puzzles-v2)
 ```
 
-The training view's styles are shared with the Tactics Trainer in
-`src/styles/trainer.css`.
+Styles: the shared trainer vocabulary (`src/styles/trainer.css`, also used by
+the Tactics Trainer) plus `src/styles/bughouse-puzzles.css`.
 
 ## Smoke-testing
 
