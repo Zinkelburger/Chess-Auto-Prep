@@ -195,7 +195,6 @@ export class CrazyhouseApp {
       renderHand($(boxId), {
         color,
         counts,
-        top: boxId === 'ch-hand-top',
         roomForMore: total < 64,
         picked: !editing && pos!.turn === color ? this.dropping : null,
         usable: (role) => !editing && pos!.turn === color && !pos!.isEnd() && dropSquares(this.current.fen, role).length > 0,
@@ -273,7 +272,7 @@ export class CrazyhouseApp {
       this.evals.set(result.fen, result);
     if (result.fen !== this.current.fen) return;
     this.renderCeval();
-    if (this.mode === 'analysis') this.board.cg.setAutoShapes(this.shapes());
+    if (this.mode === 'analysis') this.board.setShapes(this.shapes());
   }
 
   private renderCeval() {

@@ -47,16 +47,15 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 /* ── Right column: hand, tools, hand ──────────────────────────── */
 .ch-side { grid-area: side; position: relative; height: var(--ch-board); min-width: 0; }
 .ch-side-inner { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 8px; }
-.ch-hand { display: flex; flex-direction: column; gap: 2px; flex: none; }
+.ch-hand { display: flex; flex-direction: column; gap: 4px; flex: none; }
 .ch-hand .zh-pocket.ch-well { width: 100%; justify-content: center; }
 .ch-well .zh-slot { flex: 0 0 var(--ch-slot); width: var(--ch-slot); border-radius: 0; }
 .ch-well .zh-slot:first-child, .ch-well .zh-slot:last-child { border-radius: 0; }
-.ch-adjust { display: flex; justify-content: center; }
-.ch-adjust-pair { display: flex; width: var(--ch-slot); }
-.ch-step { flex: 1; height: 22px; padding: 0; border: 1px solid transparent; border-radius: 4px; background: none; color: var(--text-dim); font: 600 1rem/1 var(--sans); cursor: pointer; }
-.ch-step:hover:not(:disabled) { background: var(--bg-raised); border-color: var(--border); color: var(--text); }
-.ch-step:active:not(:disabled) { background: var(--accent-bg); color: var(--accent); }
-.ch-step:disabled { opacity: 0.3; cursor: default; }
+.ch-steps { display: flex; justify-content: center; }
+.ch-step { flex: 0 0 calc(var(--ch-slot) - 6px); height: 40px; margin: 0 3px; padding: 0; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--bg-raised); color: var(--text); font: 600 1.75rem/1 var(--sans); cursor: pointer; }
+.ch-step:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.ch-step:active:not(:disabled) { background: var(--accent-bg); }
+.ch-step:disabled { opacity: 0.25; cursor: default; }
 
 .ch-tools { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
 .ch-analysis, .ch-editor { flex: 1; min-height: 0; display: flex; flex-direction: column; }

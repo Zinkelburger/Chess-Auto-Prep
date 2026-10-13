@@ -65,7 +65,7 @@ try {
   await page.screenshot({ path: path.join(output, 'analysis.png') });
 
   // + under Black's knight: the hand, the FEN and the eval follow.
-  await page.click('#ch-hand-top .ch-adjust-pair:nth-child(2) .ch-step:last-child');
+  await page.click('#ch-hand-top .ch-step[data-role="knight"][data-step="more"]');
   assert.match(await fen(page), /\[n\] w/);
   assert.equal(await page.$eval('#ch-hand-top .zh-slot[data-role="knight"]', (el) => el.dataset.nb), '1');
   await page.waitForFunction((b) => {
@@ -78,15 +78,15 @@ try {
   assert.match(await page.$eval('#ch-moves', (el) => el.textContent), /Hands edited at the start: \+n/);
 
   // − takes it back; − at zero is disabled.
-  await page.click('#ch-hand-top .ch-adjust-pair:nth-child(2) .ch-step:first-child');
+  await page.click('#ch-hand-top .ch-step[data-role="knight"][data-step="fewer"]');
   assert.match(await fen(page), /\[\] w/);
-  assert.equal(await page.$eval('#ch-hand-top .ch-adjust-pair:nth-child(2) .ch-step:first-child', (el) => el.disabled), true);
+  assert.equal(await page.$eval('#ch-hand-top .ch-step[data-role="knight"][data-step="fewer"]', (el) => el.disabled), true);
 
   // Moves by clicking squares, then a drop from the hand by click-and-square.
   await click(page, 'd2'); await click(page, 'd4');
   await click(page, 'e5'); await click(page, 'd4');
   await until(page, '#ch-fen', /\[p\] w/); // exd4 put a pawn in Black's hand
-  await page.click('#ch-hand-bottom .ch-adjust-pair:nth-child(2) .ch-step:last-child'); // White +N
+  await page.click('#ch-hand-bottom .ch-step[data-role="knight"][data-step="more"]'); // White +N
   await page.click('#ch-hand-bottom .zh-slot[data-role="knight"]');
   await click(page, 'd5');
   await until(page, '#ch-moves', /N@d5/);
@@ -114,7 +114,7 @@ try {
   await page.click('#ch-spare-top .ch-trash');
   await click(page, 'a7');
   await until(page, '#ch-fen', /^r1bqkb1r\/1ppp/); // the a7 pawn is gone
-  await page.click('#ch-hand-top .ch-adjust-pair:nth-child(5) .ch-step:last-child'); // Black +Q in the editor
+  await page.click('#ch-hand-top .ch-step[data-role="queen"][data-step="more"]'); // Black +Q in the editor
   assert.match(await fen(page), /\[[^\]]*q[^\]]*\]/);
   await page.screenshot({ path: path.join(output, 'editor.png') });
   await page.click('#ch-turn button[data-turn="black"]');
