@@ -9,6 +9,7 @@ import type { Api } from '@lichess-org/chessground/api';
 import type { Key, Role } from '@lichess-org/chessground/types';
 import { placement } from '../bughouse/boards';
 import { renderPocket } from '../bughouse/pocket';
+import { choosePromotion } from '../bughouse/promotion';
 import type { Colour } from '../bughouse/types';
 import type { Position } from './puzzle';
 
@@ -32,7 +33,7 @@ export class PuzzleBoard {
   private dropping: string | null = null;
 
   constructor(
-    boardEl: HTMLElement,
+    private readonly boardEl: HTMLElement,
     private readonly rows: { top: HTMLElement; bottom: HTMLElement },
     private readonly onMove: (uci: string) => void,
   ) {
@@ -119,13 +120,15 @@ export class PuzzleBoard {
 
   private moved(orig: Key, dest: Key) {
     this.dropping = null;
-    const hit = (this.state?.legal ?? []).filter((u) => u.startsWith(orig + dest));
-    if (!hit.length) { this.rerender(); return; }
-    this.onMove(hit.length > 1 ? this.preferredPromotion(hit) : hit[0]);
+    const state = this.state;
+    const hit = (state?.legal ?? []).filter((u) => u.startsWith(orig + dest));
+    if (!state || !hit.length) { this.rerender(); return; }
+    if (hit.length === 1) { this.onMove(hit[0]); return; }
+    // A promotion: lila's picker over the board. The choice is the player's,
+    // so an underpromotion is never given away.
+    void choosePromotion(this.boardEl.parentElement!, hit, state.pos.turn, state.bottom)
+      .then((uci) => { if (uci) this.onMove(uci); else this.rerender(); });
   }
-
-  /** Set by the page: which of a pawn's promotions to play (default a queen). */
-  preferredPromotion: (options: string[]) => string = (options) => options.find((u) => u.endsWith('q')) ?? options[0];
 
   private dropped(role: Role, key: Key) {
     this.dropping = null;

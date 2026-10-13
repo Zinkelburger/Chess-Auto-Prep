@@ -18,6 +18,10 @@ lila's camelCase vocabulary, so a trainer page can reuse the familiar names:
   * `quietMove`: a solver move before the last that neither gives nor escapes
     check, captures nothing, attacks no enemy piece from its square, is no
     advanced pawn move and is not a king move;
+  * `fork` (no mate): a solver move leaves the moved or dropped piece
+    attacking two enemy pieces worth more than itself, the king included;
+  * `oneMove` for a one-move tactic, and `hangingPiece` when that move takes
+    a piece worth 3 or more that nothing can take back;
   * bughouse: `drop` (some solver move is a drop), `dropMate` (the mating move
     is a drop), `contactMate` (the mating piece stands next to the king);
   * `long`: four or more solver moves.
@@ -29,7 +33,7 @@ import chess
 from chess import BISHOP, KING, KNIGHT, PAWN, QUEEN, ROOK, square_distance, square_file, square_rank
 from chess.variant import CrazyhouseBoard
 
-from .frozen import replay
+from .frozen import bughouse_mate, replay
 
 VALUES = {PAWN: 1, KNIGHT: 3, BISHOP: 3, ROOK: 5, QUEEN: 9}
 
@@ -52,7 +56,7 @@ def tag_themes(fen: str, line: list[str], cp: int | None) -> list[str]:
     solver = range(0, len(line), 2)
     tags: list[str] = []
 
-    mated = final.is_checkmate()
+    mated = bughouse_mate(final)
     if mated:
         n = (len(line) + 1) // 2
         tags += [f"mateIn{min(n, 5)}", "mate"]
@@ -76,6 +80,12 @@ def tag_themes(fen: str, line: list[str], cp: int | None) -> list[str]:
         tags.append("quietMove")
     if any(moves[i].drop for i in solver):
         tags.append("drop")
+    if not mated and any(_fork(boards[i + 1], moves[i], pov) for i in solver):
+        tags.append("fork")
+    if not mated and len(line) == 1:
+        tags.append("oneMove")
+        if _hanging(boards[0], boards[1], moves[0]):
+            tags.append("hangingPiece")
     if mated:
         if moves[-1].drop:
             tags.append("dropMate")
@@ -88,6 +98,28 @@ def tag_themes(fen: str, line: list[str], cp: int | None) -> list[str]:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
+
+
+def _hanging(before: CrazyhouseBoard, after: CrazyhouseBoard, move: chess.Move) -> bool:
+    """A capture of a piece worth 3 or more that nothing can take back."""
+    taken = before.piece_at(move.to_square)
+    return (taken is not None and VALUES.get(taken.piece_type, 0) >= 3 and not after.is_check()
+            and not after.is_attacked_by(after.turn, move.to_square))
+
+
+def _fork(after: CrazyhouseBoard, move: chess.Move, pov: chess.Color) -> bool:
+    """lila's fork: the piece just moved or dropped attacks two or more enemy
+    pieces each worth more than itself, the king included."""
+    piece = after.piece_at(move.to_square)
+    if piece is None or piece.piece_type == KING:
+        return False
+    own = VALUES.get(piece.piece_type, 0)
+    targets = 0
+    for square in after.attacks(move.to_square):
+        target = after.piece_at(square)
+        if target and target.color != pov and (target.piece_type == KING or VALUES[target.piece_type] > own):
+            targets += 1
+    return targets >= 2
 
 
 def _sacrifice(boards: list[CrazyhouseBoard], moves: list[chess.Move], pov: chess.Color) -> bool:

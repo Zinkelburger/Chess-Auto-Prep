@@ -664,17 +664,40 @@ class TestPuzzleExport(unittest.TestCase):
     def test_found_plain_mate_in_one_is_not_exported(self):
         from bughouse_db.puzzles import web_puzzle
 
-        one = self.candidate(fen="6k1/5ppp/8/8/8/8/8/K3R3[] w - - 0 30", line=["e1e8"],
-                             mates=["e1e8"], played="Re8#")
+        one = self.candidate(fen=self.SMOTHER, line=["d6f7"], mates=["d6f7"], played="Nf7#")
         self.assertIsNone(web_puzzle(one))
-        missed = web_puzzle(self.candidate(fen="6k1/5ppp/8/8/8/8/8/K3R3[] w - - 0 30",
-                                           line=["e1e8"], mates=["e1e8"], played="Re7"))
+        missed = web_puzzle(self.candidate(fen=self.SMOTHER, line=["d6f7"], mates=["d6f7"], played="Nb5"))
         self.assertIsNotNone(missed)
-        self.assertIn("backRankMate", missed["themes"])
+        self.assertIn("smotheredMate", missed["themes"])
+
+    def test_a_check_a_drop_could_block_is_not_mate(self):
+        from chess.variant import CrazyhouseBoard
+        from bughouse_db.frozen import bughouse_mate, mating_moves
+        from bughouse_db.puzzles import web_puzzle
+
+        back_rank = CrazyhouseBoard("4R1k1/5ppp/8/8/8/8/8/K7[] b - - 0 1")
+        self.assertTrue(back_rank.is_checkmate(), "mate in chess and in crazyhouse")
+        self.assertFalse(bughouse_mate(back_rank), "f8 could take a dropped piece")
+        self.assertTrue(bughouse_mate(CrazyhouseBoard("6rk/5Npp/8/8/8/8/8/K7[] b - - 0 1")))
+        self.assertEqual(mating_moves(CrazyhouseBoard("6k1/5ppp/8/8/8/8/8/K3R3[] w - - 0 30")), [])
+        self.assertIsNone(web_puzzle(self.candidate(fen="6k1/5ppp/8/8/8/8/8/K3R3[] w - - 0 30",
+                                                    line=["e1e8"], mates=["e1e8"], played="Re7")))
 
     # ── Advantage solving ───────────────────────────────────────────
 
     ROOK = "k7/ppp5/8/8/8/8/8/K6R[] w - - 0 1"
+    SMOTHER = "6rk/6pp/3N4/8/8/8/8/K7[] w - - 0 30"
+    def loose(self):
+        """Rules that check only lila's one-best-move line."""
+        from bughouse_db.puzzles import TacticRules
+
+        return TacticRules(forcing="any", min_gain=-99, sit="", collect_cp=None)
+
+    def lila(self):
+        """The default rules, ending the line at the first move that is not unique, as lila does."""
+        from bughouse_db.puzzles import TacticRules
+
+        return TacticRules(collect_cp=None)
 
     def test_advantage_line_is_trimmed_to_moves_with_an_alternative(self):
         from bughouse_db.puzzles import solve_advantage
@@ -687,8 +710,9 @@ class TestPuzzleExport(unittest.TestCase):
             cp("h3h4", 520),                            # no alternative: trimmed
             cp("b8a8", -520),
             cp("h4h5", 300, ("cp", 250, ["h4g4"])),    # not a valid attack: stop
+            cp("a8b8", -500),                           # the final score and line
         ])
-        s = solve_advantage(engine, self.ROOK)
+        s = solve_advantage(engine, self.ROOK, self.loose())
         self.assertEqual((s.kind, s.line, s.cp), ("advantage", ["h1h2", "c7c6", "h2h3"], 500))
         self.assertEqual(engine.calls[0][2], 2, "solver moves use two principal variations")
         self.assertEqual(engine.calls[1][1], engine.calls[0][1] // 2, "defender at half the nodes")
@@ -701,7 +725,7 @@ class TestPuzzleExport(unittest.TestCase):
             cp("c7c6", -450),
             cp("h2h3", 300, ("cp", 250, ["h2g2"])),
         ])
-        self.assertIsNone(solve_advantage(engine, self.ROOK))
+        self.assertEqual(solve_advantage(engine, self.ROOK, self.lila()), "one quiet move")
 
     def test_a_later_move_below_200_busts_the_puzzle(self):
         from bughouse_db.puzzles import solve_advantage
@@ -711,14 +735,84 @@ class TestPuzzleExport(unittest.TestCase):
             cp("c7c6", -450),
             cp("h2h3", 150, ("cp", -500, ["h2g2"])),
         ])
-        self.assertIsNone(solve_advantage(engine, self.ROOK))
+        self.assertEqual(solve_advantage(engine, self.ROOK, self.lila()), "not winning")
 
     def test_advantage_line_ending_in_mate_becomes_a_mate_puzzle(self):
         from bughouse_db.puzzles import solve_advantage
 
+        engine = FakeEngine([{1: ("mate", 1, ["d6f7"]), 2: ("cp", 350, ["d6b5"])}])
+        s = solve_advantage(engine, self.SMOTHER)
+        self.assertEqual((s.kind, s.line, s.mates), ("mate", ["d6f7"], ["d6f7"]))
         engine = FakeEngine([{1: ("mate", 1, ["h1h8"]), 2: ("cp", 350, ["h1h7"])}])
-        s = solve_advantage(engine, self.ROOK)
-        self.assertEqual((s.kind, s.line, s.mates), ("mate", ["h1h8"], ["h1h8"]))
+        self.assertEqual(solve_advantage(engine, self.ROOK), "blockable mate")
+
+    # A knight check forks king and rook; the rook falls on the next move.
+    FORK = "r3k3/8/8/1N6/8/8/P7/K7[] w - - 0 1"
+
+    def fork_engine(self, *tail):
+        return FakeEngine([
+            cp("b5c7", 600, ("cp", 0, ["b5d4"])),       # Nc7+ forks e8 and a8
+            cp("e8d7", -600),
+            cp("c7a8", 650, ("cp", 50, ["c7b5"])),      # Nxa8 collects the rook
+            cp("d7c8", -650),
+            cp("a8b6", 600, ("cp", 550, ["a1b2"])),     # nothing unique left: the line ends
+            *tail,
+        ])
+
+    def test_a_forcing_material_win_is_a_tactic(self):
+        from bughouse_db.puzzles import TacticRules, solve_advantage
+
+        engine = self.fork_engine(
+            cp("d7c8", -650),                           # final score; its line takes nothing back
+            cp("d7c8", -600),                           # handed a pawn
+            cp("d7c8", -450),                           # handed a knight
+        )
+        s = solve_advantage(engine, self.FORK, self.lila())
+        self.assertEqual((s.kind, s.line, s.gain, s.sit_cp), ("advantage", ["b5c7", "e8d7", "c7a8"], 5, 450))
+
+    def test_a_fork_is_played_out_to_the_capture_accepting_any_that_wins(self):
+        from bughouse_db.puzzles import TacticRules, solve_advantage
+
+        engine = FakeEngine([
+            cp("b5c7", 600, ("cp", 0, ["b5d4"])),       # Nc7+ forks e8 and a8
+            cp("e8d7", -600),
+            cp("c7a8", 650, ("cp", 600, ["c7e6"])),     # two moves win: not unique
+            {1: ("cp", 650, ["c7a8"]), 2: ("cp", 560, ["a2a4"]), 3: ("cp", 100, ["c7e6"])},  # a4 takes nothing
+            cp("d7c8", -650),                           # final score and line
+            cp("d7c8", -600),
+            cp("d7c8", -450),
+        ])
+        s = solve_advantage(engine, self.FORK, TacticRules())
+        self.assertEqual((s.line, s.mates, s.gain), (["b5c7", "e8d7", "c7a8"], ["c7a8"], 5))
+        self.assertEqual(engine.calls[3][2], 5, "the collecting step weighs five moves")
+
+    def test_partner_help_or_a_small_gain_turns_a_tactic_down(self):
+        from bughouse_db.puzzles import TacticRules, solve_advantage
+
+        helped = self.fork_engine(cp("d7c8", -650), cp("d7c8", -600), cp("d7c8", 100))
+        self.assertEqual(solve_advantage(helped, self.FORK, self.lila()), "partner help saves them")
+        greedy = self.fork_engine(cp("d7c8", -650))
+        self.assertEqual(solve_advantage(greedy, self.FORK, TacticRules(min_gain=6, collect_cp=None)), "wins too little")
+
+    def test_a_recapture_wins_nothing(self):
+        from bughouse_db.puzzles import TacticRules, solve_advantage
+
+        # Before Black's last move White also had the rook's worth: Black took a knight.
+        before = "r3k3/8/8/1N6/8/8/P7/K7[N] b - - 0 1"
+        engine = self.fork_engine(cp("d7c8", -650))
+        self.assertEqual(solve_advantage(engine, self.FORK, self.lila(), prev=before), "wins too little")
+
+    def test_a_quiet_move_before_the_win_lets_them_sit(self):
+        from bughouse_db.puzzles import TacticRules, solve_advantage
+
+        engine = FakeEngine([
+            cp("b5d4", 600, ("cp", 0, ["b5a3"])),       # quiet: no check, no capture
+            cp("e8e7", -600),
+            cp("d4c6", 650, ("cp", 50, ["d4b5"])),      # Nc6+
+            cp("e7d7", -650),
+            cp("c6a5", 600, ("cp", 550, ["a1b2"])),     # nothing unique left: the line ends
+        ])
+        self.assertEqual(solve_advantage(engine, self.FORK, self.lila()), "lets them sit")
 
     def test_mate_in_one_with_a_strong_quiet_alternative_is_not_a_valid_attack(self):
         from bughouse_db.puzzles import is_valid_mate_in_one
@@ -748,8 +842,7 @@ class TestPuzzleExport(unittest.TestCase):
 
     def test_back_rank_and_contact_mates(self):
         t = self.themes("6k1/5ppp/8/8/8/8/8/K3R3[] w - - 0 1", ["e1e8"])
-        self.assertIn("backRankMate", t)
-        self.assertNotIn("contactMate", t)
+        self.assertNotIn("mate", t, "a drop on f8 would block it, so it is not mate in bughouse")
         t = self.themes("6k1/5ppp/8/8/8/Q7/8/K7[R] w - - 0 1", ["R@f8"])
         self.assertIn("contactMate", t)
         self.assertIn("dropMate", t)
@@ -763,6 +856,19 @@ class TestPuzzleExport(unittest.TestCase):
         self.assertIn("discoveredCheck", t)
         self.assertNotIn("doubleCheck", t)
 
+    def test_fork(self):
+        self.assertIn("fork", self.themes("r3k3/8/8/1N6/8/8/P7/K7[] w - - 0 1",
+                                          ["b5c7", "e8d7", "c7a8"], cp=650))
+        self.assertIn("fork", self.themes("r3k3/8/8/8/8/8/P7/K7[N] w - - 0 1", ["N@c7", "e8d7", "c7a8"], cp=650))
+        self.assertNotIn("fork", self.themes("r3k3/8/8/1N6/8/8/P7/K7[] w - - 0 1", ["b5d4", "e8d7", "d4c6"], cp=650))
+
+    def test_one_move_and_hanging_piece(self):
+        t = self.themes("k7/8/8/3r4/8/8/8/K2R4[] w - - 0 1", ["d1d5"], cp=500)
+        self.assertIn("oneMove", t)
+        self.assertIn("hangingPiece", t)
+        t = self.themes("k7/8/4p3/3r4/8/8/8/K2R4[] w - - 0 1", ["d1d5"], cp=300)
+        self.assertNotIn("hangingPiece", t, "e6 takes back")
+
     def test_sacrifice_counts_a_dropped_piece_that_is_taken(self):
         fen = "6k1/5ppp/8/8/8/8/8/K6R[N] w - - 0 1"
         self.assertIn("sacrifice", self.themes(fen, ["N@f6", "g7f6", "h1g1"], cp=300))
@@ -774,7 +880,7 @@ class TestPuzzleExport(unittest.TestCase):
                         ["h1h2", "c7c6", "h2h3", "c6c5", "h3h4", "c5c4", "h4h8"])
         self.assertIn("quietMove", t)
         self.assertIn("long", t)
-        self.assertIn("mateIn4", t)
+        self.assertNotIn("mateIn4", t, "Rh8+ could be blocked on b8")
 
     # ── Difficulty ──────────────────────────────────────────────────
 
@@ -796,8 +902,8 @@ class TestPuzzleExport(unittest.TestCase):
 
         adv = self.candidate(kind="advantage", line=["c5d7", "f8g8", "d7b8"], mates=[],
                              cp=850, played="Nxe6", ply=55)
-        missed = self.candidate(fen="6k1/5ppp/8/8/8/8/8/K3R3[] w - - 0 30", dual="x|y",
-                                line=["e1e8"], mates=["e1e8"], played="Re7", ply=7, prev=None)
+        missed = self.candidate(fen=self.SMOTHER, dual="x|y",
+                                line=["d6f7"], mates=["d6f7"], played="Nb5", ply=7, prev=None)
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "bughouse-puzzles"
             out.mkdir()

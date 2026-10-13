@@ -18,6 +18,7 @@ import { balance, checkFen, parseReserve, splitBoard } from './setup';
 import { Lines } from './lines';
 import type { BoardName, Colour } from './types';
 import { renderPocket } from './pocket';
+import { choosePromotion } from './promotion';
 export { Lines } from './lines';
 export type { LineMove } from './lines';
 export type { BoardName, Colour } from './types';
@@ -204,8 +205,12 @@ export class Boards {
 
   private moved(name: BoardName, orig: Key, dest: Key) {
     this.dropping = null;
-    const hit = this.hooks.view(name).legal.filter((u) => u.startsWith(orig + dest));
-    if (hit.length) this.hooks.play(name, hit); else this.render();
+    const view = this.hooks.view(name);
+    const hit = view.legal.filter((u) => u.startsWith(orig + dest));
+    if (hit.length < 2) { if (hit.length) this.hooks.play(name, hit); else this.render(); return; }
+    // A promotion: lila's picker over the board, the pawn already on its square.
+    void choosePromotion(this.el(`board-${name}`).parentElement!, hit, view.turn ?? 'white', view.bottom)
+      .then((uci) => { if (uci) this.hooks.play(name, [uci]); else this.render(); });
   }
 
   /** A reserve piece dragged onto a square; chessground has already put it there. */
