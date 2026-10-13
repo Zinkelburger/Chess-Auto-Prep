@@ -42,6 +42,10 @@ const square = async (page, key) => {
   return { x: box.x + (file + 0.5) * s, y: box.y + (7 - rank + 0.5) * s };
 };
 const click = async (page, key) => { const p = await square(page, key); await page.mouse.click(p.x, p.y); };
+// Chessground reports moves and clicks on a 1 ms timer, so wait for their effect.
+const until = (page, selector, pattern) => page.waitForFunction(
+  (sel, src) => new RegExp(src).test(document.querySelector(sel)[sel === '#ch-fen' || sel === '#ch-pgn' ? 'value' : 'textContent']),
+  { timeout: 5000 }, selector, pattern.source);
 const evaluated = (page) => page.waitForFunction(() => /^[+\-#]?\d/.test(document.querySelector('#ch-pearl').textContent) && document.querySelectorAll('.ch-pv').length > 0, { timeout: 180_000 });
 
 try {
@@ -81,11 +85,11 @@ try {
   // Moves by clicking squares, then a drop from the hand by click-and-square.
   await click(page, 'd2'); await click(page, 'd4');
   await click(page, 'e5'); await click(page, 'd4');
-  assert.match(await fen(page), /\[p\] w/, 'exd4 put a pawn in Black’s hand');
+  await until(page, '#ch-fen', /\[p\] w/); // exd4 put a pawn in Black's hand
   await page.click('#ch-hand-bottom .ch-adjust-pair:nth-child(2) .ch-step:last-child'); // White +N
   await page.click('#ch-hand-bottom .zh-slot[data-role="knight"]');
   await click(page, 'd5');
-  assert.match(await page.$eval('#ch-moves', (el) => el.textContent), /N@d5/);
+  await until(page, '#ch-moves', /N@d5/);
   assert.match(await page.$eval('#ch-moves', (el) => el.textContent), /\+N/, 'the edit is marked in the moves');
   await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('ArrowLeft');
@@ -106,10 +110,10 @@ try {
   await queen.click();
   await new Promise((r) => setTimeout(r, 200));
   await click(page, 'h5');
-  assert.match(await fen(page), /\/3N3Q\//, 'the queen is on h5');
+  await until(page, '#ch-fen', /\/3N3Q\//); // the queen is on h5
   await page.click('#ch-spare-top .ch-trash');
   await click(page, 'a7');
-  assert.doesNotMatch(await fen(page), /^r1bqkb1r\/pppp/);
+  await until(page, '#ch-fen', /^r1bqkb1r\/1ppp/); // the a7 pawn is gone
   await page.click('#ch-hand-top .ch-adjust-pair:nth-child(5) .ch-step:last-child'); // Black +Q in the editor
   assert.match(await fen(page), /\[[^\]]*q[^\]]*\]/);
   await page.screenshot({ path: path.join(output, 'editor.png') });
