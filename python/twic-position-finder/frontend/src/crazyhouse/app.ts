@@ -1,8 +1,13 @@
 /**
  * Crazyhouse Analysis: lichess.org/analysis/crazyhouse on one board, plus a
- * − and + under every piece in both hands and lila's board editor. Built for
- * bughouse questions such as "what if my opponent had a pawn here": the
- * rules and the engine are crazyhouse, and the hands are whatever you set.
+ * + above and − below every piece in both hands and lila's board editor.
+ * Built for bughouse questions such as "what if my opponent had a pawn
+ * here": the rules and the engine are crazyhouse, and the hands are
+ * whatever you set.
+ *
+ * This file wires the parts together: the tree and the current position,
+ * the engine, the board, the move list (moves.ts), the engine panel
+ * (ceval.ts), practice (practice.ts), the ☰ menu (menu.ts) and the editor.
  */
 import type { DrawShape } from '@lichess-org/chessground/draw';
 import type { Key, Piece } from '@lichess-org/chessground/types';
@@ -10,19 +15,25 @@ import { makePockets } from 'chessops/fen';
 import { Material } from 'chessops/setup';
 import type { Color, Role } from 'chessops/types';
 import { CrazyBoard, type Brush } from './board';
-import { DEFAULT_THREADS, Engine, MAX_THREADS, type EngineLine, type EngineResult, type EngineStatus, type SearchSettings } from './engine';
+import { CevalView } from './ceval';
+import { Engine, MAX_THREADS, type EngineResult, type EngineStatus } from './engine';
 import { renderHand } from './hand';
+import { liveGlyph, type Glyph } from './judge';
+import { openHelp, renderMenu } from './menu';
+import { MoveList } from './moves';
+import { PRACTICE_NODES, Practice } from './practice';
+import { clamp, loadSettings, saveSettings, type Toggle } from './settings';
+import { engineShapes, glyphShape, moveShapes, threatShapes, variationShapes } from './shapes';
 import {
-  HAND_ROLES, START_FEN, Tree, boardDests, dropSquares, fenOf, handEdit, positionOf, readFen, sanLine,
-  type TreeNode,
+  HAND_ROLES, START_FEN, Tree, boardDests, dropSquares, fenOf, positionOf, readFen, readMove, threatFen,
+  type SavedTree, type TreeNode,
 } from './tree';
+import { makeUci } from 'chessops/util';
 
 const LETTER: Record<Role, string> = { pawn: 'P', knight: 'N', bishop: 'B', rook: 'R', queen: 'Q', king: 'K' };
 const SPARE_ROLES: Role[] = ['king', 'queen', 'rook', 'bishop', 'knight', 'pawn'];
-const SETTINGS_KEY = 'crazyhouse-analysis-v1';
-const PV_MOVES = 14;
-
-interface Settings extends SearchSettings { engineOn: boolean }
+/** The analysis tree, kept in this browser so a reload comes back to it (Lichess keeps it too). */
+const TREE_KEY = 'crazyhouse-analysis-tree-v1';
 
 interface Draft {
   turn: Color;
@@ -34,33 +45,18 @@ interface Draft {
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-function loadSettings(): Settings {
-  const base: Settings = { engineOn: true, multiPv: 2, threads: DEFAULT_THREADS, hashMb: 128, infinite: false };
-  try {
-    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}');
-    return {
-      engineOn: typeof saved.engineOn === 'boolean' ? saved.engineOn : base.engineOn,
-      multiPv: clamp(saved.multiPv, 1, 5, base.multiPv),
-      threads: clamp(saved.threads, 1, MAX_THREADS, base.threads),
-      hashMb: clamp(saved.hashMb, 16, 512, base.hashMb),
-      infinite: typeof saved.infinite === 'boolean' ? saved.infinite : base.infinite,
-    };
-  } catch { return base; }
-}
-
-function clamp(value: unknown, lo: number, hi: number, fallback: number): number {
-  const n = Math.round(Number(value));
-  return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
-}
-
-export function formatEval(line: Pick<EngineLine, 'cp' | 'mate'>): string {
-  if (line.mate !== undefined) return `#${line.mate}`;
-  const pawns = (line.cp ?? 0) / 100;
-  return `${pawns > 0 ? '+' : ''}${pawns.toFixed(1)}`;
-}
-
 function squaresOf(uci: string): Key[] {
   return (uci.includes('@') ? [uci.slice(2, 4)] : [uci.slice(0, 2), uci.slice(2, 4)]) as Key[];
+}
+
+/** A tree move as the arrow Lichess draws: castling to the king's square, not the rook's. */
+function arrowUci(node: TreeNode): string {
+  if (!node.san.startsWith('O-O')) return node.uci;
+  return node.uci.slice(0, 2) + (node.san.startsWith('O-O-O') ? 'c' : 'g') + node.uci[1];
+}
+
+function loadSavedTree(): SavedTree | null {
+  try { return JSON.parse(localStorage.getItem(TREE_KEY) ?? 'null') as SavedTree | null; } catch { return null; }
 }
 
 export class CrazyhouseApp {
@@ -74,17 +70,36 @@ export class CrazyhouseApp {
   private engineStatus: EngineStatus = { kind: 'off' };
   private readonly engine: Engine;
   private readonly board: CrazyBoard;
+  private readonly moves: MoveList;
+  private readonly ceval: CevalView;
   private draft: Draft | null = null;
   private pgnDirty = false;
-  private menu: HTMLElement | null = null;
+  private threat = false;
+  private practice: Practice | null = null;
+  private forkIndex = 0;
+  private hoverUci: string | null = null;
+  private menuOpen = false;
+  private autoplay: { delay: number; timer: number } | null = null;
+  private stepping = false;
+  private saveTimer = 0;
+  private toastTimer = 0;
+  private lastDepth = new Map<string, number>();
 
   constructor() {
     const fen = new URLSearchParams(location.search).get('fen');
     const read = fen ? readFen(fen) : null;
-    this.tree = new Tree(read?.ok ? fenOf(read.pos) : START_FEN);
-    this.current = this.tree.root;
+    const target = read?.ok ? fenOf(read.pos) : START_FEN;
+    const saved = loadSavedTree();
+    const restored = saved ? Tree.restore(saved) : null;
+    if (restored && restored.current.fen === target && !(read && !read.ok)) {
+      this.tree = restored.tree;
+      this.current = restored.current;
+    } else {
+      this.tree = new Tree(target);
+      this.current = this.tree.root;
+    }
     if (read && !read.ok) this.flash(`Could not open the linked position: ${read.error}`);
-    if (read?.ok && read.pos.turn === 'black') this.orientation = 'black';
+    if (positionOf(this.tree.root.fen).turn === 'black') this.orientation = 'black';
 
     this.engine = new Engine(
       (status) => { this.engineStatus = status; this.renderCeval(); },
@@ -92,35 +107,78 @@ export class CrazyhouseApp {
     );
     this.board = new CrazyBoard($('ch-board-wrap'), $('ch-board'), {
       move: (orig, dest) => void this.boardMove(orig, dest),
-      drop: (role, key) => this.playUci(`${LETTER[role]}@${key}`),
+      drop: (role, key) => this.play(`${LETTER[role]}@${key}`, 'user'),
       clickSquare: (key) => this.clickSquare(key),
       wheel: (forward) => forward ? this.next() : this.prev(),
       edited: () => this.draftChanged(),
     });
-    this.bind();
-    this.renderAll();
-    this.analyse();
-  }
 
-  // ── Navigation and moves ─────────────────────────────────────────
-  private goTo(node: TreeNode) {
-    this.current = node;
-    this.dropping = null;
+    const app = this;
+    this.moves = new MoveList($('ch-moves'), $('ch-fork'), {
+      get tree() { return app.tree; },
+      get current() { return app.current; },
+      get settings() { return app.settings; },
+      get forkIndex() { return app.forkIndex; },
+      glyph: (node) => this.glyph(node),
+      goTo: (node) => this.goTo(node),
+      treeChanged: () => { this.treeChanged(); this.renderMoves(); this.renderShapes(); },
+      deleted: (parent, hadCurrent) => {
+        this.treeChanged();
+        if (hadCurrent) this.goTo(parent); else { this.renderMoves(); this.renderShapes(); }
+      },
+      copied: (text) => void navigator.clipboard?.writeText(text).then(() => this.toast('PGN copied'), () => this.toast('Copying was blocked by the browser')),
+    });
+    this.ceval = new CevalView({
+      header: $('ch-ceval'), pearl: $('ch-pearl'), name: $('ch-engine-name'), info: $('ch-engine-info'), bar: $('ch-bar'),
+      threat: $<HTMLButtonElement>('ch-threat'), pvs: $('ch-pvs'), board: $('ch-pv-board'), switch: $<HTMLInputElement>('ch-engine-on'),
+    }, {
+      hover: (uci) => { if (uci !== this.hoverUci) { this.hoverUci = uci; this.renderShapes(); } },
+      play: (pv, upTo) => this.playLine(pv, upTo),
+    });
+
+    this.bind();
     this.renderAll();
     this.analyse();
     this.updateUrl();
   }
 
+  // ── Navigation and moves ─────────────────────────────────────────
+  /** Shows a position. `browse` is the player moving through the tree (not a move or replay). */
+  private goTo(node: TreeNode, browse = true) {
+    const from = this.current;
+    if (!this.stepping) this.stopAutoplay();
+    this.moves.closeMenu();
+    this.current = node;
+    this.dropping = null;
+    if (node !== from) { this.threat = false; this.forkIndex = 0; this.hoverUci = null; }
+    this.renderAll();
+    this.analyse();
+    this.updateUrl();
+    this.scheduleSave();
+    this.practice?.jumped(browse, from, node);
+  }
+
   private prev() { const p = this.tree.parent(this.current.id); if (p) this.goTo(p); }
-  private next() { const c = this.current.children[0]; if (c) this.goTo(c); }
+  private next() { const c = this.current.children[this.forkIndex] ?? this.current.children[0]; if (c) this.goTo(c); }
   private first() { if (this.current !== this.tree.root) this.goTo(this.tree.root); }
   private last() { const end = this.tree.lineEnd(this.current.id); if (end !== this.current) this.goTo(end); }
 
-  private playUci(uci: string): boolean {
+  /** ↑/↓ choose among the moves already played from here, as Lichess's fork; otherwise first/last. */
+  private forkStep(dir: 1 | -1): boolean {
+    const n = this.current.children.length;
+    if (n < 2) return false;
+    this.forkIndex = (this.forkIndex + dir + n) % n;
+    this.moves.render();
+    this.renderShapes();
+    return true;
+  }
+
+  private play(uci: string, by: 'user' | 'engine'): boolean {
     const node = this.tree.play(this.current.id, uci);
     if (!node) { this.renderBoard(); return false; }
+    if (by === 'user') this.practice?.userMoved();
     this.treeChanged();
-    this.goTo(node);
+    this.goTo(node, false);
     return true;
   }
 
@@ -131,23 +189,22 @@ export class CrazyhouseApp {
     if (piece?.role === 'pawn' && (rank === '1' || rank === '8')) {
       const role = await this.board.pickPromotion(dest, piece.color, this.orientation);
       if (!role) { this.renderBoard(); return; }
-      this.playUci(orig + dest + (role === 'knight' ? 'n' : role[0]));
+      this.play(orig + dest + (role === 'knight' ? 'n' : role[0]), 'user');
       return;
     }
-    this.playUci(orig + dest);
+    this.play(orig + dest, 'user');
   }
 
   private clickSquare(key: Key) {
     const role = this.dropping;
     if (!role) return;
     this.dropping = null;
-    if (!this.playUci(`${LETTER[role]}@${key}`)) this.renderAll();
+    if (!this.play(`${LETTER[role]}@${key}`, 'user')) this.renderAll();
   }
 
   private playBest() {
-    const result = this.evals.get(this.current.fen);
-    const best = result?.lines[0]?.pv[0];
-    if (best) this.playUci(best);
+    const best = this.evals.get(this.current.fen)?.lines[0]?.pv[0];
+    if (best) this.play(best, 'user');
   }
 
   /** Plays an engine line from the current position up to and including move `upTo`. */
@@ -158,11 +215,38 @@ export class CrazyhouseApp {
       if (!next) break;
       node = next;
     }
-    if (node !== this.current) { this.treeChanged(); this.goTo(node); }
+    if (node !== this.current) { this.treeChanged(); this.goTo(node, false); }
   }
 
   private treeChanged() {
     this.renderPgn();
+    this.scheduleSave();
+  }
+
+  // ── Replay mode ─────────────────────────────────────────────────
+  private replay(delay: number | null) {
+    this.stopAutoplay();
+    if (delay === null) { this.renderActionMenu(); return; }
+    if (!this.current.children.length) this.goTo(this.tree.root);
+    this.closeActionMenu();
+    const step = () => {
+      const child = this.current.children[0];
+      if (!child) { this.stopAutoplay(); return; }
+      this.stepping = true;
+      this.goTo(child, false);
+      this.stepping = false;
+      this.autoplay = { delay, timer: window.setTimeout(step, delay) };
+    };
+    this.autoplay = { delay, timer: window.setTimeout(step, delay) };
+    this.renderControls();
+  }
+
+  private stopAutoplay() {
+    if (!this.autoplay) return;
+    clearTimeout(this.autoplay.timer);
+    this.autoplay = null;
+    this.renderControls();
+    if (this.menuOpen) this.renderActionMenu();
   }
 
   // ── Hands ───────────────────────────────────────────────────────
@@ -182,6 +266,7 @@ export class CrazyhouseApp {
     this.renderAll();
     this.analyse();
     this.updateUrl();
+    this.practice?.check();
   }
 
   private renderHands() {
@@ -230,22 +315,31 @@ export class CrazyhouseApp {
     });
   }
 
+  /** Lichess's board shapes (autoShape.ts): practice hints, a hovered line, engine and threat arrows, the move's annotation, variations. */
   private shapes(): DrawShape[] {
-    if (!this.settings.engineOn) return [];
-    const result = this.evals.get(this.current.fen);
-    if (!result) return [];
-    const turn = positionOf(this.current.fen).turn;
-    return result.lines.map((line, i): DrawShape | null => {
-      const uci = line.pv[0];
-      if (!uci) return null;
-      const brush = i === 0 ? 'paleBlue' : 'paleGrey';
-      const modifiers = { lineWidth: i === 0 ? 12 : 7 };
-      if (uci[1] === '@') {
-        const role = ({ P: 'pawn', N: 'knight', B: 'bishop', R: 'rook', Q: 'queen' } as Record<string, Role>)[uci[0]];
-        return { orig: uci.slice(2, 4) as Key, brush, piece: { role, color: turn, scale: 0.8 } };
-      }
-      return { orig: uci.slice(0, 2) as Key, dest: uci.slice(2, 4) as Key, brush, modifiers };
-    }).filter((s): s is DrawShape => !!s);
+    if (this.practice) return this.practice.shapes();
+    const pos = positionOf(this.current.fen);
+    const turn = pos.turn, other: Color = turn === 'white' ? 'black' : 'white';
+    let shapes: DrawShape[] = [];
+    const on = this.settings.engineOn && !pos.isEnd();
+    if (on && this.hoverUci) shapes.push(...moveShapes(this.threat ? other : turn, this.hoverUci, 'paleBlue'));
+    else if (on && this.settings.bestArrows) {
+      const result = this.evals.get(this.current.fen);
+      if (result) shapes.push(...engineShapes(turn, result.lines, this.settings.maneuverArrows));
+    }
+    if (on && this.threat) {
+      const result = this.evals.get(threatFen(this.current.fen));
+      if (result) shapes.push(...threatShapes(other, result.lines, this.settings.maneuverArrows));
+    }
+    const glyph = this.settings.glyphsOnBoard ? this.glyph(this.current) : undefined;
+    if (glyph) shapes.push(glyphShape(this.current.uci, this.current.san, glyph));
+    if (this.settings.variationArrows && this.current.children.length > 1)
+      shapes = shapes.concat(variationShapes(turn, this.current.children.map(arrowUci), this.forkIndex, shapes));
+    return shapes;
+  }
+
+  private renderShapes() {
+    if (this.mode === 'analysis') this.board.setShapes(this.shapes());
   }
 
   private flip() {
@@ -259,10 +353,12 @@ export class CrazyhouseApp {
 
   // ── Engine ──────────────────────────────────────────────────────
   private analyse() {
-    if (!this.settings.engineOn || this.mode === 'editor') { this.engine.stop(); return; }
+    if (this.mode === 'editor') { this.engine.stop(); return; }
     const pos = positionOf(this.current.fen);
     if (pos.isEnd()) { this.engine.stop(); this.renderCeval(); return; }
-    this.engine.analyse(this.current.fen, this.settings);
+    if (this.practice) this.engine.analyse(this.current.fen, { ...this.settings, multiPv: 1, infinite: false, nodes: PRACTICE_NODES });
+    else if (!this.settings.engineOn) { this.engine.stop(); return; }
+    else this.engine.analyse(this.threat ? threatFen(this.current.fen) : this.current.fen, this.settings);
     this.engine.load().catch(() => { /* Shown in the engine header. */ });
   }
 
@@ -270,180 +366,170 @@ export class CrazyhouseApp {
     const kept = this.evals.get(result.fen);
     if (!kept || result.depth >= kept.depth || result.lines.length > kept.lines.length || kept.lines.length > this.settings.multiPv)
       this.evals.set(result.fen, result);
-    if (result.fen !== this.current.fen) return;
+    const searched = this.threat ? threatFen(this.current.fen) : this.current.fen;
+    if (result.fen !== this.current.fen && result.fen !== searched) return;
+    if (this.practice) { this.practice.check(); return; }
     this.renderCeval();
-    if (this.mode === 'analysis') this.board.setShapes(this.shapes());
+    this.renderShapes();
+    // Live annotations change only with a new depth.
+    if (this.settings.liveGlyphs && this.lastDepth.get(result.fen) !== result.depth) {
+      this.lastDepth.set(result.fen, result.depth);
+      this.renderMoves();
+    }
+  }
+
+  /** Whether an engine move (e1g1) is the tree's move (chessops writes castling as e1h1). */
+  private sameMove(fen: string, engineUci: string | undefined, node: TreeNode): boolean {
+    if (!engineUci) return false;
+    if (engineUci === node.uci) return true;
+    if (!node.san.startsWith('O-O')) return false;
+    const move = readMove(positionOf(fen), engineUci);
+    return !!move && makeUci(move) === node.uci;
+  }
+
+  /** Lichess's live annotation: what the move lost against the engine's best before it. Not for a move whose hands were edited after it. */
+  private glyph(node: TreeNode): Glyph | undefined {
+    if (!this.settings.liveGlyphs || node.hand) return undefined;
+    const parent = this.tree.parent(node.id);
+    const before = parent && this.evals.get(parent.fen);
+    if (!parent || !before) return undefined;
+    const best = before.lines[0];
+    if (!best || this.sameMove(parent.fen, best.pv[0], node)) return undefined;
+    const after = before.lines.find((l) => this.sameMove(parent.fen, l.pv[0], node)) ?? this.evals.get(node.fen)?.lines[0];
+    if (!after) return undefined;
+    return liveGlyph(positionOf(parent.fen).turn, best, after);
   }
 
   private renderCeval() {
-    const pearl = $('ch-pearl'), engineName = $('ch-engine-name'), info = $('ch-engine-info'), pvs = $('ch-pvs');
-    $<HTMLInputElement>('ch-engine-on').checked = this.settings.engineOn;
     const pos = positionOf(this.current.fen);
-    pvs.replaceChildren();
-    engineName.textContent = 'Fairy-Stockfish 14 NNUE';
-    $('ch-ceval').classList.toggle('off', !this.settings.engineOn);
-    if (pos.isCheckmate()) { pearl.textContent = '#'; info.textContent = 'Checkmate'; return; }
-    if (pos.isStalemate()) { pearl.textContent = '½'; info.textContent = 'Stalemate'; return; }
-    if (!this.settings.engineOn) { pearl.textContent = ''; info.textContent = 'Off · press L to turn on'; return; }
-    const status = this.engineStatus;
-    const result = this.evals.get(this.current.fen);
-    if (!result) {
-      pearl.innerHTML = '<span class="ch-spinner" aria-hidden="true"></span>';
-      info.textContent = status.kind === 'loading' ? status.text : status.kind === 'failed' ? status.text : 'Calculating…';
-      info.classList.toggle('ch-failed', status.kind === 'failed');
-      return;
-    }
-    info.classList.remove('ch-failed');
-    pearl.textContent = formatEval(result.lines[0]);
-    info.textContent = `Depth ${result.depth}${result.knps ? ` · ${result.knps.toLocaleString()} kn/s` : ''}`;
-    for (const line of result.lines) pvs.append(this.pvRow(line));
-  }
-
-  private pvRow(line: EngineLine): HTMLElement {
-    const row = document.createElement('div');
-    row.className = 'ch-pv';
-    const score = document.createElement('strong');
-    score.textContent = formatEval(line);
-    row.append(score);
-    const sans = sanLine(this.current.fen, line.pv, PV_MOVES);
-    let ply = this.current.ply;
-    sans.forEach((san, i) => {
-      ply++;
-      const white = ply % 2 === 1;
-      if (white || i === 0) {
-        const n = document.createElement('span');
-        n.className = 'ch-pv-num';
-        n.textContent = `${Math.floor((ply + 1) / 2)}.${white ? '' : '..'}`;
-        row.append(n);
-      }
-      const move = document.createElement('button');
-      move.type = 'button';
-      move.className = 'ch-pv-move';
-      move.textContent = san;
-      move.onclick = () => this.playLine(line.pv, i);
-      row.append(move);
+    const fen = this.threat ? threatFen(this.current.fen) : this.current.fen;
+    this.ceval.render({
+      enabled: this.settings.engineOn,
+      fen,
+      ply: this.current.ply,
+      multiPv: this.settings.multiPv,
+      infinite: this.settings.infinite,
+      result: this.evals.get(fen),
+      status: this.engineStatus,
+      threat: this.threat,
+      inCheck: pos.isCheck(),
+      over: pos.isCheckmate() ? 'Checkmate' : pos.isStalemate() ? 'Stalemate' : null,
+      orientation: this.orientation,
     });
-    return row;
-  }
-
-  private saveSettings() {
-    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings)); } catch { /* Settings stay for this visit. */ }
   }
 
   private toggleEngine(on = !this.settings.engineOn) {
+    if (this.practice) return;
     this.settings.engineOn = on;
-    this.saveSettings();
+    if (!on) this.threat = false;
+    saveSettings(this.settings);
     this.renderCeval();
-    this.renderBoard();
+    this.renderShapes();
     this.analyse();
   }
 
-  // ── Move list (lila's column view) ──────────────────────────────
+  /** Lichess's "Show threat" (X): what the other side would play if it were its move. */
+  private toggleThreat(on = !this.threat) {
+    const pos = positionOf(this.current.fen);
+    if (on === this.threat || this.practice || !this.settings.engineOn || pos.isCheck() || pos.isEnd()) return;
+    this.threat = on;
+    this.hoverUci = null;
+    this.renderCeval();
+    this.renderShapes();
+    this.analyse();
+  }
+
+  private toggleSetting(key: Toggle) {
+    this.settings[key] = !this.settings[key];
+    saveSettings(this.settings);
+    this.renderMoves();
+    this.renderShapes();
+    if (this.menuOpen) this.renderActionMenu();
+  }
+
+  // ── Practice ────────────────────────────────────────────────────
+  private togglePractice(on = !this.practice) {
+    if (on === !!this.practice || this.mode === 'editor') return;
+    this.stopAutoplay();
+    this.closeActionMenu();
+    if (on) {
+      this.threat = false;
+      const app = this;
+      this.practice = new Practice({
+        get tree() { return app.tree; },
+        get current() { return app.current; },
+        evalOf: (fen) => this.evals.get(fen),
+        playUci: (uci) => { this.play(uci, 'engine'); },
+        goTo: (node) => this.goTo(node),
+        changed: () => { this.renderPractice(); this.renderShapes(); },
+        shapesChanged: () => this.renderShapes(),
+        stop: () => this.togglePractice(false),
+      }, this.orientation, $('ch-practice'));
+    } else this.practice = null;
+    this.renderAll();
+    this.analyse();
+    this.practice?.check();
+  }
+
+  private renderPractice() {
+    const box = $('ch-practice');
+    box.hidden = !this.practice;
+    $('ch-analysis').classList.toggle('practising', !!this.practice);
+    $('ch-practice-toggle').setAttribute('aria-pressed', String(!!this.practice));
+    this.practice?.render();
+  }
+
+  // ── Move list ───────────────────────────────────────────────────
   private renderMoves() {
-    const box = $('ch-moves');
-    const out: HTMLElement[] = [];
-    const rootEdit = handEdit(this.tree.loadedFen, this.tree.root.fen);
-    if (rootEdit) out.push(el('div', 'ch-root-edit', `Hands edited at the start: ${rootEdit}`));
-    let node = this.tree.root;
-    let needIndex = true;
-    while (node.children.length) {
-      const [main, ...alternatives] = node.children;
-      const white = main.ply % 2 === 1;
-      if (white) out.push(el('index', '', String(Math.floor((main.ply + 1) / 2))));
-      else if (needIndex) { out.push(el('index', '', String(Math.floor((main.ply + 1) / 2)))); out.push(el('span', 'ch-empty', '…')); }
-      out.push(this.moveEl(main, 'ch-move'));
-      needIndex = false;
-      if (alternatives.length) {
-        if (white) out.push(el('span', 'ch-empty', '…'));
-        const interrupt = el('div', 'ch-interrupt');
-        for (const alt of alternatives) {
-          const line = el('div', 'ch-line');
-          this.inline(alt, line, true);
-          interrupt.append(line);
-        }
-        out.push(interrupt);
-        needIndex = true;
-      }
-      node = main;
-    }
-    if (!this.tree.root.children.length && !rootEdit) out.push(el('div', 'ch-moves-empty', 'Play a move on the board, or drag a piece in from a hand.'));
-    box.replaceChildren(...out);
-    const active = box.querySelector<HTMLElement>('.active');
-    if (active) {
-      const top = active.offsetTop - box.offsetTop;
-      if (top < box.scrollTop || top > box.scrollTop + box.clientHeight - active.offsetHeight) box.scrollTop = top - box.clientHeight / 2;
-    } else if (this.current === this.tree.root) box.scrollTop = 0;
+    if (this.mode === 'analysis') this.moves.render();
   }
 
-  /** A variation written inline: `12...Nf6 13.N@e5 (13.Bd3 P@h6) Qe7`. */
-  private inline(start: TreeNode, out: HTMLElement, numbered: boolean) {
-    let node = start;
-    out.append(this.moveEl(node, 'ch-vmove', numbered));
-    let needNumber = false;
-    while (node.children.length) {
-      const [main, ...alternatives] = node.children;
-      out.append(this.moveEl(main, 'ch-vmove', needNumber));
-      needNumber = false;
-      for (const alt of alternatives) {
-        out.append(el('span', 'ch-paren', '('));
-        this.inline(alt, out, true);
-        out.append(el('span', 'ch-paren', ')'));
-        needNumber = true;
-      }
-      node = main;
-    }
+  // ── ☰ menu ──────────────────────────────────────────────────────
+  private toggleActionMenu(open = !this.menuOpen) {
+    this.menuOpen = open && this.mode === 'analysis';
+    this.renderActionMenu();
   }
 
-  private moveEl(node: TreeNode, cls: string, numbered = false): HTMLElement {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = cls + (node === this.current ? ' active' : '');
-    b.dataset.id = node.id;
-    const white = node.ply % 2 === 1;
-    const number = Math.floor((node.ply + 1) / 2);
-    if (cls === 'ch-vmove' && (white || numbered)) b.append(el('span', 'ch-num', `${number}.${white ? '' : '..'}`));
-    b.append(document.createTextNode(node.san));
-    const edit = handEdit(this.tree.expectedFen(node.id), node.fen);
-    if (edit) {
-      const chip = el('span', 'ch-edit', edit);
-      chip.title = 'Hands edited after this move';
-      b.append(chip);
-    }
-    return b;
-  }
+  private closeActionMenu() { if (this.menuOpen) this.toggleActionMenu(false); }
 
-  private openMenu(node: TreeNode, x: number, y: number) {
-    this.closeMenu();
-    const menu = el('div', 'ch-menu');
-    menu.setAttribute('role', 'menu');
-    const item = (text: string, action: () => void) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.setAttribute('role', 'menuitem');
-      b.textContent = text;
-      b.onclick = () => { this.closeMenu(); action(); };
-      menu.append(b);
-    };
-    if (!this.tree.isMainline(node.id)) item('Make main line', () => { this.tree.promote(node.id); this.treeChanged(); this.renderMoves(); });
-    item('Delete from here', () => {
-      const inside = this.tree.path(this.current.id).includes(node);
-      const parent = this.tree.delete(node.id);
-      this.treeChanged();
-      if (inside && parent) this.goTo(parent); else this.renderMoves();
+  private renderActionMenu() {
+    $('ch-tools').classList.toggle('menu-open', this.menuOpen);
+    $('ch-menu-toggle').setAttribute('aria-expanded', String(this.menuOpen));
+    const box = $('ch-action-menu');
+    box.hidden = !this.menuOpen;
+    if (!this.menuOpen) { box.replaceChildren(); return; }
+    let mainline = 0;
+    for (let n = this.tree.root; n.children[0]; n = n.children[0]) mainline++;
+    renderMenu(box, {
+      settings: this.settings,
+      practising: !!this.practice,
+      autoplay: this.autoplay?.delay ?? null,
+      canReplay: mainline > 3,
+      hasMoves: this.tree.root.children.length > 0,
+      flip: () => { this.flip(); this.closeActionMenu(); },
+      editor: () => { this.closeActionMenu(); this.openEditor(); },
+      practice: () => this.togglePractice(),
+      help: () => openHelp(),
+      clearMoves: () => this.clearMoves(),
+      replay: (delay) => this.replay(delay),
+      toggle: (key) => this.toggleSetting(key),
     });
-    document.body.append(menu);
-    const rect = menu.getBoundingClientRect();
-    menu.style.left = `${Math.min(x, innerWidth - rect.width - 8)}px`;
-    menu.style.top = `${Math.min(y, innerHeight - rect.height - 8)}px`;
-    (menu.querySelector('button') as HTMLButtonElement).focus();
-    this.menu = menu;
   }
 
-  private closeMenu() { this.menu?.remove(); this.menu = null; }
+  private clearMoves() {
+    this.tree = new Tree(this.tree.root.fen);
+    this.pgnDirty = false;
+    this.treeChanged();
+    this.closeActionMenu();
+    this.goTo(this.tree.root);
+  }
 
   // ── Editor ──────────────────────────────────────────────────────
   private openEditor() {
     if (this.mode === 'editor') return;
+    if (this.practice) this.togglePractice(false);
+    this.stopAutoplay();
+    this.closeActionMenu();
     const pos = positionOf(this.current.fen);
     const castling = this.current.fen.split(' ')[2] ?? '-';
     this.draft = {
@@ -455,8 +541,9 @@ export class CrazyhouseApp {
     };
     this.mode = 'editor';
     this.dropping = null;
+    this.threat = false;
     this.engine.stop();
-    this.closeMenu();
+    this.moves.closeMenu();
     $('ch').dataset.mode = 'editor';
     this.board.showEditor(this.current.fen, this.orientation, 'pointer');
     this.renderAll();
@@ -471,6 +558,7 @@ export class CrazyhouseApp {
       this.current = this.tree.root;
       this.evals.clear();
       this.pgnDirty = false;
+      this.scheduleSave();
     }
     this.mode = 'analysis';
     this.draft = null;
@@ -614,11 +702,7 @@ export class CrazyhouseApp {
     if (!read.ok) { this.fenError(read.error); return; }
     const fen = fenOf(read.pos);
     if (fen === this.current.fen) return;
-    this.tree = new Tree(fen);
-    this.evals.clear();
-    this.pgnDirty = false;
-    this.treeChanged();
-    this.goTo(this.tree.root);
+    this.newTree(new Tree(fen), null);
   }
 
   private fenError(error: string | null) {
@@ -631,11 +715,16 @@ export class CrazyhouseApp {
     const tree = Tree.fromPgn($<HTMLTextAreaElement>('ch-pgn').value);
     if (!tree) { $('ch-pgn-error').textContent = 'No crazyhouse moves found in that PGN.'; return; }
     $('ch-pgn-error').textContent = '';
+    this.newTree(tree, tree.lineEnd(tree.root.id));
+  }
+
+  private newTree(tree: Tree, at: TreeNode | null) {
+    if (this.practice) this.togglePractice(false);
     this.tree = tree;
     this.pgnDirty = false;
     this.evals.clear();
     this.treeChanged();
-    this.goTo(tree.lineEnd(tree.root.id));
+    this.goTo(at ?? tree.root);
   }
 
   private updateUrl() {
@@ -644,8 +733,23 @@ export class CrazyhouseApp {
     history.replaceState(null, '', url);
   }
 
+  private scheduleSave() {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = window.setTimeout(() => {
+      try { localStorage.setItem(TREE_KEY, JSON.stringify(this.tree.save(this.current.id))); } catch { /* Kept for this visit only. */ }
+    }, 300);
+  }
+
   private flash(text: string) {
     $('ch-fen-error').textContent = text;
+  }
+
+  private toast(text: string) {
+    const box = $('ch-toast');
+    box.textContent = text;
+    box.hidden = false;
+    clearTimeout(this.toastTimer);
+    this.toastTimer = window.setTimeout(() => { box.hidden = true; }, 1800);
   }
 
   // ── Rendering and wiring ────────────────────────────────────────
@@ -657,7 +761,9 @@ export class CrazyhouseApp {
     if (this.mode === 'analysis') {
       this.renderCeval();
       this.renderMoves();
+      this.renderPractice();
     } else this.renderEditorPanel();
+    this.renderActionMenu();
     this.renderControls();
     this.renderUnder();
     this.renderPgn();
@@ -671,6 +777,9 @@ export class CrazyhouseApp {
     $<HTMLButtonElement>('ch-next').disabled = !analysis || atEnd;
     $<HTMLButtonElement>('ch-last').disabled = !analysis || atEnd;
     $('ch-edit').setAttribute('aria-pressed', String(!analysis));
+    $<HTMLButtonElement>('ch-practice-toggle').disabled = !analysis;
+    $<HTMLButtonElement>('ch-menu-toggle').disabled = !analysis;
+    $('ch-controls').classList.toggle('replaying', !!this.autoplay);
   }
 
   private bind() {
@@ -680,7 +789,10 @@ export class CrazyhouseApp {
     $('ch-last').onclick = () => this.last();
     $('ch-flip').onclick = () => this.flip();
     $('ch-edit').onclick = () => this.mode === 'editor' ? this.closeEditor(false) : this.openEditor();
+    $('ch-practice-toggle').onclick = () => this.togglePractice();
+    $('ch-menu-toggle').onclick = () => this.toggleActionMenu();
     $('ch-engine-on').onchange = (e) => this.toggleEngine((e.target as HTMLInputElement).checked);
+    $('ch-threat').onclick = () => this.toggleThreat();
 
     const settings = $('ch-settings');
     $('ch-gear').onclick = () => {
@@ -695,7 +807,7 @@ export class CrazyhouseApp {
       input.onchange = () => {
         this.settings[key] = clamp(input.value, lo, hi, this.settings[key]);
         input.value = String(this.settings[key]);
-        this.saveSettings();
+        saveSettings(this.settings);
         if (key === 'multiPv') this.evals.clear();
         this.renderCeval();
         this.analyse();
@@ -707,21 +819,7 @@ export class CrazyhouseApp {
     $('ch-set-threads-max').textContent = `of ${MAX_THREADS}`;
     const infinite = $<HTMLInputElement>('ch-set-infinite');
     infinite.checked = this.settings.infinite;
-    infinite.onchange = () => { this.settings.infinite = infinite.checked; this.saveSettings(); this.analyse(); };
-
-    $('ch-moves').addEventListener('click', (e) => {
-      const id = (e.target as HTMLElement).closest<HTMLElement>('[data-id]')?.dataset.id;
-      const node = id && this.tree.get(id);
-      if (node) this.goTo(node);
-    });
-    $('ch-moves').addEventListener('contextmenu', (e) => {
-      const id = (e.target as HTMLElement).closest<HTMLElement>('[data-id]')?.dataset.id;
-      const node = id && this.tree.get(id);
-      if (!node) return;
-      e.preventDefault();
-      this.openMenu(node, e.clientX, e.clientY);
-    });
-    document.addEventListener('mousedown', (e) => { if (this.menu && !this.menu.contains(e.target as Node)) this.closeMenu(); });
+    infinite.onchange = () => { this.settings.infinite = infinite.checked; saveSettings(this.settings); this.analyse(); };
 
     // Editor panel
     for (const b of document.querySelectorAll<HTMLButtonElement>('#ch-turn button'))
@@ -747,6 +845,7 @@ export class CrazyhouseApp {
     const pgn = $<HTMLTextAreaElement>('ch-pgn');
     pgn.oninput = () => { this.pgnDirty = true; $<HTMLButtonElement>('ch-pgn-import').disabled = false; };
     $('ch-pgn-import').onclick = () => this.importPgn();
+    $('ch-pgn-copy').onclick = () => void navigator.clipboard?.writeText(this.tree.pgn()).then(() => this.toast('PGN copied'));
 
     document.addEventListener('keydown', (e) => this.key(e));
   }
@@ -759,33 +858,44 @@ export class CrazyhouseApp {
 
   private key(e: KeyboardEvent) {
     const target = e.target as HTMLElement;
-    if (target.closest('input, textarea, [contenteditable]') || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (target.closest('input, textarea, [contenteditable], dialog') || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === 'Escape') {
-      if (this.menu) { this.closeMenu(); return; }
+      if (this.moves.menuOpen) { this.moves.closeMenu(); return; }
+      if (this.menuOpen) { this.closeActionMenu(); return; }
       if (this.dropping) { this.dropping = null; this.renderBoard(); this.renderHands(); return; }
       if (this.mode === 'editor') { this.closeEditor(false); return; }
+      if (this.autoplay) { this.stopAutoplay(); return; }
     }
     if (this.mode === 'editor') return;
-    const actions: Record<string, () => void> = {
+    const shift = e.shiftKey;
+    const actions: Record<string, () => void> = shift ? {
+      ArrowLeft: () => this.goTo(this.tree.previousBranch(this.current.id)),
+      K: () => this.goTo(this.tree.previousBranch(this.current.id)),
+      ArrowRight: () => this.goTo(this.tree.nextBranch(this.current.id, this.forkIndex)),
+      J: () => this.goTo(this.tree.nextBranch(this.current.id, this.forkIndex)),
+      ArrowUp: () => this.goTo(this.tree.stepLine(this.current.id, 'prev')),
+      ArrowDown: () => this.goTo(this.tree.stepLine(this.current.id, 'next')),
+      I: () => this.toggleSetting('inline'),
+      '?': () => openHelp(),
+      $: () => this.last(),
+    } : {
       ArrowLeft: () => this.prev(), ArrowRight: () => this.next(),
-      ArrowUp: () => this.first(), ArrowDown: () => this.last(),
-      Home: () => this.first(), End: () => this.last(),
+      ArrowUp: () => { if (!this.forkStep(-1)) this.first(); },
+      ArrowDown: () => { if (!this.forkStep(1)) this.last(); },
+      Home: () => this.first(), End: () => this.last(), '0': () => this.first(),
       j: () => this.next(), k: () => this.prev(),
-      f: () => this.flip(), l: () => this.toggleEngine(), ' ': () => this.playBest(),
+      f: () => this.flip(), l: () => this.toggleEngine(), x: () => this.toggleThreat(),
+      a: () => this.toggleSetting('bestArrows'), v: () => this.toggleSetting('variationArrows'),
+      b: () => this.openEditor(), h: () => this.toggleActionMenu(),
+      ' ': () => { if (this.practice) return; if (this.settings.engineOn) this.playBest(); else this.toggleEngine(true); },
     };
     const action = actions[e.key];
     if (!action) return;
     if (target.closest('button') && (e.key === ' ' || e.key === 'Enter')) return;
     e.preventDefault();
+    this.moves.closeMenu();
     action();
   }
-}
-
-function el(tag: string, cls: string, text?: string): HTMLElement {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text !== undefined) e.textContent = text;
-  return e;
 }
 
 function squareIndex(key: Key): number {

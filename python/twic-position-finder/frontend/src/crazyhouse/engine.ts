@@ -31,6 +31,9 @@ export interface EngineResult {
   fen: string;
   depth: number;
   knps: number;
+  nodes: number;
+  /** Time since the search started. */
+  millis: number;
   lines: EngineLine[];
   /** The search ended by itself (time or depth limit). */
   done: boolean;
@@ -41,6 +44,8 @@ export interface SearchSettings {
   threads: number;
   hashMb: number;
   infinite: boolean;
+  /** Stop after this many nodes instead of the time limit (practice). */
+  nodes?: number;
 }
 
 export type EngineStatus =
@@ -53,7 +58,7 @@ export const MAX_THREADS = Math.max(1, Math.min(32, navigator.hardwareConcurrenc
 /** Like Lichess: about all cores but one, leaving the page responsive. */
 export const DEFAULT_THREADS = Math.max(1, MAX_THREADS - (MAX_THREADS % 2 ? 0 : 1));
 /** Without infinite analysis a position is searched this long, as on Lichess. */
-const SEARCH_MS = 30_000;
+export const SEARCH_MS = 30_000;
 
 export function crossOriginReady(): boolean {
   return typeof SharedArrayBuffer !== 'undefined' && globalThis.crossOriginIsolated === true;
@@ -104,7 +109,7 @@ async function fetchChunk(chunk: Chunk, cache: Cache | null, progress: (bytes: n
   return buffer;
 }
 
-interface Job { fen: string; settings: SearchSettings; generation: number }
+interface Job { fen: string; settings: SearchSettings; generation: number; started: number }
 
 export class Engine {
   private module: StockfishWeb | null = null;
@@ -118,6 +123,7 @@ export class Engine {
   private generation = 0;
   private lines = new Map<number, EngineLine>();
   private knps = 0;
+  private nodes = 0;
   private sent = new Map<string, string>();
 
   constructor(
@@ -181,7 +187,7 @@ export class Engine {
 
   /** Searches `fen` from now on; any search in progress is stopped first. */
   analyse(fen: string, settings: SearchSettings) {
-    this.next = { fen, settings: { ...settings }, generation: ++this.generation };
+    this.next = { fen, settings: { ...settings }, generation: ++this.generation, started: 0 };
     if (!this.module) return;
     if (this.running) this.halt();
     else this.start();
@@ -211,14 +217,17 @@ export class Engine {
     if (!job || !this.module) return;
     this.next = null;
     this.running = job;
+    job.started = performance.now();
     this.lines = new Map();
     this.knps = 0;
+    this.nodes = 0;
     this.setOption('Threads', String(job.settings.threads));
     this.setOption('Hash', String(job.settings.hashMb));
     this.setOption('MultiPV', String(job.settings.multiPv));
     this.setOption('UCI_AnalyseMode', 'true');
     this.module.uci(`position fen ${job.fen}`);
-    this.module.uci(job.settings.infinite ? 'go infinite' : `go depth 99 movetime ${SEARCH_MS}`);
+    const s = job.settings;
+    this.module.uci(s.nodes ? `go nodes ${s.nodes}` : s.infinite ? 'go infinite' : `go depth 99 movetime ${SEARCH_MS}`);
   }
 
   private received(line: string) {
@@ -234,13 +243,14 @@ export class Engine {
     const job = this.running;
     if (!job || this.stopping || !line.startsWith('info ') || !line.includes(' pv ')) return;
     const parts = line.split(' ');
-    let depth = 0, multipv = 1, cp: number | undefined, mate: number | undefined, bound = false, nps = 0;
+    let depth = 0, multipv = 1, cp: number | undefined, mate: number | undefined, bound = false, nps = 0, nodes = 0;
     let i = 1;
     for (; i < parts.length; i++) {
       const key = parts[i];
       if (key === 'depth') depth = Number(parts[++i]);
       else if (key === 'multipv') multipv = Number(parts[++i]);
       else if (key === 'nps') nps = Number(parts[++i]);
+      else if (key === 'nodes') nodes = Number(parts[++i]);
       else if (key === 'score') {
         const kind = parts[++i], value = Number(parts[++i]);
         if (kind === 'cp') cp = value; else mate = value;
@@ -257,12 +267,13 @@ export class Engine {
     if (multipv === 1) this.lines = new Map([...this.lines].filter(([, l]) => l.depth >= depth - 1));
     this.lines.set(multipv, { multipv, depth, pv, cp: cp === undefined ? undefined : cp * sign, mate: mate === undefined ? undefined : mate * sign });
     if (nps) this.knps = Math.round(nps / 1000);
+    if (nodes) this.nodes = nodes;
     this.publish(job, false);
   }
 
   private publish(job: Job, done: boolean) {
     const lines = [...this.lines.values()].sort((a, b) => a.multipv - b.multipv).slice(0, job.settings.multiPv);
     if (!lines.length) return;
-    this.onResult({ fen: job.fen, depth: lines[0].depth, knps: this.knps, lines, done });
+    this.onResult({ fen: job.fen, depth: lines[0].depth, knps: this.knps, nodes: this.nodes, millis: performance.now() - job.started, lines, done });
   }
 }

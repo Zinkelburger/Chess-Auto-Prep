@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {
-  MAX_IN_HAND, START_FEN, Tree, adjustHand, boardDests, dropSquares, handEdit, handLetters, readFen, sanLine,
+  MAX_IN_HAND, START_FEN, Tree, adjustHand, boardDests, dropSquares, handEdit, handLetters, playLine, readFen, sanLine, threatFen,
 } from '../src/crazyhouse/tree';
+import { liveGlyph, povDiff, verdict, winningChances } from '../src/crazyhouse/judge';
 
 const ITALIAN = 'r1bqkb1r/pppp1ppp/2n2n2/4p3/4P3/2N2N2/PPPP1PPP/R1BQKB1R[] w KQkq - 4 4';
 
@@ -68,7 +69,7 @@ const e4 = t2.play(t2.root.id, 'e2e4')!;
 const d4 = t2.play(t2.root.id, 'd2d4')!;
 t2.play(d4.id, 'd7d5');
 assert.ok(t2.isMainline(e4.id));
-t2.promote(d4.id);
+t2.promote(d4.id, true);
 assert.equal(t2.root.children[0], d4);
 assert.equal(t2.lineEnd(t2.root.id).san, 'd5');
 assert.equal(t2.delete(d4.id), t2.root);
@@ -95,5 +96,90 @@ assert.equal(back.root.children[0].children.length, 2);
 assert.equal(Tree.fromPgn('[Event "x"]\n\n*'), null, 'no moves');
 const fromFen = Tree.fromPgn(`[FEN "${ITALIAN}"]\n\n4. d4 *`)!;
 assert.equal(fromFen.root.children[0].san, 'd4');
+
+// Promote variation goes up one fork; Make main line goes all the way (lila's promoteAt).
+const t3 = new Tree();
+const t3e4 = t3.play(t3.root.id, 'e2e4')!;
+const t3e5 = t3.play(t3e4.id, 'e7e5')!;
+const t3c5 = t3.play(t3e4.id, 'c7c5')!;
+const t3d4 = t3.play(t3.root.id, 'd2d4')!;
+const t3d5 = t3.play(t3d4.id, 'd7d5')!;
+const t3f5 = t3.play(t3d4.id, 'g8f6')!;
+assert.equal(t3.isMainline(t3f5.id), false);
+t3.promote(t3f5.id, false);
+assert.equal(t3d4.children[0], t3f5, 'one step: Nf6 heads its fork');
+assert.equal(t3.root.children[0], t3e4, 'the fork above is untouched');
+t3.promote(t3f5.id, false);
+assert.equal(t3.root.children[0], t3d4, 'the next step reaches the root fork');
+assert.ok(t3.isMainline(t3f5.id));
+t3.promote(t3c5.id, true);
+assert.ok(t3.isMainline(t3c5.id), 'make main line');
+assert.equal(t3e4.children[0], t3c5);
+void t3e5; void t3d5;
+
+// Force variation: a main-line move shown as a variation; promoting it undoes that.
+t3.setForceVariation(t3c5.id, true);
+assert.equal(t3.isMainline(t3c5.id), false);
+assert.equal(t3.mainChild(t3e4), undefined);
+t3.promote(t3c5.id, false);
+assert.equal(t3c5.forceVariation, undefined);
+assert.ok(t3.isMainline(t3c5.id));
+
+// Copy main line / variation PGN: the path to the move and what follows.
+const copyMain = t3.copyLine(t3e4.id, false);
+assert.match(copyMain.pgn, /\n1\. e4 c5 \*\n$/, 'the main line, no variations');
+assert.ok(copyMain.ids.has(t3c5.id) && !copyMain.ids.has(t3e5.id));
+const copyVar = t3.copyLine(t3d4.id, true);
+assert.match(copyVar.pgn, /1\. d4 Nf6 \( 1\.\.\. d5 \) \*/, 'a variation keeps its sub-variations');
+
+// Branch navigation, as Lichess's shift+arrows.
+assert.equal(t3.previousBranch(t3c5.id), t3e4);
+assert.equal(t3.nextBranch(t3.root.id), t3e4, 'stops at the next fork');
+assert.equal(t3.nextBranch(t3.root.id, 1), t3d4);
+assert.equal(t3.stepLine(t3c5.id, 'next'), t3e5);
+assert.equal(t3.stepLine(t3e5.id, 'next'), t3c5, 'wraps around');
+
+// Folding variations.
+assert.ok(t3.someCollapsible(false));
+t3.setCollapsedAll(true);
+assert.ok(t3.root.collapsed && t3e4.collapsed && !t3.someCollapsible(false));
+t3.setCollapsedAll(false);
+assert.ok(!t3.someCollapsible(true));
+
+// Saved and restored with hand edits, forced variations and the current move.
+const saved = new Tree(ITALIAN);
+const s1 = saved.play(saved.root.id, 'd2d4')!;
+saved.adjustHand(s1.id, 'black', 'knight', 1);
+const s2 = saved.play(s1.id, 'N@g4')!;
+saved.play(s1.id, 'e5d4');
+saved.setForceVariation(s2.id, true);
+const back2 = Tree.restore(JSON.parse(JSON.stringify(saved.save(s2.id))))!;
+assert.equal(back2.current.fen, s2.fen);
+assert.equal(back2.current.san, 'N@g4');
+assert.equal(back2.tree.pgn(), saved.pgn());
+assert.equal(back2.current.forceVariation, true);
+assert.equal(Tree.restore({ loadedFen: 'nonsense', root: { uci: '', children: [] }, current: [] }), null);
+
+// PGN round trip keeps hand edits made between moves.
+const edited = Tree.fromPgn(saved.pgn())!;
+const e1 = edited.root.children[0];
+assert.equal(handEdit(edited.expectedFen(e1.id), e1.fen), '+n');
+assert.equal(edited.lineEnd(edited.root.id).fen, saved.lineEnd(saved.root.id).fen);
+
+// Lines with positions, and the threat position.
+const line = playLine(START_FEN, ['e2e4', 'e7e5', 'x']);
+assert.deepEqual(line.map((m) => m.san), ['e4', 'e5']);
+assert.match(line[1].fen, /^rnbqkbnr\/pppp1ppp/);
+assert.equal(threatFen('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR[] b KQkq e3 0 1'), 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR[] w KQkq - 0 1');
+
+// Lichess's winning chances and judgements.
+assert.equal(winningChances({ cp: 0 }), 0);
+assert.ok(winningChances({ mate: 3 }) > winningChances({ cp: 1000 }) - 0.01);
+assert.ok(Math.abs(povDiff('white', { cp: 100 }, { cp: -100 }) + povDiff('black', { cp: 100 }, { cp: -100 })) < 1e-9);
+assert.equal(liveGlyph('white', { cp: 30 }, { cp: 10 }), undefined);
+assert.equal(liveGlyph('white', { cp: 30 }, { cp: -400 })?.symbol, '??');
+assert.equal(liveGlyph('black', { cp: -30 }, { cp: 60 })?.symbol, '?!');
+assert.equal(verdict('white', { cp: 50 }, { cp: 45 }), 'goodMove');
+assert.equal(verdict('black', { cp: 0 }, { cp: 900 }), 'blunder');
 
 console.log('crazyhouse tree: ok');

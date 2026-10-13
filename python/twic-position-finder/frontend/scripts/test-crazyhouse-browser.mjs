@@ -102,6 +102,69 @@ try {
   await evaluated(page);
   await page.screenshot({ path: path.join(output, 'analysis-line.png') });
 
+  // Lichess's analysis tools. Hovering an engine move shows its position on a small board.
+  await page.waitForFunction(() => document.querySelectorAll('#ch-pvs .ch-pv-move').length > 2);
+  // The engine redraws its lines as it searches, so aim at a move until the pointer lands on one.
+  for (let i = 0; i < 20 && await page.$eval('#ch-pv-board', (el) => el.hidden); i++) {
+    const pvMove = await page.$$eval('#ch-pvs .ch-pv-move', (es) => { const r = es[1].getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; });
+    await page.mouse.move(5, 5);
+    await page.mouse.move(pvMove[0], pvMove[1]);
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  await page.waitForFunction(() => !document.querySelector('#ch-pv-board').hidden && document.querySelector('#ch-pv-board cg-board'));
+  await page.mouse.move(5, 5);
+  // Show threat (X): the other side's best move, from the flipped position.
+  await page.keyboard.press('x');
+  await until(page, '#ch-engine-name', /Show threat/);
+  await page.keyboard.press('x');
+  await until(page, '#ch-engine-name', /Fairy-Stockfish/);
+  // Right-click a move: Lichess's menu, Copy PGN puts the line on the clipboard.
+  await page.browserContext().overridePermissions(origin, ['clipboard-read', 'clipboard-write', 'clipboard-sanitized-write']);
+  await page.bringToFront();
+  const exd4 = await page.$$('#ch-moves .ch-move');
+  const box = await exd4[1].boundingBox();
+  await page.mouse.click(box.x + 4, box.y + 4, { button: 'right' });
+  assert.deepEqual(await page.$$eval('.ch-menu button', (bs) => bs.map((b) => b.textContent)), ['Force variation', 'Copy main line PGN', 'Delete from here']);
+  await page.click('.ch-menu button:nth-of-type(2)'); // a real click: the clipboard needs a user gesture
+  await until(page, '#ch-toast', /PGN copied/);
+  assert.match(await page.evaluate(() => navigator.clipboard.readText()), /4\. d4 exd4 \{ Hands edited: \+N \} 5\. N@d5/);
+  // ☰ menu (H) with Lichess's switches; inline notation.
+  await page.keyboard.press('h');
+  await page.waitForSelector('#ch-action-menu:not([hidden]) .ch-menu-switch');
+  await page.$$eval('.ch-menu-switch', (rows) => rows.find((r) => r.textContent.includes('Inline notation')).querySelector('input').click());
+  await page.keyboard.press('Escape');
+  assert.equal(await page.$eval('#ch-moves', (el) => el.classList.contains('ch-moves-inline')), true);
+  await page.keyboard.down('Shift'); await page.keyboard.press('I'); await page.keyboard.up('Shift');
+  assert.equal(await page.$eval('#ch-moves', (el) => el.classList.contains('ch-moves-inline')), false);
+  // Keyboard help (?).
+  await page.keyboard.down('Shift'); await page.keyboard.press('?'); await page.keyboard.up('Shift');
+  assert.equal(await page.$eval('dialog.ch-help', (d) => d.open), true);
+  await page.keyboard.press('Escape');
+  // A reload comes back to the same moves and position.
+  const kept = await fen(page);
+  await new Promise((r) => setTimeout(r, 500));
+  await page.reload();
+  await page.waitForSelector('#ch-moves .ch-move');
+  assert.equal(await fen(page), kept);
+  assert.match(await page.$eval('#ch-moves', (el) => el.textContent), /N@d5/);
+  // Practice with computer: White is the player (board not flipped); after a White move the engine answers.
+  await page.keyboard.press('ArrowLeft');
+  await until(page, '#ch-fen', / w /);
+  await page.click('#ch-practice-toggle');
+  await until(page, '#ch-practice', /Your turn/);
+  const beforeBb5 = await fen(page);
+  await click(page, 'f1'); await click(page, 'b5');
+  await until(page, '#ch-moves', /Bb5/);
+  // The engine's answer: White to move again, in a new position.
+  await page.waitForFunction((b) => { const f = document.querySelector('#ch-fen').value; return / w /.test(f) && f !== b; }, { timeout: 120_000 }, beforeBb5);
+  await until(page, '#ch-practice', /Your turn/);
+  await page.screenshot({ path: path.join(output, 'practice.png') });
+  await page.click('#ch-practice-toggle');
+  assert.equal(await page.$eval('#ch-practice', (el) => el.hidden), true);
+  // Back to N@d5: Bb5 and the reply are a variation now.
+  await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowRight');
+  await until(page, '#ch-fen', /\/3N4\/.*\[p\] b/);
+
   // Board editor: a white queen painted on h5 and a black pawn removed, then analysed.
   await page.click('#ch-edit');
   assert.equal(await page.$eval('#ch', (el) => el.dataset.mode), 'editor');

@@ -54,7 +54,16 @@ Node/Python build environment, not Emscripten. See the
   Fairy-Stockfish 14 build (`@lichess-org/stockfish-web`) with Lichess's
   crazyhouse NNUE, downloaded once in parts and kept in the browser cache;
   `board.ts` is the chessground board in analysis and editor modes; `hand.ts`
-  draws a hand with its − and + buttons; `app.ts` is the page. A hand edit is
+  draws a hand with a + above and a − below each piece; `moves.ts` is the
+  move list (column or inline, folds, live ?!/?/?? marks, the right-click
+  menu with Promote, Make main line, Force variation, Copy PGN, Delete);
+  `ceval.ts` the engine panel (Show threat, progress bar, the board shown
+  when hovering an engine move); `shapes.ts` Lichess's arrows; `judge.ts`
+  Lichess's winning chances, live marks and practice verdicts;
+  `practice.ts` Practice with computer; `menu.ts` the ☰ menu (replay mode,
+  the analysis switches) and the keyboard help; `settings.ts` the saved
+  settings; `app.ts` wires the page. The tree is kept in `localStorage` and
+  comes back on reload when the address still points at its position. A hand edit is
   kept on its position and carried through the moves after it; the engine
   always gets a bare FEN. Hands are capped at 16 of a piece (the NNUE's slots)
   and 64 pieces in all. The engine is multi-threaded, so `/crazyhouse` and

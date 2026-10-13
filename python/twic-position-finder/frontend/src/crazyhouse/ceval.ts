@@ -1,0 +1,180 @@
+/**
+ * The engine panel of lichess.org/analysis: switch, evaluation, engine and
+ * depth, "Show threat", the gear, a progress bar, and the engine lines.
+ * Hovering a line shows its first move on the board; hovering a move in it
+ * shows a small board of that position (the wheel steps along the line);
+ * clicking a move plays the line up to it.
+ */
+import { Chessground } from '@lichess-org/chessground';
+import type { Api } from '@lichess-org/chessground/api';
+import type { Key } from '@lichess-org/chessground/types';
+import type { Color, Role } from 'chessops/types';
+import { SEARCH_MS, type EngineLine, type EngineResult, type EngineStatus } from './engine';
+import { el } from './moves';
+import { HAND_ROLES, playLine, positionOf, type LineMove } from './tree';
+
+const PV_MOVES = 16;
+const LETTER: Record<Role, string> = { pawn: 'P', knight: 'N', bishop: 'B', rook: 'R', queen: 'Q', king: 'K' };
+
+export interface CevalState {
+  enabled: boolean;
+  /** The position searched: the current one, or with the other side to move in threat mode. */
+  fen: string;
+  ply: number;
+  multiPv: number;
+  infinite: boolean;
+  result: EngineResult | undefined;
+  status: EngineStatus;
+  threat: boolean;
+  /** The current side is in check: no threat to show. */
+  inCheck: boolean;
+  /** Checkmate or stalemate on the board. */
+  over: string | null;
+  orientation: Color;
+}
+
+export interface CevalHooks {
+  /** A line's first move is hovered (null when the pointer leaves). */
+  hover(uci: string | null): void;
+  /** Plays a line up to and including move `upTo`. */
+  play(pv: string[], upTo: number): void;
+}
+
+export function formatEval(line: Pick<EngineLine, 'cp' | 'mate'>): string {
+  if (line.mate !== undefined) return `#${line.mate}`;
+  const pawns = (line.cp ?? 0) / 100;
+  return `${pawns > 0 ? '+' : ''}${pawns.toFixed(1)}`;
+}
+
+export class CevalView {
+  private mini: Api | null = null;
+  private hovered: { fen: string; moves: LineMove[]; index: number } | null = null;
+  private state: CevalState | null = null;
+
+  constructor(
+    private readonly els: { header: HTMLElement; pearl: HTMLElement; name: HTMLElement; info: HTMLElement; bar: HTMLElement; threat: HTMLButtonElement; pvs: HTMLElement; board: HTMLElement; switch: HTMLInputElement },
+    hooks: CevalHooks,
+  ) {
+    const { pvs } = els;
+    pvs.addEventListener('mouseover', (e) => {
+      const target = e.target as HTMLElement;
+      const row = target.closest<HTMLElement>('.ch-pv');
+      hooks.hover(row?.dataset.uci ?? null);
+      const move = target.closest<HTMLElement>('.ch-pv-move');
+      if (move && row) this.showBoard(row, Number(move.dataset.index));
+    });
+    pvs.addEventListener('mouseleave', () => { hooks.hover(null); this.hideBoard(); });
+    pvs.addEventListener('wheel', (e) => {
+      if (!this.hovered) return;
+      e.preventDefault();
+      const index = Math.max(0, Math.min(this.hovered.moves.length - 1, this.hovered.index + (e.deltaY > 0 ? 1 : -1)));
+      this.drawBoard(this.hovered.moves, index);
+    }, { passive: false });
+    pvs.addEventListener('click', (e) => {
+      const move = (e.target as HTMLElement).closest<HTMLElement>('.ch-pv-move');
+      const row = move?.closest<HTMLElement>('.ch-pv');
+      if (!move || !row || this.state?.threat) return;
+      this.hideBoard();
+      hooks.play(row.dataset.pv!.split(' '), Number(move.dataset.index));
+    });
+  }
+
+  render(state: CevalState) {
+    this.state = state;
+    const { header, pearl, name, info, bar, threat, pvs, switch: toggle } = this.els;
+    toggle.checked = state.enabled;
+    header.classList.toggle('off', !state.enabled);
+    header.classList.toggle('ch-threat-mode', state.threat);
+    threat.hidden = !state.enabled || state.inCheck || !!state.over;
+    threat.setAttribute('aria-pressed', String(state.threat));
+    name.textContent = state.threat ? 'Show threat' : 'Fairy-Stockfish 14 NNUE';
+    info.classList.remove('ch-failed');
+    pvs.replaceChildren();
+    bar.style.width = '0';
+    bar.classList.toggle('threat', state.threat);
+    if (state.over) { pearl.textContent = state.over === 'Checkmate' ? '#' : '½'; info.textContent = state.over; this.hideBoard(); return; }
+    if (!state.enabled) { pearl.textContent = ''; info.textContent = 'Off · press L to turn on'; this.hideBoard(); return; }
+    if (!state.result) this.hideBoard();
+    const result = state.result;
+    if (!result) {
+      pearl.innerHTML = '<span class="ch-spinner" aria-hidden="true"></span>';
+      info.textContent = state.status.kind === 'loading' || state.status.kind === 'failed' ? state.status.text : 'Calculating…';
+      info.classList.toggle('ch-failed', state.status.kind === 'failed');
+      return;
+    }
+    pearl.textContent = formatEval(result.lines[0]);
+    info.textContent = `Depth ${result.depth}${result.knps ? ` · ${result.knps.toLocaleString()} kn/s` : ''}`;
+    bar.style.width = `${result.done || state.infinite ? 100 : Math.min(100, (100 * result.millis) / SEARCH_MS)}%`;
+    for (let i = 0; i < state.multiPv; i++) pvs.append(this.row(state, result.lines[i]));
+    // The board stays while the pointer is on a line of this position; engine updates redraw the rows under it.
+    if (this.hovered && this.hovered.fen !== state.fen) this.hideBoard();
+  }
+
+  private row(state: CevalState, line: EngineLine | undefined): HTMLElement {
+    const row = el('div', 'ch-pv');
+    if (!line) { row.append(el('strong', '', '')); return row; }
+    row.dataset.uci = line.pv[0];
+    row.dataset.pv = line.pv.join(' ');
+    row.classList.toggle('ch-pv-threat', state.threat);
+    row.append(el('strong', '', formatEval(line)));
+    let ply = state.ply + (state.threat ? 1 : 0);
+    playLine(state.fen, line.pv, PV_MOVES).forEach((move, i) => {
+      ply++;
+      const white = ply % 2 === 1;
+      if (white || i === 0) row.append(el('span', 'ch-pv-num', `${Math.floor((ply + 1) / 2)}.${white ? '' : '..'}`));
+      const b = el('button', 'ch-pv-move', move.san) as HTMLButtonElement;
+      b.type = 'button';
+      b.dataset.index = String(i);
+      if (state.threat) b.tabIndex = -1;
+      row.append(b);
+    });
+    return row;
+  }
+
+  private showBoard(row: HTMLElement, index: number) {
+    if (!this.state) return;
+    const moves = playLine(this.state.fen, row.dataset.pv!.split(' '), PV_MOVES);
+    if (!moves[index]) return;
+    const box = this.els.board;
+    box.hidden = false;
+    const rows = this.els.pvs.getBoundingClientRect(), parent = box.offsetParent?.getBoundingClientRect();
+    if (parent) box.style.top = `${rows.bottom - parent.top + 4}px`;
+    this.drawBoard(moves, index);
+  }
+
+  private drawBoard(moves: LineMove[], index: number) {
+    const move = moves[index];
+    this.hovered = { fen: this.state!.fen, moves, index };
+    const box = this.els.board;
+    box.hidden = false;
+    const orientation = this.state!.orientation;
+    const lastMove = (move.uci[1] === '@' ? [move.uci.slice(2, 4)] : [move.uci.slice(0, 2), move.uci.slice(2, 4)]) as Key[];
+    if (!this.mini) {
+      const host = box.querySelector<HTMLElement>('.ch-pv-board-cg')!;
+      this.mini = Chessground(host, { viewOnly: true, coordinates: false, animation: { enabled: false }, drawable: { enabled: false, visible: false } });
+    }
+    this.mini.set({ fen: move.fen.split(' ')[0].replace(/\[.*$/, ''), orientation, lastMove });
+    this.mini.redrawAll();
+    const pos = positionOf(move.fen);
+    for (const [side, hand] of [['white', box.querySelector<HTMLElement>('.ch-pv-hand-white')!], ['black', box.querySelector<HTMLElement>('.ch-pv-hand-black')!]] as const) {
+      hand.replaceChildren(...HAND_ROLES.flatMap((role) => {
+        const n = pos.pockets?.[side][role] ?? 0;
+        if (!n) return [];
+        const span = el('span', 'ch-pv-hand-piece');
+        const img = document.createElement('img');
+        img.src = `/piece/${side === 'white' ? 'w' : 'b'}${LETTER[role]}.svg`;
+        img.alt = '';
+        span.append(img);
+        if (n > 1) span.append(el('em', '', String(n)));
+        return [span];
+      }));
+    }
+    box.classList.toggle('ch-pv-board-flipped', orientation === 'black');
+    box.setAttribute('aria-label', `After ${move.san}`);
+  }
+
+  private hideBoard() {
+    this.hovered = null;
+    this.els.board.hidden = true;
+  }
+}
