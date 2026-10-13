@@ -233,11 +233,12 @@ export class MoveList {
     menu.setAttribute('role', 'menu');
     const white = node.ply % 2 === 1;
     menu.append(el('p', 'ch-menu-title', `${Math.floor((node.ply + 1) / 2)}${white ? '.' : '...'} ${node.san}`));
-    const item = (text: string, action: () => void, preview?: { ids: Set<string>; kind: 'copy' | 'delete' }) => {
+    const item = (glyph: keyof typeof GLYPHS, text: string, action: () => void, preview?: { ids: Set<string>; kind: 'copy' | 'delete' }) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.setAttribute('role', 'menuitem');
-      b.textContent = text;
+      b.innerHTML = `<svg viewBox="0 0 512 512" fill="currentColor" aria-hidden="true"><path d="${GLYPHS[glyph]}"/></svg>`;
+      b.append(text);
       b.onclick = () => { this.closeMenu(); action(); };
       if (preview) {
         const show = (on: boolean) => { this.pending = on ? preview : null; this.render(); };
@@ -249,17 +250,17 @@ export class MoveList {
       menu.append(b);
     };
     const onMainline = tree.isMainline(node.id);
-    if (this.host.settings.disclosure && tree.someCollapsible(false)) item('Collapse all', () => { tree.setCollapsedAll(true); this.host.treeChanged(); });
-    if (this.host.settings.disclosure && tree.someCollapsible(true)) item('Expand all', () => { tree.setCollapsedAll(false); this.host.treeChanged(); });
-    if (!onMainline && this.canPromote(node)) item('Promote variation', () => { tree.promote(node.id, false); this.host.treeChanged(); });
-    if (!onMainline) item('Make main line', () => { tree.promote(node.id, true); this.host.treeChanged(); });
-    if (onMainline) item('Force variation', () => { tree.setForceVariation(node.id, true); this.host.treeChanged(); });
+    if (this.host.settings.disclosure && tree.someCollapsible(false)) item('collapse', 'Collapse all', () => { tree.setCollapsedAll(true); this.host.treeChanged(); });
+    if (this.host.settings.disclosure && tree.someCollapsible(true)) item('expand', 'Expand all', () => { tree.setCollapsedAll(false); this.host.treeChanged(); });
+    if (!onMainline && this.canPromote(node)) item('promote', 'Promote variation', () => { tree.promote(node.id, false); this.host.treeChanged(); });
+    if (!onMainline) item('mainline', 'Make main line', () => { tree.promote(node.id, true); this.host.treeChanged(); });
+    if (onMainline) item('force', 'Force variation', () => { tree.setForceVariation(node.id, true); this.host.treeChanged(); });
     const copy = tree.copyLine(node.id, !onMainline);
-    item(onMainline ? 'Copy main line PGN' : 'Copy variation PGN', () => this.host.copied(copy.pgn), { ids: copy.ids, kind: 'copy' });
+    item('copy', onMainline ? 'Copy main line PGN' : 'Copy variation PGN', () => this.host.copied(copy.pgn), { ids: copy.ids, kind: 'copy' });
     const below = new Set<string>();
     const walk = (n: TreeNode) => { below.add(n.id); n.children.forEach(walk); };
     walk(node);
-    item('Delete from here', () => {
+    item('delete', 'Delete from here', () => {
       const hadCurrent = tree.path(this.host.current.id).includes(node);
       const parent = tree.delete(node.id);
       if (parent) this.host.deleted(parent, hadCurrent);
@@ -288,6 +289,17 @@ export class MoveList {
     if (this.pending) { this.pending = null; this.render(); }
   }
 }
+
+/** Lichess's context-menu glyphs (lila public/font/lichess.ttf), 512-unit outlines. */
+const GLYPHS = {
+  collapse: 'M293 293H384Q391 293 397 287Q402 282 402 274V238Q402 230 397 225Q391 219 384 219L212 220L128 219Q121 219 115 225Q110 230 110 238V274Q110 282 115 287Q121 293 128 293ZM475 119V393Q475 427 451 451Q427 475 393 475H119Q85 475 61 451Q37 427 37 393V119Q37 85 61 61Q85 37 119 37H393Q427 37 451 61Q475 85 475 119Z',
+  expand: 'M402 274V238Q402 230 397 225Q391 219 384 219H293V128Q293 121 287 115Q282 110 274 110H238Q230 110 225 115Q219 121 219 128V219H128Q121 219 115 225Q110 230 110 238V274Q110 282 115 287Q121 293 128 293H219V384Q219 391 225 397Q230 402 238 402H274Q282 402 287 397Q293 391 293 384V293H384Q391 293 397 287Q402 282 402 274ZM475 119V393Q475 427 451 451Q427 475 393 475H119Q85 475 61 451Q37 427 37 393V119Q37 85 61 61Q85 37 119 37H393Q427 37 451 61Q475 85 475 119Z',
+  promote: 'M480 352 256 128 32 352Z',
+  mainline: 'M469 181 263 388 224 427Q214 435 204 435Q193 435 185 427L43 285Q35 277 35 265Q35 253 43 246L81 207Q91 199 101 199Q112 199 120 207L204 291L392 103Q400 95 411 95Q421 95 431 103L469 142Q477 150 477 162Q477 174 469 181Z',
+  force: 'M369 269 214 424Q208 430 201 430Q194 430 188 424Q183 419 183 411V329H55Q49 329 42 324Q37 319 37 311V201Q37 193 42 188Q49 183 55 183H183V101Q183 93 188 88Q194 82 201 82Q208 82 214 88L369 243Q375 249 375 256Q375 263 369 269ZM475 155V357Q475 391 451 415Q427 439 393 439H302Q298 439 295 436Q293 434 293 430L292 428Q292 426 292 424V416Q292 415 292.5 413Q293 411 293 410Q293 406 296 404Q298 402 302 402H393Q412 402 425 389Q439 375 439 357V155Q439 137 425 123Q412 110 393 110H304Q303 110 301 109H297Q297 108 295 107Q293 105 293 104V101L292 99Q292 97 292 95V87Q292 86 292.5 84Q293 82 293 81Q293 76 296 75Q298 73 302 73H393Q427 73 451 97Q475 121 475 155Z',
+  copy: 'M384 64Q410 64 429 83Q448 102 448 128V448Q448 475 429.5 493.5Q411 512 384 512H128Q101 512 82.5 493.5Q64 475 64 448V128Q64 101 82.5 82.5Q101 64 128 64H178Q183 36 205 18Q227 0 256 0Q285 0 306.5 18Q328 36 334 64ZM273 55Q266 48 256 48Q246 48 239 55Q232 62 232 72Q232 82 239 89Q246 96 256 96Q266 96 273 89Q280 82 280 72Q280 62 273 55ZM400 448V128Q400 121 395.5 116.5Q391 112 384 112H366Q368 121 368 128V144Q368 151 363.5 155.5Q359 160 352 160H160Q153 160 148.5 155.5Q144 151 144 144V128Q144 121 146 112H128Q121 112 116.5 116.5Q112 121 112 128V448Q112 455 116.5 459.5Q121 464 128 464H384Q391 464 395.5 459.5Q400 455 400 448Z',
+  delete: 'M201 210V375Q201 379 199 381Q196 384 192 384H174Q170 384 167 381Q165 380 165 375V210Q165 205 167 204Q170 201 174 201H192Q196 201 199 204Q201 206 201 210ZM274 210V375Q274 379 272 381Q269 384 265 384H247Q243 384 240 381Q238 379 238 375V210Q238 206 240 204Q243 201 247 201H265Q269 201 272 204Q274 206 274 210ZM347 210V375Q347 380 345 381Q342 384 338 384H320Q316 384 313 381Q311 379 311 375V210Q311 206 313 204Q316 201 320 201H338Q342 201 345 204Q347 205 347 210ZM384 417V146H128V417Q128 421 130 429Q132 434 134 436L137 439H375L378 436Q380 434 382 429Q384 421 384 417ZM192 110H320L306 76Q305 75 301 73H211Q207 75 206 76ZM457 119V137Q457 140 455 144Q451 146 448 146H421V417Q421 441 407 458Q394 475 375 475H137Q118 475 105 459Q91 442 91 418V146H64Q61 146 57 144Q55 140 55 137V119Q55 116 57 112Q61 110 64 110H152L172 62Q177 51 188 44Q198 37 210 37H302Q314 37 324 44Q335 51 340 62L360 110H448Q451 110 455 112Q457 116 457 119Z',
+};
 
 export function el(tag: string, cls: string, text?: string): HTMLElement {
   const e = document.createElement(tag);

@@ -125,6 +125,8 @@ try {
   const box = await exd4[1].boundingBox();
   await page.mouse.click(box.x + 4, box.y + 4, { button: 'right' });
   assert.deepEqual(await page.$$eval('.ch-menu button', (bs) => bs.map((b) => b.textContent)), ['Force variation', 'Copy main line PGN', 'Delete from here']);
+  assert.equal(await page.$$eval('.ch-menu button svg path', (ps) => ps.length), 3); // Lichess's glyph on each item
+  await page.screenshot({ path: path.join(output, 'move-menu.png') });
   await page.click('.ch-menu button:nth-of-type(2)'); // a real click: the clipboard needs a user gesture
   await until(page, '#ch-toast', /PGN copied/);
   assert.match(await page.evaluate(() => navigator.clipboard.readText()), /4\. d4 exd4 \{ Hands edited: \+N \} 5\. N@d5/);
