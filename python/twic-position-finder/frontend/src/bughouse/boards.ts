@@ -9,7 +9,7 @@
 import { Chessground } from '@lichess-org/chessground';
 import type { Api } from '@lichess-org/chessground/api';
 import type { DrawShape } from '@lichess-org/chessground/draw';
-import type { Key, Piece, Role } from '@lichess-org/chessground/types';
+import type { Key, Role } from '@lichess-org/chessground/types';
 import '@lichess-org/chessground/assets/chessground.base.css';
 import '@lichess-org/chessground/assets/chessground.brown.css';
 import '@lichess-org/chessground/assets/chessground.cburnett.css';
@@ -17,6 +17,7 @@ import { balance, checkFen, parseReserve, splitBoard } from './setup';
 
 import { Lines } from './lines';
 import type { BoardName, Colour } from './types';
+import { renderPocket } from './pocket';
 export { Lines } from './lines';
 export type { LineMove } from './lines';
 export type { BoardName, Colour } from './types';
@@ -86,7 +87,11 @@ export class Boards {
   constructor(private readonly prefix: string, private readonly hooks: BoardsHooks) {
     this.cg = { A: this.mount('A'), B: this.mount('B') };
     // The boards follow the window; chessground measures its squares once.
-    new ResizeObserver(() => { for (const name of BOARDS) this.cg[name].redrawAll(); }).observe(this.el('board-A'));
+    // chessground keeps each board's place on the page; a pocket row above a
+    // board moves it without resizing it, so a change there re-measures too.
+    const resized = new ResizeObserver(() => { for (const name of BOARDS) this.cg[name].redrawAll(); });
+    resized.observe(this.el('board-A'));
+    for (const name of BOARDS) resized.observe(this.el(`player-top-${name}`));
   }
 
   private el(id: string): HTMLElement { return document.getElementById(`${this.prefix}-${id}`)!; }
@@ -175,39 +180,21 @@ export class Boards {
     who.className = 'who';
     who.textContent = `Player ${SEAT[name][colour]}${view.turn === colour && view.check ? ' · Check' : ''}`;
     box.append(dot, who);
-    const pocket = view.pockets[colour];
-    for (const p of ['p', 'n', 'b', 'r', 'q']) {
-      const count = [...pocket].filter((c) => c.toLowerCase() === p).length;
-      if (!count) continue;
-      const letter = p.toUpperCase();
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'bb-pocket';
-      button.append(pieceImage(colour === 'white' ? letter : p), document.createTextNode(String(count)));
-      button.setAttribute('aria-label', `Player ${SEAT[name][colour]}: ${count} ${PIECE_NAMES[p]} in reserve`);
-      button.setAttribute('aria-pressed', String(this.dropping?.board === name && this.dropping.letter === letter));
-      button.disabled = !!view.disabled || view.turn !== colour || !this.dropTargets(view, letter).length;
-      if (!button.disabled) {
-        // Pressing and dragging carries the piece onto the board, as on Lichess;
-        // a plain click picks it up for the next square clicked. Mouse and touch
-        // events, as Lichess's reserves use: chessground follows the drag through
-        // them, and cancelling a pointerdown would suppress exactly those.
-        const pickUp = (e: MouseEvent | TouchEvent) => {
-          if (e instanceof MouseEvent && e.button !== 0) return;
-          e.preventDefault();
-          this.cg[name].dragNewPiece({ role: ROLES[p], color: colour } as Piece, e);
-        };
-        button.addEventListener('mousedown', pickUp);
-        button.addEventListener('touchstart', pickUp, { passive: false });
-        button.onclick = () => {
-          const same = this.dropping?.board === name && this.dropping.letter === letter;
-          for (const other of BOARDS) this.cg[other].selectSquare(null);
-          this.dropping = same ? null : { board: name, letter };
-          this.render();
-        };
-      }
-      box.append(button);
-    }
+    const playable = !view.disabled && view.turn === colour;
+    box.append(renderPocket({
+      colour,
+      pocket: view.pockets[colour],
+      owner: `Player ${SEAT[name][colour]}`,
+      selected: this.dropping?.board === name ? this.dropping.letter : null,
+      usable: (letter) => playable && this.dropTargets(view, letter).length > 0,
+      onDrag: (piece, e) => this.cg[name].dragNewPiece(piece, e),
+      onPick: (letter) => {
+        const same = this.dropping?.board === name && this.dropping.letter === letter;
+        for (const other of BOARDS) this.cg[other].selectSquare(null);
+        this.dropping = same ? null : { board: name, letter };
+        this.render();
+      },
+    }));
   }
 
   private moved(name: BoardName, orig: Key, dest: Key) {

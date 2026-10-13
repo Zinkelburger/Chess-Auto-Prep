@@ -64,7 +64,7 @@ try {
   };
   await playRow('A', 'e4', 'B'); await playRow('A', 'd5', 'A'); await playRow('A', 'exd5', 'B');
   await playRow('B', 'e4', 'C');
-  await page.click('#bdb-player-bottom-B .bb-pocket');  // C's pawn from the capture on board 1
+  await page.click('#bdb-player-bottom-B .zh-slot:not(:disabled)');  // C's pawn from the capture on board 1
   await page.click('#bdb-board-B [data-square="e6"]');
   await page.waitForFunction(() => document.querySelector('#bdb-mover-B').textContent === 'Move: Player D');
   await page.click('#bdb-prev-A');

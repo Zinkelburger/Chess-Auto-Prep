@@ -26,7 +26,9 @@ async function module(): Promise<Wasm> {
   if (!modulePromise) {
     modulePromise = (async () => {
       progress('Loading the browser engine…');
-      const url = directory + 'hivemind.mjs';
+      // A full URL: Vite's dev server rewrites a root path to `?import` and
+      // then refuses it as a file from public/; a build never touches it.
+      const url = new URL(directory + 'hivemind.mjs', self.location.href).href;
       const { default: createHivemind } = await import(/* @vite-ignore */ url);
       const engine: Wasm = await createHivemind();
       engine.ccall('bh_init', null, [], []);

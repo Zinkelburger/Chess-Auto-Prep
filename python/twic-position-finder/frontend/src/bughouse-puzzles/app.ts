@@ -5,18 +5,21 @@
  * key map follow the Tactics Trainer: a wrong move shows briefly and is
  * taken back, a right one gets the defender's reply, and View solution
  * plays out the rest. The current puzzle's id lives in the URL hash.
+ *
+ * Solving shows only the board, the task and the moves; choosing puzzles,
+ * progress and the notes on the set live in the Settings sheet.
  */
 import type { Colour } from '../bughouse/types';
 import { PuzzleBoard } from './board';
-import { Attempt, formatTimeControl, inCheck, labLink, type Puzzle } from './puzzle';
+import { Attempt, inCheck, labLink, type Puzzle } from './puzzle';
 import {
-  DEFAULT_FILTER, DIFFICULTIES, DIFFICULTY_LABELS, KIND_LABELS, LENGTHS, PuzzleStore, applyFilter, facetCounts,
+  DEFAULT_FILTER, DIFFICULTIES, DIFFICULTY_LABELS, LENGTHS, PuzzleStore, applyFilter, facetCounts,
   lengthLabel, normalizeFilter, parseHash, puzzleHash, themeCounts, themeLabel,
   type Filter, type IndexEntry, type KindFilter, type PuzzleIndex,
 } from './set';
 
 type Outcome = 'win' | 'fail';
-type Feedback = 'turn' | 'good' | 'bad' | 'win' | 'fail' | 'revealed' | 'error';
+type Feedback = 'intro' | 'turn' | 'good' | 'bad' | 'win' | 'fail' | 'revealed' | 'error';
 type State = 'loading' | 'ready' | 'error' | 'empty';
 /** Theme chips shown before "more" expands the facet. */
 const THEME_CAP = 8;
@@ -83,7 +86,7 @@ export class BughousePuzzlesApp {
       return;
     }
     this.all = index.puzzles;
-    $('bp-source').textContent = `${index.count} puzzles from ${index.source}, generated ${index.generated}. Fairy-Stockfish found and checked each one with the reserves frozen. Your results are kept in this browser only.`;
+    $('bp-source').textContent = `${index.count} puzzles from ${index.source}. Your results are kept in this browser only.`;
     if (!this.board) {
       this.board = new PuzzleBoard($('bp-board'), { top: $('bp-seat-top'), bottom: $('bp-seat-bottom') }, (uci) => this.onMove(uci));
       this.board.preferredPromotion = (options) => {
@@ -108,11 +111,11 @@ export class BughousePuzzlesApp {
     $('bp-solution').onclick = () => this.reveal();
     $('bp-retry-load').onclick = () => { if (this.all.length) this.go(this.index); else void this.start(); };
     $('bp-clear-filters').onclick = () => this.applyFilter({ ...DEFAULT_FILTER }, this.list[this.index]?.id ?? null);
-    $('bp-copy-link').onclick = () => void this.copyLink();
-    $('bp-filters-toggle').onclick = () => {
-      const open = $('bp-filters').classList.toggle('open');
-      $('bp-filters-toggle').setAttribute('aria-expanded', String(open));
-    };
+    const sheet = $<HTMLDialogElement>('bp-settings');
+    $('bp-settings-open').onclick = () => sheet.showModal();
+    $('bp-settings-close').onclick = () => sheet.close();
+    // A click on the backdrop (the dialog itself, outside its content) closes it.
+    sheet.addEventListener('click', (e) => { if (e.target === sheet) sheet.close(); });
     window.addEventListener('hashchange', () => {
       const id = parseHash(location.hash);
       const at = id ? this.list.findIndex((e) => e.id === id) : -1;
@@ -120,6 +123,7 @@ export class BughousePuzzlesApp {
     });
     document.addEventListener('keydown', (e) => {
       if ((e.target as HTMLElement).matches('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
+      if ($<HTMLDialogElement>('bp-settings').open) return;
       const key = e.key.toLowerCase();
       if (e.key === 'ArrowUp' || key === 'p') { e.preventDefault(); this.go(this.index - 1); }
       else if (e.key === 'ArrowDown' || key === 's') { e.preventDefault(); this.next(); }
@@ -139,22 +143,6 @@ export class BughousePuzzlesApp {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(this.saved)); } catch { /* not kept; fine */ }
   }
 
-  private async copyLink() {
-    const id = this.list[this.index]?.id;
-    if (!id) return;
-    const url = `${location.origin}${location.pathname}${puzzleHash(id)}`;
-    const label = $('bp-copy-label');
-    const button = $('bp-copy-link');
-    try {
-      await navigator.clipboard.writeText(url);
-      label.textContent = 'Copied';
-      button.classList.add('copied');
-    } catch {
-      label.textContent = 'Copy failed';
-    }
-    setTimeout(() => { label.textContent = 'Copy link'; button.classList.remove('copied'); }, 1500);
-  }
-
   // ── Filters ────────────────────────────────────────────────────
 
   private applyFilter(filter: Filter, keep: string | null) {
@@ -165,7 +153,7 @@ export class BughousePuzzlesApp {
       this.clearTimer();
       this.attempt = null;
       this.setState('empty');
-      this.say('turn', 'No puzzles match', 'Loosen a filter to continue.');
+      this.say('turn', 'No puzzles match', 'Change the settings to continue.');
       this.setText('.bp-counter', '0 / 0');
       for (const id of ['bp-prev', 'bp-next', 'bp-retry', 'bp-solution']) $<HTMLButtonElement>(id).disabled = true;
       this.renderSession();
@@ -191,21 +179,21 @@ export class BughousePuzzlesApp {
     const lengths = facetCounts(this.all, f, 'length', ['all', ...LENGTHS]);
     const lengthChips = LENGTHS.filter((l) => facetCounts(this.all, { ...DEFAULT_FILTER, kind: f.kind }, 'length', [l]).get(l))
       .map((l) => ({ value: l, label: lengthLabel(l, f.kind), count: lengths.get(l) ?? 0, checked: f.length === l }));
-    this.renderFacet($('bp-length'), 'bp-length', [{ value: 'all', label: 'Any length', count: lengths.get('all') ?? 0, checked: f.length === 'all' }, ...lengthChips],
+    this.renderFacet($('bp-length'), 'bp-length', [{ value: 'all', label: 'Any', count: lengths.get('all') ?? 0, checked: f.length === 'all' }, ...lengthChips],
       (v) => this.change({ length: v as Filter['length'] }));
 
     const difficulties = facetCounts(this.all, f, 'difficulty', ['all', ...DIFFICULTIES]);
     this.renderFacet($('bp-difficulty'), 'bp-difficulty', [
-      { value: 'all', label: 'Any level', count: difficulties.get('all') ?? 0, checked: f.difficulty === 'all' },
+      { value: 'all', label: 'Any', count: difficulties.get('all') ?? 0, checked: f.difficulty === 'all' },
       ...DIFFICULTIES.map((d) => ({ value: String(d), label: DIFFICULTY_LABELS[d], count: difficulties.get(d) ?? 0, checked: f.difficulty === d })),
     ], (v) => this.change({ difficulty: v === 'all' ? 'all' : (Number(v) as 1 | 2 | 3) }));
 
     const missed = facetCounts(this.all, f, 'missed', [true]).get(true) ?? 0;
     const box = $('bp-missed');
-    box.replaceChildren(this.chip('checkbox', 'bp-missed', 'missed', 'Missed in the game', missed, f.missed, () => this.change({ missed: !f.missed })));
+    box.replaceChildren(this.chip('checkbox', 'bp-missed', 'missed', 'Only ones the player missed', missed, f.missed, () => this.change({ missed: !f.missed })));
 
     const themes = themeCounts(this.all, f).filter(([, n]) => n > 0);
-    $('bp-theme').hidden = themes.length < 2 && !f.theme;
+    $('bp-theme-setting').hidden = themes.length < 2 && !f.theme;
     const active = [f.kind !== 'all', f.length !== 'all', f.difficulty !== 'all', !!f.theme, f.missed].filter(Boolean).length;
     const activeEl = $('bp-filter-active');
     activeEl.hidden = !active;
@@ -213,7 +201,7 @@ export class BughousePuzzlesApp {
     // Only the commonest themes show at first, so the board stays above the fold.
     const shown = this.themesOpen ? themes : themes.filter(([t], i) => i < THEME_CAP || t === f.theme);
     this.renderFacet($('bp-theme'), 'bp-theme', [
-      { value: '', label: 'Any theme', count: applyFilter(this.all, { ...f, theme: null }).length, checked: !f.theme },
+      { value: '', label: 'Any', count: applyFilter(this.all, { ...f, theme: null }).length, checked: !f.theme },
       ...shown.map(([t, n]) => ({ value: t, label: themeLabel(t), count: n, checked: f.theme === t })),
     ], (v) => this.change({ theme: v || null }));
     if (themes.length > THEME_CAP) {
@@ -290,7 +278,7 @@ export class BughousePuzzlesApp {
     if (intro) {
       // Show the board before the opponent's move, then let chessground animate it in.
       this.renderBoard(false, intro);
-      this.say('turn', 'Their move', 'Watch what just happened.');
+      this.say('intro');
       this.timer = setTimeout(() => {
         this.timer = null;
         this.say('turn');
@@ -357,7 +345,7 @@ export class BughousePuzzlesApp {
     this.say(revealed ? 'revealed' : a.failed ? 'fail' : 'win');
     this.renderBoard();
     this.renderSession();
-    this.renderThemes(true);
+    $('bp-lab-link').hidden = false;
   }
 
   private clearTimer() {
@@ -369,7 +357,6 @@ export class BughousePuzzlesApp {
 
   private renderBoard(showWrong = false, intro: Attempt['pos'] | null = null) {
     const a = this.attempt!;
-    const p = a.puzzle;
     let pos = intro ?? a.pos;
     let last = intro ? [] : a.last;
     if (showWrong && this.wrong) {
@@ -387,7 +374,6 @@ export class BughousePuzzlesApp {
       legal: this.timer || intro || a.done ? [] : a.legal(),
       last,
       check: !showWrong && !intro && inCheck(a.pos),
-      players: { white: { name: p.white, rating: p.welo }, black: { name: p.black, rating: p.belo } },
     });
   }
 
@@ -401,69 +387,20 @@ export class BughousePuzzlesApp {
 
   private renderPuzzle() {
     const a = this.attempt!;
-    const p = a.puzzle;
     this.renderNav();
-    const task = $('bp-task');
-    task.replaceChildren();
-    if (p.kind === 'mate') {
-      task.textContent = `${sideName(a.solver)} mates in ${p.mate}`;
-    } else {
-      const sep = document.createElement('span');
-      sep.className = 'sep';
-      sep.textContent = '·';
-      task.append(`${sideName(a.solver)} to play`, sep, 'find the best move');
-    }
-    $('bp-players').innerHTML = '';
-    const players = $('bp-players');
-    const side = (name: string, elo: number) => {
-      const s = document.createElement('span');
-      s.textContent = name;
-      const r = document.createElement('span');
-      r.className = 'rating';
-      r.textContent = String(elo);
-      s.append(r);
-      return s;
-    };
-    const vs = document.createElement('span');
-    vs.className = 'vs';
-    vs.textContent = '–';
-    players.append(side(p.white, p.welo), vs, side(p.black, p.belo));
-    $('bp-game-sub').textContent = `Board ${p.board} · FICS game ${p.game} · ${p.date.replace(/\./g, '-')} · ${formatTimeControl(p.tc)}`;
-    $<HTMLAnchorElement>('bp-lab-link').href = labLink(p, a.solver);
-    this.renderThemes(false);
+    const link = $<HTMLAnchorElement>('bp-lab-link');
+    link.href = labLink(a.puzzle, a.solver);
+    link.hidden = true;
     this.renderLine();
   }
 
-  private inGameSentence(): string {
+  /** What to find, in lila's words: the task under the feedback title. */
+  private task(): string {
     const a = this.attempt!;
-    const p = a.puzzle;
-    const who = sideName(a.solver);
-    if (p.found) return `In the game, ${who} found it.`;
-    return p.played ? `In the game, ${who} played ${p.played}.` : 'The game ended here.';
-  }
-
-  /** Kind and difficulty are safe to show at once; the themes would give the idea away. */
-  private renderThemes(solved: boolean) {
-    const a = this.attempt!;
-    const p = a.puzzle;
-    const tags = $('bp-tags');
-    tags.replaceChildren();
-    const badge = (text: string, cls = '') => {
-      const b = document.createElement('span');
-      b.className = `badge ${cls}`.trim();
-      b.textContent = text;
-      return b;
-    };
-    tags.append(badge(KIND_LABELS[p.kind]), badge(DIFFICULTY_LABELS[p.difficulty], p.difficulty === 3 ? 'badge-warn' : p.difficulty === 1 ? 'badge-ok' : ''));
-    const box = $('bp-puzzle-themes');
-    const list = p.themes.filter((t) => !/^mate$|^mateIn\d+$/.test(t) || p.kind !== 'mate');
-    box.hidden = !solved || !list.length;
-    $('bp-puzzle-theme-chips').replaceChildren(...list.map((t) => {
-      const c = document.createElement('span');
-      c.className = 'bp-chip';
-      c.textContent = themeLabel(t);
-      return c;
-    }));
+    const side = sideName(a.solver);
+    return a.puzzle.kind === 'mate'
+      ? `${side} mates in ${a.puzzle.mate}.`
+      : `Find the best move for ${side.toLowerCase()}.`;
   }
 
   private renderLine() {
@@ -519,45 +456,19 @@ export class BughousePuzzlesApp {
       return;
     }
     if (!a) return;
-    const p = a.puzzle;
-    const mate = p.kind === 'mate';
-    const total = Math.ceil(p.line.length / 2);
-    const step = Math.floor(a.ply / 2) + 1;
     const over = state === 'win' || state === 'fail' || state === 'revealed';
     $<HTMLButtonElement>('bp-solution').disabled = over;
-    const progress = total > 1 ? `Move ${Math.min(step, total)} of ${total}. ` : '';
-    switch (state) {
-      case 'turn':
-        titleEl.textContent = 'Your move';
-        subEl.textContent = mate
-          ? (a.finalStep ? `${progress}Deliver mate.` : `Check, move ${step} of ${total}. Only one keeps the mate.`)
-          : (a.finalStep && total > 1 ? `${progress}Finish it.` : `${progress}Find the best move.`);
-        break;
-      case 'good':
-        titleEl.textContent = 'Right';
-        subEl.textContent = 'Their reply…';
-        break;
-      case 'bad':
-        titleEl.textContent = mate ? (a.finalStep ? 'Not mate' : 'That doesn’t force mate') : 'Not the best move';
-        subEl.textContent = mate
-          ? (a.finalStep ? 'Look at every check, drops included.' : 'Each move must be check and leave no way out.')
-          : 'There is something stronger. Count the drops too.';
-        break;
-      case 'win':
-        titleEl.textContent = mate ? 'Checkmate' : 'Winning';
-        subEl.textContent = `Solved first time. ${this.inGameSentence()}`;
-        break;
-      case 'fail':
-        titleEl.textContent = mate ? 'Checkmate' : 'Winning';
-        subEl.textContent = `Solved after a miss. ${this.inGameSentence()}`;
-        break;
-      case 'revealed':
-        titleEl.textContent = 'Solution';
-        subEl.textContent = `Retry to play it yourself. ${this.inGameSentence()}`;
-        break;
-      case 'error':
-        break;
-    }
+    const copy: Record<Exclude<Feedback, 'error'>, [string, string]> = {
+      intro: ['Their move', this.task()],
+      turn: ['Your turn', this.task()],
+      good: ['Best move!', 'Keep going.'],
+      bad: ['Not the move', 'Try something else.'],
+      win: ['Solved!', 'First try.'],
+      fail: ['Solved', 'After a miss.'],
+      revealed: ['Solution', 'Retry to play it yourself.'],
+    };
+    if (state === 'error') return;
+    [titleEl.textContent, subEl.textContent] = copy[state];
   }
 
   private renderSession() {
@@ -566,7 +477,7 @@ export class BughousePuzzlesApp {
     const outcomes = this.list.map((p) => this.saved.outcomes[p.id]);
     const won = outcomes.filter((o) => o === 'win').length;
     const done = outcomes.filter(Boolean).length;
-    this.setText('.bp-score', done ? `${won} / ${done} solved first time` : '');
+    this.setText('.bp-score', done ? `· ${won} of ${done} first try` : '');
     this.list.forEach((p, i) => {
       const cell = document.createElement('button');
       cell.type = 'button';
