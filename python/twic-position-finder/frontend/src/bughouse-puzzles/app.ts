@@ -394,15 +394,6 @@ export class BughousePuzzlesApp {
     this.renderLine();
   }
 
-  /** What to find, in lila's words: the task under the feedback title. */
-  private task(): string {
-    const a = this.attempt!;
-    const side = sideName(a.solver);
-    return a.puzzle.kind === 'mate'
-      ? `${side} mates in ${a.puzzle.mate}.`
-      : `Find the best move for ${side.toLowerCase()}.`;
-  }
-
   private renderLine() {
     const a = this.attempt!;
     const box = $('bp-line');
@@ -449,26 +440,29 @@ export class BughousePuzzlesApp {
     const titleEl = $('bp-turn-title');
     const subEl = $('bp-turn-sub');
     const a = this.attempt;
-    if (a) $<HTMLImageElement>('bp-turn-icon').src = a.solver === 'white' ? '/piece/wK.svg' : '/piece/bK.svg';
     if (title !== undefined) {
       titleEl.textContent = title;
       subEl.textContent = sub ?? '';
+      subEl.hidden = !sub;
       return;
     }
+    subEl.hidden = true;
     if (!a) return;
     const over = state === 'win' || state === 'fail' || state === 'revealed';
     $<HTMLButtonElement>('bp-solution').disabled = over;
-    const copy: Record<Exclude<Feedback, 'error'>, [string, string]> = {
-      intro: ['Their move', this.task()],
-      turn: ['Your turn', this.task()],
-      good: ['Best move!', 'Keep going.'],
-      bad: ['Not the move', 'Try something else.'],
-      win: ['Solved!', 'First try.'],
-      fail: ['Solved', 'After a miss.'],
-      revealed: ['Solution', 'Retry to play it yourself.'],
+    // One line: whose move it is while solving, then only the verdict.
+    const toMove = `${sideName(a.solver)} to move`;
+    const copy: Record<Exclude<Feedback, 'error'>, string> = {
+      intro: toMove,
+      turn: toMove,
+      good: 'Best move!',
+      bad: 'Not the move',
+      win: 'Solved!',
+      fail: 'Solved after a miss',
+      revealed: 'Solution',
     };
     if (state === 'error') return;
-    [titleEl.textContent, subEl.textContent] = copy[state];
+    titleEl.textContent = copy[state];
   }
 
   private renderSession() {

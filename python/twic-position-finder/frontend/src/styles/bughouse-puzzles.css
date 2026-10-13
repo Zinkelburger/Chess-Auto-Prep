@@ -41,6 +41,8 @@
 .bp[data-state="loading"] .bp-side > :not(.bp-feedback, .bp-head) { opacity: 0.45; pointer-events: none; }
 
 /* ── Feedback: the one authored motion moment ─────────────────── */
+/* One line, no icon; a fixed height so a verdict never moves the buttons. */
+.bp-feedback { min-height: 64px; }
 .bp-feedback { transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
 .bp-feedback .turn-title { transition: color 0.2s; }
 .bp-feedback.is-fresh .turn-text { animation: bp-rise 0.2s cubic-bezier(0.16, 1, 0.3, 1); }

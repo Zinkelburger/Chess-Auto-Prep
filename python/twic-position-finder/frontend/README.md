@@ -126,7 +126,7 @@ app.ts          page controller: play, reply, Solution, Retry, #<id> deep links,
 ```
 
 Solving shows only the board, its two pockets, one feedback box in lila's
-words ("Your turn", "Black mates in 2."), the moves and four buttons; who
+words ("Black to move", then "Best move!" or "Solved!"; no mate count and no icon), the moves and four buttons; who
 played the game and whether they found the move stay out of the way. The link
 to both boards in Bughouse Lab appears once a puzzle is over.
 
