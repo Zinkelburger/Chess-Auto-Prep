@@ -22,7 +22,7 @@ import type { ParsedPgn, PgnEval } from './pgn';
 import type { TacticsStore } from './store';
 import { effectiveCp, severityOf, winPercent, winningChances, type Severity } from './win-chances';
 
-export type Source = 'lichess' | 'chesscom';
+export type Source = 'lichess' | 'chesscom' | 'pgn';
 
 /** How bad a move has to be to become a puzzle. */
 export type MinSeverity = 'mistake' | 'inaccuracy';
@@ -185,7 +185,7 @@ function fenAfter(fen: string, uci: string): string | null {
 }
 
 function collectSites(game: ParsedPgn, userColor: 'w' | 'b'): { sites: Site[]; sans: string[] } {
-  const chess = new Chess();
+  const chess = new Chess(game.headers.FEN);
   const sites: Site[] = [];
   const sans: string[] = [];
   let prevEval: PgnEval | null = null;

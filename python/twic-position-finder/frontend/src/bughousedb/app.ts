@@ -10,9 +10,10 @@ import { ExpectimaxTables } from '../bughouse/expectimax';
  */
 import { EnginePool, type BrowserEngine, type NodeSearchResult } from '../bughouse/engine';
 import {
-  BOARDS, Boards, LineView, Lines, SEAT, SetupBoxes, readBoard, squaresOf,
+  BOARDS, Boards, LineView, Lines, SEAT, SetupBoxes, squaresOf,
   type BoardName, type BoardView, type Colour, type LineMove,
 } from '../bughouse/boards';
+import { readBoard } from '../bughouse/setup';
 import {
   ApiError, bookPosition, bookTicket, bookUpload,
   type BookUpload, type BookMove, type BookPosition, type BookScore, type Clock, type RawSearch, type Team,

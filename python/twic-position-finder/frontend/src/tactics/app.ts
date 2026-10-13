@@ -13,6 +13,10 @@ import { fetchChesscomGames, fetchLichessGames, SourceError, type SourceGame } f
 import { ALL_TIME_CLASSES, LIMITS, loadSettings, saveSettings, type Settings } from './settings';
 import { puzzlesAtSeverity, recordSatisfies, TacticsStore } from './store';
 import { SEVERITY_GLYPH } from './win-chances';
+import { parsePgnAsync } from '../prep/pgn-client';
+import { writePgn } from '../prep/pgn';
+import { parsePgn } from './pgn';
+import { workspaceStore } from '../prep/storage';
 import { Chess } from 'chess.js';
 
 type PuzzleOutcome = 'pending' | 'win' | 'fail';
@@ -40,6 +44,9 @@ const TIME_LABEL: Record<string, string> = {
 };
 
 export class TacticsApp {
+  private localPgn = '';
+  private sessionWrites: Promise<void> = Promise.resolve();
+  private sessionTimer: ReturnType<typeof setTimeout> | undefined;
   private settings = loadSettings();
   private readonly store = new TacticsStore();
   private pool: EnginePool | null = null;
@@ -79,7 +86,63 @@ export class TacticsApp {
     this.bindSetup();
     this.bindAnalysis();
     this.bindTrain();
-    this.warmEngine();
+    this.bindLocal();
+    void this.restoreSession();
+    window.addEventListener('pagehide', () => { this.abort?.abort(); this.pool?.dispose(); this.pool = null; });
+  }
+
+  private bindLocal(): void {
+    const accept = (text: string, name: string) => {
+      this.localPgn = text;
+      $('tactics-pgn-name').textContent = name + ' · usernames and time controls are ignored for this PGN.';
+      $('clear-tactics-pgn').hidden = false;
+    };
+    $('tactics-pgn').addEventListener('change', async () => {
+      const file = $<HTMLInputElement>('tactics-pgn').files?.[0];
+      if (!file) return;
+      try {
+        if (file.size > 10 * 1024 * 1024) throw new Error('Open a PGN smaller than 10 MB.');
+        const text = await file.text(); await parsePgnAsync(text); accept(text, file.name);
+      } catch (error) { this.flashSetup((error as Error).message, 'error'); }
+    });
+    $('clear-tactics-pgn').onclick = () => { this.localPgn = ''; $<HTMLInputElement>('tactics-pgn').value = ''; $('tactics-pgn-name').textContent = ''; $('clear-tactics-pgn').hidden = true; };
+    try { const text = sessionStorage.getItem('cap-tactics-import'); if (text) { accept(text, 'PGN from the viewer'); sessionStorage.removeItem('cap-tactics-import'); } } catch { /* File import remains available. */ }
+  }
+
+  private async localGames(): Promise<SourceGame[]> {
+    if (!this.localPgn) return [];
+    const games = await parsePgnAsync(this.localPgn);
+    const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(this.localPgn)))].map(b => b.toString(16).padStart(2, '0')).join('');
+    return games.map((game, i) => {
+      const parsed = parsePgn(writePgn([game])), h = parsed.headers, id = hash + ':' + i;
+      return { source: 'pgn', id, parsed, meta: { source: 'pgn', id, url: '', white: h.White || 'White', black: h.Black || 'Black', whiteElo: null, blackElo: null, result: game.result, date: h.Date || '', timeClass: '', moves: parsed.moves.map(m => m.san) } };
+    });
+  }
+
+  private persistSession(): void {
+    clearTimeout(this.sessionTimer);
+    this.sessionTimer = setTimeout(() => {
+      const value = structuredClone({ version: 1, puzzles: this.puzzles, outcomes: this.outcomes, index: this.index });
+      this.sessionWrites = this.sessionWrites.then(async () => {
+        try { await workspaceStore('write', value, 'tactics'); $('tactics-save').textContent = 'Training saved in this browser.'; }
+        catch { $('tactics-save').textContent = 'Training could not be saved in this browser.'; }
+      });
+    }, 200);
+  }
+
+  private async restoreSession(): Promise<void> {
+    try {
+      const saved = await workspaceStore('read', undefined, 'tactics') as { version: number; puzzles: Puzzle[]; outcomes: PuzzleOutcome[]; index: number } | undefined;
+      if (!saved || saved.version !== 1 || !Array.isArray(saved.puzzles) || !saved.puzzles.length || this.analysing) return;
+      if (!Array.isArray(saved.outcomes) || saved.outcomes.length !== saved.puzzles.length) return;
+      for (const puzzle of saved.puzzles) { new Chess(puzzle.fen); if (!Array.isArray(puzzle.bestLineUci) || !puzzle.game) return; }
+      $('resume-tactics').hidden = false;
+      $('resume-tactics').onclick = () => {
+        this.puzzles = saved.puzzles; this.outcomes = saved.outcomes;
+        this.index = Math.max(0, Math.min(saved.puzzles.length - 1, saved.index || 0));
+        this.enterTraining();
+      };
+    } catch { /* A failed/corrupt save never prevents a fresh session. */ }
   }
 
   // ── View switching ───────────────────────────────────────────
@@ -146,11 +209,11 @@ export class TacticsApp {
       minSeverity: $<HTMLSelectElement>('f-severity').value === 'inaccuracy' ? 'inaccuracy' : 'mistake',
       autoNext: this.settings.autoNext,
     };
-    if (!s.lichessUser && !s.chesscomUser) {
-      this.flashSetup('Enter a Lichess or Chess.com username.', 'error');
+    if (!s.lichessUser && !s.chesscomUser && !this.localPgn) {
+      this.flashSetup('Open a PGN or enter a Lichess or Chess.com username.', 'error');
       return null;
     }
-    if (s.timeClasses.length === 0) {
+    if (!this.localPgn && s.timeClasses.length === 0) {
       this.flashSetup('Pick at least one time control.', 'error');
       return null;
     }
@@ -180,14 +243,6 @@ export class TacticsApp {
       });
     }
     return this.pool;
-  }
-
-  /** Boot the engine as soon as the page opens so the first run has no wait. */
-  private warmEngine(): void {
-    const pool = this.ensurePool(this.settings.workers);
-    pool.start().catch((err: Error) => {
-      $('engine-status').textContent = `Engine failed to load: ${err.message}`;
-    });
   }
 
   // ── Analysis run ─────────────────────────────────────────────
@@ -222,9 +277,15 @@ export class TacticsApp {
     $('setup-alert').hidden = true;
     const s = this.readSettings();
     if (!s) return;
+    let local: SourceGame[] = [];
+    $<HTMLButtonElement>('btn-start').disabled = true;
+    try { local = await this.localGames(); } catch (error) { this.flashSetup((error as Error).message, 'error'); return; }
+    finally { $<HTMLButtonElement>('btn-start').disabled = false; }
     this.settings = s;
     saveSettings(s);
 
+    const localSide = document.querySelector<HTMLInputElement>('input[name=pgn-side]:checked')!.value as 'w' | 'b';
+    $('resume-tactics').hidden = true;
     // Reset session
     this.cancel(false);
     this.puzzles = [];
@@ -238,7 +299,7 @@ export class TacticsApp {
     pool.start().catch(() => { /* reported via evaluate() */ });
 
     $('an-title').textContent = 'Fetching games…';
-    $('an-sub').textContent = [s.lichessUser && `Lichess: ${s.lichessUser}`, s.chesscomUser && `Chess.com: ${s.chesscomUser}`]
+    $('an-sub').textContent = local.length ? 'PGN from this device' : [s.lichessUser && `Lichess: ${s.lichessUser}`, s.chesscomUser && `Chess.com: ${s.chesscomUser}`]
       .filter(Boolean).join(' · ');
     $('an-games').textContent = '0 / 0';
     $('an-found').textContent = '0';
@@ -254,19 +315,19 @@ export class TacticsApp {
     // not sink the other.
     const notes: string[] = [];
     const fetches: Promise<SourceGame[]>[] = [];
-    if (s.lichessUser) {
+    if (!local.length && s.lichessUser) {
       fetches.push(fetchLichessGames(s.lichessUser, s.numGames, s.timeClasses, ctl.signal).catch((err: Error) => {
         if (err.name !== 'AbortError') notes.push(err instanceof SourceError ? err.message : 'Lichess fetch failed.');
         return [];
       }));
     }
-    if (s.chesscomUser) {
+    if (!local.length && s.chesscomUser) {
       fetches.push(fetchChesscomGames(s.chesscomUser, s.numGames, s.timeClasses, ctl.signal).catch((err: Error) => {
         if (err.name !== 'AbortError') notes.push(err instanceof SourceError ? err.message : 'Chess.com fetch failed.');
         return [];
       }));
     }
-    const games = (await Promise.all(fetches)).flat();
+    const games = local.length ? local.slice(0, s.numGames) : (await Promise.all(fetches)).flat();
     if (ctl.signal.aborted) return;
 
     if (notes.length) {
@@ -301,8 +362,8 @@ export class TacticsApp {
       while (next < games.length && !ctl.signal.aborted) {
         const i = next++;
         const g = games[i];
-        const username = g.source === 'lichess' ? s.lichessUser : s.chesscomUser;
-        const color = userColorOf(g.parsed.headers, username);
+        const username = g.source === 'pgn' ? localSide : g.source === 'lichess' ? s.lichessUser : s.chesscomUser;
+        const color = g.source === 'pgn' ? localSide : userColorOf(g.parsed.headers, username);
         try {
           if (color) {
             const key = TacticsStore.gameKey(g.source, g.id, username, s.depth);
@@ -375,6 +436,7 @@ export class TacticsApp {
     if (list.length === 0) return;
     this.puzzles.push(...list);
     this.outcomes.push(...list.map((): PuzzleOutcome => 'pending'));
+    this.persistSession();
     $('an-found').textContent = String(this.puzzles.length);
     $<HTMLButtonElement>('btn-train-now').disabled = false;
     if (!this.views.train.hidden) {
@@ -577,14 +639,14 @@ export class TacticsApp {
     $('tr-players').textContent = `${g.white}${elo(g.whiteElo)} – ${g.black}${elo(g.blackElo)}`;
     const res = $('tr-result');
     res.textContent = g.result.replaceAll('1/2-1/2', '½–½').replaceAll('1-0', '1–0').replaceAll('0-1', '0–1');
-    const bits = [TIME_LABEL[g.timeClass] ?? g.timeClass, g.date, g.source === 'lichess' ? 'Lichess' : 'Chess.com']
+    const bits = [TIME_LABEL[g.timeClass] ?? g.timeClass, g.date, g.source === 'pgn' ? 'Imported PGN' : g.source === 'lichess' ? 'Lichess' : 'Chess.com']
       .filter(Boolean);
     $('tr-game-sub').textContent = bits.join(' · ');
     const link = $<HTMLAnchorElement>('tr-game-link');
     link.hidden = !g.url;
     link.href = g.url;
     const analyse = $<HTMLAnchorElement>('tr-analyse-link');
-    analyse.href = `https://lichess.org/analysis/standard/${p.fen.replaceAll(' ', '_')}?color=${p.color}`;
+    analyse.href = `/pgn/?fen=${encodeURIComponent(p.fen)}`;
 
     const playedNo = `${p.moveNumber}${p.color === 'white' ? '.' : '…'}`;
     const glyph = SEVERITY_GLYPH[p.severity];
@@ -775,6 +837,7 @@ export class TacticsApp {
 
   /** Lila-style session strip: one cell per puzzle, click to jump. */
   private renderSession(): void {
+    this.persistSession();
     const strip = $('tr-session');
     strip.replaceChildren();
     const won = this.outcomes.filter((o) => o === 'win').length;

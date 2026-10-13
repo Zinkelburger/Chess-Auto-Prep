@@ -1,0 +1,97 @@
+/* Bughouse Puzzles. Solving is the board, lila's pockets above and below
+   it, one feedback box, the moves and four buttons; choosing puzzles and the
+   notes on the set live in the Settings sheet. The shared trainer vocabulary
+   (turn box, SAN tokens, session strip) comes from trainer.css, the board and
+   the pocket from bughouse-board.css. */
+
+/* ── Layout: the board as large as the window allows ──────────── */
+/* The column is the board plus two pockets, each an eighth of the board. */
+.bp { --bp-board: clamp(300px, calc((100dvh - var(--nav-h) - 128px) / 1.25), 720px); }
+.bp-layout { display: grid; grid-template-columns: var(--bp-board) minmax(280px, 380px); gap: 32px; align-items: start; justify-content: center; }
+.bp-board-col { min-width: 0; }
+.bp-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; position: sticky; top: calc(var(--nav-h) + 16px); padding-top: calc(var(--bp-board) / 8 + 6px); }
+@media (max-width: 800px) {
+  .bp { --bp-board: 100%; padding-top: 8px; }
+  .bp-layout { grid-template-columns: 1fr; gap: 16px; }
+  .bp-side { position: static; padding-top: 0; }
+}
+
+/* ── Pockets: the seat rows hold nothing else ─────────────────── */
+.bp-seat { display: flex; padding: 6px 0; }
+
+/* ── Board with skeleton, error and empty states ───────────────── */
+.bp-board-wrap { background: var(--bg-card); }
+.bp-board-wrap .bb-board cg-container { width: 100%; height: 100%; }
+.bp-skeleton, .bp-board-note { position: absolute; inset: 0; display: none; }
+.bp-skeleton {
+  background-color: #363d48;
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8" shape-rendering="crispEdges"><rect width="8" height="8" fill="%23363d48"/><path fill="%232f353f" d="M1 0h1v1h-1zM3 0h1v1h-1zM5 0h1v1h-1zM7 0h1v1h-1zM0 1h1v1h-1zM2 1h1v1h-1zM4 1h1v1h-1zM6 1h1v1h-1zM1 2h1v1h-1zM3 2h1v1h-1zM5 2h1v1h-1zM7 2h1v1h-1zM0 3h1v1h-1zM2 3h1v1h-1zM4 3h1v1h-1zM6 3h1v1h-1zM1 4h1v1h-1zM3 4h1v1h-1zM5 4h1v1h-1zM7 4h1v1h-1zM0 5h1v1h-1zM2 5h1v1h-1zM4 5h1v1h-1zM6 5h1v1h-1zM1 6h1v1h-1zM3 6h1v1h-1zM5 6h1v1h-1zM7 6h1v1h-1zM0 7h1v1h-1zM2 7h1v1h-1zM4 7h1v1h-1zM6 7h1v1h-1z"/></svg>');
+  background-size: 100% 100%;
+}
+.bp-skeleton::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.05) 50%, transparent 70%); background-size: 200% 100%; animation: bp-shimmer 1.6s ease-in-out infinite; }
+@keyframes bp-shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+.bp-board-note { flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 6px; padding: 24px; background: var(--bg-card); }
+.bp-board-note .btn { margin-top: 10px; }
+.bp-note-title { font-size: 1.1rem; font-weight: 600; }
+.bp-note-copy { color: var(--text-dim); font-size: 0.9rem; max-width: 28em; }
+.bp[data-state="loading"] .bp-skeleton { display: block; }
+.bp[data-state="error"] .bp-note-error, .bp[data-state="empty"] .bp-note-empty { display: flex; }
+.bp:not([data-state="ready"]) .bb-board { visibility: hidden; }
+.bp:not([data-state="ready"]) .bp-seat { visibility: hidden; }
+.bp[data-state="loading"] .bp-side > :not(.bp-feedback, .bp-head) { opacity: 0.45; pointer-events: none; }
+
+/* ── Feedback: the one authored motion moment ─────────────────── */
+/* One line, no icon; a fixed height so a verdict never moves the buttons. */
+.bp-feedback { min-height: 64px; }
+.bp-feedback { transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
+.bp-feedback .turn-title { transition: color 0.2s; }
+.bp-feedback.is-fresh .turn-text { animation: bp-rise 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes bp-rise { from { opacity: 0.4; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.bp-feedback.turn-revealed { background: var(--pick-bg); border-color: var(--pick); }
+.bp-feedback.turn-revealed .turn-title { color: var(--pick); }
+.bp-feedback.turn-error { border-color: var(--warn); }
+.bp-feedback.turn-error .turn-title { color: var(--warn); }
+@media (prefers-reduced-motion: reduce) {
+  .bp-feedback, .bp-feedback .turn-text, .bp-skeleton::after { animation: none; transition: none; }
+}
+
+/* ── Side: title bar, feedback, moves, buttons ────────────────── */
+.bp-head { display: flex; align-items: center; gap: 12px; }
+.bp-title { font-size: 1.05rem; font-weight: 600; margin: 0; letter-spacing: 0; }
+.bp-counter { font-family: var(--mono); font-size: 0.9rem; color: var(--text-dim); }
+.bp-gear { margin-left: auto; padding: 6px 8px; gap: 4px; }
+.bp-gear svg { width: 18px; height: 18px; }
+.bp-filter-active { color: var(--accent); font-size: 0.8rem; }
+.bp-line { min-height: 36px; gap: 2px 4px; margin: 0; padding: 4px 0; align-content: center; }
+.bp-line .san-num { color: var(--text-faint); font-family: var(--mono); font-size: 0.85rem; padding: 3px 0 3px 2px; align-self: center; }
+.bp-line .san-token.wrong { color: var(--danger); text-decoration: line-through; }
+.bp-controls { display: grid; grid-template-columns: auto 1fr 1fr 1.3fr; gap: 8px; }
+.bp-controls .btn { min-height: 44px; justify-content: center; }
+.bp-controls .bp-prev { padding: 0 12px; }
+.bp-controls .btn:focus-visible { outline-offset: 2px; }
+.bp-controls .btn-outline:active:not(:disabled) { background: var(--bg-raised); }
+.bp-controls .btn-primary:active:not(:disabled) { filter: brightness(0.92); }
+.bp-lab-link { font-size: 0.85rem; align-self: flex-start; }
+
+/* ── Settings sheet ───────────────────────────────────────────── */
+.bp-sheet { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(440px, 100vw); height: 100dvh; max-height: none; padding: 0; border: 0; border-left: 1px solid var(--border); background: var(--bg-card); color: var(--text); display: none; flex-direction: column; }
+.bp-sheet[open] { display: flex; animation: bp-sheet-in 0.22s cubic-bezier(0.16, 1, 0.3, 1); }
+.bp-sheet::backdrop { background: rgb(0 0 0 / 0.5); }
+@keyframes bp-sheet-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.bp-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.bp-sheet-head h2 { font-size: 1.05rem; font-weight: 600; margin: 0; }
+.bp-sheet-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+.bp-label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-dim); margin-bottom: 8px; }
+.bp-facet { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.bp-facet .choice span { padding: 6px 12px; font-size: 0.85rem; line-height: 1.3; display: inline-flex; align-items: baseline; gap: 6px; }
+.bp-facet .choice b { font-weight: 400; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.bp-facet .choice input:checked + span b { color: var(--text-dim); }
+.bp-facet .choice input:disabled + span { opacity: 0.4; cursor: not-allowed; }
+.bp-facet .choice:hover span { background: var(--bg-raised); }
+.bp-more-themes { padding: 4px 8px; font-size: 0.82rem; }
+.bp-progress { border-top: 1px solid var(--border); padding-top: 20px; }
+.bp-progress .session-strip { max-height: 132px; overflow-y: auto; padding: 2px; }
+.bp-progress .session-cell { width: 16px; height: 16px; }
+.bp-progress .session-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; transform: none; }
+.bp-source { font-size: 0.82rem; line-height: 1.5; margin: 0; }
+@media (prefers-reduced-motion: reduce) { .bp-sheet[open] { animation: none; } }

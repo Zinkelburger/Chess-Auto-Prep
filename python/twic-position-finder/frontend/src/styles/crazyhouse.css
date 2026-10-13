@@ -1,0 +1,279 @@
+/* Crazyhouse Analysis: lichess.org/analysis/crazyhouse's layout. The board on
+   the left with FEN and PGN under it; on the right a column as tall as the
+   board with a hand at each end and the engine and moves between them; the
+   move buttons under that column. Board squares and the pocket well come from
+   bughouse-board.css. In the editor the board shrinks so lila's spare-piece
+   rows fit above and below it in the same height. */
+
+/* The page scrolls like Lichess's: board and right column fill the first
+   screen, FEN and PGN sit below it. */
+main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
+
+.ch {
+  --ch-board: clamp(280px, min(calc(100dvh - var(--nav-h) - 84px), calc(100vw - 48px - 24px - 420px)), 860px);
+  --ch-slot: min(60px, calc(var(--ch-board) / 8));
+  display: grid;
+  grid-template-columns: var(--ch-board) minmax(300px, 440px);
+  grid-template-areas: 'stage side' 'under controls';
+  column-gap: 24px;
+  row-gap: 10px;
+  justify-content: center;
+  align-items: start;
+}
+.ch[data-mode="editor"] { --ch-sq: calc(var(--ch-board) / 10); }
+
+/* ── Board ─────────────────────────────────────────────────────── */
+.ch-stage { grid-area: stage; display: flex; flex-direction: column; width: var(--ch-board); height: var(--ch-board); align-items: center; }
+.ch-board-wrap { position: relative; width: var(--ch-board); height: var(--ch-board); flex: none; }
+.ch[data-mode="editor"] .ch-board-wrap { width: calc(var(--ch-sq) * 8); height: calc(var(--ch-sq) * 8); }
+.ch-board-wrap .bb-board cg-container { width: 100%; height: 100%; }
+.ch-board-wrap.ch-editing[data-brush="piece"] cg-board,
+.ch-board-wrap.ch-editing[data-brush="trash"] cg-board { cursor: crosshair; }
+
+/* lila's spare pieces: pointer, six pieces, bin; one square each. */
+.ch-spare { display: grid; grid-template-columns: repeat(8, var(--ch-sq)); height: var(--ch-sq); flex: none; background: var(--bg-card); border-radius: 4px; }
+.ch-spare button { display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--text-dim); cursor: pointer; touch-action: none; }
+.ch-spare button:hover { background: var(--bg-raised); color: var(--text); }
+.ch-spare button[aria-pressed="true"] { background: var(--accent-bg); color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+.ch-spare img { width: 100%; height: 100%; pointer-events: none; }
+.ch-spare svg { width: 46%; height: 46%; }
+
+/* Lichess's promotion picker over the board. */
+.ch-promotion { position: absolute; inset: 0; z-index: 5; background: rgb(0 0 0 / 0.5); }
+.ch-promotion-piece { position: absolute; width: 12.5%; height: 12.5%; padding: 0; border: 0; border-radius: 50%; background: radial-gradient(circle, #b0b0b0 25%, #808080 100%); cursor: pointer; transition: border-radius 0.15s, background 0.15s; }
+.ch-promotion-piece:hover { border-radius: 0; background: radial-gradient(circle, #ffffff 25%, #d64f00 100%); }
+.ch-promotion-piece img { width: 100%; height: 100%; pointer-events: none; }
+
+/* ── Right column: hand, tools, hand ──────────────────────────── */
+.ch-side { grid-area: side; position: relative; height: var(--ch-board); min-width: 0; }
+.ch-side-inner { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 8px; }
+.ch-hand { display: flex; flex-direction: column; gap: 4px; flex: none; }
+.ch-hand .zh-pocket.ch-well { width: 100%; justify-content: center; }
+.ch-well .zh-slot { flex: 0 0 var(--ch-slot); width: var(--ch-slot); border-radius: 0; }
+.ch-well .zh-slot:first-child, .ch-well .zh-slot:last-child { border-radius: 0; }
+.ch-steps { display: flex; justify-content: center; }
+.ch-step { flex: 0 0 calc(var(--ch-slot) - 6px); height: 40px; margin: 0 3px; padding: 0; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--bg-raised); color: var(--text); font: 600 1.75rem/1 var(--sans); cursor: pointer; }
+.ch-step:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.ch-step:active:not(:disabled) { background: var(--accent-bg); }
+.ch-step:disabled { opacity: 0.25; cursor: default; }
+
+.ch-tools { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.ch-analysis, .ch-editor { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ch-analysis { position: relative; }
+.ch-tools.menu-open .ch-analysis { display: none; }
+.ch-analysis.practising .ch-ceval, .ch-analysis.practising .ch-settings, .ch-analysis.practising .ch-pvs { display: none; }
+.ch[data-mode="analysis"] .ch-editor, .ch[data-mode="editor"] .ch-analysis { display: none; }
+
+/* Engine header: switch, eval, engine name and depth, gear. */
+.ch-ceval { position: relative; display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 10px; border-bottom: 1px solid var(--border); min-height: 52px; }
+.ch-ceval .ch-pearl { margin: 0 4px; }
+/* Lichess's search progress line along the bottom of the engine header. */
+.ch-bar { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; pointer-events: none; }
+.ch-bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.3s linear; }
+.ch-bar span.threat { background: var(--danger); }
+.ch-ceval.off .ch-bar { display: none; }
+#ch-threat[aria-pressed="true"] { background: var(--danger-bg, rgb(223 83 83 / 0.15)); color: var(--danger); }
+.ch-ceval.ch-threat-mode .ch-engine-name { color: var(--danger); }
+.ch-switch { position: relative; flex: none; width: 34px; height: 18px; cursor: pointer; }
+.ch-switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.ch-switch span { position: absolute; inset: 0; border-radius: 9px; background: var(--bg-raised); box-shadow: inset 0 0 0 1px var(--border-strong); transition: background 0.15s; pointer-events: none; }
+.ch-switch span::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--text-dim); transition: transform 0.15s, background 0.15s; }
+.ch-switch input:checked + span { background: var(--accent); box-shadow: none; }
+.ch-switch input:checked + span::after { transform: translateX(16px); background: #fff; }
+.ch-switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ch-pearl { min-width: 3.4em; font-size: 1.6rem; font-weight: 700; line-height: 1; text-align: center; }
+.ch-engine { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.25; }
+.ch-engine-name { font-size: 0.85rem; color: var(--text-dim); }
+.ch-engine-info { font-size: 0.8rem; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ch-engine-info.ch-failed { color: var(--danger); white-space: normal; }
+.ch-ceval.off .ch-engine-name { color: var(--text-faint); }
+.ch-spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: ch-spin 0.8s linear infinite; }
+@keyframes ch-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ch-spinner { animation-duration: 3s; } }
+
+.ch-icon { display: inline-grid; place-items: center; flex: none; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--text-dim); cursor: pointer; }
+.ch-icon svg { width: 20px; height: 20px; }
+.ch-icon:hover:not(:disabled) { background: var(--bg-raised); color: var(--text); }
+.ch-icon:disabled { opacity: 0.35; cursor: default; }
+.ch-icon[aria-pressed="true"], .ch-icon[aria-expanded="true"] { background: var(--accent-bg); color: var(--accent); }
+
+.ch-settings { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 10px; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+.ch-settings label { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--text-dim); }
+.ch-settings input[type="number"] { width: 4.6em; padding: 3px 6px; font-size: 0.88rem; }
+.ch-check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.ch-check input { margin: 0; accent-color: var(--accent); }
+
+/* Engine lines, one row each, as on Lichess. */
+.ch-pvs { flex: none; border-bottom: 1px solid var(--border); }
+.ch-pvs:empty { display: none; }
+.ch-pv { display: flex; align-items: center; gap: 2px; height: 2em; padding: 0 8px; white-space: nowrap; overflow: hidden; font-size: 0.88rem; border-top: 1px solid var(--border); }
+.ch-pv:first-child { border-top: 0; }
+.ch-pv strong { flex: none; min-width: 3.6em; margin-right: 4px; font-variant-numeric: tabular-nums; }
+.ch-pv-num { color: var(--text-faint); margin-left: 3px; }
+.ch-pv-move { padding: 1px 3px; border: 0; border-radius: 3px; background: none; color: var(--text); font: inherit; cursor: pointer; }
+.ch-pv-move:hover { background: var(--accent-bg); color: var(--accent); }
+.ch-pv-threat .ch-pv-move { cursor: default; }
+.ch-pv-threat .ch-pv-move:hover { background: var(--bg-raised); color: var(--text); }
+
+/* The position of a hovered move in an engine line, over the move list. */
+.ch-pv-board { position: absolute; left: 8px; z-index: 6; display: flex; flex-direction: column; gap: 3px; width: min(240px, calc(100% - 16px)); padding: 4px; background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: 6px; box-shadow: var(--shadow); pointer-events: none; }
+.ch-pv-board[hidden] { display: none; }
+.ch-pv-board.ch-pv-board-flipped { flex-direction: column-reverse; }
+.ch-pv-board-cg { width: 100%; height: auto; aspect-ratio: 1; }
+.ch-pv-board-cg cg-container { width: 100%; height: 100%; }
+.ch-pv-hand { display: flex; gap: 2px; min-height: 22px; align-items: center; }
+.ch-pv-hand-piece { position: relative; display: inline-flex; }
+.ch-pv-hand-piece img { width: 22px; height: 22px; }
+.ch-pv-hand-piece em { position: absolute; right: -2px; bottom: -2px; padding: 0 2px; border-radius: 3px; background: #d64f00; color: #fff; font: 700 9px/1.2 var(--sans); font-style: normal; }
+
+/* Moves: lila's column view, variations interrupting the columns. */
+.ch-moves { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: 2.4em 1fr 1fr; align-content: start; font-size: 0.95rem; }
+.ch-moves index { display: grid; place-items: center; background: var(--bg-input); color: var(--text-faint); font-size: 0.85rem; border-right: 1px solid var(--border); }
+.ch-move, .ch-empty { display: flex; align-items: center; gap: 4px; min-height: 1.9em; padding: 0 8px; border: 0; background: none; color: var(--text); font: inherit; font-weight: 600; text-align: left; }
+.ch-move { cursor: pointer; }
+.ch-empty { color: var(--text-faint); font-weight: 400; }
+.ch-move:hover { background: var(--bg-raised); }
+.ch-move.active, .ch-vmove.active { background: var(--accent-bg); color: var(--accent); }
+.ch-interrupt { grid-column: 1 / -1; padding: 4px 8px 6px 14px; background: var(--bg); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); font-size: 0.86rem; }
+.ch-line { padding: 1px 0; line-height: 1.7; }
+.ch-line + .ch-line { border-top: 1px dashed var(--border); }
+.ch-vmove { display: inline; padding: 1px 3px; border: 0; border-radius: 3px; background: none; color: var(--text-dim); font: inherit; cursor: pointer; }
+.ch-vmove:hover { background: var(--bg-raised); color: var(--text); }
+.ch-num { color: var(--text-faint); margin-right: 2px; }
+.ch-paren { color: var(--text-faint); }
+.ch-move .ch-glyph, .ch-vmove .ch-glyph { margin-left: 2px; font-weight: 700; }
+.ch-glyph-inaccuracy, .ch-move-inaccuracy { color: #56b4e9; }
+.ch-glyph-mistake, .ch-move-mistake { color: #e69f00; }
+.ch-glyph-blunder, .ch-move-blunder { color: #df5353; }
+.ch-move.active.ch-move-inaccuracy, .ch-move.active.ch-move-mistake, .ch-move.active.ch-move-blunder { color: var(--accent); }
+.ch-pending-copy { background: var(--accent-bg) !important; }
+.ch-pending-delete { text-decoration: line-through; text-decoration-color: var(--danger); background: rgb(223 83 83 / 0.12) !important; }
+.ch-fold { margin: 0 4px 0 0; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: 3px; background: var(--bg-card); color: var(--text-dim); font: inherit; font-size: 0.8rem; line-height: 1.5; cursor: pointer; }
+.ch-fold:hover { color: var(--text); border-color: var(--text-faint); }
+.ch-interrupt > .ch-fold { float: left; margin-top: 3px; }
+.ch-interrupt > .ch-fold[aria-expanded="false"] { float: none; margin-top: 0; }
+/* Inline notation: the tree as one text, as on Lichess with Shift+I. */
+.ch-moves.ch-moves-inline { display: block; padding: 6px 8px; }
+.ch-inline { line-height: 1.9; }
+.ch-inline .ch-vmove { color: var(--text); }
+.ch-inline .ch-paren + .ch-vmove, .ch-inline .ch-paren ~ .ch-vmove { color: var(--text-dim); }
+/* The moves already played from here, chosen with ↑/↓ (Lichess's fork). */
+.ch-fork { flex: none; display: flex; flex-wrap: wrap; gap: 2px 6px; padding: 6px 8px; border-top: 1px solid var(--border); font-size: 0.9rem; }
+.ch-fork[hidden] { display: none; }
+.ch-fork .ch-vmove { padding: 2px 6px; border: 1px solid var(--border); color: var(--text); }
+.ch-fork .ch-vmove.selected { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+.ch-toast { position: absolute; right: 10px; bottom: 10px; z-index: 7; margin: 0; padding: 6px 10px; border-radius: 4px; background: var(--bg-raised); border: 1px solid var(--border-strong); box-shadow: var(--shadow); font-size: 0.85rem; }
+.ch-toast[hidden] { display: none; }
+.ch-edit { margin-left: 4px; padding: 0 4px; border-radius: 3px; background: var(--warn-bg); color: var(--warn); font-size: 0.72rem; font-weight: 600; font-family: var(--mono); }
+.ch-root-edit { grid-column: 1 / -1; padding: 6px 10px; color: var(--warn); font-size: 0.85rem; border-bottom: 1px solid var(--border); }
+.ch-moves-empty { grid-column: 1 / -1; padding: 14px 12px; color: var(--text-faint); font-size: 0.9rem; }
+
+.ch-menu { position: fixed; z-index: 50; display: flex; flex-direction: column; min-width: 170px; padding: 4px; background: var(--bg-raised); border: 1px solid var(--border-strong); border-radius: 6px; box-shadow: var(--shadow); }
+.ch-menu-title { margin: 0; padding: 4px 10px 6px; color: var(--text-faint); font-size: 0.8rem; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.ch-menu button { display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 8px; border: 0; border-radius: 4px; background: none; color: var(--text); font: inherit; font-size: 0.9rem; text-align: left; cursor: pointer; }
+.ch-menu button svg { width: 15px; height: 15px; flex: none; color: var(--text-dim); }
+.ch-menu button:hover svg, .ch-menu button:focus-visible svg { color: inherit; }
+.ch-menu button:hover, .ch-menu button:focus-visible { background: var(--accent-bg); color: var(--accent); outline: none; }
+
+/* ── Practice with computer ───────────────────────────────────── */
+.ch-practice { flex: none; border-bottom: 1px solid var(--border); }
+.ch-practice[hidden] { display: none; }
+.ch-practice-head { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border-bottom: 1px solid var(--border); }
+.ch-practice-strength { flex: 1; color: var(--text-faint); font-size: 0.8rem; }
+.ch-practice-close { font-size: 1.3rem; }
+.ch-practice-feedback { display: flex; align-items: center; gap: 12px; padding: 12px; min-height: 72px; }
+.ch-practice-king { width: 44px; height: 44px; flex: none; }
+.ch-practice-icon { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 50%; background: var(--bg-raised); color: var(--text-dim); font-size: 1.4rem; font-weight: 700; }
+.ch-practice-text { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.ch-practice-text strong { font-size: 1.05rem; }
+.ch-link { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: 0.9rem; cursor: pointer; }
+.ch-link:hover { text-decoration: underline; }
+.ch-practice-comment { padding: 0 12px 12px; min-height: 1.6em; font-size: 0.95rem; }
+.ch-practice-comment:empty { display: none; }
+.ch-verdict { font-weight: 600; }
+.ch-verdict-goodMove .ch-verdict { color: #22ac38; }
+.ch-verdict-inaccuracy .ch-verdict { color: #56b4e9; }
+.ch-verdict-mistake .ch-verdict { color: #e69f00; }
+.ch-verdict-blunder .ch-verdict { color: #df5353; }
+.ch-practice-best { font-weight: 600; }
+
+/* ── ☰ menu (Lichess's action menu) ────────────────────────────── */
+.ch-action-menu { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px 14px; }
+.ch-action-menu[hidden] { display: none; }
+.ch-menu-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.ch-menu-tool { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 0; border-radius: 4px; background: none; color: var(--text); font: inherit; font-size: 0.92rem; text-align: left; cursor: pointer; }
+.ch-menu-tool svg { width: 20px; height: 20px; flex: none; color: var(--text-dim); }
+.ch-menu-tool:hover { background: var(--bg-raised); }
+.ch-menu-tool[aria-pressed="true"] { background: var(--accent-bg); color: var(--accent); }
+.ch-menu-tool[aria-pressed="true"] svg { color: var(--accent); }
+.ch-menu-heading { margin: 16px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border); color: var(--text-dim); font-size: 0.8rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.ch-menu-replay { display: flex; gap: 8px; }
+.ch-menu-choice { flex: 1; padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: 4px; background: none; color: var(--text); font: inherit; font-size: 0.9rem; cursor: pointer; }
+.ch-menu-choice:hover { background: var(--bg-raised); }
+.ch-menu-choice[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+.ch-menu-switch { position: relative; display: flex; align-items: center; gap: 8px; margin: 0; padding: 7px 2px; font-size: 0.92rem; cursor: pointer; }
+.ch-menu-switch-label { flex: 1; }
+.ch-menu-switch kbd { padding: 0 5px; border: 1px solid var(--border-strong); border-radius: 3px; color: var(--text-faint); font: 0.75rem var(--mono); }
+.ch-menu-switch input { position: absolute; right: 2px; width: 34px; height: 18px; margin: 0; opacity: 0; cursor: pointer; }
+.ch-switch-track { position: relative; flex: none; width: 34px; height: 18px; border-radius: 9px; background: var(--bg-raised); box-shadow: inset 0 0 0 1px var(--border-strong); pointer-events: none; transition: background 0.15s; }
+.ch-switch-track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--text-dim); transition: transform 0.15s, background 0.15s; }
+.ch-menu-switch input:checked + .ch-switch-track { background: var(--accent); box-shadow: none; }
+.ch-menu-switch input:checked + .ch-switch-track::after { transform: translateX(16px); background: #fff; }
+.ch-menu-switch input:focus-visible + .ch-switch-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ch-controls.replaying #ch-next { color: var(--accent); }
+
+/* Keyboard help (?). */
+.ch-help { width: min(560px, calc(100vw - 32px)); padding: 20px 24px; background: var(--bg-card); color: var(--text); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: var(--shadow); }
+.ch-help::backdrop { background: rgb(0 0 0 / 0.5); }
+.ch-help h2 { margin: 0 0 12px; font-size: 1.15rem; }
+.ch-help-close { position: absolute; top: 10px; right: 10px; font-size: 1.3rem; }
+.ch-help-keys { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0; font-size: 0.9rem; }
+.ch-help-keys dt { color: var(--text-dim); font-family: var(--mono); font-size: 0.85rem; }
+.ch-help-keys dd { margin: 0; }
+.ch-help-note { margin: 14px 0 0; color: var(--text-dim); font-size: 0.85rem; }
+
+/* ── Editor panel ──────────────────────────────────────────────── */
+.ch-editor { gap: 14px; padding: 12px; overflow-y: auto; }
+.ch-editor-tip { font-size: 0.85rem; }
+.ch-choice { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.ch-choice button { flex: 1; padding: 7px 8px; border: 0; background: none; color: var(--text-dim); font: inherit; font-size: 0.9rem; cursor: pointer; }
+.ch-choice button + button { border-left: 1px solid var(--border); }
+.ch-choice button[aria-checked="true"] { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+.ch-castling { display: grid; grid-template-columns: auto auto auto; gap: 6px 14px; justify-content: start; align-items: center; margin: 0; padding: 0; border: 0; font-size: 0.9rem; }
+.ch-castling legend { padding: 0; margin-bottom: 6px; font-size: 0.85rem; color: var(--text-dim); }
+.ch-castling > span { color: var(--text-dim); }
+.ch-castling label { white-space: nowrap; }
+.ch-editor-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.ch-editor-actions { margin-top: auto; justify-content: flex-end; }
+.ch-editor-error { min-height: 1.3em; color: var(--danger); font-size: 0.88rem; }
+
+/* ── Under the board and controls ─────────────────────────────── */
+.ch-under { grid-area: under; display: flex; flex-direction: column; gap: 6px; width: var(--ch-board); min-width: 0; }
+.ch-fen-row { display: flex; align-items: center; gap: 8px; }
+.ch-fen-row label, .ch-pgn-label { margin: 0; font-size: 0.85rem; color: var(--text-dim); }
+.ch-fen-row input { flex: 1; min-width: 0; padding: 5px 8px; font-size: 0.82rem; }
+.ch-fen-row input[aria-invalid="true"] { border-color: var(--danger); }
+.ch-under textarea { width: 100%; padding: 6px 8px; font-size: 0.8rem; resize: vertical; }
+.ch-pgn-row { display: flex; align-items: flex-start; gap: 8px; }
+.ch-pgn-row .btn { flex: none; }
+.ch-pgn-row .ch-error { flex: 1; }
+.ch-error { color: var(--danger); font-size: 0.85rem; }
+.ch-error:empty { display: none; }
+.ch-pgn-row .ch-error:empty { display: block; }
+.ch-controls { grid-area: controls; display: flex; align-items: center; gap: 4px; }
+.ch-controls-gap { flex: 1; }
+.ch-controls .ch-nav { width: 52px; height: 38px; }
+.ch-controls .ch-nav svg { width: 24px; height: 24px; }
+
+/* ── Narrow screens: one column ───────────────────────────────── */
+@media (max-width: 860px) {
+  .ch {
+    --ch-board: min(calc(100vw - 32px), 640px);
+    grid-template-columns: var(--ch-board);
+    grid-template-areas: 'top' 'stage' 'bottom' 'controls' 'tools' 'under';
+  }
+  .ch-side, .ch-side-inner { display: contents; }
+  #ch-hand-top { grid-area: top; }
+  #ch-hand-bottom { grid-area: bottom; }
+  .ch-tools { grid-area: tools; height: 60dvh; }
+}

@@ -10,7 +10,8 @@
 .bb-boards { display: flex; gap: 20px; }
 .bb-board-panel { width: var(--board); display: flex; flex-direction: column; min-height: 0; }
 
-.bb-player { display: flex; align-items: center; gap: 6px; height: 40px; }
+.bb-player { display: flex; align-items: center; gap: 6px; min-height: 40px; padding: 4px 0; }
+.bb-player .zh-pocket { margin-left: auto; }
 .bb-player .who { color: var(--text-dim); font-size: 14px; white-space: nowrap; margin-right: 4px; }
 .bb-player .turn { width: 11px; height: 11px; border-radius: 50%; flex: none; visibility: hidden; }
 .bb-player .turn.white { background: #fff; }
@@ -22,29 +23,38 @@
 /* The board itself is chessground's: its pieces (cburnett), move dots, last-move
    and selection colours come from @lichess-org/chessground's assets. That
    package's brown board is only a demo (black squares at 20% over cream), so
-   the squares and coordinates below are Lichess's brown, dimmed (#c4ab88 and
-   #8e6d51 for #f0d9b5 and #b58863) so the board does not outshine the dark
-   page around it. Coordinates are lowercase and bold inside the board, ranks at
+   the squares and coordinates below are Lichess's default brown, #f0d9b5 and
+   #b58863, at full brightness. Coordinates are lowercase and bold inside the board, ranks at
    the top right of the right-hand file and files at the bottom left of the
    bottom rank, each in the colour of the other kind of square. */
 .bb-board { width: 100%; height: 100%; }
-.bb-board cg-board { background-color: #c4ab88; background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8" shape-rendering="crispEdges"><rect width="8" height="8" fill="%23c4ab88"/><path fill="%238e6d51" d="M1 0h1v1h-1zM3 0h1v1h-1zM5 0h1v1h-1zM7 0h1v1h-1zM0 1h1v1h-1zM2 1h1v1h-1zM4 1h1v1h-1zM6 1h1v1h-1zM1 2h1v1h-1zM3 2h1v1h-1zM5 2h1v1h-1zM7 2h1v1h-1zM0 3h1v1h-1zM2 3h1v1h-1zM4 3h1v1h-1zM6 3h1v1h-1zM1 4h1v1h-1zM3 4h1v1h-1zM5 4h1v1h-1zM7 4h1v1h-1zM0 5h1v1h-1zM2 5h1v1h-1zM4 5h1v1h-1zM6 5h1v1h-1zM1 6h1v1h-1zM3 6h1v1h-1zM5 6h1v1h-1zM7 6h1v1h-1zM0 7h1v1h-1zM2 7h1v1h-1zM4 7h1v1h-1zM6 7h1v1h-1z"/></svg>'); }
-.bb-board coords { opacity: 1; font-family: var(--sans, sans-serif); font-size: 11px; font-weight: 700; line-height: 1; }
-.bb-board coords.ranks { left: auto; right: 0; top: 0; width: 100%; height: 100%; }
+.bb-board cg-board { background-color: #f0d9b5; background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8" shape-rendering="crispEdges"><rect width="8" height="8" fill="%23f0d9b5"/><path fill="%23b58863" d="M1 0h1v1h-1zM3 0h1v1h-1zM5 0h1v1h-1zM7 0h1v1h-1zM0 1h1v1h-1zM2 1h1v1h-1zM4 1h1v1h-1zM6 1h1v1h-1zM1 2h1v1h-1zM3 2h1v1h-1zM5 2h1v1h-1zM7 2h1v1h-1zM0 3h1v1h-1zM2 3h1v1h-1zM4 3h1v1h-1zM6 3h1v1h-1zM1 4h1v1h-1zM3 4h1v1h-1zM5 4h1v1h-1zM7 4h1v1h-1zM0 5h1v1h-1zM2 5h1v1h-1zM4 5h1v1h-1zM6 5h1v1h-1zM1 6h1v1h-1zM3 6h1v1h-1zM5 6h1v1h-1zM7 6h1v1h-1zM0 7h1v1h-1zM2 7h1v1h-1zM4 7h1v1h-1zM6 7h1v1h-1z"/></svg>'); }
+.bb-board coords { opacity: 1; font-family: var(--sans, sans-serif); font-size: 11px; font-weight: 700; line-height: 1; text-transform: none; }
+.bb-board coords.ranks, .bb-board coords.ranks.black { left: auto; right: 0; top: 0; width: 100%; height: 100%; }
 .bb-board coords.ranks coord { transform: none; text-align: right; padding: 2px 3px 0 0; }
-.bb-board coords.files { left: 0; bottom: 0; height: auto; text-transform: none; text-align: left; }
-.bb-board coords.files coord { padding: 0 0 2px 3px; }
-.bb-board.orientation-white .ranks :nth-child(odd), .bb-board.orientation-white .files :nth-child(even),
-.bb-board.orientation-black .ranks :nth-child(even), .bb-board.orientation-black .files :nth-child(odd) { color: #745841; }
-.bb-board.orientation-white .ranks :nth-child(even), .bb-board.orientation-white .files :nth-child(odd),
-.bb-board.orientation-black .ranks :nth-child(odd), .bb-board.orientation-black .files :nth-child(even) { color: #c4ab88; }
-.bb-board, .bb-pocket:not(:disabled) { touch-action: none; }
+.bb-board coords.files, .bb-board coords.files.black { left: 0; bottom: 0; height: auto; text-align: left; }
+.bb-board coords.files coord { padding: 0 0 2px 3px; text-transform: lowercase; }
+/* Each coordinate in the other square colour, as on Lichess. */
+.bb-board coord.coord-light { color: #b58863; }
+.bb-board coord.coord-dark { color: #f0d9b5; }
+.bb-board, .zh-slot:not(:disabled) { touch-action: none; }
 
-.bb-pocket { display: flex; align-items: center; padding: 0 5px 0 0; border: 1px solid transparent; border-radius: 4px; background: none; color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer; }
-.bb-pocket img { width: 30px; height: 30px; }
-.bb-pocket:hover:not(:disabled) { background: var(--bg-raised); }
-.bb-pocket[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-bg); }
-.bb-pocket:disabled { opacity: 1; cursor: default; }
+/* A reserve as lila's crazyhouse pocket (ui/lib/css/chess/_zh-pocket.scss):
+   five square slots in a grey inset well, counts on lila's orange accent,
+   empty slots faint in place. Its width is five eighths of the board, so a
+   slot is a board square. */
+.zh-pocket { display: flex; flex: none; width: 62.5%; background: #888; border-radius: 4px; box-shadow: 0 3px 5px rgb(0 0 0 / 0.3) inset; font-size: clamp(12px, 1.5vmin, 15px); }
+.zh-slot { position: relative; flex: 0 0 20%; aspect-ratio: 1; padding: 0; border: 0; border-radius: 0; background: none; color: #fff; cursor: default; transition: background-color 0.15s; }
+.zh-slot:first-child { border-radius: 4px 0 0 4px; }
+.zh-slot:last-child { border-radius: 0 4px 4px 0; }
+.zh-slot img { display: block; width: 100%; height: 100%; pointer-events: none; }
+.zh-slot[data-nb="0"] img { opacity: 0.1; }
+.zh-slot:disabled { opacity: 1; }
+.zh-nb { position: absolute; right: 0; bottom: 0; padding: 3px 0.3em; border-radius: 4px; background: #d64f00; box-shadow: 0 3px 4px hsl(0 0% 0% / 0.15) inset; color: #fff; font-size: 1.1em; font-weight: 700; line-height: 0.9; font-variant-numeric: tabular-nums; text-shadow: 0 1px 1px #000; }
+.zh-slot:not(:disabled) { cursor: pointer; }
+.zh-slot:not(:disabled):hover { background-color: #aaa; }
+.zh-slot[aria-pressed="true"], .zh-slot[aria-pressed="true"]:not(:disabled):hover { background-color: rgb(20 85 30 / 0.5); }
+.zh-slot:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 1; }
 
 .bb-history { list-style: none; margin: 6px 0 0; padding: 4px 0; height: 80px; overflow-y: auto; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 13px; }
 .bb-history:empty::before { content: 'No moves yet'; display: block; padding: 2px 6px; color: var(--text-faint); font-family: var(--sans); }
@@ -85,3 +95,13 @@
 }
 
 .bb-board-title { font-size: 13px; font-weight: 500; color: var(--text-dim); margin: 0; }
+
+/* lila's promotion picker (ui/lib/css/chess/_promotion.scss): the board
+   dimmed, four grey circles on the promotion file that open into squares with
+   lila's orange glow under the pointer. */
+.promotion-choice { position: absolute; inset: 0; z-index: 5; background: rgb(30 34 40 / 0.7); }
+.promotion-square { position: absolute; width: 12.5%; height: 12.5%; padding: 0; border: 0; border-radius: 50%; background: #b0b0b0; box-shadow: inset 0 0 25px 3px #808080; cursor: pointer; transition: border-radius 0.15s, box-shadow 0.15s; }
+.promotion-square img { display: block; width: 100%; height: 100%; transform: scale(0.8); transition: transform 0.15s; pointer-events: none; }
+.promotion-square:hover, .promotion-square:focus-visible { border-radius: 0; box-shadow: inset 0 0 48px 8px #d64f00; outline: none; }
+.promotion-square:hover img, .promotion-square:focus-visible img { transform: none; }
+@media (prefers-reduced-motion: reduce) { .promotion-square, .promotion-square img { transition: none; } }

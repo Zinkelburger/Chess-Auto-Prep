@@ -1,0 +1,116 @@
+---
+import Base from '../layouts/Base.astro';
+import '../styles/trainer.css';
+import '../styles/bughouse-board.css';
+import '../styles/bughouse-puzzles.css';
+
+const chevronLeft = 'M15 18l-6-6 6-6';
+const chevronRight = 'M9 18l6-6-6-6';
+const gear = 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z';
+---
+<Base
+  title="Bughouse Puzzles"
+  description="Mates and tactics from real FICS bughouse games. Your reserve is frozen: captures go to your partner and nothing new arrives."
+  wide
+>
+  <div class="bp" id="bp" data-state="loading">
+    <div class="bp-layout">
+      <section class="bp-board-col" aria-label="Board">
+        <div id="bp-seat-top" class="bp-seat bp-seat-top"></div>
+        <div class="trainer-board bp-board-wrap">
+          <div id="bp-board" class="bb-board" role="group" aria-label="Puzzle board"></div>
+          <div class="bp-skeleton" aria-hidden="true"></div>
+          <div class="bp-board-note bp-note-error" role="alert">
+            <p class="bp-note-title">Could not load the puzzles</p>
+            <p class="bp-note-copy" id="bp-error-copy">The network answered with an error.</p>
+            <button type="button" class="btn btn-outline" id="bp-retry-load">Try again</button>
+          </div>
+          <div class="bp-board-note bp-note-empty">
+            <p class="bp-note-title">No puzzles match</p>
+            <p class="bp-note-copy">Nothing in the set has every selected setting.</p>
+            <button type="button" class="btn btn-outline" id="bp-clear-filters">Show all puzzles</button>
+          </div>
+        </div>
+        <div id="bp-seat-bottom" class="bp-seat bp-seat-bottom"></div>
+      </section>
+
+      <aside class="bp-side" aria-label="Puzzle">
+        <div class="bp-head">
+          <h1 class="bp-title">Bughouse Puzzles</h1>
+          <span class="num bp-counter" aria-live="polite">— / —</span>
+          <button type="button" class="btn btn-outline btn-sm bp-gear" id="bp-settings-open" title="Settings" aria-label="Settings" aria-haspopup="dialog">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={gear}/></svg>
+            <b class="bp-filter-active num" id="bp-filter-active" hidden></b>
+          </button>
+        </div>
+
+        <div class="turn-box turn-turn bp-feedback" id="bp-turn" aria-live="polite">
+          <div class="turn-text">
+            <div class="turn-title" id="bp-turn-title">Loading</div>
+            <div class="turn-sub" id="bp-turn-sub" hidden></div>
+          </div>
+        </div>
+
+        <div class="line-moves bp-line" id="bp-line" aria-label="Moves played"></div>
+
+        <div class="bp-controls">
+          <button type="button" class="btn btn-outline bp-prev" id="bp-prev" title="Previous puzzle (P or ↑)" aria-label="Previous puzzle" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={chevronLeft}/></svg>
+          </button>
+          <button type="button" class="btn btn-outline" id="bp-solution" title="Show the solution (space)" disabled>Solution</button>
+          <button type="button" class="btn btn-outline" id="bp-retry" title="Start again (R)" disabled>Retry</button>
+          <button type="button" class="btn btn-primary" id="bp-next" title="Next puzzle (S or ↓)" disabled>
+            Next
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={chevronRight}/></svg>
+          </button>
+        </div>
+
+        <a id="bp-lab-link" class="link-ext bp-lab-link" href="/bughouse" hidden>Both boards in Bughouse Lab ↗</a>
+      </aside>
+    </div>
+
+    <dialog class="bp-sheet" id="bp-settings" aria-labelledby="bp-settings-title">
+      <div class="bp-sheet-head">
+        <h2 id="bp-settings-title">Settings</h2>
+        <button type="button" class="btn btn-primary btn-sm" id="bp-settings-close">Done</button>
+      </div>
+
+      <div class="bp-sheet-body">
+        <div class="bp-setting">
+          <span class="bp-label">Puzzles</span>
+          <div class="bp-facet" id="bp-kind" role="radiogroup" aria-label="Kind"></div>
+        </div>
+        <div class="bp-setting">
+          <span class="bp-label">Length</span>
+          <div class="bp-facet" id="bp-length" role="radiogroup" aria-label="Length"></div>
+        </div>
+        <div class="bp-setting">
+          <span class="bp-label">Level</span>
+          <div class="bp-facet" id="bp-difficulty" role="radiogroup" aria-label="Level"></div>
+        </div>
+        <div class="bp-setting" id="bp-theme-setting">
+          <span class="bp-label">Theme</span>
+          <div class="bp-facet" id="bp-theme" role="radiogroup" aria-label="Theme"></div>
+        </div>
+        <div class="bp-setting">
+          <div class="bp-facet" id="bp-missed" aria-label="In the game"></div>
+        </div>
+
+        <div class="bp-setting bp-progress">
+          <span class="bp-label">Progress <span class="dim num bp-score"></span></span>
+          <div class="session-strip scroll-thin" id="bp-session" role="list"></div>
+        </div>
+
+        <p class="dim bp-source">
+          Your reserve is frozen: captures go to your partner and nothing new arrives, so every drop has to count.
+          <span id="bp-source"></span>
+        </p>
+      </div>
+    </dialog>
+  </div>
+</Base>
+
+<script>
+  import { BughousePuzzlesApp } from '../bughouse-puzzles/app';
+  new BughousePuzzlesApp();
+</script>

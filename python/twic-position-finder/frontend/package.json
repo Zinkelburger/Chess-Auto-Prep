@@ -11,22 +11,28 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "prebuild": "npm run test:bughouse && astro check && python3 ../../../tools/bughouse_web/prepare_assets.py",
-    "predev": "python3 ../../../tools/bughouse_web/prepare_assets.py",
-    "test:bughouse": "node scripts/test-bughouse-state.mjs"
+    "prebuild": "npm run test:bughouse && npm run test:prep && npm run test:crazyhouse && astro check && python3 ../../../tools/bughouse_web/prepare_assets.py && python3 ../../../tools/prepare_prep_web.py && python3 ../../../tools/prepare_crazyhouse_web.py",
+    "predev": "python3 ../../../tools/bughouse_web/prepare_assets.py && python3 ../../../tools/prepare_prep_web.py && python3 ../../../tools/prepare_crazyhouse_web.py",
+    "test:bughouse": "node scripts/test-bughouse-state.mjs",
+    "test:prep": "node scripts/test-prep.mjs",
+    "test:prep:browser": "node scripts/test-prep-browser.mjs",
+    "test:crazyhouse": "node scripts/test-crazyhouse.mjs",
+    "test:crazyhouse:browser": "node scripts/test-crazyhouse-browser.mjs"
   },
   "dependencies": {
     "@lichess-org/chessground": "10.2.0",
+    "@lichess-org/stockfish-web": "0.5.0",
     "astro": "^6.1.0",
     "chess.js": "^1.4.0",
     "chessground": "^9.2.1",
+    "chessops": "0.15.1",
     "onnxruntime-web": "1.22.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
     "@types/node": "^26.3.0",
+    "esbuild": "0.27.4",
     "puppeteer-core": "^25.9.0",
-    "typescript": "^5.9.3",
-    "esbuild": "0.27.4"
+    "typescript": "^5.9.3"
   }
 }

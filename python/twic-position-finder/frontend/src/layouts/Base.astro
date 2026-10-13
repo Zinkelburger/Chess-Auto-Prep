@@ -14,15 +14,19 @@ const {
   title,
   wide = false,
   fill = false,
-  description = 'Chess Auto Prep — TWIC alerts, tactics from your games, Bughouse Lab, and the Charles Clock.',
+  description = 'Chess Auto Prep — TWIC alerts, tactics from your games, Bughouse Lab and puzzles, crazyhouse analysis, and the Charles Clock.',
 } = Astro.props;
 const path = Astro.url.pathname.replace(/\/$/, '') || '/';
 
 const NAV = [
+  { href: '/pgn', label: 'PGN Viewer', match: ['/pgn'] },
+  { href: '/expectimax', label: 'Expectimax', match: ['/expectimax'] },
   { href: '/twic-notifications', label: 'TWIC Alerts', match: ['/twic-notifications', '/dashboard', '/verify', '/unsubscribe'] },
   { href: '/tactics', label: 'Tactics Trainer', match: ['/tactics'] },
   { href: '/bughouse', label: 'Bughouse Lab', match: ['/bughouse'] },
+  { href: '/bughouse-puzzles', label: 'Bughouse Puzzles', match: ['/bughouse-puzzles'] },
   { href: '/bughousedb', label: 'BughouseDB', match: ['/bughousedb'] },
+  { href: '/crazyhouse', label: 'Crazyhouse', match: ['/crazyhouse'] },
   { href: '/charles-clock', label: 'Charles Clock', match: ['/charles-clock'] },
 ];
 ---
@@ -32,7 +36,7 @@ const NAV = [
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content={description} />
-  <meta name="theme-color" content="#171a1f" />
+  <meta name="theme-color" content="#1e2228" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♟</text></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -70,30 +74,31 @@ const NAV = [
 <style is:global>
   /* ── Tokens ────────────────────────────────────────────────────────
      Shared with docs/design/wireframe-style.css and the Charles Clock:
-     dark-only, slightly blue-grey neutrals, one muted steel-blue accent. */
+     dark-only, slightly blue-grey neutrals lifted a step so boards and text
+     read brightly, one muted steel-blue accent. */
   :root {
-    --bg: #171a1f;
-    --bg-card: #1f242b;
-    --bg-input: #262c35;
-    --bg-raised: #2b323c;
-    --border: #39414c;
-    --border-strong: #4a5462;
-    --text: #e6e9ee;
-    --text-dim: #9aa4b2;
-    --text-faint: #6f7987;
+    --bg: #1e2228;
+    --bg-card: #272c34;
+    --bg-input: #2f353f;
+    --bg-raised: #363d48;
+    --border: #454e5a;
+    --border-strong: #58626f;
+    --text: #eef1f5;
+    --text-dim: #aeb7c3;
+    --text-faint: #858f9c;
     --accent: #5f93cc;
     --accent-hover: #7fb0ea;
     --accent-rgb: 95, 147, 204;
-    --accent-bg: #1c2a3b;
+    --accent-bg: #233349;
     --accent-ink: #1d2229;
     --pick: #7fb0ea;
-    --pick-bg: #1e2f44;
+    --pick-bg: #253850;
     --ok: #6cc79a;
-    --ok-bg: #1c332a;
+    --ok-bg: #213a30;
     --warn: #e6c069;
-    --warn-bg: #3a3218;
+    --warn-bg: #42391d;
     --danger: #e08585;
-    --danger-bg: #3a2020;
+    --danger-bg: #432627;
     --mono: 'Source Code Pro', ui-monospace, SFMono-Regular, monospace;
     --sans: 'Source Sans 3', system-ui, -apple-system, sans-serif;
     --radius: 8px;
@@ -180,7 +185,7 @@ const NAV = [
   }
   .nav-links a:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
   .nav-links a.active { color: var(--accent); background: var(--accent-bg); }
-  @media (max-width: 760px) {
+  @media (max-width: 1180px) {
     .nav-inner { flex-direction: column; height: auto; padding: 10px 16px; gap: 6px; }
     .nav-links { flex-wrap: wrap; justify-content: center; }
     .nav-links a { font-size: 0.82rem; padding: 5px 10px; }

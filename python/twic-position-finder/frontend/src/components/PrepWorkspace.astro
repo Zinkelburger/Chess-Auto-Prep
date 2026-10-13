@@ -1,0 +1,79 @@
+---
+import Base from '../layouts/Base.astro';
+import '../styles/prep.css';
+const { mode = 'viewer' } = Astro.props;
+---
+<Base title={mode === 'search' ? 'Expectimax' : 'PGN Viewer'} wide description="Open PGNs, explore every variation, and find practical moves with Stockfish and Maia. Your files and analysis stay in your browser.">
+  <div id="prep" data-mode={mode}>
+    <header class="prep-heading">
+      <div><h1>{mode === 'search' ? 'Expectimax' : 'PGN Viewer'}</h1><p class="dim">Your board. Your files. Analysis on this device.</p></div>
+      <div class="prep-actions">
+        <label class="btn btn-primary" for="pgn-file">Open PGN<input id="pgn-file" class="visually-hidden" type="file" accept=".pgn,text/plain,application/x-chess-pgn" /></label>
+        <button class="btn btn-outline" id="export-pgn">Export PGN</button>
+      </div>
+    </header>
+    <p id="save-status" class="prep-save" role="status">Loading your last workspace…</p>
+    <details id="import-panel" class="prep-import">
+      <summary>Paste PGN or set a position</summary>
+      <label for="pgn-text">PGN games, including variations and comments</label>
+      <textarea id="pgn-text" rows="5" spellcheck="false" placeholder="1. e4 e5 2. Nf3 Nc6 (2... Nf6) *"></textarea>
+      <div class="prep-actions"><button class="btn btn-outline" id="import-pgn">Open pasted PGN</button><button class="btn btn-text" id="example-pgn">Load example</button></div>
+      <form id="fen-form" class="prep-fen"><label for="fen-input">Starting FEN</label><input id="fen-input" spellcheck="false" autocomplete="off" placeholder="Paste a FEN position" required /><button class="btn btn-outline">Set position</button></form>
+    </details>
+    <p id="prep-error" class="prep-error" role="alert" hidden></p>
+    <div class="prep-workspace">
+      <section class="prep-board-column" aria-label="Chess position">
+        <div id="prep-board" class="prep-board" role="img" aria-label="Chessboard, starting position"></div>
+        <div class="prep-navigation" role="group" aria-label="Board navigation">
+          <button class="btn btn-outline" id="first-move" title="Start (Home)">Start</button>
+          <button class="btn btn-outline" id="previous-move" title="Previous move (Left arrow)">Previous</button>
+          <button class="btn btn-outline" id="next-move" title="Next mainline move (Right arrow)">Next</button>
+          <button class="btn btn-outline" id="last-move" title="End (End)">End</button>
+          <button class="btn btn-text" id="flip-board">Flip</button>
+        </div>
+        <form id="move-form" class="prep-move-entry"><label for="move-input" class="visually-hidden">Play a move, SAN or UCI</label><input id="move-input" placeholder="Play a move: Nf3 or g1f3" autocomplete="off" spellcheck="false" required /><button class="btn btn-outline">Play</button></form>
+        <div class="prep-engine-row"><button id="analyse-position" class="btn btn-text">Analyse position</button><span id="position-score" class="mono" aria-live="polite"></span></div>
+        <p id="position-description" class="dim"></p>
+        <p id="position-comment" class="prep-comment"></p>
+      </section>
+      <section class="prep-reading" aria-label="Games and analysis">
+        <div class="prep-tabs" role="tablist" aria-label="Workspace panels"><button id="moves-tab" role="tab" aria-controls="moves-panel" aria-selected={mode !== 'search'}>Moves</button><button id="search-tab" role="tab" aria-controls="search-panel" aria-selected={mode === 'search'}>Expectimax</button></div>
+        <div id="moves-panel" role="tabpanel" aria-labelledby="moves-tab" hidden={mode === 'search'}>
+          <label for="game-filter">Find a game</label><input id="game-filter" type="search" placeholder="Player, event or date" />
+          <div id="game-list" class="prep-game-list" aria-label="Games"></div>
+          <h2 id="game-title">Analysis board</h2><p id="game-details" class="dim"></p>
+          <div id="move-tree" class="prep-moves"></div>
+          <button id="more-moves" class="btn btn-text" hidden>Show more moves</button>
+          <p class="prep-help">Click any move or variation. Use the arrow keys to step through a line. Playing a new move adds a variation.</p>
+          <a class="btn btn-text" href="/tactics/" id="train-pgn">Find tactics in this PGN</a>
+        </div>
+        <div id="search-panel" role="tabpanel" aria-labelledby="search-tab" hidden={mode !== 'search'}>
+          <h2>Prepare for human replies</h2>
+          <p class="dim">Stockfish evaluates the positions. Maia estimates which replies a player at your chosen rating will play.</p>
+          <form id="search-form">
+            <fieldset id="search-fields">
+              <div class="prep-settings">
+                <div><label for="search-side">Prepare for</label><div class="prep-side" id="search-side"><label><input type="radio" name="side" value="w" checked /> White</label><label><input type="radio" name="side" value="b" /> Black</label></div></div>
+                <div><label for="search-elo">Opponent rating</label><input id="search-elo" type="number" min="400" max="3000" step="100" value="1600" required /></div>
+                <div><label for="search-plies">Look ahead (plies)</label><input id="search-plies" type="number" min="1" max="8" value="2" required /></div>
+                <div><label for="search-depth">Stockfish depth</label><input id="search-depth" type="number" min="6" max="18" value="10" required /></div>
+              </div>
+              <details class="prep-limits"><summary>Search limits</summary><div class="prep-settings">
+                <div><label for="search-nodes">Position budget</label><input id="search-nodes" type="number" min="50" max="10000" value="1000" required /></div>
+                <div><label for="search-replies">Maximum replies</label><input id="search-replies" type="number" min="1" max="10" value="5" required /></div>
+                <div><label for="search-mass">Reply coverage (%)</label><input id="search-mass" type="number" min="50" max="100" value="90" required /></div>
+              </div><p class="prep-help">All legal moves are considered on your turns. Opponent turns retain the likeliest replies up to these limits and renormalize their shares. One ply is one player's move.</p></details>
+            </fieldset>
+            <div class="prep-actions"><button id="start-search" class="btn btn-primary">Run expectimax</button><button id="stop-search" type="button" class="btn btn-outline" disabled>Stop</button><button id="resume-search" type="button" class="btn btn-outline" hidden>Resume saved search</button></div>
+          </form>
+          <p id="search-status" class="prep-search-status" role="status">Ready. Maia downloads about 40 MB on first use.</p>
+          <div id="search-results"></div>
+          <button id="export-search" class="btn btn-text" hidden>Export search JSON</button>
+          <p class="prep-help">Expected score is a model estimate from 0 to 1, not a measured win probability. Results apply to the chosen side, depth and retained replies. Engine scores use the same chosen side. Keep this tab open while searching. <a href="/prep-engine/MAIA3_LICENSE.txt">Maia license</a>.</p>
+        </div>
+      </section>
+    </div>
+    <p class="prep-storage-note">Saved in this browser on this device. Export PGN for a backup or to use it in the desktop app. Clearing site data removes saved work.</p>
+  </div>
+</Base>
+<script>import { PrepApp } from '../prep/app'; new PrepApp();</script>

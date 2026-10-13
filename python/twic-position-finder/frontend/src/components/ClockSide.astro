@@ -36,6 +36,9 @@ const { side, name } = Astro.props;
     </div>
 
     <div class="time num" data-time role="timer" aria-live="off">2:00</div>
-    <div class="hint" data-hint>tap to start opponent's clock</div>
+    <div class="hint" data-hint>
+      <span class="hint-main" data-hint-main></span>
+      <span class="hint-sub" data-hint-sub></span>
+    </div>
   </div>
 </section>
