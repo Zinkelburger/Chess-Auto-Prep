@@ -72,7 +72,8 @@ export class CrazyBoard {
         change: () => { if (this.mode === 'editor') hooks.edited(); },
       },
     });
-    new ResizeObserver(() => this.cg.redrawAll()).observe(el);
+    // A board with no size (a window shrunk to nothing) has no coordinates for arrows: wait for one.
+    new ResizeObserver(() => { if (this.sized()) this.cg.redrawAll(); }).observe(el);
     el.addEventListener('wheel', (e) => {
       if (this.mode !== 'analysis' || e.ctrlKey) return;
       e.preventDefault();
@@ -100,8 +101,18 @@ export class CrazyBoard {
       selectable: { enabled: true },
       highlight: { custom: new Map(view.dropSquares.map((sq) => [sq, 'move-dest'])) },
     });
-    this.cg.setAutoShapes(view.shapes);
+    this.setShapes(view.shapes);
     this.wrap.classList.remove('ch-editing');
+  }
+
+  /** Engine arrows; drawn now, or when the board has a size again. */
+  setShapes(shapes: DrawShape[]) {
+    if (this.sized()) this.cg.setAutoShapes(shapes);
+    else this.cg.state.drawable.autoShapes = shapes;
+  }
+
+  private sized(): boolean {
+    return this.wrap.clientWidth > 0 && this.wrap.clientHeight > 0;
   }
 
   showEditor(fen: string, orientation: Color, brush: Brush) {

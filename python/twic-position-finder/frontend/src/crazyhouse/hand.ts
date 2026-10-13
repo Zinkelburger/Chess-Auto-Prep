@@ -1,6 +1,7 @@
 /**
  * A hand drawn as lila's crazyhouse pocket (grey well, five slots, orange
- * counts), with a − and + under each piece to take one away or add one.
+ * counts), with a large + above and − below each piece to add one or take
+ * one away.
  * The side to move's pieces are dragged or clicked onto the board as usual.
  */
 import type { Color, Role } from 'chessops/types';
@@ -17,8 +18,6 @@ export interface HandView {
   /** Whether one more piece fits (the 64-piece limit). */
   roomForMore: boolean;
   picked: Role | null;
-  /** The hand sits above the board: its +/− row goes on top. */
-  top: boolean;
 }
 
 export interface HandHooks {
@@ -33,10 +32,8 @@ export function renderHand(box: HTMLElement, view: HandView, hooks: HandHooks) {
   well.className = 'zh-pocket ch-well';
   well.setAttribute('role', 'group');
   well.setAttribute('aria-label', `${side}’s hand`);
-  const adjust = document.createElement('div');
-  adjust.className = 'ch-adjust';
-  adjust.setAttribute('role', 'group');
-  adjust.setAttribute('aria-label', `Change ${side.toLowerCase()}’s hand`);
+  const more = stepRow(`Add to ${side.toLowerCase()}’s hand`);
+  const fewer = stepRow(`Take from ${side.toLowerCase()}’s hand`);
   for (const role of HAND_ROLES) {
     const count = view.counts[role];
     const slot = document.createElement('button');
@@ -69,24 +66,27 @@ export function renderHand(box: HTMLElement, view: HandView, hooks: HandHooks) {
       slot.onclick = () => hooks.pick(role);
     }
     well.append(slot);
-
-    const pair = document.createElement('div');
-    pair.className = 'ch-adjust-pair';
-    pair.append(
-      stepButton('−', `One ${NAMES[role]} fewer for ${side.toLowerCase()}`, count <= 0, () => hooks.adjust(view.color, role, -1)),
-      stepButton('+', `One more ${NAMES[role]} for ${side.toLowerCase()}`, count >= MAX_IN_HAND || !view.roomForMore, () => hooks.adjust(view.color, role, 1)),
-    );
-    adjust.append(pair);
+    more.append(stepButton(role, 1, `One more ${NAMES[role]} for ${side.toLowerCase()}`, count >= MAX_IN_HAND || !view.roomForMore, () => hooks.adjust(view.color, role, 1)));
+    fewer.append(stepButton(role, -1, `One ${NAMES[role]} fewer for ${side.toLowerCase()}`, count <= 0, () => hooks.adjust(view.color, role, -1)));
   }
-  box.classList.toggle('ch-hand-top', view.top);
-  box.replaceChildren(...(view.top ? [adjust, well] : [well, adjust]));
+  box.replaceChildren(more, well, fewer);
 }
 
-function stepButton(text: string, label: string, disabled: boolean, onClick: () => void): HTMLButtonElement {
+function stepRow(label: string): HTMLDivElement {
+  const row = document.createElement('div');
+  row.className = 'ch-steps';
+  row.setAttribute('role', 'group');
+  row.setAttribute('aria-label', label);
+  return row;
+}
+
+function stepButton(role: Role, delta: 1 | -1, label: string, disabled: boolean, onClick: () => void): HTMLButtonElement {
   const b = document.createElement('button');
   b.type = 'button';
   b.className = 'ch-step';
-  b.textContent = text;
+  b.dataset.role = role;
+  b.dataset.step = delta > 0 ? 'more' : 'fewer';
+  b.textContent = delta > 0 ? '+' : '−';
   b.title = label;
   b.setAttribute('aria-label', label);
   b.disabled = disabled;
