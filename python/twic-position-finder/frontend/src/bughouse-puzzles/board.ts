@@ -100,7 +100,11 @@ export class PuzzleBoard {
       owner: yours ? 'Your' : 'Their',
       selected: yours ? this.dropping : null,
       usable: (letter) => state.pos.turn === colour && this.dropTargets(letter).length > 0,
-      onDrag: (piece, e) => this.cg.dragNewPiece(piece, e),
+      onDrag: (piece, e) => {
+        // The pocket may have scrolled into view since the last board event.
+        this.cg.state.dom.bounds.clear();
+        this.cg.dragNewPiece(piece, e);
+      },
       onPick: (letter) => {
         this.cg.selectSquare(null);
         this.dropping = this.dropping === letter ? null : letter;
