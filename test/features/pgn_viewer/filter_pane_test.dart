@@ -58,8 +58,10 @@ void main() {
     await pump(tester, pane());
     await tester.enterText(find.widgetWithText(TextField, 'Player'), 'Moves');
     await tester.pumpAndSettle();
-    final sequence = find.widgetWithText(TextField, 'e4 c5 … Nf3');
-    expect(sequence, findsOneWidget, reason: 'the value box shows the form');
+    // Empty fields show no example text (DESIGN.md, Inputs / Fields).
+    final sequence = find.widgetWithText(TextField, 'Value');
+    expect(sequence, findsOneWidget);
+    expect(find.text('e4 c5 … Nf3'), findsNothing);
     await tester.enterText(sequence, '1.d4 … c4');
     await tester.pump(const Duration(milliseconds: 400));
     // The worker answers on the real clock; its answer lands on a pump.

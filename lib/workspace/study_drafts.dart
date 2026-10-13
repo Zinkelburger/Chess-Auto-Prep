@@ -1,4 +1,3 @@
-import '../chess/pgn/chapter.dart';
 import '../chess/pgn/chapter_line.dart';
 import '../chess/pgn/game_summary.dart';
 import '../chess/pgn/game_tree.dart';
@@ -16,7 +15,7 @@ import 'document_session.dart';
 ChapterDraft? gameDraft(DocumentSession session) {
   final chapter = session.chapter;
   if (chapter == null) return null;
-  final line = _lineOnBoard(chapter);
+  final line = _lineOnBoard(session);
   return ChapterDraft(
     name: line == null ? '' : summarizeGame(line, index: 0).title,
     orientation: session.orientation,
@@ -37,7 +36,7 @@ ChapterDraft? lineDraft(DocumentSession session, NodePath path) {
   final sans = [
     for (final move in tree.lineTo(tree.endOfLineFrom(path))) move.san,
   ];
-  final line = _lineOnBoard(session.chapter!);
+  final line = _lineOnBoard(session);
   final move = numberedMoves([node]);
   return ChapterDraft(
     name: line == null ? move : '${summarizeGame(line, index: 0).title}, $move',
@@ -46,8 +45,12 @@ ChapterDraft? lineDraft(DocumentSession session, NodePath path) {
   );
 }
 
-/// The game of the file the board shows, when it shows one game of it.
-ChapterLine? _lineOnBoard(Chapter chapter) {
+/// The game of the file the board shows, when it shows one game of it or
+/// the file holds only one. The analysis board is no game of any file: its
+/// line carries only the placeholder players a new line is given.
+ChapterLine? _lineOnBoard(DocumentSession session) {
+  final chapter = session.chapter;
+  if (chapter == null || session.isScratch) return null;
   final game = chapter.game;
   if (game == null)
     return chapter.lines.length == 1 ? chapter.lines.single : null;

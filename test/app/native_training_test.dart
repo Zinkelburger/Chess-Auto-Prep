@@ -159,7 +159,11 @@ void main() {
       app.parts.training.lines.setScope(TrainScope.book);
       await app.parts.players.trainGroupStudy(group);
       await app.parts.training.lines.reload();
-      expect(app.parts.requests.mode, Mode.trainer);
+      expect(
+        app.parts.requests.mode,
+        Mode.study,
+        reason: 'a group study trains in Study\'s Train pane',
+      );
       expect(app.parts.training.lines.scope, TrainScope.chapter);
       expect(ready().lines.map((line) => line.moves.first.san), ['e4', 'd4']);
       expect(ready().lines.map((line) => line.side), [Side.white, Side.black]);
