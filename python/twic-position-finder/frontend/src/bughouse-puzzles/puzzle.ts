@@ -172,10 +172,14 @@ export class Attempt {
     return this.solverToMove ? (this.puzzle.legal[this.ply / 2] ?? '').split(' ').filter(Boolean) : [];
   }
 
-  /** The moves that count as right at this step: the line's move, or any mate at the end of a mate puzzle. */
+  /**
+   * The moves that count as right at this step: the line's move, or at the
+   * last step any of `mates`: every mate of a mate puzzle, or every move of a
+   * tactic that collects the material as well as the line's.
+   */
   accepted(): string[] {
     const line = [norm(this.puzzle.line[this.ply])];
-    if (!this.finalStep || this.puzzle.kind !== 'mate' || !this.puzzle.mates.length) return line;
+    if (!this.finalStep || !this.puzzle.mates.length) return line;
     const mates = this.puzzle.mates.map(norm);
     return mates.includes(line[0]) ? mates : [...line, ...mates];
   }

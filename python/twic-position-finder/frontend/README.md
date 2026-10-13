@@ -90,12 +90,33 @@ so this trainer, the Dart app, and Lichess agree on what a mistake is.
 `python3 -m bughouse_db puzzles --year 2017 --games 1500 --engine PATH` from
 `tools/` (Fairy-Stockfish binary; see `tools/bughouse_db/puzzles.py`). Each
 puzzle is one board of a real game with the reserves frozen: captures go to the
-partner and nothing arrives. Two kinds: a **mate** puzzle is a forced mate
-(every solver move but the last is check and the only move that keeps the mate;
-the last accepts any mate) and an **advantage** puzzle is a lila-style tactic
-(one best move at each step, the engine's reply for the defender, the last move
-of the line is the only accepted one). Themes use lila's camelCase vocabulary
-and a static difficulty 1–3 (Easy / Medium / Hard).
+partner and nothing arrives. The engine plays that rule through
+`tools/bughouse_db/frozenhouse.ini` (crazyhouse with `capturesToHand = false`);
+Fairy-Stockfish's own `bughouse` variant also searches drops of pieces a
+partner might send, which made most early tactics wrong.
+
+Two kinds. A **mate** puzzle is a forced mate: every solver move but the last
+is check and the only move that keeps the mate, and the last accepts any mate.
+A check a dropped piece could block is not mate, as on FICS. A **tactic** wins
+material and keeps the initiative:
+
+- the first move is the only one worth the name (lila's win-chance gap, or
+  `--unique-cp`, 300 in the published set, over the second best);
+- every solver move before the last is a check or a capture (`--forcing`), so
+  the defender never gets a quiet moment to sit and wait for their partner;
+- where several moves would follow, the line takes one more step only if its
+  best move takes something, accepting any capture or check that wins nearly
+  as much (`--collect-cp`), so a fork is played out to the capture;
+- at least `--min-gain` (3) material is won, counted a few moves into the
+  engine's line and against the board before the opponent's last move, so a
+  recapture or a piece taken straight back wins nothing;
+- the solver is still at least 2 pawns ahead when the defender is handed a
+  pawn, then a knight (`--sit`), as a partner might.
+
+`--candidates-out` keeps a scan and `--from-candidates` verifies it again under
+other rules; every run prints why candidates were turned down. Themes use
+lila's camelCase vocabulary (including `fork`) and a static difficulty 1–3
+(Easy / Medium / Hard).
 
 The set is served as a small index plus immutable shards (`public/_headers`
 caches `index.json` for ten minutes and `s*.json` for a year):

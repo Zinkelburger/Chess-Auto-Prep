@@ -71,6 +71,21 @@ def main(argv: list[str] | None = None) -> int:
                            help="re-export a --raw-out file instead of mining (no engine needed)")
     p_puzzles.add_argument("--kinds", default=",".join(puzzles_api.KINDS),
                            help="puzzle kinds to mine, e.g. mate or mate,advantage")
+    p_puzzles.add_argument("--skip", type=int, default=0, help="skip this many eligible games first")
+    p_puzzles.add_argument("--forcing", choices=("checks", "captures", "any"), default=puzzles_api.RULES.forcing,
+                           help="what a tactic's moves before the last must be")
+    p_puzzles.add_argument("--min-gain", type=int, default=puzzles_api.RULES.min_gain,
+                           help="material a tactic must win, settled (P1 N3 B3 R5 Q9)")
+    p_puzzles.add_argument("--sit", default=puzzles_api.RULES.sit,
+                           help="pieces handed to the defender at the end, one at a time ('' for none)")
+    p_puzzles.add_argument("--unique-cp", type=int, default=None,
+                           help="also count a move as the only one when it beats the second by this many cp")
+    p_puzzles.add_argument("--collect-cp", type=int, default=puzzles_api.RULES.collect_cp,
+                           help="play a tactic one step past its last unique move, accepting moves this close "
+                                "to the best (-1: end the line there, as lila does)")
+    p_puzzles.add_argument("--verify-nodes", type=int, default=puzzles_api.VERIFY_NODES)
+    p_puzzles.add_argument("--candidates-out", type=Path, help="keep the scan's candidates")
+    p_puzzles.add_argument("--from-candidates", type=Path, help="verify a kept scan again instead of scanning")
 
     args = parser.parse_args(argv)
 
@@ -91,6 +106,11 @@ def main(argv: list[str] | None = None) -> int:
         return puzzles_api.run(
             args.year, args.games, args.min_elo, args.jobs, args.engine, args.out, args.raw_out,
             kinds, args.from_raw,
+            rules=puzzles_api.TacticRules(forcing=args.forcing, min_gain=args.min_gain, sit=args.sit,
+                                         unique_cp=args.unique_cp,
+                                         collect_cp=None if args.collect_cp < 0 else args.collect_cp),
+            skip=args.skip, candidates_out=args.candidates_out, from_candidates=args.from_candidates,
+            verify_nodes=args.verify_nodes,
         )
     if args.command == "explore":
         con = book_api.open_book()

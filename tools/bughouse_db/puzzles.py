@@ -3,9 +3,14 @@
 A puzzle is one board of a real game where the side to move has a forced
 win *on that board alone*. The board's reserves are frozen where they stand:
 nothing arrives from the partner, and a capture goes to the partner rather
-than back into the capturer's hand (`frozen.py`). Fairy-Stockfish's `bughouse`
-variant plays one board under exactly that rule, so it both finds and checks
-them. The rules follow lichess-puzzler's generator where bughouse allows it.
+than back into the capturer's hand (`frozen.py`). Fairy-Stockfish plays that
+rule as `frozenhouse` (`frozenhouse.ini`: crazyhouse with `capturesToHand =
+false`), so it both finds and checks them. Its own `bughouse` variant must not
+be used: it also searches drops of pieces the side does not hold, as if the
+partner might send them, and scores the mates they lead to near 1,400 cp.
+A check that a dropped piece could block is not mate (`frozen.bughouse_mate`):
+on FICS the player may wait for the piece. The rules follow lichess-puzzler's
+generator where bughouse allows it.
 
 Scan. Every position from each board's sixth move gets a cheap search
 (`SCAN_NODES`). Its score, from the side to move, is kept per board so the
@@ -30,18 +35,25 @@ one is solved with deep searches (`VERIFY_NODES`, two principal variations):
     move gives check: a quiet move lets the defender sit and wait for help
     from their partner, so only a line of checks is really forced. The final
     move may be any mate, and all mates are accepted;
-  * advantage (lila's `cook_advantage`): at each solver move the attack must
-    be valid, i.e. there is no alternative, or the best move is a sound mate
-    in one, or `win_chances(best) > win_chances(second) + 0.7`; an invalid
-    attack ends the line there. A valid best move below 200 cp busts the
-    puzzle, as does a twofold repetition. The defender answers with the engine
-    best at half the nodes. At most `MAX_ADVANTAGE` solver moves are searched.
-    The line is then trimmed as lila trims it: trailing solver moves with no
-    alternative are dropped (and the line always ends on a solver move). An
-    advantage line that ends in checkmate and also meets the mate rules above
-    is a mate puzzle; otherwise it needs at least two solver moves and stays
-    an advantage puzzle even if its last move happens to mate (only the
-    line's final move is then accepted).
+  * advantage (lila's `cook_advantage`, then `TacticRules`): at each solver
+    move the attack must be valid, i.e. there is no alternative, or the best
+    move is a sound mate in one, or `win_chances(best) > win_chances(second)
+    + 0.7`, or (with `unique_cp`) the best beats the second by that many cp;
+    an invalid attack ends the line there, after one more collecting step
+    when its best move is a capture (`collect_cp`: any capture or check that
+    wins nearly as much is accepted). A valid best move below 200 cp busts
+    the puzzle, as does a twofold repetition. The defender answers with the
+    engine best at half the nodes. At most `MAX_ADVANTAGE` solver moves. The
+    line is trimmed as lila trims it. An advantage line that ends in mate and
+    meets the mate rules is a mate puzzle; otherwise it is a tactic when every
+    solver move before the last is forcing (`forcing`: checks, or checks and
+    captures, so the defender has no quiet moment to sit and wait for their
+    partner), a one-move line is a check or a capture, the solver is still at
+    least 300 cp ahead, it wins `min_gain` material counted `settle_plies`
+    into the engine's line against the board before the opponent's last move
+    (so a recapture wins nothing), and it stays `sit_cp` ahead when the
+    defender is handed each piece of `sit` in turn. A rejected candidate
+    records why, and a run prints the reasons.
 
 Mate in one. Lila keeps mate-in-one only from its best games. Here a
 mate-in-one is kept only when the player missed it in the game, or when the
@@ -78,6 +90,7 @@ import random
 import re
 import subprocess
 import sys
+from collections import Counter
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -85,9 +98,9 @@ import chess
 from chess.variant import CrazyhouseBoard
 
 from .bpgn import BpgnGame, iter_games, open_bpgn
-from .frozen import frozen_push, mating_moves, position_key, replay
+from .frozen import bughouse_mate, frozen_push, mating_moves, position_key, replay
 from .paths import REPO, corpus_dir
-from .themes import tag_themes
+from .themes import material_diff, tag_themes
 
 SCAN_NODES = 40_000
 VERIFY_NODES = 1_500_000
@@ -98,6 +111,44 @@ KINDS = ("mate", "advantage")
 SHARD_SIZE = 50
 
 WEB_OUT = REPO / "python/twic-position-finder/frontend/public/bughouse-puzzles"
+VARIANT_INI = Path(__file__).with_name("frozenhouse.ini")
+
+
+@dataclass(frozen=True)
+class TacticRules:
+    """What a material tactic must do beyond lila's one-best-move rule.
+
+    `forcing`: what every solver move but the last must be. `checks` leaves the
+    defender no time to sit and wait for their partner; `captures` also allows
+    a capture; `any` is lila's rule. `min_gain`: material won (board plus
+    hand, P1 N3 B3 R5 Q9), counted `settle_plies` into the engine's best line
+    after the last move, against the board before the opponent's last move, so
+    neither a recapture nor a piece simply taken back counts. `sit`: the
+    pieces handed to the defender one at a time at the end, as their partner
+    might; the solver must still be `sit_cp` ahead with each.
+    """
+
+    forcing: str = "checks"
+    min_gain: int = 3
+    sit: str = "pn"
+    sit_cp: int = 200
+    # A one-move tactic is kept when that move is a check or a capture and the
+    # engine's best line after it collects the material (a fork, a skewer).
+    min_moves: int = 1
+    # How far the engine's best line is followed past the end before the
+    # material is counted, so a piece simply taken back does not count.
+    settle_plies: int = 4
+    # Where several moves win, the line takes one more step anyway and accepts
+    # every move within this many centipawns of the best that still wins: a
+    # fork is played out to the capture. None ends the line there, as lila does.
+    collect_cp: int | None = 150
+    # A move is the only one worth the name by lila's win-chance gap, or, when
+    # set, by this many centipawns over the second best: frozen-reserve scores
+    # run high, and lila's win chances cannot tell +15 from +9.
+    unique_cp: int | None = None
+
+
+RULES = TacticRules()
 
 Score = tuple[str, int]  # ("cp", 35) or ("mate", 3), from one side's point of view
 
@@ -124,10 +175,14 @@ class Candidate:
     cp: int | None = None  # final eval of an advantage line (None for a mate score)
     line: list[str] = field(default_factory=list)
     mates: list[str] = field(default_factory=list)
+    gain: int | None = None  # material won by an advantage line, settled
+    sit_cp: int | None = None  # the solver's worst score once the defender is handed a piece
+    reject: str | None = None  # why verification turned it down; never exported
 
 
 class FairyEngine:
-    """One Fairy-Stockfish process in its single-board `bughouse` variant."""
+    """One Fairy-Stockfish process playing one bughouse board with its reserves
+    frozen (`frozenhouse.ini`)."""
 
     def __init__(self, path: str) -> None:
         self.proc = subprocess.Popen(
@@ -135,7 +190,8 @@ class FairyEngine:
         )
         self._send("uci")
         self._until("uciok")
-        for option in ("UCI_Variant value bughouse", "Threads value 1", "Hash value 32"):
+        for option in (f"VariantPath value {VARIANT_INI}", "UCI_Variant value frozenhouse",
+                       "Threads value 1", "Hash value 32"):
             self._send(f"setoption name {option}")
         self._send("isready")
         self._until("readyok")
@@ -212,12 +268,16 @@ def is_mate(score: Score | None) -> bool:
 
 _ENGINE: FairyEngine | None = None
 _KINDS: frozenset[str] = frozenset(KINDS)
+_RULES: TacticRules = RULES
 
 
-def _init_worker(path: str, kinds: frozenset[str] = frozenset(KINDS)) -> None:
-    global _ENGINE, _KINDS
+def _init_worker(path: str, kinds: frozenset[str] = frozenset(KINDS), rules: TacticRules = RULES,
+                 verify_nodes: int = VERIFY_NODES) -> None:
+    global _ENGINE, _KINDS, _RULES, VERIFY_NODES
     _ENGINE = FairyEngine(path)
     _KINDS = kinds
+    _RULES = rules
+    VERIFY_NODES = verify_nodes
 
 
 def _elo(tags: dict[str, str], key: str) -> int:
@@ -292,6 +352,8 @@ class Solution:
     line: list[str]
     mates: list[str] = field(default_factory=list)
     cp: int | None = None
+    gain: int | None = None
+    sit_cp: int | None = None
 
 
 def _rank_score(rank: tuple[str, int, list[str]] | None) -> Score | None:
@@ -340,10 +402,12 @@ def is_valid_mate_in_one(engine, board: CrazyhouseBoard, best: Score, second: Sc
     return False
 
 
-def is_valid_attack(engine, board: CrazyhouseBoard, best: Score, second: Score | None) -> bool:
+def is_valid_attack(engine, board: CrazyhouseBoard, best: Score, second: Score | None,
+                    unique_cp: int | None = None) -> bool:
     """lila: the best move is the only continuation worth the name."""
     return (second is None or is_valid_mate_in_one(engine, board, best, second)
-            or win_chances(best) > win_chances(second) + 0.7)
+            or win_chances(best) > win_chances(second) + 0.7
+            or (unique_cp is not None and best[0] == second[0] == "cp" and best[1] - second[1] >= unique_cp))
 
 
 @dataclass
@@ -352,12 +416,69 @@ class _Step:
     best: Score
     second: Score | None
     check: bool
+    capture: bool
+    accept: list[str] = field(default_factory=list)  # a collecting step's accepted moves
 
 
-def solve_advantage(engine, fen: str) -> Solution | None:
-    """lila's `cook_advantage` with its trimming, on one frozen bughouse board."""
+def _forcing(step: _Step, rule: str) -> bool:
+    return rule == "any" or step.check or (rule == "captures" and step.capture)
+
+
+def _collect(engine, board: CrazyhouseBoard, within: int) -> _Step | None:
+    """The step after the line's last unique move, when it takes the material:
+    the best move is a capture, and every capture or check that wins nearly
+    as much is accepted too. None when the best move takes nothing, so the
+    material was already won and the line ends before it."""
+    ranks, _ = engine.search(board.fen(), VERIFY_NODES, multipv=5)
+    scores = {rank: (_rank_score(r), r[2][0]) for rank, r in ranks.items()}
+    best_score, move = scores[1]
+    uci = chess.Move.from_uci(move)
+    if not board.is_capture(uci):
+        return None
+    floor = max(300, as_cp(best_score) - within)
+
+    def takes(m: str) -> bool:
+        candidate = chess.Move.from_uci(m)
+        return board.is_capture(candidate) or board.gives_check(candidate)
+
+    accept = [m for score, m in scores.values() if as_cp(score) >= floor and takes(m)]
+    return _Step(move, best_score, scores.get(2, (None, ""))[0], board.gives_check(uci), True, accept)
+
+
+def _solver_cp(engine, board: CrazyhouseBoard, nodes: int) -> int:
+    """The solver's score with the defender to move."""
+    return _solver_line(engine, board, nodes)[0]
+
+
+def _solver_line(engine, board: CrazyhouseBoard, nodes: int) -> tuple[int, list[str]]:
+    """The solver's score with the defender to move, and the engine's best line."""
+    ranks, _ = engine.search(board.fen(), nodes)
+    best = ranks.get(1)
+    return (-as_cp((best[0], best[1])), best[2]) if best else (0, [])
+
+
+def _settle(board: CrazyhouseBoard, pv: list[str], plies: int) -> CrazyhouseBoard:
+    """`board` after up to `plies` legal moves of the engine's line."""
+    settled = board.copy(stack=False)
+    for uci in pv[:plies]:
+        try:
+            move = chess.Move.from_uci(uci)
+        except ValueError:
+            break
+        if move not in settled.legal_moves:
+            break
+        frozen_push(settled, uci)
+    return settled
+
+
+def solve_advantage(engine, fen: str, rules: TacticRules | None = None,
+                    prev: str | None = None) -> Solution | str:
+    """lila's `cook_advantage` with its trimming, on one frozen bughouse board,
+    then the material rules of `TacticRules`. A rejected line returns why."""
+    rules = rules or RULES
     engine.new_game()
     board = CrazyhouseBoard(fen)
+    pov = board.turn
     seen = {position_key(board)}
     steps: list[_Step] = []
     replies: list[str] = []
@@ -365,57 +486,93 @@ def solve_advantage(engine, fen: str) -> Solution | None:
         ranks, _ = engine.search(board.fen(), VERIFY_NODES, multipv=2)
         rank = ranks.get(1)
         if not rank:
-            return None
+            return "no move"
         best, second = _rank_score(rank), _rank_score(ranks.get(2))
         assert best
-        if not is_valid_attack(engine, board, best, second):
+        if not is_valid_attack(engine, board, best, second, rules.unique_cp):
+            if steps and rules.collect_cp is not None and as_cp(best) >= 300:
+                collect = _collect(engine, board, rules.collect_cp)
+                if collect:
+                    steps.append(collect)
             break
         if as_cp(best) < 200:
-            return None
+            return "not winning"
         move = rank[2][0]
-        steps.append(_Step(move, best, second, board.gives_check(chess.Move.from_uci(move))))
+        uci = chess.Move.from_uci(move)
+        steps.append(_Step(move, best, second, board.gives_check(uci), board.is_capture(uci)))
         frozen_push(board, move)
         if board.is_game_over():
             break
         if position_key(board) in seen:
-            return None
+            return "repetition"
         seen.add(position_key(board))
         _, reply = engine.search(board.fen(), VERIFY_NODES // 2)
         if reply in ("(none)", "0000"):
             break
         frozen_push(board, reply)
         if position_key(board) in seen:
-            return None
+            return "repetition"
         seen.add(position_key(board))
         replies.append(reply)
-    while steps and steps[-1].second is None:
+    while steps and steps[-1].second is None and not steps[-1].accept:
         steps.pop()
     if not steps:
-        return None
+        return "no unique first move"
     line = [steps[0].move]
     for step, reply in zip(steps[1:], replies):
         line += [reply, step.move]
-    final = replay(fen, line)[-1]
-    if (final.is_checkmate() and len(steps) <= MAX_MATE
+    boards = replay(fen, line)
+    final = boards[-1]
+    if (bughouse_mate(final) and len(steps) <= MAX_MATE
             and all(s.check and not is_mate(s.second) for s in steps[:-1])):
-        return Solution("mate", line, mating_moves(replay(fen, line)[-2]))
-    if len(steps) < 2:
-        return None
-    last = steps[-1].best
-    return Solution("advantage", line, [], last[1] if last[0] == "cp" else None)
+        return Solution("mate", line, mating_moves(boards[-2]))
+    if final.is_checkmate():
+        return "blockable mate"
+    if len(steps) < rules.min_moves:
+        return "too short"
+    if len(steps) == 1 and not _forcing(steps[0], "captures"):
+        return "one quiet move"
+    if not all(_forcing(step, rules.forcing) for step in steps[:-1]):
+        return "lets them sit"
+    cp, pv = _solver_line(engine, final, VERIFY_NODES // 2)
+    if cp < 300:
+        return "not winning at the end"
+    # Count the material a few moves on, against the board before the
+    # opponent's last move: a recapture wins nothing.
+    base = material_diff(boards[0], pov)
+    if prev:
+        base = max(base, material_diff(CrazyhouseBoard(prev), pov))
+    gain = material_diff(_settle(final, pv, rules.settle_plies), pov) - base
+    if gain < rules.min_gain:
+        return "wins too little"
+    worst = cp
+    for letter in rules.sit:
+        helped = final.copy(stack=False)
+        helped.pockets[not pov].add(chess.Piece.from_symbol(letter).piece_type)
+        worst = min(worst, _solver_cp(engine, helped, VERIFY_NODES // 2))
+    if worst < rules.sit_cp:
+        return "partner help saves them"
+    solution = Solution("advantage", line, steps[-1].accept, cp)
+    solution.gain, solution.sit_cp = gain, worst
+    return solution
 
 
-def _verify(candidate: Candidate) -> Candidate | None:
+def _verify(candidate: Candidate) -> Candidate:
+    """The candidate with its solution, or with `reject` saying why there is none."""
     assert _ENGINE
     try:
-        solver = solve_mate if candidate.kind == "mate" else solve_advantage
-        solved = solver(_ENGINE, candidate.fen)
-    except Exception:  # noqa: BLE001
-        return None
-    if not solved:
-        return None
+        if candidate.kind == "mate":
+            solved: Solution | str = solve_mate(_ENGINE, candidate.fen) or "mate not forced"
+        else:
+            solved = solve_advantage(_ENGINE, candidate.fen, _RULES, candidate.prev)
+    except Exception as error:  # noqa: BLE001
+        solved = f"error: {type(error).__name__}"
+    if isinstance(solved, str):
+        candidate.reject = f"{candidate.kind}: {solved}"
+        return candidate
     candidate.kind, candidate.line, candidate.mates, candidate.cp = (
         solved.kind, solved.line, solved.mates, solved.cp)
+    candidate.gain, candidate.sit_cp = solved.gain, solved.sit_cp
     return candidate
 
 
@@ -466,7 +623,7 @@ def web_puzzle(c: Candidate) -> dict | None:
             legal.append(" ".join(m.uci() for m in board.legal_moves))
         sans.append(frozen_push(board, uci))
     mate = c.kind == "mate"
-    if mate and not board.is_checkmate():
+    if mate and not bughouse_mate(board):
         return None
     moves = (len(c.line) + 1) // 2
     start = CrazyhouseBoard(c.fen)
@@ -479,7 +636,7 @@ def web_puzzle(c: Candidate) -> dict | None:
     return {
         "id": f"{c.game}-{c.board}-{c.ply}", "kind": c.kind, "fen": c.fen, "prev": c.prev,
         "dual": c.dual, "board": c.board, "last": c.last, "mate": moves if mate else 0,
-        "moves": moves, "cp": c.cp, "themes": themes,
+        "moves": moves, "cp": c.cp, "gain": c.gain, "themes": themes,
         "difficulty": rate_difficulty(c.kind, moves, themes, found, start, c.line[0]),
         "line": c.line, "san": sans, "legal": legal, "mates": c.mates, "played": c.played,
         "found": found, "game": c.game, "date": c.date, "tc": c.tc,
@@ -548,53 +705,75 @@ def export_raw(raw: Path, out: Path, source: str) -> int:
 
 def run(year: int, games: int, min_elo: int, jobs: int, engine: str | None,
         out: Path, raw_out: Path | None, kinds: frozenset[str] = frozenset(KINDS),
-        from_raw: Path | None = None) -> int:
+        from_raw: Path | None = None, rules: TacticRules = RULES, skip: int = 0,
+        candidates_out: Path | None = None, from_candidates: Path | None = None,
+        verify_nodes: int = VERIFY_NODES) -> int:
     if from_raw:
         return export_raw(from_raw, out, source_text(year, games, min_elo))
     path = _engine_path(engine)
     unknown = kinds - set(KINDS)
     if unknown or not kinds:
         raise SystemExit(f"--kinds takes a subset of {','.join(KINDS)}")
-    source_file = corpus_dir() / f"export{year}.bpgn.bz2"
-    if not source_file.exists():
-        raise SystemExit(f"{source_file} is missing. Run `python3 -m bughouse_db fetch --only {year}`.")
-    picked: list[BpgnGame] = []
-    for game in iter_games(open_bpgn(source_file)):
-        elos = game.elos()
-        if (game.rated and len(game.moves) > 30 and game.avg_elo >= min_elo
-                and min(elos) >= min_elo - 300):
-            picked.append(game)
-            if len(picked) >= games:
-                break
-    print(f"{len(picked)} games from {year}", file=sys.stderr, flush=True)
-
-    with mp.Pool(jobs or max(1, (os.cpu_count() or 2) - 1), initializer=_init_worker,
-                 initargs=(path, kinds)) as pool:
-        found: list[Candidate] = []
-        for n, batch in enumerate(pool.imap_unordered(scan_game, picked, chunksize=2), 1):
-            found.extend(batch)
-            if n % 100 == 0:
-                print(f"scanned {n}/{len(picked)} games, {len(found)} candidates",
-                      file=sys.stderr, flush=True)
-        seen: set[str] = set()
-        unique = []
-        for c in found:
-            key = " ".join(c.fen.split()[:3])
-            if key not in seen:
-                seen.add(key)
-                unique.append(c)
+    workers = jobs or max(1, (os.cpu_count() or 2) - 1)
+    with mp.Pool(workers, initializer=_init_worker, initargs=(path, kinds, rules, verify_nodes)) as pool:
+        if from_candidates:
+            # Verify a saved scan again, e.g. under other rules: no rescanning.
+            unique = [Candidate(**record) for record in json.loads(from_candidates.read_text())]
+            unique = [c for c in unique if c.kind in kinds]
+            for c in unique:
+                c.reject = None
+            n_games = games
+        else:
+            source_file = corpus_dir() / f"export{year}.bpgn.bz2"
+            if not source_file.exists():
+                raise SystemExit(f"{source_file} is missing. Run `python3 -m bughouse_db fetch --only {year}`.")
+            picked: list[BpgnGame] = []
+            eligible = 0
+            for game in iter_games(open_bpgn(source_file)):
+                elos = game.elos()
+                if (game.rated and len(game.moves) > 30 and game.avg_elo >= min_elo
+                        and min(elos) >= min_elo - 300):
+                    eligible += 1
+                    if eligible <= skip:
+                        continue
+                    picked.append(game)
+                    if len(picked) >= games:
+                        break
+            n_games = len(picked)
+            print(f"{n_games} games from {year} (after skipping {skip})", file=sys.stderr, flush=True)
+            found: list[Candidate] = []
+            for n, batch in enumerate(pool.imap_unordered(scan_game, picked, chunksize=2), 1):
+                found.extend(batch)
+                if n % 100 == 0:
+                    print(f"scanned {n}/{n_games} games, {len(found)} candidates",
+                          file=sys.stderr, flush=True)
+            seen: set[str] = set()
+            unique = []
+            for c in found:
+                key = " ".join(c.fen.split()[:3])
+                if key not in seen:
+                    seen.add(key)
+                    unique.append(c)
+            if candidates_out:
+                candidates_out.parent.mkdir(parents=True, exist_ok=True)
+                candidates_out.write_text(json.dumps([asdict(c) for c in unique]) + "\n")
         by_kind = {k: sum(1 for c in unique if c.kind == k) for k in KINDS}
         print(f"verifying {len(unique)} candidates {by_kind}", file=sys.stderr, flush=True)
         verified: list[Candidate] = []
+        rejects: Counter[str] = Counter()
         for n, c in enumerate(pool.imap_unordered(_verify, unique), 1):
-            if c:
+            if c.reject:
+                rejects[c.reject] += 1
+            else:
                 verified.append(c)
             if n % 100 == 0:
                 print(f"verified {n}/{len(unique)}, {len(verified)} sound", file=sys.stderr, flush=True)
-
+    kept = Counter(c.kind for c in verified)
+    print(f"sound: {dict(kept)}; turned down: " + ", ".join(f"{k} {v}" for k, v in rejects.most_common()),
+          file=sys.stderr, flush=True)
     if raw_out:
         raw_out.parent.mkdir(parents=True, exist_ok=True)
         raw_out.write_text(json.dumps([asdict(c) for c in verified]) + "\n")
-    n = export_web(verified, out, source_text(year, len(picked), min_elo))
+    n = export_web(verified, out, source_text(year, n_games, min_elo))
     print(f"{n} puzzles written to {out}", file=sys.stderr)
     return 0
