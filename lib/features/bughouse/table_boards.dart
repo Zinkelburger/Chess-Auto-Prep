@@ -227,9 +227,10 @@ class _BoardColumn extends StatelessWidget {
   }
 }
 
-/// A player's fixed reserve slots. Available pieces have a light board-colour
-/// background and an explicit count; empty slots stay in place. Only the player
-/// on move can drop, by click then square, or drag.
+/// A player's reserve as lila's crazyhouse pocket: five slots, each the size
+/// of a board square, in a grey well beside the seat's letter. Pieces held
+/// show in full with their count; empty slots stay in place, faint. Only
+/// the player on move can drop, by click then square, or drag.
 class _SeatRow extends StatelessWidget {
   const _SeatRow({
     required this.position,
@@ -267,33 +268,32 @@ class _SeatRow extends StatelessWidget {
               seat.letter,
               style: TextStyle(
                 color: toMove ? scheme.onSurface : scheme.onSurfaceVariant,
+                fontWeight: toMove ? FontWeight.w600 : null,
               ),
             ),
           ),
-          Expanded(
-            child: Container(
-              height: square,
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(Space.xs),
-              ),
-              child: Row(
-                children: [
-                  for (final role in reserveRoles)
-                    Expanded(
-                      child: _ReservePiece(
-                        key: ValueKey(('reserve', seat, role)),
-                        piece: Piece(color: side, role: role),
-                        count: pockets.of(side, role),
-                        seat: seat,
-                        size: square,
-                        live: toMove && pockets.of(side, role) > 0,
-                        picked: toMove && picked == role,
-                        onPick: () => onPick(role),
-                      ),
-                    ),
-                ],
-              ),
+          Container(
+            width: square * reserveRoles.length,
+            height: square,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              gradient: labPocketWell,
+              borderRadius: BorderRadius.circular(Space.xs),
+            ),
+            child: Row(
+              children: [
+                for (final role in reserveRoles)
+                  _ReservePiece(
+                    key: ValueKey(('reserve', seat, role)),
+                    piece: Piece(color: side, role: role),
+                    count: pockets.of(side, role),
+                    seat: seat,
+                    size: square,
+                    live: toMove && pockets.of(side, role) > 0,
+                    picked: toMove && picked == role,
+                    onPick: () => onPick(role),
+                  ),
+              ],
             ),
           ),
         ],
@@ -328,7 +328,7 @@ class _TurnDot extends StatelessWidget {
   );
 }
 
-class _ReservePiece extends StatelessWidget {
+class _ReservePiece extends StatefulWidget {
   const _ReservePiece({
     super.key,
     required this.piece,
@@ -351,50 +351,69 @@ class _ReservePiece extends StatelessWidget {
   final VoidCallback onPick;
 
   @override
+  State<_ReservePiece> createState() => _ReservePieceState();
+}
+
+class _ReservePieceState extends State<_ReservePiece> {
+  bool _hovered = false;
+
+  void _hover(bool on) {
+    if (mounted && _hovered != on) setState(() => _hovered = on);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final size = widget.size;
+    final count = widget.count;
+    final role = widget.piece.role.name;
     Widget image() => PieceWidget(
-      piece: piece,
+      piece: widget.piece,
       size: size,
       pieceAssets: PieceSet.cburnettAssets,
     );
     final face = Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        color: count > 0 ? BoardTheme.of(context).lightSquare : null,
-        border: Border.all(
-          color: picked ? scheme.primary : Colors.transparent,
-          width: picked ? 2 : 1,
-        ),
-        borderRadius: BorderRadius.circular(Space.xs),
-      ),
+      color: widget.picked
+          ? BoardTheme.of(context).selected
+          : widget.live && _hovered
+          ? labPocketHover
+          : null,
       child: Stack(
         children: [
-          Center(
-            child: Opacity(opacity: count == 0 ? 0.2 : 1, child: image()),
+          Opacity(
+            opacity: count == 0 ? labPocketEmptyOpacity : 1,
+            child: image(),
           ),
           if (count > 0)
             Positioned(
               right: 0,
               bottom: 0,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 3),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: Space.xs,
+                  vertical: 3,
+                ),
                 decoration: BoxDecoration(
-                  color: scheme.surface,
+                  color: labPocketCount,
                   borderRadius: BorderRadius.circular(Space.xs),
                 ),
-                child: Text('$count', style: monoText),
+                child: Text(
+                  '$count',
+                  style: labPocketCountText.copyWith(
+                    fontSize: (size * 0.28).clamp(12, 17),
+                  ),
+                ),
               ),
             ),
         ],
       ),
     );
-    final label = 'Player ${seat.letter}: $count ${piece.role.name} in reserve';
-    if (!live) {
+    final label = 'Player ${widget.seat.letter}: $count $role in reserve';
+    if (!widget.live) {
       return Tooltip(
         message: count == 0
-            ? 'No ${piece.role.name} in reserve'
+            ? 'No $role in reserve'
             : '$label · waiting for turn',
         child: Semantics(label: label, child: face),
       );
@@ -404,18 +423,20 @@ class _ReservePiece extends StatelessWidget {
           '$label · click, then click a highlighted square, or drag onto the board',
       child: Semantics(
         label: label,
-        selected: picked,
+        selected: widget.picked,
         button: true,
         child: Draggable<Piece>(
-          data: piece,
+          data: widget.piece,
           // Held under the pointer by its middle, as a piece on the board is.
           dragAnchorStrategy: (draggable, context, position) =>
               Offset(size / 2, size / 2),
           feedback: image(),
           childWhenDragging: Opacity(opacity: 0.3, child: face),
           child: MouseRegion(
-            cursor: SystemMouseCursors.grab,
-            child: InkWell(onTap: onPick, child: face),
+            cursor: SystemMouseCursors.click,
+            onEnter: (_) => _hover(true),
+            onExit: (_) => _hover(false),
+            child: GestureDetector(onTap: widget.onPick, child: face),
           ),
         ),
       ),

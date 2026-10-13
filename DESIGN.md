@@ -259,6 +259,9 @@ active pane's a brighter grey. Dividers between panes are 1px lines with a
 ### Engine lines
 - **Style:** the old inline-bar style, not a Lichess headline: a small switch and status, then 28px rows with a 54px score gutter and the moves after it. Hovering a move floats its board.
 
+### Bughouse reserve (lila's pocket)
+- **Style:** lila's crazyhouse pocket, kept on purpose over the flat rules: five square-sized slots (pawn to queen) in a #888 grey well with lila's inset top shade, 4px radius, beside the seat's letter. A held piece shows in full with its count in white bold on lila's orange (#D64F00) in the slot's lower right; an empty slot keeps its place with the piece at 10% opacity. On the player's turn a slot brightens to #AAA under the pointer, a picked piece takes the board's selection green, and its drop squares are ringed on the board.
+
 ### Reading card (signature)
 - **Style:** Reading Black card, 8px radius, 24px inset; movetext in 16px mono at 1.7, comments in 16px prose at a 640px measure. Mistakes are marked and clickable; no per-move evaluations in the movetext.
 
