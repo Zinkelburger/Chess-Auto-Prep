@@ -86,6 +86,15 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// The Positions list the open chapter's finds by default; a trap the
+  /// chapter never reaches shows once `This chapter` is turned off.
+  Future<void> listEveryFind(WidgetTester tester) async {
+    expect(find.textContaining('f6?', findRichText: true), findsNothing);
+    expect(find.text('None in this chapter.'), findsOneWidget);
+    await tester.tap(find.text('This chapter'));
+    await tester.pumpAndSettle();
+  }
+
   Future<void> trainTheTrap(WidgetTester tester) async {
     final row = find.ancestor(
       of: find.textContaining('f6?', findRichText: true),
@@ -114,6 +123,7 @@ void main() {
   testWidgets('a trap no chapter plays goes into the draft, asked first, '
       'and is trained there', (tester) async {
     await openWith(tester, chapterWith('1. d4 d5'));
+    await listEveryFind(tester);
     await trainTheTrap(tester);
 
     expect(find.textContaining('Main (draft)'), findsOneWidget);
@@ -169,6 +179,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
+    await listEveryFind(tester);
     await trainTheTrap(tester);
 
     expect(find.textContaining('Add it to Main (draft 2)'), findsOneWidget);
@@ -215,6 +226,7 @@ void main() {
       'question names Main (draft 2), and the line goes there', (tester) async {
     final taken = inKid('Main (draft)', draft: false);
     await openBeside(tester, {taken: chapterWith('1. c4')});
+    await listEveryFind(tester);
     await trainTheTrap(tester);
 
     expect(find.textContaining('Add it to Main (draft 2)'), findsOneWidget);
@@ -237,6 +249,7 @@ void main() {
   ) async {
     final black = inKid('Main (draft)');
     await openBeside(tester, {black: draftText('Main (draft)', 'Black')});
+    await listEveryFind(tester);
     await trainTheTrap(tester);
 
     expect(find.textContaining('Add it to Main (draft 2)'), findsOneWidget);
@@ -253,6 +266,7 @@ void main() {
   testWidgets('a draft made while the question is up that changes where the '
       'line goes stops it, and nothing is written', (tester) async {
     await openBeside(tester, const {});
+    await listEveryFind(tester);
     await trainTheTrap(tester);
     expect(
       find.textContaining('Add it to Main (draft) first?'),
