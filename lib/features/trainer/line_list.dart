@@ -15,6 +15,7 @@ import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'progress.dart';
 import 'trainer.dart';
+import 'study_training_controls.dart';
 import 'trainer_words.dart';
 import '../../ui/move_notation.dart';
 
@@ -366,16 +367,18 @@ class _Header extends StatelessWidget {
           spacing: Space.s,
           runSpacing: Space.s,
           children: [
-            FilledButton(
-              onPressed: due == 0 || busy ? null : trainer.review,
-              child: Text(due == 0 ? 'Nothing due' : 'Review $due'),
-            ),
-            OutlinedButton(
-              onPressed: learn == 0 || busy ? null : trainer.learn,
-              child: Text(
-                learn == 0 ? 'Nothing left to learn' : 'Learn $learn',
+            if (learn > 0)
+              FilledButton(
+                onPressed: busy ? null : trainer.learn,
+                child: Text('Learn $learn'),
               ),
-            ),
+            if (due > 0)
+              OutlinedButton(
+                onPressed: busy ? null : trainer.review,
+                child: Text('Review $due'),
+              ),
+            if (due == 0 && learn == 0)
+              const Text('Nothing due. Choose a line below to practice.'),
           ],
         ),
       ],
@@ -648,17 +651,22 @@ class TrainScopeButtons extends StatelessWidget {
   final Trainer trainer;
 
   @override
-  Widget build(BuildContext context) => SegmentedButton<TrainScope>(
-    segments: const [
-      ButtonSegment(value: TrainScope.chapter, label: Text('Chapter')),
-      ButtonSegment(value: TrainScope.repertoire, label: Text('Repertoire')),
-      ButtonSegment(value: TrainScope.book, label: Text('Book')),
-    ],
-    selected: {trainer.scope},
-    showSelectedIcon: false,
-    style: const ButtonStyle(visualDensity: VisualDensity.compact),
-    onSelectionChanged: (s) => trainer.setScope(s.single),
-  );
+  Widget build(BuildContext context) => trainer.studyDocument != null
+      ? StudyTrainingControls(trainer: trainer)
+      : SegmentedButton<TrainScope>(
+          segments: const [
+            ButtonSegment(value: TrainScope.chapter, label: Text('Chapter')),
+            ButtonSegment(
+              value: TrainScope.repertoire,
+              label: Text('Repertoire'),
+            ),
+            ButtonSegment(value: TrainScope.book, label: Text('Book')),
+          ],
+          selected: {trainer.scope},
+          showSelectedIcon: false,
+          style: const ButtonStyle(visualDensity: VisualDensity.compact),
+          onSelectionChanged: (s) => trainer.setScope(s.single),
+        );
 }
 
 /// [child] at the height it is given, or at [height] in a scroll view when

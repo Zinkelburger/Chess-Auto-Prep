@@ -19,7 +19,7 @@ class SearchField extends StatelessWidget {
 
   final TextEditingController controller;
 
-  /// What is being searched, such as `Search repertoires`.
+  /// Accessible name and hover help, such as `Search repertoires`.
   final String hint;
 
   final ValueChanged<String> onChanged;
@@ -33,29 +33,34 @@ class SearchField extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder(
       valueListenable: controller,
-      builder: (context, value, _) => TextField(
-        controller: controller,
-        autofocus: autofocus,
-        onChanged: onChanged,
-        onSubmitted: onSubmitted,
-        // The body size, not a text field's own larger one: the box sits in
-        // a column of rows and must not be the loudest thing in it.
-        style: Theme.of(context).textTheme.bodyMedium,
-        decoration: InputDecoration(
-          isDense: true,
-          hintText: hint,
-          prefixIcon: const Icon(Icons.search, size: IconSize.action),
-          suffixIcon: value.text.isEmpty
-              ? null
-              : IconButton(
-                  icon: const Icon(Icons.close, size: IconSize.menu),
-                  tooltip: 'Clear search',
-                  onPressed: () {
-                    controller.clear();
-                    onChanged('');
-                  },
-                ),
-          border: const OutlineInputBorder(),
+      builder: (context, value, _) => Tooltip(
+        message: hint,
+        child: Semantics(
+          label: hint,
+          child: TextField(
+            controller: controller,
+            autofocus: autofocus,
+            onChanged: onChanged,
+            onSubmitted: onSubmitted,
+            // The body size, not a text field's own larger one: the box sits in
+            // a column of rows and must not be the loudest thing in it.
+            style: Theme.of(context).textTheme.bodyMedium,
+            decoration: InputDecoration(
+              isDense: true,
+              prefixIcon: const Icon(Icons.search, size: IconSize.action),
+              suffixIcon: value.text.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.close, size: IconSize.menu),
+                      tooltip: 'Clear search',
+                      onPressed: () {
+                        controller.clear();
+                        onChanged('');
+                      },
+                    ),
+              border: const OutlineInputBorder(),
+            ),
+          ),
         ),
       ),
     );

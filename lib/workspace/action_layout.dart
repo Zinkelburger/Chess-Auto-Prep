@@ -54,6 +54,7 @@ final class ActionLayout extends ChangeNotifier {
     PaneTabs<WorkspaceTab> first,
     this._explorer, {
     this.opensBeside = false,
+    this.analysisInPanes = false,
   }) {
     _panes.add(first);
     first.addListener(notifyListeners);
@@ -65,6 +66,9 @@ final class ActionLayout extends ChangeNotifier {
   /// of its own ([open]). A mode whose first pane cannot be read at half
   /// its height leaves this off, and a picked tab then joins that pane.
   final bool opensBeside;
+
+  /// Trainer analysis uses the shared board and can be split and remembered.
+  final bool analysisInPanes;
   final _panes = <PaneTabs<WorkspaceTab>>[];
   final _explorers = <int, Explorer>{};
 
@@ -103,7 +107,7 @@ final class ActionLayout extends ChangeNotifier {
         '$i': {
           'open': [
             for (final tab in openIn(i))
-              if (tab != WorkspaceTab.analysis) tab.name,
+              if (analysisInPanes || tab != WorkspaceTab.analysis) tab.name,
           ],
           'selected': pane(i).selected.name,
           'empty': isEmpty(i),
@@ -144,10 +148,17 @@ final class ActionLayout extends ChangeNotifier {
         final names = entry['open'];
         final open = names is List ? names.whereType<String>() : <String>[];
         final known = {for (final t in pane(i).tabs) t.id.name: t.id};
-        pane(i).restore([
-          for (final name in open)
-            if (name != 'analysis' && known.containsKey(name)) known[name]!,
-        ], entry['selected'] == 'analysis' ? null : known[entry['selected']]);
+        pane(i).restore(
+          [
+            for (final name in open)
+              if ((analysisInPanes || name != 'analysis') &&
+                  known.containsKey(name))
+                known[name]!,
+          ],
+          !analysisInPanes && entry['selected'] == 'analysis'
+              ? null
+              : known[entry['selected']],
+        );
         if (entry['empty'] == true && !pane(i).tabs.any((t) => t.pinned))
           _empty.add(i);
       }
@@ -217,7 +228,9 @@ final class ActionLayout extends ChangeNotifier {
       visible.contains(index) && pane(index).tabs.any((t) => t.id == tab);
 
   bool canSplit(WorkspaceTab tab) =>
-      count < 4 && tab != WorkspaceTab.analysis && !pane(0).tabOf(tab).pinned;
+      count < 4 &&
+      (analysisInPanes || tab != WorkspaceTab.analysis) &&
+      !pane(0).tabOf(tab).pinned;
 
   void show(int index, WorkspaceTab tab) {
     if (!canPlace(tab, index)) return;
@@ -263,7 +276,11 @@ final class ActionLayout extends ChangeNotifier {
     _ensure(
       fresh,
       pane(0).tabs
-          .firstWhere((tab) => tab.id != WorkspaceTab.analysis && !tab.pinned)
+          .firstWhere(
+            (tab) =>
+                (analysisInPanes || tab.id != WorkspaceTab.analysis) &&
+                !tab.pinned,
+          )
           .id,
     );
     _empty.add(fresh);
@@ -284,12 +301,19 @@ final class ActionLayout extends ChangeNotifier {
   /// and a mode whose tabs are all pinned has nothing to put in one.
   bool get canAddPane =>
       count < 4 &&
-      pane(0).tabs.any((tab) => tab.id != WorkspaceTab.analysis && !tab.pinned);
+      pane(0).tabs.any(
+        (tab) =>
+            (analysisInPanes || tab.id != WorkspaceTab.analysis) && !tab.pinned,
+      );
 
   void _ensure(int index, WorkspaceTab initial) {
     while (_panes.length <= index) {
       final catalog = pane(0).tabs
-          .where((tab) => tab.id != WorkspaceTab.analysis && !tab.pinned)
+          .where(
+            (tab) =>
+                (analysisInPanes || tab.id != WorkspaceTab.analysis) &&
+                !tab.pinned,
+          )
           .toList();
       final tabs = PaneTabs(catalog, open: [initial], selected: initial);
       tabs.addListener(notifyListeners);

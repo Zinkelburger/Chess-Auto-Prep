@@ -77,8 +77,8 @@ const int trapLossCapCp = mateBaseCp;
 /// times how much they win, the win capped at [trapRankLossCapCp].
 List<Trap> trapsOf(
   SearchNode root, {
-  double minShare = 0.2,
-  int minLossCp = 50,
+  double minShare = trapMinShare,
+  int minLossCp = trapMinLossCp,
   int punishPlies = 6,
   bool everyMove = false,
 }) {
@@ -137,21 +137,11 @@ Iterable<Trap> _trapsAt(
   required int minLossCp,
   required int punishPlies,
 }) sync* {
-  final scored = [
-    for (final reply in node.replies)
-      if (reply.child.evaluated) reply,
-  ];
-  if (scored.length < 2) return;
-  final best = scored.reduce(
-    (a, b) => b.child.evalForUs.cp < a.child.evalForUs.cp ? b : a,
-  );
-  for (final reply in scored) {
-    if (identical(reply, best) || reply.probability < minShare) continue;
-    final loss = math.min(
-      reply.child.evalForUs.cp - best.child.evalForUs.cp,
-      trapLossCapCp,
-    );
-    if (loss < minLossCp) continue;
+  for (final (reply, loss) in trapRepliesAt(
+    node,
+    minShare: minShare,
+    minLossCp: minLossCp,
+  )) {
     yield Trap(
       toTrap: List.unmodifiable(sofar),
       blunder: _step(node.fen, reply.move, reply.child, ours: false),
@@ -161,6 +151,42 @@ Iterable<Trap> _trapsAt(
       reach: reach,
     );
   }
+}
+
+/// The least share of games a trap's reply is played in.
+const trapMinShare = 0.2;
+
+/// The least a trap's reply throws away against the opponent's best.
+const trapMinLossCp = 50;
+
+/// The replies at [node] that are traps, each with what it throws away
+/// against the opponent's best reply there, capped at [trapLossCapCp]: the
+/// one rule the Expectimax table's `?` and the Positions' traps both read.
+/// A position with fewer than two scored replies has nothing to compare, so
+/// it sets none.
+List<(ReplyMove, int)> trapRepliesAt(
+  OpponentNode node, {
+  double minShare = trapMinShare,
+  int minLossCp = trapMinLossCp,
+}) {
+  final scored = [
+    for (final reply in node.replies)
+      if (reply.child.evaluated) reply,
+  ];
+  if (scored.length < 2) return const [];
+  final best = scored.reduce(
+    (a, b) => b.child.evalForUs.cp < a.child.evalForUs.cp ? b : a,
+  );
+  return [
+    for (final reply in scored)
+      if (!identical(reply, best) && reply.probability >= minShare)
+        if (math.min(
+              reply.child.evalForUs.cp - best.child.evalForUs.cp,
+              trapLossCapCp,
+            )
+            case final loss when loss >= minLossCp)
+          (reply, loss),
+  ];
 }
 
 double _worth(Trap trap) =>

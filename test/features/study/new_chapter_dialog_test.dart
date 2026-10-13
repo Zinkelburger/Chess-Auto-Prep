@@ -17,10 +17,8 @@ void main() {
         theme: darkTheme(),
         home: Builder(
           builder: (context) => TextButton(
-            onPressed: () async => answered = await showNewChapterDialog(
-              context,
-              suggested: 'Chapter 3',
-            ),
+            onPressed: () async =>
+                answered = await showNewChapterDialog(context),
             child: const Text('Ask'),
           ),
         ),
@@ -28,6 +26,17 @@ void main() {
     );
     await tester.tap(find.text('Ask'));
     await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(find.widgetWithText(TextField, 'Chapter name'))
+          .controller!
+          .text,
+      isEmpty,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Chapter name'),
+      'Chapter 3',
+    );
     await tester.tap(find.text('Position'));
     await tester.pumpAndSettle();
     final fen = find.widgetWithText(TextField, 'FEN');
@@ -61,8 +70,7 @@ void main() {
         theme: darkTheme(),
         home: Builder(
           builder: (context) => TextButton(
-            onPressed: () =>
-                showNewChapterDialog(context, suggested: 'Chapter 3'),
+            onPressed: () => showNewChapterDialog(context),
             child: const Text('Ask'),
           ),
         ),

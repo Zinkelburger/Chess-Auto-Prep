@@ -38,9 +38,9 @@ import '../ui/choice_field.dart';
 /// (Black), and what the engine alone says (Engine), all from White's side:
 /// a move whose value for the other side sits well off the engine's is one
 /// the side playing it is expected to go wrong after. Each move the model
-/// was asked about also says how often it is played, and a reply that
-/// throws away half a pawn or more against their best is marked `?`: a
-/// trap. The table follows the board and fills in while the search runs.
+/// was asked about also says how often it is played, and a reply that is
+/// a trap by the one rule the Positions use is marked
+/// `?`. The table follows the board and fills in while the search runs.
 /// Clicking a row plays the move; resting on it floats the position after
 /// it.
 ///
@@ -53,6 +53,7 @@ class SearchPane extends StatefulWidget {
     required this.session,
     required this.settings,
     this.onOpenChapter,
+    this.onShowPositions,
   });
 
   final FillGaps fill;
@@ -64,6 +65,9 @@ class SearchPane extends StatefulWidget {
 
   /// Opens the draft the lines were written to.
   final ValueChanged<ChapterRef>? onOpenChapter;
+
+  /// Shows the Positions, where what a search found is listed.
+  final VoidCallback? onShowPositions;
 
   @override
   State<SearchPane> createState() => _SearchPaneState();
@@ -130,6 +134,15 @@ class _SearchPaneState extends State<SearchPane>
     // A box left mid-number puts its setting back before it goes.
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _settingsOpen = !_settingsOpen);
+  }
+
+  /// One half-move deeper than the depth asked for, then on from the tree.
+  Future<void> _deeper(int depth) async {
+    if (_invalid != null) return;
+    await widget.settings.update(
+      widget.settings.value.copyWith(expectimax: _options.withDepth(depth + 1)),
+    );
+    if (mounted) await _search();
   }
 
   Future<void> _search() async {
@@ -252,7 +265,10 @@ class _SearchPaneState extends State<SearchPane>
         1.0,
         MediaQuery.textScalerOf(context).scale(fontSize) / fontSize,
       );
-      final available = size.maxWidth - Space.m - Space.xs;
+      final positions = widget.onShowPositions == null
+          ? 0.0
+          : kMinInteractiveDimension;
+      final available = size.maxWidth - Space.m - Space.xs - positions;
       final runWidth = math.min(
         searchRunWidth * scale,
         available - kMinInteractiveDimension,
@@ -284,6 +300,15 @@ class _SearchPaneState extends State<SearchPane>
                     SizedBox(width: repliesWidth, child: replies),
                   ],
                   const Spacer(),
+                  if (widget.onShowPositions case final show?)
+                    IconButton(
+                      icon: const Icon(Icons.list_alt, size: IconSize.action),
+                      tooltip: AppKey.positions.tip(
+                        'Show the positions the searches found',
+                      ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      onPressed: show,
+                    ),
                   _gear(context),
                 ],
               ),
@@ -391,11 +416,27 @@ class _SearchPaneState extends State<SearchPane>
         ),
       );
     }
-    // A search with these settings covers the board: pressing goes on.
-    final resumable = switch (fill.nodeAtBoard(request: _request)) {
-      OurNode() || OpponentNode() => true,
-      _ => false,
-    };
+    // A search with these settings covers the board: pressing goes on, or
+    // when it already reaches the depth asked for, one half-move deeper.
+    final request = _request;
+    final node = fill.nodeAtBoard(request: request);
+    final resumable = node is OurNode || node is OpponentNode;
+    final depth = request.depthPlies;
+    if (resumable &&
+        depth != null &&
+        depth < ExpectimaxOptions.maxDepth &&
+        searchedTo(node!, depth)) {
+      return Tooltip(
+        message: AppKey.search.tip(
+          'Searched $depth half-moves deep here; search ${depth + 1}',
+        ),
+        child: FilledButton.icon(
+          onPressed: fill.canStart ? () => unawaited(_deeper(depth)) : null,
+          icon: const Icon(Icons.play_arrow),
+          label: const Text('Deeper'),
+        ),
+      );
+    }
     return Tooltip(
       message: AppKey.search.tip(
         resumable
@@ -480,7 +521,7 @@ class _SearchPaneState extends State<SearchPane>
         :final stoppedBy,
       ) =>
         (
-          '${complete ? 'Searched' : 'Stopped at'} depth $depth · '
+          '${complete ? 'Depth' : 'Stopped at depth'} $depth · '
               '$nodes positions'
               '${sourceLost ? ' · ChessDB stopped answering' : ''}'
               '${stoppedBy == null ? '' : ' · $stoppedBy'}${_findsWords()}',
@@ -510,39 +551,61 @@ class _SearchPaneState extends State<SearchPane>
                 ),
               ),
             ),
-            if (state case FillRunning(
-              of: null,
-              lastPly: null,
-              stopping: false,
-              :final depth,
-            ))
-              Tooltip(
-                message:
-                    'Score every position at this depth, then pause and '
-                    'keep the tree',
-                child: TextButton(
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  onPressed: widget.fill.finishLevel,
-                  child: Text('Finish depth ${depth < 1 ? 1 : depth}'),
-                ),
-              )
-            else
-              const SizedBox(width: Space.s),
+            _statusEnd(state),
           ],
         ),
       ),
     );
   }
 
-  /// What the run pointed out, and where to see it.
+  /// The status line's end: `Finish depth N` while a search with no depth
+  /// runs, `N found` after a run that found something, else a gap.
+  Widget _statusEnd(FillState state) {
+    if (state case FillRunning(
+      of: null,
+      lastPly: null,
+      stopping: false,
+      :final depth,
+    )) {
+      return Tooltip(
+        message:
+            'Score every position at this depth, then pause and '
+            'keep the tree',
+        child: TextButton(
+          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+          onPressed: widget.fill.finishLevel,
+          child: Text('Finish depth ${depth < 1 ? 1 : depth}'),
+        ),
+      );
+    }
+    if (_found case final count?) {
+      return Tooltip(
+        message: AppKey.positions.tip('Show the positions this search found'),
+        child: TextButton(
+          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+          onPressed: widget.onShowPositions,
+          child: Text('$count found'),
+        ),
+      );
+    }
+    return const SizedBox(width: Space.s);
+  }
+
+  /// What went wrong keeping what the run pointed out.
   String _findsWords() => switch (widget.fill.finds?.recorded) {
-    FindsReading() => '',
     FindsUnsaved() => ' · search positions not saved',
-    FindsKept(count: 0) => '',
-    FindsKept(:final count) => ' · $count found (Positions, Ctrl+P)',
-    null => '',
+    _ => '',
+  };
+
+  /// How many positions the last run pointed out, once kept and when the
+  /// Positions can be shown; the button at the status line's end.
+  int? get _found => switch (widget.fill.finds?.recorded) {
+    FindsKept(:final count)
+        when count > 0 &&
+            widget.onShowPositions != null &&
+            widget.fill.state is FillDone =>
+      count,
+    _ => null,
   };
 
   Widget _table(BuildContext context) {
@@ -664,21 +727,30 @@ class _SearchPaneState extends State<SearchPane>
       child = Row(
         children: [
           Expanded(
-            child: Text(
-              lines is LinesFailed
-                  ? lines.reason
-                  : 'Turn the best moves into lines in a draft chapter.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: lines is LinesFailed ? theme.colorScheme.error : null,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
+            child: lines is LinesFailed
+                ? Tooltip(
+                    message: lines.reason,
+                    child: Text(
+                      lines.reason,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.error,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  )
+                : const SizedBox.shrink(),
           ),
-          OutlinedButton(
-            onPressed: fill.canMakeLines
-                ? () => unawaited(fill.makeLines())
-                : null,
-            child: const Text('Make lines'),
+          Tooltip(
+            message:
+                'Write the best moves as lines in a draft chapter beside '
+                'this one, traps marked ?',
+            child: OutlinedButton(
+              onPressed: fill.canMakeLines
+                  ? () => unawaited(fill.makeLines())
+                  : null,
+              child: const Text('Make lines'),
+            ),
           ),
         ],
       );

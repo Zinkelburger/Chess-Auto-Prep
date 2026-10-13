@@ -6,6 +6,9 @@ final class TrainingOptions {
     this.replyMillis = 700,
     this.replayMistakes = true,
     this.rateReviews = false,
+    this.repertoirePath = '',
+    this.reviewAll = false,
+    this.pausedScopes = const {},
   });
 
   final int learnLimit;
@@ -16,8 +19,15 @@ final class TrainingOptions {
   /// Whether a reviewed line waits for the user's Again/Hard/Good/Easy,
   /// Anki's way, rather than being graded from its mistakes as Chessable
   /// grades it; the grade the mistakes earned is then the one Space takes.
-  /// A line new to the sitting is always graded.
+  /// This applies to the quiz after learning a new line as well.
   final bool rateReviews;
+
+  /// The dedicated trainer's last repertoire and review choice.
+  final String repertoirePath;
+  final bool reviewAll;
+
+  /// Paused repertoires/chapters; individual line pauses live with progress.
+  final Set<String> pausedScopes;
 
   static const defaults = TrainingOptions();
 
@@ -27,12 +37,18 @@ final class TrainingOptions {
     int? replyMillis,
     bool? replayMistakes,
     bool? rateReviews,
+    String? repertoirePath,
+    bool? reviewAll,
+    Set<String>? pausedScopes,
   }) => TrainingOptions(
     learnLimit: learnLimit ?? this.learnLimit,
     reviewLimit: reviewLimit ?? this.reviewLimit,
     replyMillis: replyMillis ?? this.replyMillis,
     replayMistakes: replayMistakes ?? this.replayMistakes,
     rateReviews: rateReviews ?? this.rateReviews,
+    repertoirePath: repertoirePath ?? this.repertoirePath,
+    reviewAll: reviewAll ?? this.reviewAll,
+    pausedScopes: pausedScopes ?? this.pausedScopes,
   );
 
   Map<String, Object> toJson() => {
@@ -41,6 +57,9 @@ final class TrainingOptions {
     'replyMillis': replyMillis,
     'replayMistakes': replayMistakes,
     'rateReviews': rateReviews,
+    'repertoirePath': repertoirePath,
+    'reviewAll': reviewAll,
+    'pausedScopes': pausedScopes.toList(),
   };
 
   factory TrainingOptions.fromJson(Object? value) {
@@ -51,6 +70,15 @@ final class TrainingOptions {
     }
 
     return TrainingOptions(
+      repertoirePath: value['repertoirePath'] is String
+          ? value['repertoirePath'] as String
+          : '',
+      reviewAll: value['reviewAll'] == true,
+      pausedScopes: value['pausedScopes'] is List
+          ? Set.unmodifiable(
+              (value['pausedScopes'] as List).whereType<String>(),
+            )
+          : const {},
       learnLimit: number('learnLimit', 10, 0, 1000),
       reviewLimit: number('reviewLimit', 0, 0, 1000),
       replyMillis: number('replyMillis', 700, 200, 2000),
@@ -70,7 +98,11 @@ final class TrainingOptions {
       reviewLimit == other.reviewLimit &&
       replyMillis == other.replyMillis &&
       replayMistakes == other.replayMistakes &&
-      rateReviews == other.rateReviews;
+      rateReviews == other.rateReviews &&
+      repertoirePath == other.repertoirePath &&
+      reviewAll == other.reviewAll &&
+      pausedScopes.length == other.pausedScopes.length &&
+      pausedScopes.containsAll(other.pausedScopes);
 
   @override
   int get hashCode => Object.hash(
@@ -79,5 +111,8 @@ final class TrainingOptions {
     replyMillis,
     replayMistakes,
     rateReviews,
+    repertoirePath,
+    reviewAll,
+    Object.hashAllUnordered(pausedScopes),
   );
 }

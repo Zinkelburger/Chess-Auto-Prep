@@ -84,10 +84,12 @@ class _LinePreviewOverlayState extends State<LinePreviewOverlay>
       width: previewBoardSize,
       height: previewBoardSize,
       child: IgnorePointer(
+        // Flat, as every surface is: an outline sets it off, not a shadow.
         child: Material(
-          elevation: 8,
-          shadowColor: Theme.of(context).colorScheme.shadow,
-          borderRadius: BorderRadius.circular(4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(4),
+            side: BorderSide(color: Theme.of(context).colorScheme.outline),
+          ),
           clipBehavior: Clip.antiAlias,
           child: StaticChessboard(
             size: previewBoardSize,

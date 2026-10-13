@@ -433,8 +433,6 @@ class _SearchNumberBoxState extends State<SearchNumberBox> {
           decoration: InputDecoration(
             isDense: true,
             labelText: widget.label,
-            hintText: widget.empty,
-            hintStyle: text.bodySmall,
             floatingLabelBehavior: FloatingLabelBehavior.always,
             // Room under a name on the border for the number to sit clear.
             contentPadding: EdgeInsets.symmetric(

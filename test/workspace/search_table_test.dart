@@ -96,9 +96,34 @@ void main() {
         other: forBlack,
       );
       expect([for (final r in rows) r.move.san], ['Qf6', 'Qb4', 'Qd6', 'Qc5']);
-      expect([for (final r in rows) r.trap], [false, false, true, false]);
+      // Qd6 loses 1.1 against Qb4 but is played 15%, under the fifth a
+      // trap needs: the Positions' rule, the table's too.
+      expect([for (final r in rows) r.trap], [false, false, false, false]);
       expect(rows[1].engineCp, -20, reason: 'one score, either way up');
       expect(rows[0].share, 0.6);
+    });
+
+    test('a reply played a fifth of the time or more that loses half a '
+        'pawn against their best is a trap, with what it loses', () {
+      final often = OpponentNode.over(
+        fen: _board,
+        evalForUs: const Eval(0),
+        replies: [
+          for (final reply in forWhite.replies)
+            ReplyMove(
+              move: reply.move,
+              probability: switch (reply.move.san) {
+                'Qf6' => 0.45,
+                'Qd6' => 0.3,
+                _ => reply.probability,
+              },
+              child: reply.child,
+            ),
+        ],
+      );
+      final rows = searchRows(side: Side.white, mine: often);
+      expect([for (final r in rows) r.move.san], ['Qf6', 'Qd6', 'Qb4']);
+      expect([for (final r in rows) r.trapLossCp], [null, 110, null]);
     });
 
     test('one search alone still fills its side', () {

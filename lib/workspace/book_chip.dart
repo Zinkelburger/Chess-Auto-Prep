@@ -21,11 +21,11 @@ class BookChip extends StatelessWidget {
   Future<void> _choose(BuildContext context) async {
     final chosen = await showChoiceDialog<Book>(
       context,
-      title: 'Use book',
+      title: 'Use opening book',
       options: books.books,
       label: (book) => book.name,
-      hint: 'Type a book',
-      empty: 'No books yet',
+      hint: 'Search opening books',
+      empty: 'No opening books yet',
     );
     if (chosen == null) return;
     // A chapter being moved or renamed rewrites the books; the choice waits
@@ -45,14 +45,16 @@ class BookChip extends StatelessWidget {
         children: [
           Flexible(
             child: Tooltip(
-              message: books.books.isEmpty ? 'Make a book' : 'Use another book',
+              message: books.books.isEmpty
+                  ? 'Make an opening book'
+                  : 'Use another opening book',
               child: TextButton.icon(
                 onPressed: books.books.isEmpty
                     ? onEdit
                     : () => unawaited(_choose(context)),
                 icon: const Icon(Icons.menu_book_outlined, size: IconSize.menu),
                 label: Text(
-                  active?.name ?? 'No book set',
+                  active?.name ?? 'No opening book set',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -60,7 +62,7 @@ class BookChip extends StatelessWidget {
             ),
           ),
           IconButton(
-            tooltip: 'Edit books',
+            tooltip: 'Edit opening books',
             iconSize: IconSize.menu,
             visualDensity: VisualDensity.compact,
             onPressed: onEdit,

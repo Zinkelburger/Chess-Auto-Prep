@@ -349,7 +349,6 @@ class _ImportDialogState extends State<_ImportDialog> {
             maxLines: 8,
             decoration: const InputDecoration(
               labelText: 'Table or opponents JSON',
-              hintText: 'Name, Rating, Chess.com, Lichess',
             ),
             onChanged: (_) {
               if (mounted) setState(() => _preview = null);

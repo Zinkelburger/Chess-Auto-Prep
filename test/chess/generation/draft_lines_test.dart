@@ -1,13 +1,14 @@
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/generation/draft_chapter.dart';
 import 'package:chess_auto_prep/chess/generation/draft_lines.dart';
+import 'package:chess_auto_prep/chess/generation/eval.dart';
 import 'package:chess_auto_prep/chess/generation/search_config.dart';
 import 'package:chess_auto_prep/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/chess/openings.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart' hide positionOf;
-import 'package:dartchess/dartchess.dart' show Side;
+import 'package:dartchess/dartchess.dart' show Position, Side;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'search_harness.dart';
@@ -213,6 +214,56 @@ void main() {
         isEmpty,
         reason: 'the twenty past the cap have nothing to hang off',
       );
+    });
+  });
+
+  group('traps in the draft', () {
+    test('a reply the trap rule marks is written with ?, the rest plain', () {
+      final afterE4 = afterUci(positionOf(Fen.initial.value), 'e2e4');
+      Fen fenOf(Position position) => Fen(position.fen);
+      SearchNode answered(Position after, int cp) => OurNode.over(
+        fen: fenOf(after),
+        evalForUs: Eval(cp),
+        candidates: [
+          CandidateMove(
+            move: const MoveRef(uci: 'g1f3', san: 'Nf3'),
+            child: HorizonNode(
+              fen: fenOf(afterUci(after, 'g1f3')),
+              evalForUs: Eval(cp),
+            ),
+          ),
+        ],
+      );
+      final tree = OpponentNode.over(
+        fen: fenOf(afterE4),
+        evalForUs: const Eval(0),
+        replies: [
+          ReplyMove(
+            move: const MoveRef(uci: 'e7e5', san: 'e5'),
+            probability: 0.7,
+            child: answered(afterUci(afterE4, 'e7e5'), 0),
+          ),
+          // Played 30%, and a pawn worse for them than e5.
+          ReplyMove(
+            move: const MoveRef(uci: 'f7f6', san: 'f6'),
+            probability: 0.3,
+            child: answered(afterUci(afterE4, 'f7f6'), 100),
+          ),
+        ],
+      );
+      final lines = linesOf(tree);
+      expect([for (final l in lines) l.moves.first.trap], [false, true]);
+      final trap = draftTree(
+        DraftEntry(line: lines.last),
+        rootFen: fenOf(afterE4),
+      );
+      expect(trap.children.single.san, 'f6');
+      expect(trap.children.single.nags, [2]);
+      final plain = draftTree(
+        DraftEntry(line: lines.first),
+        rootFen: fenOf(afterE4),
+      );
+      expect(plain.children.single.nags, isEmpty);
     });
   });
 

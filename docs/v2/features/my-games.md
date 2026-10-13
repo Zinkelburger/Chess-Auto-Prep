@@ -14,9 +14,11 @@ the book ran out. They leave knowing which lines to fix, one click from the file
 
 ## Screen
 Reached from the mode menu (`My games`, after Tactics). Games left, board in the middle, reading
-card right; the card's tabs are `Book` (pinned), `Game` and `Explorer`
-(whose `Book` source shows what else the book plays). The book chip (`books.md`) sits under the
-accounts; with no book in use the list says `No book set. Pick the book to compare your games with.`
+card right; `Game` is the initial pinned tab, with `Book` and `Game review`
+beside it. `Explorer` is available from the tools menu. The book chip
+(`books.md`) sits under the accounts. Saved games remain browsable and searchable
+without a selected book; only opening comparison needs one. Selecting a book
+updates the comparison while preserving the search.
 
 - **Accounts block** — the same block as the top of the Tactics column: the usernames with
   `Change`, `Get games` / `Pause` / `Resume` and its status line. With no username, only

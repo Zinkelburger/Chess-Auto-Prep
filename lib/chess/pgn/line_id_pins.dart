@@ -217,7 +217,7 @@ String _oldAppSpelling(String spelling) {
   GamesArranged games,
 ) {
   if ((before.game != null || after.game != null) &&
-      !sidesPerChapter(before.lines)) {
+      !before.lines.any((line) => studyTrainingSide(line) != null)) {
     return (chapter: after, games: games);
   }
   final moved = [

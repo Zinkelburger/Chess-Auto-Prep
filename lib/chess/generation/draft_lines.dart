@@ -5,6 +5,7 @@ import '../pv_text.dart';
 import '../pgn/game_tree.dart';
 import 'eval.dart';
 import 'search_node.dart';
+import 'traps.dart' show trapRepliesAt;
 
 /// The lines a finished search proposes, as the draft chapter writes them.
 ///
@@ -25,6 +26,7 @@ final class DraftMove {
     required this.after,
     required this.value,
     required this.ours,
+    this.trap = false,
   });
 
   final MoveRef move;
@@ -39,6 +41,9 @@ final class DraftMove {
   final double value;
 
   final bool ours;
+
+  /// A reply that is a trap ([trapRepliesAt]): written with a `?`.
+  final bool trap;
 
   /// What identifies the decision this move is: where, and what.
   String get decision => '$before|${move.uci}';
@@ -81,13 +86,22 @@ List<DraftLine> linesOf(SearchNode root) {
         ], reach);
       case OpponentNode(:final replies):
         var followed = false;
+        final traps = {
+          for (final (trap, _) in trapRepliesAt(node)) trap.move.uci,
+        };
         for (final reply in replies) {
           final child = reply.child;
           if (child is! OurNode && child is! TerminalNode) continue;
           followed = true;
           walk(child, [
             ...sofar,
-            _step(node.fen, reply.move, child, ours: false),
+            _step(
+              node.fen,
+              reply.move,
+              child,
+              ours: false,
+              trap: traps.contains(reply.move.uci),
+            ),
           ], reach * reply.probability);
         }
         if (!followed && sofar.isNotEmpty) {
@@ -115,12 +129,14 @@ DraftMove _step(
   MoveRef move,
   SearchNode child, {
   required bool ours,
+  bool trap = false,
 }) => DraftMove(
   move: move,
   before: from.position,
   after: child.fen,
   value: child.valuation.value,
   ours: ours,
+  trap: trap,
 );
 
 /// A line the draft keeps, with the near-copies folded into it.
@@ -363,6 +379,7 @@ _Branch _graft(
         uci: move.move.uci,
         fen: move.after,
         comment: tokens.join(' '),
+        nags: move.trap ? const [_mistakeNag] : const [],
       ),
     );
     here.children.add(next);
@@ -370,6 +387,9 @@ _Branch _graft(
   }
   return here;
 }
+
+/// `$2`, the `?` a trap's reply is written with.
+const _mistakeNag = 2;
 
 final class _Branch {
   _Branch(this.node);

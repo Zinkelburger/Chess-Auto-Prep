@@ -1,3 +1,4 @@
+import '../chess/pgn/tree_edit.dart' show pathOfSans;
 import '../features/pgn_viewer/export_dialog.dart';
 import '../features/tournaments/tournament_run.dart';
 import '../features/databases/database_library.dart';
@@ -15,9 +16,9 @@ import '../features/library/pgn_drop_region.dart';
 import '../features/settings/setting_rows.dart';
 import '../features/settings/settings_dialog.dart';
 import '../features/tactics/my_games_block.dart';
-import '../features/tactics/puzzle_trainer.dart';
 import '../features/trainer/train_pane.dart';
 import '../features/trainer/trainer.dart';
+import '../features/trainer/training_outline.dart';
 import '../ui/app_action.dart';
 import '../ui/app_keys.dart';
 import '../ui/choice_dialog.dart';
@@ -45,6 +46,7 @@ import 'layout_memory.dart';
 import 'search_door.dart';
 import 'mode_view.dart';
 import 'mode.dart';
+import 'training_visibility.dart';
 import 'player_wiring.dart';
 import 'top_bar.dart';
 import 'workspace_requests.dart';
@@ -131,9 +133,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   void _selectLayout() =>
       _layoutMemory.select(_requests.mode, switch (_requests.mode) {
         Mode.repertoires ||
-        Mode.trainer ||
         Mode.study ||
         Mode.pgnViewer => _ws.session.source?.path,
+        Mode.trainer => _train.lines.selection.root,
         _ => null,
       }, _view.layout);
 
@@ -160,7 +162,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     if (mode == _shown) return;
     if (_shown case final left?) {
       final previous = _views[left]!;
-      if (previous.tabs.selected == WorkspaceTab.analysis) {
+      if (left != Mode.trainer &&
+          previous.tabs.selected == WorkspaceTab.analysis) {
         previous.tabs.show(WorkspaceTab.moves);
       }
       previous.left();
@@ -168,6 +171,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     _ws.inspection?.hide();
     _shown = mode;
     _selectLayout();
+    if (mode == Mode.trainer && _train.lines.lesson == null) {
+      _train.lines.selection.enter(_ws.session.source);
+    } else if (mode == Mode.repertoires && _train.lines.lesson == null) {
+      _train.lines.selection.followDocument();
+    }
     _views[mode]!.entered();
     _innerTabChanged();
     _outlineShown = _wantsOutline;
@@ -201,6 +209,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     final tab = switch (kind) {
       EngineJobKind.search || EngineJobKind.makingLines => WorkspaceTab.search,
       EngineJobKind.audit => WorkspaceTab.audit,
+      EngineJobKind.solitaire => WorkspaceTab.solitaire,
       _ => WorkspaceTab.review,
     };
     var mode = _jobMode ?? Mode.repertoires;
@@ -215,13 +224,15 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   PaneTabs<WorkspaceTab> get _tabs => _view.tabs;
 
   bool get _inspecting =>
+      _requests.mode != Mode.trainer &&
       _tabs.selected == WorkspaceTab.analysis &&
       (_ws.inspection?.active ?? false);
   Workspace get _boardWorkspace => _inspecting ? _ws.inspecting : _ws;
 
   void _innerTabChanged() {
     if (!mounted) return;
-    if (_tabs.selected == WorkspaceTab.analysis) {
+    if (_requests.mode != Mode.trainer &&
+        _tabs.selected == WorkspaceTab.analysis) {
       if (!(_ws.inspection?.active ?? false)) unawaited(_showAnalysis());
     } else {
       _ws.inspection?.hide();
@@ -240,7 +251,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
 
   void _analysisChanged() {
     if (!mounted) return;
-    if (!(_ws.inspection?.active ?? false) &&
+    if (_requests.mode != Mode.trainer &&
+        !(_ws.inspection?.active ?? false) &&
         _tabs.selected == WorkspaceTab.analysis) {
       _tabs.show(WorkspaceTab.moves);
     }
@@ -318,6 +330,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     _sitting.check();
     _puzzle.check();
     _shown = _requests.mode;
+    if (_shown == Mode.trainer) {
+      _train.lines.selection.enter(_ws.session.source);
+    }
     _requests.addListener(_modeMayHaveChanged);
     _ws.inspection?.addListener(_analysisChanged);
     _ws.jobs?.addListener(_jobChanged);
@@ -355,14 +370,17 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// whichever mode the user switches to. Hide it during a lesson too: its
   /// line previews would reveal the moves the user is being asked to recall.
   bool get _wantsOutline =>
-      (_requests.mode == Mode.repertoires || _requests.mode == Mode.trainer) &&
+      (_requests.mode == Mode.repertoires) &&
       _ws.session.source != null &&
       _ws.session.game == null &&
       _train.lines.board.value == null;
 
   @override
-  Listenable listenableOf(Shell widget) =>
-      Listenable.merge([widget.workspace.session, widget.training.lines.board]);
+  Listenable listenableOf(Shell widget) => Listenable.merge([
+    widget.workspace.session,
+    widget.training.lines.board,
+    widget.training.lines.selection,
+  ]);
 
   /// Puts the outline column in or takes it out when the open chapter
   /// changes what is wanted. The other two panes are left alone, so the
@@ -411,7 +429,12 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       switch (tab) {
         WorkspaceTab.train => TrainPane(
           trainer: _train.lines,
-          onImport: () => unawaited(_importTrainingCourse()),
+          onStudy: _requests.mode == Mode.trainer
+              ? () => unawaited(_studyLesson())
+              : null,
+          onImport: _requests.mode == Mode.study
+              ? null
+              : () => unawaited(_importTrainingCourse()),
           onSettings: () => unawaited(
             showSettingsDialog(
               context,
@@ -433,8 +456,40 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   Future<void> _importTrainingCourse() async {
     final result = await _requests.importFile();
     if (!mounted || result is! RequestDone) return;
-    _train.lines.setScope(TrainScope.chapter);
+    if (_requests.mode == Mode.trainer) {
+      final source = _ws.session.source;
+      final selection = _train.lines.selection;
+      final folder = selection.repertoires
+          .where((r) => r.chapters.any((c) => c.path == source?.path))
+          .firstOrNull;
+      if (folder != null) selection.choose(folder);
+    } else {
+      _train.lines.setScope(TrainScope.chapter);
+    }
     _view.show(WorkspaceTab.train);
+  }
+
+  Future<void> _studyLesson() async {
+    final trainer = _train.lines;
+    final lesson = trainer.lesson;
+    if (lesson == null || lesson.suspended) return;
+    final line = lesson.line;
+    final shown = lesson.drill.shown;
+    trainer.suspend();
+    final result = await _requests.openLine(
+      root: line.start,
+      sans: line.moves.map((m) => m.san).toList(),
+      ply: shown,
+      side: line.side,
+    );
+    if (!mounted || trainer.lesson != lesson) return;
+    if (result is! RequestDone) {
+      trainer.resume();
+      return;
+    }
+    if (!_view.layout.isOpen(WorkspaceTab.analysis))
+      _view.layout.reveal(WorkspaceTab.analysis);
+    if (_requests.mode == Mode.trainer) unawaited(_ws.analysis.enable());
   }
 
   /// Space shows the answer while a puzzle is on the board; otherwise it
@@ -487,9 +542,31 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     _arrange();
   }
 
-  /// A find's line on an analysis board at its position.
+  /// The Positions in the list column, whatever was there.
+  void _showPositions() {
+    if (_listShown && _positionsShown) return;
+    _togglePositions();
+  }
+
+  /// A find's position in the open chapter when the chapter plays its line
+  /// that far, else its line on an analysis board at its position.
   void _openFind(KeptFind kept) {
     _ws.finds.select(kept.id);
+    final session = _ws.session;
+    final tree = session.tree;
+    if (!_inspecting &&
+        session.source != null &&
+        tree != null &&
+        tree.rootFen.position == kept.rootFen.position) {
+      final path = pathOfSans(
+        tree,
+        kept.find.sans.take(kept.find.ply).toList(),
+      );
+      if (path != null) {
+        session.goTo(path);
+        return;
+      }
+    }
     unawaited(
       _requests.openLine(
         root: kept.rootFen,
@@ -548,10 +625,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   }
 
   Future<void> _saveCopy() async {
-    final name = await showCopyNameDialog(
-      context,
-      _ws.session.chapter?.name ?? 'Chapter',
-    );
+    final name = await showCopyNameDialog(context);
     if (name == null || !mounted) return;
     // A file this app may not write cannot have a copy beside it either.
     final result = await _ws.session.saveCopy(
@@ -834,9 +908,17 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     child: _positionsShown
         ? FindsPanel(
             finds: _ws.finds,
+            session: _ws.session,
             onOpen: _openFind,
             onTrain: _trainFind,
             trailing: trailing,
+          )
+        : _requests.mode == Mode.trainer
+        ? TrainingOutline(
+            trainer: _train.lines,
+            trailing: trailing,
+            onRead: (line) => unawaited(_readLine(line)),
+            onImport: () => unawaited(_importTrainingCourse()),
           )
         : _view.list(trailing),
   );
@@ -872,6 +954,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       moves: _moves,
       hooks: WorkspaceHooks(
         builder: _view is RepertoiresView,
+        onAnnotate: !_inspecting && _view is StudyView
+            ? () => _editing.value = true
+            : null,
         noteEditing: _view is RepertoiresView || _view is ViewerView,
         header: _view.header,
         underHeading: _inspecting ? null : _view.underHeading,
@@ -884,6 +969,10 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         tabBody: _tabBody,
         boardClaim: _inspecting ? null : _claim,
         lesson: _inspecting ? null : _train.lines.board,
+        trainingTools: _requests.mode == Mode.trainer,
+        onStudyLesson: _requests.mode == Mode.trainer
+            ? () => unawaited(_studyLesson())
+            : null,
         onBoardMove: _inspecting ? null : _boardMove,
         onEngineMove: _inspecting ? null : _engineMove,
         onSaveHeld: _inspecting ? null : _saveHeld,
@@ -893,6 +982,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
           _requests.openExplorerGame(game, source: source, ply: ply),
         ),
         onOpenChapter: (ref) => unawaited(_requests.readInBuilder(ref, [])),
+        onShowPositions: _showPositions,
         // The chapter a book move was found in: in the builder, at the
         // position the move leads to.
         onOpenPlace: (place) =>
@@ -905,89 +995,3 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
 
 /// The columns of the window, left to right.
 enum _Pane { list, outline, workspace }
-
-/// Keeps the Train tab's sitting beside its controls: in the mode it was
-/// started in, with the Train tab open. Anywhere else the board would go on
-/// showing the lesson and taking moves for it with nothing to answer or
-/// leave it by, so the sitting pauses.
-final class SittingInView {
-  SittingInView({
-    required Trainer trainer,
-    required WorkspaceRequests requests,
-    required bool Function() trainTabOpen,
-  }) : _trainer = trainer,
-       _requests = requests,
-       _trainTabOpen = trainTabOpen {
-    for (final owner in _owners) {
-      owner.addListener(check);
-    }
-  }
-
-  final Trainer _trainer;
-  final WorkspaceRequests _requests;
-
-  /// Whether the mode on screen has its Train tab open: the tabs are the
-  /// shell's, one set per mode.
-  final bool Function() _trainTabOpen;
-
-  /// The mode the sitting runs in, while one does.
-  Mode? _mode;
-  bool _wasSuspended = false;
-
-  List<Listenable> get _owners => [_trainer, _requests];
-
-  /// Suspends the sitting out of view; returning offers explicit Resume.
-  void check() {
-    if (_trainer.lesson == null) {
-      _mode = null;
-      _wasSuspended = false;
-      return;
-    }
-    final suspended = _trainer.lesson!.suspended;
-    if (_wasSuspended && !suspended) _mode = _requests.mode;
-    _wasSuspended = suspended;
-    final mode = _mode ??= _requests.mode;
-    if (_requests.mode != mode || !_trainTabOpen()) _trainer.suspend();
-  }
-
-  void dispose() {
-    for (final owner in _owners) {
-      owner.removeListener(check);
-    }
-  }
-}
-
-/// Keeps a puzzle on the board only while Tactics is on screen. Anywhere
-/// else the board would go on judging the moves made on it, Space would
-/// show its answer and the arrows walk the puzzles, with nothing on screen
-/// to say so; so it is put down, and the run is kept for Tactics.
-final class PuzzleInView {
-  PuzzleInView({
-    required PuzzleTrainer puzzles,
-    required WorkspaceRequests requests,
-  }) : _puzzles = puzzles,
-       _requests = requests {
-    for (final owner in _owners) {
-      owner.addListener(check);
-    }
-  }
-
-  final PuzzleTrainer _puzzles;
-  final WorkspaceRequests _requests;
-
-  List<Listenable> get _owners => [_puzzles, _requests];
-
-  /// Puts the puzzle down if it is up out of Tactics: the mode changed, or
-  /// a set game came up in another mode's document.
-  void check() {
-    if (_puzzles.up != null && _requests.mode != Mode.tactics) {
-      _puzzles.putDown();
-    }
-  }
-
-  void dispose() {
-    for (final owner in _owners) {
-      owner.removeListener(check);
-    }
-  }
-}

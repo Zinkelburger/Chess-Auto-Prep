@@ -4,11 +4,12 @@ import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/generation/eval.dart';
 import 'package:chess_auto_prep/chess/generation/finds.dart';
 import 'package:chess_auto_prep/chess/generation/search_node.dart';
+import 'package:chess_auto_prep/chess/pgn/tree_edit.dart' show positionOf;
 import 'package:chess_auto_prep/storage/finds_store.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:path/path.dart' as p;
 import 'package:chess_auto_prep/workspace/finds.dart';
-import 'package:dartchess/dartchess.dart' show Side;
+import 'package:dartchess/dartchess.dart' show Move, Side;
 import 'package:flutter_test/flutter_test.dart';
 
 Fen board(String name) => Fen('$name w - - 0 1');
@@ -112,6 +113,43 @@ void main() {
     tearDown(() {
       finds.dispose();
       store.close();
+    });
+
+    test('narrowed to a chapter, only the finds decided in its positions '
+        'are shown', () {
+      Find opening(List<String> sans) => Find(
+        kind: FindKind.trap,
+        sans: sans,
+        ply: 2,
+        keyPly: 1,
+        fen: board(sans.join()),
+        evalCp: 100,
+        lossCp: 200,
+        share: 0.3,
+        reach: 0.5,
+        worth: 1,
+      );
+      store.keep(
+        [
+          opening(['e4', 'e5']),
+          opening(['d4', 'd5']),
+        ],
+        side: Side.white,
+        rootFen: Fen.initial,
+        elo: 1800,
+        at: DateTime(2026, 9),
+      );
+      finds.load();
+      final afterE4 = Fen(
+        positionOf(Fen.initial)!.play(Move.parse('e2e4')!).fen,
+      ).position;
+
+      finds.within({Fen.initial.position, afterE4});
+      expect(finds.narrowed, isTrue);
+      expect(finds.shown.single.find.sans, ['e4', 'e5']);
+
+      finds.within(null);
+      expect(finds.shown, hasLength(2));
     });
 
     test('records a search from where the board stood', () async {

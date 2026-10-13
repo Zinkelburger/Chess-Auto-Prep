@@ -17,13 +17,11 @@ typedef NewChapter = ({String name, Fen root, Side? orientation});
 /// position has no moves to work either of them out from later. `Position`
 /// opens the board editor in the dialog, its FEN field the same position as
 /// text; `Create` waits until a game could start from it.
-Future<NewChapter?> showNewChapterDialog(
-  BuildContext context, {
-  required String suggested,
-}) => showDialog<NewChapter>(
-  context: context,
-  builder: (_) => _NewChapterDialog(suggested: suggested),
-);
+Future<NewChapter?> showNewChapterDialog(BuildContext context) =>
+    showDialog<NewChapter>(
+      context: context,
+      builder: (_) => const _NewChapterDialog(),
+    );
 
 enum _Start { initial, position }
 
@@ -40,16 +38,14 @@ enum _Facing {
 }
 
 class _NewChapterDialog extends StatefulWidget {
-  const _NewChapterDialog({required this.suggested});
-
-  final String suggested;
+  const _NewChapterDialog();
 
   @override
   State<_NewChapterDialog> createState() => _NewChapterDialogState();
 }
 
 class _NewChapterDialogState extends State<_NewChapterDialog> {
-  late final _name = TextEditingController(text: widget.suggested);
+  final _name = TextEditingController();
   String? _nameProblem;
   var _start = _Start.initial;
   var _facing = _Facing.automatic;

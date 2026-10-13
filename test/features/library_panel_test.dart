@@ -114,10 +114,7 @@ void main() {
 
   testWidgets('an empty library says how to start', (tester) async {
     await show(tester, []);
-    expect(
-      find.text('No repertoires yet\nCreate a repertoire to get started.'),
-      findsOneWidget,
-    );
+    expect(find.text('No repertoires yet.'), findsOneWidget);
   });
 
   testWidgets(

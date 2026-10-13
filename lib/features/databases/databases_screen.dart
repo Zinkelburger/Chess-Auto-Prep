@@ -317,8 +317,7 @@ class _CorpusFiltersState extends State<_CorpusFilters> {
           key: ValueKey(label),
           controller: controller,
           decoration: InputDecoration(
-            labelText: label,
-            hintText: controller == _since ? 'YYYY.MM.DD' : null,
+            labelText: controller == _since ? '$label (YYYY.MM.DD)' : label,
             prefixIcon: const Icon(Icons.search),
           ),
           onChanged: _changed,

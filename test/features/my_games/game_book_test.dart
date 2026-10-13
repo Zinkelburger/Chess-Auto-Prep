@@ -212,6 +212,27 @@ void main() {
     expect(checked.waysOf(Deviation.mine), isEmpty);
   });
 
+  test(
+    'saved games stay browsable without a book and compare after selection',
+    () async {
+      final selected = fixture.books.active!;
+      fixture.books.activate(null);
+      final unchecked = await watched();
+      expect(unchecked.hasBook, isFalse);
+      expect(unchecked.games, hasLength(5));
+      expect(unchecked.games.every((g) => g.verdict is NoBook), isTrue);
+      expect(fixture.files.listings, 0);
+      fixture.book.search('Rival');
+      expect(fixture.book.shown, hasLength(5));
+      fixture.books.activate(selected);
+      await pumpEventQueue();
+      final checked = fixture.book.state as BookChecked;
+      expect(checked.hasBook, isTrue);
+      expect(checked.ways, isNotEmpty);
+      expect(fixture.book.shown, hasLength(5));
+    },
+  );
+
   test('says so when no username is saved', () async {
     await fixture.accounts.setUsername(GameSite.lichess, null);
     fixture.book.watch();

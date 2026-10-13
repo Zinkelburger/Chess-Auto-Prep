@@ -43,7 +43,7 @@ and [tooling map](agents/tooling.md) for details and remaining product scope.
 
 ## Modes and shared workflows
 
-All mode names are defined in `app/mode.dart`: Repertoire builder, Books,
+All mode names are defined in `app/mode.dart`: Repertoire builder, Opening books,
 PGN Viewer, Repertoire trainer, Study, Tactics, My games, Player analysis,
 Players & prep, Databases, Engine tournament and Bughouse lab. The optional
 Bughouse mode is offered when its engine assets are present.
@@ -51,7 +51,12 @@ Bughouse mode is offered when its engine assets are present.
 - Library and chapter outline share guarded PGN storage; edits, moves, deletes,
   restore and accepted training outcomes use the existing recovery owners.
 - Trainer Learn/Review and the shared Train tab use the same scheduling and
-  lesson owners. A mode, tab or file detour suspends the current lesson and its
+  lesson owners. `TrainingSelection` keeps the dedicated trainer's repertoire,
+  browsing scope and session picks independent of the board document;
+  `TrainingOutline` and `TrainingHome` live inside the existing three panels.
+  `TrainingOptions` persists the repertoire, review choice and parent pauses.
+  Analysis/Explorer help opens a scratch study detour at the lesson position;
+  Return to training restores the retained lesson. A mode, tab or file detour suspends the current lesson and its
   timers; Resume reclaims the board in the visible Train pane. Back to lines
   ends it explicitly. Accepted ratings finish saving while paused; a changed
   source invalidates the retained lesson. Training records remain under Documents.
@@ -61,14 +66,31 @@ Bughouse mode is offered when its engine assets are present.
   file` (`Explorer.independent(starting:)`), and supplies the Filter tab
   (`ViewerFilterPane`) and the followed player's colour choice
   (`PlayerSideChoice`) through `ModeView`.
+- Viewer Solitaire uses `engines/solitaire_evaluator.dart` for depth-14,
+  five-line comparisons, with a 50-centipawn tolerance and better-move badges.
+  `chess/pgn/solitaire_record.dart` builds a spoiler-free progress tree and
+  full annotated review; `MoveTreeView.preview` reads these without document
+  edits. The final PGN can be copied or added to a study. See
+  [Solitaire behavior](v2/features/pgn-viewer.md#game-buttons-and-solitaire-2026-09-28).
 - Study uses the same document session for chapters, tags, starts, cleanup,
-  quiz markers, import/export and retained retry commands.
+  quiz markers, import/export and retained retry commands. `studyTabs` and
+  `Train study` expose the shared trainer without leaving Study. The chapter
+  list has search, drag ordering and move-to-position; the import preview joins
+  PGN files, pasted PGN and Lichess URLs with new/current-study destinations.
+  `TrainingSide` separates practice choices from board orientation, with chapter
+  or whole-study scope. Deleted-study restoration retains uncertain moves for
+  exact retry. See [Study](v2/features/study.md).
 - Tactics mines downloaded games into `tactics_sets/Default.pgn`, trains puzzles
   on the shared board and can inspect the source game. Text search and filters
-  define both the visible puzzle list and Play's counted queue. Alternative answers use
+  define both the visible puzzle list and Play's counted queue.
+  `PuzzleTrainer.continueSession` restores a parked run without clearing results. Alternative answers use
   a supervised finite engine job; unavailable checks do not invent grades.
+- My games reads saved games independently of the selected comparison book;
+  `BookChecked.hasBook` distinguishes browsing from opening comparison. Its
+  initial Game tab has Book and Game review beside it.
 - Players/prep owns identities, groups, downloads, findings, prepared flags and
-  linked prep studies. Failed analysis offers Try again and diagnostic Details;
+  linked prep studies. Player analysis exposes My book beside Game, and Player
+  openings offers saving the current line to a prep study. Failed analysis offers Try again and diagnostic Details;
   an unsuccessful refresh retains the previous corpus and its source revisions.
   `PlayerPosition.addGame` owns result counting for both the corpus and filtered
   statistics; its game and move collections are read-only to consumers. Filtering
@@ -119,6 +141,10 @@ Bughouse mode is offered when its engine assets are present.
 - Engine tournaments use the shared supervisor, retryable checkpoints, saved
   history, ratings/crosstables and viewer handoff. Bughouse keeps its own two-board
   screen, Hivemind analysis, archive/book reads and saved matches.
+- Text fields leave the typing area blank until the user enters a value.
+  `SearchField` keeps its magnifier, clear action, accessible name and hover
+  help; `ChoiceField` uses persistent labels. New-name dialogs start empty,
+  while rename/edit dialogs retain saved values.
 - `AccessibleBoard` adds named squares, side-to-move/check announcements,
   orientation-aware arrow navigation, Enter/Space selection and keyboard promotion
   to the shared pointer board. Modified history shortcuts still pass through.
@@ -196,3 +222,14 @@ save/reopen, conflict, process-kill and recovery tests remain.
   The API reader/importer is `python/twic-position-finder/bughouse_expectimax.py`;
   `frontend/src/bughouse/expectimax.ts` renders the shared snapshots on both
   bughouse web pages.
+
+## Static browser preparation
+
+The separately deployed Astro frontend now exposes `/pgn`, `/expectimax`,
+`/tactics` and `/bughouse` from one site navigation. The PGN/expectimax workspace
+is `python/twic-position-finder/frontend/src/prep/`, with worker-owned parsing,
+Stockfish/Maia search and transactional browser storage. Local PGNs can move
+from the viewer into tactics; both accept custom FEN starts. These browser
+owners do not import Flutter/native storage. See the
+[frontend guide](../python/twic-position-finder/frontend/README.md#pgn-workspace-and-browser-expectimax)
+for persistence, search semantics, asset preparation and browser verification.

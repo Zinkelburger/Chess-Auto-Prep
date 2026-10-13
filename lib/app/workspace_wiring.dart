@@ -107,7 +107,12 @@ final class WorkspaceWiring {
     launch: _env.startEngine,
   );
 
-  late final _solitaire = Solitaire(_session, _analysis);
+  late final _solitaire = Solitaire(
+    _session,
+    _analysis,
+    launch: _env.startEngine,
+    jobs: _jobs,
+  );
 
   late final _boardBook = BoardBook(
     session: _session,

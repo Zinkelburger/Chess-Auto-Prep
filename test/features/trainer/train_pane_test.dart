@@ -143,8 +143,8 @@ void main() {
   testWidgets('the lines, where they stand, and the ways in', (tester) async {
     await pump(tester);
     expect(find.text('0 learned · 0 due · 2 untrained'), findsOneWidget);
-    expect(find.text('Nothing due'), findsOneWidget);
-    expect(find.text('Learn 2'), findsOneWidget);
+    expect(find.text('Nothing due'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Learn 2'), findsOneWidget);
     expect(find.text('Ruy'), findsOneWidget);
     expect(
       find.text('…3.Bc4'),

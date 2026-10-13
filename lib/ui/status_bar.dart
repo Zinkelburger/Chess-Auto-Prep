@@ -49,7 +49,10 @@ class StatusBar extends StatelessWidget {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: Space.s),
-              child: Text(text, style: TextStyle(color: ink)),
+              child: Semantics(
+                liveRegion: true,
+                child: Text(text, style: TextStyle(color: ink)),
+              ),
             ),
           ),
           if (action case final action?)

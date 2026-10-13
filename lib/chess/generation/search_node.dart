@@ -321,6 +321,21 @@ int nodesIn(SearchNode node) => switch (node) {
   _ => 1,
 };
 
+/// Whether [node] is searched [plies] half-moves deep: no position nearer
+/// than that is left unexpanded or cut off at a horizon, so going on with
+/// the same depth would add nothing.
+bool searchedTo(SearchNode node, int plies) => switch (node) {
+  _ when plies <= 0 => true,
+  TerminalNode() => true,
+  HorizonNode() || FrontierNode() => false,
+  OurNode(:final candidates) => candidates.every(
+    (c) => searchedTo(c.child, plies - 1),
+  ),
+  OpponentNode(:final replies) => replies.every(
+    (r) => searchedTo(r.child, plies - 1),
+  ),
+};
+
 /// [node] with every opponent position cut to its likeliest replies, as a
 /// search with [mass] and [most] would have kept them ([likeliestReplies]),
 /// and the values above them taken again. For a tree saved before the cut,

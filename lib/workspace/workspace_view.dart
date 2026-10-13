@@ -38,6 +38,7 @@ import 'repertoire_tree.dart' show TreePlace;
 import 'search_pane.dart';
 import 'workspace.dart';
 import 'workspace_tabs.dart';
+import 'training_analysis_pane.dart';
 import '../ui/app_keys.dart';
 
 /// What the window around the workspace adds to it: the mode's own tabs
@@ -49,18 +50,22 @@ final class WorkspaceHooks {
     this.header = true,
     this.builder = false,
     this.noteEditing = false,
+    this.onAnnotate,
     this.gameCounter = true,
     this.gameOrdering,
     this.moveMenu,
     this.tabBody,
     this.boardClaim,
     this.lesson,
+    this.trainingTools = false,
+    this.onStudyLesson,
     this.onBoardMove,
     this.onEngineMove,
     this.onExplorerGame,
     this.onExplorerLogin,
     this.onDownloadTwic,
     this.onOpenChapter,
+    this.onShowPositions,
     this.onOpenPlace,
     this.onEditBooks,
     this.onSaveHeld,
@@ -69,6 +74,10 @@ final class WorkspaceHooks {
     this.explorerFileBar,
     this.underHeading,
   });
+
+  final VoidCallback? onAnnotate;
+  final bool trainingTools;
+  final VoidCallback? onStudyLesson;
 
   /// Under the heading: what the mode has to say about the game before it
   /// is read, such as where it left the user's book.
@@ -117,6 +126,9 @@ final class WorkspaceHooks {
 
   /// Opens a chapter in the builder: the draft a search's lines went to.
   final ValueChanged<ChapterRef>? onOpenChapter;
+
+  /// Shows the Positions in the list column: where a search's finds are.
+  final VoidCallback? onShowPositions;
 
   /// Where a move made on the board goes when not into the document: a
   /// puzzle judges it. Null plays it into the document.
@@ -201,6 +213,7 @@ class WorkspaceView extends StatelessWidget {
               noteEditable: hooks.builder,
               editing: hooks.noteEditing ? editing : null,
               quiet: hooks.quietBoard,
+              engineInBoard: !hooks.trainingTools,
               settings: workspace.settings,
               analysis: workspace.analysis,
               onMove: hooks.onBoardMove ?? workspace.session.playMove,
@@ -256,6 +269,7 @@ class WorkspaceView extends StatelessWidget {
             editing: editing,
             onSave: hooks.onSaveHeld,
             commentInNote: hooks.noteEditing,
+            studyTools: hooks.onAnnotate != null,
           ),
           // While part of the game is hidden the arrows would walk into it.
           _UnlessHidden(
@@ -311,6 +325,10 @@ class _Tabbed extends StatelessWidget {
             )
           : _moves(),
     ),
+    WorkspaceTab.analysis when hooks.trainingTools => TrainingAnalysisPane(
+      workspace: workspace,
+      onMove: hooks.onEngineMove,
+    ),
     WorkspaceTab.moves || WorkspaceTab.analysis => _moves(),
     WorkspaceTab.review =>
       workspace.review == null
@@ -328,6 +346,7 @@ class _Tabbed extends StatelessWidget {
       session: workspace.session,
       settings: workspace.settings,
       onOpenChapter: hooks.onOpenChapter,
+      onShowPositions: hooks.onShowPositions,
     ),
     WorkspaceTab.audit =>
       workspace.audit == null
@@ -339,11 +358,57 @@ class _Tabbed extends StatelessWidget {
     WorkspaceTab.player || WorkspaceTab.playerBook => _supplied(context, tab),
   };
 
-  Widget _moves() => MoveTreeView(
-    session: workspace.session,
-    moveMenu: hooks.moveMenu,
-    heading: hooks.header ? _heading() : null,
-  );
+  Widget _moves() {
+    final solitaire = workspace.solitaire;
+    Widget reader() => MoveTreeView(
+      session: workspace.session,
+      moveMenu: (path) => [
+        if (hooks.onAnnotate != null)
+          MenuItemButton(
+            onPressed: () {
+              workspace.session.goTo(path);
+              hooks.onAnnotate!();
+            },
+            child: const Text('Comment this move'),
+          ),
+        ...?hooks.moveMenu?.call(path),
+      ],
+      heading: hooks.header ? _heading() : null,
+      preview: solitaire?.active == true && solitaire?.record != null
+          ? (tree: solitaire!.record!, onRead: solitaire.inspect)
+          : null,
+    );
+    Widget annotatedReader() => hooks.onAnnotate == null
+        ? reader()
+        : ListenableBuilder(
+            listenable: workspace.session,
+            builder: (context, _) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (workspace.session.chapter != null &&
+                    workspace.session.shownTo == null)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Tooltip(
+                      message: AppKey.edit.tip('Annotate the selected move'),
+                      child: TextButton(
+                        onPressed: hooks.onAnnotate,
+                        child: const Text('Annotate'),
+                      ),
+                    ),
+                  ),
+                Expanded(child: reader()),
+              ],
+            ),
+          );
+    return solitaire == null
+        ? annotatedReader()
+        : ListenableBuilder(
+            listenable: solitaire,
+            builder: (context, _) =>
+                solitaire.active ? reader() : annotatedReader(),
+          );
+  }
 
   // At a puzzle the table would tick the answer, or list it as the only
   // move with This file, so it goes while the answer is hidden, as the
@@ -420,9 +485,23 @@ class _Tabbed extends StatelessWidget {
     builder: (context, lesson, _) => lesson != null && _tellsAnswers(tab)
         ? Padding(
             padding: const EdgeInsets.all(readingCardInset),
-            child: Text(
-              'Hidden while training',
-              style: Theme.of(context).textTheme.bodySmall,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Hidden while training',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                if (hooks.onStudyLesson != null) ...[
+                  const SizedBox(height: Space.s),
+                  OutlinedButton(
+                    onPressed: hooks.onStudyLesson,
+                    child: const Text('Reveal help and study'),
+                  ),
+                  const SizedBox(height: Space.s),
+                  const Text('Your lesson stays ready to resume.'),
+                ],
+              ],
             ),
           )
         : _body(context, tab, explorer: explorer, book: book),
@@ -490,6 +569,7 @@ class _BoardAndCounter extends StatefulWidget {
     this.noteEditable = false,
     this.editing,
     this.quiet = false,
+    this.engineInBoard = true,
   });
 
   final DocumentSession session;
@@ -501,6 +581,9 @@ class _BoardAndCounter extends StatefulWidget {
   /// Whether the engine's row, the move field and an empty note stay away
   /// until they are used ([WorkspaceHooks.quietBoard]).
   final bool quiet;
+
+  /// Training provides the shared engine in its Analysis tool pane.
+  final bool engineInBoard;
 
   /// Where a move made on the board or typed into the field goes.
   final ValueChanged<String> onMove;
@@ -542,10 +625,17 @@ class _BoardAndCounterState extends State<_BoardAndCounter>
   /// The engine's room: none while part of the game is hidden, and none on
   /// a quiet board until the engine is on.
   double _room() =>
-      widget.session.shownTo != null ||
+      !widget.engineInBoard ||
+          widget.session.shownTo != null ||
           (widget.quiet && !widget.analysis.enabled)
       ? 0
       : enginePaneHeight(widget.analysis, settingsOpen: _engineSettings.value);
+
+  @override
+  void didUpdateWidget(_BoardAndCounter oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _engineRoom = _room();
+  }
 
   @override
   Listenable listenableOf(_BoardAndCounter widget) =>

@@ -103,13 +103,17 @@ class _TacticsPanelState extends State<TacticsPanel> {
           ),
           Expanded(
             child: switch (widget.set.state) {
-              SetLoading() => const SizedBox.shrink(),
+              SetLoading() => const _Message('Reading puzzles…'),
               SetMissing() => const _Message(
                 'No puzzles yet. Get your games above: the mistakes you made '
                 'in them become puzzles here.',
               ),
               SetUnreadable(:final detail) => _Message(
                 'The puzzle set could not be read: $detail',
+                action: TextButton(
+                  onPressed: () => unawaited(widget.set.load()),
+                  child: const Text('Try again'),
+                ),
               ),
               SetReady() => _ready(context),
             },
@@ -131,9 +135,17 @@ class _TacticsPanelState extends State<TacticsPanel> {
         Padding(
           padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, 0),
           child: FilledButton.icon(
-            onPressed: shown.isEmpty ? null : () => widget.onPlay(),
+            onPressed: shown.isEmpty && widget.trainer.run == null
+                ? null
+                : () => widget.onPlay(),
             icon: const Icon(Icons.play_arrow, size: IconSize.action),
-            label: Text('Play (${shown.length})'),
+            label: Text(
+              widget.trainer.up != null
+                  ? 'Show puzzle'
+                  : widget.trainer.run != null
+                  ? 'Continue session'
+                  : 'Play (${shown.length})',
+            ),
           ),
         ),
         Expanded(child: _list(queue, shown)),

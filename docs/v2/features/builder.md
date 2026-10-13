@@ -34,8 +34,8 @@ The move-note card beneath the board is directly editable, including the chapter
 existing commit-on-navigation editor and guarded document saver.
 
 Expectimax is headed by one bar that never moves (2026-10-01): a button that is
-`Expectimax`, `Pause` or `Resume` in the same place at the same width, the
-`Depth` box (empty is no limit) and a gear, with a typeable `Replies from`
+`Expectimax`, `Pause`, `Resume` or `Deeper` in the same place at the same width, the
+`Depth` box (empty is no limit), the Positions list button and a gear, with a typeable `Replies from`
 field (Maia, Lichess masters, Lichess players, TWIC games) beside the depth
 where the pane is 480px or wider and on its own line under the bar where it is
 not. One status line under it starts
@@ -44,8 +44,15 @@ side is the bottom of the board, so pressing it turns the board (as F does). It
 is held while a search runs. It is not a two-part switch: the owner removed a
 permanent White/Black switch from the builder on 2026-09-22. After it the line says what will run
 (`Maia 2200 · best 4, then 4`), then how far the search has
-got; while a search with no depth runs, `Finish depth N` at the line's end lets
-the level under way finish before pausing. The gear swaps the results in place
+got (`Depth 3 · 95 positions`); while a search with no depth runs, `Finish depth N`
+at the line's end lets the level under way finish before pausing, and after a run
+that found something `N found` there opens the Positions. `Resume` shows only
+where the tree at the board stops short of the depth asked for; a tree already
+that deep shows `Deeper`, which raises `Depth` by one and goes on from it
+(2026-10-08; pressing `Resume` there used to do nothing). Empty value cells
+read `–`, and a trap's `?` says on hover how often it is played and what it
+loses; the move column's header explains the mark. `Make lines` writes a
+trap's reply with `?` (`$2`). The gear swaps the results in place
 for the rest of the settings, as the engine pane's gear does: Maia practical |
 ChessDB mainline; with a database chosen, a tick box `Fall back to Maia under`
 N `games at a position` (ticked, 10), and for Lichess players a line naming the

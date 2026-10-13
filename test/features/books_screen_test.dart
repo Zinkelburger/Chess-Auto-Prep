@@ -86,7 +86,13 @@ void main() {
       expect(find.text('Updating book chapters…'), findsOneWidget);
       expect(
         tester
-            .widget<TextButton>(find.widgetWithText(TextButton, 'New book'))
+            .widget<IconButton>(
+              find.byWidgetPredicate(
+                (widget) =>
+                    widget is IconButton &&
+                    widget.tooltip == 'New opening book',
+              ),
+            )
             .onPressed,
         isNull,
       );
@@ -116,7 +122,7 @@ void main() {
     'creation already confirmed in a dialog waits for reference save',
     (tester) async {
       await show(tester);
-      await tester.tap(find.widgetWithText(TextButton, 'New book'));
+      await tester.tap(find.byTooltip('New opening book'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).last, 'Next event');
       final held = Completer<SaveResult>();
@@ -169,7 +175,7 @@ void main() {
     tester,
   ) async {
     await show(tester, chip: true);
-    await tester.tap(find.text('No book set'));
+    await tester.tap(find.text('No opening book set'));
     await tester.pumpAndSettle();
     final held = Completer<SaveResult>();
     final saving = books.saveReferences(() => held.future);

@@ -214,7 +214,8 @@ Flat by default. Depth is tonal: reading black under charcoal under graphite,
 separated by 1px outline-grey lines. Menus and popovers are graphite with an
 outline and an 8px radius, not a shadow. Ink splashes and highlight washes
 are off. The only floating surface is the 200px preview board that appears
-80ms after the pointer rests on a move.
+80ms after the pointer rests on a move; it too is set off by a 1px outline, not a
+shadow, as are suggestion lists and drag labels.
 
 ### Named Rules
 **The No-Shadow Rule.** Separate surfaces with a tonal step or a 1px outline, never a drop shadow or glow.
@@ -237,9 +238,10 @@ active pane's a brighter grey. Dividers between panes are 1px lines with a
 - **Hover / Focus:** no splash and no highlight wash; Material's state layer only.
 
 ### Pane tabs
-- **Style:** 34px tall, up to 220px wide, 6px radius; the chosen tab filled in Selection Grey; a 2px line shows where a dragged tab will land. Tabs close from the right-click menu.
+- **Style:** 34px tall, up to 220px wide and never wider than the strip (a long title ends in an ellipsis), 6px radius; the chosen tab filled in Selection Grey; a 2px line shows where a dragged tab will land. Tabs close from the right-click menu. The list column's Repertoires / Chapters / Positions tabs use the same height and inset.
 
 ### Inputs / Fields
+- Empty fields contain no example text or typing prompts. Keep names on labels, search purposes in accessible names and hover help, and required formats in labels. New names start blank; saved values and functional settings remain visible.
 - **Style:** shared `search_field`, `choice_field`, `number_field` controls with a label above and an underline; search always shows its magnifier and clear action.
 - **Choices:** typeable ChoiceField, NumberStepper or a segmented button. Never a dropdown the player cannot type into.
 - **Filters:** compact Field / Rule / Value rows; selected sets as removable chips.
@@ -249,13 +251,16 @@ active pane's a brighter grey. Dividers between panes are 1px lines with a
 - **Result bar:** three grey parts with their own quiet ink, at most 220px wide.
 
 ### Tool panes (Expectimax is the pattern)
-- **Bar:** a fixed-height row that never reflows: the pane's one action (a button that keeps its place and width whatever it says: Expectimax, Pause, Resume), the one or two values changed on every use, and a gear at the end.
-- **Status:** one fixed-height line under the bar: what will run, then progress, then the outcome or the problem. A secondary action for the running state sits at its end. A fact that frames the whole pane sits at its start as a text button that names it and changes it (Expectimax: the side prepared, which turns the board).
-- **Value table:** a fixed header and 32px rows; the move takes the room left by fixed mono gutters (48px share, 56px values). A pane too narrow drops the least needed column whole (Played) rather than squeezing any.
+- **Bar:** a fixed-height row that never reflows: the pane's one action (a button that keeps its place and width whatever it says: Expectimax, Pause, Resume, Deeper — Resume only where there is something left to go on with), the one or two values changed on every use, an icon for the list the pane's results feed (Positions) and a gear at the end.
+- **Status:** one fixed-height line under the bar: what will run, then progress, then the outcome or the problem, in as few words as fit (`Depth 3 · 95 positions`). A secondary action for the running state, or the way to the outcome's results (`4 found`), sits at its end. A fact that frames the whole pane sits at its start as a text button that names it and changes it (Expectimax: the side prepared, which turns the board).
+- **Value table:** a fixed header and 32px rows; the move takes the room left by fixed mono gutters (48px share, 56px values). A pane too narrow drops the least needed column whole (Played) rather than squeezing any. A value the search does not hold reads a muted `–`, never a blank cell. A mark such as the trap's `?` says what it means on hover, and the column header explains it.
 - **Gear:** swaps the pane's content in place for the remaining settings, one named row each with a one-line explanation on screen, and back. The same rows appear as a Settings group and write the same saved values. While the action runs they are shown but locked, with one line saying why.
 
 ### Engine lines
 - **Style:** the old inline-bar style, not a Lichess headline: a small switch and status, then 28px rows with a 54px score gutter and the moves after it. Hovering a move floats its board.
+
+### Bughouse reserve (lila's pocket)
+- **Style:** lila's crazyhouse pocket, kept on purpose over the flat rules: five square-sized slots (pawn to queen) in a #888 grey well with lila's inset top shade, 4px radius, beside the seat's letter. A held piece shows in full with its count in white bold on lila's orange (#D64F00) in the slot's lower right; an empty slot keeps its place with the piece at 10% opacity. On the player's turn a slot brightens to #AAA under the pointer, a picked piece takes the board's selection green, and its drop squares are ringed on the board.
 
 ### Reading card (signature)
 - **Style:** Reading Black card, 8px radius, 24px inset; movetext in 16px mono at 1.7, comments in 16px prose at a 640px measure. Mistakes are marked and clickable; no per-move evaluations in the movetext.

@@ -16,6 +16,7 @@ import '../features/pgn_viewer/filter_pane.dart';
 import '../features/pgn_viewer/pgn_viewer_panel.dart';
 import '../features/pgn_viewer/player_side_choice.dart';
 import '../features/study/study_panel.dart';
+import '../features/trainer/trainer.dart';
 import '../storage/chapter_files.dart';
 import '../ui/app_action.dart';
 import '../ui/choice_dialog.dart';
@@ -87,11 +88,13 @@ abstract base class ModeView {
     PaneTabs<WorkspaceTab> tabs, {
     Explorer? explorer,
     bool opensBeside = false,
+    bool analysisInPanes = false,
   }) : _explorer = explorer,
        layout = ActionLayout(
          tabs,
          explorer ?? workspace.explorer,
          opensBeside: opensBeside,
+         analysisInPanes: analysisInPanes,
        );
 
   final Workspace workspace;
@@ -199,6 +202,7 @@ abstract base class _DocumentModeView extends ModeView {
     this.requests, {
     super.explorer,
     super.opensBeside,
+    super.analysisInPanes,
   });
 
   final WorkspaceRequests requests;
@@ -277,8 +281,13 @@ abstract base class _DocumentModeView extends ModeView {
 /// As in the viewer, a tool picked while the card is one pane opens under
 /// it, so the moves or the lesson stay in view.
 abstract base class _LibraryView extends _DocumentModeView {
-  _LibraryView(super.workspace, super.tabs, super.requests, this._modes)
-    : super(opensBeside: true);
+  _LibraryView(
+    super.workspace,
+    super.tabs,
+    super.requests,
+    this._modes, {
+    super.analysisInPanes,
+  }) : super(opensBeside: true);
 
   final DocumentModes _modes;
 
@@ -325,7 +334,7 @@ final class TrainerView extends _LibraryView {
     Workspace workspace,
     WorkspaceRequests requests,
     DocumentModes modes,
-  ) : super(workspace, trainerTabs(), requests, modes);
+  ) : super(workspace, trainerTabs(), requests, modes, analysisInPanes: true);
 
   /// Coming here is coming to train, whichever tab was left up.
   @override
@@ -431,7 +440,10 @@ final class ViewerView extends _DocumentModeView {
     WorkspaceTab.solitaire when _solitaire != null => SolitairePane(
       solitaire: _solitaire!,
       onNextGame: _modes.viewer.file == null ? null : () => walk(1),
-      onAddToStudy: _addGame,
+      onAddToStudy: () {
+        final draft = _solitaire!.reviewDraft;
+        if (draft != null) unawaited(requests.addToStudy([draft]));
+      },
     ),
     WorkspaceTab.filter => ViewerFilterPane(
       viewer: _modes.viewer,
@@ -591,15 +603,32 @@ final class ViewerView extends _DocumentModeView {
 /// Study: the studies and their chapters, and the quiz markers a
 /// right-click puts on a move.
 final class StudyView extends _DocumentModeView {
-  StudyView(Workspace workspace, WorkspaceRequests requests, this._modes)
-    : super(workspace, readingTabs(), requests);
+  StudyView(
+    Workspace workspace,
+    WorkspaceRequests requests,
+    this._modes,
+    this._trainer,
+  ) : super(workspace, studyTabs(), requests);
+
+  final Trainer _trainer;
+
+  @override
+  bool get offersBuilder => false;
+
+  void train() {
+    _trainer.setScope(TrainScope.chapter);
+    show(WorkspaceTab.train);
+  }
 
   final DocumentModes _modes;
 
   /// The studies are read again each time they come on screen: one
   /// imported or written since is listed.
   @override
-  void entered() => unawaited(_modes.studies.refresh());
+  void entered() {
+    _trainer.setScope(TrainScope.chapter);
+    unawaited(_modes.studies.refresh());
+  }
 
   @override
   MoveMenu get moveMenu =>
@@ -608,6 +637,7 @@ final class StudyView extends _DocumentModeView {
   @override
   Widget list(Widget toggle) => StudyPanel(
     studies: _modes.studies,
+    onTrain: train,
     session: workspace.session,
     onOpen: (study, chapter) => unawaited(requests.open(study, game: chapter)),
     trailing: toggle,
@@ -650,6 +680,7 @@ final class BooksView extends ModeView {
           child: Builder(
             builder: (context) => BooksScreen(
               books: workspace.books,
+              onAddRepertoire: () => _requests.switchTo(Mode.repertoires),
               catalog: _modes.library.catalog,
               onOpenChapter: (ref) =>
                   unawaited(_requests.readInBuilder(ref, const [])),
@@ -663,7 +694,7 @@ final class BooksView extends ModeView {
 
   @override
   List<AppAction> actions(ModeMenu menu) => [
-    AppAction('New book', menu.dialogs.newBook, group: 'Books'),
+    AppAction('New opening book', menu.dialogs.newBook, group: 'Opening books'),
   ];
 }
 
@@ -777,23 +808,34 @@ Map<Mode, ModeView> modeViews({
   required PlayerModes players,
   required DatabaseLibrary databases,
   TournamentRun? tournaments,
-}) => {
-  for (final mode in Mode.values)
-    mode: switch (mode) {
-      Mode.repertoires => RepertoiresView(workspace, requests, documents),
-      Mode.trainer => TrainerView(workspace, requests, documents),
-      Mode.books => BooksView(workspace, requests, documents),
-      Mode.pgnViewer => ViewerView(workspace, requests, documents),
-      Mode.study => StudyView(workspace, requests, documents),
-      Mode.tactics => TacticsView(workspace, requests, training),
-      Mode.myGames => MyGamesView(workspace, requests, training),
-      Mode.bughouse => BughouseView(workspace, labs, requests.input),
-      Mode.playerAnalysis => PlayerAnalysisView(workspace, requests, players),
-      Mode.players => PlayersView(workspace, players),
-      Mode.databases => DatabasesView(workspace, databases, requests),
-      Mode.engineTournament => TournamentView(workspace, tournaments, requests),
-    },
-};
+}) {
+  final study = StudyView(workspace, requests, documents, training.lines);
+  return {
+    for (final mode in Mode.values)
+      mode: switch (mode) {
+        Mode.repertoires => RepertoiresView(workspace, requests, documents),
+        Mode.trainer => TrainerView(workspace, requests, documents),
+        Mode.books => BooksView(workspace, requests, documents),
+        Mode.pgnViewer => ViewerView(workspace, requests, documents),
+        Mode.study => study,
+        Mode.tactics => TacticsView(workspace, requests, training),
+        Mode.myGames => MyGamesView(workspace, requests, training),
+        Mode.bughouse => BughouseView(workspace, labs, requests.input),
+        Mode.playerAnalysis => PlayerAnalysisView(workspace, requests, players),
+        Mode.players => PlayersView(
+          workspace,
+          players,
+          onTrainStudy: study.train,
+        ),
+        Mode.databases => DatabasesView(workspace, databases, requests),
+        Mode.engineTournament => TournamentView(
+          workspace,
+          tournaments,
+          requests,
+        ),
+      },
+  };
+}
 
 /// The analysis board's doors in the Actions menu: back to it, a new one
 /// from the position on the board, and — while it is up — a paste onto it
@@ -891,10 +933,7 @@ Future<void> saveHeld(
   if (where == null || !context.mounted) return;
   switch (where) {
     case _HeldTarget.copy:
-      final name = await showCopyNameDialog(
-        context,
-        session.chapter?.name ?? 'Chapter',
-      );
+      final name = await showCopyNameDialog(context);
       if (name == null) return;
       sayCopy(requests.say, await session.saveCopy(name, into: collections));
     case _HeldTarget.study:

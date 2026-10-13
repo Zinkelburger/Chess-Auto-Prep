@@ -70,7 +70,6 @@ class _LibraryPanelState extends State<LibraryPanel> {
       context,
       title: 'Create repertoire',
       label: 'Repertoire name',
-      hint: 'My Sicilian',
       confirm: 'Create',
     );
     if (name == null || !mounted) return;
@@ -135,8 +134,19 @@ class _LibraryPanelState extends State<LibraryPanel> {
 
   Widget _listed(Library library) {
     if (library.repertoires.isEmpty) {
-      return const _Message(
-        'No repertoires yet\nCreate a repertoire to get started.',
+      return Padding(
+        padding: const EdgeInsets.all(Space.l),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('No repertoires yet.'),
+            const SizedBox(height: Space.m),
+            FilledButton(
+              onPressed: library.busy ? null : _newRepertoire,
+              child: const Text('New repertoire'),
+            ),
+          ],
+        ),
       );
     }
     if (library.visible.isEmpty) {

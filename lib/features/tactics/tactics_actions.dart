@@ -82,7 +82,17 @@ List<AppAction> myGamesActions(
 /// What can be done to the puzzle on the board, while one is.
 List<AppAction> puzzleActions(PuzzleTrainer trainer) {
   final up = trainer.up;
-  if (up == null) return const [];
+  if (up == null)
+    return trainer.run == null
+        ? const []
+        : [
+            AppAction(
+              'Continue session',
+              () => unawaited(trainer.continueSession()),
+              group: 'Tactics',
+            ),
+            AppAction('End session', trainer.end, group: 'Tactics'),
+          ];
   return [
     AppAction(
       'Show solution',

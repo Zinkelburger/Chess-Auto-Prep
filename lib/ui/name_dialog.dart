@@ -20,7 +20,6 @@ Future<String?> showNameDialog(
   required String label,
   required String confirm,
   String initial = '',
-  String? hint,
   NameDialogExtra? extra,
 }) => showDialog<String>(
   context: context,
@@ -29,7 +28,6 @@ Future<String?> showNameDialog(
     label: label,
     confirm: confirm,
     initial: initial,
-    hint: hint,
     extra: extra,
   ),
 );
@@ -40,7 +38,6 @@ class _NameDialog extends StatefulWidget {
     required this.label,
     required this.confirm,
     required this.initial,
-    required this.hint,
     required this.extra,
   });
 
@@ -48,7 +45,6 @@ class _NameDialog extends StatefulWidget {
   final String label;
   final String confirm;
   final String initial;
-  final String? hint;
   final NameDialogExtra? extra;
 
   @override
@@ -99,7 +95,6 @@ class _NameDialogState extends State<_NameDialog> {
               autofocus: true,
               decoration: InputDecoration(
                 labelText: widget.label,
-                hintText: widget.hint,
                 errorText: _problem,
               ),
               onChanged: (_) {

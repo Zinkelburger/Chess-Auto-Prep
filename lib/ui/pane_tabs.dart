@@ -267,35 +267,42 @@ class _PaneTabStripState<K extends Object> extends State<PaneTabStrip<K>>
       child: Row(
         children: [
           Flexible(
-            child: Listener(
-              onPointerSignal: _wheel,
-              child: SingleChildScrollView(
-                controller: _scroll,
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    for (final id in tabs.open)
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          maxWidth: paneTabMaxWidth,
-                          minHeight: paneTabHeight,
-                          maxHeight: paneTabHeight,
+            child: LayoutBuilder(
+              // No tab is wider than the strip: a long title in a narrow
+              // pane ends in an ellipsis rather than scrolling its start
+              // out of view.
+              builder: (context, room) => Listener(
+                onPointerSignal: _wheel,
+                child: SingleChildScrollView(
+                  controller: _scroll,
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final id in tabs.open)
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: room.maxWidth.isFinite
+                                ? room.maxWidth.clamp(0, paneTabMaxWidth)
+                                : paneTabMaxWidth,
+                            minHeight: paneTabHeight,
+                            maxHeight: paneTabHeight,
+                          ),
+                          child: _TabSlot<K>(
+                            key: _keys.putIfAbsent(id, GlobalKey.new),
+                            tabs: tabs,
+                            tab: tabs.tabOf(id),
+                            onSelect: widget.onSelect,
+                            onClose: widget.onClose,
+                            connected: widget.connected,
+                            closeButton: widget.closeButtons,
+                            onContextMenu: widget.onContextMenu,
+                            onDragStarted: widget.onDragStarted,
+                            onDragEnd: widget.onDragEnd,
+                            onDrop: widget.onDrop,
+                          ),
                         ),
-                        child: _TabSlot<K>(
-                          key: _keys.putIfAbsent(id, GlobalKey.new),
-                          tabs: tabs,
-                          tab: tabs.tabOf(id),
-                          onSelect: widget.onSelect,
-                          onClose: widget.onClose,
-                          connected: widget.connected,
-                          closeButton: widget.closeButtons,
-                          onContextMenu: widget.onContextMenu,
-                          onDragStarted: widget.onDragStarted,
-                          onDragEnd: widget.onDragEnd,
-                          onDrop: widget.onDrop,
-                        ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

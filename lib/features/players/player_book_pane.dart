@@ -31,10 +31,15 @@ class PlayerBookPane extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(Space.m, Space.m, Space.m, 0),
-            child: Row(
+            child: Wrap(
+              spacing: Space.s,
+              runSpacing: Space.s,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 FilledButton(
-                  onPressed: book.busy ? null : book.check,
+                  onPressed: book.busy || book.analysis.gameIndexes.isEmpty
+                      ? null
+                      : book.check,
                   child: Text(book.busy ? 'Checking…' : 'Check my book'),
                 ),
                 const SizedBox(width: Space.s),
@@ -59,8 +64,11 @@ class PlayerBookPane extends StatelessWidget {
             ),
             child: Text(
               status ??
-                  'Finds this player’s replies your book in use does not '
-                      'answer.',
+                  (book.analysis.corpus == null
+                      ? 'Choose a player and load their games first.'
+                      : book.analysis.gameIndexes.isEmpty
+                      ? 'No games match. Change the colour or filters in the left panel.'
+                      : 'Compare this player’s replies with your book for the opposite colour.'),
               style: theme.textTheme.bodySmall,
             ),
           ),

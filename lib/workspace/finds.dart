@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import '../chess/fen.dart';
 import '../chess/generation/finds.dart';
 import '../chess/generation/search_node.dart';
+import '../chess/pgn/tree_edit.dart' show positionOf;
 import '../diagnostics/log.dart';
 import '../storage/finds_store.dart';
 import '../storage/pending_writes.dart';
@@ -73,6 +74,8 @@ final class Finds extends ChangeNotifier {
   List<KeptFind>? _shown;
   FindOrder _order = FindOrder.worth;
   FindKind? _kind;
+  Set<String>? _within;
+  final _decidedAt = <int, String?>{};
   int? _selected;
   FindsRecorded? _recorded;
   bool _disposed = false;
@@ -97,11 +100,43 @@ final class Finds extends ChangeNotifier {
           ? const FindsUnsaved('Search positions have not been saved.')
           : null);
 
+  /// Whether only the finds decided in [within]'s positions are shown.
+  bool get narrowed => _within != null;
+
   /// The finds of the kinds shown, in the order chosen.
   List<KeptFind> get shown => _shown ??= _sorted([
     for (final kept in all)
-      if (_kind == null || kept.find.kind == _kind) kept,
+      if ((_kind == null || kept.find.kind == _kind) &&
+          (_within == null || _within!.contains(_decided(kept))))
+        kept,
   ]);
+
+  /// Shows only the finds whose move is played from one of [positions],
+  /// four FEN fields each — a chapter's, so the list is what comes up in
+  /// it; null shows them all.
+  void within(Set<String>? positions) {
+    final held = _within;
+    if (positions == null
+        ? held == null
+        : held != null &&
+              held.length == positions.length &&
+              held.containsAll(positions))
+      return;
+    _within = positions;
+    _changed();
+  }
+
+  /// The position the find's move is played from, four fields; null when
+  /// its line cannot be played from its root.
+  String? _decided(KeptFind kept) => _decidedAt.putIfAbsent(kept.id, () {
+    var position = positionOf(kept.rootFen);
+    for (final san in kept.find.sans.take(kept.find.keyPly)) {
+      final move = position?.parseSan(san);
+      if (move == null) return null;
+      position = position!.play(move);
+    }
+    return position == null ? null : Fen(position.fen).position;
+  });
 
   /// Reads the store once; later calls do nothing.
   void load() {

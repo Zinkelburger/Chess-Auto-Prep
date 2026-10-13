@@ -23,6 +23,7 @@ class BooksScreen extends StatelessWidget {
     required this.books,
     required this.catalog,
     required this.onOpenChapter,
+    this.onAddRepertoire,
   });
 
   final Books books;
@@ -32,6 +33,7 @@ class BooksScreen extends StatelessWidget {
 
   /// Opens a chapter in the builder.
   final ValueChanged<ChapterRef> onOpenChapter;
+  final VoidCallback? onAddRepertoire;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -55,6 +57,7 @@ class BooksScreen extends StatelessWidget {
                     book: editing,
                     catalog: catalog,
                     onOpenChapter: onOpenChapter,
+                    onAddRepertoire: onAddRepertoire,
                   ),
           ),
         ],
@@ -75,9 +78,8 @@ Future<void> newBook(
   final status = say ?? StatusScope.of(context);
   final name = await showNameDialog(
     context,
-    title: 'New book',
-    label: 'Book name',
-    hint: 'Spring Equinox Open',
+    title: 'New opening book',
+    label: 'Opening book name',
     confirm: 'Create',
   );
   if (name == null) return;
@@ -98,8 +100,8 @@ Future<void> _rename(BuildContext context, Books books, Book book) async {
   final say = StatusScope.of(context);
   final name = await showNameDialog(
     context,
-    title: 'Rename book',
-    label: 'Book name',
+    title: 'Rename opening book',
+    label: 'Opening book name',
     initial: book.name,
     confirm: 'Rename',
   );
@@ -129,7 +131,7 @@ Future<void> _delete(BuildContext context, Books books, Book book) async {
   final say = StatusScope.of(context);
   final yes = await confirmAction(
     context,
-    title: 'Delete book "${book.name}"?',
+    title: 'Delete opening book "${book.name}"?',
     message: 'Its repertoires and chapters stay where they are.',
     confirm: 'Delete',
   );
@@ -159,13 +161,15 @@ class _BookList extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.s, 0),
           child: Row(
             children: [
-              Expanded(child: Text('Books', style: theme.textTheme.titleSmall)),
-              TextButton.icon(
+              Expanded(
+                child: Text('Opening books', style: theme.textTheme.titleSmall),
+              ),
+              IconButton(
                 onPressed: books.changingReferences
                     ? null
                     : () => unawaited(newBook(context, books)),
                 icon: const Icon(Icons.add, size: IconSize.menu),
-                label: const Text('New book'),
+                tooltip: 'New opening book',
               ),
             ],
           ),
@@ -226,13 +230,16 @@ class _NoBooks extends StatelessWidget {
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('No books yet.', style: Theme.of(context).textTheme.bodyMedium),
+        Text(
+          'No opening books yet.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
         const SizedBox(height: Space.m),
         FilledButton(
           onPressed: books.loaded && !books.changingReferences
               ? () => unawaited(newBook(context, books))
               : null,
-          child: const Text('New book'),
+          child: const Text('New opening book'),
         ),
       ],
     ),
@@ -248,12 +255,14 @@ class _BookEditor extends StatefulWidget {
     required this.book,
     required this.catalog,
     required this.onOpenChapter,
+    this.onAddRepertoire,
   });
 
   final Books books;
   final Book book;
   final RepertoireCatalog catalog;
   final ValueChanged<ChapterRef> onOpenChapter;
+  final VoidCallback? onAddRepertoire;
 
   @override
   State<_BookEditor> createState() => _BookEditorState();
@@ -367,11 +376,24 @@ class _BookEditorState extends State<_BookEditor> {
           child: rows.isEmpty
               ? Padding(
                   padding: const EdgeInsets.all(Space.l),
-                  child: Text(
-                    widget.catalog.repertoires.isEmpty
-                        ? 'No repertoires yet.'
-                        : 'Nothing matches "${_search.text.trim()}".',
-                    style: theme.textTheme.bodySmall,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.catalog.repertoires.isEmpty
+                            ? 'Create or import a repertoire, then choose its chapters for this book.'
+                            : 'Nothing matches "${_search.text.trim()}".',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                      if (widget.catalog.repertoires.isEmpty &&
+                          widget.onAddRepertoire != null) ...[
+                        const SizedBox(height: Space.m),
+                        OutlinedButton(
+                          onPressed: widget.onAddRepertoire,
+                          child: const Text('Open repertoire builder'),
+                        ),
+                      ],
+                    ],
                   ),
                 )
               : ListView(children: rows),

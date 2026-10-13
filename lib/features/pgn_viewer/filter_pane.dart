@@ -271,9 +271,7 @@ class _RuleRow extends StatelessWidget {
     final value = ChoiceField(
       text: rule.value,
       options: values,
-      // A move sequence reads as the moves themselves, `…` where others
-      // may come between.
-      hint: rule.field == movesField ? 'e4 c5 … Nf3' : 'Value',
+      hint: 'Value',
       onChanged: (typed) => onChanged(rule.copyWith(value: typed)),
     );
     final remove = IconButton(

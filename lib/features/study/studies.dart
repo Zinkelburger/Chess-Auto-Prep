@@ -3,6 +3,7 @@ import '../../storage/pgn_file_picker.dart';
 import '../../storage/pgn_file_import.dart';
 import '../../storage/pgn_export.dart';
 import '../../storage/operation_id.dart';
+import '../../storage/relocation_notes.dart' show recoveryFolder;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
@@ -13,6 +14,7 @@ import '../../chess/pgn/study_edits.dart' as pgn show addChapters;
 import '../../storage/edit_scope.dart' show GamesRearranged;
 import '../../workspace/study_choice.dart';
 import 'study_commands.dart' show studyNameOf;
+import 'study_import_source.dart';
 import '../../diagnostics/log.dart';
 import '../../net/lichess_studies.dart';
 import '../../storage/pending_writes.dart';
@@ -57,6 +59,12 @@ final class Studies extends ChangeNotifier {
 
   /// What a study's first chapter is called before anyone renames it.
   static const firstChapter = 'Chapter 1';
+
+  late final imports = StudyImportSource(
+    lichess: _lichess,
+    picker: picker,
+    importer: importer,
+  );
 
   final PgnFilePicker? picker;
   final PgnFileImport? importer;
@@ -153,7 +161,12 @@ final class Studies extends ChangeNotifier {
   Future<StudyResult> addChapters(
     StudyChoice into,
     List<ChapterDraft> drafts,
-  ) => _run('add chapters to a study', () async {
+  ) => _run('add chapters to a study', () => _addChapters(into, drafts));
+
+  Future<StudyResult> _addChapters(
+    StudyChoice into,
+    List<ChapterDraft> drafts,
+  ) async {
     switch (into) {
       case NewStudy(:final name):
         if (nameProblem(name) case final wrong?) return StudyProblem(wrong);
@@ -174,7 +187,7 @@ final class Studies extends ChangeNotifier {
               : _addOnDisk(study, drafts),
         );
     }
-  });
+  }
 
   StudyResult _addOpen(ChapterRef study, List<ChapterDraft> drafts) {
     final chapter = _session.chapter;
@@ -293,6 +306,36 @@ final class Studies extends ChangeNotifier {
       return _createdUnderAFreeName(name, text);
     });
   }
+
+  Future<StudyResult> importPreview(
+    StudyImportData data, {
+    ChapterRef? into,
+    String? name,
+  }) => _run('import study chapters', () async {
+    if (name != null) {
+      if (nameProblem(name) case final wrong?) return StudyProblem(wrong);
+    }
+    if (into == null)
+      return _createdUnderAFreeName(name ?? data.name, data.text);
+    if (!data.complete)
+      return const StudyProblem(
+        'Some games could not be read completely. Import them as a new study to preserve their original text.',
+      );
+    return _addChapters(IntoStudy(into), [
+      for (final (index, line) in data.chapter.lines.indexed)
+        ChapterDraft(
+          name: studyChapterName(
+            line,
+            index: index,
+            study: studyNameIn(data.chapter.lines),
+          ),
+          orientation: studyOrientation(line),
+          moves: line.tree!,
+          tags: line.tags,
+          result: line.terminator,
+        ),
+    ]);
+  });
 
   Future<StudyResult> exportPgn(String name) async {
     if (nameProblem(name) case final wrong?) return StudyProblem(wrong);
@@ -451,6 +494,91 @@ final class Studies extends ChangeNotifier {
           'Rename was not confirmed: $detail. Retry rename to finish.',
         );
     }
+  }
+
+  Future<DeletedListing> deleted() => _files.deleted();
+
+  _StudyRename? _restore;
+  bool get canRetryRestore => _restore != null;
+  Future<StudyResult> restore(DeletedChapter deleted, {String? name}) =>
+      _run('restore study', () async {
+        final wanted = name ?? deleted.name;
+        if (nameProblem(wanted) case final wrong?) return StudyProblem(wrong);
+        if (!p.equals(deleted.folder, _root) ||
+            !p.equals(p.dirname(deleted.path), p.join(_root, recoveryFolder))) {
+          return const StudyProblem(
+            'That deleted study is outside the studies folder.',
+          );
+        }
+        final from = ChapterRef.at(deleted.path);
+        final to = ChapterRef.at(p.join(_root, '$wanted.pgn'));
+        if (_restore case final existing?) {
+          if (existing.from != from || existing.to != to)
+            return const StudyProblem('Retry the pending study restore first.');
+          return _restoreLocked();
+        }
+        return _changing(
+          from.path,
+          () => _changing(to.path, () async {
+            final read = await _store.open(from);
+            if (read is! store.Opened)
+              return const StudyProblem(
+                'That deleted study could not be read. Refresh and try again.',
+              );
+            if (read.readOnly case final reason?) return StudyProblem(reason);
+            final id = newOperationId();
+            final pending = pendingWrites ?? PendingWrites();
+            Future<store.MoveResult> work() =>
+                _store.move(from, to, expected: read.revision, operationId: id);
+            _restore = _StudyRename(
+              from,
+              to,
+              Object(),
+              pending.accept<store.MoveResult>(
+                resource: this,
+                label: 'Restore study',
+                work: work,
+                problem: (result) =>
+                    result is store.IoFailure && result is! store.Unfinished
+                    ? result.detail
+                    : null,
+              ),
+              () => pending.track(this, work(), label: 'Restore study'),
+            );
+            return _finishRestore();
+          }),
+        );
+      });
+
+  Future<StudyResult> retryRestore() =>
+      _run('retry study restore', _restoreLocked);
+  Future<StudyResult> _restoreLocked() async {
+    final move = _restore;
+    if (move == null) return const StudyDone();
+    return _changing(
+      move.from.path,
+      () => _changing(move.to.path, _finishRestore),
+    );
+  }
+
+  Future<StudyResult> _finishRestore() async {
+    final move = _restore!;
+    final result = move.pending.committed
+        ? await move.again()
+        : await move.pending.run();
+    if (result is! store.IoFailure) _restore = null;
+    return switch (result) {
+      store.Moved() => const StudyDone(),
+      store.Collision() => const StudyProblem(
+        'A study with that name already exists. Use Restore as to choose another name.',
+      ),
+      store.Conflict() => const StudyProblem(
+        'The deleted study changed. Refresh and try again.',
+      ),
+      store.IoFailure(:final detail) => StudyProblem(
+        'Restore was not confirmed: $detail. Retry restore to finish.',
+      ),
+    };
   }
 
   /// Recoverable: the file goes to the recovery folder through the store,

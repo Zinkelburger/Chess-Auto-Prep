@@ -13,6 +13,34 @@ import '../support/scripted_explorer.dart';
 import '../support/session_fixture.dart';
 
 void main() {
+  test('trainer restores Analysis beside Train', () async {
+    final fixture = await openSession('[Result "*"]\n\n1. e4 *');
+    addTearDown(fixture.dispose);
+    final settings = SettingsStore();
+    addTearDown(settings.dispose);
+    final explorer = explorerOver(fixture.session, settings: settings);
+    addTearDown(explorer.dispose);
+    final layout = ActionLayout(
+      trainerTabs(),
+      explorer,
+      opensBeside: true,
+      analysisInPanes: true,
+    );
+    addTearDown(layout.dispose);
+    layout.reveal(WorkspaceTab.analysis);
+    final saved = layout.snapshot();
+    final restored = ActionLayout(
+      trainerTabs(),
+      explorer,
+      opensBeside: true,
+      analysisInPanes: true,
+    );
+    addTearDown(restored.dispose);
+    expect(restored.restore(saved), isTrue);
+    expect(restored.count, 2);
+    expect(restored.snapshot(), saved);
+  });
+
   test(
     'files and modes retain independent layouts, reset and survive immediate exit',
     () async {

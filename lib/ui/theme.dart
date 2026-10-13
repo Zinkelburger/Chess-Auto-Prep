@@ -707,6 +707,30 @@ const labBlackDotRing = Color(0xFF5A5A60);
 /// can be dropped on: Lichess's pale blue.
 const labHintColor = Color(0x99003088);
 
+/// A player's reserve, drawn as lila's crazyhouse pocket: five piece slots
+/// in a mid-grey well, shaded along its top edge as lila's inset pocket is,
+/// a slot brighter under the pointer when its piece can be dropped. An
+/// empty slot keeps its place with a faint piece.
+const labPocketWell = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  stops: [0, 0.14],
+  colors: [Color(0xFF5F5F5F), Color(0xFF888888)],
+);
+const labPocketHover = Color(0xFFAAAAAA);
+const labPocketEmptyOpacity = 0.1;
+
+/// A reserve piece's count: white bold on lila's orange accent, in the
+/// slot's lower right corner. It is the number the player reads while
+/// choosing a drop.
+const labPocketCount = Color(0xFFD64F00);
+const labPocketCountText = TextStyle(
+  color: Color(0xFFFFFFFF),
+  fontWeight: FontWeight.w700,
+  height: 1,
+  shadows: [Shadow(offset: Offset(0, 1), blurRadius: 1)],
+);
+
 /// The Books mode: the list of books, a repertoire's or a chapter's row,
 /// and how far a chapter sits in from its repertoire.
 const booksListWidth = 260.0;

@@ -70,22 +70,34 @@ void main() {
     fixture.dispose();
   });
 
-  Future<void> pump(WidgetTester tester) => tester.pumpWidget(
-    MaterialApp(
-      theme: darkTheme(),
-      home: Scaffold(
-        body: SizedBox(
-          width: 560,
-          height: 480,
-          child: SearchPane(
-            fill: fill,
-            session: fixture.session,
-            settings: settings,
+  Future<void> pump(WidgetTester tester, {VoidCallback? onShowPositions}) =>
+      tester.pumpWidget(
+        MaterialApp(
+          theme: darkTheme(),
+          home: Scaffold(
+            body: SizedBox(
+              width: 560,
+              height: 480,
+              child: SearchPane(
+                fill: fill,
+                session: fixture.session,
+                settings: settings,
+                onShowPositions: onShowPositions,
+              ),
+            ),
           ),
         ),
-      ),
-    ),
-  );
+      );
+
+  testWidgets('the bar shows the Positions beside the gear', (tester) async {
+    var shown = 0;
+    await pump(tester, onShowPositions: () => shown++);
+    await tester.tap(
+      find.byTooltip('Show the positions the searches found (Ctrl+P)'),
+    );
+    expect(shown, 1);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('a failed tree save offers retry and explicit discard', (
     tester,
@@ -493,10 +505,13 @@ void main() {
     // any.
     expect(find.text('White'), findsNWidgets(2), reason: 'side and column');
     expect(find.text('Black'), findsOneWidget, reason: 'the column');
+    // The search covers the board to the depth asked for: going on would
+    // add nothing, so the button offers one half-move more.
+    expect(find.widgetWithText(FilledButton, 'Resume'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Deeper'), findsOneWidget);
     expect(
-      find.widgetWithText(FilledButton, 'Resume'),
+      find.byTooltip('Searched 2 half-moves deep here; search 3 (Ctrl+G)'),
       findsOneWidget,
-      reason: 'the search covers the board',
     );
     // Six root moves keep every legal move, weak ones included.
     expect(find.text('e4'), findsOneWidget);

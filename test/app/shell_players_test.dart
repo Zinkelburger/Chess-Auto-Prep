@@ -599,7 +599,7 @@ void main() {
     );
   });
 
-  testWidgets('Train group study opens it in the trainer without asking '
+  testWidgets('Train group study opens the study training pane without asking '
       'for a side', (tester) async {
     await w.pumpShell(tester);
     await w.parts.players.openStudy(player);
@@ -618,7 +618,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Train group study'));
     await tester.pumpAndSettle();
-    expect(w.requests.mode, Mode.trainer);
+    expect(w.requests.mode, Mode.study);
     expect(w.session.source?.path, contains('Prep – Club Open'));
     expect(w.session.chapter!.game, 0);
     final trained = w.parts.training.lines.state as TrainerReady;

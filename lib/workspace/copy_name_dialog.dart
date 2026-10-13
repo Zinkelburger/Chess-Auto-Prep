@@ -19,25 +19,20 @@ void sayCopy(Say say, CopyResult result) =>
     say(copySaid(result), problem: result is! CopySaved);
 
 /// Asks what to call the copy. Returns null when the user backs out.
-Future<String?> showCopyNameDialog(BuildContext context, String suggestion) =>
-    showDialog<String>(
-      context: context,
-      builder: (context) => _CopyNameDialog(suggestion: suggestion),
-    );
+Future<String?> showCopyNameDialog(BuildContext context) => showDialog<String>(
+  context: context,
+  builder: (context) => const _CopyNameDialog(),
+);
 
 class _CopyNameDialog extends StatefulWidget {
-  const _CopyNameDialog({required this.suggestion});
-
-  final String suggestion;
+  const _CopyNameDialog();
 
   @override
   State<_CopyNameDialog> createState() => _CopyNameDialogState();
 }
 
 class _CopyNameDialogState extends State<_CopyNameDialog> {
-  late final _controller = TextEditingController(
-    text: '${widget.suggestion} copy',
-  );
+  final _controller = TextEditingController();
 
   @override
   void dispose() {

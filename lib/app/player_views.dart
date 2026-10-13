@@ -30,12 +30,12 @@ final class PlayerAnalysisView extends ModeView {
             PaneTab(WorkspaceTab.moves, 'Game'),
             PaneTab(WorkspaceTab.playerBook, 'My book'),
             PaneTab(WorkspaceTab.explorer, 'Explorer'),
-            PaneTab(WorkspaceTab.search, 'Search'),
+            PaneTab(WorkspaceTab.search, 'Expectimax'),
           ],
           open: const [
             WorkspaceTab.moves,
+            WorkspaceTab.playerBook,
             WorkspaceTab.explorer,
-            WorkspaceTab.search,
           ],
         ),
       );
@@ -113,6 +113,7 @@ final class PlayerAnalysisView extends ModeView {
     WorkspaceTab.player => PlayerTreePane(
       analysis: players.analysis,
       session: workspace.session,
+      onSave: () => unawaited(players.saveLine()),
       onOpen: (i) => unawaited(_open(i, null, fen: workspace.session.fen)),
       onStart: () {
         final first = players.analysis.gameIndexes.firstOrNull;
@@ -189,9 +190,10 @@ final class PlayerAnalysisView extends ModeView {
 }
 
 final class PlayersView extends ModeView {
-  PlayersView(Workspace workspace, this.players)
+  PlayersView(Workspace workspace, this.players, {this.onTrainStudy})
     : super(workspace, readingTabs());
   final PlayerModes players;
+  final VoidCallback? onTrainStudy;
   @override
   Widget list(Widget toggle) => const SizedBox.shrink();
 
@@ -231,7 +233,8 @@ final class PlayersView extends ModeView {
             onLinkedStudy: (path, chapter) =>
                 unawaited(players.openLinkedStudy(path, chapter)),
             onGroupStudy: (g) => unawaited(players.openGroupStudy(g)),
-            onTrainGroup: (g) => unawaited(players.trainGroupStudy(g)),
+            onTrainGroup: (g) =>
+                unawaited(players.trainGroupStudy(g, onOpened: onTrainStudy)),
             onCopy: (g) => unawaited(players.exportGroup(g, copy: true)),
             onExport: (g) => unawaited(players.exportGroup(g)),
           ),

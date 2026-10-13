@@ -19,9 +19,15 @@ import '../../ui/move_notation.dart';
 /// Nothing on it moves when the feedback changes: each line keeps its
 /// height whether it has words in it or not.
 class PuzzlePane extends StatelessWidget {
-  const PuzzlePane({super.key, required this.trainer, this.onAnalyze});
+  const PuzzlePane({
+    super.key,
+    required this.trainer,
+    this.onAnalyze,
+    this.available = 0,
+  });
 
   final PuzzleTrainer trainer;
+  final int available;
 
   /// Opens the puzzle's game with the engine on, once the answer is on
   /// view: the host owns the tabs and the engine.
@@ -42,7 +48,7 @@ class PuzzlePane extends StatelessWidget {
             trainer: trainer,
             recap: recap,
           ),
-          (null, null) => const _Idle(),
+          (null, null) => _Idle(trainer: trainer, available: available),
         };
         return SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(
@@ -59,13 +65,33 @@ class PuzzlePane extends StatelessWidget {
 }
 
 class _Idle extends StatelessWidget {
-  const _Idle();
+  const _Idle({required this.trainer, required this.available});
+  final PuzzleTrainer trainer;
+  final int available;
 
   @override
-  Widget build(BuildContext context) => Text(
-    'Press Play in the list to start, or click a puzzle in it.',
-    style: Theme.of(context).textTheme.bodyMedium,
-  );
+  Widget build(BuildContext context) {
+    final parked = trainer.run != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          parked ? 'Session paused' : 'Practice your mistakes',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: Space.s),
+        Text(
+          parked
+              ? 'Your results are kept. Continue session from the list or select a puzzle.'
+              : available > 0
+              ? '$available puzzles ready. Choose Play in the list, then find the best move on the board.'
+              : 'Get your games in the left panel to create puzzles, or adjust the filters if you already have some.',
+        ),
+        if (parked)
+          TextButton(onPressed: trainer.end, child: const Text('End session')),
+      ],
+    );
+  }
 }
 
 class _Solving extends StatelessWidget {
