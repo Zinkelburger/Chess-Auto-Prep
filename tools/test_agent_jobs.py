@@ -84,7 +84,7 @@ class JobTests(unittest.TestCase):
                 lease.close()
 
     def test_profiles_separate_documents_preferences_and_app_instances(self):
-        with tempfile.TemporaryDirectory() as directory, patch.object(jobs, 'STATE', Path(directory)):
+        with tempfile.TemporaryDirectory() as directory, patch.object(jobs, 'storage_dir', return_value=Path(directory)):
             first = jobs.profile_env(Path(directory) / 'first')
             second = jobs.profile_env(Path(directory) / 'second')
             self.assertNotEqual(first['XDG_CONFIG_HOME'], second['XDG_CONFIG_HOME'])
@@ -102,10 +102,14 @@ class JobTests(unittest.TestCase):
             self.assertTrue(Path(docs).is_dir())
 
     def test_a_job_temp_folder_holds_everything_and_goes_with_the_job(self):
-        with tempfile.TemporaryDirectory() as directory, patch.object(jobs, 'STATE', Path(directory)):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(jobs, 'storage_dir', return_value=Path(directory)), \
+                patch.object(jobs, 'STATE', Path(directory) / 'locks'):
             with jobs.job_temp({'KEEP': '1'}) as env:
                 temp = Path(env['TMPDIR'])
                 self.assertEqual(env['KEEP'], '1')
+                self.assertEqual(env['TMP'], env['TMPDIR'])
+                self.assertEqual(env['TEMP'], env['TMPDIR'])
                 self.assertTrue(temp.is_relative_to(directory))
                 made = subprocess.check_output(
                     [sys.executable, '-c', 'import tempfile; print(tempfile.mkdtemp())'],
@@ -118,7 +122,9 @@ class JobTests(unittest.TestCase):
             self.assertFalse(temp.exists())
 
     def test_a_killed_jobs_temp_folder_is_swept_and_a_running_one_kept(self):
-        with tempfile.TemporaryDirectory() as directory, patch.object(jobs, 'STATE', Path(directory)):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(jobs, 'storage_dir', return_value=Path(directory)), \
+                patch.object(jobs, 'STATE', Path(directory) / 'locks'):
             dead = Path(directory) / f'{jobs.JOB_TEMP_PREFIX}2147483646-1-abc'
             (dead / 'leftover').mkdir(parents=True)
             alive = Path(directory) / (f'{jobs.JOB_TEMP_PREFIX}{os.getpid()}-'
@@ -130,6 +136,69 @@ class JobTests(unittest.TestCase):
             self.assertFalse(dead.exists())
             self.assertTrue(alive.exists())
             self.assertTrue(other.exists())
+
+    def test_sweeper_keeps_live_service_children_and_legacy_locks(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(jobs, 'storage_dir', return_value=Path(directory) / 'cache'), \
+                patch.object(jobs, 'STATE', Path(directory) / 'locks'), \
+                patch.object(jobs, 'populated', return_value=True) as populated:
+            legacy = jobs.STATE / f'{jobs.JOB_TEMP_PREFIX}2147483646-1-old'
+            legacy.mkdir(parents=True)
+            slot = jobs.STATE / 'slot-0.json'
+            slot.write_text(json.dumps({'pid': 2147483646, 'cgroup': '/old.service'}))
+            lock = jobs.STATE / 'slot-0.lock'
+            lock.touch()
+            current = Path(directory) / 'cache' / f'{jobs.JOB_TEMP_PREFIX}2147483645-1-new'
+            current.mkdir(parents=True)
+            (current / '.owner.json').write_text(json.dumps({'cgroup': '/new.service'}))
+            alias = current.parent / f'{jobs.JOB_TEMP_PREFIX}2147483644-1-alias'
+            alias.symlink_to(legacy, target_is_directory=True)
+            jobs.sweep_job_temps()
+            self.assertTrue(legacy.exists())
+            self.assertTrue(current.exists())
+            populated.return_value = False
+            jobs.sweep_job_temps()
+            self.assertFalse(legacy.exists())
+            self.assertFalse(current.exists())
+            self.assertTrue(alias.is_symlink())
+            self.assertTrue(lock.exists())
+            self.assertTrue(slot.exists())
+
+    def test_cache_must_be_private_owned_disk_storage(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.dict(os.environ, {'CHESS_PREP_JOB_CACHE': directory}), \
+                patch.object(jobs, 'require_disk_storage') as require_disk:
+            self.assertEqual(jobs.storage_dir(), Path(directory))
+            require_disk.assert_called_once_with(Path(directory))
+            Path(directory).chmod(0o755)
+            with self.assertRaisesRegex(RuntimeError, '0700'):
+                jobs.storage_dir()
+            Path(directory).chmod(0o700)
+            alias = Path(directory) / 'alias'
+            alias.symlink_to(directory, target_is_directory=True)
+            with patch.dict(os.environ, {'CHESS_PREP_JOB_CACHE': str(alias)}):
+                with self.assertRaisesRegex(RuntimeError, 'symlink'):
+                    jobs.storage_dir()
+            with patch.dict(os.environ, {'CHESS_PREP_JOB_CACHE': 'relative'}):
+                with self.assertRaisesRegex(RuntimeError, 'absolute'):
+                    jobs.storage_dir()
+            with patch.object(jobs.os, 'getuid', return_value=os.getuid() + 1):
+                with self.assertRaisesRegex(RuntimeError, 'owned'):
+                    jobs.storage_dir()
+
+    def test_memory_backed_checkouts_and_caches_fail_before_job_launch(self):
+        with patch.object(jobs.subprocess, 'check_output') as output:
+            for kind in ('tmpfs', 'ramfs'):
+                output.return_value = kind + '\n'
+                with self.assertRaisesRegex(RuntimeError, 'move the checkout/cache to disk'):
+                    jobs.require_disk_storage(Path('/example'))
+            output.return_value = 'ext2/ext3\n'
+            jobs.require_disk_storage(Path('/example'))
+        with patch.object(jobs, 'require_disk_storage', side_effect=RuntimeError('RAM-backed')), \
+                patch.object(jobs, 'setup') as setup:
+            with self.assertRaisesRegex(RuntimeError, 'RAM-backed'):
+                jobs.run(argparse.Namespace())
+            setup.assert_not_called()
 
     def test_missing_xvfb_fails_without_using_desktop(self):
         with patch.object(jobs, 'xvfb_binary', side_effect=RuntimeError('missing')):
@@ -172,6 +241,8 @@ class JobTests(unittest.TestCase):
 
     def test_runtime_lifetime_is_owned_by_headless_service_only(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(jobs, 'STATE', Path(directory)), \
+                patch.object(jobs, 'storage_dir', return_value=Path(directory)), \
+                patch.object(jobs, 'require_disk_storage'), \
                 patch.object(jobs, 'setup'), patch.object(jobs, 'xvfb_binary'), \
                 patch.object(jobs.subprocess, 'run'), patch.object(jobs.subprocess, 'Popen') as spawn:
             spawn.return_value.poll.return_value = 0
@@ -203,7 +274,7 @@ class JobTests(unittest.TestCase):
             jobs.xvfb_binary()
         except RuntimeError:
             self.skipTest('Xvfb not installed on this host')
-        with tempfile.TemporaryDirectory() as directory, patch.object(jobs, 'STATE', Path(directory)):
+        with tempfile.TemporaryDirectory() as directory, patch.object(jobs, 'storage_dir', return_value=Path(directory)):
             original = dict(os.environ)
             with jobs.display(jobs.profile_env(Path(directory)), True) as env:
                 self.assertEqual(env['GDK_BACKEND'], 'x11')
@@ -213,6 +284,105 @@ class JobTests(unittest.TestCase):
                 self.assertTrue(socket.exists())
             self.assertFalse(socket.exists())
             self.assertEqual(dict(os.environ), original)
+
+
+class DriverStorageTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.enterContext(patch.object(jobs, 'storage_dir', return_value=self.directory / 'cache'))
+        self.enterContext(patch.object(jobs, 'driver_dir', return_value=self.directory / 'controls'))
+
+    def load_driver(self, override=None):
+        with patch.dict(os.environ):
+            os.environ.pop('CHESS_PREP_DRIVER_DIR', None)
+            if override is not None:
+                os.environ['CHESS_PREP_DRIVER_DIR'] = str(override)
+            spec = importlib.util.spec_from_file_location('test_app_driver', ROOT / 'scripts/app_driver.py')
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+
+    def test_default_outputs_use_disk_cache_and_controls_keep_their_namespace(self):
+        driver = self.load_driver()
+        driver.prepare_output_dir()
+        self.assertEqual(driver.STATE_DIR, self.directory / 'controls')
+        for output in (driver.APP_LOG, driver.SHOTS, driver.DAEMON_LOG):
+            self.assertTrue(output.is_relative_to(self.directory / 'cache'))
+            self.assertFalse(output.is_relative_to(driver.STATE_DIR))
+
+    def test_explicit_fixture_directory_keeps_files_together_and_rejects_ram(self):
+        driver = self.load_driver(self.directory / 'fixture')
+        driver.prepare_output_dir()
+        self.assertEqual(driver.OUTPUT_DIR, driver.STATE_DIR)
+        for output in (driver.APP_LOG, driver.SHOTS, driver.DAEMON_LOG, driver.STATE, driver.SOCK):
+            self.assertTrue(output.is_relative_to(self.directory / 'fixture'))
+        with patch.object(jobs, 'require_disk_storage', side_effect=RuntimeError('RAM-backed')):
+            with self.assertRaisesRegex(RuntimeError, 'RAM-backed'):
+                driver.prepare_output_dir()
+
+    def test_legacy_logs_remain_readable_until_a_new_session_records_its_output(self):
+        driver = self.load_driver()
+        driver.STATE_DIR.mkdir()
+        legacy = driver.STATE_DIR / 'app.log'
+        legacy.write_text('legacy session')
+        self.assertEqual(driver.session_log(), legacy)
+        driver.write_state(outputDir=str(driver.OUTPUT_DIR))
+        self.assertEqual(driver.session_log(), driver.APP_LOG)
+        self.assertEqual(legacy.read_text(), 'legacy session')
+
+    def test_launch_records_output_and_opens_daemon_log_on_disk(self):
+        driver = self.load_driver()
+        opened = []
+        def launch(*args, **kwargs):
+            opened.append(Path(kwargs['stdout'].name))
+            driver.write_state(status='running', pid=123)
+            driver.SOCK.touch()
+            return argparse.Namespace(pid=123)
+        with patch.object(driver.subprocess, 'Popen', side_effect=launch), \
+                patch.object(jobs, 'require_disk_storage'), \
+                patch('builtins.print'):
+            driver.cmd_start([])
+        self.assertEqual(opened, [driver.DAEMON_LOG])
+        self.assertEqual(driver.read_state()['outputDir'], str(driver.OUTPUT_DIR))
+        self.assertTrue(driver.APP_LOG.exists())
+        self.assertFalse((driver.STATE_DIR / 'app.log').exists())
+        self.assertFalse((driver.STATE_DIR / 'daemon.out').exists())
+
+    def test_live_session_is_reused_without_allocating_another_snapshot(self):
+        driver = self.load_driver()
+        driver.write_state(pid=os.getpid())
+        driver.SOCK.touch()
+        with patch.object(driver, 'make_worktree') as snapshot, \
+                patch.object(driver, 'prepare_output_dir') as outputs, \
+                patch('builtins.print'):
+            driver.cmd_start(['--worktree'])
+        snapshot.assert_not_called()
+        outputs.assert_not_called()
+
+    def test_preview_snapshot_uses_disk_and_dependency_preparation_is_bounded(self):
+        driver = self.load_driver()
+        with patch.object(driver.subprocess, 'run') as run, \
+                patch.object(jobs, 'require_disk_storage'):
+            snapshot = driver.make_worktree()
+        self.assertTrue(snapshot.is_relative_to(self.directory / 'cache' / 'snapshots'))
+        self.assertTrue(snapshot.is_dir())
+        prepare = run.call_args_list[1]
+        command = prepare.args[0]
+        self.assertTrue(command[1].endswith('/scripts/agent_job.py'))
+        self.assertEqual(command[2], 'run')
+        self.assertIn('--prepare', command)
+        self.assertEqual(prepare.kwargs['cwd'], snapshot)
+
+    def test_screenshot_names_cannot_escape_disk_output_directory(self):
+        driver = self.load_driver()
+        daemon = driver.Daemon(driver.REPO)
+        self.addCleanup(daemon.log.close)
+        with patch.object(daemon, 'ext', return_value={}) as ext:
+            for name in ('/tmp/shot.png', '../shot', '..'):
+                self.assertIn('error', daemon.dispatch({'cmd': 'ss', 'args': {'name': name}}))
+            ext.assert_not_called()
+            daemon.dispatch({'cmd': 'ss', 'args': {'name': 'board'}})
+        self.assertEqual(ext.call_args.args, ('screenshot', {'path': str(driver.SHOTS / 'board.png')}))
 
 
 if __name__ == '__main__':

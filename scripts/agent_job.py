@@ -49,6 +49,36 @@ def driver_dir(path: Path) -> Path:
     return STATE / 'drivers' / checkout_key(path)
 
 
+def require_disk_storage(path: Path) -> None:
+    """Builds also write into their checkout, regardless of TMPDIR."""
+    kind = subprocess.check_output(
+        ['stat', '--file-system', '--format=%T', '--', str(path)],
+        text=True, timeout=10).strip()
+    if kind in {'tmpfs', 'ramfs'}:
+        raise RuntimeError(
+            f'{path} is on {kind}; move the checkout/cache to disk before building. '
+            'RAM-backed builds can exhaust memory outside the job limit.')
+
+
+def storage_dir() -> Path:
+    """Heavy disposable data lives on disk; admission locks never move."""
+    path = Path(os.environ.get('CHESS_PREP_JOB_CACHE',
+                               str(Path.home() / '.cache/chess-prep-jobs')))
+    if not path.is_absolute():
+        raise RuntimeError('CHESS_PREP_JOB_CACHE must be an absolute disk-backed path')
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    info = path.lstat()
+    if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid()
+            or stat.S_IMODE(info.st_mode) != 0o700):
+        raise RuntimeError('Job cache must be an owned directory with mode 0700, not a symlink')
+    require_disk_storage(path)
+    return path
+
+
+def profile_dir(path: Path) -> Path:
+    return storage_dir() / 'profiles' / checkout_key(path)
+
+
 def process_token(pid: int) -> str:
     try:
         fields = Path(f'/proc/{pid}/stat').read_text().rsplit(') ', 1)[1].split()
@@ -138,7 +168,7 @@ def setup() -> None:
 
 def profile_env(checkout: Path) -> dict[str, str]:
     env = dict(os.environ)
-    profile = driver_dir(checkout) / 'profile'
+    profile = profile_dir(checkout)
     for suffix in ['config', 'data', 'cache', 'state', 'Documents', 'Downloads']:
         (profile / suffix).mkdir(parents=True, exist_ok=True, mode=0o700)
     for var, suffix in [('XDG_CONFIG_HOME', 'config'), ('XDG_DATA_HOME', 'data'),
@@ -243,31 +273,43 @@ JOB_TEMP_PREFIX = 'job-tmp-'
 def job_temp(env: dict):
     """A temporary folder of the job's own, removed when the job ends.
 
-    /tmp is a tmpfs with a fixed number of files, and tests leave files
-    behind on purpose: the app's folder lock keeps one lock file for every
-    folder it ever locked, and every test locks fresh folders. Hundreds of
-    thousands of them once filled /tmp for every session on the machine.
-    With TMPDIR pointing here, nothing a job makes outlives it; the folder of
-    a job that was killed is swept by the next job once its worker is gone.
+    Large compiler outputs must not consume the RAM backing /tmp. Each job
+    uses disk storage and deletes its own files; killed jobs are swept only
+    after both their worker and service children have exited.
     """
     sweep_job_temps()
     token = process_token(os.getpid())
-    path = Path(tempfile.mkdtemp(prefix=f'{JOB_TEMP_PREFIX}{os.getpid()}-{token}-', dir=STATE))
+    path = Path(tempfile.mkdtemp(prefix=f'{JOB_TEMP_PREFIX}{os.getpid()}-{token}-', dir=storage_dir()))
     try:
-        yield dict(env, TMPDIR=str(path))
+        (path / '.owner.json').write_text(json.dumps({'cgroup': current_cgroup()}))
+        yield dict(env, TMPDIR=str(path), TMP=str(path), TEMP=str(path))
     finally:
         remove_tree(path)
 
 
 def sweep_job_temps() -> None:
-    """Removes job folders whose worker is no longer running."""
-    for folder in STATE.glob(JOB_TEMP_PREFIX + '*'):
-        try:
-            pid, token = folder.name[len(JOB_TEMP_PREFIX):].split('-')[:2]
-            if process_token(int(pid)) != token:
+    """Remove dead jobs, including old tmpfs jobs, without touching locks."""
+    for root in (storage_dir(), STATE):
+        for folder in root.glob(JOB_TEMP_PREFIX + '*'):
+            try:
+                info = folder.lstat()
+                if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+                    continue
+                pid, token, _ = folder.name[len(JOB_TEMP_PREFIX):].split('-', 2)
+                if not token.isdecimal() or process_token(int(pid)) == token:
+                    continue
+                # New jobs record their service. Old jobs can still have live
+                # children after a worker dies, so consult the shared slots too.
+                owners = [read_json(folder / '.owner.json')]
+                owners += [read_json(STATE / f'slot-{i}.json') for i in range(2)]
+                if any(isinstance(owner, dict) and owner.get('cgroup')
+                       and populated(owner['cgroup'])
+                       and (index == 0 or owner.get('pid') == int(pid))
+                       for index, owner in enumerate(owners)):
+                    continue
                 remove_tree(folder)
-        except ValueError:
-            continue
+            except (ValueError, FileNotFoundError):
+                continue
 
 
 def remove_tree(path: Path) -> None:
@@ -351,6 +393,8 @@ def worker(args) -> int:
 
 
 def run(args) -> int:
+    require_disk_storage(Path.cwd())
+    storage_dir()  # Reject unsafe cache configuration before queuing a service.
     setup()
     if args.headless:
         xvfb_binary()  # Fail before queuing, never fall back to a visible app.

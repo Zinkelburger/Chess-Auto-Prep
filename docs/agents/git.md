@@ -37,8 +37,10 @@ The helper does not run tests for you. Use the task's relevant local checks
 before integration. GitHub release CI runs for `v*` tag pushes only. Development
 branches, backups and PRs do not trigger it. The tag workflow runs all builds,
 tests and artifact checks before publishing in the same run. Do not add a
-separate rehearsal branch or require a rehearsal before releasing. Use focused
-local checks for routine development.
+separate rehearsal branch or require a rehearsal before releasing. Releases
+require passing tests, offline-tool, integration and engine gates. The
+`windows-check` branch is a focused Windows setup diagnostic on Server 2022 and
+2025 and publishes nothing. Use focused local checks for routine development.
 A failed backup push is recoverable: keep the worktrees and retry integration.
 Never force-push the backup to hide divergence from another machine.
 

@@ -3,8 +3,22 @@
 These programs have separate responsibilities; read only the relevant row's
 skill or README. Commands below run from the repo root unless stated otherwise;
 heavy checks/builds use `scripts/ci.sh with -- COMMAND`. Each job gets its
-own `TMPDIR`, deleted when the job ends, so test leftovers such as the folder
-lock's files cannot fill the shared `/tmp`.
+own disk-backed `TMPDIR`/`TMP`/`TEMP`, deleted when the job ends. Temporary
+build files and disposable app profiles live under `~/.cache/chess-prep-jobs`
+(override with `CHESS_PREP_JOB_CACHE`, an absolute, owned mode-0700 directory).
+The runner rejects RAM-backed checkouts and caches: moving only `TMPDIR`
+does not move a checkout's `.dart_tool` and `build` outputs off RAM.
+Driver logs and screenshots also live in this disk cache; `start --worktree`
+creates its detached snapshot there and prepares dependencies through the
+bounded runner. `CHESS_PREP_DRIVER_DIR` still isolates all driver files at an
+explicit path, which must be disk-backed for new launches. Existing sessions
+keep their old outputs; `log` reads that session's recorded location.
+Small admission locks, sockets and driver state retain their existing `/tmp`
+paths so old and new runners still share the same limits. Never delete these
+locks while jobs may be running. The next job sweeps abandoned temporary
+directories only after their worker and service children have exited.
+App profiles persist across runs for fixtures; the driver reports the current
+profile path. Existing driver sessions retain their old profile until restarted.
 
 | Area | Responsibility and entrypoint |
 |---|---|
@@ -16,7 +30,8 @@ lock's files cannot fill the shared `/tmp`.
 | `tools/test_bughouse_engine.py` | `deps [--all]` checks bundle dependencies; `run` searches with the extracted engine. Bughouse/release CI gates Linux and Windows bundles |
 | `tools/diagnose_bughouse_windows.ps1` | Self-contained diagnostic on the failing Windows machine: published hashes, PE headers, loader resolution, mitigations and actual startup |
 | `tools/bughouse_web/` | The WASM bughouse engine for the web: `build.py` compiles the Emscripten bridge, `prepare_assets.py` chunks the network and copies ONNX Runtime on every frontend build |
-| `tools/bughouse_db/` | Offline FICS opening book, plus `hivemind_book.py`, the engine-eval book behind `/bughousedb`; `python3 -m bughouse_db <command>` from `tools/`, with `fetch`, `index`, `explore` or `status`; test with `tools/test_bughouse_db.py` |
+| `tools/prepare_crazyhouse_web.py` | Prepares the site's `/crazyhouse` engine on every frontend build: copies Lichess's Fairy-Stockfish WASM from `@lichess-org/stockfish-web` and splits Lichess's checksum-pinned crazyhouse NNUE into parts under Cloudflare's 25 MiB limit (`CRAZYHOUSE_NNUE=PATH` skips the download) |
+| `tools/bughouse_db/` | Offline FICS opening book, plus `hivemind_book.py`, the engine-eval book behind `/bughousedb`; `python3 -m bughouse_db <command>` from `tools/`, with `fetch`, `index`, `explore`, `status` or `puzzles` (the site's Bughouse Puzzles set, mates and material-winning tactics on one board with frozen reserves; needs Fairy-Stockfish, `--engine PATH` or `$FAIRY_STOCKFISH`, run with `tools/bughouse_db/frozenhouse.ini`, never its own `bughouse` variant); test with `tools/test_bughouse_db.py` |
 | `tools/lichess_broadcasts.py` | Collect over-the-board games from Lichess broadcasts into `Documents/lichess_broadcasts/<collection>/` (per-broadcast PGNs, manifest, merged PGN); `by USER`, `tour ID`, `search`, `status`. Community broadcasts are found by owner or tour id, not `search`; tests in `tools/test_lichess_broadcasts.py`. Method, APIs and the committed Massachusetts collection (`scripts/data/broadcasts/`): [docs/BROADCAST_GAMES.md](../BROADCAST_GAMES.md) |
 | `tools/chesscom_events.py` | Same collection from chess.com Events (`search`, `event <slug>`, `status`); moves come over the events websocket, spoken with a stdlib Socket.IO client. A game on both sites is kept once; tests in `tools/test_chesscom_events.py` |
 | `tools/master_import_pgn.dart` | Turn PGN files into a master-format database (`games` + `book`) with the app's importer: `MASTER_IMPORT_ARGS="out.db in.pgn" scripts/ci.sh test tools/master_import_pgn.dart`; query it with the chess-prep MCP `db` parameter |

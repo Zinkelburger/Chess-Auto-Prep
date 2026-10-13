@@ -139,6 +139,6 @@ families do.
 |---|---|
 | No `mcp__chess-prep__*` tools | A fresh clone must approve `.mcp.json` (`/mcp`); meanwhile use `$M call`. |
 | `ModuleNotFoundError: chess` | Install `tools/mcp/requirements.txt`; roster, tournament and my-games tools work without it. |
-| `server produced no JSON-RPC reply` | Import error in `tools/mcp/`, usually another session mid-edit (`git status tools/mcp`). Do not patch or stash it; wait or use a detached snapshot (`git worktree add --detach /tmp/chess-prep-check HEAD`). |
+| `server produced no JSON-RPC reply` | Import error in `tools/mcp/`, usually another session mid-edit (`git status tools/mcp`). Do not patch or stash it; wait or use a detached snapshot in a unique disk-backed directory under `~/.local/share/chess-prep/worktrees/`, following `AGENTS.md`. |
 | Build process gone, tree small | `expectimax_resume` continues it; `expectimax_result` on a partial tree is still a real answer. |
 | `master_status` shows 0 games | The app has not imported TWIC here; the user builds it from the app's Databases page. |
