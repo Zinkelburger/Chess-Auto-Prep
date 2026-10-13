@@ -118,13 +118,22 @@ played and whether the player found it).
 set.ts          index/shard types, pure filtering + facet counts, theme/difficulty labels,
                 deep-link hash parsing, PuzzleStore (index once, shards on demand, prefetch of the next)
 puzzle.ts       data types, frozen-reserve moves, one Attempt (pure, tested in tests/bughouse-state.ts)
-board.ts        one chessground board with a seat row per side: player, rating and the frozen reserve
-app.ts          page controller: filter bar (kind, length, difficulty, theme, missed in the game), play,
-                reply, View solution, Copy link, #<id> deep links, results in localStorage (bughouse-puzzles-v2)
+board.ts        one chessground board with each side's frozen reserve above and below it
+app.ts          page controller: play, reply, Solution, Retry, #<id> deep links, results in
+                localStorage (bughouse-puzzles-v2); a Settings sheet holds the filters (kind,
+                length, level, theme, missed in the game), progress and the notes on the set
+../bughouse/pocket.ts  a reserve as lila's crazyhouse pocket, shared with Bughouse Lab
 ```
 
+Solving shows only the board, its two pockets, one feedback box in lila's
+words ("Your turn", "Black mates in 2."), the moves and four buttons; who
+played the game and whether they found the move stay out of the way. The link
+to both boards in Bughouse Lab appears once a puzzle is over.
+
 Styles: the shared trainer vocabulary (`src/styles/trainer.css`, also used by
-the Tactics Trainer) plus `src/styles/bughouse-puzzles.css`.
+the Tactics Trainer), the board and pocket in `src/styles/bughouse-board.css`
+(Lichess's default brown at full brightness, lila's pocket), plus
+`src/styles/bughouse-puzzles.css`.
 
 ## Smoke-testing
 
