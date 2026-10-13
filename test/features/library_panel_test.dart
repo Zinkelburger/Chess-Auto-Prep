@@ -404,6 +404,13 @@ void main() {
       await tester.tap(find.text('Restore'));
       await tester.pumpAndSettle();
       expect(find.text('"Main" is already in KID'), findsOneWidget);
+      final field = find.widgetWithText(TextField, 'Restore as');
+      expect(
+        tester.widget<TextField>(field).controller!.text,
+        isEmpty,
+        reason: 'a new name starts blank',
+      );
+      await tester.enterText(field, 'Main (restored)');
       await tester.tap(find.widgetWithText(FilledButton, 'Restore'));
       await tester.pumpAndSettle();
       expect(

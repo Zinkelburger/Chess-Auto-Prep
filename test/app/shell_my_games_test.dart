@@ -11,8 +11,9 @@ import '../support/scripted_store.dart';
 import '../support/window_fixture.dart';
 
 /// My games in the window: the user's games in the left column, each game
-/// on the shared board from their side, the Book tab on the reading card,
-/// and the way into the builder where a game left the book.
+/// on the shared board from their side, the Game tab first on the reading
+/// card with Book and Game review beside it, and the way into the builder
+/// where a game left the book.
 void main() {
   late WindowFixture w;
 
@@ -47,9 +48,14 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('lists the games with their verdicts beside the Book tab', (
-    tester,
-  ) async {
+  /// The Book tab, which sits beside the Game tab the card opens on.
+  Future<void> toBookTab(WidgetTester tester) async {
+    await tester.tap(find.text('Book'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('lists the games with their verdicts beside the Game, Book and '
+      'Game review tabs', (tester) async {
     await toMyGames(tester);
     expect(w.requests.mode, Mode.myGames);
     expect(find.text('2...e6 left book', findRichText: true), findsOneWidget);
@@ -57,9 +63,15 @@ void main() {
       find.text('3...cxd4 book ended', findRichText: true),
       findsOneWidget,
     );
-    for (final tab in ['Book', 'Game', 'Explorer']) {
+    for (final tab in ['Game', 'Book', 'Game review']) {
       expect(find.text(tab), findsOneWidget, reason: tab);
     }
+    expect(
+      find.text('Explorer'),
+      findsNothing,
+      reason: 'the explorer is opened from the tools menu',
+    );
+    await toBookTab(tester);
     expect(find.textContaining('Open one of your games'), findsOneWidget);
   });
 
@@ -71,6 +83,7 @@ void main() {
     expect(w.session.game, 1);
     expect(w.session.orientation, Side.black);
     expect(w.session.cursor.indexes, hasLength(4));
+    await toBookTab(tester);
     expect(find.text('Played'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
@@ -99,6 +112,7 @@ void main() {
     await toMyGames(tester);
     await tester.tap(find.text('3...cxd4 book ended', findRichText: true));
     await tester.pumpAndSettle();
+    await toBookTab(tester);
     await tester.tap(find.text('Open in builder'));
     await tester.pumpAndSettle();
     expect(w.requests.mode, Mode.repertoires);
