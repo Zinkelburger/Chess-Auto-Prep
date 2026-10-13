@@ -398,12 +398,7 @@ class _ReservePieceState extends State<_ReservePiece> {
                   color: labPocketCount,
                   borderRadius: BorderRadius.circular(Space.xs),
                 ),
-                child: Text(
-                  '$count',
-                  style: labPocketCountText.copyWith(
-                    fontSize: (size * 0.28).clamp(12, 17),
-                  ),
-                ),
+                child: Text('$count', style: labPocketCountStyle(size)),
               ),
             ),
         ],
