@@ -89,10 +89,6 @@ export class BughousePuzzlesApp {
     $('bp-source').textContent = `${index.count} puzzles from ${index.source}. Your results are kept in this browser only.`;
     if (!this.board) {
       this.board = new PuzzleBoard($('bp-board'), { top: $('bp-seat-top'), bottom: $('bp-seat-bottom') }, (uci) => this.onMove(uci));
-      this.board.preferredPromotion = (options) => {
-        const want = this.attempt?.accepted().find((u) => options.includes(u));
-        return want ?? options.find((u) => u.endsWith('q')) ?? options[0];
-      };
     }
     // A deep link wins over the saved place, and over a filter that would hide it.
     const linked = parseHash(location.hash);
@@ -417,12 +413,12 @@ export class BughousePuzzlesApp {
     if (this.wrong) token(a.played.length, this.wrongLabel(this.wrong), 'wrong');
   }
 
-  /** A wrong move has no SAN in the data: "Nf7", "e5" or the drop as written. */
+  /** A wrong move has no SAN in the data: "Nf7", "e5", "e8=N" or the drop as written. */
   private wrongLabel(uci: string): string {
     if (uci[1] === '@') return uci;
     const piece = this.attempt!.pos.pieces[uci.slice(0, 2)] ?? '';
     const letter = piece.toLowerCase() === 'p' ? '' : piece.toUpperCase();
-    return `${letter}${uci.slice(2, 4)}`;
+    return `${letter}${uci.slice(2, 4)}${uci[4] ? `=${uci[4].toUpperCase()}` : ''}`;
   }
 
   /** Set the feedback box. Without a title the state writes its own copy for the current attempt. */

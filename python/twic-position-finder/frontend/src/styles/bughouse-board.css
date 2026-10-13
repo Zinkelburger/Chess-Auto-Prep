@@ -95,3 +95,13 @@
 }
 
 .bb-board-title { font-size: 13px; font-weight: 500; color: var(--text-dim); margin: 0; }
+
+/* lila's promotion picker (ui/lib/css/chess/_promotion.scss): the board
+   dimmed, four grey circles on the promotion file that open into squares with
+   lila's orange glow under the pointer. */
+.promotion-choice { position: absolute; inset: 0; z-index: 5; background: rgb(30 34 40 / 0.7); }
+.promotion-square { position: absolute; width: 12.5%; height: 12.5%; padding: 0; border: 0; border-radius: 50%; background: #b0b0b0; box-shadow: inset 0 0 25px 3px #808080; cursor: pointer; transition: border-radius 0.15s, box-shadow 0.15s; }
+.promotion-square img { display: block; width: 100%; height: 100%; transform: scale(0.8); transition: transform 0.15s; pointer-events: none; }
+.promotion-square:hover, .promotion-square:focus-visible { border-radius: 0; box-shadow: inset 0 0 48px 8px #d64f00; outline: none; }
+.promotion-square:hover img, .promotion-square:focus-visible img { transform: none; }
+@media (prefers-reduced-motion: reduce) { .promotion-square, .promotion-square img { transition: none; } }
