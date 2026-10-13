@@ -54,6 +54,8 @@ interface SideElements {
   flagChip: HTMLElement;
   who: HTMLElement;
   hint: HTMLElement;
+  hintMain: HTMLElement;
+  hintSub: HTMLElement;
   caps: HTMLButtonElement[];
 }
 
@@ -64,7 +66,11 @@ const DEFAULTS: Settings = { minutes: 2, base: 0, minor: 2, rook: 4, queen: 6, s
 const SIDES: readonly Side[] = ['top', 'bottom'];
 const CAPTURES: readonly CaptureKind[] = ['minor', 'rook', 'queen'];
 const TENTHS_UNDER = 10_000; // show tenths below this
-const HIT_DEBOUNCE = 70; // ms — swallow a bouncing double-slap
+// A palm that lands on both halves arrives as two hits a few ms apart; no real
+// move-and-press is this fast. Same-side repeats are already turned away
+// because the side is no longer on move, so this only guards the other side.
+const CROSS_SIDE_LOCKOUT = 200; // ms
+const RESET_CONFIRM = 3_000; // ms the "Tap again" state lasts
 const HISTORY_MAX = 200;
 const MIN_EMERGENCY = 5_000; // never warn later than 5s left
 
@@ -114,6 +120,11 @@ export function initCharlesClock(): void {
     raf: 0,
   };
   let lastHitAt = -1e9;
+  // Which half plays White. It follows the players: Flip swaps it, and the
+  // first tap of a game decides it (the half that taps starts the other's
+  // clock, so the other half is White). Not part of a snapshot — a flip
+  // rewrites every snapshot in place, so it never needs restoring.
+  let whiteSide: Side = 'bottom';
 
   const other = (s: Side): Side => (s === 'top' ? 'bottom' : 'top');
   const snapshot = (): Snapshot => ({
@@ -142,6 +153,8 @@ export function initCharlesClock(): void {
       flagChip: $('[data-flagchip]', root),
       who: $('[data-who]', root),
       hint: $('[data-hint]', root),
+      hintMain: $('[data-hint-main]', root),
+      hintSub: $('[data-hint-sub]', root),
       caps: $$<HTMLButtonElement>('.cap', root),
     };
   }
@@ -154,6 +167,7 @@ export function initCharlesClock(): void {
     fullscreen: $<HTMLButtonElement>('[data-action="fullscreen"]'),
   };
   const primaryLabel = $('[data-primary-label]');
+  const resetText = $('[data-reset-label]');
   const queenTrade = $('[data-queen-trade]');
   const sheet = $('[data-sheet]');
   const form = $<HTMLFormElement>('[data-settings-form]');
@@ -302,6 +316,8 @@ export function initCharlesClock(): void {
     for (const side of SIDES) {
       const t = fmt(state.ms[side]);
       if (t !== painted[side]) {
+        // h:mm:ss needs a smaller size than m:ss to fit the half.
+        if (t.length !== painted[side].length) el[side].time.classList.toggle('long', t.length > 6);
         painted[side] = t;
         el[side].time.textContent = t;
       }
@@ -327,8 +343,20 @@ export function initCharlesClock(): void {
         e.root.classList.toggle('low', low);
         e.root.classList.toggle('flagged', flagged);
         e.flagChip.hidden = !flagged;
-        e.hint.hidden = state.started;
       }
+
+      // A silent hint keeps its last words, only hidden, so its box — and the
+      // digits and capture buttons around it — never move when play starts.
+      const paused = state.started && !state.running && !state.flagged;
+      const [main, sub] = !state.started
+        ? [side === whiteSide ? 'White moves first' : "Tap here to start White's clock",
+          'Took a piece? Hit its button instead.']
+        : paused ? ['Paused', 'Press Resume to play on'] : ['', ''];
+      e.hint.classList.toggle('hint-off', main === '');
+      if (main && e.hintMain.textContent !== main) e.hintMain.textContent = main;
+      if (sub && e.hintSub.textContent !== sub) e.hintSub.textContent = sub;
+      const who = side === whiteSide ? 'White' : 'Black';
+      if (e.who.textContent !== who) e.who.textContent = who;
 
       const canCapture = ticking;
       for (const c of e.caps) if (c.disabled === canCapture) c.disabled = !canCapture;
@@ -340,10 +368,10 @@ export function initCharlesClock(): void {
     }
     paintTime();
 
-    // Primary button
-    btn.primary.disabled = !!state.flagged;
+    // Primary button. After a flag it starts the next game; the finished one
+    // stays one Undo away.
     // The play/pause glyphs both live in the markup; .app.running picks one.
-    const label = state.flagged ? 'Done' : state.running ? 'Pause' : state.started ? 'Resume' : 'Start';
+    const label = state.flagged ? 'New game' : state.running ? 'Pause' : state.started ? 'Resume' : 'Start';
     if (primaryLabel.textContent !== label) {
       primaryLabel.textContent = label;
       btn.primary.setAttribute('aria-label', label);
@@ -352,6 +380,15 @@ export function initCharlesClock(): void {
     btn.undo.disabled = state.history.length === 0;
     btn.reset.disabled = !idle;
     btn.settings.disabled = !idle;
+    // Mid-game a flip moves each player's time to the other end of the phone.
+    btn.flip.disabled = state.running;
+    if (!idle) disarmReset();
+    const resetLabel = resetArmed ? 'Reset?' : 'Reset';
+    if (resetText.textContent !== resetLabel) {
+      resetText.textContent = resetLabel;
+      btn.reset.setAttribute('aria-label', resetArmed ? 'Tap again to reset the clock' : 'Reset the clock');
+    }
+    btn.reset.classList.toggle('armed', resetArmed);
 
     app.classList.toggle('running', state.running);
     app.classList.toggle('game-over', !!state.flagged);
@@ -368,7 +405,6 @@ export function initCharlesClock(): void {
     if (queenTrade.textContent !== trade) queenTrade.textContent = trade;
   }
 
-  let bumpTimer: ReturnType<typeof setTimeout> | undefined;
   function bumpIncrement(): void {
     for (const side of SIDES) {
       const node = el[side].cum;
@@ -376,9 +412,15 @@ export function initCharlesClock(): void {
       void node.offsetWidth;
       node.classList.add('bump');
     }
+    nudgeUndo();
+  }
+
+  /** Point at Undo for a few seconds after an action worth taking back. */
+  let undoTimer: ReturnType<typeof setTimeout> | undefined;
+  function nudgeUndo(): void {
     btn.undo.classList.add('urgent');
-    clearTimeout(bumpTimer);
-    bumpTimer = setTimeout(() => btn.undo.classList.remove('urgent'), 5000);
+    clearTimeout(undoTimer);
+    undoTimer = setTimeout(() => btn.undo.classList.remove('urgent'), 5000);
   }
 
   // ── Clock loop ──────────────────────────────────────────────────
@@ -436,7 +478,7 @@ export function initCharlesClock(): void {
     ensureAudio();
     if (!state.started) {
       state.started = true;
-      state.active = 'bottom'; // bottom = "white", moves first
+      state.active = whiteSide;
     }
     state.running = true;
     state.lastTick = performance.now();
@@ -453,7 +495,10 @@ export function initCharlesClock(): void {
     render();
   }
 
-  function reset(): void {
+  /** Back to a fresh clock. With `keepUndo`, the game being thrown away is one
+   * Undo away instead of gone. */
+  function reset(keepUndo = false): void {
+    const kept = keepUndo && state.started ? [...state.history, snapshot()] : [];
     state.running = false;
     cancelAnimationFrame(state.raf);
     releaseWakeLock();
@@ -464,9 +509,28 @@ export function initCharlesClock(): void {
     state.moves.top = state.moves.bottom = 0;
     state.flagged = null;
     state.lowFired.top = state.lowFired.bottom = false;
-    state.history.length = 0;
+    state.history = kept.slice(-HISTORY_MAX);
+    disarmReset();
     classSig = { top: '', bottom: '' };
     painted.top = painted.bottom = '';
+    render();
+    if (kept.length) nudgeUndo();
+  }
+
+  // Reset sits in the bar between two people slapping the phone, so once a
+  // game is under way it takes a second tap within a few seconds — and even
+  // then the game it throws away is one Undo away.
+  let resetArmed = false;
+  let resetTimer: ReturnType<typeof setTimeout> | undefined;
+  function disarmReset(): void {
+    clearTimeout(resetTimer);
+    resetArmed = false;
+  }
+  function requestReset(): void {
+    if (!state.started || state.flagged || resetArmed) return reset(true);
+    resetArmed = true;
+    clearTimeout(resetTimer);
+    resetTimer = setTimeout(() => { resetArmed = false; render(); }, RESET_CONFIRM);
     render();
   }
 
@@ -475,7 +539,7 @@ export function initCharlesClock(): void {
   function hit(side: Side, capture: CaptureKind | null): void {
     if (state.flagged) return;
     const now = performance.now();
-    if (now - lastHitAt < HIT_DEBOUNCE) return;
+    if (now - lastHitAt < CROSS_SIDE_LOCKOUT) return;
     ensureAudio();
 
     if (!state.started) {
@@ -487,6 +551,7 @@ export function initCharlesClock(): void {
       state.started = true;
       state.running = true;
       state.active = other(side);
+      whiteSide = state.active;
       state.lastTick = now;
       lastHitAt = now;
       SFX.hit();
@@ -580,9 +645,7 @@ export function initCharlesClock(): void {
       if (s.active) s.active = other(s.active);
       if (s.flagged) s.flagged = other(s.flagged);
     }
-    const who = el.top.who.textContent;
-    el.top.who.textContent = el.bottom.who.textContent;
-    el.bottom.who.textContent = who;
+    whiteSide = other(whiteSide);
     // Force a full repaint: both caches are keyed by side, and the side
     // they describe just changed underneath them.
     classSig = { top: '', bottom: '' };
@@ -594,26 +657,36 @@ export function initCharlesClock(): void {
 
   // ── Events ──────────────────────────────────────────────────────
 
+  // Only a touch, a pen or the main mouse button hits the clock; a right or
+  // middle click is not a move. Every finger counts, not just the first:
+  // an opponent resting a finger on their own half must not swallow your hit.
+  const isHit = (e: PointerEvent): boolean => e.button <= 0;
+
   for (const side of SIDES) {
     sideEls[side].addEventListener('pointerdown', (e) => {
       if ((e.target as Element).closest('.cap:not(:disabled)')) return;
       e.preventDefault();
-      hit(side, null);
+      if (isHit(e)) hit(side, null);
     }, { passive: false });
 
     for (const c of el[side].caps) {
       c.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        hit(side, asCapture(c.dataset.cap));
+        if (isHit(e)) hit(side, asCapture(c.dataset.cap));
       }, { passive: false });
       c.addEventListener('click', (e) => e.preventDefault());
     }
   }
 
-  btn.primary.addEventListener('click', () => (state.running ? pause() : start()));
+  const primaryAction = (): void => {
+    if (state.flagged) reset(true);
+    else if (state.running) pause();
+    else start();
+  };
+  btn.primary.addEventListener('click', primaryAction);
   btn.undo.addEventListener('click', undo);
-  btn.reset.addEventListener('click', reset);
+  btn.reset.addEventListener('click', requestReset);
   btn.flip.addEventListener('click', swapSides);
 
   if (document.documentElement.requestFullscreen) {
@@ -626,8 +699,12 @@ export function initCharlesClock(): void {
 
   // ── Settings sheet ──────────────────────────────────────────────
 
+  // "Face the players" previews live while the sheet is open, so Cancel has
+  // to put the old arrangement back.
+  let facingAtOpen = settings.facing;
   function openSettings(): void {
     pause();
+    facingAtOpen = settings.facing;
     field('minutes').value = String(settings.minutes);
     field('base').value = String(settings.base);
     field('minor').value = String(settings.minor);
@@ -638,15 +715,23 @@ export function initCharlesClock(): void {
     sheet.hidden = false;
   }
   function closeSettings(): void { sheet.hidden = true; }
+  function cancelSettings(): void {
+    if (settings.facing !== facingAtOpen) {
+      settings.facing = facingAtOpen;
+      saveSettings(settings);
+      layout();
+    }
+    closeSettings();
+  }
 
   btn.settings.addEventListener('click', openSettings);
-  $('[data-action="settings-cancel"]').addEventListener('click', closeSettings);
+  $('[data-action="settings-cancel"]').addEventListener('click', cancelSettings);
   field('facing').addEventListener('change', () => {
     settings.facing = field('facing').checked;
     saveSettings(settings);
     layout();
   });
-  sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSettings(); });
+  sheet.addEventListener('click', (e) => { if (e.target === sheet) cancelSettings(); });
 
   $$('[data-preset-min]').forEach((b) => b.addEventListener('click', () => {
     field('minutes').value = b.dataset.presetMin ?? String(DEFAULTS.minutes);
@@ -686,16 +771,16 @@ export function initCharlesClock(): void {
 
   document.addEventListener('keydown', (e) => {
     if (!sheet.hidden) {
-      if (e.key === 'Escape') closeSettings();
+      if (e.key === 'Escape') cancelSettings();
       return;
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     switch (e.code) {
-      case 'Space': e.preventDefault(); if (state.running) pause(); else start(); break;
+      case 'Space': e.preventDefault(); primaryAction(); break;
       case 'ArrowUp': e.preventDefault(); hit('top', null); break;
       case 'ArrowDown': e.preventDefault(); hit('bottom', null); break;
       case 'KeyU': e.preventDefault(); undo(); break;
-      case 'KeyR': if (!btn.reset.disabled) { e.preventDefault(); reset(); } break;
+      case 'KeyR': if (!btn.reset.disabled) { e.preventDefault(); requestReset(); } break;
       case 'KeyF': e.preventDefault(); btn.flip.click(); break;
     }
   });
@@ -712,6 +797,20 @@ export function initCharlesClock(): void {
   document.addEventListener('contextmenu', (e) => {
     if ((e.target as Element).closest('.side')) e.preventDefault();
   });
+
+  // A zoomed clock can hide the other player's time mid-game, and the page
+  // cannot scroll to get it back. iOS Safari ignores user-scalable=no and
+  // touch-action does not reliably stop its pinch, so cancel the gesture
+  // itself. gesture* events are WebKit-only and harmless elsewhere; the
+  // two-finger touchmove guard also covers Android's "force enable zoom".
+  // Document touch listeners default to passive, hence passive:false.
+  const stopZoom = (e: Event): void => e.preventDefault();
+  for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+    document.addEventListener(type, stopZoom, { passive: false });
+  }
+  document.addEventListener('touchmove', (e) => {
+    if (e.touches.length > 1) e.preventDefault();
+  }, { passive: false });
 
   // ── Go ──────────────────────────────────────────────────────────
 
