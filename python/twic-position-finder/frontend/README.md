@@ -11,6 +11,7 @@ Static Astro site deployed to Cloudflare Pages. Browser preparation tools, one s
 | `/bughouse`           | Two linked boards and Hivemind running entirely in the browser | `src/bughouse/*`, `../../../tools/bughouse_web/` |
 | `/bughouse-puzzles`   | Bughouse Puzzles — mates and tactics mined from FICS games, reserves frozen | `src/bughouse-puzzles/*`, `public/bughouse-puzzles/` |
 | `/bughousedb`         | BughouseDB — the shared Hivemind book; missing positions analysed in the browser | `src/bughousedb/*`, `src/bughouse/boards.ts` |
+| `/crazyhouse`         | Crazyhouse Analysis — lichess.org/analysis/crazyhouse on one board, with + and − on every piece in both hands and lila's board editor; Fairy-Stockfish in the browser | `src/crazyhouse/*`, `../../../tools/prepare_crazyhouse_web.py` |
 | `/charles-clock`      | Charles Clock — a full-screen phone clock with its own `<html>`      | `src/pages/charles-clock.astro`        |
 
 `/dashboard` forwards to `/twic-notifications` (with the query string, so old
@@ -48,6 +49,20 @@ Node/Python build environment, not Emscripten. See the
   the filter builder; `board-preview.ts` is the dependency-free FEN renderer
   and the floating `HoverBoard`.
 - `src/tactics/` — see below.
+- `src/crazyhouse/` — Crazyhouse Analysis. `tree.ts` is the move tree and
+  the hand edits (pure, `npm run test:crazyhouse`); `engine.ts` runs Lichess's
+  Fairy-Stockfish 14 build (`@lichess-org/stockfish-web`) with Lichess's
+  crazyhouse NNUE, downloaded once in parts and kept in the browser cache;
+  `board.ts` is the chessground board in analysis and editor modes; `hand.ts`
+  draws a hand with its − and + buttons; `app.ts` is the page. A hand edit is
+  kept on its position and carried through the moves after it; the engine
+  always gets a bare FEN. Hands are capped at 16 of a piece (the NNUE's slots)
+  and 64 pieces in all. The engine is multi-threaded, so `/crazyhouse` and
+  `/crazyhouse-engine/*` alone are cross-origin isolated (COOP/COEP in
+  `public/_headers` and the dev server in `astro.config.mjs`). After
+  `npm run build`, `npm run test:crazyhouse:browser` drives the page in
+  headless Chrome with the real engine and writes screenshots to
+  `build/crazyhouse-web/`.
 - `public/stockfish/` — stockfish.js 18 single-threaded build (`stockfish.js` +
   `stockfish.wasm`). `public/piece/` — cburnett SVGs used by both board renderers.
 
