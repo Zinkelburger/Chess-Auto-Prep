@@ -731,6 +731,11 @@ const labPocketCountText = TextStyle(
   shadows: [Shadow(offset: Offset(0, 1), blurRadius: 1)],
 );
 
+/// The count's text for a slot [slot] pixels wide: about a quarter of the
+/// slot, never under the 12px floor.
+TextStyle labPocketCountStyle(double slot) =>
+    labPocketCountText.copyWith(fontSize: (slot * 0.28).clamp(12, 17));
+
 /// The Books mode: the list of books, a repertoire's or a chapter's row,
 /// and how far a chapter sits in from its repertoire.
 const booksListWidth = 260.0;
