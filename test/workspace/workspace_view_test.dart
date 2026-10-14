@@ -376,40 +376,90 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('engine off returns its line space and keeps the switch', (
-    tester,
-  ) async {
+  /// The board's place and size, and where the move field under it is.
+  (Rect, Offset) boardAndField(WidgetTester tester) => (
+    tester.getRect(find.byType(BoardView)),
+    tester.getTopLeft(find.byType(MoveField)),
+  );
+
+  /// A window short enough that the board's size is set by its height,
+  /// where any room taken under it would shrink it.
+  Future<void> short(WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(1400, 600));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('the engine on, off and paused keeps the board\'s size and '
+      'the move field\'s place', (tester) async {
     analysis.dispose();
     final engine = ScriptedEngine();
     analysis = EngineAnalysis(session, () async => Started(engine));
     await pump(tester);
-    final field = find.byTooltip('Type a move (/)');
-    final offAt = tester.getTopLeft(field).dy;
+    await short(tester);
+    final off = boardAndField(tester);
+    expect(
+      off.$1.width,
+      lessThan(560),
+      reason: 'the board is held by the window\'s height',
+    );
     await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
     await tester.pumpAndSettle();
-    expect(
-      tester.getTopLeft(field).dy - offAt,
-      engineRowHeight * analysis.multiPv,
-    );
+    expect(analysis.enabled, isTrue);
+    expect(boardAndField(tester), off);
     await tester.tap(find.byTooltip('Turn engine off (E)'));
     await tester.pumpAndSettle();
-    expect(tester.getTopLeft(field).dy, offAt);
+    expect(boardAndField(tester), off);
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets('the engine gear makes room for its settings while it is open', (
+  testWidgets('the engine gear swaps its rows for the settings in place', (
     tester,
   ) async {
     await pump(tester);
-    final field = find.byTooltip('Type a move (/)');
-    final offAt = tester.getTopLeft(field).dy;
+    await short(tester);
+    final closed = boardAndField(tester);
     await tester.tap(find.byTooltip('Engine settings'));
     await tester.pumpAndSettle();
     expect(find.text('CPU cores'), findsOneWidget);
-    expect(tester.getTopLeft(field).dy - offAt, engineRowHeight * 3);
+    expect(boardAndField(tester), closed);
     await tester.tap(find.byTooltip('Show lines'));
     await tester.pumpAndSettle();
     expect(find.text('CPU cores'), findsNothing);
-    expect(tester.getTopLeft(field).dy, offAt);
+    expect(boardAndField(tester), closed);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a quiet board keeps the engine\'s room blank until it is on, '
+      'at the same size', (tester) async {
+    analysis.dispose();
+    final engine = ScriptedEngine();
+    analysis = EngineAnalysis(session, () async => Started(engine));
+    await pump(tester, hooks: const WorkspaceHooks(quietBoard: true));
+    await short(tester);
+    final off = boardAndField(tester);
+    expect(find.text('Engine'), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+    await tester.pumpAndSettle();
+    expect(find.text('Engine'), findsOneWidget);
+    expect(boardAndField(tester), off);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a viewed file\'s game counter fits beside the move field on '
+      'a board held small by the window', (tester) async {
+    final viewed = await viewerOver(threeGameFile);
+    addTearDown(viewed.dispose);
+    await viewed.open();
+    session = viewed.session;
+    saver = viewed.saver;
+    analysis.dispose();
+    startAnalysis();
+    await pump(tester);
+    await tester.binding.setSurfaceSize(const Size(1280, 480));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(BoardView)).width, lessThan(281));
+    expect(find.text('of 3'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('F turns the board over; E asks for the engine', (tester) async {

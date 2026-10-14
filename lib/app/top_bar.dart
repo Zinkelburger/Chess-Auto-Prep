@@ -14,7 +14,9 @@ import '../ui/app_keys.dart';
 /// 2026-09-22), and the rest of the row is empty. While the list pane is
 /// hidden, the `»` that brings it back sits before the menus, where the
 /// pane would be; shown, the pane carries its own `«` in its top right
-/// corner, so the toggle is always at the pane's edge.
+/// corner, so the toggle is always at the pane's edge. The window's
+/// [status] sentence takes the empty middle, so it never pushes the page
+/// down.
 class TopBar extends StatelessWidget {
   const TopBar({
     super.key,
@@ -32,7 +34,11 @@ class TopBar extends StatelessWidget {
     required this.actionsChange,
     this.activity,
     this.onActivity,
+    this.status,
   });
+
+  /// The window's sentence about the last action, or null for none.
+  final Widget? status;
 
   final Mode mode;
   final String? activity;
@@ -91,7 +97,9 @@ class TopBar extends StatelessWidget {
           _ModeMenu(mode: mode, onMode: onMode, offered: offered),
           const SizedBox(width: Space.s),
           _ActionsMenu(actions: actions, changes: actionsChange),
-          const Spacer(),
+          const SizedBox(width: Space.l),
+          Expanded(child: status ?? const SizedBox.shrink()),
+          const SizedBox(width: Space.s),
           if (activity != null)
             Flexible(
               child: TextButton(

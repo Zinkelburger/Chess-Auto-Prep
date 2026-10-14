@@ -804,8 +804,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     );
   }
 
-  /// The top bar, the status, and under them [screen] — a mode's own — or
-  /// the columns over the workspace.
+  /// The top bar with the status sentence in it, and under it [screen] — a
+  /// mode's own — or the columns over the workspace.
   Widget _window(Widget? screen) => Column(
     children: [
       TopBar(
@@ -830,15 +830,17 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
           _editing,
           _view.layout,
         ]),
+        status: switch (_requests.status) {
+          final status? => StatusBar(
+            displaySan(context, status),
+            action: _requests.statusAction,
+            problem: _requests.statusIsProblem,
+            onClose: () => _requests.say(null),
+          ),
+          null => null,
+        },
       ),
       const Divider(height: 1),
-      if (_requests.status case final status?)
-        StatusBar(
-          displaySan(context, status),
-          action: _requests.statusAction,
-          problem: _requests.statusIsProblem,
-          onClose: () => _requests.say(null),
-        ),
       Expanded(
         child:
             screen ??
