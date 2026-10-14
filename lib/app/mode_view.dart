@@ -9,7 +9,6 @@ import 'package:flutter/widgets.dart';
 
 import '../features/books/books_screen.dart';
 import '../features/bughouse/bughouse_screen.dart';
-import '../features/library/library.dart';
 import '../features/library/library_panel.dart';
 import '../chess/explorer_choice.dart';
 import '../features/pgn_viewer/filter_pane.dart';
@@ -17,10 +16,7 @@ import '../features/pgn_viewer/pgn_viewer_panel.dart';
 import '../features/pgn_viewer/player_side_choice.dart';
 import '../features/study/study_panel.dart';
 import '../features/trainer/trainer.dart';
-import '../storage/chapter_files.dart';
 import '../ui/app_action.dart';
-import '../ui/choice_dialog.dart';
-import '../ui/name_dialog.dart';
 import '../ui/pane_tabs.dart';
 import '../workspace/board_book.dart';
 import '../workspace/board_book_pane.dart';
@@ -304,10 +300,10 @@ abstract base class _LibraryView extends _DocumentModeView {
 
   @override
   AppAction get fileEntry => AppAction(
-    'Paste PGN',
+    'Paste PGN as repertoire',
     () => unawaited(requests.pasteRepertoire()),
     // On the analysis board Ctrl+V pastes onto the board instead.
-    shortcut: workspace.session.isScratch ? null : 'Ctrl+V',
+    shortcut: workspace.session.isScratch ? null : AppKey.paste.label,
     group: 'File',
   );
 }
@@ -837,76 +833,6 @@ Map<Mode, ModeView> modeViews({
   };
 }
 
-/// The analysis board's doors in the Actions menu: back to it, a new one
-/// from the position on the board, and — while it is up — a paste onto it
-/// and the two ways to keep it. Each way to keep it asks two questions, one
-/// dialog each: where, then what to call it.
-List<AppAction> boardActions(
-  BuildContext context, {
-  required DocumentSession session,
-  required WorkspaceRequests requests,
-  required Library library,
-  required VoidCallback? onAnalyze,
-}) {
-  final scratch = session.isScratch;
-  return [
-    if (onAnalyze != null)
-      AppAction(
-        'Open Analysis tab',
-        onAnalyze,
-        shortcut: AppKey.analysisBoard.label,
-        group: 'Board',
-      ),
-    // On the board, Paste PGN or FEN below takes a FEN too.
-    if (!scratch)
-      AppAction(
-        'Paste FEN',
-        () => unawaited(requests.pasteFen()),
-        shortcut: AppKey.pastePosition.label,
-        group: 'File',
-      ),
-    if (scratch) ...[
-      AppAction(
-        'Paste PGN or FEN',
-        () => unawaited(requests.pasteOntoBoard()),
-        shortcut: AppKey.paste.label,
-        group: 'File',
-      ),
-      if (requests.mode == Mode.repertoires)
-        AppAction(
-          'Save to repertoire…',
-          () => unawaited(_toRepertoire(context, requests, library)),
-          group: 'Document',
-        ),
-      if (requests.mode == Mode.study)
-        AppAction(
-          'Save to study…',
-          () => unawaited(requests.addToStudy([?gameDraft(session)])),
-          group: 'Document',
-        ),
-    ],
-  ];
-}
-
-Future<void> _toRepertoire(
-  BuildContext context,
-  WorkspaceRequests requests,
-  Library library,
-) async {
-  final into = await showChoiceDialog<RepertoireFolder>(
-    context,
-    title: 'Save to repertoire',
-    options: library.repertoires,
-    label: (folder) => folder.name,
-    hint: 'Type a repertoire',
-    empty: 'No repertoires yet',
-  );
-  if (into == null || !context.mounted) return;
-  final name = await _chapterName(context, into.name);
-  if (name == null) return;
-  await requests.saveBoardToRepertoire(into, name);
-}
-
 /// Save, Ctrl+S and Save changes: the held edits into their file, or, for a
 /// file this app may not write, into a copy in [collections] or a new
 /// chapter of a study, whichever the user picks.
@@ -947,14 +873,4 @@ enum _HeldTarget {
 
   const _HeldTarget(this.label);
   final String label;
-}
-
-Future<String?> _chapterName(BuildContext context, String into) async {
-  if (!context.mounted) return null;
-  return showNameDialog(
-    context,
-    title: 'New chapter in $into',
-    label: 'Chapter name',
-    confirm: 'Save',
-  );
 }

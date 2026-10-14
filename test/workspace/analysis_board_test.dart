@@ -132,10 +132,78 @@ void main() {
 
     test('a paste of a FEN alone takes a FEN and nothing else', () {
       final fields = _sicilian.split(' ').take(4).join(' ');
-      final board = pastedPosition(' $fields\n', side: Side.black);
+      final board = pastedPosition(' $fields\n');
       expect((board as PastedBoard).chapter.tree.rootFen, Fen('$fields 0 1'));
-      expect(board.chapter.side, Side.black);
-      expect(pastedPosition('1. e4 c5', side: Side.white), isA<PasteRefused>());
+      expect(pastedPosition('1. e4 c5'), isA<PasteRefused>());
+    });
+
+    test('a FEN is read quoted, as a tag, or cut short', () {
+      const placement = 'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR';
+      for (final text in [
+        '"$_sicilian"',
+        "  '$_sicilian'\n",
+        '`$_sicilian`',
+        '\u201c$_sicilian\u201d',
+        '[FEN "$_sicilian"]',
+        '$placement  w   KQkq -',
+        '$placement W KQkq',
+      ]) {
+        expect(
+          pastedFen(text)?.position,
+          Fen(_sicilian).position,
+          reason: text,
+        );
+      }
+      expect(pastedFen('$placement w'), Fen('$placement w - - 0 1'));
+      expect(pastedFen(placement), Fen('$placement w - - 0 1'));
+      expect(pastedFen('$_sicilian\n1. e4'), isNull);
+      expect(pastedFen('1. e4 c5'), isNull);
+    });
+
+    test('castling rights the board does not allow are dropped', () {
+      expect(
+        pastedFen('4k3/8/8/8/8/8/8/4K3 w KQkq - 0 1'),
+        Fen('4k3/8/8/8/8/8/8/4K3 w - - 0 1'),
+      );
+    });
+
+    test('a FEN that cannot be played from says why', () {
+      expect(
+        (pastedPosition('8/8/8/8/8/8/8/8 w - -') as PasteRefused).reason,
+        'Not a playable FEN. The board is empty.',
+      );
+      expect(
+        (pastedBoard('4k3/8/8/8/8/8/8/8 w', side: Side.white) as PasteRefused)
+            .reason,
+        'Not a playable FEN. Each side needs exactly one king.',
+      );
+    });
+
+    test('a pasted FEN faces the side to move', () {
+      final black = pastedBoard(_afterE4.value, side: Side.white);
+      expect((black as PastedBoard).chapter.side, Side.black);
+      final white = pastedPosition(_sicilian);
+      expect((white as PastedBoard).chapter.side, Side.white);
+    });
+
+    test('a game from a position of its own faces its side to move', () {
+      final board = pastedBoard(
+        '[FEN "${_afterE4.value}"]\n[SetUp "1"]\n\n1... c5 *',
+        side: Side.white,
+      );
+      expect((board as PastedBoard).chapter.side, Side.black);
+      expect(board.chapter.tree.rootFen, _afterE4);
+    });
+
+    test('a FEN pasted over a blank board takes its tab', () async {
+      final blank = session.analysisPage;
+      expect(await paste(_sicilian), isNull);
+      expect(session.analysisPage, same(blank));
+      expect(session.fen, Fen(_sicilian));
+      session.playMove('g1f3');
+      expect(await paste(_afterE4.value), isNull);
+      expect(session.analysisPage, isNot(same(blank)));
+      expect(session.fen, _afterE4);
     });
 
     test('the pasted board keeps the side the board faces', () async {

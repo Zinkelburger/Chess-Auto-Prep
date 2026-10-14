@@ -184,7 +184,9 @@ an optional left list column, then the workspace: the board column (board,
 compact engine lines, typed-move field, note card) beside the reading card's
 panes, first shared two parts board to three parts card. Panes split right or
 below from a tab's context menu; each pane has a browser-style tab strip
-(34px tabs, the chosen one filled). The Repertoire builder starts split:
+(34px tabs, the chosen one filled). The sentence about the last action sits
+in the top bar's empty middle on one line (all of it on hover), in the error
+colour only when the action could not be done; it never pushes the page down. The Repertoire builder starts split:
 Moves on the left, Expectimax on the right; the book opens under the moves
 from its button.
 
@@ -259,6 +261,7 @@ active pane's a brighter grey. Dividers between panes are 1px lines with a
 ### Engine lines
 - **Style:** the old inline-bar style, not a Lichess headline: a small switch and status, then 28px rows with a 54px score gutter and the moves after it. Hovering a move floats its board.
 - **Status:** depth, speed and nodes, then the engine's own name (`Depth 24 · 12 MN/s · 345M nodes · Stockfish 19`), in tabular figures; the rows carry no depth. The gear's rows are typeable steppers, as in Settings ▸ Engine.
+- **Room:** the switch's row and the rows below keep their height whether the engine is on, off, paused or showing its settings; empty rows are blank space, never a placeholder. The board above never changes size when the engine is switched.
 
 ### Bughouse reserve (lila's pocket)
 - **Style:** lila's crazyhouse pocket, kept on purpose over the flat rules: five square-sized slots (pawn to queen) in a #888 grey well with lila's inset top shade, 4px radius, beside the seat's letter. A held piece shows in full with its count in white bold on lila's orange (#D64F00) in the slot's lower right; an empty slot keeps its place with the piece at 10% opacity. On the player's turn a slot brightens to #AAA under the pointer, a picked piece takes the board's selection green, and its drop squares are ringed on the board.

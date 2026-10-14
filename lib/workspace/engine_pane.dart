@@ -183,15 +183,14 @@ class _EnginePaneState extends State<EnginePane>
   }
 }
 
-/// The height reserved only while the engine has something to show. Its
-/// settings take at least their own rows and otherwise the lines' room, so
-/// opening them over enough lines does not move the board.
-double enginePaneHeight(EngineAnalysis analysis, {bool settingsOpen = false}) {
-  final lines = analysis.enabled && !analysis.paused ? analysis.multiPv : 0;
-  final rows = lines * engineRowHeight;
-  return engineBarHeight +
-      (settingsOpen ? max(rows, engineSettingsHeight) : rows);
-}
+/// The height the engine keeps whether it is on, off, paused or showing
+/// its settings: the switch's row and a row for each line, or for each
+/// setting when those are more. Switching the engine or opening its gear
+/// never changes the size of the board above it; rows with nothing in them
+/// are blank.
+double enginePaneHeight(EngineAnalysis analysis) =>
+    engineBarHeight +
+    max(analysis.multiPv, engineSettingRows) * engineRowHeight;
 
 /// A sliding switch beside the engine's status, visible when off too, the
 /// threat's crosshair and the settings' gear.

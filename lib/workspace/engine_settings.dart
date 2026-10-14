@@ -27,12 +27,9 @@ abstract final class EngineSettingCopy {
   static const minMemoryMb = 16;
 }
 
-/// How many rows the engine's settings take in place of its lines.
+/// How many rows the engine's settings take in place of its lines, each as
+/// tall as a line, so opening them over the default lines moves nothing.
 const engineSettingRows = 3;
-
-/// The room the engine's settings take under the pane's bar: as much as
-/// three lines, so opening them over the default lines moves nothing.
-const engineSettingsHeight = engineSettingRows * engineRowHeight;
 
 /// The engine's own settings, shown in the engine pane where its lines
 /// are: how many lines, how many cores, how much memory. One typeable

@@ -135,6 +135,17 @@ extension SetupEdits on Setup {
   );
 }
 
+/// Why a position with [cause] cannot be played from, as a sentence.
+String illegalSetupReason(IllegalSetupCause cause) => switch (cause) {
+  IllegalSetupCause.empty => 'The board is empty.',
+  IllegalSetupCause.kings => 'Each side needs exactly one king.',
+  IllegalSetupCause.oppositeCheck => 'The side not to move is in check.',
+  IllegalSetupCause.impossibleCheck => 'No game could reach this check.',
+  IllegalSetupCause.pawnsOnBackrank =>
+    'Pawns cannot stand on the first or last rank.',
+  IllegalSetupCause.variant => 'This is not a chess position.',
+};
+
 /// [text] as dartchess reads a FEN, or null when it cannot be read.
 ///
 /// Every throw is caught, not only `FenException`: the board parser also

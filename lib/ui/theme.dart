@@ -615,8 +615,8 @@ const gameOrdinalWidth = 40.0;
 const gameNumberWidth = 52.0;
 
 /// The typed-move field under the board: room for `exd8=Q+` and no more,
-/// so the game counter beside it keeps its place on the narrowest board.
-const moveFieldWidth = 144.0;
+/// so the game counter beside it fits on a board 280 pixels wide.
+const moveFieldWidth = 112.0;
 
 /// The Explorer tab's table: the move gutter, the games gutter, the header
 /// row over them, and the height of one filter chip. The result bar sits after the

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:chess_auto_prep/engines/engine_line.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
@@ -402,11 +404,19 @@ void main() {
     );
   });
 
-  test('the settings take their own rows, or the lines\' room if larger', () {
+  test('the room kept is the lines\' or the settings\', whichever is more, '
+      'on or off', () {
+    final rows = max(analysis.multiPv, engineSettingRows);
     expect(
-      enginePaneHeight(analysis, settingsOpen: true),
-      engineBarHeight + engineSettingsHeight,
+      enginePaneHeight(analysis),
+      engineBarHeight + engineRowHeight * rows,
     );
-    expect(enginePaneHeight(analysis), engineBarHeight);
+    analysis.setLines(6);
+    expect(enginePaneHeight(analysis), engineBarHeight + engineRowHeight * 6);
+    analysis.setLines(1);
+    expect(
+      enginePaneHeight(analysis),
+      engineBarHeight + engineRowHeight * engineSettingRows,
+    );
   });
 }
