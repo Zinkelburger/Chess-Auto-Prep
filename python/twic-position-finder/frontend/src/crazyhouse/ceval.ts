@@ -54,6 +54,7 @@ export class CevalView {
   constructor(
     private readonly els: { header: HTMLElement; pearl: HTMLElement; name: HTMLElement; info: HTMLElement; bar: HTMLElement; threat: HTMLButtonElement; pvs: HTMLElement; board: HTMLElement; switch: HTMLInputElement },
     hooks: CevalHooks,
+    private readonly engineName = 'Fairy-Stockfish 14 NNUE',
   ) {
     const { pvs } = els;
     pvs.addEventListener('mouseover', (e) => {
@@ -87,7 +88,7 @@ export class CevalView {
     header.classList.toggle('ch-threat-mode', state.threat);
     threat.hidden = !state.enabled || state.inCheck || !!state.over;
     threat.setAttribute('aria-pressed', String(state.threat));
-    name.textContent = state.threat ? 'Show threat' : 'Fairy-Stockfish 14 NNUE';
+    name.textContent = state.threat ? 'Show threat' : this.engineName;
     info.classList.remove('ch-failed');
     pvs.replaceChildren();
     bar.style.width = '0';
@@ -103,8 +104,9 @@ export class CevalView {
       return;
     }
     pearl.textContent = formatEval(result.lines[0]);
-    info.textContent = `Depth ${result.depth}${result.knps ? ` · ${result.knps.toLocaleString()} kn/s` : ''}`;
-    bar.style.width = `${result.done || state.infinite ? 100 : Math.min(100, (100 * result.millis) / SEARCH_MS)}%`;
+    info.textContent = result.info ?? `Depth ${result.depth}${result.knps ? ` · ${result.knps.toLocaleString()} kn/s` : ''}`;
+    const progress = result.progress ?? result.millis / SEARCH_MS;
+    bar.style.width = `${result.done || state.infinite ? 100 : Math.min(100, 100 * progress)}%`;
     for (let i = 0; i < state.multiPv; i++) pvs.append(this.row(state, result.lines[i]));
     // The board stays while the pointer is on a line of this position; engine updates redraw the rows under it.
     if (this.hovered && this.hovered.fen !== state.fen) this.hideBoard();

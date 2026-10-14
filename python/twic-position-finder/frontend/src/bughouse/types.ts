@@ -21,8 +21,20 @@ export interface EnginePayload {
   dual_fen?: string | null; moves?: string[]; team?: Colour;
   time_advantage?: boolean; their_time_advantage?: boolean;
   require_move_on?: string; movetime_ms?: number; nodes?: number;
+  /** `frozen`: one board's FEN, its engine lines, and how often (ms) to report while searching. */
+  fen?: string; lines?: number; report_ms?: number;
 }
-export type EngineAction = 'position' | 'analyse' | 'search';
+export type EngineAction = 'position' | 'analyse' | 'search' | 'frozen';
+/**
+ * `frozen` reports and result: board A searched with the partner board held
+ * still (Bughouse Single Board). Values are from the side to move; mate is in
+ * plies. The first report carries only `static`, the network's own score.
+ */
+export interface FrozenSearch {
+  static?: number;
+  q: number; mate: number | null; nodes: number; depth: number; elapsed_ms: number; offset: number; done: boolean;
+  lines: { q: number; mate: number | null; visits: number; prior: number; pv: string[] }[];
+}
 export interface EngineReply {
-  id?: number; progress?: string; error?: string; result?: unknown; partial?: Analysis;
+  id?: number; progress?: string; error?: string; result?: unknown; partial?: Analysis | FrozenSearch;
 }

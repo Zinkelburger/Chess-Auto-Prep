@@ -4,6 +4,7 @@ import * as ort from 'onnxruntime-web/wasm';
 interface Wasm {
   HEAPF32: Float32Array;
   cancelled: boolean;
+  onFrozenReport?: (json: string) => void;
   inferenceError?: string;
   infer: (...args: number[]) => Promise<void>;
   ccall: (name: string, result: string | null, types: string[], args: unknown[], options?: { async: boolean }) => string | Promise<string>;
@@ -153,6 +154,19 @@ async function request(id: number, action: EngineAction, payload: EnginePayload)
     const position = JSON.parse(text as string);
     if (position.error) throw new Error(position.error);
     return position;
+  }
+  if (action === 'frozen') {
+    await session(engine);
+    // A stopped search still answers with what it found; the page decides.
+    engine.onFrozenReport = (json) => { if (!cancelled) postMessage({ id, partial: JSON.parse(json) }); };
+    try {
+      const text = await engine.ccall('bh_frozen_search', 'string', ['string', 'number', 'number', 'number', 'number'],
+        [payload.fen ?? '', payload.nodes ?? 800, payload.movetime_ms ?? 30000, payload.lines ?? 1, payload.report_ms ?? 0], { async: true });
+      if (engine.inferenceError) { const error = engine.inferenceError; engine.inferenceError = undefined; throw new Error(error); }
+      const answer = JSON.parse(text as string);
+      if (answer.error) throw new Error(answer.error);
+      return answer;
+    } finally { engine.onFrozenReport = undefined; }
   }
   const cacheKey = JSON.stringify(payload);
   const cached = action === 'analyse' ? analysisCache.get(cacheKey) : undefined;

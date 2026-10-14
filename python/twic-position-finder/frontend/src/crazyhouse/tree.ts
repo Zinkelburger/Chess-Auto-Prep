@@ -7,14 +7,22 @@
  * of a piece no longer in hand) is cut. The tree never checks material counts: any hand chessops accepts
  * is allowed (no kings, at most 64 pieces), capped per piece at what
  * Fairy-Stockfish's NNUE can represent.
+ *
+ * Bughouse Single Board uses the same tree with bughouse rules for one board
+ * (`useBughouseRules`): a capture leaves the board for the partner instead of
+ * the capturer's hand, and a check a drop could block is not mate. The side
+ * caught in it waits for a blocker; the engine plays that as a drop of the
+ * piece it waits for (a pawn, or a knight where a pawn cannot stand).
  */
 import { makeFen, parseFen, INITIAL_FEN } from 'chessops/fen';
 import { makeSan as chessopsSan, parseSan } from 'chessops/san';
 import { parsePgn, startingPosition, type PgnNodeData, type Node as PgnNode } from 'chessops/pgn';
 import { Crazyhouse } from 'chessops/variant';
+import { between } from 'chessops/attacks';
 import { makeSquare, makeUci, parseUci } from 'chessops/util';
 import { normalizeMove } from 'chessops/chess';
 import { chessgroundDests } from 'chessops/compat';
+import { SquareSet } from 'chessops/squareSet';
 import type { Color, Move, Role, SquareName } from 'chessops/types';
 
 export const START_FEN = INITIAL_FEN.replace(' w ', '[] w ');
@@ -22,6 +30,56 @@ export const START_FEN = INITIAL_FEN.replace(' w ', '[] w ');
 export const MAX_IN_HAND = 16;
 export const HAND_ROLES: Role[] = ['pawn', 'knight', 'bishop', 'rook', 'queen'];
 const LETTER: Record<Role, string> = { pawn: 'p', knight: 'n', bishop: 'b', rook: 'r', queen: 'q', king: 'k' };
+
+let bughouse = false;
+
+/** Switches this page to bughouse rules for one board; called once, before any position is read. */
+export function useBughouseRules() { bughouse = true; }
+export function isBughouse(): boolean { return bughouse; }
+
+/** Plays a legal move by this page's rules. */
+function playMove(pos: Crazyhouse, move: Move) {
+  if (!bughouse) { pos.play(move); return; }
+  const turn = pos.turn;
+  if ('role' in move && !pos.pockets![turn][move.role]) pos.pockets![turn][move.role]++;
+  const hand = pos.pockets![turn].clone();
+  pos.play(move);
+  // chessops banks a capture in the mover's hand; in bughouse it goes to the partner.
+  if ('role' in move) hand[move.role]--;
+  pos.pockets![turn] = hand;
+}
+
+/** A check that drops could block: one sliding checker with an empty square between it and the king. */
+function blockable(pos: Crazyhouse): boolean {
+  const king = pos.board.kingOf(pos.turn);
+  const checkers = pos.ctx().checkers;
+  if (king === undefined || checkers.size() !== 1) return false;
+  return between(king, checkers.first()!).diff(pos.board.occupied).nonEmpty();
+}
+
+/**
+ * Bughouse: the side to move is in a check it could only block with a piece
+ * it does not have, and has no other move. Not mate: it waits for a partner.
+ */
+export function isWaiting(pos: Crazyhouse): boolean {
+  return bughouse && pos.isCheck() && !pos.hasDests() && blockable(pos);
+}
+
+/** The pieces a waiting side may drop when its partner sends one: a pawn, or a knight where no pawn can block. */
+function waitingDrop(pos: Crazyhouse, move: Move): boolean {
+  if (!('role' in move) || !isWaiting(pos)) return false;
+  const blocks = between(pos.board.kingOf(pos.turn)!, pos.ctx().checkers.first()!).diff(pos.board.occupied);
+  const pawnBlocks = blocks.diff(SquareSet.backranks());
+  if (!blocks.has(move.to)) return false;
+  return move.role === 'pawn' ? pawnBlocks.has(move.to) : move.role === 'knight' && pawnBlocks.isEmpty();
+}
+
+/** Checkmate, stalemate, or (bughouse) waiting for a blocker; null while play goes on. */
+export function outcomeOf(fen: string): 'Checkmate' | 'Stalemate' | 'Waiting' | null {
+  const pos = positionOf(fen);
+  if (isWaiting(pos)) return 'Waiting';
+  return pos.isCheckmate() ? 'Checkmate' : pos.isStalemate() ? 'Stalemate' : null;
+}
 
 export interface TreeNode {
   id: string;
@@ -173,7 +231,7 @@ export function readMove(pos: Crazyhouse, uci: string): Move | undefined {
   const raw = parseUci(uci);
   if (!raw) return undefined;
   const move = normalizeMove(pos, raw);
-  return pos.isLegal(move) ? move : undefined;
+  return pos.isLegal(move) || waitingDrop(pos, move) ? move : undefined;
 }
 
 export interface LineMove { uci: string; san: string; fen: string }
@@ -186,7 +244,7 @@ export function playLine(fen: string, ucis: string[], limit = ucis.length): Line
     const move = readMove(pos, uci);
     if (!move) break;
     const san = makeSan(pos, move);
-    pos.play(move);
+    playMove(pos, move);
     out.push({ uci, san, fen: fenOf(pos) });
   }
   return out;
@@ -302,7 +360,7 @@ export class Tree {
     const parent = this.parent(id);
     if (!parent) return this.loadedFen;
     const pos = positionOf(parent.fen);
-    pos.play(parseUci(node.uci)!);
+    playMove(pos, parseUci(node.uci)!);
     return fenOf(pos);
   }
 
@@ -315,7 +373,7 @@ export class Tree {
     const existing = parent.children.find((c) => c.uci === makeUci(move));
     if (existing) return existing;
     const san = makeSan(pos, move);
-    pos.play(move);
+    playMove(pos, move);
     const child: TreeNode = { id: newId(), ply: parent.ply + 1, uci: makeUci(move), san, fen: fenOf(pos), children: [] };
     parent.children.push(child);
     this.index(child, parent);
@@ -338,9 +396,9 @@ export class Tree {
     for (const child of node.children) {
       const pos = positionOf(node.fen);
       const move = parseUci(child.uci);
-      if (!move || !pos.isLegal(move)) { this.unindex(child); continue; }
+      if (!move || !readMove(pos, child.uci)) { this.unindex(child); continue; }
       child.san = makeSan(pos, move);
-      pos.play(move);
+      playMove(pos, move);
       child.fen = applyDelta(fenOf(pos), child.hand);
       kept.push(child);
       this.replay(child);
@@ -465,7 +523,9 @@ export class Tree {
   }
 
   private headers(): string[] {
-    const headers = ['[Event "Crazyhouse analysis"]', '[Site "https://chessautoprep.com/crazyhouse"]', '[Variant "Crazyhouse"]'];
+    const headers = bughouse
+      ? ['[Event "Bughouse single board"]', '[Site "https://chessautoprep.com/bughouse-single-board"]', '[Variant "Bughouse"]']
+      : ['[Event "Crazyhouse analysis"]', '[Site "https://chessautoprep.com/crazyhouse"]', '[Variant "Crazyhouse"]'];
     if (this.root.fen !== START_FEN) headers.push(`[FEN "${this.root.fen}"]`, '[SetUp "1"]');
     return headers;
   }
@@ -508,7 +568,7 @@ export class Tree {
     out.push(node.san);
   }
 
-  /** A tree from a crazyhouse PGN (the first game; any variant tag is read as crazyhouse). */
+  /** A tree from a crazyhouse PGN (the first game; any variant tag is read as this page's rules). */
   static fromPgn(text: string): Tree | null {
     const game = parsePgn(text)[0];
     if (!game) return null;
@@ -518,7 +578,7 @@ export class Tree {
     const tree = new Tree(fenOf(start.value as Crazyhouse));
     const walk = (pgnNode: PgnNode<PgnNodeData>, node: TreeNode, pos: Crazyhouse) => {
       for (const child of pgnNode.children) {
-        const move = parseSan(pos, child.data.san);
+        const move = parseSan(pos, child.data.san) ?? (bughouse ? waitingSan(pos, child.data.san) : undefined);
         if (!move) continue;
         const next = tree.play(node.id, makeUci(move));
         if (!next) continue;
@@ -549,3 +609,10 @@ function plyOf(fen: string): number {
   return (full - 1) * 2 + (parts[1] === 'b' ? 1 : 0);
 }
 
+
+/** A waiting side's drop of the piece its partner sends (`N@f8` with no knight in hand). */
+function waitingSan(pos: Crazyhouse, san: string): Move | undefined {
+  const m = /^([PN])?@([a-h][1-8])/.exec(san);
+  if (!m) return undefined;
+  return readMove(pos, `${m[1] ?? 'P'}@${m[2]}`);
+}

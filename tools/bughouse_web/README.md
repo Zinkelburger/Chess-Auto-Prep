@@ -87,7 +87,13 @@ can be reopened offline: there is no page-caching service worker.
 ## Engine port
 
 `CMakeLists.txt` compiles the pinned Hivemind source revision
-`5508ba9daf4164e48a8a8a9b39e101efdc60e97a` plus three browser adapters:
+`5508ba9daf4164e48a8a8a9b39e101efdc60e97a`, with `patches/*.patch` applied
+in name order, plus three browser adapters. `patches/frozen-board.patch` adds
+`g_frozenBoardB` for Bughouse Single Board: board B gets no moves, a check on
+A that a drop could block lets the checked side drop the blocker it waits for
+(a pawn, or a knight where a pawn cannot stand), nobody's sit plane is set,
+and `g_frozenValueOffset` is subtracted from every network value. With the
+flag off (the Lab, BughouseDB) searches are unchanged. The adapters:
 
 * `bridge.cc`: validated position/SAN/UCI interface and bounded MCTS searches.
   It uses the existing `Board`, `SearchThread` and `Node` implementations.
@@ -101,6 +107,17 @@ can be reopened offline: there is no page-caching service worker.
   actions, with that board's policy prior and their summed visits, most
   visited first. BughouseDB's in-browser analysis scores only each board's
   first four. The worker exposes it as the `search` action.
+* `bh_frozen_search(fen, nodes, millisCap,
+  lines, reportMs)` searches one board's FEN (hands in brackets) for the side
+  to move. Board B is the starting position held still, the opponent's colour
+  to move there, with every piece missing from A in the pocket of whoever
+  captured it (bughouse conserves pieces; without them the network barely
+  notices a missing queen). Two static inferences first measure the
+  network's shared offset (both seats with no sit plane rate themselves about
+  −0.5); the search subtracts it, so q is a winning chance from the side to
+  move and the start position reads about 0. It reports to
+  `Module.onFrozenReport` every `reportMs` and returns up to five lines with
+  board A's moves only. The worker exposes it as the `frozen` action.
 * `engine_web.cc`: replaces native ONNX Runtime with an Asyncify call to
   ONNX Runtime Web, keeping the existing plane encoder and neural outputs.
 * `thread_web.cc`: supplies Fairy-Stockfish's thread-local counters without
@@ -157,7 +174,8 @@ Install/activate Emscripten SDK **4.0.15**, then from the repository root:
 scripts/ci.sh with -- python3 tools/bughouse_web/build.py --emsdk /path/to/emsdk
 ```
 
-The script checks out the pinned Hivemind revision under ignored `build/`.
+The script checks out the pinned Hivemind revision under ignored `build/`,
+exports it to `build/bughouse-web-patched/` and applies `patches/*.patch`.
 `--source /path/to/hivemind` can reuse an existing clean checkout at that
 revision; it never edits that checkout. `public/bughouse-engine/build.json`
 records the source revision, compiler version, bridge hashes and output

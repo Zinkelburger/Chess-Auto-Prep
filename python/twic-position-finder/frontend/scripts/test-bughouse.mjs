@@ -62,7 +62,7 @@ try {
   assert.equal(await page.$$eval('cg-board piece', (e) => e.length), 64);
   assert.equal(assets.some((u) => /model-.*\.bin/.test(u)), false, 'moving does not load the network');
   await move('A', 'e2', 'e4'); await move('A', 'd7', 'd5'); await move('A', 'e4', 'd5'); await enter('B', 'e4');
-  const pawn = '[aria-label="Player B: 1 pawn in reserve"]';
+  const pawn = '[aria-label="Player B: 1 pawn"]';
   assert.equal(await page.$eval(pawn, (e) => e.disabled), false);
   await page.click(pawn); await clickSquare('B', 'e6'); await ready();
   await pawnOn('B', 'e6', 'black');

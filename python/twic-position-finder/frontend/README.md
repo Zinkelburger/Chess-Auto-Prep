@@ -11,6 +11,7 @@ Static Astro site deployed to Cloudflare Pages. Browser preparation tools, one s
 | `/bughouse`           | Two linked boards and Hivemind running entirely in the browser | `src/bughouse/*`, `../../../tools/bughouse_web/` |
 | `/bughouse-puzzles`   | Bughouse Puzzles — mates and tactics mined from FICS games, reserves frozen | `src/bughouse-puzzles/*`, `public/bughouse-puzzles/` |
 | `/bughousedb`         | BughouseDB — the shared Hivemind book; missing positions analysed in the browser | `src/bughousedb/*`, `src/bughouse/boards.ts` |
+| `/bughouse-single-board` | Bughouse Single Board — the Crazyhouse Analysis board with bughouse rules for one board and Hivemind in the browser (partner board held still), an evaluation gauge, and a sit panel: the value of moving now against waiting for each piece | `src/bughouse-single/*`, `src/crazyhouse/*` |
 | `/crazyhouse`         | Crazyhouse Analysis — lichess.org/analysis/crazyhouse on one board, with + and − on every piece in both hands and lila's board editor; Fairy-Stockfish in the browser | `src/crazyhouse/*`, `../../../tools/prepare_crazyhouse_web.py` |
 | `/charles-clock`      | Charles Clock — a full-screen phone clock with its own `<html>`      | `src/pages/charles-clock.astro`        |
 
@@ -72,6 +73,17 @@ Node/Python build environment, not Emscripten. See the
   `npm run build`, `npm run test:crazyhouse:browser` drives the page in
   headless Chrome with the real engine and writes screenshots to
   `build/crazyhouse-web/`.
+- `src/bughouse-single/` — Bughouse Single Board, which runs the crazyhouse
+  app with a `Flavor` (`crazyhouse/app.ts`): `useBughouseRules()` makes the
+  tree send captures to the partner and treats a check a drop could block as
+  waiting, not mate (the side drops the blocker it waits for, a pawn or a
+  knight); `engine.ts` adapts the Bughouse Lab worker's `frozen` search
+  (Hivemind with the partner board held still) to the engine panel, gauge and
+  move marks; `sit.ts` searches the position again with one more pawn, knight,
+  bishop, rook or queen for the side to move on spare workers and names the
+  cheapest piece that mates ("Sit for a knight"). Rules and score conversion:
+  `npm run test:crazyhouse`; the page with the real engine:
+  `npm run build && npm run test:bughouse-single:browser`.
 - `public/stockfish/` — stockfish.js 18 single-threaded build (`stockfish.js` +
   `stockfish.wasm`). `public/piece/` — cburnett SVGs used by both board renderers.
 

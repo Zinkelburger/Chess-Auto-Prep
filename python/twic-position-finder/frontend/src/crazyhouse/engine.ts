@@ -37,6 +37,20 @@ export interface EngineResult {
   lines: EngineLine[];
   /** The search ended by itself (time or depth limit). */
   done: boolean;
+  /** Replaces "Depth n · kn/s" under the engine name (Hivemind counts positions, not depth). */
+  info?: string;
+  /** How far the search is through its allowance, 0 to 1, for the bar under the engine header. */
+  progress?: number;
+}
+
+/** What the analysis board asks of an engine: Fairy-Stockfish here, Hivemind on Bughouse Single Board. */
+export interface AnalysisEngine {
+  /** Downloads (once) and starts the engine; later calls share the same start. */
+  load(): Promise<void>;
+  /** Searches `fen` from now on; any search in progress is stopped first. */
+  analyse(fen: string, settings: SearchSettings): void;
+  /** Stops searching and forgets the queued position. */
+  stop(): void;
 }
 
 export interface SearchSettings {
@@ -111,7 +125,7 @@ async function fetchChunk(chunk: Chunk, cache: Cache | null, progress: (bytes: n
 
 interface Job { fen: string; settings: SearchSettings; generation: number; started: number }
 
-export class Engine {
+export class Engine implements AnalysisEngine {
   private module: StockfishWeb | null = null;
   private loading: Promise<void> | null = null;
   private status: EngineStatus = { kind: 'off' };

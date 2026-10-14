@@ -1,0 +1,57 @@
+/* Bughouse Single Board: Crazyhouse Analysis's layout (crazyhouse.css) plus
+   Lichess's evaluation gauge beside the board and the sit panel under the
+   engine lines. */
+
+/* ── Evaluation gauge: White's winning chances, white from the bottom ── */
+.bs { --bs-gauge: clamp(8px, calc(var(--ch-board) / 48), 16px); }
+.ch-gauge { position: absolute; top: 0; bottom: 0; left: calc(-1 * var(--bs-gauge) - 6px); width: var(--bs-gauge); overflow: hidden; border-radius: 2px; background: #e9e9e9; }
+.ch-gauge-black { position: absolute; inset: 0; background: #3a3a3a; transform: scaleY(0.5); transform-origin: top; transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+.ch-gauge.flipped { transform: rotate(180deg); }
+/* Eighths, as on Lichess, with the middle one stronger. */
+.ch-gauge-ticks { position: absolute; inset: 0; background: repeating-linear-gradient(to bottom, transparent 0 calc(12.5% - 1px), rgb(127 127 127 / 0.45) calc(12.5% - 1px) 12.5%); }
+.ch-gauge-ticks::after { content: ''; position: absolute; left: 0; right: 0; top: calc(50% - 1px); height: 2px; background: #d64f00; opacity: 0.8; }
+.ch-gauge.off .ch-gauge-black { transform: scaleY(0.5); }
+.ch-gauge.off { opacity: 0.35; }
+.ch[data-mode="editor"] .ch-gauge { display: none; }
+@media (prefers-reduced-motion: reduce) { .ch-gauge-black { transition: none; } }
+
+/* ── Sit panel: move now, or wait for one more piece ──────────── */
+.bs-sit { flex: none; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+.bs-sit[hidden] { display: none; }
+.ch-analysis.practising .bs-sit { display: none; }
+.bs-sit-head { display: flex; align-items: baseline; gap: 8px; padding: 7px 10px 5px; }
+.bs-sit-head strong { font-weight: 600; }
+.bs-sit-note { margin-left: auto; color: var(--text-faint); font-size: 0.78rem; white-space: nowrap; }
+.bs-sit-verdict { margin: 0 8px 6px; padding: 6px 10px; border-radius: 4px; background: var(--ok-bg); color: var(--ok); }
+.bs-sit-verdict strong { font-weight: 700; }
+
+.bs-sit-row {
+  display: grid; grid-template-columns: 6.6em 3.7em minmax(4.5em, max-content) 1fr; align-items: center; column-gap: 8px;
+  width: 100%; min-height: 2.15em; padding: 0 10px; border: 0; border-top: 1px solid var(--border);
+  background: none; color: var(--text); font: inherit; text-align: left;
+}
+button.bs-sit-row { cursor: pointer; }
+button.bs-sit-row:hover { background: var(--accent-bg); }
+button.bs-sit-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.bs-sit-label { display: inline-flex; align-items: center; gap: 2px; color: var(--text-dim); white-space: nowrap; }
+.bs-sit-label img { width: 22px; height: 22px; }
+.bs-sit-name { margin-left: 2px; }
+.bs-sit-now .bs-sit-name { margin-left: 0; color: var(--text); font-weight: 600; }
+.bs-sit-eval { font-weight: 700; font-variant-numeric: tabular-nums; }
+.bs-sit-eval .ch-spinner { width: 14px; height: 14px; vertical-align: middle; }
+.bs-sit-move { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bs-sit-failed { color: var(--danger); font-weight: 400; white-space: normal; }
+.bs-sit-gain { height: 6px; border-radius: 3px; background: var(--bg-input); overflow: hidden; }
+.bs-sit-bar { display: block; width: 100%; height: 100%; border-radius: 3px; background: var(--accent); transform-origin: left; transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+.bs-sit-mates .bs-sit-eval, .bs-sit-mates .bs-sit-move { color: var(--ok); }
+.bs-sit-mates .bs-sit-bar { background: var(--ok); }
+
+/* The rule of this board, under it. */
+.bs-note { margin: 0 0 4px; max-width: 70ch; color: var(--text-dim); font-size: 0.85rem; line-height: 1.45; }
+
+@media (max-width: 860px) {
+  /* The gauge sits in the page's side gutter beside the board. */
+  .bs { --bs-gauge: 8px; }
+  .ch-gauge { left: calc(-1 * var(--bs-gauge) - 4px); }
+  .bs-sit-row { grid-template-columns: 6.2em 3.5em minmax(4em, max-content) 1fr; min-height: 2.6em; }
+}

@@ -9,6 +9,8 @@ const KEY = 'crazyhouse-analysis-v1';
 
 export interface Settings extends SearchSettings {
   engineOn: boolean;
+  /** Bughouse Single Board: positions searched for each row of the sit panel. */
+  sitNodes: number;
   inline: boolean;
   disclosure: boolean;
   liveGlyphs: boolean;
@@ -32,7 +34,7 @@ export const TOGGLES: { key: Toggle; label: string; hotkey?: string; group: 'Mov
 ];
 
 const DEFAULTS: Settings = {
-  engineOn: true, multiPv: 2, threads: DEFAULT_THREADS, hashMb: 128, infinite: false,
+  engineOn: true, multiPv: 2, threads: DEFAULT_THREADS, hashMb: 128, infinite: false, sitNodes: 200,
   inline: false, disclosure: false, liveGlyphs: false, glyphsOnBoard: true,
   bestArrows: true, maneuverArrows: false, variationArrows: true,
 };
@@ -42,19 +44,22 @@ export function clamp(value: unknown, lo: number, hi: number, fallback: number):
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
 }
 
-export function loadSettings(): Settings {
-  const out = { ...DEFAULTS };
+/** The settings kept under `key`, with `defaults` over Lichess's for another page's engine. */
+export function loadSettings(key = KEY, defaults: Partial<Settings> = {}): Settings {
+  const base = { ...DEFAULTS, ...defaults };
+  const out = { ...base };
   try {
-    const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Record<string, unknown>;
-    for (const key of Object.keys(DEFAULTS) as (keyof Settings)[])
-      if (typeof saved[key] === 'boolean' && typeof DEFAULTS[key] === 'boolean') (out[key] as boolean) = saved[key] as boolean;
-    out.multiPv = clamp(saved.multiPv, 1, 5, DEFAULTS.multiPv);
-    out.threads = clamp(saved.threads, 1, MAX_THREADS, DEFAULTS.threads);
-    out.hashMb = clamp(saved.hashMb, 16, 512, DEFAULTS.hashMb);
+    const saved = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
+    for (const name of Object.keys(base) as (keyof Settings)[])
+      if (typeof saved[name] === 'boolean' && typeof base[name] === 'boolean') (out[name] as boolean) = saved[name] as boolean;
+    out.multiPv = clamp(saved.multiPv, 1, 5, base.multiPv);
+    out.threads = clamp(saved.threads, 1, MAX_THREADS, base.threads);
+    out.hashMb = clamp(saved.hashMb, 16, 512, base.hashMb);
+    out.sitNodes = clamp(saved.sitNodes, 20, 5000, base.sitNodes);
   } catch { /* Defaults. */ }
   return out;
 }
 
-export function saveSettings(settings: Settings) {
-  try { localStorage.setItem(KEY, JSON.stringify(settings)); } catch { /* Settings stay for this visit. */ }
+export function saveSettings(settings: Settings, key = KEY) {
+  try { localStorage.setItem(key, JSON.stringify(settings)); } catch { /* Settings stay for this visit. */ }
 }

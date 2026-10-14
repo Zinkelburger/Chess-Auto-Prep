@@ -31,18 +31,19 @@ export interface NodeSearchResult {
 export class BrowserEngine {
   private worker: Worker | null = null;
   private serial = 0;
-  private pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void; partial?: (analysis: Analysis) => void }>();
+  private pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void; partial?: (report: never) => void }>();
 
   constructor(private progress: (message: string) => void) {}
 
-  request<T>(action: EngineAction, payload: object, partial?: (analysis: Analysis) => void): Promise<T> {
+  /** `partial` receives the worker's reports before the result: an `Analysis` for `analyse`, a `FrozenSearch` for `frozen`. */
+  request<T, P = Analysis>(action: EngineAction, payload: object, partial?: (report: P) => void): Promise<T> {
     if (!this.worker) {
       this.worker = new Worker(new URL('./engine.worker.ts', import.meta.url), { type: 'module' });
       this.worker.onmessage = ({ data }: MessageEvent<EngineReply>) => {
         if (data.progress) { this.progress(data.progress); return; }
         const pending = data.id === undefined ? undefined : this.pending.get(data.id);
         if (!pending) return;
-        if (data.partial) { pending.partial?.(data.partial); return; }
+        if (data.partial) { pending.partial?.(data.partial as never); return; }
         this.pending.delete(data.id!);
         if (data.error) pending.reject(new Error(data.error));
         else pending.resolve(data.result);

@@ -17,7 +17,8 @@
     "test:prep": "node scripts/test-prep.mjs",
     "test:prep:browser": "node scripts/test-prep-browser.mjs",
     "test:crazyhouse": "node scripts/test-crazyhouse.mjs",
-    "test:crazyhouse:browser": "node scripts/test-crazyhouse-browser.mjs"
+    "test:crazyhouse:browser": "node scripts/test-crazyhouse-browser.mjs",
+    "test:bughouse-single:browser": "node scripts/test-bughouse-single-browser.mjs"
   },
   "dependencies": {
     "@lichess-org/chessground": "10.2.0",
