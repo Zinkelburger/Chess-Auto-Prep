@@ -99,8 +99,18 @@ try {
   await evaluated(page);
   await sitDone(page);
   await page.screenshot({ path: path.join(output, 'mobile.png'), fullPage: true });
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  assert.ok(overflow <= 0, `no sideways scroll on a phone (${overflow}px)`);
+  // A phone widens its layout viewport to fit wide content, so measure against
+  // the device width, not innerWidth.
+  for (const width of [390, 360, 320]) {
+    await page.setViewport({ width, height: 740, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+    // Chessground follows its new size one animation frame after the resize.
+    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+    const [wide, culprit] = await page.evaluate((width) => {
+      const over = [...document.querySelectorAll('body *')].filter((el) => el.getBoundingClientRect().right > width + 1 && !el.closest('.nav-links'));
+      return [document.documentElement.scrollWidth, over.slice(0, 3).map((el) => `${el.tagName}.${el.className}#${el.id}`).join(', ')];
+    }, width);
+    assert.ok(wide <= width, `no sideways scroll on a ${width} px phone (page is ${wide} px: ${culprit})`);
+  }
 
   assert.deepEqual(errors, [], 'no page errors');
   console.log('bughouse single board browser: ok');

@@ -83,7 +83,7 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ch-pearl { min-width: 3.4em; font-size: 1.6rem; font-weight: 700; line-height: 1; text-align: center; }
 .ch-engine { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.25; }
-.ch-engine-name { font-size: 0.85rem; color: var(--text-dim); }
+.ch-engine-name { font-size: 0.85rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ch-engine-info { font-size: 0.8rem; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ch-engine-info.ch-failed { color: var(--danger); white-space: normal; }
 .ch-ceval.off .ch-engine-name { color: var(--text-faint); }
@@ -276,4 +276,7 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
   #ch-hand-top { grid-area: top; }
   #ch-hand-bottom { grid-area: bottom; }
   .ch-tools { grid-area: tools; height: 60dvh; }
+  /* The move arrows give up width first, so the row fits a 320 px phone. */
+  .ch-controls { gap: 2px; }
+  .ch-controls .ch-nav { flex: 0 1 52px; min-width: 28px; }
 }

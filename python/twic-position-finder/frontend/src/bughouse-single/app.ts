@@ -19,7 +19,7 @@ export function startBughouseSingleBoard() {
   const maxThreads = Math.max(1, Math.min(MAX_SIT_WORKERS, cores - 1));
   new CrazyhouseApp({
     engine: (onStatus, onResult) => new HivemindEngine(onStatus, onResult),
-    engineName: 'Hivemind · one board',
+    engineName: 'Hivemind',
     treeKey: 'bughouse-single-board-tree-v1',
     settingsKey: 'bughouse-single-board-v1',
     // Each sit worker holds its own network: two leave a phone room to breathe.

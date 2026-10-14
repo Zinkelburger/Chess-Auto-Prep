@@ -112,7 +112,8 @@ async function session(engine: Wasm): Promise<ort.InferenceSession> {
       // no SharedArrayBuffer, COOP/COEP, GPU, server or remote model required.
       if (cancelled) throw new Error('Analysis cancelled.');
       ort.env.wasm.numThreads = 1;
-      ort.env.wasm.wasmPaths = directory;
+      // A full URL: the dev server rejects a root-relative import of a /public file.
+      ort.env.wasm.wasmPaths = new URL(directory, self.location.origin).href;
       const network = await ort.InferenceSession.create(model, { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
       engine.infer = async (input, batch, value, policyA, policyB, wdl, movesLeft) => {
         // ORT's CPU promise can settle in the same microtask turn. Yield a
