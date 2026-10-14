@@ -65,7 +65,7 @@ export interface ExtraHost {
   evalOf(fen: string): EngineResult | undefined;
   /** One more of this piece in the hand of the side to move, as if the partner sent it. */
   give(role: Role): void;
-  /** Shows a move on the board while the pointer is on it (null to clear). */
+  /** Shows a move on the board, in place of the engine's arrows, while the pointer is on it (null to clear). */
   hover(uci: string | null): void;
 }
 
@@ -117,6 +117,8 @@ export class CrazyhouseApp {
   private practice: Practice | null = null;
   private forkIndex = 0;
   private hoverUci: string | null = null;
+  /** Engine lines draw their hovered move pale, like the engine's own arrow; the page's extra panel draws it solid. */
+  private hoverBrush = 'paleBlue';
   private menuOpen = false;
   private autoplay: { delay: number; timer: number } | null = null;
   private stepping = false;
@@ -180,7 +182,7 @@ export class CrazyhouseApp {
       header: $('ch-ceval'), pearl: $('ch-pearl'), name: $('ch-engine-name'), info: $('ch-engine-info'), bar: $('ch-bar'),
       threat: $<HTMLButtonElement>('ch-threat'), pvs: $('ch-pvs'), board: $('ch-pv-board'), switch: $<HTMLInputElement>('ch-engine-on'),
     }, {
-      hover: (uci) => { if (uci !== this.hoverUci) { this.hoverUci = uci; this.renderShapes(); } },
+      hover: (uci) => this.hover(uci, 'paleBlue'),
       play: (pv, upTo) => this.playLine(pv, upTo),
     }, flavor.engineName);
     this.extra = flavor.extra ? flavor.extra({
@@ -190,7 +192,7 @@ export class CrazyhouseApp {
       get engineReady() { return app.engineStatus.kind === 'ready'; },
       evalOf: (fen) => this.evals.get(fen),
       give: (role) => this.adjust(positionOf(this.current.fen).turn, role, 1),
-      hover: (uci) => { if (uci !== this.hoverUci) { this.hoverUci = uci; this.renderShapes(); } },
+      hover: (uci) => this.hover(uci, 'blue'),
     }) : null;
 
     this.bind();
@@ -379,7 +381,7 @@ export class CrazyhouseApp {
     const turn = pos.turn, other: Color = turn === 'white' ? 'black' : 'white';
     let shapes: DrawShape[] = [];
     const on = this.settings.engineOn && !ended(this.current.fen);
-    if (on && this.hoverUci) shapes.push(...moveShapes(this.threat ? other : turn, this.hoverUci, 'paleBlue'));
+    if (on && this.hoverUci) shapes.push(...moveShapes(this.threat ? other : turn, this.hoverUci, this.hoverBrush));
     else if (on && this.settings.bestArrows) {
       const result = this.evals.get(this.current.fen);
       if (result) shapes.push(...engineShapes(turn, result.lines, this.settings.maneuverArrows));
@@ -393,6 +395,13 @@ export class CrazyhouseApp {
     if (this.settings.variationArrows && this.current.children.length > 1)
       shapes = shapes.concat(variationShapes(turn, this.current.children.map(arrowUci), this.forkIndex, shapes));
     return shapes;
+  }
+
+  private hover(uci: string | null, brush: string) {
+    if (uci === this.hoverUci && brush === this.hoverBrush) return;
+    this.hoverUci = uci;
+    this.hoverBrush = brush;
+    this.renderShapes();
   }
 
   private renderShapes() {

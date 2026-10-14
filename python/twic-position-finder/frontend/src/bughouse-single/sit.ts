@@ -11,7 +11,6 @@ import { BrowserEngine } from '../bughouse/engine';
 import type { FrozenSearch } from '../bughouse/types';
 import type { Extra, ExtraHost } from '../crazyhouse/app';
 import { formatEval } from '../crazyhouse/ceval';
-import { winningChances } from '../crazyhouse/judge';
 import { el } from '../crazyhouse/moves';
 import { adjustHand, outcomeOf, positionOf, sanLine } from '../crazyhouse/tree';
 import { centipawns, mateMoves } from './engine';
@@ -134,11 +133,21 @@ export class SitPanel implements Extra {
     const side = ladder.turn === 'white' ? 'White' : 'Black';
     const now = ladder.rows[0].result;
     const head = el('div', 'bs-sit-head');
+    head.title = `Each row is its own ${ladder.nodes.toLocaleString()}-position search`;
     head.append(el('strong', '', `Sit or move · ${side} to play`));
-    head.append(el('span', 'bs-sit-note', `${ladder.nodes.toLocaleString()} positions each`));
     const verdict = this.verdict(ladder);
-    const rows = ladder.rows.map((row) => this.row(ladder, row, now));
-    this.box.replaceChildren(head, ...(verdict ? [verdict] : []), ...rows);
+    if (verdict) head.append(verdict);
+    const table = el('table', 'bs-sit-table');
+    const heading = el('tr', '');
+    for (const [label, title] of [['Option', ''], ['Eval', ''], ['Gain', 'Better than moving now, for the side to play'], ['Best move', '']]) {
+      const th = el('th', '', label); th.setAttribute('scope', 'col'); if (title) th.title = title; heading.append(th);
+    }
+    const body = el('tbody', '');
+    body.append(...ladder.rows.map((row) => this.row(ladder, row, now)));
+    const thead = el('thead', '');
+    thead.append(heading);
+    table.append(thead, body);
+    this.box.replaceChildren(head, table);
   }
 
   /** The cheapest piece that mates, when moving now does not. */
@@ -148,52 +157,56 @@ export class SitPanel implements Extra {
     if (mates(ladder.rows[0])) return null;
     const row = ladder.rows.slice(1).find(mates);
     if (!row?.role || !row.result?.san) return null;
-    const box = el('p', 'bs-sit-verdict');
+    const box = el('span', 'bs-sit-verdict', `Sit for ${ARTICLE[row.role]}`);
     const moves = Math.abs(row.result.mate!);
-    box.append(el('strong', '', `Sit for ${ARTICLE[row.role]}`),
-      document.createTextNode(moves === 1 ? ` · ${row.result.san}` : ` · mate in ${moves}, starting ${row.result.san}`));
+    box.title = moves === 1 ? `${row.result.san} mates` : `Mate in ${moves}, starting ${row.result.san}`;
     return box;
   }
 
   private row(ladder: Ladder, row: Row, now: Row['result']): HTMLElement {
     const color = ladder.turn;
-    const item = row.role && row.fen ? el('button', 'bs-sit-row') as HTMLButtonElement : el('div', row.role ? 'bs-sit-row' : 'bs-sit-row bs-sit-now');
-    if (item instanceof HTMLButtonElement) {
-      item.type = 'button';
+    const mover = color === 'white' ? 1 : -1;
+    const item = el('tr', row.role ? 'bs-sit-row' : 'bs-sit-row bs-sit-now');
+    const option = el('td', 'bs-sit-option');
+    // The whole row gives the piece; its button carries that for the keyboard.
+    const giving = row.role !== null && row.fen !== null;
+    const label = el(giving ? 'button' : 'span', 'bs-sit-label');
+    if (giving) {
       item.dataset.role = row.role!;
-      item.title = `Give ${color} ${ARTICLE[row.role!]}`;
+      (label as HTMLButtonElement).type = 'button';
+      label.title = `Give ${color} ${ARTICLE[row.role!]}`;
     }
-    const label = el('span', 'bs-sit-label');
     if (row.role) {
       const img = document.createElement('img');
       img.src = `/piece/${color === 'white' ? 'w' : 'b'}${LETTER[row.role]}.svg`;
       img.alt = '';
-      label.append(document.createTextNode('+'), img, el('span', 'bs-sit-name', row.role));
-    } else label.append(el('span', 'bs-sit-name', 'Move now'));
-    item.append(label);
+      label.append(el('span', 'bs-sit-plus', '+'), img, el('span', 'bs-sit-name', row.role[0].toUpperCase() + row.role.slice(1)));
+    } else label.textContent = 'Move now';
+    option.append(label);
 
-    const score = el('strong', 'bs-sit-eval');
-    const gain = el('span', 'bs-sit-gain');
-    const move = el('span', 'bs-sit-move');
+    const score = el('td', 'bs-sit-eval');
+    const gain = el('td', 'bs-sit-gain');
+    const move = el('td', 'bs-sit-move');
     if (!row.fen) { score.textContent = '—'; move.textContent = 'Hand is full'; }
     else if (row.failed) { score.textContent = '—'; move.textContent = row.failed; move.classList.add('bs-sit-failed'); }
-    else if (!row.result) { score.append(el('span', 'ch-spinner', '')); }
+    else if (!row.result) score.append(el('span', 'ch-spinner', ''));
     else {
       score.textContent = formatEval(row.result);
       move.textContent = row.result.san ?? '';
       if (row.result.move) item.dataset.move = row.result.move;
-      if (row.role && now) {
-        const mover = color === 'white' ? 1 : -1;
-        // Winning chances run from −1 to 1; a full bar is a swing of half that range.
-        const delta = mover * (winningChances(row.result) - winningChances(now));
-        const bar = el('span', 'bs-sit-bar');
-        bar.style.transform = `scaleX(${Math.min(1, Math.max(0, delta)).toFixed(3)})`;
-        gain.append(bar);
-        gain.title = `${delta >= 0 ? '+' : '−'}${Math.abs(Math.round(50 * delta))}% winning chances`;
-      }
-      if ((row.result.mate ?? 0) * (color === 'white' ? 1 : -1) > 0) item.classList.add('bs-sit-mates');
+      if (row.role && now) gain.textContent = gainOf(row.result, now, mover);
+      if ((row.result.mate ?? 0) * mover > 0) item.classList.add('bs-sit-mates');
     }
-    item.append(score, gain, move);
+    item.append(option, score, gain, move);
     return item;
   }
+}
+
+/** How much better waiting is than moving now, in pawns for the side to play; "Mates" when only the wait mates. */
+function gainOf(row: NonNullable<Row['result']>, now: NonNullable<Row['result']>, mover: number): string {
+  const mates = (r: typeof row) => (r.mate ?? 0) * mover > 0;
+  if (mates(row)) return mates(now) ? '—' : 'Mates';
+  if (row.mate !== undefined || now.mate !== undefined) return '—';
+  const pawns = (mover * ((row.cp ?? 0) - (now.cp ?? 0))) / 100;
+  return `${pawns >= 0 ? '+' : '−'}${Math.abs(pawns).toFixed(1)}`;
 }

@@ -16,35 +16,51 @@
 @media (prefers-reduced-motion: reduce) { .ch-gauge-black { transition: none; } }
 
 /* ── Sit panel: move now, or wait for one more piece ──────────── */
-.bs-sit { flex: none; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+/* Its own section of the tools column: a strip of page background parts it
+   from the engine lines, a header band names it, and the ladder is a ruled
+   table so each score lines up with its option and its move. */
+.bs-sit { flex: none; border-top: 8px solid var(--bg); border-bottom: 1px solid var(--border); font-size: 0.9rem; }
 .bs-sit[hidden] { display: none; }
 .ch-analysis.practising .bs-sit { display: none; }
-.bs-sit-head { display: flex; align-items: baseline; gap: 8px; padding: 7px 10px 5px; }
-.bs-sit-head strong { font-weight: 600; }
-.bs-sit-note { margin-left: auto; color: var(--text-faint); font-size: 0.78rem; white-space: nowrap; }
-.bs-sit-verdict { margin: 0 8px 6px; padding: 6px 10px; border-radius: 4px; background: var(--ok-bg); color: var(--ok); }
-.bs-sit-verdict strong { font-weight: 700; }
+.bs-sit-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 10px; padding: 7px 10px; background: var(--bg-input); border-bottom: 1px solid var(--border); }
+.bs-sit-head strong { font-size: 0.95rem; font-weight: 700; }
+/* The cheapest piece that mates, when moving now does not. */
+.bs-sit-verdict { margin-left: auto; color: var(--ok); font-weight: 700; white-space: nowrap; }
 
-.bs-sit-row {
-  display: grid; grid-template-columns: 6.6em 3.7em minmax(4.5em, max-content) 1fr; align-items: center; column-gap: 8px;
-  width: 100%; min-height: 2.15em; padding: 0 10px; border: 0; border-top: 1px solid var(--border);
-  background: none; color: var(--text); font: inherit; text-align: left;
+.bs-sit-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-variant-numeric: tabular-nums; }
+.bs-sit-table th {
+  padding: 4px 10px; border-bottom: 1px solid var(--border-strong);
+  color: var(--text-dim); font-size: 0.78rem; font-weight: 600; text-align: left; white-space: nowrap;
 }
-button.bs-sit-row { cursor: pointer; }
-button.bs-sit-row:hover { background: var(--accent-bg); }
-button.bs-sit-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.bs-sit-label { display: inline-flex; align-items: center; gap: 2px; color: var(--text-dim); white-space: nowrap; }
-.bs-sit-label img { width: 22px; height: 22px; }
-.bs-sit-name { margin-left: 2px; }
-.bs-sit-now .bs-sit-name { margin-left: 0; color: var(--text); font-weight: 600; }
-.bs-sit-eval { font-weight: 700; font-variant-numeric: tabular-nums; }
+.bs-sit-table th:nth-child(1) { width: 34%; }
+.bs-sit-table th:nth-child(2), .bs-sit-table th:nth-child(3) { width: 19%; }
+.bs-sit-table td { height: 2.15em; padding: 0 10px; border-top: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Vertical rules between the columns. */
+.bs-sit-table th + th, .bs-sit-table td + td { border-left: 1px solid var(--border); }
+.bs-sit-table th:nth-child(2), .bs-sit-table th:nth-child(3), .bs-sit-eval, .bs-sit-gain { text-align: right; }
+
+/* Moving now is the baseline the five waits are measured against. */
+.bs-sit-now td { border-bottom: 2px solid var(--border-strong); font-weight: 700; }
+.bs-sit-eval { font-weight: 700; }
 .bs-sit-eval .ch-spinner { width: 14px; height: 14px; vertical-align: middle; }
-.bs-sit-move { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bs-sit-gain { color: var(--text-dim); }
+.bs-sit-move { font-weight: 600; }
 .bs-sit-failed { color: var(--danger); font-weight: 400; white-space: normal; }
-.bs-sit-gain { height: 6px; border-radius: 3px; background: var(--bg-input); overflow: hidden; }
-.bs-sit-bar { display: block; width: 100%; height: 100%; border-radius: 3px; background: var(--accent); transform-origin: left; transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
-.bs-sit-mates .bs-sit-eval, .bs-sit-mates .bs-sit-move { color: var(--ok); }
-.bs-sit-mates .bs-sit-bar { background: var(--ok); }
+
+.bs-sit-table td.bs-sit-option { padding: 0; }
+.bs-sit-label {
+  display: flex; align-items: center; gap: 4px; width: 100%; height: 2.15em; padding: 0 10px;
+  border: 0; background: none; color: var(--text); font: inherit; text-align: left;
+}
+button.bs-sit-label { cursor: pointer; }
+.bs-sit-plus { color: var(--text-faint); font-weight: 600; }
+.bs-sit-option img { flex: none; width: 24px; height: 24px; }
+.bs-sit-name { overflow: hidden; text-overflow: ellipsis; }
+
+tr[data-role] { cursor: pointer; }
+tr[data-role]:hover td { background: var(--accent-bg); }
+.bs-sit-label:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.bs-sit-mates .bs-sit-eval, .bs-sit-mates .bs-sit-gain, .bs-sit-mates .bs-sit-move { color: var(--ok); }
 
 /* The rule of this board, under it. */
 .bs-note { margin: 0 0 4px; max-width: 70ch; color: var(--text-dim); font-size: 0.85rem; line-height: 1.45; }
@@ -53,5 +69,5 @@ button.bs-sit-row:focus-visible { outline: 2px solid var(--accent); outline-offs
   /* The gauge sits in the page's side gutter beside the board. */
   .bs { --bs-gauge: 8px; }
   .ch-gauge { left: calc(-1 * var(--bs-gauge) - 4px); }
-  .bs-sit-row { grid-template-columns: 6.2em 3.5em minmax(4em, max-content) 1fr; min-height: 2.6em; }
+  .bs-sit-table td, .bs-sit-label { height: 2.8em; }
 }

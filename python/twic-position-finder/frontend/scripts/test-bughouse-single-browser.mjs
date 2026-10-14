@@ -87,6 +87,10 @@ try {
   const verdict = await text(page, '.bs-sit-verdict');
   console.log('hole:', verdict);
   assert.match(verdict, /Sit for a knight/);
+  // Hovering a row draws its move solid, in place of the engine's pale arrows.
+  await page.hover('#bs-sit .bs-sit-row[data-role="knight"]');
+  await page.waitForSelector('cg-container svg g[cgHash$=",h6,blue"]', { timeout: 5_000 });
+  assert.equal(await page.$('cg-container svg g[cgHash*="paleBlue"]'), null, 'engine arrows give way to the hovered row');
   await page.screenshot({ path: path.join(output, 'sit-for-knight.png') });
   // Clicking the knight row gives White the knight; the engine then mates.
   await page.click('#bs-sit .bs-sit-row[data-role="knight"]');
