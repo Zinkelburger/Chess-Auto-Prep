@@ -34,7 +34,6 @@
   border: 0; background: none; color: var(--text); font: inherit; text-align: left;
 }
 button.bs-sit-label { cursor: pointer; }
-.bs-sit-plus { color: var(--text-faint); font-weight: 600; }
 .bs-sit-option img { flex: none; width: 24px; height: 24px; }
 .bs-sit-name { overflow: hidden; text-overflow: ellipsis; }
 

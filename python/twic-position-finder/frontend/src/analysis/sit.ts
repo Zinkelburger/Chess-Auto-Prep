@@ -167,7 +167,7 @@ export class SitPanel implements Extra {
       const img = document.createElement('img');
       img.src = `/piece/${color === 'white' ? 'w' : 'b'}${LETTER[row.role]}.svg`;
       img.alt = '';
-      label.append(el('span', 'bs-sit-plus', '+'), img, el('span', 'bs-sit-name', row.role[0].toUpperCase() + row.role.slice(1)));
+      label.append(img, el('span', 'bs-sit-name', row.role[0].toUpperCase() + row.role.slice(1)));
     } else label.textContent = 'Move now';
     option.append(label);
 
