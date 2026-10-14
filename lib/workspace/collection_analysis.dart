@@ -88,20 +88,29 @@ final class CollectionAnalysis extends ChangeNotifier {
   }
 
   /// Paste stays in this scratch game and cannot replace the source file.
+  /// Answers why nothing was pasted, or null.
   Future<String?> paste(String text, {bool positionOnly = false}) async {
+    switch (positionOnly
+        ? pastedPosition(text)
+        : pastedBoard(text, side: session.orientation)) {
+      case PasteRefused(:final reason):
+        return reason;
+      case PastedBoard(:final chapter):
+        await put(chapter);
+        return null;
+    }
+  }
+
+  /// [board] as this game's scratch work, in place of what it was.
+  Future<void> put(Chapter board) async {
     final key = _sourceKey;
     final ticket = ++_generation;
-    final parsed = positionOnly
-        ? pastedPosition(text, side: session.orientation)
-        : pastedBoard(text, side: session.orientation);
-    if (parsed case PasteRefused(:final reason)) return reason;
-    if (!await session.showAnalysisBoard((parsed as PastedBoard).chapter) ||
+    if (!await session.showAnalysisBoard(board) ||
         _disposed ||
         ticket != _generation ||
         key != _sourceKey)
-      return null;
+      return;
     _pages[key] = session.analysisPage;
-    return null;
   }
 
   void hide() {

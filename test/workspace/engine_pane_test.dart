@@ -141,34 +141,105 @@ void main() {
     expect(find.text('+0.20'), findsOneWidget);
   });
 
-  testWidgets('each score keeps its reached depth until the position changes', (
-    tester,
-  ) async {
+  testWidgets('the depth is said once, in the status, for the best line; '
+      'each score keeps its row until the position changes', (tester) async {
     await analyse(tester);
     final height = tester.getSize(find.byType(EnginePane)).height;
     engine.current.emit(
       line(multiPv: 2, depth: 17, score: const MateIn(-2), pv: ['e7e5']),
     );
     await tester.pump(const Duration(milliseconds: 200));
-    expect(find.text('Depth 18'), findsOneWidget);
-    expect(find.text('Depth 17'), findsOneWidget);
+    expect(find.textContaining('Depth'), findsOneWidget, reason: 'not a row');
+    expect(find.text('Depth 18 · Scripted 1'), findsOneWidget);
     engine.current.emit(
       line(depth: 35, score: const Centipawns(-20), pv: ['c7c5']),
     );
     await tester.pump(const Duration(milliseconds: 200));
-    expect(find.text('Depth 18'), findsNothing);
-    expect(find.text('Depth 35'), findsOneWidget);
-    expect(find.text('Depth 17'), findsOneWidget);
+    expect(find.text('Depth 35 · Scripted 1'), findsOneWidget);
+    expect(find.text('#2'), findsOneWidget, reason: 'the second line stays');
     engine.current.end();
     await tester.pumpAndSettle();
-    expect(find.text('Depth 35'), findsOneWidget);
-    expect(find.text('Depth 17'), findsOneWidget);
+    expect(find.text('Depth 35 · Scripted 1'), findsOneWidget);
+    expect(find.text('#2'), findsOneWidget);
     expect(tester.getSize(find.byType(EnginePane)).height, height);
     session.forward();
     await tester.pump();
-    expect(find.text('Depth 35'), findsNothing);
-    expect(find.text('Depth 17'), findsNothing);
+    expect(find.text('Scripted 1'), findsOneWidget);
+    expect(find.text('#2'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the status says how fast and how far the engine has searched, '
+      'and leaves out the depth a found mate runs out to', (tester) async {
+    await pump(tester);
+    await analysis.enable();
+    await tester.pump();
+    engine.current.emit(
+      EngineLine(
+        multiPv: 1,
+        depth: 24,
+        score: const Centipawns(-35),
+        pv: const ['c7c5'],
+        nodes: 345000000,
+        nps: 12400000,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(
+      find.text('Depth 24 · 12 MN/s · 345M nodes · Scripted 1'),
+      findsOneWidget,
+    );
+    engine.current.emit(
+      EngineLine(
+        multiPv: 1,
+        depth: 245,
+        score: const MateIn(3),
+        pv: const ['c7c5'],
+        nodes: 2100000000,
+        nps: 850000,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('850 kN/s · 2.1G nodes · Scripted 1'), findsOneWidget);
+  });
+
+  testWidgets('a narrow pane says the depth and speed rather than half a '
+      'name; the tooltip says it all', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(520, 400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await pump(tester);
+    await analysis.enable();
+    await tester.pump();
+    engine.current.emit(
+      EngineLine(
+        multiPv: 1,
+        depth: 24,
+        score: const Centipawns(-35),
+        pv: const ['c7c5'],
+        nodes: 345000000,
+        nps: 12400000,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('Depth 24 · 12 MN/s'), findsOneWidget);
+    expect(
+      find.byTooltip('Depth 24 · 12 MN/s · 345M nodes · Scripted 1'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('an engine standing in for the chosen one says why, after its '
+      'own name', (tester) async {
+    analysis.dispose();
+    analysis = EngineAnalysis(
+      session,
+      () async => Started(engine, notice: 'Komodo did not start'),
+    );
+    await pump(tester);
+    await analysis.enable();
+    await tester.pump();
+    expect(find.text('Scripted 1 · Komodo did not start'), findsOneWidget);
   });
 
   testWidgets('resting the pointer on a move floats the position after it', (
@@ -263,14 +334,14 @@ void main() {
     expect(analysis.threatShown, isFalse);
   });
 
-  /// The slider in the settings row named [label].
-  Finder slider(String label) => find.descendant(
+  /// The number box in the settings row named [label].
+  Finder box(String label) => find.descendant(
     of: find.widgetWithText(Row, label),
-    matching: find.byType(Slider),
+    matching: find.byType(TextField),
   );
 
-  testWidgets('the gear turns the lines into the engine settings, which '
-      'write the shared settings when let go, and back', (tester) async {
+  testWidgets('the gear turns the lines into the engine settings, typed or '
+      'stepped into the shared settings, and back', (tester) async {
     // The window's wiring: the analysis follows the setting.
     settings.addListener(() => analysis.setLines(settings.value.engineLines));
     await analyse(tester);
@@ -279,30 +350,44 @@ void main() {
     await tester.pump();
     expect(settingsOpen.value, isTrue);
     expect(find.text('1... c5'), findsNothing, reason: 'in place of lines');
-    expect(find.text('Lines'), findsOneWidget);
-    expect(find.text('1 of 4'), findsOneWidget);
-    expect(find.text('128 MB'), findsOneWidget);
+    expect(find.text('Lines shown'), findsOneWidget);
+    expect(find.text('of 4'), findsOneWidget);
+    expect(
+      tester.widget<TextField>(box('CPU cores')).controller!.text,
+      '2',
+      reason: 'half of the computer until chosen',
+    );
+    expect(
+      tester.widget<TextField>(box('Memory')).controller!.text,
+      '${Settings.defaultMemoryMb}',
+    );
     expect(
       tester.getSize(find.byType(EnginePane)).height,
       engineBarHeight + engineRowHeight * 3,
       reason: 'three lines leave room for the settings: nothing moves',
     );
 
-    await tester.drag(slider('CPU cores'), const Offset(800, 0));
+    await tester.tap(find.byTooltip('Increase CPU cores'));
     await tester.pump();
-    expect(settings.value.engineCores, 4);
-    expect(find.text('4 of 4'), findsOneWidget);
-    await tester.drag(slider('Lines'), const Offset(-800, 0));
+    expect(settings.value.engineCores, 3);
+    await tester.enterText(box('CPU cores'), '64');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(settings.value.engineCores, 4, reason: 'kept inside the machine');
+    await tester.enterText(box('Lines shown'), '1');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
     expect(settings.value.engineLines, 1);
     expect(analysis.multiPv, 1);
-    await tester.drag(slider('Memory'), const Offset(800, 0));
+    await tester.enterText(box('Memory'), '9999');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
     expect(settings.value.engineMemoryMb, Settings.maxMemoryMb);
     expect(
       tester.getSize(find.byType(EnginePane)).height,
       engineBarHeight + engineRowHeight * 3,
     );
+    expect(tester.takeException(), isNull);
 
     await tester.tap(find.byTooltip('Show lines'));
     await tester.pump();

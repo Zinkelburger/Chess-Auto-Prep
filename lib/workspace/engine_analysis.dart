@@ -24,9 +24,13 @@ final class EngineStarting extends EngineState {
 }
 
 final class EngineRunning extends EngineState {
-  const EngineRunning(this.name);
+  const EngineRunning(this.name, {this.notice});
 
+  /// What the engine calls itself (UCI `id name`).
   final String name;
+
+  /// Why this is not the engine the user chose, when it is not.
+  final String? notice;
 }
 
 final class EngineFailed extends EngineState {
@@ -235,10 +239,10 @@ final class EngineAnalysis extends ChangeNotifier {
     switch (start) {
       case StartFailed(:final reason):
         _set(EngineFailed(failure(reason)));
-      case Started(:final engine):
+      case Started(:final engine, :final notice):
         _engine = engine;
         unawaited(engine.exited.then((exit) => _lost(engine, exit)));
-        _set(EngineRunning(engine.name));
+        _set(EngineRunning(engine.name, notice: notice));
         _follow();
     }
   }

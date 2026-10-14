@@ -260,6 +260,7 @@ active pane's a brighter grey. Dividers between panes are 1px lines with a
 
 ### Engine lines
 - **Style:** the old inline-bar style, not a Lichess headline: a small switch and status, then 28px rows with a 54px score gutter and the moves after it. Hovering a move floats its board.
+- **Status:** depth, speed and nodes, then the engine's own name (`Depth 24 · 12 MN/s · 345M nodes · Stockfish 19`), in tabular figures; the rows carry no depth. The gear's rows are typeable steppers, as in Settings ▸ Engine.
 - **Room:** the switch's row and the rows below keep their height whether the engine is on, off, paused or showing its settings; empty rows are blank space, never a placeholder. The board above never changes size when the engine is switched.
 
 ### Bughouse reserve (lila's pocket)

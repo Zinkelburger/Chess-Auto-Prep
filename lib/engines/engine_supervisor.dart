@@ -17,9 +17,13 @@ sealed class EngineStart {
 }
 
 final class Started extends EngineStart {
-  const Started(this.engine);
+  const Started(this.engine, {this.notice});
 
   final Engine engine;
+
+  /// A sentence for the user when this is not the engine they chose: the
+  /// one they chose did not start and this one runs in its place.
+  final String? notice;
 }
 
 /// What the engine wrote before it failed is in the [EngineTranscript] the
@@ -80,6 +84,7 @@ final class EngineSupervisor {
   /// [patience] is how long the handshake may take; a binary that is not a
   /// UCI engine is killed after it. [finitePatience] bounds each fixed-depth
   /// search from its `go`; continuous analysis is uncapped until stopped.
+  /// With [advertisedOnly], options the engine does not list are not sent.
   Future<EngineStart> start(
     String executable, {
     Map<String, String> options = const {},
@@ -87,6 +92,7 @@ final class EngineSupervisor {
     Duration patience = const Duration(seconds: 10),
     Duration finitePatience = UciEngine.defaultFinitePatience,
     EngineTranscript? transcript,
+    bool advertisedOnly = false,
   }) {
     if (_disposed) {
       return Future.value(const StartFailed('The app is closing.'));
@@ -101,7 +107,11 @@ final class EngineSupervisor {
         executable,
         Map.unmodifiable(options),
         List.unmodifiable(arguments),
-        (patience: patience, finite: finitePatience),
+        (
+          patience: patience,
+          finite: finitePatience,
+          advertisedOnly: advertisedOnly,
+        ),
         transcript ?? EngineTranscript(),
       ),
     );
@@ -111,7 +121,7 @@ final class EngineSupervisor {
     String executable,
     Map<String, String> options,
     List<String> arguments,
-    ({Duration patience, Duration finite}) limits,
+    ({Duration patience, Duration finite, bool advertisedOnly}) limits,
     EngineTranscript transcript,
   ) async {
     final name = p.basename(executable);
@@ -141,6 +151,7 @@ final class EngineSupervisor {
         options: options,
         patience: limits.patience,
         finitePatience: limits.finite,
+        advertisedOnly: limits.advertisedOnly,
       );
       if (!_keep(engine, process)) {
         await engine.quit();

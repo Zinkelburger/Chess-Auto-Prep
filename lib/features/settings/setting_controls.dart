@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../ui/choice_field.dart';
 import '../../ui/theme.dart';
 import '../../ui/number_field.dart';
 import 'lichess_account.dart';
@@ -71,6 +72,15 @@ class SettingRowView extends StatelessWidget {
 
   Widget _control(SettingControl control) => switch (control) {
     ChoiceSetting() => _Choice(control),
+    TypedChoiceSetting() => SizedBox(
+      width: settingChoiceWidth,
+      child: ChoiceField(
+        text: control.text,
+        options: [for (final (_, label) in control.options) label],
+        hint: 'Engine',
+        onSubmitted: control.pick,
+      ),
+    ),
     NumberSetting() => NumberField(
       label: row.label,
       value: control.value,

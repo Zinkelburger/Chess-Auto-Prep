@@ -86,6 +86,8 @@ final class EngineLine {
     required this.depth,
     required this.score,
     required this.pv,
+    this.nodes,
+    this.nps,
   });
 
   /// 1 for the best line.
@@ -97,11 +99,17 @@ final class EngineLine {
   /// gave a score and no moves, which is what a finished game gets.
   final List<String> pv;
 
+  /// Positions searched so far and per second, when the engine says.
+  final int? nodes;
+  final int? nps;
+
   EngineLine forWhite({required bool whiteToMove}) => EngineLine(
     multiPv: multiPv,
     depth: depth,
     score: score.forWhite(whiteToMove: whiteToMove),
     pv: pv,
+    nodes: nodes,
+    nps: nps,
   );
 }
 
@@ -118,6 +126,8 @@ EngineLine? parseInfoLine(String line) {
   final words = line.trim().split(_spaces);
   if (words.first != 'info') return null;
   int? depth;
+  int? nodes;
+  int? nps;
   var multiPv = 1;
   Score? score;
   List<String>? pv;
@@ -127,6 +137,10 @@ EngineLine? parseInfoLine(String line) {
         depth = int.tryParse(_word(words, i + 1));
       case 'multipv':
         multiPv = int.tryParse(_word(words, i + 1)) ?? 1;
+      case 'nodes':
+        nodes = int.tryParse(_word(words, i + 1));
+      case 'nps':
+        nps = int.tryParse(_word(words, i + 1));
       case 'score':
         score = _score(_word(words, i + 1), _word(words, i + 2));
       case 'lowerbound' || 'upperbound':
@@ -142,6 +156,8 @@ EngineLine? parseInfoLine(String line) {
     depth: depth,
     score: score,
     pv: pv ?? const [],
+    nodes: nodes,
+    nps: nps,
   );
 }
 

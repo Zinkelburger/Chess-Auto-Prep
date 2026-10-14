@@ -57,10 +57,14 @@ class BoardEditor extends StatefulWidget {
     super.key,
     required this.initial,
     required this.onChanged,
+    this.orientation = Side.white,
   });
 
   final Fen initial;
   final ValueChanged<Fen?> onChanged;
+
+  /// The side at the bottom when the editor opens.
+  final Side orientation;
 
   /// How wide the editor is: the board, the gap and the controls.
   static const width = editorBoardSize + Space.l + editorControlsWidth;
@@ -82,6 +86,7 @@ class _BoardEditorState extends State<BoardEditor> {
   void initState() {
     super.initState();
     _setup = SetupEdits.read(widget.initial.value) ?? Setup.standard;
+    _bottom = widget.orientation;
   }
 
   @override
@@ -137,15 +142,7 @@ class _BoardEditorState extends State<BoardEditor> {
       ? 'Could not read that FEN.'
       : switch (_setup.illegal) {
           null => null,
-          IllegalSetupCause.empty => 'The board is empty.',
-          IllegalSetupCause.kings => 'Each side needs exactly one king.',
-          IllegalSetupCause.oppositeCheck =>
-            'The side not to move is in check.',
-          IllegalSetupCause.impossibleCheck =>
-            'No game could reach this check.',
-          IllegalSetupCause.pawnsOnBackrank =>
-            'Pawns cannot stand on the first or last rank.',
-          IllegalSetupCause.variant => 'This is not a chess position.',
+          final cause => illegalSetupReason(cause),
         };
 
   @override
@@ -428,22 +425,33 @@ class _Slot extends StatelessWidget {
 }
 
 /// Asks for a position set up on the board editor, starting from
-/// [initial]; answers it, or null when the user backed out. `Use this
-/// position` waits until a game could start from what is on the board.
+/// [initial] seen from [orientation]; answers it, or null when the user
+/// backed out. `Use this position` waits until a game could start from what
+/// is on the board.
 Future<Fen?> showBoardEditor(
   BuildContext context, {
   required Fen initial,
   String title = 'Set up a position',
+  Side orientation = Side.white,
 }) => showDialog<Fen>(
   context: context,
-  builder: (_) => _BoardEditorDialog(initial: initial, title: title),
+  builder: (_) => _BoardEditorDialog(
+    initial: initial,
+    title: title,
+    orientation: orientation,
+  ),
 );
 
 class _BoardEditorDialog extends StatefulWidget {
-  const _BoardEditorDialog({required this.initial, required this.title});
+  const _BoardEditorDialog({
+    required this.initial,
+    required this.title,
+    required this.orientation,
+  });
 
   final Fen initial;
   final String title;
+  final Side orientation;
 
   @override
   State<_BoardEditorDialog> createState() => _BoardEditorDialogState();
@@ -464,6 +472,7 @@ class _BoardEditorDialogState extends State<_BoardEditorDialog> {
     content: SingleChildScrollView(
       child: BoardEditor(
         initial: widget.initial,
+        orientation: widget.orientation,
         onChanged: (fen) {
           if (mounted) setState(() => _position = fen);
         },

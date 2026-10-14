@@ -12,14 +12,16 @@ import '../ui/theme.dart';
 import 'document_session.dart';
 import 'engine_analysis.dart';
 import 'engine_settings.dart';
+import 'engine_status.dart';
 import 'line_preview.dart';
 import '../ui/app_keys.dart';
 import '../ui/move_notation.dart';
 
 /// The engine's lines for the position on the board, laid out as the old
-/// app's engine bar: a labelled sliding switch and the engine's status,
-/// then one fixed-height row per MultiPV line, each a score gutter and the
-/// line's moves. The score is read in the gutter and nowhere larger.
+/// app's engine bar: a labelled sliding switch and the engine's status —
+/// depth, speed, nodes and name — then one fixed-height row per MultiPV
+/// line, each a score gutter and the line's moves. The score is read in the
+/// gutter and nowhere larger.
 ///
 /// A row keeps its height while it has no line yet, so the moves below never
 /// jump as lines arrive; switched off, only the switch and status remain.
@@ -173,7 +175,6 @@ class _EnginePaneState extends State<EnginePane>
     return _LineRow(
       key: ValueKey('${snapshot.fen.value}:$multiPv'),
       score: line.score.text,
-      depth: line.depth,
       moves: moves,
       onHover: _hover,
       onLeave: _leave,
@@ -209,13 +210,13 @@ class _Header extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
     final best = analysis.snapshot?.best;
-    final (String status, Color? colour) = switch (analysis.state) {
-      EngineOff() => ('Off', null),
-      EngineStarting() => ('Starting…', null),
-      EngineFailed(:final reason) => (reason, scheme.error),
-      EnginePaused(:final reason) => (reason, scheme.onSurfaceVariant),
-      EngineRunning(:final name) => (
-        best == null ? name : 'Depth ${best.depth} · $name',
+    final (List<String> status, Color? colour) = switch (analysis.state) {
+      EngineOff() => (const ['Off'], null),
+      EngineStarting() => (const ['Starting…'], null),
+      EngineFailed(:final reason) => ([reason], scheme.error),
+      EnginePaused(:final reason) => ([reason], scheme.onSurfaceVariant),
+      EngineRunning(:final name, :final notice) => (
+        engineStatusChoices(name, best, notice: notice),
         null,
       ),
     };
@@ -242,12 +243,15 @@ class _Header extends StatelessWidget {
           const SizedBox(width: Space.xs),
           Expanded(
             child: Tooltip(
-              message: status,
-              child: Text(
-                status,
-                style: text.labelSmall?.copyWith(color: colour),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              message: status.first,
+              child: _Status(
+                choices: status,
+                // Figures of one width, so the numbers ticking over do not
+                // shuffle the words after them.
+                style: text.labelSmall?.copyWith(
+                  color: colour,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
             ),
           ),
@@ -275,6 +279,41 @@ class _Header extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The longest of [choices] that fits the room, the last one cut short
+/// when none does: a narrow board column says the depth and the speed
+/// rather than half of the engine's name. The tooltip says all of it.
+class _Status extends StatelessWidget {
+  const _Status({required this.choices, required this.style});
+
+  final List<String> choices;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final scaler = MediaQuery.textScalerOf(context);
+      final direction = Directionality.of(context);
+      final shown = choices.firstWhere((choice) {
+        final painter = TextPainter(
+          text: TextSpan(text: choice, style: style),
+          textDirection: direction,
+          textScaler: scaler,
+          maxLines: 1,
+        )..layout();
+        final fits = painter.width <= constraints.maxWidth;
+        painter.dispose();
+        return fits;
+      }, orElse: () => choices.last);
+      return Text(
+        shown,
+        style: style,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+    },
+  );
 }
 
 /// A small icon at the header's end, muted, in the accent while it is on.
@@ -312,7 +351,6 @@ class _LineRow extends StatefulWidget {
   const _LineRow({
     super.key,
     required this.score,
-    required this.depth,
     required this.moves,
     required this.onHover,
     required this.onLeave,
@@ -320,7 +358,6 @@ class _LineRow extends StatefulWidget {
   });
 
   final String score;
-  final int depth;
   final List<PvMove> moves;
   final void Function(PvMove move, Offset anchor) onHover;
   final VoidCallback onLeave;
@@ -363,19 +400,6 @@ class _LineRowState extends State<_LineRow> {
               child: Text(
                 widget.score,
                 style: monoText.copyWith(color: scheme.onSurface),
-                maxLines: 1,
-              ),
-            ),
-          ),
-          SizedBox(
-            width: MediaQuery.textScalerOf(context).scale(engineDepthWidth),
-            height: engineRowHeight,
-            child: Center(
-              child: Text(
-                'Depth ${widget.depth}',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
                 maxLines: 1,
               ),
             ),

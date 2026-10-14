@@ -408,19 +408,22 @@ final class DocumentSession extends ChangeNotifier {
     _showBoard();
   }
 
-  /// The analysis board as it was left or, given [board], [board] in its
-  /// place, once the file that was up has its last words written, as
-  /// opening another file would. Whether the board is up: false when
-  /// another document was asked for meanwhile, or the session went.
-  Future<bool> showAnalysisBoard([Chapter? board]) => _selectAnalysis(
-    board == null ? _board : (KeptBoard(board)..restart(board)),
-  );
+  /// The analysis board as it was left or, given [board], [board] on a new
+  /// one, or on the one up when nothing was played or edited on it. False
+  /// when another document was asked for meanwhile, or the session went.
+  Future<bool> showAnalysisBoard([Chapter? board]) {
+    if (board == null) return _selectAnalysis(_board);
+    _editors.commit();
+    final blank = isScratch && !_board.canUndo && tree!.children.isEmpty;
+    return _selectAnalysis(blank ? _board : KeptBoard(board), fresh: board);
+  }
 
   Future<bool> restoreAnalysisPage(KeptBoard page) => _selectAnalysis(page);
 
-  Future<bool> _selectAnalysis(KeptBoard page) async {
+  /// [page] up, [fresh] in it if given, once the file up is all written.
+  Future<bool> _selectAnalysis(KeptBoard page, {Chapter? fresh}) async {
     if (_disposed) return false;
-    if (identical(page, _board) && isScratch) return true;
+    if (identical(page, _board) && isScratch && fresh == null) return true;
     // Before the flush, which then writes what the words make of the file.
     _editors.commit();
     final ticket = ++_opens;
@@ -433,6 +436,7 @@ final class DocumentSession extends ChangeNotifier {
         ..cursor = cursor;
     }
     _board = page;
+    if (fresh != null) page.restart(fresh);
     _showBoard();
     return true;
   }
@@ -975,8 +979,7 @@ final class DocumentSession extends ChangeNotifier {
   }
 
   /// Writes the words on screen beside their file and leaves the session
-  /// where it is, which is what the question on the way out asks for: the
-  /// user is going somewhere else, so the copy is not what they want open.
+  /// where it is: the question on the way out asks for that.
   Future<CopyResult> copyAside(String name, {String? into}) async {
     final ref = _source;
     final chapter = _chapter;

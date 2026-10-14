@@ -41,6 +41,7 @@ import '../workspace/workspace.dart';
 import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_tabs.dart';
 import '../workspace/workspace_view.dart';
+import 'board_doors.dart';
 import 'full_screen.dart';
 import 'layout_memory.dart';
 import 'search_door.dart';
@@ -596,32 +597,16 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     ),
   );
 
+  late final _doors = BoardDoors(
+    requests: _requests,
+    workspace: _ws,
+    inspecting: () => mounted && _inspecting,
+  );
+
   Future<void> _analyze() async {
     _train.puzzles.inspectAlternative();
     _docs.autoplay.stop();
     _tabs.add(WorkspaceTab.analysis.tab);
-  }
-
-  Future<void> _paste({bool positionOnly = false}) async {
-    if (!_inspecting) {
-      await (positionOnly ? _requests.pasteFen() : _requests.paste());
-      return;
-    }
-    final source = _ws.session.source;
-    final game = _ws.session.game;
-    final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
-    if (!mounted ||
-        !_inspecting ||
-        source != _ws.session.source ||
-        game != _ws.session.game)
-      return;
-    if (text == null || text.trim().isEmpty) {
-      _requests.say('Nothing to paste: copy a PGN or FEN first.');
-      return;
-    }
-    _requests.say(
-      await _ws.inspection!.paste(text, positionOnly: positionOnly),
-    );
   }
 
   Future<void> _saveCopy() async {
@@ -700,20 +685,14 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
             editing: _editing,
             onSaveCopy: () {},
           ),
-          AppAction(
-            'Paste PGN or FEN',
-            () => unawaited(_paste()),
-            shortcut: AppKey.paste.label,
-            group: 'Document',
-          ),
+          ..._doors.entries(context),
           ...tabActions(_tabs),
         ]
       : _view.actions((
           editing: _editing,
           board: () => boardActions(
             context,
-            session: _ws.session,
-            requests: _requests,
+            doors: _doors,
             library: _docs.library,
             onAnalyze: _view.offersNewAnalysis
                 ? () => unawaited(_analyze())
@@ -768,8 +747,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     ...AppKey.toggleList.bind(_toggleList),
     ...AppKey.positions.bind(_togglePositions),
     ...AppKey.openFile.bind(() => unawaited(_requests.openPgnFile())),
-    ...AppKey.paste.bind(() => unawaited(_paste())),
-    ...AppKey.pastePosition.bind(() => unawaited(_paste(positionOnly: true))),
+    ...AppKey.paste.bind(() => unawaited(_doors.paste())),
+    ...AppKey.pastePosition.bind(
+      () => unawaited(_doors.paste(positionOnly: true)),
+    ),
+    ...AppKey.setUpPosition.bind(() => unawaited(_doors.setUp(context))),
     ...AppKey.analysisBoard.bind(() => unawaited(_analyze())),
     ...AppKey.search.bind(() => unawaited(_search.search(_view.layout))),
     ...AppKey.play.bind(_space),
@@ -780,7 +762,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// The window's keys a mode with a screen of its own keeps: the settings,
   /// the actions typed for, full screen, and Alt+← and Alt+→ back to where
   /// the last jump came from and forward again. The rest are the
-  /// workspace's.
+  /// workspace's, but for the paste ([BoardDoors.onScreen]).
   Map<ShortcutActivator, VoidCallback> get _screenKeys => {
     ...AppKey.fullScreen.bind(widget.fullScreen.toggle),
     ...AppKey.settings.bind(() => unawaited(_settings())),
@@ -813,9 +795,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
                 ? PgnDropRegion(
                     library: _docs.library,
                     onOpen: (ref) => unawaited(_requests.open(ref)),
-                    child: _window(_view.screen(_screenKeys)),
+                    child: _window(_doors.onScreen(_view.screen(_screenKeys))),
                   )
-                : _window(_view.screen(_screenKeys)),
+                : _window(_doors.onScreen(_view.screen(_screenKeys))),
           ),
         ),
       ),

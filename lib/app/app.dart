@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../diagnostics/log.dart';
+import '../engines/analysis_launch.dart';
 import '../features/settings/lichess_login_dialog.dart';
 import '../features/databases/twic_download_dialog.dart';
 import '../features/settings/setting_rows.dart';
@@ -111,7 +112,11 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
 
   List<SettingGroup> _settingRows() => settingGroups(
     store: _parts.settings,
-    coresAvailable: Platform.numberOfProcessors,
+    coresAvailable: _parts.env.coresAvailable,
+    analysisEngines: [
+      for (final engine in [...?_parts.tournaments?.engines])
+        if (analysesBoard(engine)) (engine.id, engine.name),
+    ],
     account: _parts.account,
     openLogFolder: () => unawaited(openFolder(widget.logFolder)),
     openLicences: _openLicences,
@@ -141,6 +146,8 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   final _diagnostics = ValueNotifier(DiagnosticCopyState.idle);
   late final _settingsAlso = Listenable.merge([
     _parts.account,
+    // The registered engines the analysis can run.
+    ?_parts.tournaments,
     _diagnostics,
     ?_parts.updates,
   ]);

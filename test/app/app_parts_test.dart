@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
+import 'package:chess_auto_prep/chess/tournament/config.dart';
+import 'package:chess_auto_prep/workspace/engine_analysis.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/storage/my_accounts.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
@@ -9,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../support/scripted_engine.dart';
+import '../support/scripted_tournaments.dart';
 import '../support/window_fixture.dart';
 
 /// How the app starts and is kept in step, as [AppParts] wires it: the
@@ -48,7 +51,7 @@ void main() {
       expect(w.analysis.enabled, isFalse);
       expect(w.analysis.multiPv, 2);
       await w.analysis.enable();
-      expect(launched, [(cores: 3, memoryMb: 128)]);
+      expect(launched, [(cores: 3, memoryMb: Settings.defaultMemoryMb)]);
       expect(w.analysis.enabled, isTrue);
       expect(w.analysis.multiPv, 2);
     },
@@ -61,7 +64,12 @@ void main() {
     expect(launched, isEmpty);
     expect(w.analysis.enabled, isFalse);
     await w.analysis.enable();
-    expect(launched, [(cores: Settings.defaults.engineCores, memoryMb: 128)]);
+    expect(launched, [
+      (
+        cores: Settings.defaults.coresOn(w.parts.env.coresAvailable),
+        memoryMb: Settings.defaultMemoryMb,
+      ),
+    ]);
     expect(w.settings.problem, isNull);
   });
 
@@ -76,11 +84,11 @@ void main() {
 
     await w.settings.update(w.settings.value.copyWith(engineCores: 4));
     await pumpEventQueue();
-    expect(launched.last, (cores: 4, memoryMb: 128));
+    expect(launched.last, (cores: 4, memoryMb: Settings.defaultMemoryMb));
 
-    await w.settings.update(w.settings.value.copyWith(engineMemoryMb: 256));
+    await w.settings.update(w.settings.value.copyWith(engineMemoryMb: 512));
     await pumpEventQueue();
-    expect(launched.last, (cores: 4, memoryMb: 256));
+    expect(launched.last, (cores: 4, memoryMb: 512));
     expect(launched, hasLength(3));
   });
 
@@ -93,7 +101,7 @@ void main() {
     expect(launched, isEmpty);
     expect(w.analysis.enabled, isFalse);
     await w.analysis.enable();
-    expect(launched, [(cores: 4, memoryMb: 128)]);
+    expect(launched, [(cores: 4, memoryMb: Settings.defaultMemoryMb)]);
     expect(w.analysis.multiPv, 3);
   });
 
@@ -127,5 +135,132 @@ void main() {
       greaterThan(listed + 1),
       reason: 'the tree and the book read the files again',
     );
+  });
+
+  group('the analysis engine', () {
+    late WindowFixture fixture;
+    late ScriptedTournaments registry;
+    late List<String> started;
+    late EngineStart Function(TournamentEngine engine) registered;
+
+    final komodo = TournamentEngine({
+      'id': 'engine-1',
+      'name': 'Komodo',
+      'executablePath': '/engines/komodo',
+      'options': {'Contempt': '0'},
+      'threads': 1,
+      'hashMb': 16,
+    });
+
+    setUp(() {
+      registry = ScriptedTournaments()..registry = [komodo];
+      started = [];
+      registered = (_) => Started(ScriptedEngine());
+      fixture = WindowFixture(
+        coresAvailable: 8,
+        tournaments: registry,
+        launchEngine: ({required cores, required memoryMb}) async {
+          started.add('stockfish $cores $memoryMb');
+          return Started(ScriptedEngine());
+        },
+        launchRegisteredEngine:
+            (engine, {required cores, required memoryMb}) async {
+              started.add('${engine.name} $cores $memoryMb');
+              return registered(engine);
+            },
+      );
+    });
+
+    tearDown(() async {
+      fixture.dispose();
+      await registry.dispose();
+    });
+
+    EngineState state() => fixture.analysis.state;
+
+    test('is the bundled Stockfish on half of the machine until another is '
+        'chosen', () async {
+      await fixture.parts.start();
+      await fixture.analysis.enable();
+      expect(started, ['stockfish 4 ${Settings.defaultMemoryMb}']);
+      expect((state() as EngineRunning).notice, isNull);
+    });
+
+    test('a registered engine chosen runs with the same cores and table, '
+        'and choosing again starts the other one', () async {
+      await fixture.parts.start();
+      await fixture.settings.update(
+        fixture.settings.value.copyWith(
+          analysisEngine: 'engine-1',
+          engineCores: 6,
+        ),
+      );
+      await fixture.analysis.enable();
+      expect(started, ['Komodo 6 ${Settings.defaultMemoryMb}']);
+      expect((state() as EngineRunning).notice, isNull);
+
+      await fixture.settings.update(
+        fixture.settings.value.copyWith(analysisEngine: Settings.builtInEngine),
+      );
+      await pumpEventQueue();
+      expect(started.last, 'stockfish 6 ${Settings.defaultMemoryMb}');
+      expect(fixture.analysis.enabled, isTrue);
+    });
+
+    test(
+      'one that does not start gives way to Stockfish, which says why',
+      () async {
+        registered = (_) => const StartFailed('komodo is not executable.');
+        await fixture.parts.start();
+        await fixture.settings.update(
+          fixture.settings.value.copyWith(analysisEngine: 'engine-1'),
+        );
+        await fixture.analysis.enable();
+        expect(started, [
+          'Komodo 4 ${Settings.defaultMemoryMb}',
+          'stockfish 4 ${Settings.defaultMemoryMb}',
+        ]);
+        final running = state() as EngineRunning;
+        expect(
+          running.notice,
+          'Komodo did not start: komodo is not executable.',
+        );
+        expect(fixture.analysis.enabled, isTrue, reason: 'never locked out');
+      },
+    );
+
+    test('one no longer registered gives way to Stockfish too', () async {
+      registry.registry = [];
+      await fixture.parts.start();
+      await fixture.settings.update(
+        fixture.settings.value.copyWith(analysisEngine: 'engine-1'),
+      );
+      await fixture.analysis.enable();
+      expect(started, ['stockfish 4 ${Settings.defaultMemoryMb}']);
+      expect(
+        (state() as EngineRunning).notice,
+        'The chosen engine is no longer registered',
+      );
+    });
+
+    test('with neither engine starting, the pane says both', () async {
+      registered = (_) => const StartFailed('komodo is not there.');
+      final broken = WindowFixture(
+        coresAvailable: 8,
+        tournaments: registry,
+        launchRegisteredEngine:
+            (engine, {required cores, required memoryMb}) async =>
+                registered(engine),
+      );
+      addTearDown(broken.dispose);
+      await broken.parts.start();
+      await broken.settings.update(
+        broken.settings.value.copyWith(analysisEngine: 'engine-1'),
+      );
+      await broken.analysis.enable();
+      final failed = broken.analysis.state as EngineFailed;
+      expect(failed.reason, startsWith('Komodo did not start'));
+      expect(failed.reason, endsWith('no engine in this test'));
+    });
   });
 }

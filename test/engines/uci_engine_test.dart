@@ -110,6 +110,31 @@ void main() {
     expect(engine.name, 'Fake 9');
   });
 
+  test('a registered engine is sent only the options it lists, and no '
+      'MultiPV when it lists none', () async {
+    final process = FakeProcess();
+    final starting = UciEngine.start(
+      process,
+      options: {'Threads': '8', 'Hash': '256', 'Contempt': '0'},
+      advertisedOnly: true,
+    );
+    await pumpEventQueue();
+    process
+      ..say('id name Old Engine 2')
+      ..say('option name Hash type spin default 16 min 1 max 4096')
+      ..say('option name Skill Level type spin default 20 min 0 max 20')
+      ..answerHandshake();
+    final engine = await starting;
+    expect(process.sent, ['uci', 'setoption name Hash value 256', 'isready']);
+    final search = engine.analyse(Fen.initial, multiPv: 3);
+    search.lines.listen((_) {});
+    await pumpEventQueue();
+    expect(process.sent.sublist(3), [
+      'position fen ${Fen.initial.value}',
+      'go infinite',
+    ]);
+  });
+
   test('a search sends the position and receives its lines', () async {
     final (engine, process) = await started();
     final search = engine.analyse(Fen.initial, multiPv: 2);

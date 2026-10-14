@@ -155,7 +155,6 @@ const engineBarHeight = 40.0;
 const engineSwitchHeight = 18.0;
 const engineRowHeight = 28.0;
 const engineScoreWidth = 54.0;
-const engineDepthWidth = 76.0;
 
 /// The tab strip at the top of a pane whose content the user can switch —
 /// Moves, Replies, Search in the reading card: the tabs share its width,
@@ -585,6 +584,9 @@ const settingRowHeight = 52.0;
 const settingInlineWidth = 420.0;
 const settingNumberWidth = 64.0;
 const settingSecretWidth = 200.0;
+
+/// A typeable choice in a settings row: wide enough for an engine's name.
+const settingChoiceWidth = 240.0;
 
 /// How tall one row of a list is — a study, its chapters, the games of a
 /// file. Small enough that a long list is one screen, tall enough to hit.
