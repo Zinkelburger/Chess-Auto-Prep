@@ -201,6 +201,32 @@ void main() {
     expect(find.text('850 kN/s · 2.1G nodes · Scripted 1'), findsOneWidget);
   });
 
+  testWidgets('a narrow pane says the depth and speed rather than half a '
+      'name; the tooltip says it all', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(520, 400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await pump(tester);
+    await analysis.enable();
+    await tester.pump();
+    engine.current.emit(
+      EngineLine(
+        multiPv: 1,
+        depth: 24,
+        score: const Centipawns(-35),
+        pv: const ['c7c5'],
+        nodes: 345000000,
+        nps: 12400000,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('Depth 24 · 12 MN/s'), findsOneWidget);
+    expect(
+      find.byTooltip('Depth 24 · 12 MN/s · 345M nodes · Scripted 1'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('an engine standing in for the chosen one says why, after its '
       'own name', (tester) async {
     analysis.dispose();

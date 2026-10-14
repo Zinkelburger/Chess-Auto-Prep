@@ -10,14 +10,36 @@ const shownDepthLimit = 100;
 /// and, last, why it is not the engine the user chose.
 ///
 /// `Depth 24 · 12 MN/s · 345M nodes · Stockfish 19`
-String engineRunningStatus(String name, EngineLine? best, {String? notice}) => [
-  if (best != null && best.depth > 0 && best.depth < shownDepthLimit)
-    'Depth ${best.depth}',
-  if (best?.nps case final nps? when nps > 0) speedText(nps),
-  if (best?.nodes case final nodes? when nodes > 0) '${countText(nodes)} nodes',
-  name,
-  ?notice,
-].join(' · ');
+String engineRunningStatus(String name, EngineLine? best, {String? notice}) =>
+    engineStatusChoices(name, best, notice: notice).first;
+
+/// [engineRunningStatus], then shorter ways to say it for a narrow pane,
+/// each leaving out the least needed fact: the nodes, then the engine's
+/// name, then the speed. Why another engine stands in is kept to the last.
+List<String> engineStatusChoices(
+  String name,
+  EngineLine? best, {
+  String? notice,
+}) {
+  final depth = best != null && best.depth > 0 && best.depth < shownDepthLimit
+      ? 'Depth ${best.depth}'
+      : null;
+  final speed = switch (best?.nps) {
+    final nps? when nps > 0 => speedText(nps),
+    _ => null,
+  };
+  final nodes = switch (best?.nodes) {
+    final nodes? when nodes > 0 => '${countText(nodes)} nodes',
+    _ => null,
+  };
+  String say(List<String?> facts) => facts.nonNulls.join(' · ');
+  return {
+    say([depth, speed, nodes, name, notice]),
+    say([depth, speed, name, notice]),
+    if (depth != null || speed != null) say([depth, speed, notice]),
+    if (depth != null) say([depth, notice]),
+  }.toList();
+}
 
 /// Nodes per second as an engine GUI writes them: `850 kN/s`, `1.2 MN/s`,
 /// `12 MN/s`.

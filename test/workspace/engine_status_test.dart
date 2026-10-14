@@ -62,4 +62,20 @@ void main() {
       'Stockfish 19 · Komodo did not start',
     );
   });
+
+  test('a narrow pane drops the nodes, then the name, then the speed', () {
+    expect(
+      engineStatusChoices(
+        'Stockfish 19',
+        best(depth: 18, nodes: 6300000, nps: 1300000),
+      ),
+      [
+        'Depth 18 · 1.3 MN/s · 6.3M nodes · Stockfish 19',
+        'Depth 18 · 1.3 MN/s · Stockfish 19',
+        'Depth 18 · 1.3 MN/s',
+        'Depth 18',
+      ],
+    );
+    expect(engineStatusChoices('Stockfish 19', null), ['Stockfish 19']);
+  });
 }

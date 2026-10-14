@@ -211,13 +211,13 @@ class _Header extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
     final best = analysis.snapshot?.best;
-    final (String status, Color? colour) = switch (analysis.state) {
-      EngineOff() => ('Off', null),
-      EngineStarting() => ('Starting…', null),
-      EngineFailed(:final reason) => (reason, scheme.error),
-      EnginePaused(:final reason) => (reason, scheme.onSurfaceVariant),
+    final (List<String> status, Color? colour) = switch (analysis.state) {
+      EngineOff() => (const ['Off'], null),
+      EngineStarting() => (const ['Starting…'], null),
+      EngineFailed(:final reason) => ([reason], scheme.error),
+      EnginePaused(:final reason) => ([reason], scheme.onSurfaceVariant),
       EngineRunning(:final name, :final notice) => (
-        engineRunningStatus(name, best, notice: notice),
+        engineStatusChoices(name, best, notice: notice),
         null,
       ),
     };
@@ -244,17 +244,15 @@ class _Header extends StatelessWidget {
           const SizedBox(width: Space.xs),
           Expanded(
             child: Tooltip(
-              message: status,
-              child: Text(
-                status,
+              message: status.first,
+              child: _Status(
+                choices: status,
                 // Figures of one width, so the numbers ticking over do not
                 // shuffle the words after them.
                 style: text.labelSmall?.copyWith(
                   color: colour,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
@@ -282,6 +280,41 @@ class _Header extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The longest of [choices] that fits the room, the last one cut short
+/// when none does: a narrow board column says the depth and the speed
+/// rather than half of the engine's name. The tooltip says all of it.
+class _Status extends StatelessWidget {
+  const _Status({required this.choices, required this.style});
+
+  final List<String> choices;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final scaler = MediaQuery.textScalerOf(context);
+      final direction = Directionality.of(context);
+      final shown = choices.firstWhere((choice) {
+        final painter = TextPainter(
+          text: TextSpan(text: choice, style: style),
+          textDirection: direction,
+          textScaler: scaler,
+          maxLines: 1,
+        )..layout();
+        final fits = painter.width <= constraints.maxWidth;
+        painter.dispose();
+        return fits;
+      }, orElse: () => choices.last);
+      return Text(
+        shown,
+        style: style,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+    },
+  );
 }
 
 /// A small icon at the header's end, muted, in the accent while it is on.
