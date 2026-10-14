@@ -207,6 +207,7 @@ try {
   await sitDone(page);
   console.log('hole:', (await page.$$eval('#bs-sit .bs-sit-row', (rows) => rows.map((r) => r.textContent))).join(' | '));
   assert.deepEqual(await page.$$eval('#bs-sit th', (ths) => ths.map((th) => th.textContent)), ['Option', 'Eval', 'Best move']);
+  assert.deepEqual(await page.$$eval('#bs-sit .bs-sit-label', (ls) => ls.map((l) => l.textContent)), ['Move now', 'Pawn', 'Knight', 'Bishop', 'Rook', 'Queen'], 'piece rows carry no +');
   assert.match(await text(page, '#bs-sit .bs-sit-row[data-role="knight"].bs-sit-mates'), /#1.*N@h6/);
   // Hovering a row draws its move solid, in place of the engine's pale arrows.
   await page.hover('#bs-sit .bs-sit-row[data-role="knight"]');
