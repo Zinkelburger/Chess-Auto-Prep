@@ -8,34 +8,32 @@ Static Astro site deployed to Cloudflare Pages. Browser preparation tools, one s
 | `/pgn`               | PGN viewer, variations, comments, move entry, local save and export     | `src/prep/*` |
 | `/expectimax`        | Stockfish + Maia expectimax computed on this device                    | `src/prep/*` |
 | `/tactics`            | Tactics Trainer — Stockfish in the browser mines puzzles from games  | `src/tactics/*`                        |
-| `/bughouse`           | Two linked boards and Hivemind running entirely in the browser | `src/bughouse/*`, `../../../tools/bughouse_web/` |
+| `/bughouse`           | Bughouse — one bughouse board on lichess.org/analysis's layout, with + and − on every piece in both hands, lila's board editor, an evaluation gauge and a sit panel; Fairy-Stockfish in the browser | `src/analysis/*`, `../../../tools/prepare_crazyhouse_web.py` |
 | `/bughouse-puzzles`   | Bughouse Puzzles — mates and tactics mined from FICS games, reserves frozen | `src/bughouse-puzzles/*`, `public/bughouse-puzzles/` |
-| `/bughousedb`         | BughouseDB — the shared Hivemind book; missing positions analysed in the browser | `src/bughousedb/*`, `src/bughouse/boards.ts` |
-| `/bughouse-single-board` | Bughouse Single Board — the Crazyhouse Analysis board with bughouse rules for one board and Hivemind in the browser (partner board held still), an evaluation gauge, and a sit panel: the value of moving now against waiting for each piece | `src/bughouse-single/*`, `src/crazyhouse/*` |
-| `/crazyhouse`         | Crazyhouse Analysis — lichess.org/analysis/crazyhouse on one board, with + and − on every piece in both hands and lila's board editor; Fairy-Stockfish in the browser | `src/crazyhouse/*`, `../../../tools/prepare_crazyhouse_web.py` |
 | `/charles-clock`      | Charles Clock — a full-screen phone clock with its own `<html>`      | `src/pages/charles-clock.astro`        |
 
 `/dashboard` forwards to `/twic-notifications` (with the query string, so old
 login emails keep working); `/verify` and `/unsubscribe` are one-shot token
-pages; `/book` is an unlisted booking page.
+pages; `/book` is an unlisted booking page. `/crazyhouse`,
+`/bughouse-single-board` and `/bughousedb` were folded into `/bughouse` in
+October 2026 and redirect there (`public/_redirects`).
 
 ```sh
 npm install
 npm run dev        # http://localhost:4321 — set PUBLIC_API_URL to point at a local server.py
 npm run build      # → dist/
 npx astro check    # type-check .ts and .astro
-npm run test:bughouse  # state, export, persistence and worker lifecycle regressions
+npm run test:analysis  # the bughouse board's tree, hands and rules
+npm run test:puzzles   # bughouse puzzles and the puzzle set
 ```
 
 Environment (build-time): `PUBLIC_API_URL` (default `https://api.chessautoprep.com`),
 `PUBLIC_TURNSTILE_SITE_KEY` (empty disables the CAPTCHA widget).
-Bughouse inference needs no server; shared evaluations use PUBLIC_API_URL. Its C++ engine runs as
-WebAssembly in a browser worker and ONNX Runtime Web runs the neural network
-locally. `npm run build` prepares checksum-pinned model chunks and the ONNX
-runtime automatically; all files fit Cloudflare Pages' 25 MiB asset limit.
-The compiled Hivemind module is committed, so Pages needs only the normal
-Node/Python build environment, not Emscripten. See the
-[static Bughouse guide](../../../tools/bughouse_web/README.md).
+`npm run build` also prepares the engines the pages download: the ONNX
+runtime the Expectimax page's Maia uses (under `/bughouse-engine/`, from the
+[static Hivemind build](../../../tools/bughouse_web/README.md)) and the
+bughouse board's Fairy-Stockfish; all files fit Cloudflare Pages' 25 MiB
+asset limit.
 
 ## Layout
 
@@ -50,40 +48,37 @@ Node/Python build environment, not Emscripten. See the
   the filter builder; `board-preview.ts` is the dependency-free FEN renderer
   and the floating `HoverBoard`.
 - `src/tactics/` — see below.
-- `src/crazyhouse/` — Crazyhouse Analysis. `tree.ts` is the move tree and
-  the hand edits (pure, `npm run test:crazyhouse`); `engine.ts` runs Lichess's
-  Fairy-Stockfish 14 build (`@lichess-org/stockfish-web`) with Lichess's
-  crazyhouse NNUE, downloaded once in parts and kept in the browser cache;
-  `board.ts` is the chessground board in analysis and editor modes; `hand.ts`
-  draws a hand with a + above and a − below each piece; `moves.ts` is the
-  move list (column or inline, folds, live ?!/?/?? marks, the right-click
-  menu with Promote, Make main line, Force variation, Copy PGN, Delete);
-  `ceval.ts` the engine panel (Show threat, progress bar, the board shown
-  when hovering an engine move); `shapes.ts` Lichess's arrows; `judge.ts`
-  Lichess's winning chances, live marks and practice verdicts;
+- `src/analysis/` — the bughouse board (`/bughouse`). `tree.ts` is the move
+  tree and the hand edits, with bughouse rules for one board: a capture goes
+  to the partner and leaves the board, and nothing arrives unless a hand is
+  edited (pure, `npm run test:analysis`). `engine.ts` runs Lichess's
+  Fairy-Stockfish 14 build (`@lichess-org/stockfish-web`) as its
+  `pocketknight` variant: chess with drops from a hand and no captures to
+  hand, which is exactly that rule. The variant has no net, so the engine uses
+  its hand-written evaluation and nothing large is downloaded. `sit.ts` is the
+  sit panel: the side to move's position searched again with one more pawn,
+  knight, bishop, rook or queen, one row after another on a second
+  single-threaded engine, naming the cheapest piece that mates ("Sit for a
+  knight"). `board.ts` is the chessground board in analysis and editor modes;
+  `hand.ts` draws a hand with a + above and a − below each piece; `moves.ts`
+  is the move list (column or inline, folds, live ?!/?/?? marks, the
+  right-click menu with Promote, Make main line, Force variation, Copy PGN,
+  Delete); `ceval.ts` the engine panel (Show threat, progress bar, the board
+  shown when hovering an engine move); `shapes.ts` Lichess's arrows;
+  `judge.ts` Lichess's winning chances, live marks and practice verdicts;
   `practice.ts` Practice with computer; `menu.ts` the ☰ menu (replay mode,
   the analysis switches) and the keyboard help; `settings.ts` the saved
   settings; `app.ts` wires the page. The tree is kept in `localStorage` and
-  comes back on reload when the address still points at its position. A hand edit is
-  kept on its position and carried through the moves after it; the engine
-  always gets a bare FEN. Hands are capped at 16 of a piece (the NNUE's slots)
-  and 64 pieces in all. The engine is multi-threaded, so `/crazyhouse` and
+  comes back on reload when the address still points at its position. A hand
+  edit is kept on its position and carried through the moves after it; the
+  engine always gets a bare FEN. Hands are capped at 16 of a piece and 64
+  pieces in all. A check a drop could block is mate when the hand is empty,
+  as the engine plays it. The engine is multi-threaded, so `/bughouse` and
   `/crazyhouse-engine/*` alone are cross-origin isolated (COOP/COEP in
   `public/_headers` and the dev server in `astro.config.mjs`). After
-  `npm run build`, `npm run test:crazyhouse:browser` drives the page in
-  headless Chrome with the real engine and writes screenshots to
-  `build/crazyhouse-web/`.
-- `src/bughouse-single/` — Bughouse Single Board, which runs the crazyhouse
-  app with a `Flavor` (`crazyhouse/app.ts`): `useBughouseRules()` makes the
-  tree send captures to the partner and treats a check a drop could block as
-  waiting, not mate (the side drops the blocker it waits for, a pawn or a
-  knight); `engine.ts` adapts the Bughouse Lab worker's `frozen` search
-  (Hivemind with the partner board held still) to the engine panel, gauge and
-  move marks; `sit.ts` searches the position again with one more pawn, knight,
-  bishop, rook or queen for the side to move on spare workers and names the
-  cheapest piece that mates ("Sit for a knight"). Rules and score conversion:
-  `npm run test:crazyhouse`; the page with the real engine:
-  `npm run build && npm run test:bughouse-single:browser`.
+  `npm run build`, `npm run test:bughouse:browser` drives the page in
+  headless Chrome with the real engine, at desktop and phone widths, and
+  writes screenshots to `build/bughouse-web/`.
 - `public/stockfish/` — stockfish.js 18 single-threaded build (`stockfish.js` +
   `stockfish.wasm`). `public/piece/` — cburnett SVGs used by both board renderers.
 

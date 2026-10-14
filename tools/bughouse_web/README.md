@@ -1,4 +1,11 @@
-# Static Bughouse Lab
+# Static Bughouse Lab (retired from the site)
+
+> October 2026: the website's Bughouse Lab, BughouseDB and Bughouse Single
+> Board pages were folded into one `/bughouse` page that runs Fairy-Stockfish
+> instead (see the frontend README). This build stays because
+> `prepare_assets.py` puts the ONNX runtime under `/bughouse-engine/`, where
+> the Expectimax page's Maia loads it. The Lab page described below, and its
+> browser check, no longer exist on the site.
 
 `/bughouse` runs **entirely in the visitor's browser**. Cloudflare Pages only
 serves static files. The API stores completed position evaluations; it runs no engine. No account
@@ -192,9 +199,7 @@ exact engine source, browser adapters, licenses and compilation instructions.
 ## Verification
 
 ```sh
-scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test:bughouse
 scripts/ci.sh with -- python3 tools/bughouse_web/test_rules.py
-scripts/ci.sh with -- python3 tools/bughouse_web/check_browser.py
 scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend exec -- \
   astro check --root python/twic-position-finder/frontend
 scripts/ci.sh analyze lint

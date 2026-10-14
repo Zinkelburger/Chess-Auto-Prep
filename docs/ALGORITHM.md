@@ -278,8 +278,8 @@ persistent cache independently of these in-memory search roots.
 
 ## Bughouse expectimax
 
-Bughouse Lab's Expectimax tab and the website's `/bughouse` and `/bughousedb`
-views share `bughouse_expectimax.db`. This is a single-board approximation:
+Bughouse Lab's Expectimax tab and the API's `/api/bughousedb/expectimax`
+(once read by the retired `/bughouse` Lab and `/bughousedb` web pages) share `bughouse_expectimax.db`. This is a single-board approximation:
 ordinary moves and drops alternate on the selected board; captures feed the
 partner's pocket, but no partner moves, clocks or sitting are expanded.
 

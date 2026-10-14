@@ -5,11 +5,11 @@
  */
 import { DEFAULT_THREADS, MAX_THREADS, type SearchSettings } from './engine';
 
-const KEY = 'crazyhouse-analysis-v1';
+const KEY = 'bughouse-analysis-v1';
 
 export interface Settings extends SearchSettings {
   engineOn: boolean;
-  /** Bughouse Single Board: positions searched for each row of the sit panel. */
+  /** The sit panel's search for each row, in thousands of nodes. */
   sitNodes: number;
   inline: boolean;
   disclosure: boolean;
@@ -34,7 +34,7 @@ export const TOGGLES: { key: Toggle; label: string; hotkey?: string; group: 'Mov
 ];
 
 const DEFAULTS: Settings = {
-  engineOn: true, multiPv: 2, threads: DEFAULT_THREADS, hashMb: 128, infinite: false, sitNodes: 200,
+  engineOn: true, multiPv: 2, threads: DEFAULT_THREADS, hashMb: 128, infinite: false, sitNodes: 300,
   inline: false, disclosure: false, liveGlyphs: false, glyphsOnBoard: true,
   bestArrows: true, maneuverArrows: false, variationArrows: true,
 };
@@ -44,9 +44,9 @@ export function clamp(value: unknown, lo: number, hi: number, fallback: number):
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
 }
 
-/** The settings kept under `key`, with `defaults` over Lichess's for another page's engine. */
-export function loadSettings(key = KEY, defaults: Partial<Settings> = {}): Settings {
-  const base = { ...DEFAULTS, ...defaults };
+/** The settings kept in this browser, over the defaults. */
+export function loadSettings(key = KEY): Settings {
+  const base = DEFAULTS;
   const out = { ...base };
   try {
     const saved = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;

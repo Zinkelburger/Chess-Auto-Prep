@@ -54,7 +54,7 @@ export class CevalView {
   constructor(
     private readonly els: { header: HTMLElement; pearl: HTMLElement; name: HTMLElement; info: HTMLElement; bar: HTMLElement; threat: HTMLButtonElement; pvs: HTMLElement; board: HTMLElement; switch: HTMLInputElement },
     hooks: CevalHooks,
-    private readonly engineName = 'Fairy-Stockfish 14 NNUE',
+    private readonly engineName = 'Fairy-Stockfish 14',
   ) {
     const { pvs } = els;
     pvs.addEventListener('mouseover', (e) => {
@@ -104,8 +104,8 @@ export class CevalView {
       return;
     }
     pearl.textContent = formatEval(result.lines[0]);
-    info.textContent = result.info ?? `Depth ${result.depth}${result.knps ? ` · ${result.knps.toLocaleString()} kn/s` : ''}`;
-    const progress = result.progress ?? result.millis / SEARCH_MS;
+    info.textContent = `Depth ${result.depth}${result.knps ? ` · ${result.knps.toLocaleString()} kn/s` : ''}`;
+    const progress = result.millis / SEARCH_MS;
     bar.style.width = `${result.done || state.infinite ? 100 : Math.min(100, 100 * progress)}%`;
     for (let i = 0; i < state.multiPv; i++) pvs.append(this.row(state, result.lines[i]));
     // The board stays while the pointer is on a line of this position; engine updates redraw the rows under it.

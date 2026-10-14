@@ -1,7 +1,8 @@
 # Hivemind, end to end
 
-The bughouse engine behind Bughouse Lab, the `bughouse` MCP server, the
-`/bughouse` and `/bughousedb` web pages and every engine match. This document
+The bughouse engine behind Bughouse Lab, the `bughouse` MCP server and every
+engine match. (The website's Hivemind pages were retired in October 2026; its
+`/bughouse` page now runs Fairy-Stockfish on one board.) This document
 is the one place that explains *how it works* rather than how to call it:
 what the network sees, what the search does with it, and — the question that
 sends everyone here — **why the evaluation sits near 0.00 when one side is
@@ -412,7 +413,7 @@ Four consumers, one engine, sharing only files.
 |---|---|
 | **Bughouse Lab** (desktop) | `lib/features/bughouse/` — `bughouse_engine.dart` owns the process, `bughouse_engine_protocol.dart` parses, `bughouse_eval.dart` calibrates, `bughouse_bundle.dart` unpacks the assets on first analysis |
 | **`bughouse` MCP server** | `tools/mcp/bughouse/` — `engine.py` the UCI client, `board.py` the cross-board rule, `calibration.py` the offset, `analysis.py` the three question shapes (`analyse` / `compare` / `playout`), `tools.py` the schemas |
-| **The browser** | `python/twic-position-finder/frontend/src/bughouse/` — the same C++ compiled to WASM, ORT-web for inference, one worker per core |
+| **The browser** (retired) | `tools/bughouse_web/` — the same C++ compiled to WASM, ORT-web for inference; no site page uses it since October 2026 |
 | **Engine matches** | [Bughouse matches](BUGHOUSE_MATCHES.md) — one process drives both teams |
 
 `tools/mcp/bughouse/paths.py:locate()` finds the engine in this order:
@@ -487,9 +488,9 @@ remembering: CRLF, and **Latin-1, not UTF-8**.
 queue that searches positions with the real engine and, via `expand_fics()`,
 follows the FICS book's *popularity* so the most-played lines get evaluated
 first. `python/twic-position-finder/bughousedb.py` is the FastAPI server
-behind `/api/bughousedb/*`, and the `/bughousedb` web page is a
-**crowd-sourced front end for it**: a visitor's browser searches missing
-positions with the WASM engine and uploads the result against a Turnstile-
+behind `/api/bughousedb/*`. The `/bughousedb` web page, retired in October
+2026, was its **crowd-sourced front end**: a visitor's browser searched missing
+positions with the WASM engine and uploaded the result against a Turnstile-
 gated ticket. The server runs no engine and rebuilds all move text from its
 own move generation. Stored values are calibrated Q; served as
 `cp = 543.17·atanh(Q)`.
@@ -506,7 +507,7 @@ Both pipelines are code-complete and **no data has been generated here**:
 | Hivemind eval book | `…/bughouse-db/hivemind_book.db` | absent |
 | server DB | `python/twic-position-finder/bughousedb.db` | absent (lives on the deployed API) |
 
-So the `/bughousedb` site is serving whatever the deployed API has
+So the deployed API holds whatever the retired `/bughousedb` page
 accumulated from visitors, and there is no local seed corpus to compare it
 against. To build one:
 

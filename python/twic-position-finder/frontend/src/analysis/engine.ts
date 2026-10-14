@@ -1,22 +1,21 @@
 /**
- * Fairy-Stockfish 14 with Lichess's crazyhouse NNUE, the engine behind
- * lichess.org/analysis/crazyhouse, from @lichess-org/stockfish-web. The
- * module runs on this page's main thread and searches in its own pthread
- * workers, so the page must be cross-origin isolated (COOP/COEP in
- * public/_headers and the dev server).
+ * Fairy-Stockfish 14 from @lichess-org/stockfish-web (Lichess's build),
+ * playing its pocketknight variant: chess with drops from a hand, where a
+ * capture leaves the board instead of going to the capturer's hand. With the
+ * hands set from the page, that is one bughouse board whose partner sends
+ * nothing: pieces arrive only when you add them. The variant has no net, so
+ * the engine evaluates with its own hand-written terms, which count material
+ * that has left the game, and nothing large is downloaded.
  *
- * The net (about 30 MB gzipped) comes in parts prepared by
- * tools/prepare_crazyhouse_web.py and is kept in the browser's cache, so it
- * downloads once. Positions are always sent as a bare FEN: a hand edited
- * between moves has no move list that leads to it.
+ * The module runs on this page's main thread and searches in its own pthread
+ * workers, so the page must be cross-origin isolated (COOP/COEP in
+ * public/_headers and the dev server). Positions are always sent as a bare
+ * FEN: a hand edited between moves has no move list that leads to it.
  */
 import type StockfishWeb from '@lichess-org/stockfish-web';
 
 const DIRECTORY = '/crazyhouse-engine/';
-const CACHE = 'crazyhouse-nnue-v1';
-
-interface Chunk { file: string; bytes: number; sha256: string }
-interface Manifest { name: string; sha256: string; chunks: Chunk[] }
+const VARIANT = 'pocketknight';
 
 /** One principal variation, scored from White's side. */
 export interface EngineLine {
@@ -37,20 +36,6 @@ export interface EngineResult {
   lines: EngineLine[];
   /** The search ended by itself (time or depth limit). */
   done: boolean;
-  /** Replaces "Depth n · kn/s" under the engine name (Hivemind counts positions, not depth). */
-  info?: string;
-  /** How far the search is through its allowance, 0 to 1, for the bar under the engine header. */
-  progress?: number;
-}
-
-/** What the analysis board asks of an engine: Fairy-Stockfish here, Hivemind on Bughouse Single Board. */
-export interface AnalysisEngine {
-  /** Downloads (once) and starts the engine; later calls share the same start. */
-  load(): Promise<void>;
-  /** Searches `fen` from now on; any search in progress is stopped first. */
-  analyse(fen: string, settings: SearchSettings): void;
-  /** Stops searching and forgets the queued position. */
-  stop(): void;
 }
 
 export interface SearchSettings {
@@ -58,7 +43,7 @@ export interface SearchSettings {
   threads: number;
   hashMb: number;
   infinite: boolean;
-  /** Stop after this many nodes instead of the time limit (practice). */
+  /** Stop after this many nodes instead of the time limit (practice, the sit panel). */
   nodes?: number;
 }
 
@@ -78,10 +63,6 @@ export function crossOriginReady(): boolean {
   return typeof SharedArrayBuffer !== 'undefined' && globalThis.crossOriginIsolated === true;
 }
 
-async function sha256(buffer: ArrayBuffer): Promise<string> {
-  return [...new Uint8Array(await crypto.subtle.digest('SHA-256', buffer))].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
 /** The largest shared memory the browser grants, shrinking the maximum as lila does. */
 function sharedMemory(lo = 1024, hi = 32768): WebAssembly.Memory {
   let shrink = 4;
@@ -96,36 +77,9 @@ function sharedMemory(lo = 1024, hi = 32768): WebAssembly.Memory {
   }
 }
 
-async function fetchChunk(chunk: Chunk, cache: Cache | null, progress: (bytes: number) => void): Promise<ArrayBuffer> {
-  const url = DIRECTORY + chunk.file;
-  const kept = await cache?.match(url).catch(() => undefined);
-  if (kept) {
-    const buffer = await kept.arrayBuffer();
-    if (buffer.byteLength === chunk.bytes && await sha256(buffer) === chunk.sha256) { progress(chunk.bytes); return buffer; }
-    await cache?.delete(url).catch(() => undefined);
-  }
-  const response = await fetch(url);
-  if (!response.ok || !response.body) throw new Error('The engine download failed. Check your connection and reload.');
-  const reader = response.body.getReader();
-  const parts: Uint8Array[] = [];
-  let received = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    parts.push(value);
-    received += value.byteLength;
-    progress(received);
-  }
-  const buffer = await new Blob(parts as BlobPart[]).arrayBuffer();
-  if (buffer.byteLength !== chunk.bytes || await sha256(buffer) !== chunk.sha256)
-    throw new Error('The engine download was incomplete. Reload to try again.');
-  try { await cache?.put(url, new Response(buffer)); } catch { /* Private mode or quota: run from memory. */ }
-  return buffer;
-}
-
 interface Job { fen: string; settings: SearchSettings; generation: number; started: number }
 
-export class Engine implements AnalysisEngine {
+export class Engine {
   private module: StockfishWeb | null = null;
   private loading: Promise<void> | null = null;
   private status: EngineStatus = { kind: 'off' };
@@ -152,7 +106,7 @@ export class Engine implements AnalysisEngine {
     this.onStatus(status);
   }
 
-  /** Downloads (once) and starts the engine; later calls share the same start. */
+  /** Starts the engine; later calls share the same start. */
   load(): Promise<void> {
     this.loading ??= this.boot().catch((e: unknown) => {
       this.loading = null;
@@ -165,24 +119,6 @@ export class Engine implements AnalysisEngine {
   private async boot() {
     if (!crossOriginReady()) throw new Error('This browser blocks the shared memory the engine needs. Reload the page, or try another browser.');
     this.setStatus({ kind: 'loading', text: 'Loading engine…' });
-    const manifestResponse = await fetch(DIRECTORY + 'net.json');
-    if (!manifestResponse.ok) throw new Error('The engine files are missing from this site.');
-    const manifest: Manifest = await manifestResponse.json();
-    let cache: Cache | null = null;
-    try { cache = await caches.open(CACHE); } catch { /* Optional download cache. */ }
-    const total = manifest.chunks.reduce((sum, c) => sum + c.bytes, 0);
-    const done: number[] = manifest.chunks.map(() => 0);
-    const buffers = await Promise.all(manifest.chunks.map((chunk, i) => fetchChunk(chunk, cache, (bytes) => {
-      done[i] = bytes;
-      const got = done.reduce((a, b) => a + b, 0);
-      if (got < total) this.setStatus({ kind: 'loading', text: `Downloading the crazyhouse net · ${Math.round(got / 1e6)} of ${Math.round(total / 1e6)} MB (once)` });
-    })));
-    this.setStatus({ kind: 'loading', text: 'Starting engine…' });
-    const net = new Uint8Array(await new Response(new Blob(buffers).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
-    if (await sha256(net.buffer as ArrayBuffer) !== manifest.sha256) {
-      for (const c of manifest.chunks) await cache?.delete(DIRECTORY + c.file).catch(() => undefined);
-      throw new Error('The engine net did not check out. Reload to download it again.');
-    }
     const scriptUrl = new URL(DIRECTORY + 'fsf_14.js', location.href).href;
     const makeModule = await import(/* @vite-ignore */ scriptUrl);
     const module: StockfishWeb = await makeModule.default({
@@ -190,10 +126,10 @@ export class Engine implements AnalysisEngine {
       locateFile: (file: string) => new URL(DIRECTORY + file, location.href).href,
       mainScriptUrlOrBlob: scriptUrl,
     });
-    module.onError = (msg: string) => this.setStatus({ kind: 'failed', text: msg.startsWith('BAD_NNUE') ? 'The engine net did not load. Reload to try again.' : msg });
+    module.onError = (msg: string) => this.setStatus({ kind: 'failed', text: msg });
     module.listen = (line: string) => this.received(line);
-    module.uci('setoption name UCI_Variant value crazyhouse');
-    module.setNnueBuffer(net, 0);
+    module.uci(`setoption name UCI_Variant value ${VARIANT}`);
+    module.uci('setoption name Use NNUE value false');
     this.module = module;
     this.setStatus({ kind: 'ready' });
     if (this.next && !this.running) this.start();

@@ -11,7 +11,7 @@
  */
 import type { Colour } from '../bughouse/types';
 import { PuzzleBoard } from './board';
-import { Attempt, inCheck, labLink, type Puzzle } from './puzzle';
+import { Attempt, analysisLink, inCheck, type Puzzle } from './puzzle';
 import {
   DEFAULT_FILTER, DIFFICULTIES, DIFFICULTY_LABELS, LENGTHS, PuzzleStore, applyFilter, facetCounts,
   lengthLabel, normalizeFilter, parseHash, puzzleHash, themeCounts, themeLabel,
@@ -341,7 +341,7 @@ export class BughousePuzzlesApp {
     this.say(revealed ? 'revealed' : a.failed ? 'fail' : 'win');
     this.renderBoard();
     this.renderSession();
-    $('bp-lab-link').hidden = false;
+    $('bp-analysis-link').hidden = false;
   }
 
   private clearTimer() {
@@ -384,8 +384,8 @@ export class BughousePuzzlesApp {
   private renderPuzzle() {
     const a = this.attempt!;
     this.renderNav();
-    const link = $<HTMLAnchorElement>('bp-lab-link');
-    link.href = labLink(a.puzzle, a.solver);
+    const link = $<HTMLAnchorElement>('bp-analysis-link');
+    link.href = analysisLink(a.puzzle);
     link.hidden = true;
     this.renderLine();
   }

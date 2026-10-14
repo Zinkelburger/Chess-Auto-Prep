@@ -1,6 +1,5 @@
-/* Bughouse Single Board: Crazyhouse Analysis's layout (crazyhouse.css) plus
-   Lichess's evaluation gauge beside the board and the sit panel under the
-   engine lines. */
+/* The bughouse board: the analysis layout (analysis.css) plus Lichess's
+   evaluation gauge beside the board and the sit panel under the engine lines. */
 
 /* ── Evaluation gauge: White's winning chances, white from the bottom ── */
 .bs { --bs-gauge: clamp(8px, calc(var(--ch-board) / 48), 16px); }

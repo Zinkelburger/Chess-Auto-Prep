@@ -1,5 +1,5 @@
 /**
- * The one crazyhouse board, in two modes that share the chessground instance:
+ * The one bughouse board, in two modes that share the chessground instance:
  *
  * - analysis: legal moves and drops of the side to move (drag a hand piece on,
  *   or click it and then a square), the promotion picker, engine arrows, and

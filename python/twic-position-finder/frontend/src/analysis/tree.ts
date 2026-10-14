@@ -1,83 +1,44 @@
 /**
- * The analysis tree for one crazyhouse board, with hands that can be edited
+ * The analysis tree for one bughouse board, with hands that can be edited
  * between moves. A hand edit is kept on its node as a change against the
  * position its move produced, and is carried through every move after it, as
  * material arriving from a partner would be. Replaying after an earlier edit
  * re-applies each later edit; a continuation that is no longer legal (a drop
  * of a piece no longer in hand) is cut. The tree never checks material counts: any hand chessops accepts
- * is allowed (no kings, at most 64 pieces), capped per piece at what
- * Fairy-Stockfish's NNUE can represent.
+ * is allowed (no kings, at most 64 pieces), capped per piece.
  *
- * Bughouse Single Board uses the same tree with bughouse rules for one board
- * (`useBughouseRules`): a capture leaves the board for the partner instead of
- * the capturer's hand, and a check a drop could block is not mate. The side
- * caught in it waits for a blocker; the engine plays that as a drop of the
- * piece it waits for (a pawn, or a knight where a pawn cannot stand).
+ * Bughouse rules for one board, as Fairy-Stockfish's pocketknight plays them:
+ * a capture leaves the board for the partner instead of going to the
+ * capturer's hand, and pieces arrive only through a hand edit. Positions are
+ * kept in chessops' crazyhouse form, which reads and writes hands in FENs.
  */
 import { makeFen, parseFen, INITIAL_FEN } from 'chessops/fen';
 import { makeSan as chessopsSan, parseSan } from 'chessops/san';
 import { parsePgn, startingPosition, type PgnNodeData, type Node as PgnNode } from 'chessops/pgn';
 import { Crazyhouse } from 'chessops/variant';
-import { between } from 'chessops/attacks';
 import { makeSquare, makeUci, parseUci } from 'chessops/util';
 import { normalizeMove } from 'chessops/chess';
 import { chessgroundDests } from 'chessops/compat';
-import { SquareSet } from 'chessops/squareSet';
 import type { Color, Move, Role, SquareName } from 'chessops/types';
 
 export const START_FEN = INITIAL_FEN.replace(' w ', '[] w ');
-/** Fairy-Stockfish's NNUE has 16 slots per piece type and side for counts in hand. */
+/** The most of one piece a hand holds (a full board's worth of pawns and then some). */
 export const MAX_IN_HAND = 16;
 export const HAND_ROLES: Role[] = ['pawn', 'knight', 'bishop', 'rook', 'queen'];
 const LETTER: Record<Role, string> = { pawn: 'p', knight: 'n', bishop: 'b', rook: 'r', queen: 'q', king: 'k' };
 
-let bughouse = false;
-
-/** Switches this page to bughouse rules for one board; called once, before any position is read. */
-export function useBughouseRules() { bughouse = true; }
-export function isBughouse(): boolean { return bughouse; }
-
-/** Plays a legal move by this page's rules. */
+/** Plays a legal move by bughouse rules: chessops banks a capture in the mover's hand, but it goes to the partner. */
 function playMove(pos: Crazyhouse, move: Move) {
-  if (!bughouse) { pos.play(move); return; }
   const turn = pos.turn;
-  if ('role' in move && !pos.pockets![turn][move.role]) pos.pockets![turn][move.role]++;
   const hand = pos.pockets![turn].clone();
   pos.play(move);
-  // chessops banks a capture in the mover's hand; in bughouse it goes to the partner.
   if ('role' in move) hand[move.role]--;
   pos.pockets![turn] = hand;
 }
 
-/** A check that drops could block: one sliding checker with an empty square between it and the king. */
-function blockable(pos: Crazyhouse): boolean {
-  const king = pos.board.kingOf(pos.turn);
-  const checkers = pos.ctx().checkers;
-  if (king === undefined || checkers.size() !== 1) return false;
-  return between(king, checkers.first()!).diff(pos.board.occupied).nonEmpty();
-}
-
-/**
- * Bughouse: the side to move is in a check it could only block with a piece
- * it does not have, and has no other move. Not mate: it waits for a partner.
- */
-export function isWaiting(pos: Crazyhouse): boolean {
-  return bughouse && pos.isCheck() && !pos.hasDests() && blockable(pos);
-}
-
-/** The pieces a waiting side may drop when its partner sends one: a pawn, or a knight where no pawn can block. */
-function waitingDrop(pos: Crazyhouse, move: Move): boolean {
-  if (!('role' in move) || !isWaiting(pos)) return false;
-  const blocks = between(pos.board.kingOf(pos.turn)!, pos.ctx().checkers.first()!).diff(pos.board.occupied);
-  const pawnBlocks = blocks.diff(SquareSet.backranks());
-  if (!blocks.has(move.to)) return false;
-  return move.role === 'pawn' ? pawnBlocks.has(move.to) : move.role === 'knight' && pawnBlocks.isEmpty();
-}
-
-/** Checkmate, stalemate, or (bughouse) waiting for a blocker; null while play goes on. */
-export function outcomeOf(fen: string): 'Checkmate' | 'Stalemate' | 'Waiting' | null {
+/** Checkmate or stalemate; null while play goes on. */
+export function outcomeOf(fen: string): 'Checkmate' | 'Stalemate' | null {
   const pos = positionOf(fen);
-  if (isWaiting(pos)) return 'Waiting';
   return pos.isCheckmate() ? 'Checkmate' : pos.isStalemate() ? 'Stalemate' : null;
 }
 
@@ -231,7 +192,7 @@ export function readMove(pos: Crazyhouse, uci: string): Move | undefined {
   const raw = parseUci(uci);
   if (!raw) return undefined;
   const move = normalizeMove(pos, raw);
-  return pos.isLegal(move) || waitingDrop(pos, move) ? move : undefined;
+  return pos.isLegal(move) ? move : undefined;
 }
 
 export interface LineMove { uci: string; san: string; fen: string }
@@ -523,9 +484,7 @@ export class Tree {
   }
 
   private headers(): string[] {
-    const headers = bughouse
-      ? ['[Event "Bughouse single board"]', '[Site "https://chessautoprep.com/bughouse-single-board"]', '[Variant "Bughouse"]']
-      : ['[Event "Crazyhouse analysis"]', '[Site "https://chessautoprep.com/crazyhouse"]', '[Variant "Crazyhouse"]'];
+    const headers = ['[Event "Bughouse analysis"]', '[Site "https://chessautoprep.com/bughouse"]', '[Variant "Bughouse"]'];
     if (this.root.fen !== START_FEN) headers.push(`[FEN "${this.root.fen}"]`, '[SetUp "1"]');
     return headers;
   }
@@ -568,7 +527,7 @@ export class Tree {
     out.push(node.san);
   }
 
-  /** A tree from a crazyhouse PGN (the first game; any variant tag is read as this page's rules). */
+  /** A tree from a bughouse or crazyhouse PGN (the first game; any variant tag is read as this page's rules). */
   static fromPgn(text: string): Tree | null {
     const game = parsePgn(text)[0];
     if (!game) return null;
@@ -578,7 +537,7 @@ export class Tree {
     const tree = new Tree(fenOf(start.value as Crazyhouse));
     const walk = (pgnNode: PgnNode<PgnNodeData>, node: TreeNode, pos: Crazyhouse) => {
       for (const child of pgnNode.children) {
-        const move = parseSan(pos, child.data.san) ?? (bughouse ? waitingSan(pos, child.data.san) : undefined);
+        const move = parseSan(pos, child.data.san);
         if (!move) continue;
         const next = tree.play(node.id, makeUci(move));
         if (!next) continue;
@@ -609,10 +568,3 @@ function plyOf(fen: string): number {
   return (full - 1) * 2 + (parts[1] === 'b' ? 1 : 0);
 }
 
-
-/** A waiting side's drop of the piece its partner sends (`N@f8` with no knight in hand). */
-function waitingSan(pos: Crazyhouse, san: string): Move | undefined {
-  const m = /^([PN])?@([a-h][1-8])/.exec(san);
-  if (!m) return undefined;
-  return readMove(pos, `${m[1] ?? 'P'}@${m[2]}`);
-}

@@ -1,90 +1,166 @@
 ---
 import Base from '../layouts/Base.astro';
-import '../styles/bughouse-expectimax.css';
-import BughouseBoards from '../components/BughouseBoards.astro';
+// Chessground's own styles first, so the shared board look overrides them.
+import '@lichess-org/chessground/assets/chessground.base.css';
+import '@lichess-org/chessground/assets/chessground.brown.css';
+import '@lichess-org/chessground/assets/chessground.cburnett.css';
 import '../styles/bughouse-board.css';
-import '../styles/bughouse.css';
-const CHOICES = [
-  { name: 'team', label: 'Our team', checked: 0, options: [['white', 'A + B'], ['black', 'C + D']] },
-  { name: 'required', label: 'Must move on', checked: 0, options: [['none', 'Either'], ['A', 'Board 1'], ['B', 'Board 2']] },
-  { name: 'budget', label: 'Nodes per team', checked: 0, options: [['800', '800'], ['3000', '3,000'], ['8000', '8,000']] },
-  // Hivemind's only clock inputs are the two diagonals, A vs D and C vs B:
-  // the team that is up may choose not to move.
-  { name: 'clock', label: 'Time', checked: 1, options: [['AB', 'A + B may sit', 'A + B are up on the diagonal clock, so they can wait rather than move'], ['even', 'Even', 'Neither team is up on the clock: both have to move'], ['CD', 'C + D may sit', 'C + D are up on the diagonal clock, so they can wait rather than move']] },
-];
+import '../styles/analysis.css';
+import '../styles/bughouse-sit.css';
+
+const icon = {
+  first: 'M18 17l-5-5 5-5M11 17l-5-5 5-5',
+  prev: 'M15 18l-6-6 6-6',
+  next: 'M9 18l6-6-6-6',
+  last: 'M6 17l5-5-5-5M13 17l5-5-5-5',
+  flip: 'M7 4v16M7 4l-3 3M7 4l3 3M17 20V4M17 20l-3-3M17 20l3-3',
+  edit: 'M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z',
+  threat: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM22 12h-4M6 12H2M12 6V2M12 22v-4',
+  practice: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
+  menu: 'M4 6h16M4 12h16M4 18h16',
+  gear: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z',
+};
 ---
-<Base title="Bughouse Lab" description="Explore two-board bughouse positions with Hivemind. Move, drop, and analyse in your browser." fill>
-  <div id="bughouse-lab" class="bb-app" data-editing="false">
-    <header class="bh-toolbar">
-      <div><h1>Bughouse Lab</h1><span id="bh-save-status" class="dim">Your line is saved on this device</span></div>
-      <div class="bh-tools">
-        <button id="bh-copy" class="btn btn-outline" type="button" title="Copy moves as BPGN" aria-label="Copy moves">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h4"/></svg> Copy moves
-        </button>
-        <button id="bh-download" class="btn btn-outline" type="button" title="Save both boards’ played moves as a .bpgn file">Download</button>
-        <button id="bh-share" class="btn btn-outline" type="button" title="Copy a link with both boards and the full line">Copy link</button>
+<Base
+  title="Bughouse"
+  description="Analyse one bughouse board with Fairy-Stockfish in your browser. Add pieces to either hand with + and see the evaluation, the best move, and which piece is worth sitting for."
+>
+  <div class="ch bs" id="ch" data-mode="analysis">
+    <section class="ch-stage" aria-label="Board">
+      <div class="ch-spare" id="ch-spare-top" role="toolbar" aria-label="Spare pieces" hidden></div>
+      <div class="ch-board-wrap" id="ch-board-wrap">
+        <div class="ch-gauge off" id="ch-gauge" aria-hidden="true"><div class="ch-gauge-black"></div><div class="ch-gauge-ticks"></div></div>
+        <div id="ch-board" class="bb-board" role="group" aria-label="Bughouse board"></div>
       </div>
-      <span id="bh-copy-status" role="status" class="dim"></span>
-    </header>
-    <noscript><p class="alert alert-error">Enable JavaScript to move pieces and request analysis.</p></noscript>
+      <div class="ch-spare" id="ch-spare-bottom" role="toolbar" aria-label="Spare pieces" hidden></div>
+    </section>
 
-    <form id="bh-position-form" class="bb-left" novalidate>
-      <BughouseBoards prefix="bh" accessible />
-    </form>
+    <section class="ch-side" aria-label="Analysis">
+      <div class="ch-side-inner">
+        <div class="ch-hand" id="ch-hand-top"></div>
 
-    <div class="bb-right bh-panel">
-      <form id="bh-analyse-form" class="bh-find" aria-label="Find a move">
-        <details class="bh-settings" open>
-          <summary>Analysis settings</summary>
-        {CHOICES.map((c) => (
-          <div class="bh-row">
-            <span class="bh-label">{c.label}</span>
-            <div class="choice-row" role="radiogroup" aria-label={c.label}>
-              {c.options.map(([value, text, hint], i) => (
-                <label class="choice" title={hint}><input type="radio" name={c.name} value={value} checked={i === c.checked} /><span>{text}</span></label>
-              ))}
+        <div class="ch-tools" id="ch-tools">
+          <div class="ch-analysis" id="ch-analysis">
+            <div class="ch-ceval" id="ch-ceval">
+              <label class="ch-switch" title="Engine (L)">
+                <input type="checkbox" id="ch-engine-on" aria-label="Engine" />
+                <span aria-hidden="true"></span>
+              </label>
+              <span class="ch-pearl num" id="ch-pearl" aria-live="polite"></span>
+              <div class="ch-engine">
+                <span class="ch-engine-name" id="ch-engine-name">Fairy-Stockfish 14</span>
+                <span class="ch-engine-info num" id="ch-engine-info"></span>
+              </div>
+              <button type="button" class="ch-icon" id="ch-threat" title="Show threat (X)" aria-label="Show threat" aria-pressed="false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.threat}/></svg>
+              </button>
+              <button type="button" class="ch-icon" id="ch-gear" title="Engine settings" aria-label="Engine settings" aria-expanded="false" aria-controls="ch-settings">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.gear}/></svg>
+              </button>
+              <div class="ch-bar" aria-hidden="true"><span id="ch-bar"></span></div>
+            </div>
+            <div class="ch-settings" id="ch-settings" hidden>
+              <label>Lines <input type="number" id="ch-set-lines" inputmode="numeric" /></label>
+              <label>CPUs <input type="number" id="ch-set-threads" inputmode="numeric" /> <span class="dim" id="ch-set-threads-max"></span></label>
+              <label>Memory <input type="number" id="ch-set-hash" inputmode="numeric" step="16" /> <span class="dim">MB</span></label>
+              <label title="How far the engine searches each row of the sit panel">Sit search <input type="number" id="ch-set-sit" inputmode="numeric" step="50" /> <span class="dim">thousand positions</span></label>
+              <label class="ch-check"><input type="checkbox" id="ch-set-infinite" /> Infinite analysis</label>
+            </div>
+            <div class="ch-practice" id="ch-practice" aria-live="polite" hidden></div>
+            <div class="ch-pvs" id="ch-pvs"></div>
+            <div class="bs-sit" id="bs-sit" role="group" aria-label="Sit or move" hidden></div>
+            <div class="ch-pv-board" id="ch-pv-board" role="img" hidden>
+              <div class="ch-pv-hand ch-pv-hand-black"></div>
+              <div class="ch-pv-board-cg bb-board"></div>
+              <div class="ch-pv-hand ch-pv-hand-white"></div>
+            </div>
+            <div class="ch-moves" id="ch-moves" aria-label="Moves"></div>
+            <div class="ch-fork" id="ch-fork" aria-label="Moves played from here" hidden></div>
+            <p class="ch-toast" id="ch-toast" role="status" hidden></p>
+          </div>
+
+          <div class="ch-action-menu" id="ch-action-menu" aria-label="Analysis menu" hidden></div>
+
+          <div class="ch-editor" aria-label="Board editor">
+            <p class="ch-editor-tip dim">Pick a piece or the bin above or below the board, then click or drag across squares. With the hand, drag pieces around or off the board.</p>
+            <div class="ch-choice" id="ch-turn" role="radiogroup" aria-label="Side to move">
+              <button type="button" role="radio" data-turn="white" aria-checked="true">White to play</button>
+              <button type="button" role="radio" data-turn="black" aria-checked="false">Black to play</button>
+            </div>
+            <fieldset class="ch-castling" id="ch-castling">
+              <legend>Castling</legend>
+              <span>White</span>
+              <label class="ch-check"><input type="checkbox" data-right="K" /> O-O</label>
+              <label class="ch-check"><input type="checkbox" data-right="Q" /> O-O-O</label>
+              <span>Black</span>
+              <label class="ch-check"><input type="checkbox" data-right="k" /> O-O</label>
+              <label class="ch-check"><input type="checkbox" data-right="q" /> O-O-O</label>
+            </fieldset>
+            <div class="ch-editor-row">
+              <button type="button" class="btn btn-outline btn-sm" id="ch-editor-start">Starting position</button>
+              <button type="button" class="btn btn-outline btn-sm" id="ch-editor-clear">Clear board</button>
+            </div>
+            <p class="ch-editor-error" id="ch-editor-error" role="alert"></p>
+            <div class="ch-editor-row ch-editor-actions">
+              <button type="button" class="btn btn-outline" id="ch-editor-cancel" title="Back to the analysis without changes (Esc)">Cancel</button>
+              <button type="button" class="btn btn-primary" id="ch-editor-apply">Analyse this position</button>
             </div>
           </div>
-        ))}
-        </details>
-        <p id="bh-budget-note" class="bh-note dim">About 6 seconds total. First analysis downloads ~44 MB; later searches reuse the engine.</p>
-        <div class="bh-go">
-          <button class="btn btn-primary" id="bh-analyse" type="submit">Analyze</button>
-          <button class="btn btn-outline" id="bh-stop" type="button" hidden>Stop</button>
-          <a id="bh-jump" class="btn btn-outline" href="#bh-result" hidden>View analysis</a>
         </div>
-        <p id="bh-availability" class="bh-note" role="status"></p>
-        <p id="bh-status" class="bh-status" role="status" aria-live="polite">Loading the browser engine…</p>
-        <div class="bh-actions">
-          <button class="btn btn-outline" id="bh-edit" type="button" aria-expanded="false" aria-controls="bh-position-form">Edit position</button>
-          <button class="btn btn-outline" id="bh-flip" type="button">Flip boards</button>
-          <button class="btn btn-outline" id="bh-reset" type="button">New game</button>
-          <button class="btn btn-outline" id="bh-undo-reset" type="button" hidden>Undo new game</button>
-        </div>
-      </form>
-      <div id="bh-result" class="bh-result" aria-live="polite"></div>
-      <section id="bh-expectimax" class="bh-expectimax" aria-label="Saved expectimax" aria-live="polite"></section>
-      <details class="bh-keyboard"><summary>Enter a move with keyboard</summary>
-      <form id="bh-move-form" class="bh-move-entry" aria-label="Enter a move">
-        <label for="bh-move-board">Play on</label>
-        <select id="bh-move-board" aria-label="Move board"><option value="A">Board 1</option><option value="B">Board 2</option></select>
-        <label for="bh-move" class="visually-hidden">Move in SAN or UCI</label>
-        <input id="bh-move" placeholder="e4, N@f3, a8=N" aria-describedby="bh-move-help" autocomplete="off" spellcheck="false" />
-        <button class="btn btn-outline" type="submit">Play</button>
-        <p id="bh-move-help" class="dim">Enter SAN or UCI. Partners are A + B and C + D. Captures go to your partner’s reserve.</p>
-      </form>
-      </details>
-      <p class="bh-links dim">
-        Runs in your browser. Completed evaluations are shared in BughouseDB. ·
-        <a href="/bughouse-engine/hivemind-source.tar.gz">Engine source</a> ·
-        <a href="/bughouse-engine/HIVEMIND_LICENSE.txt">Hivemind license</a> ·
-        <a href="/bughouse-engine/ONNXRUNTIME_THIRD_PARTY_NOTICES.txt">Runtime notices</a>
-      </p>
+
+        <div class="ch-hand" id="ch-hand-bottom"></div>
+      </div>
+    </section>
+
+    <section class="ch-under" aria-label="Position">
+      <p class="bs-note">One board of a bughouse game. Every capture goes to the partner and leaves this board, and nothing arrives unless you add it to a hand with +.</p>
+      <div class="ch-fen-row">
+        <label for="ch-fen">FEN</label>
+        <input id="ch-fen" class="mono" spellcheck="false" autocomplete="off" />
+        <button type="button" class="btn btn-outline btn-sm" id="ch-fen-copy">Copy</button>
+      </div>
+      <p class="ch-error" id="ch-fen-error" role="alert"></p>
+      <label class="ch-pgn-label" for="ch-pgn">PGN</label>
+      <textarea id="ch-pgn" class="mono" rows="4" spellcheck="false"></textarea>
+      <div class="ch-pgn-row">
+        <p class="ch-error" id="ch-pgn-error" role="alert"></p>
+        <button type="button" class="btn btn-outline btn-sm" id="ch-pgn-copy">Copy PGN</button>
+        <button type="button" class="btn btn-outline btn-sm" id="ch-pgn-import" disabled>Import PGN</button>
+      </div>
+    </section>
+
+    <div class="ch-controls" id="ch-controls" role="toolbar" aria-label="Board controls">
+      <button type="button" class="ch-icon" id="ch-flip" title="Flip board (F)" aria-label="Flip board">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.flip}/></svg>
+      </button>
+      <button type="button" class="ch-icon" id="ch-edit" title="Board editor (B)" aria-label="Board editor" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.edit}/></svg>
+      </button>
+      <button type="button" class="ch-icon" id="ch-practice-toggle" title="Practice with computer" aria-label="Practice with computer" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.practice}/></svg>
+      </button>
+      <span class="ch-controls-gap"></span>
+      <button type="button" class="ch-icon ch-nav" id="ch-first" title="First move (↑)" aria-label="First move">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.first}/></svg>
+      </button>
+      <button type="button" class="ch-icon ch-nav" id="ch-prev" title="Previous move (←)" aria-label="Previous move">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.prev}/></svg>
+      </button>
+      <button type="button" class="ch-icon ch-nav" id="ch-next" title="Next move (→)" aria-label="Next move">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.next}/></svg>
+      </button>
+      <button type="button" class="ch-icon ch-nav" id="ch-last" title="Last move (↓)" aria-label="Last move">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.last}/></svg>
+      </button>
+      <span class="ch-controls-gap"></span>
+      <button type="button" class="ch-icon" id="ch-menu-toggle" title="Menu (H)" aria-label="Menu" aria-expanded="false" aria-controls="ch-action-menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.menu}/></svg>
+      </button>
     </div>
-    <dialog id="bh-copy-dialog" aria-labelledby="bh-copy-title"><h2 id="bh-copy-title">Copy your analysis</h2><textarea id="bh-copy-text" aria-label="Analysis to copy" readonly></textarea><button id="bh-copy-close" class="btn btn-outline" type="button">Close</button></dialog>
-    <dialog id="bh-promotion" aria-labelledby="bh-promotion-title"><h2 id="bh-promotion-title">Promote to</h2><div id="bh-promotion-options" class="bh-promotion-options"></div><button id="bh-promotion-cancel" class="btn btn-outline" type="button">Cancel</button></dialog>
   </div>
 </Base>
+
 <script>
-  import '../bughouse/app';
+  import { BughouseApp } from '../analysis/app';
+  new BughouseApp();
 </script>

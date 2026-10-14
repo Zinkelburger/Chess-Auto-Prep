@@ -2,25 +2,24 @@
  * The sit panel: for the side to move, what the position is worth if it
  * moves now, and if it waits for one more pawn, knight, bishop, rook or queen
  * from its partner, with the best move once that piece arrives. Each row is
- * its own Hivemind search of the same size on spare workers, so the rows
- * compare like with like; the main engine keeps the analysis going meanwhile.
- * The cheapest piece that mates is called out: "Sit for a knight".
+ * its own Fairy-Stockfish search of the same size, one after another on a
+ * second single-threaded engine, so the rows compare like with like while the
+ * main engine keeps the analysis going. The cheapest piece that mates is
+ * called out: "Sit for a knight".
  */
 import type { Color, Role } from 'chessops/types';
-import { BrowserEngine } from '../bughouse/engine';
-import type { FrozenSearch } from '../bughouse/types';
-import type { Extra, ExtraHost } from '../crazyhouse/app';
-import { formatEval } from '../crazyhouse/ceval';
-import { el } from '../crazyhouse/moves';
-import { adjustHand, outcomeOf, positionOf, sanLine } from '../crazyhouse/tree';
-import { centipawns, mateMoves } from './engine';
+import type { Extra, ExtraHost } from './app';
+import { formatEval } from './ceval';
+import { Engine, type EngineResult } from './engine';
+import { el } from './moves';
+import { adjustHand, outcomeOf, positionOf, sanLine } from './tree';
 
 const ROLES: (Role | null)[] = [null, 'pawn', 'knight', 'bishop', 'rook', 'queen'];
 const LETTER: Record<Role, string> = { pawn: 'P', knight: 'N', bishop: 'B', rook: 'R', queen: 'Q', king: 'K' };
 const ARTICLE: Record<Role, string> = { pawn: 'a pawn', knight: 'a knight', bishop: 'a bishop', rook: 'a rook', queen: 'a queen', king: 'a king' };
-/** Spare workers hold their own copy of the network (about 150 MB each). */
-export const MAX_SIT_WORKERS = 4;
 const SETTLE_MS = 250;
+/** A row whose search never reports (it should within seconds) is given up on. */
+const ROW_TIMEOUT_MS = 120_000;
 
 interface Row {
   role: Role | null;
@@ -30,12 +29,15 @@ interface Row {
   failed?: string;
 }
 
+/** `nodes` is the search size of each row, in thousands of nodes (the setting). */
 interface Ladder { fen: string; nodes: number; turn: Color; rows: Row[] }
 
 const keyOf = (fen: string, nodes: number) => `${nodes} ${fen}`;
 
 export class SitPanel implements Extra {
-  private engines: BrowserEngine[] = [];
+  private engine: Engine | null = null;
+  /** The row search waiting for its final report. */
+  private pending: { fen: string; resolve: (result: EngineResult | null) => void } | null = null;
   private ladders = new Map<string, Ladder>();
   private shown: Ladder | null = null;
   private generation = 0;
@@ -71,8 +73,7 @@ export class SitPanel implements Extra {
       rows: ROLES.map((role) => ({ role, fen: role ? adjustHand(fen, turn, role, 1) : fen })),
     };
     this.render(ladder);
-    // Wait for the main engine to have the network in this browser's cache:
-    // the spare workers then read it instead of downloading it again.
+    // The main engine starts first; this one loads its own copy once that has.
     if (!this.host.engineReady) return;
     this.schedule(ladder);
   }
@@ -86,44 +87,50 @@ export class SitPanel implements Extra {
 
   private stop() {
     this.generation++;
-    for (const engine of this.engines) engine.cancel();
+    this.engine?.stop();
+    this.settle(null);
   }
 
-  private engine(i: number): BrowserEngine {
-    while (this.engines.length <= i) this.engines.push(new BrowserEngine(() => {}));
-    return this.engines[i];
+  private settle(result: EngineResult | null) {
+    const pending = this.pending;
+    this.pending = null;
+    pending?.resolve(result);
+  }
+
+  /** One row's search to its end; null when it was stopped. */
+  private search(fen: string, nodes: number): Promise<EngineResult | null> {
+    this.engine ??= new Engine(
+      (status) => { if (status.kind === 'failed') this.settle(null); },
+      (result) => { if (result.done && result.fen === this.pending?.fen) this.settle(result); },
+    );
+    const engine = this.engine;
+    return new Promise((resolve) => {
+      const timer = window.setTimeout(() => this.settle(null), ROW_TIMEOUT_MS);
+      this.pending = { fen, resolve: (result) => { clearTimeout(timer); resolve(result); } };
+      engine.load().then(
+        () => engine.analyse(fen, { multiPv: 1, threads: 1, hashMb: 16, infinite: false, nodes }),
+        () => this.settle(null),
+      );
+    });
   }
 
   private async run(ladder: Ladder, generation: number) {
-    // A worker answers one search at a time: let the stopped ones finish first.
+    // One search at a time: let the stopped ladder finish first.
     await this.running.catch(() => undefined);
     if (generation !== this.generation) return;
     this.ladders.set(keyOf(ladder.fen, ladder.nodes), ladder);
-    const queue = ladder.rows.filter((r) => r.fen && !r.result);
-    const lanes = Math.max(1, Math.min(MAX_SIT_WORKERS, this.host.settings.threads, queue.length));
-    const lane = async (i: number) => {
-      for (let row = queue.shift(); row && generation === this.generation; row = queue.shift()) {
-        try {
-          const found = await this.engine(i).request<FrozenSearch>('frozen', {
-            fen: row.fen, nodes: ladder.nodes, movetime_ms: 120_000, lines: 1, report_ms: 0,
-          });
-          if (generation !== this.generation) { queue.unshift(row); return; }
-          const line = found.lines[0];
-          const sign = ladder.turn === 'white' ? 1 : -1;
-          const value = line?.mate ?? found.mate;
-          row.result = value !== null && value !== undefined
-            ? { mate: sign * mateMoves(value) }
-            : { cp: sign * centipawns(line?.q ?? found.q) };
-          if (line?.pv[0]) row.result = { ...row.result, move: line.pv[0], san: sanLine(row.fen!, [line.pv[0]])[0] };
-          delete row.failed;
-        } catch (error) {
-          if (generation !== this.generation) { queue.unshift(row); return; }
-          row.failed = error instanceof Error ? error.message : String(error);
-        }
-        if (this.shown === ladder) this.render(ladder);
+    for (const row of ladder.rows.filter((r) => r.fen && !r.result)) {
+      const found = await this.search(row.fen!, ladder.nodes * 1000);
+      if (generation !== this.generation) return;
+      const line = found?.lines[0];
+      if (!line) row.failed = 'No search';
+      else {
+        row.result = line.mate !== undefined ? { mate: line.mate } : { cp: line.cp };
+        if (line.pv[0]) row.result = { ...row.result, move: line.pv[0], san: sanLine(row.fen!, [line.pv[0]])[0] };
+        delete row.failed;
       }
-    };
-    await Promise.all(Array.from({ length: lanes }, (_, i) => lane(i)));
+      if (this.shown === ladder) this.render(ladder);
+    }
   }
 
   private render(ladder: Ladder | null) {
@@ -133,7 +140,7 @@ export class SitPanel implements Extra {
     const side = ladder.turn === 'white' ? 'White' : 'Black';
     const now = ladder.rows[0].result;
     const head = el('div', 'bs-sit-head');
-    head.title = `Each row is its own ${ladder.nodes.toLocaleString()}-position search`;
+    head.title = `Each row is its own search of ${ladder.nodes.toLocaleString()} thousand positions`;
     head.append(el('strong', '', `Sit or move · ${side} to play`));
     const verdict = this.verdict(ladder);
     if (verdict) head.append(verdict);

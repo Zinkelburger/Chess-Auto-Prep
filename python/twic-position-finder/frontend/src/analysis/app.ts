@@ -1,16 +1,13 @@
 /**
- * Crazyhouse Analysis: lichess.org/analysis/crazyhouse on one board, plus a
- * + above and − below every piece in both hands and lila's board editor.
- * Built for bughouse questions such as "what if my opponent had a pawn
- * here": the rules and the engine are crazyhouse, and the hands are
- * whatever you set.
+ * Bughouse analysis: lichess.org/analysis on one bughouse board, with a +
+ * above and − below every piece in both hands and lila's board editor.
+ * Captures leave for the partner and nothing arrives unless you add it, so
+ * the hands are exactly what you set. Fairy-Stockfish searches it, and the
+ * sit panel (sit.ts) shows what one more piece is worth to the side to move.
  *
  * This file wires the parts together: the tree and the current position,
  * the engine, the board, the move list (moves.ts), the engine panel
  * (ceval.ts), practice (practice.ts), the ☰ menu (menu.ts) and the editor.
- *
- * Bughouse Single Board runs the same app with a `Flavor`: bughouse rules,
- * Hivemind as the engine, an evaluation gauge and its sit panel.
  */
 import type { DrawShape } from '@lichess-org/chessground/draw';
 import type { Key, Piece } from '@lichess-org/chessground/types';
@@ -19,13 +16,14 @@ import { Material } from 'chessops/setup';
 import type { Color, Role } from 'chessops/types';
 import { CrazyBoard, type Brush } from './board';
 import { CevalView } from './ceval';
-import { Engine, MAX_THREADS, type AnalysisEngine, type EngineResult, type EngineStatus } from './engine';
+import { Engine, MAX_THREADS, type EngineResult, type EngineStatus } from './engine';
 import { renderHand } from './hand';
 import { liveGlyph, winningChances, type Glyph } from './judge';
 import { openHelp, renderMenu } from './menu';
 import { MoveList } from './moves';
 import { PRACTICE_NODES, Practice } from './practice';
 import { clamp, loadSettings, saveSettings, type Settings, type Toggle } from './settings';
+import { SitPanel } from './sit';
 import { engineShapes, glyphShape, moveShapes, threatShapes, variationShapes } from './shapes';
 import {
   HAND_ROLES, START_FEN, Tree, boardDests, dropSquares, fenOf, outcomeOf, positionOf, readFen, readMove, threatFen,
@@ -36,25 +34,9 @@ import { makeUci } from 'chessops/util';
 const LETTER: Record<Role, string> = { pawn: 'P', knight: 'N', bishop: 'B', rook: 'R', queen: 'Q', king: 'K' };
 const SPARE_ROLES: Role[] = ['king', 'queen', 'rook', 'bishop', 'knight', 'pawn'];
 /** The analysis tree, kept in this browser so a reload comes back to it (Lichess keeps it too). */
-const TREE_KEY = 'crazyhouse-analysis-tree-v1';
+const TREE_KEY = 'bughouse-analysis-tree-v1';
 
-/** What a page changes about the analysis board. Crazyhouse Analysis uses none of it. */
-export interface Flavor {
-  engine?: (onStatus: (status: EngineStatus) => void, onResult: (result: EngineResult) => void) => AnalysisEngine;
-  engineName?: string;
-  /** Local storage keys for the tree and the settings. */
-  treeKey?: string;
-  settingsKey?: string;
-  settingsDefaults?: Partial<Settings>;
-  /** The engine's allowance for a practice reply. */
-  practiceNodes?: number;
-  /** The most the CPUs setting allows (all cores by default). */
-  maxThreads?: number;
-  /** A panel that follows the shown position (Bughouse Single Board's sit panel). */
-  extra?: (host: ExtraHost) => Extra;
-}
-
-/** What an extra panel may read and do. */
+/** What the sit panel may read and do. */
 export interface ExtraHost {
   readonly fen: string;
   readonly settings: Settings;
@@ -98,7 +80,7 @@ function loadSavedTree(key: string): SavedTree | null {
   try { return JSON.parse(localStorage.getItem(key) ?? 'null') as SavedTree | null; } catch { return null; }
 }
 
-export class CrazyhouseApp {
+export class BughouseApp {
   private tree: Tree;
   private current: TreeNode;
   private orientation: Color = 'white';
@@ -107,7 +89,7 @@ export class CrazyhouseApp {
   private settings: Settings;
   private evals = new Map<string, EngineResult>();
   private engineStatus: EngineStatus = { kind: 'off' };
-  private readonly engine: AnalysisEngine;
+  private readonly engine: Engine;
   private readonly board: CrazyBoard;
   private readonly moves: MoveList;
   private readonly ceval: CevalView;
@@ -117,7 +99,7 @@ export class CrazyhouseApp {
   private practice: Practice | null = null;
   private forkIndex = 0;
   private hoverUci: string | null = null;
-  /** Engine lines draw their hovered move pale, like the engine's own arrow; the page's extra panel draws it solid. */
+  /** Engine lines draw their hovered move pale, like the engine's own arrow; the sit panel draws it solid. */
   private hoverBrush = 'paleBlue';
   private menuOpen = false;
   private autoplay: { delay: number; timer: number } | null = null;
@@ -125,22 +107,14 @@ export class CrazyhouseApp {
   private saveTimer = 0;
   private toastTimer = 0;
   private lastDepth = new Map<string, number>();
-  private readonly treeKey: string;
-  private readonly settingsKey: string | undefined;
-  private readonly practiceNodes: number;
-  private readonly maxThreads: number;
-  private readonly extra: Extra | null;
+  private readonly extra: Extra;
 
-  constructor(flavor: Flavor = {}) {
-    this.treeKey = flavor.treeKey ?? TREE_KEY;
-    this.settingsKey = flavor.settingsKey;
-    this.settings = loadSettings(flavor.settingsKey, flavor.settingsDefaults);
-    this.practiceNodes = flavor.practiceNodes ?? PRACTICE_NODES;
-    this.maxThreads = flavor.maxThreads ?? MAX_THREADS;
+  constructor() {
+    this.settings = loadSettings();
     const fen = new URLSearchParams(location.search).get('fen');
     const read = fen ? readFen(fen) : null;
     const target = read?.ok ? fenOf(read.pos) : START_FEN;
-    const saved = loadSavedTree(this.treeKey);
+    const saved = loadSavedTree(TREE_KEY);
     const restored = saved ? Tree.restore(saved) : null;
     if (restored && restored.current.fen === target && !(read && !read.ok)) {
       this.tree = restored.tree;
@@ -154,7 +128,7 @@ export class CrazyhouseApp {
 
     const onStatus = (status: EngineStatus) => { this.engineStatus = status; this.renderCeval(); this.extra?.update(); };
     const onResult = (result: EngineResult) => this.engineResult(result);
-    this.engine = flavor.engine ? flavor.engine(onStatus, onResult) : new Engine(onStatus, onResult);
+    this.engine = new Engine(onStatus, onResult);
     this.board = new CrazyBoard($('ch-board-wrap'), $('ch-board'), {
       move: (orig, dest) => void this.boardMove(orig, dest),
       drop: (role, key) => this.play(`${LETTER[role]}@${key}`, 'user'),
@@ -184,8 +158,8 @@ export class CrazyhouseApp {
     }, {
       hover: (uci) => this.hover(uci, 'paleBlue'),
       play: (pv, upTo) => this.playLine(pv, upTo),
-    }, flavor.engineName);
-    this.extra = flavor.extra ? flavor.extra({
+    });
+    this.extra = new SitPanel({
       get fen() { return app.current.fen; },
       get settings() { return app.settings; },
       get active() { return app.mode === 'analysis' && !app.practice && app.settings.engineOn; },
@@ -193,7 +167,7 @@ export class CrazyhouseApp {
       evalOf: (fen) => this.evals.get(fen),
       give: (role) => this.adjust(positionOf(this.current.fen).turn, role, 1),
       hover: (uci) => this.hover(uci, 'blue'),
-    }) : null;
+    }, $('bs-sit'));
 
     this.bind();
     this.renderAll();
@@ -341,7 +315,7 @@ export class CrazyhouseApp {
         counts,
         roomForMore: total < 64,
         picked: !editing && pos!.turn === color ? this.dropping : null,
-        usable: (role) => !editing && pos!.turn === color && !ended(this.current.fen) && dropSquares(this.current.fen, role).length > 0,
+        usable: (role) => !editing && pos!.turn === color && !outcomeOf(this.current.fen) && dropSquares(this.current.fen, role).length > 0,
       }, {
         adjust: (c, role, delta) => this.adjust(c, role, delta),
         drag: (c, role, e) => { this.dropping = null; this.board.dragNew({ role, color: c }, e); },
@@ -380,7 +354,7 @@ export class CrazyhouseApp {
     const pos = positionOf(this.current.fen);
     const turn = pos.turn, other: Color = turn === 'white' ? 'black' : 'white';
     let shapes: DrawShape[] = [];
-    const on = this.settings.engineOn && !ended(this.current.fen);
+    const on = this.settings.engineOn && !outcomeOf(this.current.fen);
     if (on && this.hoverUci) shapes.push(...moveShapes(this.threat ? other : turn, this.hoverUci, this.hoverBrush));
     else if (on && this.settings.bestArrows) {
       const result = this.evals.get(this.current.fen);
@@ -425,8 +399,8 @@ export class CrazyhouseApp {
 
   private search() {
     if (this.mode === 'editor') { this.engine.stop(); return; }
-    if (ended(this.current.fen)) { this.engine.stop(); this.renderCeval(); return; }
-    if (this.practice) this.engine.analyse(this.current.fen, { ...this.settings, multiPv: 1, infinite: false, nodes: this.practiceNodes });
+    if (outcomeOf(this.current.fen)) { this.engine.stop(); this.renderCeval(); return; }
+    if (this.practice) this.engine.analyse(this.current.fen, { ...this.settings, multiPv: 1, infinite: false, nodes: PRACTICE_NODES });
     else if (!this.settings.engineOn) { this.engine.stop(); return; }
     else this.engine.analyse(this.threat ? threatFen(this.current.fen) : this.current.fen, this.settings);
     this.engine.load().catch(() => { /* Shown in the engine header. */ });
@@ -484,7 +458,7 @@ export class CrazyhouseApp {
       status: this.engineStatus,
       threat: this.threat,
       inCheck: pos.isCheck(),
-      over: ended(this.current.fen),
+      over: outcomeOf(this.current.fen),
       orientation: this.orientation,
     });
   }
@@ -510,7 +484,7 @@ export class CrazyhouseApp {
     if (this.practice) return;
     this.settings.engineOn = on;
     if (!on) this.threat = false;
-    saveSettings(this.settings, this.settingsKey);
+    saveSettings(this.settings);
     this.renderCeval();
     this.renderShapes();
     this.analyse();
@@ -519,7 +493,7 @@ export class CrazyhouseApp {
   /** Lichess's "Show threat" (X): what the other side would play if it were its move. */
   private toggleThreat(on = !this.threat) {
     const pos = positionOf(this.current.fen);
-    if (on === this.threat || this.practice || !this.settings.engineOn || pos.isCheck() || ended(this.current.fen)) return;
+    if (on === this.threat || this.practice || !this.settings.engineOn || pos.isCheck() || outcomeOf(this.current.fen)) return;
     this.threat = on;
     this.hoverUci = null;
     this.renderCeval();
@@ -529,7 +503,7 @@ export class CrazyhouseApp {
 
   private toggleSetting(key: Toggle) {
     this.settings[key] = !this.settings[key];
-    saveSettings(this.settings, this.settingsKey);
+    saveSettings(this.settings);
     this.renderMoves();
     this.renderShapes();
     if (this.menuOpen) this.renderActionMenu();
@@ -801,7 +775,7 @@ export class CrazyhouseApp {
 
   private importPgn() {
     const tree = Tree.fromPgn($<HTMLTextAreaElement>('ch-pgn').value);
-    if (!tree) { $('ch-pgn-error').textContent = 'No crazyhouse moves found in that PGN.'; return; }
+    if (!tree) { $('ch-pgn-error').textContent = 'No moves found in that PGN.'; return; }
     $('ch-pgn-error').textContent = '';
     this.newTree(tree, tree.lineEnd(tree.root.id));
   }
@@ -824,7 +798,7 @@ export class CrazyhouseApp {
   private scheduleSave() {
     clearTimeout(this.saveTimer);
     this.saveTimer = window.setTimeout(() => {
-      try { localStorage.setItem(this.treeKey, JSON.stringify(this.tree.save(this.current.id))); } catch { /* Kept for this visit only. */ }
+      try { localStorage.setItem(TREE_KEY, JSON.stringify(this.tree.save(this.current.id))); } catch { /* Kept for this visit only. */ }
     }, 300);
   }
 
@@ -896,20 +870,20 @@ export class CrazyhouseApp {
       input.onchange = () => {
         this.settings[key] = clamp(input.value, lo, hi, this.settings[key]);
         input.value = String(this.settings[key]);
-        saveSettings(this.settings, this.settingsKey);
+        saveSettings(this.settings);
         if (key === 'multiPv') this.evals.clear();
         this.renderCeval();
         this.analyse();
       };
     };
     number('ch-set-lines', 'multiPv', 1, 5);
-    number('ch-set-threads', 'threads', 1, this.maxThreads);
+    number('ch-set-threads', 'threads', 1, MAX_THREADS);
     number('ch-set-hash', 'hashMb', 16, 512);
     number('ch-set-sit', 'sitNodes', 20, 5000);
-    $('ch-set-threads-max').textContent = `of ${this.maxThreads}`;
+    $('ch-set-threads-max').textContent = `of ${MAX_THREADS}`;
     const infinite = $<HTMLInputElement>('ch-set-infinite');
     infinite.checked = this.settings.infinite;
-    infinite.onchange = () => { this.settings.infinite = infinite.checked; saveSettings(this.settings, this.settingsKey); this.analyse(); };
+    infinite.onchange = () => { this.settings.infinite = infinite.checked; saveSettings(this.settings); this.analyse(); };
 
     // Editor panel
     for (const b of document.querySelectorAll<HTMLButtonElement>('#ch-turn button'))
@@ -986,12 +960,6 @@ export class CrazyhouseApp {
     this.moves.closeMenu();
     action();
   }
-}
-
-/** Checkmate or stalemate: nothing to search. A bughouse side waiting for a blocker is still searched. */
-function ended(fen: string): 'Checkmate' | 'Stalemate' | null {
-  const outcome = outcomeOf(fen);
-  return outcome === 'Waiting' ? null : outcome;
 }
 
 function squareIndex(key: Key): number {

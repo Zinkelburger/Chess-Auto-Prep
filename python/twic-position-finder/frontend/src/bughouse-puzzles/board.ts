@@ -2,9 +2,12 @@
  * The puzzle board: one chessground board with each side's frozen reserve
  * above and below it, drawn as lila's pocket. The look,
  * the move dots, dragging a reserve piece on and click-to-drop work as in
- * Bughouse Lab (../bughouse/boards.ts), on one board instead of two.
+ * the shared bughouse board (../bughouse/boards.ts).
  */
 import { Chessground } from '@lichess-org/chessground';
+import '@lichess-org/chessground/assets/chessground.base.css';
+import '@lichess-org/chessground/assets/chessground.brown.css';
+import '@lichess-org/chessground/assets/chessground.cburnett.css';
 import type { Api } from '@lichess-org/chessground/api';
 import type { Key, Role } from '@lichess-org/chessground/types';
 import { placement } from '../bughouse/boards';
