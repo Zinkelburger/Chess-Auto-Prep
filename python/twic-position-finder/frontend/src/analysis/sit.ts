@@ -4,8 +4,7 @@
  * from its partner, with the best move once that piece arrives. Each row is
  * its own Fairy-Stockfish search of the same size, one after another on a
  * second single-threaded engine, so the rows compare like with like while the
- * main engine keeps the analysis going. The cheapest piece that mates is
- * called out: "Sit for a knight".
+ * main engine keeps the analysis going. A row that mates is marked.
  */
 import type { Color, Role } from 'chessops/types';
 import type { Extra, ExtraHost } from './app';
@@ -137,40 +136,21 @@ export class SitPanel implements Extra {
     this.shown = ladder;
     this.box.hidden = !ladder;
     if (!ladder) { this.box.replaceChildren(); return; }
-    const side = ladder.turn === 'white' ? 'White' : 'Black';
-    const now = ladder.rows[0].result;
-    const head = el('div', 'bs-sit-head');
-    head.title = `Each row is its own search of ${ladder.nodes.toLocaleString()} thousand positions`;
-    head.append(el('strong', '', `Sit or move · ${side} to play`));
-    const verdict = this.verdict(ladder);
-    if (verdict) head.append(verdict);
     const table = el('table', 'bs-sit-table');
+    table.title = `Each row is its own search of ${ladder.nodes.toLocaleString()} thousand positions`;
     const heading = el('tr', '');
-    for (const [label, title] of [['Option', ''], ['Eval', ''], ['Gain', 'Better than moving now, for the side to play'], ['Best move', '']]) {
-      const th = el('th', '', label); th.setAttribute('scope', 'col'); if (title) th.title = title; heading.append(th);
+    for (const label of ['Option', 'Eval', 'Best move']) {
+      const th = el('th', '', label); th.setAttribute('scope', 'col'); heading.append(th);
     }
     const body = el('tbody', '');
-    body.append(...ladder.rows.map((row) => this.row(ladder, row, now)));
+    body.append(...ladder.rows.map((row) => this.row(ladder, row)));
     const thead = el('thead', '');
     thead.append(heading);
     table.append(thead, body);
-    this.box.replaceChildren(head, table);
+    this.box.replaceChildren(table);
   }
 
-  /** The cheapest piece that mates, when moving now does not. */
-  private verdict(ladder: Ladder): HTMLElement | null {
-    const mover = ladder.turn === 'white' ? 1 : -1;
-    const mates = (row: Row) => (row.result?.mate ?? 0) * mover > 0;
-    if (mates(ladder.rows[0])) return null;
-    const row = ladder.rows.slice(1).find(mates);
-    if (!row?.role || !row.result?.san) return null;
-    const box = el('span', 'bs-sit-verdict', `Sit for ${ARTICLE[row.role]}`);
-    const moves = Math.abs(row.result.mate!);
-    box.title = moves === 1 ? `${row.result.san} mates` : `Mate in ${moves}, starting ${row.result.san}`;
-    return box;
-  }
-
-  private row(ladder: Ladder, row: Row, now: Row['result']): HTMLElement {
+  private row(ladder: Ladder, row: Row): HTMLElement {
     const color = ladder.turn;
     const mover = color === 'white' ? 1 : -1;
     const item = el('tr', row.role ? 'bs-sit-row' : 'bs-sit-row bs-sit-now');
@@ -192,7 +172,6 @@ export class SitPanel implements Extra {
     option.append(label);
 
     const score = el('td', 'bs-sit-eval');
-    const gain = el('td', 'bs-sit-gain');
     const move = el('td', 'bs-sit-move');
     if (!row.fen) { score.textContent = '—'; move.textContent = 'Hand is full'; }
     else if (row.failed) { score.textContent = '—'; move.textContent = row.failed; move.classList.add('bs-sit-failed'); }
@@ -201,19 +180,9 @@ export class SitPanel implements Extra {
       score.textContent = formatEval(row.result);
       move.textContent = row.result.san ?? '';
       if (row.result.move) item.dataset.move = row.result.move;
-      if (row.role && now) gain.textContent = gainOf(row.result, now, mover);
       if ((row.result.mate ?? 0) * mover > 0) item.classList.add('bs-sit-mates');
     }
-    item.append(option, score, gain, move);
+    item.append(option, score, move);
     return item;
   }
-}
-
-/** How much better waiting is than moving now, in pawns for the side to play; "Mates" when only the wait mates. */
-function gainOf(row: NonNullable<Row['result']>, now: NonNullable<Row['result']>, mover: number): string {
-  const mates = (r: typeof row) => (r.mate ?? 0) * mover > 0;
-  if (mates(row)) return mates(now) ? '—' : 'Mates';
-  if (row.mate !== undefined || now.mate !== undefined) return '—';
-  const pawns = (mover * ((row.cp ?? 0) - (now.cp ?? 0))) / 100;
-  return `${pawns >= 0 ? '+' : '−'}${Math.abs(pawns).toFixed(1)}`;
 }

@@ -18,7 +18,7 @@ import { CrazyBoard, type Brush } from './board';
 import { CevalView } from './ceval';
 import { Engine, MAX_THREADS, type EngineResult, type EngineStatus } from './engine';
 import { renderHand } from './hand';
-import { liveGlyph, winningChances, type Glyph } from './judge';
+import { liveGlyph, type Glyph } from './judge';
 import { openHelp, renderMenu } from './menu';
 import { MoveList } from './moves';
 import { PRACTICE_NODES, Practice } from './practice';
@@ -445,7 +445,6 @@ export class BughouseApp {
   }
 
   private renderCeval() {
-    this.renderGauge();
     const pos = positionOf(this.current.fen);
     const fen = this.threat ? threatFen(this.current.fen) : this.current.fen;
     this.ceval.render({
@@ -461,23 +460,6 @@ export class BughouseApp {
       over: outcomeOf(this.current.fen),
       orientation: this.orientation,
     });
-  }
-
-  /** Lichess's evaluation gauge beside the board: White's winning chances, white from the bottom (top when flipped). */
-  private renderGauge() {
-    const gauge = document.getElementById('ch-gauge');
-    if (!gauge) return;
-    const over = outcomeOf(this.current.fen);
-    const line = this.evals.get(this.current.fen)?.lines[0];
-    const shown = this.mode === 'analysis' && this.settings.engineOn && (!!line || over === 'Checkmate');
-    gauge.classList.toggle('off', !shown);
-    gauge.classList.toggle('flipped', this.orientation === 'black');
-    if (!shown) return;
-    const white = over === 'Checkmate'
-      ? (positionOf(this.current.fen).turn === 'white' ? -1 : 1)
-      : winningChances(line!);
-    gauge.querySelector<HTMLElement>('.ch-gauge-black')!.style.transform = `scaleY(${(1 - white) / 2})`;
-    gauge.title = line ? `Evaluation ${line.mate !== undefined ? `#${line.mate}` : ((line.cp ?? 0) / 100).toFixed(1)}` : over!;
   }
 
   private toggleEngine(on = !this.settings.engineOn) {

@@ -66,7 +66,6 @@ export class MoveList {
     if (rootEdit) out.push(el('div', 'ch-root-edit', `Hands edited at the start: ${rootEdit}`));
     if (settings.inline) out.push(this.inlineView());
     else out.push(...this.columns());
-    if (!tree.root.children.length && !rootEdit) out.push(el('div', 'ch-moves-empty', 'Play a move on the board, or drag a piece in from a hand.'));
     this.box.classList.toggle('ch-moves-inline', settings.inline);
     this.box.replaceChildren(...out);
     this.renderFork();

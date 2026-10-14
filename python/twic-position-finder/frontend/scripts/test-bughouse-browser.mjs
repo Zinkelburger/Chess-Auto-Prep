@@ -68,9 +68,10 @@ try {
   await page.goto(url('r1bqkb1r/pppp1ppp/2n2n2/4p3/4P3/2N2N2/PPPP1PPP/R1BQKB1R[] w KQkq - 4 4'));
   assert.equal(await page.evaluate(() => crossOriginIsolated), true, 'the page is cross-origin isolated');
 
-  // The engine starts and evaluates, with no net to download; the gauge shows it; the sit panel fills.
+  // The engine starts and evaluates, with no net to download; the sit panel fills.
   await evaluated(page);
-  assert.equal(await page.$eval('#ch-gauge', (el) => el.classList.contains('off')), false, 'the gauge shows the evaluation');
+  assert.equal(await page.$('#ch-gauge'), null, 'no evaluation bar beside the board');
+  assert.equal(await page.$('.ch-moves-empty'), null, 'an empty move list has no hint');
   await sitDone(page);
   console.log('sit panel:', (await page.$$eval('#bs-sit .bs-sit-row', (rows) => rows.map((r) => r.textContent))).join(' | '));
   const before = await page.$eval('#ch-pearl', (el) => el.textContent);
@@ -201,12 +202,12 @@ try {
   assert.match(await fen(page), / b /);
   await evaluated(page);
 
-  // The g7 hole: a knight would mate, so the sit panel says to sit for one.
+  // The g7 hole: a knight would mate, and its row is marked as mating.
   await page.goto(url(HOLE));
   await sitDone(page);
-  const verdict = await text(page, '.bs-sit-verdict');
-  console.log('hole:', verdict, '|', (await page.$$eval('#bs-sit .bs-sit-row', (rows) => rows.map((r) => r.textContent))).join(' | '));
-  assert.match(verdict, /Sit for a knight/);
+  console.log('hole:', (await page.$$eval('#bs-sit .bs-sit-row', (rows) => rows.map((r) => r.textContent))).join(' | '));
+  assert.deepEqual(await page.$$eval('#bs-sit th', (ths) => ths.map((th) => th.textContent)), ['Option', 'Eval', 'Best move']);
+  assert.match(await text(page, '#bs-sit .bs-sit-row[data-role="knight"].bs-sit-mates'), /#1.*N@h6/);
   // Hovering a row draws its move solid, in place of the engine's pale arrows.
   await page.hover('#bs-sit .bs-sit-row[data-role="knight"]');
   await page.waitForSelector('cg-container svg g[cgHash$=",h6,blue"]', { timeout: 5_000 });
@@ -217,7 +218,7 @@ try {
   assert.match(await fen(page), /\[N\] w/);
   await page.waitForFunction(() => document.querySelector('#ch-pearl').textContent.startsWith('#'), { timeout: 120_000 });
 
-  // A phone: board, hands with + and −, gauge, engine and sit panel.
+  // A phone: board, hands with + and −, engine and sit panel.
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await page.goto(url('r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R[] w KQkq - 4 4'));
   await evaluated(page);

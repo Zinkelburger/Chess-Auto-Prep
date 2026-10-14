@@ -25,11 +25,10 @@ const icon = {
   title="Bughouse"
   description="Analyse one bughouse board with Fairy-Stockfish in your browser. Add pieces to either hand with + and see the evaluation, the best move, and which piece is worth sitting for."
 >
-  <div class="ch bs" id="ch" data-mode="analysis">
+  <div class="ch" id="ch" data-mode="analysis">
     <section class="ch-stage" aria-label="Board">
       <div class="ch-spare" id="ch-spare-top" role="toolbar" aria-label="Spare pieces" hidden></div>
       <div class="ch-board-wrap" id="ch-board-wrap">
-        <div class="ch-gauge off" id="ch-gauge" aria-hidden="true"><div class="ch-gauge-black"></div><div class="ch-gauge-ticks"></div></div>
         <div id="ch-board" class="bb-board" role="group" aria-label="Bughouse board"></div>
       </div>
       <div class="ch-spare" id="ch-spare-bottom" role="toolbar" aria-label="Spare pieces" hidden></div>
@@ -113,7 +112,6 @@ const icon = {
     </section>
 
     <section class="ch-under" aria-label="Position">
-      <p class="bs-note">One board of a bughouse game. Every capture goes to the partner and leaves this board, and nothing arrives unless you add it to a hand with +.</p>
       <div class="ch-fen-row">
         <label for="ch-fen">FEN</label>
         <input id="ch-fen" class="mono" spellcheck="false" autocomplete="off" />

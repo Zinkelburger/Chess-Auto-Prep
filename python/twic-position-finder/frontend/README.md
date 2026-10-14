@@ -8,7 +8,7 @@ Static Astro site deployed to Cloudflare Pages. Browser preparation tools, one s
 | `/pgn`               | PGN viewer, variations, comments, move entry, local save and export     | `src/prep/*` |
 | `/expectimax`        | Stockfish + Maia expectimax computed on this device                    | `src/prep/*` |
 | `/tactics`            | Tactics Trainer — Stockfish in the browser mines puzzles from games  | `src/tactics/*`                        |
-| `/bughouse`           | Bughouse — one bughouse board on lichess.org/analysis's layout, with + and − on every piece in both hands, lila's board editor, an evaluation gauge and a sit panel; Fairy-Stockfish in the browser | `src/analysis/*`, `../../../tools/prepare_crazyhouse_web.py` |
+| `/bughouse`           | Bughouse — one bughouse board on lichess.org/analysis's layout, with + and − on every piece in both hands, lila's board editor and a sit panel; Fairy-Stockfish in the browser | `src/analysis/*`, `../../../tools/prepare_crazyhouse_web.py` |
 | `/bughouse-puzzles`   | Bughouse Puzzles — mates and tactics mined from FICS games, reserves frozen | `src/bughouse-puzzles/*`, `public/bughouse-puzzles/` |
 | `/charles-clock`      | Charles Clock — a full-screen phone clock with its own `<html>`      | `src/pages/charles-clock.astro`        |
 
@@ -58,8 +58,7 @@ asset limit.
   its hand-written evaluation and nothing large is downloaded. `sit.ts` is the
   sit panel: the side to move's position searched again with one more pawn,
   knight, bishop, rook or queen, one row after another on a second
-  single-threaded engine, naming the cheapest piece that mates ("Sit for a
-  knight"). `board.ts` is the chessground board in analysis and editor modes;
+  single-threaded engine, with the rows that mate marked. `board.ts` is the chessground board in analysis and editor modes;
   `hand.ts` draws a hand with a + above and a − below each piece; `moves.ts`
   is the move list (column or inline, folds, live ?!/?/?? marks, the
   right-click menu with Promote, Make main line, Force variation, Copy PGN,
