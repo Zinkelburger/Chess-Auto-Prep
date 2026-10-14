@@ -16,6 +16,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../chess/fen.dart';
+import '../chess/tournament/config.dart';
+import '../engines/analysis_launch.dart';
+import '../storage/settings.dart';
 import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
 import '../engines/bughouse_backend.dart';
@@ -93,6 +96,14 @@ typedef BughouseOutside = ({
 typedef EngineLauncher =
     Future<EngineStart> Function({required int cores, required int memoryMb});
 
+/// Starts an engine the user registered, with these threads and this table.
+typedef RegisteredEngineLauncher =
+    Future<EngineStart> Function(
+      TournamentEngine engine, {
+      required int cores,
+      required int memoryMb,
+    });
+
 /// Everything the app reaches outside itself — the files, the network, the
 /// engines, the clock — and how long it waits for things, in one value.
 ///
@@ -130,6 +141,8 @@ final class AppEnvironment {
     required this.olderAnalyzed,
     required this.maia,
     required this.launchEngine,
+    this.launchRegisteredEngine = _noRegisteredEngine,
+    int? coresAvailable,
     required this.stopEngines,
     required this.evalCache,
     required this.keepTree,
@@ -163,7 +176,8 @@ final class AppEnvironment {
        lookups = lookups ?? RemoteQueue.none(),
        books = books ?? MemoryBooks(),
        players = players ?? MemoryPlayers(),
-       playerReports = playerReports ?? PlayerReports() {
+       playerReports = playerReports ?? PlayerReports(),
+       coresAvailable = coresAvailable ?? Platform.numberOfProcessors {
     settings.pendingWrites = pendingWrites;
     this.store.pendingWrites = pendingWrites;
   }
@@ -265,6 +279,13 @@ final class AppEnvironment {
         cores: cores,
         memoryMb: memoryMb,
       ),
+      launchRegisteredEngine: (engine, {required cores, required memoryMb}) =>
+          launchAnalysisEngine(
+            engine,
+            engines: engines,
+            cores: cores,
+            memoryMb: memoryMb,
+          ),
       tournaments: FileTournaments(
         root: Directory(p.join(documents.path, 'engine_tournaments')),
         support: support,
@@ -408,6 +429,12 @@ final class AppEnvironment {
   /// The human-move model: the Replies tab, the gaps and the fill.
   final MovePolicy maia;
   final EngineLauncher launchEngine;
+
+  /// Starts an engine registered in Engine tournament for the analysis.
+  final RegisteredEngineLauncher launchRegisteredEngine;
+
+  /// The cores this computer has: half of them is the engine's default.
+  final int coresAvailable;
   final TournamentStore? tournaments;
   final TournamentLauncher? launchTournament;
 
@@ -483,15 +510,60 @@ final class AppEnvironment {
 
   /// A Stockfish with the threads and the table the settings give it now.
   Future<EngineStart> startEngine() => launchEngine(
-    cores: settings.value.engineCores,
+    cores: settings.value.coresOn(coresAvailable),
     memoryMb: settings.value.engineMemoryMb,
   );
 
+  /// The engine the board's analysis runs: the one chosen under Settings ▸
+  /// Engine, with the same threads and table as Stockfish. One that is no
+  /// longer registered, or does not start, gives way to the bundled
+  /// Stockfish, which says so; the analysis never goes without an engine
+  /// for want of the chosen one.
+  Future<EngineStart> startAnalysisEngine() async {
+    final s = settings.value;
+    final id = s.analysisEngine;
+    if (id == Settings.builtInEngine) return startEngine();
+    final engine = await _registered(id);
+    if (engine == null) {
+      log.w('start the analysis engine', 'no registered engine has id $id');
+      return _builtInInstead('The chosen engine is no longer registered');
+    }
+    final started = await launchRegisteredEngine(
+      engine,
+      cores: s.coresOn(coresAvailable),
+      memoryMb: s.engineMemoryMb,
+    );
+    if (started case StartFailed(:final reason)) {
+      log.w('start ${engine.name} for analysis', reason);
+      return _builtInInstead('${engine.name} did not start: $reason');
+    }
+    return started;
+  }
+
+  Future<TournamentEngine?> _registered(String id) async {
+    final registry = await tournaments?.engines();
+    if (registry case TournamentFailed(:final message)) {
+      log.w('read the engine registry for analysis', message);
+    }
+    return switch (registry) {
+      TournamentSaved(:final value) =>
+        value.where((e) => e.id == id && analysesBoard(e)).firstOrNull,
+      _ => null,
+    };
+  }
+
+  Future<EngineStart> _builtInInstead(String notice) async =>
+      switch (await startEngine()) {
+        Started(:final engine) => Started(engine, notice: notice),
+        StartFailed(:final reason) => StartFailed('$notice. $reason'),
+      };
+
   /// Hivemind on half of this machine's cores, as BughouseDB runs it. Not
-  /// the Stockfish setting: that defaults to one core, and a network engine
-  /// on one core takes a minute over what the lab asks in ten seconds.
+  /// the Stockfish setting, which the user may have turned down: a network
+  /// engine on one core takes a minute over what the lab asks in ten
+  /// seconds.
   Future<HivemindStart> startHivemind() =>
-      bughouse.launch(cores: max(1, Platform.numberOfProcessors ~/ 2));
+      bughouse.launch(cores: max(1, coresAvailable ~/ 2));
 }
 
 double _noJitter() => 0;
@@ -678,6 +750,12 @@ Future<bool> _bughouseBundled() async {
 }
 
 Future<List<Player>> _noSavedPlayers() async => const [];
+
+Future<EngineStart> _noRegisteredEngine(
+  TournamentEngine engine, {
+  required int cores,
+  required int memoryMb,
+}) async => const StartFailed('No registered engines here.');
 
 Future<String?> _noFile() async => null;
 

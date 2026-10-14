@@ -6,6 +6,7 @@ import '../../storage/settings_store.dart';
 import 'app_updates.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/move_notation.dart';
+import '../../workspace/engine_settings.dart';
 import '../../workspace/search_settings.dart';
 import 'lichess_account.dart';
 import 'update_rows.dart';
@@ -57,6 +58,38 @@ final class ChoiceSetting<T extends Object> extends SettingControl {
   /// Takes [chosen], one of [options]' values, from a widget that holds the
   /// setting without its type: the row list is one list of controls.
   void pick(Object chosen) => onChanged(chosen as T);
+}
+
+/// One of more choices than fit side by side, typed or picked from what
+/// fits what is typed: the registered engines.
+final class TypedChoiceSetting extends SettingControl {
+  const TypedChoiceSetting({
+    required this.options,
+    required this.value,
+    required this.onChanged,
+  });
+
+  /// Each choice's value and the words it is shown and typed as.
+  final List<(String, String)> options;
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  /// The words [value] is shown as; the first choice's when it is none of
+  /// them, as a choice that went away is.
+  String get text =>
+      options.where((o) => o.$1 == value).firstOrNull?.$2 ?? options.first.$2;
+
+  /// Takes the choice whose words are [typed], ignoring case; words that
+  /// name none change nothing.
+  void pick(String typed) {
+    final key = typed.trim().toLowerCase();
+    for (final (value, label) in options) {
+      if (label.toLowerCase() == key) {
+        if (value != this.value) onChanged(value);
+        return;
+      }
+    }
+  }
 }
 
 /// A whole number, typed or stepped.
@@ -131,9 +164,13 @@ final class AccountSetting extends SettingControl {
 /// lands, not as they were when the rows were built: two changes can land
 /// before the next build — a typed number taken as the field loses focus
 /// to a click on another row — and the second must not undo the first.
+///
+/// [analysisEngines] are the engines registered in Engine tournament that
+/// can analyse, by id and name; the bundled Stockfish is always offered.
 List<SettingGroup> settingGroups({
   required SettingsStore store,
   required int coresAvailable,
+  List<(String, String)> analysisEngines = const [],
   required LichessAccountState account,
   required VoidCallback openLogFolder,
   required VoidCallback openLicences,
@@ -244,28 +281,42 @@ List<SettingGroup> settingGroups({
     ]),
     SettingGroup('Engine', [
       SettingRow(
-        'CPU cores',
+        EngineSettingCopy.engine,
+        TypedChoiceSetting(
+          options: [
+            (Settings.builtInEngine, EngineSettingCopy.builtIn),
+            ...analysisEngines,
+          ],
+          value: s.analysisEngine,
+          onChanged: (id) => change((now) => now.copyWith(analysisEngine: id)),
+        ),
+        hint:
+            'the engine behind the board\'s lines; add more in Engine '
+            'tournament',
+      ),
+      SettingRow(
+        EngineSettingCopy.cores,
         NumberSetting(
-          value: s.engineCores,
+          value: s.coresOn(coresAvailable),
           min: 1,
           max: coresAvailable,
           onChanged: (n) => change((now) => now.copyWith(engineCores: n)),
         ),
-        hint: 'of $coresAvailable on this computer',
+        hint: 'of $coresAvailable on this computer; half by default',
       ),
       SettingRow(
-        'Memory',
+        EngineSettingCopy.memory,
         NumberSetting(
           value: s.engineMemoryMb,
-          min: 16,
+          min: EngineSettingCopy.minMemoryMb,
           max: Settings.maxMemoryMb,
-          step: 64,
+          step: EngineSettingCopy.memoryStep,
           unit: 'MB',
           onChanged: (n) => change((now) => now.copyWith(engineMemoryMb: n)),
         ),
       ),
       SettingRow(
-        'Lines shown',
+        EngineSettingCopy.lines,
         NumberSetting(
           value: s.engineLines,
           min: 1,

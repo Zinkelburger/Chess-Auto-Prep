@@ -160,9 +160,28 @@ Bughouse mode is offered when its engine assets are present.
   of held edits confirms the named document and refuses stale dialog callbacks.
 - Settings includes accounts, engine/training controls, diagnostics, shortcuts,
   licenses and verified update downloads/install-on-close.
-  The engine pane's gear swaps its lines in place for Lines, CPU cores and
-  Memory sliders; both views write the same settings, which the workspace
-  wiring applies to the running engine. The Expectimax tab's gear does the
+  The engine pane (`workspace/engine_pane.dart`) is the switch, one status
+  line and 28px rows of score gutter plus moves; the status
+  (`workspace/engine_status.dart`) says depth, speed and nodes from UCI
+  `info` (`EngineLine.nodes`/`nps`), then the engine's `id name`, and leaves
+  out the depth a found mate runs out to. Its gear swaps the lines in place
+  for typeable Lines shown, CPU cores and Memory steppers
+  (`workspace/engine_settings.dart`, wording shared with Settings ▸ Engine
+  through `EngineSettingCopy`); both write the same settings, which the
+  workspace wiring applies to the running engine. CPU cores is automatic
+  until chosen (`Settings.autoCores`, resolved by `Settings.coresOn` to half
+  the machine) and the table defaults to 256 MB; a file written before
+  `engineDefaults` holds the old 1 core / 128 MB defaults, which read as the
+  new ones. Settings ▸ Engine ▸ Analysis engine picks the bundled Stockfish
+  or an engine registered in Engine tournament (`Settings.analysisEngine`,
+  the registry's id). `AppEnvironment.startAnalysisEngine` starts it for the
+  board's lines and the Analysis tab through `engines/analysis_launch.dart`,
+  with the same threads and table and only the UCI options the engine lists;
+  one that is gone or does not start gives way to Stockfish with a
+  `Started.notice` the status ends with. Fills, reviews and audits keep
+  Stockfish. Stockfish install failures give the player one plain sentence;
+  the file, checksum or `tools/fetch_assets.py` hint goes to the log. The
+  Expectimax tab's gear does the
   same for the search (`workspace/search_settings.dart`): its rows and
   Settings ▸ Expectimax write `Settings.expectimax`
   (`chess/generation/expectimax_options.dart`), and every way of starting a

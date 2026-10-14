@@ -82,6 +82,8 @@ final class WindowFixture {
     WindowInput? input,
     SettingsStore? settings,
     EngineLauncher? launchEngine,
+    this.launchRegisteredEngine,
+    this.coresAvailable,
     this.tournaments,
     this.viewerPlaces,
     this.viewerDrafts,
@@ -96,6 +98,14 @@ final class WindowFixture {
        _maia = maia;
 
   final TournamentStore? tournaments;
+
+  /// Starts an engine registered in [tournaments] for the analysis; by
+  /// default none starts.
+  final RegisteredEngineLauncher? launchRegisteredEngine;
+
+  /// The cores the environment says the computer has; this machine's by
+  /// default.
+  final int? coresAvailable;
   final ViewerPlaces? viewerPlaces;
 
   /// Where held viewer edits are checkpointed; none by default.
@@ -199,6 +209,11 @@ final class WindowFixture {
           _launchEngine ??
           ({required cores, required memoryMb}) async =>
               const StartFailed('no engine in this test'),
+      launchRegisteredEngine:
+          launchRegisteredEngine ??
+          (engine, {required cores, required memoryMb}) async =>
+              const StartFailed('no registered engine in this test'),
+      coresAvailable: coresAvailable,
       stopEngines: () async {},
       evalCache: () => throw StateError('no eval cache in this test'),
       keepTree: (_, _, {required runId}) async {},

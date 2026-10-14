@@ -16,6 +16,7 @@ void main() {
   final reads = <String>[];
   final problems = <LogEntry>[];
   void collect(LogEntry entry) => problems.add(entry);
+  Iterable<String> logged() => problems.map((entry) => entry.line);
 
   String lockWith({required String engineSha, String source = 'src1'}) =>
       jsonEncode({
@@ -103,7 +104,11 @@ void main() {
       utf8.encode(lockWith(engineSha: 'not-it')),
     );
     final result = await install().locate();
-    expect((result as StockfishMissing).reason, contains('does not match'));
+    expect(
+      (result as StockfishMissing).reason,
+      'The bundled Stockfish is damaged.',
+    );
+    expect(logged(), anyElement(contains('does not match')));
     expect(
       await Directory(p.join(support.path, 'app')).list().toList(),
       isEmpty,
@@ -123,10 +128,12 @@ void main() {
     expect(await File(found.path).readAsBytes(), engine);
   });
 
-  test('a build without the engine says what to run', () async {
+  test('a build without the engine says so plainly; the log says what to '
+      'run', () async {
     assets.remove('assets/executables/stockfish-linux.gz');
     final result = await install().locate();
-    expect((result as StockfishMissing).reason, contains('fetch_assets'));
+    expect((result as StockfishMissing).reason, 'This build has no Stockfish.');
+    expect(logged(), anyElement(contains('fetch_assets')));
   });
 
   test('a build without checksums cannot install', () async {
@@ -141,7 +148,10 @@ void main() {
       utf8.encode(lockWith(engineSha: sha256.convert(rubbish).toString())),
     );
     final result = await install().locate();
-    expect((result as StockfishMissing).reason, contains('Could not install'));
+    expect(
+      (result as StockfishMissing).reason,
+      'Stockfish could not be installed.',
+    );
     final app = Directory(p.join(support.path, 'app'));
     expect(
       await app.list().map((e) => p.basename(e.path)).toList(),
@@ -217,7 +227,11 @@ void main() {
 
     final result = await install().locate();
 
-    expect((result as StockfishMissing).reason, contains('does not match'));
+    expect(
+      (result as StockfishMissing).reason,
+      'The bundled Stockfish is damaged.',
+    );
+    expect(logged(), anyElement(contains('does not match')));
   });
 
   test('a failed install leaves no half-unpacked file behind', () async {
@@ -286,7 +300,11 @@ void main() {
     final result = await install().locate();
 
     expect(result, isA<StockfishMissing>());
-    expect((result as StockfishMissing).reason, contains('stamp'));
+    expect(
+      (result as StockfishMissing).reason,
+      'The installed Stockfish could not be checked.',
+    );
+    expect(logged(), anyElement(contains('stamp')));
     expect(
       await File(first.path).readAsBytes(),
       engine,
@@ -299,6 +317,10 @@ void main() {
       utf8.encode('{"stockfish-linux": '),
     );
     final result = await install().locate();
-    expect((result as StockfishMissing).reason, contains('is damaged'));
+    expect(
+      (result as StockfishMissing).reason,
+      'The bundled Stockfish is damaged.',
+    );
+    expect(logged(), anyElement(contains('is damaged')));
   });
 }

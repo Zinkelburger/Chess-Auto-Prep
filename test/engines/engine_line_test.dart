@@ -11,6 +11,16 @@ void main() {
     expect(line.multiPv, 2);
     expect(line.score, const Centipawns(-35));
     expect(line.pv, ['e7e5', 'g1f3', 'b8c6']);
+    expect(line.nodes, 1234567);
+    expect(line.nps, 987654);
+    final white = line.forWhite(whiteToMove: false);
+    expect((white.nodes, white.nps), (1234567, 987654));
+  });
+
+  test('a line without the search counts has none', () {
+    final line = parseInfoLine('info depth 3 score cp 5 pv e2e4')!;
+    expect(line.nodes, isNull);
+    expect(line.nps, isNull);
   });
 
   test('a line without multipv is the best line', () {

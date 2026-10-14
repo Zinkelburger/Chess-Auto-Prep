@@ -12,14 +12,16 @@ import '../ui/theme.dart';
 import 'document_session.dart';
 import 'engine_analysis.dart';
 import 'engine_settings.dart';
+import 'engine_status.dart';
 import 'line_preview.dart';
 import '../ui/app_keys.dart';
 import '../ui/move_notation.dart';
 
 /// The engine's lines for the position on the board, laid out as the old
-/// app's engine bar: a labelled sliding switch and the engine's status,
-/// then one fixed-height row per MultiPV line, each a score gutter and the
-/// line's moves. The score is read in the gutter and nowhere larger.
+/// app's engine bar: a labelled sliding switch and the engine's status —
+/// depth, speed, nodes and name — then one fixed-height row per MultiPV
+/// line, each a score gutter and the line's moves. The score is read in the
+/// gutter and nowhere larger.
 ///
 /// A row keeps its height while it has no line yet, so the moves below never
 /// jump as lines arrive; switched off, only the switch and status remain.
@@ -173,7 +175,6 @@ class _EnginePaneState extends State<EnginePane>
     return _LineRow(
       key: ValueKey('${snapshot.fen.value}:$multiPv'),
       score: line.score.text,
-      depth: line.depth,
       moves: moves,
       onHover: _hover,
       onLeave: _leave,
@@ -184,11 +185,12 @@ class _EnginePaneState extends State<EnginePane>
 
 /// The height reserved only while the engine has something to show. Its
 /// settings take at least their own rows and otherwise the lines' room, so
-/// opening them over three or more lines does not move the board.
+/// opening them over enough lines does not move the board.
 double enginePaneHeight(EngineAnalysis analysis, {bool settingsOpen = false}) {
   final lines = analysis.enabled && !analysis.paused ? analysis.multiPv : 0;
-  final rows = settingsOpen ? max(lines, engineSettingRows) : lines;
-  return engineBarHeight + rows * engineRowHeight;
+  final rows = lines * engineRowHeight;
+  return engineBarHeight +
+      (settingsOpen ? max(rows, engineSettingsHeight) : rows);
 }
 
 /// A sliding switch beside the engine's status, visible when off too, the
@@ -214,8 +216,8 @@ class _Header extends StatelessWidget {
       EngineStarting() => ('Starting…', null),
       EngineFailed(:final reason) => (reason, scheme.error),
       EnginePaused(:final reason) => (reason, scheme.onSurfaceVariant),
-      EngineRunning(:final name) => (
-        best == null ? name : 'Depth ${best.depth} · $name',
+      EngineRunning(:final name, :final notice) => (
+        engineRunningStatus(name, best, notice: notice),
         null,
       ),
     };
@@ -245,7 +247,12 @@ class _Header extends StatelessWidget {
               message: status,
               child: Text(
                 status,
-                style: text.labelSmall?.copyWith(color: colour),
+                // Figures of one width, so the numbers ticking over do not
+                // shuffle the words after them.
+                style: text.labelSmall?.copyWith(
+                  color: colour,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -312,7 +319,6 @@ class _LineRow extends StatefulWidget {
   const _LineRow({
     super.key,
     required this.score,
-    required this.depth,
     required this.moves,
     required this.onHover,
     required this.onLeave,
@@ -320,7 +326,6 @@ class _LineRow extends StatefulWidget {
   });
 
   final String score;
-  final int depth;
   final List<PvMove> moves;
   final void Function(PvMove move, Offset anchor) onHover;
   final VoidCallback onLeave;
@@ -363,19 +368,6 @@ class _LineRowState extends State<_LineRow> {
               child: Text(
                 widget.score,
                 style: monoText.copyWith(color: scheme.onSurface),
-                maxLines: 1,
-              ),
-            ),
-          ),
-          SizedBox(
-            width: MediaQuery.textScalerOf(context).scale(engineDepthWidth),
-            height: engineRowHeight,
-            child: Center(
-              child: Text(
-                'Depth ${widget.depth}',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
                 maxLines: 1,
               ),
             ),

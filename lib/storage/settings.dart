@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' show max;
 
 import 'package:flutter/foundation.dart' show setEquals, mapEquals;
 
@@ -20,8 +21,9 @@ final class Settings {
     this.boardCoordinates = true,
     this.figurines = false,
     this.tournamentFinalPositions = true,
-    this.engineCores = 1,
-    this.engineMemoryMb = 128,
+    this.engineCores = autoCores,
+    this.engineMemoryMb = defaultMemoryMb,
+    this.analysisEngine = builtInEngine,
     this.engineLines = 3,
     this.engineThreat = false,
     this.copyFilesIntoDocuments = true,
@@ -47,11 +49,16 @@ final class Settings {
   final bool figurines;
   final bool tournamentFinalPositions;
 
-  /// Threads the workspace engine may use.
+  /// Threads the workspace engine may use; [autoCores] until the user picks
+  /// a number, which [coresOn] turns into half of the machine.
   final int engineCores;
 
   /// The engine's hash table, in megabytes.
   final int engineMemoryMb;
+
+  /// The registered engine the analysis runs, by its Engine tournament id;
+  /// [builtInEngine] for the bundled Stockfish.
+  final String analysisEngine;
 
   /// How many lines the engine pane shows.
   final int engineLines;
@@ -118,6 +125,33 @@ final class Settings {
 
   static const defaults = Settings();
 
+  /// [engineCores] while the user has not chosen: half of the machine.
+  static const autoCores = 0;
+
+  /// A table that suits a desktop with several engines open at once.
+  static const defaultMemoryMb = 256;
+
+  /// [analysisEngine] for the bundled Stockfish.
+  static const builtInEngine = '';
+
+  /// The threads [engineCores] means on a machine with [available] cores:
+  /// half of them while it is [autoCores], else the choice, kept inside the
+  /// machine.
+  int coresOn(int available) {
+    final most = max(1, available);
+    return engineCores == autoCores
+        ? max(1, most ~/ 2)
+        : engineCores.clamp(1, most);
+  }
+
+  /// Files written before [_engineDefaultsKey] wrote every value, so the old
+  /// defaults there say nothing about a choice: one core and 128 MB read as
+  /// the new defaults. A file that has the key says what it means.
+  static const _engineDefaultsKey = 'engineDefaults';
+  static const _engineDefaultsVersion = 2;
+  static const _legacyCores = 1;
+  static const _legacyMemoryMb = 128;
+
   /// The most the engine rows accept: a table bigger than this or more
   /// lines than this is a tuning job, not a setting.
   static const maxMemoryMb = 4096;
@@ -137,6 +171,7 @@ final class Settings {
     bool? tournamentFinalPositions,
     int? engineCores,
     int? engineMemoryMb,
+    String? analysisEngine,
     int? engineLines,
     bool? engineThreat,
     bool? copyFilesIntoDocuments,
@@ -158,6 +193,7 @@ final class Settings {
         tournamentFinalPositions ?? this.tournamentFinalPositions,
     engineCores: engineCores ?? this.engineCores,
     engineMemoryMb: engineMemoryMb ?? this.engineMemoryMb,
+    analysisEngine: analysisEngine ?? this.analysisEngine,
     engineLines: engineLines ?? this.engineLines,
     engineThreat: engineThreat ?? this.engineThreat,
     copyFilesIntoDocuments:
@@ -184,8 +220,12 @@ final class Settings {
     'boardCoordinates': boardCoordinates,
     'figurines': figurines,
     'tournamentFinalPositions': tournamentFinalPositions,
-    'engineCores': engineCores,
+    _engineDefaultsKey: _engineDefaultsVersion,
+    // Left out while automatic, so an older build reads its own default
+    // rather than a zero it would hand the engine.
+    if (engineCores != autoCores) 'engineCores': engineCores,
     'engineMemoryMb': engineMemoryMb,
+    'analysisEngine': analysisEngine,
     'engineLines': engineLines,
     'engineThreat': engineThreat,
     'copyFilesIntoDocuments': copyFilesIntoDocuments,
@@ -218,6 +258,14 @@ final class Settings {
       return value is T ? value : fallback;
     }
 
+    final legacy = decoded[_engineDefaultsKey] is! int;
+    int engine(String key, int fallback, int oldDefault) {
+      final value = pick<int?>(key, null);
+      return value == null || value < 1 || (legacy && value == oldDefault)
+          ? fallback
+          : value;
+    }
+
     return Settings(
       boardCoordinates: pick('boardCoordinates', defaults.boardCoordinates),
       figurines: pick('figurines', defaults.figurines),
@@ -225,8 +273,13 @@ final class Settings {
         'tournamentFinalPositions',
         defaults.tournamentFinalPositions,
       ),
-      engineCores: pick('engineCores', defaults.engineCores),
-      engineMemoryMb: pick('engineMemoryMb', defaults.engineMemoryMb),
+      engineCores: engine('engineCores', defaults.engineCores, _legacyCores),
+      engineMemoryMb: engine(
+        'engineMemoryMb',
+        defaults.engineMemoryMb,
+        _legacyMemoryMb,
+      ),
+      analysisEngine: pick('analysisEngine', defaults.analysisEngine),
       engineLines: pick('engineLines', defaults.engineLines),
       engineThreat: pick('engineThreat', defaults.engineThreat),
       copyFilesIntoDocuments: pick(
@@ -264,8 +317,10 @@ final class Settings {
     'boardCoordinates',
     'figurines',
     'tournamentFinalPositions',
+    _engineDefaultsKey,
     'engineCores',
     'engineMemoryMb',
+    'analysisEngine',
     'engineLines',
     'engineThreat',
     'copyFilesIntoDocuments',
@@ -303,6 +358,7 @@ final class Settings {
       other.tournamentFinalPositions == tournamentFinalPositions &&
       other.engineCores == engineCores &&
       other.engineMemoryMb == engineMemoryMb &&
+      other.analysisEngine == analysisEngine &&
       other.engineLines == engineLines &&
       other.engineThreat == engineThreat &&
       other.copyFilesIntoDocuments == copyFilesIntoDocuments &&
@@ -325,6 +381,7 @@ final class Settings {
     tournamentFinalPositions,
     engineCores,
     engineMemoryMb,
+    analysisEngine,
     engineLines,
     engineThreat,
     copyFilesIntoDocuments,
