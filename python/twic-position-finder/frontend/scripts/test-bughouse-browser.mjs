@@ -19,10 +19,11 @@ const server = http.createServer(async (req, res) => {
     const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
     let file = path.join(frontend, 'dist', pathname);
     if ((await fs.stat(file)).isDirectory()) file = path.join(file, 'index.html');
-    if (pathname === '/bughouse' || pathname.startsWith('/bughouse/') || pathname.startsWith('/crazyhouse-engine/')) {
+    if (pathname === '/bughouse' || pathname.startsWith('/bughouse/') || pathname.startsWith('/bughouse-engine/')) {
       res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
       res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
     }
+    if (pathname.startsWith('/_astro/')) res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
     res.setHeader('Content-Type', types[path.extname(file)] || 'application/octet-stream');
     res.end(await fs.readFile(file));
   } catch { res.writeHead(404); res.end(); }
@@ -33,7 +34,9 @@ const origin = `http://127.0.0.1:${server.address().port}`;
 const chromeTmp = await fs.mkdtemp(path.join(os.homedir(), '.cache', 'bht-'));
 const browser = await puppeteer.launch({
   executablePath: process.env.CHROME_BIN || '/usr/bin/google-chrome', headless: true,
-  args: ['--disable-dev-shm-usage'], env: { ...process.env, TMPDIR: chromeTmp },
+  // WebGPU in headless Chrome needs these; without a GPU the page falls back to the CPU.
+  args: ['--disable-dev-shm-usage', '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-angle=vulkan', '--ignore-gpu-blocklist'],
+  env: { ...process.env, TMPDIR: chromeTmp },
 });
 const fen = (page) => page.$eval('#ch-fen', (el) => el.value);
 const square = async (page, key) => {
@@ -64,7 +67,12 @@ try {
   await page.setViewport({ width: 1440, height: 900 });
   // Small sit searches keep the check quick on a two-CPU runner.
   await page.goto(`${origin}/bughouse/`);
-  await page.evaluate(() => { localStorage.clear(); localStorage.setItem('bughouse-analysis-v1', JSON.stringify({ sitNodes: 40 })); });
+  // BUGHOUSE_BACKEND=cpu checks the CPU path on a machine that has WebGPU.
+  await page.evaluate((backend) => {
+    localStorage.clear();
+    localStorage.setItem('bughouse-analysis-v2', JSON.stringify({ sitNodes: 100 }));
+    if (backend) localStorage.setItem('bughouse-engine-backend', backend);
+  }, process.env.BUGHOUSE_BACKEND ?? '');
   await page.goto(url('r1bqkb1r/pppp1ppp/2n2n2/4p3/4P3/2N2N2/PPPP1PPP/R1BQKB1R[] w KQkq - 4 4'));
   assert.equal(await page.evaluate(() => crossOriginIsolated), true, 'the page is cross-origin isolated');
 
@@ -84,11 +92,13 @@ try {
   assert.equal(await page.$eval('#ch-hand-top .zh-slot[data-role="knight"]', (el) => el.dataset.nb), '1');
   await page.waitForFunction((b) => {
     const t = document.querySelector('#ch-pearl').textContent;
-    return /^[+\-#]?\d/.test(t) && t !== b && document.querySelector('#ch-engine-info').textContent.startsWith('Depth 1');
+    // Searched for a while, or to its end on a slow CPU.
+    const searched = parseInt(document.querySelector('#ch-engine-info').textContent.replace(/,/g, ''), 10) >= 100 || document.querySelector('#ch-bar').style.width === '100%';
+    return /^[+\-#]?\d/.test(t) && t !== b && searched;
   }, { timeout: 120_000 }, before);
   const after = await page.$eval('#ch-pearl', (el) => el.textContent);
   console.log('eval with a knight in Black’s hand:', after);
-  assert.ok(Number(after) < Number(before) - 1, 'a knight for Black is worth more than a pawn');
+  assert.ok(Number(after) < Number(before), 'a knight for Black is good for Black');
   assert.match(await page.$eval('#ch-moves', (el) => el.textContent), /Hands edited at the start: \+n/);
 
   // − takes it back; − at zero is disabled.
@@ -98,6 +108,7 @@ try {
 
   // Moves by clicking squares, then a drop from the hand by click-and-square.
   await click(page, 'd2'); await click(page, 'd4');
+  await until(page, '#ch-fen', / b /); // d4 is on the board before Black answers
   await click(page, 'e5'); await click(page, 'd4');
   await until(page, '#ch-fen', /\[\] w/); // exd4: the pawn went to Black's partner, not Black's hand
   await page.click('#ch-hand-bottom .ch-step[data-role="knight"][data-step="more"]'); // White +N
@@ -131,12 +142,12 @@ try {
   await page.keyboard.press('x');
   await until(page, '#ch-engine-name', /Show threat/);
   await page.keyboard.press('x');
-  await until(page, '#ch-engine-name', /Fairy-Stockfish/);
+  await until(page, '#ch-engine-name', /Hivemind/);
   // Right-click a move: Lichess's menu, Copy PGN puts the line on the clipboard.
   await page.browserContext().overridePermissions(origin, ['clipboard-read', 'clipboard-write', 'clipboard-sanitized-write']);
   await page.bringToFront();
-  const exd4 = await page.$$('#ch-moves .ch-move');
-  const box = await exd4[1].boundingBox();
+  // Measured and clicked in one go: the move list redraws as the engine reports.
+  const box = await page.$$eval('#ch-moves .ch-move', (moves) => { const r = moves[1].getBoundingClientRect(); return { x: r.x, y: r.y }; });
   await page.mouse.click(box.x + 4, box.y + 4, { button: 'right' });
   assert.deepEqual(await page.$$eval('.ch-menu button', (bs) => bs.map((b) => b.textContent)), ['Force variation', 'Copy main line PGN', 'Delete from here']);
   assert.equal(await page.$$eval('.ch-menu button svg path', (ps) => ps.length), 3); // Lichess's glyph on each item

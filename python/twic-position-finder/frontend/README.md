@@ -8,7 +8,7 @@ Static Astro site deployed to Cloudflare Pages. Browser preparation tools, one s
 | `/pgn`               | PGN viewer, variations, comments, move entry, local save and export     | `src/prep/*` |
 | `/expectimax`        | Stockfish + Maia expectimax computed on this device                    | `src/prep/*` |
 | `/tactics`            | Tactics Trainer — Stockfish in the browser mines puzzles from games  | `src/tactics/*`                        |
-| `/bughouse`           | Bughouse — one bughouse board on lichess.org/analysis's layout, with + and − on every piece in both hands, lila's board editor and a sit panel; Fairy-Stockfish in the browser | `src/analysis/*`, `../../../tools/prepare_crazyhouse_web.py` |
+| `/bughouse`           | Bughouse — one bughouse board on lichess.org/analysis's layout, with + and − on every piece in both hands, lila's board editor and a sit panel; Hivemind in the browser, on the GPU through WebGPU | `src/analysis/*`, `../../../tools/bughouse_web/` |
 | `/bughouse-puzzles`   | Bughouse Puzzles — mates and tactics mined from FICS games, reserves frozen | `src/bughouse-puzzles/*`, `public/bughouse-puzzles/` |
 | `/charles-clock`      | Charles Clock — a full-screen phone clock with its own `<html>`      | `src/pages/charles-clock.astro`        |
 
@@ -29,11 +29,12 @@ npm run test:puzzles   # bughouse puzzles and the puzzle set
 
 Environment (build-time): `PUBLIC_API_URL` (default `https://api.chessautoprep.com`),
 `PUBLIC_TURNSTILE_SITE_KEY` (empty disables the CAPTCHA widget).
-`npm run build` also prepares the engines the pages download: the ONNX
-runtime the Expectimax page's Maia uses (under `/bughouse-engine/`, from the
-[static Hivemind build](../../../tools/bughouse_web/README.md)) and the
-bughouse board's Fairy-Stockfish; all files fit Cloudflare Pages' 25 MiB
-asset limit.
+`npm run build` also prepares the engines the pages download, under
+`/bughouse-engine/`: Hivemind's network in checksum-pinned parts and ONNX
+Runtime (the WebGPU build for the bughouse board, the plain one for the
+Expectimax page's Maia), from the
+[static Hivemind build](../../../tools/bughouse_web/README.md); all files fit
+Cloudflare Pages' 25 MiB asset limit.
 
 ## Layout
 
@@ -51,14 +52,20 @@ asset limit.
 - `src/analysis/` — the bughouse board (`/bughouse`). `tree.ts` is the move
   tree and the hand edits, with bughouse rules for one board: a capture goes
   to the partner and leaves the board, and nothing arrives unless a hand is
-  edited (pure, `npm run test:analysis`). `engine.ts` runs Lichess's
-  Fairy-Stockfish 14 build (`@lichess-org/stockfish-web`) as its
-  `pocketknight` variant: chess with drops from a hand and no captures to
-  hand, which is exactly that rule. The variant has no net, so the engine uses
-  its hand-written evaluation and nothing large is downloaded. `sit.ts` is the
-  sit panel: the side to move's position searched again with one more pawn,
-  knight, bishop, rook or queen, one row after another on a second
-  single-threaded engine, with the rows that mate marked. `board.ts` is the chessground board in analysis and editor modes;
+  edited (pure, `npm run test:analysis`). `engine.ts` runs Hivemind, the
+  bughouse engine, on that one board: its partner board is held still behind
+  it (`tools/bughouse_web/patches/frozen-board.patch`). `hivemind.worker.ts`
+  runs the engine's WebAssembly build and its network with ONNX Runtime Web:
+  on the GPU through WebGPU when the browser has it, evaluating 32 positions
+  per batch (about 350 positions a second on a laptop's integrated GPU), and
+  otherwise on up to four CPU threads, one position at a time (about 25 a
+  second). One worker serves everything: the shown position is searched first
+  for 10 seconds (reports several times a second, as Lichess's engine), then
+  the sit panel's rows (`sit.ts`: the side to move's position again with one
+  more pawn, knight, bishop, rook or queen, mating rows marked). Hivemind's
+  value is a winning chance; lines show it as Lichess's centipawns for that
+  chance. `localStorage['bughouse-engine-backend'] = 'cpu'` forces the CPU
+  path. `board.ts` is the chessground board in analysis and editor modes;
   `hand.ts` draws a hand with a + above and a − below each piece; `moves.ts`
   is the move list (column or inline, folds, live ?!/?/?? marks, the
   right-click menu with Promote, Make main line, Force variation, Copy PGN,
@@ -71,13 +78,13 @@ asset limit.
   comes back on reload when the address still points at its position. A hand
   edit is kept on its position and carried through the moves after it; the
   engine always gets a bare FEN. Hands are capped at 16 of a piece and 64
-  pieces in all. A check a drop could block is mate when the hand is empty,
-  as the engine plays it. The engine is multi-threaded, so `/bughouse` and
-  `/crazyhouse-engine/*` alone are cross-origin isolated (COOP/COEP in
-  `public/_headers` and the dev server in `astro.config.mjs`). After
-  `npm run build`, `npm run test:bughouse:browser` drives the page in
-  headless Chrome with the real engine, at desktop and phone widths, and
-  writes screenshots to `build/bughouse-web/`.
+  pieces in all. The CPU path's threads need SharedArrayBuffer, so `/bughouse`
+  and `/bughouse-engine/*` are cross-origin isolated, and `/_astro/*` (where
+  the worker is bundled) carries COEP too (`public/_headers`, and the dev
+  server in `astro.config.mjs`). After `npm run build`,
+  `npm run test:bughouse:browser` drives the page in headless Chrome with the
+  real engine, at desktop and phone widths, and writes screenshots to
+  `build/bughouse-web/`; `BUGHOUSE_BACKEND=cpu` runs it on the CPU path.
 - `public/stockfish/` — stockfish.js 18 single-threaded build (`stockfish.js` +
   `stockfish.wasm`). `public/piece/` — cburnett SVGs used by both board renderers.
 

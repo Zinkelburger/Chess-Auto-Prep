@@ -7,7 +7,7 @@
  * of a piece no longer in hand) is cut. The tree never checks material counts: any hand chessops accepts
  * is allowed (no kings, at most 64 pieces), capped per piece.
  *
- * Bughouse rules for one board, as Fairy-Stockfish's pocketknight plays them:
+ * Bughouse rules for one board, as the engine plays them with its partner board held still:
  * a capture leaves the board for the partner instead of going to the
  * capturer's hand, and pieces arrive only through a hand edit. Positions are
  * kept in chessops' crazyhouse form, which reads and writes hands in FENs.

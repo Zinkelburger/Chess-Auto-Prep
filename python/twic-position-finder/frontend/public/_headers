@@ -13,8 +13,9 @@
 /bughouse-puzzles/index.json
   Cache-Control: public, max-age=600
 
-# The bughouse board runs Lichess's multi-threaded Fairy-Stockfish, which needs
-# SharedArrayBuffer, so only this page and its engine files are cross-origin isolated.
+# The bughouse board runs Hivemind's network on several CPU threads when the
+# browser has no WebGPU, which needs SharedArrayBuffer, so only this page and
+# its engine files are cross-origin isolated.
 /bughouse
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
@@ -23,8 +24,14 @@
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
 
-/crazyhouse-engine/*
+/bughouse-engine/*
   Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: same-origin
+
+# An isolated page may start a worker only from a script that is isolated too;
+# the engine worker is bundled here. The headers change nothing for other pages.
+/_astro/*
   Cross-Origin-Embedder-Policy: require-corp
   Cross-Origin-Resource-Policy: same-origin
 

@@ -1,8 +1,8 @@
 # Hivemind, end to end
 
 The bughouse engine behind Bughouse Lab, the `bughouse` MCP server and every
-engine match. (The website's Hivemind pages were retired in October 2026; its
-`/bughouse` page now runs Fairy-Stockfish on one board.) This document
+engine match, and the website's `/bughouse` board (one board, the partner board
+held still, on the GPU through WebGPU). This document
 is the one place that explains *how it works* rather than how to call it:
 what the network sees, what the search does with it, and — the question that
 sends everyone here — **why the evaluation sits near 0.00 when one side is
@@ -413,7 +413,7 @@ Four consumers, one engine, sharing only files.
 |---|---|
 | **Bughouse Lab** (desktop) | `lib/features/bughouse/` — `bughouse_engine.dart` owns the process, `bughouse_engine_protocol.dart` parses, `bughouse_eval.dart` calibrates, `bughouse_bundle.dart` unpacks the assets on first analysis |
 | **`bughouse` MCP server** | `tools/mcp/bughouse/` — `engine.py` the UCI client, `board.py` the cross-board rule, `calibration.py` the offset, `analysis.py` the three question shapes (`analyse` / `compare` / `playout`), `tools.py` the schemas |
-| **The browser** (retired) | `tools/bughouse_web/` — the same C++ compiled to WASM, ORT-web for inference; no site page uses it since October 2026 |
+| **The browser** | `tools/bughouse_web/` and `frontend/src/analysis/hivemind.worker.ts` — the same C++ compiled to WASM, ORT-web for inference on WebGPU (batches of 32) or CPU threads |
 | **Engine matches** | [Bughouse matches](BUGHOUSE_MATCHES.md) — one process drives both teams |
 
 `tools/mcp/bughouse/paths.py:locate()` finds the engine in this order:

@@ -1,11 +1,10 @@
-# Static Bughouse Lab (retired from the site)
+# Static Hivemind build
 
 > October 2026: the website's Bughouse Lab, BughouseDB and Bughouse Single
-> Board pages were folded into one `/bughouse` page that runs Fairy-Stockfish
-> instead (see the frontend README). This build stays because
-> `prepare_assets.py` puts the ONNX runtime under `/bughouse-engine/`, where
-> the Expectimax page's Maia loads it. The Lab page described below, and its
-> browser check, no longer exist on the site.
+> Board pages were folded into one `/bughouse` page: one board with the
+> partner board held still (`bh_frozen_search`), run on the GPU through
+> WebGPU in batches, or on CPU threads (see the frontend README). The Lab
+> page described below, and its browser check, no longer exist on the site.
 
 `/bughouse` runs **entirely in the visitor's browser**. Cloudflare Pages only
 serves static files. The API stores completed position evaluations; it runs no engine. No account

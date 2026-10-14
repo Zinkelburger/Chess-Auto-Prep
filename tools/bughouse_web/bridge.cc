@@ -504,15 +504,19 @@ extern "C" {
 // One board searched with the partner board held still (g_frozenBoardB) for
 // the side to move. Stops at the node budget (1..1000000), the time cap
 // (1..3600000 ms), a solved root or Stop. Every reportMs it hands the current
-// lines to Module.onFrozenReport. q values are from the side to move.
-const char* bh_frozen_search(const char* fen, int nodes, int millisCap, int lines, int reportMs) {
+// lines to Module.onFrozenReport. q values are from the side to move. `batch`
+// (1..64) leaves are evaluated together: one at a time suits a CPU, while a
+// GPU needs batches to be fast.
+const char* bh_frozen_search(const char* fen, int nodes, int millisCap, int lines, int reportMs, int batch) {
     try {
         FrozenScope frozen;
         Color side;
         auto board = load_frozen(fen, side);
         if (!board->has_any_legal_move(0)) throw std::runtime_error("The side to move has no move.");
-        Engine engine(0, 1);
-        const auto values = frozen_values(*board, side, engine);
+        // The static values evaluate one position each; the search fills whole batches.
+        Engine single(0, 1);
+        Engine engine(0, std::clamp(batch, 1, 64));
+        const auto values = frozen_values(*board, side, single);
         g_frozenValueOffset = (values[0] + values[1]) / 2;
         frozen_report(("{\"static\":" + std::to_string((values[0] - values[1]) / 2) + "}").c_str());
         SearchParams::RuntimeConfig config;

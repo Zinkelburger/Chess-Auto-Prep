@@ -2,7 +2,7 @@
  * Bughouse analysis: lichess.org/analysis on one bughouse board, with a +
  * above and − below every piece in both hands and lila's board editor.
  * Captures leave for the partner and nothing arrives unless you add it, so
- * the hands are exactly what you set. Fairy-Stockfish searches it, and the
+ * the hands are exactly what you set. Hivemind searches it, and the
  * sit panel (sit.ts) shows what one more piece is worth to the side to move.
  *
  * This file wires the parts together: the tree and the current position,
@@ -16,7 +16,7 @@ import { Material } from 'chessops/setup';
 import type { Color, Role } from 'chessops/types';
 import { CrazyBoard, type Brush } from './board';
 import { CevalView } from './ceval';
-import { Engine, MAX_THREADS, type EngineResult, type EngineStatus } from './engine';
+import { Engine, type EngineResult, type EngineStatus } from './engine';
 import { renderHand } from './hand';
 import { liveGlyph, type Glyph } from './judge';
 import { openHelp, renderMenu } from './menu';
@@ -49,6 +49,10 @@ export interface ExtraHost {
   give(role: Role): void;
   /** Shows a move on the board, in place of the engine's arrows, while the pointer is on it (null to clear). */
   hover(uci: string | null): void;
+  /** Searches a position after the analysis of the shown one; null when cancelled or failed. */
+  evaluate(fen: string, nodes: number): Promise<EngineResult | null>;
+  /** Drops the evaluations asked for so far. */
+  cancelEvaluations(): void;
 }
 
 export interface Extra {
@@ -167,6 +171,8 @@ export class BughouseApp {
       evalOf: (fen) => this.evals.get(fen),
       give: (role) => this.adjust(positionOf(this.current.fen).turn, role, 1),
       hover: (uci) => this.hover(uci, 'blue'),
+      evaluate: (fen, nodes) => this.engine.evaluate(fen, nodes),
+      cancelEvaluations: () => this.engine.cancelEvaluations(),
     }, $('bs-sit'));
 
     this.bind();
@@ -402,13 +408,21 @@ export class BughouseApp {
     if (outcomeOf(this.current.fen)) { this.engine.stop(); this.renderCeval(); return; }
     if (this.practice) this.engine.analyse(this.current.fen, { ...this.settings, multiPv: 1, infinite: false, nodes: PRACTICE_NODES });
     else if (!this.settings.engineOn) { this.engine.stop(); return; }
-    else this.engine.analyse(this.threat ? threatFen(this.current.fen) : this.current.fen, this.settings);
+    else {
+      const fen = this.threat ? threatFen(this.current.fen) : this.current.fen;
+      // A position already searched to its limit is shown as it was, as Lichess keeps its evaluations;
+      // the engine's time then goes to the sit panel.
+      const kept = this.evals.get(fen);
+      if (kept?.done && kept.lines.length >= this.settings.multiPv && !this.settings.infinite) this.engine.stop();
+      else this.engine.analyse(fen, this.settings);
+    }
     this.engine.load().catch(() => { /* Shown in the engine header. */ });
   }
 
   private engineResult(result: EngineResult) {
     const kept = this.evals.get(result.fen);
-    if (!kept || result.depth >= kept.depth || result.lines.length > kept.lines.length || kept.lines.length > this.settings.multiPv)
+    // A position searched again starts from nothing: keep the further search until the new one passes it.
+    if (!kept || result.nodes >= kept.nodes || result.lines.length > kept.lines.length || kept.lines.length > this.settings.multiPv)
       this.evals.set(result.fen, result);
     const searched = this.threat ? threatFen(this.current.fen) : this.current.fen;
     if (result.fen !== this.current.fen && result.fen !== searched) return;
@@ -843,7 +857,7 @@ export class BughouseApp {
       settings.hidden = !settings.hidden;
       $('ch-gear').setAttribute('aria-expanded', String(!settings.hidden));
     };
-    const number = (id: string, key: 'multiPv' | 'threads' | 'hashMb' | 'sitNodes', lo: number, hi: number) => {
+    const number = (id: string, key: 'multiPv' | 'sitNodes', lo: number, hi: number) => {
       const input = document.getElementById(id) as HTMLInputElement | null;
       if (!input) return;
       input.min = String(lo);
@@ -859,10 +873,7 @@ export class BughouseApp {
       };
     };
     number('ch-set-lines', 'multiPv', 1, 5);
-    number('ch-set-threads', 'threads', 1, MAX_THREADS);
-    number('ch-set-hash', 'hashMb', 16, 512);
     number('ch-set-sit', 'sitNodes', 20, 5000);
-    $('ch-set-threads-max').textContent = `of ${MAX_THREADS}`;
     const infinite = $<HTMLInputElement>('ch-set-infinite');
     infinite.checked = this.settings.infinite;
     infinite.onchange = () => { this.settings.infinite = infinite.checked; saveSettings(this.settings); this.analyse(); };

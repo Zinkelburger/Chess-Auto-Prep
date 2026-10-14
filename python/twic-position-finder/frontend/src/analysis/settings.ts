@@ -3,13 +3,13 @@
  * Lichess's analysis settings with Lichess's defaults; the engine ones are
  * its engine gear.
  */
-import { DEFAULT_THREADS, MAX_THREADS, type SearchSettings } from './engine';
+import type { SearchSettings } from './engine';
 
-const KEY = 'bughouse-analysis-v1';
+const KEY = 'bughouse-analysis-v2';
 
 export interface Settings extends SearchSettings {
   engineOn: boolean;
-  /** The sit panel's search for each row, in thousands of nodes. */
+  /** The sit panel's search for each row, in positions. */
   sitNodes: number;
   inline: boolean;
   disclosure: boolean;
@@ -34,7 +34,7 @@ export const TOGGLES: { key: Toggle; label: string; hotkey?: string; group: 'Mov
 ];
 
 const DEFAULTS: Settings = {
-  engineOn: true, multiPv: 2, threads: DEFAULT_THREADS, hashMb: 128, infinite: false, sitNodes: 300,
+  engineOn: true, multiPv: 2, infinite: false, sitNodes: 200,
   inline: false, disclosure: false, liveGlyphs: false, glyphsOnBoard: true,
   bestArrows: true, maneuverArrows: false, variationArrows: true,
 };
@@ -53,8 +53,6 @@ export function loadSettings(key = KEY): Settings {
     for (const name of Object.keys(base) as (keyof Settings)[])
       if (typeof saved[name] === 'boolean' && typeof base[name] === 'boolean') (out[name] as boolean) = saved[name] as boolean;
     out.multiPv = clamp(saved.multiPv, 1, 5, base.multiPv);
-    out.threads = clamp(saved.threads, 1, MAX_THREADS, base.threads);
-    out.hashMb = clamp(saved.hashMb, 16, 512, base.hashMb);
     out.sitNodes = clamp(saved.sitNodes, 20, 5000, base.sitNodes);
   } catch { /* Defaults. */ }
   return out;

@@ -10,9 +10,14 @@ const crossOriginIsolated = {
   configureServer(server) {
     server.middlewares.use((req, res, next) => {
       const path = req.url?.split('?')[0] ?? '';
-      if (path === '/bughouse' || path.startsWith('/bughouse/') || path.startsWith('/crazyhouse-engine/')) {
+      if (path === '/bughouse' || path.startsWith('/bughouse/') || path.startsWith('/bughouse-engine/')) {
         res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
         res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+      } else if (!req.headers.accept?.includes('text/html')) {
+        // Scripts and other files: the engine worker must be isolated to start
+        // from the isolated page. The headers change nothing for other pages.
+        res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+        res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
       }
       next();
     });

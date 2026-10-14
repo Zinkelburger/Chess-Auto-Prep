@@ -4,6 +4,7 @@ import {
   outcomeOf, positionOf, readMove,
 } from '../src/analysis/tree';
 import { liveGlyph, povDiff, verdict, winningChances } from '../src/analysis/judge';
+import { centipawns, mateMoves, toResult } from '../src/analysis/engine';
 
 const ITALIAN = 'r1bqkb1r/pppp1ppp/2n2n2/4p3/4P3/2N2N2/PPPP1PPP/R1BQKB1R[] w KQkq - 4 4';
 
@@ -195,5 +196,20 @@ assert.equal(liveGlyph('white', { cp: 30 }, { cp: -400 })?.symbol, '??');
 assert.equal(liveGlyph('black', { cp: -30 }, { cp: 60 })?.symbol, '?!');
 assert.equal(verdict('white', { cp: 50 }, { cp: 45 }), 'goodMove');
 assert.equal(verdict('black', { cp: 0 }, { cp: 900 }), 'blunder');
+
+// Hivemind's winning chances read as Lichess's centipawns, from White's side.
+assert.equal(centipawns(0), 0);
+assert.ok(centipawns(0.5) > 290 && centipawns(0.5) < 300);
+assert.ok(Math.abs(winningChances({ cp: centipawns(0.3) }) - 0.3) < 0.01, 'the inverse of lila\'s winning chances');
+assert.equal(mateMoves(1), 1);
+assert.equal(mateMoves(2), 1);
+assert.equal(mateMoves(-3), -2);
+const black = toResult('8/8/8/8/8/8/8/k6K[] b - - 0 1', {
+  q: 0.5, mate: null, nodes: 100, depth: 3, elapsed_ms: 5000, done: true,
+  lines: [{ q: 0.5, mate: null, visits: 60, pv: ['a1a2'] }, { q: 0.2, mate: 2, visits: 40, pv: ['a1b2'] }],
+}, true);
+assert.ok(black.lines[0].cp! < 0, 'good for Black is negative');
+assert.equal(black.lines[1].mate, -1, 'Black mates in one');
+assert.equal(black.info, '100 positions · 20/s');
 
 console.log('bughouse analysis tree: ok');

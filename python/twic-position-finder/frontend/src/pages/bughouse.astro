@@ -23,7 +23,7 @@ const icon = {
 ---
 <Base
   title="Bughouse"
-  description="Analyse one bughouse board with Fairy-Stockfish in your browser. Add pieces to either hand with + and see the evaluation, the best move, and which piece is worth sitting for."
+  description="Analyse one bughouse board with Hivemind, the bughouse engine, in your browser. Add pieces to either hand with + and see the evaluation, the best move, and which piece is worth sitting for."
 >
   <div class="ch" id="ch" data-mode="analysis">
     <section class="ch-stage" aria-label="Board">
@@ -47,7 +47,7 @@ const icon = {
               </label>
               <span class="ch-pearl num" id="ch-pearl" aria-live="polite"></span>
               <div class="ch-engine">
-                <span class="ch-engine-name" id="ch-engine-name">Fairy-Stockfish 14</span>
+                <span class="ch-engine-name" id="ch-engine-name">Hivemind</span>
                 <span class="ch-engine-info num" id="ch-engine-info"></span>
               </div>
               <button type="button" class="ch-icon" id="ch-threat" title="Show threat (X)" aria-label="Show threat" aria-pressed="false">
@@ -60,9 +60,7 @@ const icon = {
             </div>
             <div class="ch-settings" id="ch-settings" hidden>
               <label>Lines <input type="number" id="ch-set-lines" inputmode="numeric" /></label>
-              <label>CPUs <input type="number" id="ch-set-threads" inputmode="numeric" /> <span class="dim" id="ch-set-threads-max"></span></label>
-              <label>Memory <input type="number" id="ch-set-hash" inputmode="numeric" step="16" /> <span class="dim">MB</span></label>
-              <label title="How far the engine searches each row of the sit panel">Sit search <input type="number" id="ch-set-sit" inputmode="numeric" step="50" /> <span class="dim">thousand positions</span></label>
+              <label title="How far the engine searches each row of the sit panel">Sit search <input type="number" id="ch-set-sit" inputmode="numeric" step="50" /> <span class="dim">positions</span></label>
               <label class="ch-check"><input type="checkbox" id="ch-set-infinite" /> Infinite analysis</label>
             </div>
             <div class="ch-practice" id="ch-practice" aria-live="polite" hidden></div>

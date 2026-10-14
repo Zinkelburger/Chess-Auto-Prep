@@ -2,14 +2,12 @@
  * The sit panel: for the side to move, what the position is worth if it
  * moves now, and if it waits for one more pawn, knight, bishop, rook or queen
  * from its partner, with the best move once that piece arrives. Each row is
- * its own Fairy-Stockfish search of the same size, one after another on a
- * second single-threaded engine, so the rows compare like with like while the
- * main engine keeps the analysis going. A row that mates is marked.
+ * its own Hivemind search of the same size, run after the analysis of the
+ * position, so the rows compare like with like. A row that mates is marked.
  */
 import type { Color, Role } from 'chessops/types';
 import type { Extra, ExtraHost } from './app';
 import { formatEval } from './ceval';
-import { Engine, type EngineResult } from './engine';
 import { el } from './moves';
 import { adjustHand, outcomeOf, positionOf, sanLine } from './tree';
 
@@ -17,8 +15,6 @@ const ROLES: (Role | null)[] = [null, 'pawn', 'knight', 'bishop', 'rook', 'queen
 const LETTER: Record<Role, string> = { pawn: 'P', knight: 'N', bishop: 'B', rook: 'R', queen: 'Q', king: 'K' };
 const ARTICLE: Record<Role, string> = { pawn: 'a pawn', knight: 'a knight', bishop: 'a bishop', rook: 'a rook', queen: 'a queen', king: 'a king' };
 const SETTLE_MS = 250;
-/** A row whose search never reports (it should within seconds) is given up on. */
-const ROW_TIMEOUT_MS = 120_000;
 
 interface Row {
   role: Role | null;
@@ -28,15 +24,12 @@ interface Row {
   failed?: string;
 }
 
-/** `nodes` is the search size of each row, in thousands of nodes (the setting). */
+/** `nodes` is the search size of each row, in positions (the setting). */
 interface Ladder { fen: string; nodes: number; turn: Color; rows: Row[] }
 
 const keyOf = (fen: string, nodes: number) => `${nodes} ${fen}`;
 
 export class SitPanel implements Extra {
-  private engine: Engine | null = null;
-  /** The row search waiting for its final report. */
-  private pending: { fen: string; resolve: (result: EngineResult | null) => void } | null = null;
   private ladders = new Map<string, Ladder>();
   private shown: Ladder | null = null;
   private generation = 0;
@@ -72,7 +65,7 @@ export class SitPanel implements Extra {
       rows: ROLES.map((role) => ({ role, fen: role ? adjustHand(fen, turn, role, 1) : fen })),
     };
     this.render(ladder);
-    // The main engine starts first; this one loads its own copy once that has.
+    // The engine loads with the analysis; the rows queue behind it.
     if (!this.host.engineReady) return;
     this.schedule(ladder);
   }
@@ -86,31 +79,7 @@ export class SitPanel implements Extra {
 
   private stop() {
     this.generation++;
-    this.engine?.stop();
-    this.settle(null);
-  }
-
-  private settle(result: EngineResult | null) {
-    const pending = this.pending;
-    this.pending = null;
-    pending?.resolve(result);
-  }
-
-  /** One row's search to its end; null when it was stopped. */
-  private search(fen: string, nodes: number): Promise<EngineResult | null> {
-    this.engine ??= new Engine(
-      (status) => { if (status.kind === 'failed') this.settle(null); },
-      (result) => { if (result.done && result.fen === this.pending?.fen) this.settle(result); },
-    );
-    const engine = this.engine;
-    return new Promise((resolve) => {
-      const timer = window.setTimeout(() => this.settle(null), ROW_TIMEOUT_MS);
-      this.pending = { fen, resolve: (result) => { clearTimeout(timer); resolve(result); } };
-      engine.load().then(
-        () => engine.analyse(fen, { multiPv: 1, threads: 1, hashMb: 16, infinite: false, nodes }),
-        () => this.settle(null),
-      );
-    });
+    this.host.cancelEvaluations();
   }
 
   private async run(ladder: Ladder, generation: number) {
@@ -119,7 +88,7 @@ export class SitPanel implements Extra {
     if (generation !== this.generation) return;
     this.ladders.set(keyOf(ladder.fen, ladder.nodes), ladder);
     for (const row of ladder.rows.filter((r) => r.fen && !r.result)) {
-      const found = await this.search(row.fen!, ladder.nodes * 1000);
+      const found = await this.host.evaluate(row.fen!, ladder.nodes);
       if (generation !== this.generation) return;
       const line = found?.lines[0];
       if (!line) row.failed = 'No search';
@@ -137,7 +106,7 @@ export class SitPanel implements Extra {
     this.box.hidden = !ladder;
     if (!ladder) { this.box.replaceChildren(); return; }
     const table = el('table', 'bs-sit-table');
-    table.title = `Each row is its own search of ${ladder.nodes.toLocaleString()} thousand positions`;
+    table.title = `Each row is its own search of ${ladder.nodes.toLocaleString()} positions`;
     const heading = el('tr', '');
     for (const label of ['Option', 'Eval', 'Best move']) {
       const th = el('th', '', label); th.setAttribute('scope', 'col'); heading.append(th);

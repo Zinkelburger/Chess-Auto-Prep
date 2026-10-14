@@ -52,7 +52,10 @@ def main():
     }
     (PUBLIC / "model.json").write_text(json.dumps(manifest, indent=2) + "\n")
     runtime = FRONTEND / "node_modules/onnxruntime-web/dist"
-    for name in ["ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded.wasm"]:
+    # The plain runtime serves the Expectimax page's Maia; the .jsep pair is the
+    # WebGPU build the bughouse board's Hivemind runs on (and its CPU fallback).
+    for name in ["ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded.wasm",
+                 "ort-wasm-simd-threaded.jsep.mjs", "ort-wasm-simd-threaded.jsep.wasm"]:
         shutil.copyfile(runtime / name, PUBLIC / name)
     for name in ["HIVEMIND_LICENSE.txt", "ONNXRUNTIME_LICENSE.txt", "ONNXRUNTIME_THIRD_PARTY_NOTICES.txt"]:
         shutil.copyfile(ROOT / "assets/licenses" / name, PUBLIC / name)

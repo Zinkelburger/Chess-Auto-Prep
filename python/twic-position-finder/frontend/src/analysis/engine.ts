@@ -1,21 +1,23 @@
 /**
- * Fairy-Stockfish 14 from @lichess-org/stockfish-web (Lichess's build),
- * playing its pocketknight variant: chess with drops from a hand, where a
- * capture leaves the board instead of going to the capturer's hand. With the
- * hands set from the page, that is one bughouse board whose partner sends
- * nothing: pieces arrive only when you add them. The variant has no net, so
- * the engine evaluates with its own hand-written terms, which count material
- * that has left the game, and nothing large is downloaded.
+ * Hivemind, the bughouse engine, searching one board: the partner board is
+ * held still behind it (tools/bughouse_web/patches/frozen-board.patch), so
+ * every capture leaves for the partner and nothing arrives unless a hand is
+ * edited. The search runs in one browser worker (hivemind.worker.ts), on the
+ * GPU when the browser offers WebGPU and on the CPU otherwise.
  *
- * The module runs on this page's main thread and searches in its own pthread
- * workers, so the page must be cross-origin isolated (COOP/COEP in
- * public/_headers and the dev server). Positions are always sent as a bare
- * FEN: a hand edited between moves has no move list that leads to it.
+ * One worker serves two kinds of search. The analysis of the shown position
+ * comes first: it reports a few times a second and stops at its time limit,
+ * as Lichess's engine does. Background evaluations (the sit panel's rows) run
+ * after it, one at a time. A new position stops whatever is running. With
+ * infinite analysis, the position is searched again without a limit once the
+ * background evaluations are done; that search is shown once it has looked
+ * at more positions than the first.
+ *
+ * Hivemind's value is a winning chance from the side to move. Lines carry it
+ * as Lichess's centipawns for that chance, from White's side, so the panel,
+ * the arrows and the move marks read them as they would read Stockfish's.
  */
-import type StockfishWeb from '@lichess-org/stockfish-web';
-
-const DIRECTORY = '/crazyhouse-engine/';
-const VARIANT = 'pocketknight';
+import type { Backend, WorkerReply, WorkerRequest } from './hivemind.worker';
 
 /** One principal variation, scored from White's side. */
 export interface EngineLine {
@@ -29,70 +31,97 @@ export interface EngineLine {
 export interface EngineResult {
   fen: string;
   depth: number;
-  knps: number;
   nodes: number;
   /** Time since the search started. */
   millis: number;
   lines: EngineLine[];
-  /** The search ended by itself (time or depth limit). */
+  /** The search ended by itself (its time or node limit). */
   done: boolean;
+  /** "1,234 positions · 380/s", under the engine name. */
+  info: string;
 }
 
 export interface SearchSettings {
   multiPv: number;
-  threads: number;
-  hashMb: number;
   infinite: boolean;
-  /** Stop after this many nodes instead of the time limit (practice, the sit panel). */
+  /** Stop after this many positions instead of the time limit (practice). */
   nodes?: number;
 }
 
 export type EngineStatus =
   | { kind: 'off' }
   | { kind: 'loading'; text: string }
-  | { kind: 'ready' }
+  | { kind: 'ready'; backend: string }
   | { kind: 'failed'; text: string };
 
-export const MAX_THREADS = Math.max(1, Math.min(32, navigator.hardwareConcurrency || 1));
-/** Like Lichess: about all cores but one, leaving the page responsive. */
-export const DEFAULT_THREADS = Math.max(1, MAX_THREADS - (MAX_THREADS % 2 ? 0 : 1));
-/** Without infinite analysis a position is searched this long, as on Lichess. */
-export const SEARCH_MS = 30_000;
+/** Without infinite analysis a position is searched this long. */
+export const SEARCH_MS = 10_000;
+const INFINITE_MS = 3_600_000;
+const REPORT_MS = 400;
+const MAX_NODES = 1_000_000;
+/** Tests can force the CPU path: localStorage `bughouse-engine-backend` = `cpu`. */
+const BACKEND_KEY = 'bughouse-engine-backend';
 
-export function crossOriginReady(): boolean {
-  return typeof SharedArrayBuffer !== 'undefined' && globalThis.crossOriginIsolated === true;
+/** A frozen-board search report from the worker; values from the side to move, mate in plies. */
+export interface FrozenSearch {
+  q: number; mate: number | null; nodes: number; depth: number; elapsed_ms: number; done: boolean;
+  lines: { q: number; mate: number | null; visits: number; pv: string[] }[];
 }
 
-/** The largest shared memory the browser grants, shrinking the maximum as lila does. */
-function sharedMemory(lo = 1024, hi = 32768): WebAssembly.Memory {
-  let shrink = 4;
-  for (;;) {
-    try {
-      return new WebAssembly.Memory({ shared: true, initial: lo, maximum: hi });
-    } catch (e) {
-      if (hi <= lo || !(e instanceof RangeError)) throw e;
-      hi = Math.max(lo, Math.ceil(hi - hi / shrink));
-      shrink = shrink === 4 ? 3 : 4;
-    }
-  }
+/** Lichess's centipawns for a winning chance (the inverse of lila's winningChances). */
+export function centipawns(q: number): number {
+  const w = Math.max(-0.999, Math.min(0.999, q));
+  return Math.round(Math.log((1 + w) / (1 - w)) / 0.00368208);
 }
 
-interface Job { fen: string; settings: SearchSettings; generation: number; started: number }
+/** Mate in moves from a mate in plies, with the sign of who mates. */
+export function mateMoves(plies: number): number {
+  return Math.sign(plies) * Math.max(1, Math.ceil(Math.abs(plies) / 2));
+}
+
+/** One search report as an engine result, scored from White's side. */
+export function toResult(fen: string, report: FrozenSearch, done: boolean): EngineResult {
+  const sign = fen.split(' ')[1] === 'b' ? -1 : 1;
+  const lines: EngineLine[] = report.lines.map((line, i) => ({
+    multipv: i + 1,
+    depth: report.depth,
+    pv: line.pv,
+    ...(line.mate !== null ? { mate: sign * mateMoves(line.mate) } : { cp: sign * centipawns(line.q) }),
+  }));
+  const seconds = report.elapsed_ms / 1000;
+  const rate = seconds > 0.2 ? Math.round(report.nodes / seconds) : 0;
+  return {
+    fen, depth: report.depth, nodes: report.nodes, millis: report.elapsed_ms, lines, done,
+    info: `${report.nodes.toLocaleString()} positions${rate ? ` · ${rate.toLocaleString()}/s` : ''}`,
+  };
+}
+
+interface Job {
+  fen: string;
+  nodes: number;
+  millis: number;
+  lines: number;
+  /** The shown position's analysis; otherwise a background evaluation. */
+  main: boolean;
+  /** Infinite analysis: search on without a limit after the background evaluations. */
+  infinite?: boolean;
+  /** Reports are shown from this many positions on (the unlimited search repeats the first one's work). */
+  shownFrom?: number;
+  settle?: (result: EngineResult | null) => void;
+}
 
 export class Engine {
-  private module: StockfishWeb | null = null;
+  private worker: Worker | null = null;
   private loading: Promise<void> | null = null;
   private status: EngineStatus = { kind: 'off' };
-  /** The search the engine is running; its output is shown until it is replaced. */
-  private running: Job | null = null;
-  /** Sent `stop`; the next search starts on `bestmove`. */
-  private stopping = false;
-  private next: Job | null = null;
-  private generation = 0;
-  private lines = new Map<number, EngineLine>();
-  private knps = 0;
-  private nodes = 0;
-  private sent = new Map<string, string>();
+  private backend: Backend | null = null;
+  private main: Job | null = null;
+  private background: Job[] = [];
+  /** Infinite analysis's unlimited search, waiting for the background evaluations. */
+  private continuation: Job | null = null;
+  /** `superseded`: stopped for other work; `dropped`: its evaluation was cancelled. */
+  private running: { job: Job; id: number; superseded: boolean; dropped: boolean } | null = null;
+  private serial = 0;
 
   constructor(
     private readonly onStatus: (status: EngineStatus) => void,
@@ -106,124 +135,129 @@ export class Engine {
     this.onStatus(status);
   }
 
-  /** Starts the engine; later calls share the same start. */
+  /** Starts the worker and loads the network; later calls share the same start. */
   load(): Promise<void> {
-    this.loading ??= this.boot().catch((e: unknown) => {
-      this.loading = null;
-      this.setStatus({ kind: 'failed', text: e instanceof Error ? e.message : String(e) });
-      throw e;
+    this.loading ??= new Promise<void>((resolve, reject) => {
+      this.setStatus({ kind: 'loading', text: 'Starting Hivemind…' });
+      const worker = new Worker(new URL('./hivemind.worker.ts', import.meta.url), { type: 'module' });
+      this.worker = worker;
+      worker.onmessage = ({ data }: MessageEvent<WorkerReply>) => {
+        if (data.type === 'progress') { if (!this.backend) this.setStatus({ kind: 'loading', text: data.text }); return; }
+        if (data.type === 'ready') {
+          this.backend = data.backend;
+          this.setStatus({ kind: 'ready', backend: data.backend.kind === 'gpu' ? 'GPU' : `CPU × ${data.backend.threads}` });
+          resolve();
+          this.next();
+          return;
+        }
+        if (data.type === 'failed' && data.id === undefined) {
+          this.loading = null;
+          this.worker?.terminate();
+          this.worker = null;
+          this.setStatus({ kind: 'failed', text: data.error });
+          reject(new Error(data.error));
+          return;
+        }
+        this.reply(data);
+      };
+      worker.onerror = () => {
+        this.loading = null;
+        this.worker = null;
+        this.setStatus({ kind: 'failed', text: 'The engine stopped. Reload to try again.' });
+        reject(new Error('worker error'));
+      };
+      let prefer: 'auto' | 'cpu' = 'auto';
+      try { if (localStorage.getItem(BACKEND_KEY) === 'cpu') prefer = 'cpu'; } catch { /* Auto. */ }
+      this.post({ type: 'load', prefer });
     });
+    this.loading.catch(() => undefined);
     return this.loading;
   }
 
-  private async boot() {
-    if (!crossOriginReady()) throw new Error('This browser blocks the shared memory the engine needs. Reload the page, or try another browser.');
-    this.setStatus({ kind: 'loading', text: 'Loading engine…' });
-    const scriptUrl = new URL(DIRECTORY + 'fsf_14.js', location.href).href;
-    const makeModule = await import(/* @vite-ignore */ scriptUrl);
-    const module: StockfishWeb = await makeModule.default({
-      wasmMemory: sharedMemory(),
-      locateFile: (file: string) => new URL(DIRECTORY + file, location.href).href,
-      mainScriptUrlOrBlob: scriptUrl,
-    });
-    module.onError = (msg: string) => this.setStatus({ kind: 'failed', text: msg });
-    module.listen = (line: string) => this.received(line);
-    module.uci(`setoption name UCI_Variant value ${VARIANT}`);
-    module.uci('setoption name Use NNUE value false');
-    this.module = module;
-    this.setStatus({ kind: 'ready' });
-    if (this.next && !this.running) this.start();
-  }
-
-  /** Searches `fen` from now on; any search in progress is stopped first. */
+  /** Searches `fen` from now on, before any background evaluation; a search in progress is stopped first. */
   analyse(fen: string, settings: SearchSettings) {
-    this.next = { fen, settings: { ...settings }, generation: ++this.generation, started: 0 };
-    if (!this.module) return;
-    if (this.running) this.halt();
-    else this.start();
+    this.main = {
+      fen, main: true, lines: settings.multiPv,
+      nodes: settings.nodes ?? MAX_NODES,
+      millis: settings.nodes ? 120_000 : SEARCH_MS,
+      infinite: settings.infinite && !settings.nodes,
+    };
+    this.continuation = null;
+    if (this.running) this.supersede();
+    else this.next();
   }
 
-  /** Stops searching and forgets the queued position. */
+  /** Stops the analysis and forgets it; background evaluations carry on. */
   stop() {
-    this.generation++;
-    this.next = null;
-    if (this.running) this.halt();
+    this.main = null;
+    this.continuation = null;
+    if (this.running?.job.main) this.supersede();
   }
 
-  private halt() {
-    if (this.stopping) return;
-    this.stopping = true;
-    this.module?.uci('stop');
+  /** Searches `fen` for `nodes` positions once the analysis is done; null when cancelled or failed. */
+  evaluate(fen: string, nodes: number): Promise<EngineResult | null> {
+    return new Promise((settle) => {
+      this.background.push({ fen, nodes, millis: 120_000, lines: 1, main: false, settle });
+      if (!this.running) this.next();
+    });
   }
 
-  private setOption(name: string, value: string) {
-    if (this.sent.get(name) === value) return;
-    this.sent.set(name, value);
-    this.module!.uci(`setoption name ${name} value ${value}`);
+  /** Drops every background evaluation, the running one included. */
+  cancelEvaluations() {
+    for (const job of this.background) job.settle?.(null);
+    this.background = [];
+    if (this.running && !this.running.job.main && !this.running.dropped) {
+      this.running.dropped = true;
+      this.running.job.settle?.(null);
+      this.supersede();
+    }
   }
 
-  private start() {
-    const job = this.next;
-    if (!job || !this.module) return;
-    this.next = null;
-    this.running = job;
-    job.started = performance.now();
-    this.lines = new Map();
-    this.knps = 0;
-    this.nodes = 0;
-    this.setOption('Threads', String(job.settings.threads));
-    this.setOption('Hash', String(job.settings.hashMb));
-    this.setOption('MultiPV', String(job.settings.multiPv));
-    this.setOption('UCI_AnalyseMode', 'true');
-    this.module.uci(`position fen ${job.fen}`);
-    const s = job.settings;
-    this.module.uci(s.nodes ? `go nodes ${s.nodes}` : s.infinite ? 'go infinite' : `go depth 99 movetime ${SEARCH_MS}`);
+  private post(message: WorkerRequest) { this.worker?.postMessage(message); }
+
+  /** Stops the running search; its answer is then dropped and the next job starts. */
+  private supersede() {
+    if (!this.running || this.running.superseded) return;
+    this.running.superseded = true;
+    this.post({ type: 'cancel' });
   }
 
-  private received(line: string) {
-    if (line.startsWith('bestmove')) {
-      const finished = this.running;
-      this.running = null;
-      const natural = !this.stopping;
-      this.stopping = false;
-      if (finished && natural && finished.generation === this.generation) this.publish(finished, true);
-      this.start();
+  private next() {
+    if (this.running || !this.backend) return;
+    const job = this.main ?? this.background.shift() ?? this.continuation;
+    if (!job) return;
+    if (job === this.main) this.main = null;
+    if (job === this.continuation) this.continuation = null;
+    const id = ++this.serial;
+    this.running = { job, id, superseded: false, dropped: false };
+    this.post({ type: 'search', id, fen: job.fen, nodes: job.nodes, millis: job.millis, lines: job.lines, reportMs: job.main ? REPORT_MS : 0 });
+  }
+
+  private reply(data: WorkerReply) {
+    const running = this.running;
+    if (!running || !('id' in data) || data.id !== running.id) return;
+    const { job } = running;
+    if (data.type === 'report') {
+      const report = data.data as FrozenSearch;
+      if (job.main && !running.superseded && report.lines?.length && report.nodes >= (job.shownFrom ?? 0))
+        this.onResult(toResult(job.fen, report, false));
       return;
     }
-    const job = this.running;
-    if (!job || this.stopping || !line.startsWith('info ') || !line.includes(' pv ')) return;
-    const parts = line.split(' ');
-    let depth = 0, multipv = 1, cp: number | undefined, mate: number | undefined, bound = false, nps = 0, nodes = 0;
-    let i = 1;
-    for (; i < parts.length; i++) {
-      const key = parts[i];
-      if (key === 'depth') depth = Number(parts[++i]);
-      else if (key === 'multipv') multipv = Number(parts[++i]);
-      else if (key === 'nps') nps = Number(parts[++i]);
-      else if (key === 'nodes') nodes = Number(parts[++i]);
-      else if (key === 'score') {
-        const kind = parts[++i], value = Number(parts[++i]);
-        if (kind === 'cp') cp = value; else mate = value;
-        if (parts[i + 1] === 'lowerbound' || parts[i + 1] === 'upperbound') { bound = true; i++; }
-      } else if (key === 'pv') break;
-      else if (key === 'string') return;
+    this.running = null;
+    if (data.type === 'done') {
+      const final = data.data as FrozenSearch;
+      const result = final.lines.length ? toResult(job.fen, final, !running.superseded) : null;
+      if (job.main) {
+        if (result && !running.superseded && final.nodes >= (job.shownFrom ?? 0)) this.onResult(result);
+        if (job.infinite && !running.superseded && !this.main)
+          this.continuation = { ...job, millis: INFINITE_MS, infinite: false, shownFrom: final.nodes };
+      } else if (running.dropped) { /* Settled when it was cancelled. */ }
+      else if (running.superseded) this.background.unshift(job); // stopped for the analysis: run it again later
+      else job.settle?.(result);
+    } else if (data.type === 'failed') {
+      if (job.main && !running.superseded) this.setStatus({ kind: 'failed', text: data.error });
+      if (!running.dropped) job.settle?.(null);
     }
-    // Only the first line's bounds are noise; later lines may only ever have bounds.
-    if (bound && multipv === 1) return;
-    const pv = parts.slice(i + 1).filter(Boolean);
-    if (!pv.length) return;
-    const blackToMove = job.fen.split(' ')[1] === 'b';
-    const sign = blackToMove ? -1 : 1;
-    if (multipv === 1) this.lines = new Map([...this.lines].filter(([, l]) => l.depth >= depth - 1));
-    this.lines.set(multipv, { multipv, depth, pv, cp: cp === undefined ? undefined : cp * sign, mate: mate === undefined ? undefined : mate * sign });
-    if (nps) this.knps = Math.round(nps / 1000);
-    if (nodes) this.nodes = nodes;
-    this.publish(job, false);
-  }
-
-  private publish(job: Job, done: boolean) {
-    const lines = [...this.lines.values()].sort((a, b) => a.multipv - b.multipv).slice(0, job.settings.multiPv);
-    if (!lines.length) return;
-    this.onResult({ fen: job.fen, depth: lines[0].depth, knps: this.knps, nodes: this.nodes, millis: performance.now() - job.started, lines, done });
+    this.next();
   }
 }

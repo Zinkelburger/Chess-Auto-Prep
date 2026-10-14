@@ -54,7 +54,7 @@ export class CevalView {
   constructor(
     private readonly els: { header: HTMLElement; pearl: HTMLElement; name: HTMLElement; info: HTMLElement; bar: HTMLElement; threat: HTMLButtonElement; pvs: HTMLElement; board: HTMLElement; switch: HTMLInputElement },
     hooks: CevalHooks,
-    private readonly engineName = 'Fairy-Stockfish 14',
+    private readonly engineName = 'Hivemind',
   ) {
     const { pvs } = els;
     pvs.addEventListener('mouseover', (e) => {
@@ -88,7 +88,7 @@ export class CevalView {
     header.classList.toggle('ch-threat-mode', state.threat);
     threat.hidden = !state.enabled || state.inCheck || !!state.over;
     threat.setAttribute('aria-pressed', String(state.threat));
-    name.textContent = state.threat ? 'Show threat' : this.engineName;
+    name.textContent = state.threat ? 'Show threat' : state.status.kind === 'ready' ? `${this.engineName} · ${state.status.backend}` : this.engineName;
     info.classList.remove('ch-failed');
     pvs.replaceChildren();
     bar.style.width = '0';
@@ -104,7 +104,7 @@ export class CevalView {
       return;
     }
     pearl.textContent = formatEval(result.lines[0]);
-    info.textContent = `Depth ${result.depth}${result.knps ? ` · ${result.knps.toLocaleString()} kn/s` : ''}`;
+    info.textContent = result.info;
     const progress = result.millis / SEARCH_MS;
     bar.style.width = `${result.done || state.infinite ? 100 : Math.min(100, 100 * progress)}%`;
     for (let i = 0; i < state.multiPv; i++) pvs.append(this.row(state, result.lines[i]));
