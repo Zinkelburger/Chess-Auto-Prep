@@ -15,13 +15,13 @@ void main() {
 
   tearDown(() => fixture.dispose());
 
-  Future<void> pump(WidgetTester tester) async {
+  Future<void> pump(WidgetTester tester, {double width = 300}) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: darkTheme(),
         home: Scaffold(
           body: SizedBox(
-            width: 300,
+            width: width,
             height: navRowHeight,
             child: GameCounter(session: fixture.session),
           ),
@@ -83,5 +83,21 @@ void main() {
       tester.widget<TextField>(find.byType(TextField)).controller?.text,
       '1',
     );
+  });
+
+  testWidgets('fits whole beside the move field on a 280-pixel board, and '
+      'gives way rather than spilling on a narrower one', (tester) async {
+    await pump(tester, width: 280 - moveFieldWidth);
+    expect(tester.takeException(), isNull);
+    expect(find.text('of 3'), findsOneWidget);
+    expect(find.byTooltip('Previous game (↑)'), findsOneWidget);
+    expect(find.byTooltip('Next game (↓)'), findsOneWidget);
+    expect(tester.getSize(find.byType(TextField)).width, gameNumberWidth);
+    for (final width in [120.0, 60.0, 30.0]) {
+      await pump(tester, width: width);
+      expect(tester.takeException(), isNull, reason: '$width wide');
+      expect(find.byType(TextField), findsOneWidget);
+    }
+    expect(find.byTooltip('Next game (↓)'), findsNothing);
   });
 }

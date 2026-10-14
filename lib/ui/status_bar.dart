@@ -12,10 +12,12 @@ typedef StatusAction = ({String label, VoidCallback onPressed});
 typedef Say =
     void Function(String sentence, {StatusAction? action, bool problem});
 
-/// One line across the window under the top bar: what the last action could
-/// not do, in the error colour, or where the result of one that worked went
-/// (a copy saved, chapters added to a study) on a plain panel, until the next
-/// thing said replaces it or the user closes it.
+/// The window's sentence about the last action, in the top bar's empty
+/// middle: what the action could not do, in the error colour, or where the
+/// result of one that worked went (a copy saved, chapters added to a
+/// study) in the text colour, until the next thing said replaces it or the
+/// user closes it. One line, its whole text on hover; it takes no room of
+/// its own, so a sentence coming or going moves nothing on the page.
 ///
 /// This is the app's one place for a sentence about an action. There are no
 /// snackbars: they cover the board and stay up after the user has read them.
@@ -39,39 +41,45 @@ class StatusBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final ink = problem ? scheme.onErrorContainer : scheme.onSurface;
-    return Container(
-      width: double.infinity,
-      color: problem ? scheme.errorContainer : scheme.surfaceContainerHigh,
-      padding: const EdgeInsets.only(left: Space.l, right: Space.s),
-      child: Row(
-        children: [
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: Space.s),
-              child: Semantics(
-                liveRegion: true,
-                child: Text(text, style: TextStyle(color: ink)),
+    final ink = problem ? scheme.error : scheme.onSurface;
+    return Row(
+      children: [
+        Flexible(
+          child: Tooltip(
+            message: text,
+            child: Semantics(
+              liveRegion: true,
+              child: Text(
+                text,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: ink),
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
-          if (action case final action?)
-            TextButton(
-              onPressed: () {
-                onClose();
-                action.onPressed();
-              },
-              style: TextButton.styleFrom(foregroundColor: ink),
-              child: Text(action.label),
-            ),
-          IconButton(
-            onPressed: onClose,
-            icon: Icon(Icons.close, size: IconSize.action, color: ink),
-            tooltip: 'Close',
-            visualDensity: VisualDensity.compact,
+        ),
+        if (action case final action?)
+          TextButton(
+            onPressed: () {
+              onClose();
+              action.onPressed();
+            },
+            child: Text(action.label),
           ),
-        ],
-      ),
+        IconButton(
+          onPressed: onClose,
+          icon: Icon(
+            Icons.close,
+            size: IconSize.menu,
+            color: scheme.onSurfaceVariant,
+          ),
+          tooltip: 'Close',
+          visualDensity: VisualDensity.compact,
+        ),
+      ],
     );
   }
 }

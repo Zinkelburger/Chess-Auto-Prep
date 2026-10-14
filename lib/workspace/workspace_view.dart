@@ -605,8 +605,8 @@ class _BoardAndCounterState extends State<_BoardAndCounter>
     with ListeningState<_BoardAndCounter> {
   double _engineRoom = 0;
 
-  /// Whether the engine shows its settings in place of its lines: here,
-  /// because the room the pane is given depends on it.
+  /// Whether the engine shows its settings in place of its lines, kept for
+  /// as long as the board is.
   final _engineSettings = ValueNotifier(false);
 
   @override
@@ -622,14 +622,11 @@ class _BoardAndCounterState extends State<_BoardAndCounter>
     super.dispose();
   }
 
-  /// The engine's room: none while part of the game is hidden, and none on
-  /// a quiet board until the engine is on.
+  /// The engine's room, the same whether it is on, off, paused, showing
+  /// its settings or kept out of a hidden answer, so none of those changes
+  /// the board's size. Only the number of lines asked for changes it.
   double _room() =>
-      !widget.engineInBoard ||
-          widget.session.shownTo != null ||
-          (widget.quiet && !widget.analysis.enabled)
-      ? 0
-      : enginePaneHeight(widget.analysis, settingsOpen: _engineSettings.value);
+      widget.engineInBoard ? enginePaneHeight(widget.analysis) : 0;
 
   @override
   void didUpdateWidget(_BoardAndCounter oldWidget) {
@@ -638,8 +635,7 @@ class _BoardAndCounterState extends State<_BoardAndCounter>
   }
 
   @override
-  Listenable listenableOf(_BoardAndCounter widget) =>
-      Listenable.merge([widget.session, widget.analysis, _engineSettings]);
+  Listenable listenableOf(_BoardAndCounter widget) => widget.analysis;
 
   @override
   void changed() {
@@ -647,6 +643,15 @@ class _BoardAndCounterState extends State<_BoardAndCounter>
     if (!mounted || room == _engineRoom) return;
     setState(() => _engineRoom = room);
   }
+
+  /// The engine in its room; on a quiet board the room stays blank until
+  /// the engine is on.
+  Widget _engine() => ListenableBuilder(
+    listenable: widget.analysis,
+    builder: (context, _) => widget.quiet && !widget.analysis.enabled
+        ? const SizedBox.shrink()
+        : SingleChildScrollView(child: widget.engine(_engineSettings)),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -703,12 +708,7 @@ class _BoardAndCounterState extends State<_BoardAndCounter>
                   },
                 ),
                 const SizedBox(height: Space.s),
-                SizedBox(
-                  height: _engineRoom,
-                  child: SingleChildScrollView(
-                    child: widget.engine(_engineSettings),
-                  ),
-                ),
+                SizedBox(height: _engineRoom, child: _engine()),
                 _navigation(),
                 MoveFeedback(entry: widget.moves),
                 if (below >= moveNoteMinHeight) _note(side, below),

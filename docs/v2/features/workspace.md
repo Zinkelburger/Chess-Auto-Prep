@@ -58,8 +58,11 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   200px board under the move, a click plays the line up to it, the chevron opens six rows; the
   crosshair at the row's end is Show threat (built 2026-09-28); no gear, nodes or settings yet. The old app's large headline score was tried and dropped.
   Since 2026-09-23 it sits **under the board**, not above the card's tabs (owner: "ugly above all
-  the tabs"). Since 2026-09-27 the engine switch and status stay visible when off; only the PV rows
-  collapse. The engine starts off on every app launch. The same switch turns it
+  the tabs"). Since 2026-09-27 the engine switch and status stay visible when off. Since 2026-10-14 the
+  rows keep their room, blank, while the engine is off or paused and under its settings (the
+  room is the larger of the lines and the settings' rows), so the board never changes size;
+  a quiet board (the viewer) keeps the whole room blank until the engine is on, and a hidden
+  puzzle answer keeps it blank too. The engine starts off on every app launch. The same switch turns it
   on or retries a failed start, alongside E and
   Actions ▸ Board ▸ Engine on. A paused engine keeps its switch and status.
   Training boards likewise reserve no empty engine area.)

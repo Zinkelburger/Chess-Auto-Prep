@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -83,37 +85,72 @@ class _GameCounterState extends State<GameCounter>
         final total = _order.length;
         if (widget.session.game == null) return const SizedBox.shrink();
         final text = Theme.of(context).textTheme;
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.chevron_left, size: IconSize.action),
-              tooltip: AppKey.previousGame.tip('Previous game'),
-              onPressed: total == 0 || at == 0
-                  ? null
-                  : () => widget.session.showGame(
-                      _order[at == null ? total - 1 : at - 1],
-                    ),
-              visualDensity: VisualDensity.compact,
-            ),
-            SizedBox(width: gameNumberWidth, child: _numberBox(text)),
-            const SizedBox(width: Space.s),
-            Text('of $total', style: text.bodySmall),
-            IconButton(
-              icon: const Icon(Icons.chevron_right, size: IconSize.action),
-              tooltip: AppKey.nextGame.tip('Next game'),
-              onPressed: total == 0 || at == total - 1
-                  ? null
-                  : () => widget.session.showGame(
-                      _order[at == null ? 0 : at + 1],
-                    ),
-              visualDensity: VisualDensity.compact,
-            ),
-          ],
+        final previous = total == 0 || at == 0
+            ? null
+            : () => widget.session.showGame(
+                _order[at == null ? total - 1 : at - 1],
+              );
+        final next = total == 0 || at == total - 1
+            ? null
+            : () => widget.session.showGame(_order[at == null ? 0 : at + 1]);
+        // Whole beside the move field on a 280-pixel board. Narrower, `of N`
+        // is cut short first, then the steps go (↑ and ↓ still walk), so
+        // the row never spills.
+        return LayoutBuilder(
+          builder: (context, room) {
+            final steps =
+                room.maxWidth >=
+                2 * _stepWidth + gameNumberWidth + Space.s + Space.xl;
+            final number = min(
+              gameNumberWidth,
+              max(0.0, room.maxWidth - Space.s),
+            );
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (steps)
+                  _step(
+                    Icons.chevron_left,
+                    AppKey.previousGame.tip('Previous game'),
+                    previous,
+                  ),
+                SizedBox(width: number, child: _numberBox(text)),
+                const SizedBox(width: Space.s),
+                Flexible(
+                  child: Text(
+                    'of $total',
+                    style: text.bodySmall,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (steps)
+                  _step(
+                    Icons.chevron_right,
+                    AppKey.nextGame.tip('Next game'),
+                    next,
+                  ),
+              ],
+            );
+          },
         );
       },
     );
   }
+
+  /// How wide a step's button is at the small icon size.
+  static const _stepWidth = IconSize.menu + 2 * Space.s;
+
+  /// A step to the game before or after, at the small icon size the
+  /// engine's header uses, so the counter fits beside the move field.
+  Widget _step(IconData icon, String tooltip, VoidCallback? onPressed) =>
+      IconButton(
+        icon: Icon(icon, size: IconSize.menu),
+        tooltip: tooltip,
+        onPressed: onPressed,
+        visualDensity: VisualDensity.compact,
+      );
 
   /// The game's number, typed over to jump; the enter key goes there.
   Widget _numberBox(TextTheme text) => TextField(
