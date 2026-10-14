@@ -137,12 +137,21 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   the side at the bottom as ours. Opening a file sets it aside for the window's life:
   Actions ▸ Analysis board ▸ `Analysis board` goes back to it. `New analysis board from here` (Ctrl+N)
   replaces it with the line on the board up to the cursor, from any file, game or the board
-  itself, facing the same way. On the board, Ctrl+V / `Paste PGN or FEN` replaces it with
-  a pasted PGN (first game, variations and comments kept), bare moves or a FEN; `Save to
+  itself, facing the same way. Ctrl+V / `Paste PGN or FEN` puts a pasted PGN (first game,
+  variations and comments kept), bare moves or a FEN on a new analysis board from any mode
+  (2026-10-14): only in the builder and trainer with a chapter up does a PGN become a
+  repertoire instead (Actions ▸ `Paste PGN as repertoire`). A FEN may be quoted, a
+  `[FEN "…"]` tag or cut short (missing fields read `w - - 0 1`); it faces the side to move,
+  and one that cannot be played says why (`Not a playable FEN. The board is empty.`). A blank
+  board — nothing played or edited — is replaced in its tab rather than joined by another.
+  Tactics, the trainer and the modes without a board open it in the Repertoire builder; the
+  Bughouse lab names its own paste. `Set up position…` (Ctrl+Shift+E, Actions ▸ Board) opens
+  the board editor on the position on the board, the same way up, and `Use this position`
+  puts it on an analysis board. With the Analysis tab up, both fill that tab instead. `Save to
   repertoire…` and `Save to study…` ask where, then the chapter name, and write a new
   chapter (the board's side as its colour). Closing the window forgets it, as on lichess.
   Owners: `DocumentSession` (`isScratch`, `KeptBoard` in `workspace/document_session.dart`),
-  `chess/pgn/analysis_board.dart`, `boardActions` in `app/mode_view.dart`.
+  `chess/pgn/analysis_board.dart`, `BoardDoors` and `boardActions` in `app/board_doors.dart`.
 - **Move field** (v2, 2026-09-23) — a small `Type a move` box at the left of the row under
   the board, on every board the user plays on: a chapter, the analysis board, a puzzle, a Train
   drill and the explorer Book's free board. SAN or UCI in any case (`nf3`, `g1f3`, `0-0`, `e1h1`,
@@ -158,7 +167,8 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   at home; an en-passant picker only when a candidate exists) and a FEN field with copy, paste,
   Apply, Discard. No move-number or halfmove field, and nothing is legality-checked as you work.
   (v2, 2026-09-28: `workspace/board_editor.dart`, embedded in the study's New chapter dialog and a
-  `Set up a position` dialog for Set starting position and the tournament's `Edit position…`.
+  `Set up a position` dialog for Set starting position, the analysis board's `Set up
+  position…` and the tournament's `Edit position…`.
   Castling boxes are always shown, disabled without king and rook at home; en passant is a chip
   row, `None` plus the candidates. The FEN field sets the board as soon as it reads, so there is
   no Apply/Discard; unreadable text says `Could not read that FEN.` and an illegal setup names
@@ -176,7 +186,8 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
 | Space | Play/pause replay; show/hide solution in a trainer (v2: autoplay in the PGN Viewer, one move a second, any navigation stops it) |
 | F / E | Flip the board / toggle the engine |
 | F11 | Fullscreen (v2: the whole window, every mode; Actions ▸ Window ▸ `Full screen`) |
-| Ctrl+V, Ctrl+Shift+V | Paste PGN, paste FEN (v2: a FEN as a new analysis board from anything open; Actions ▸ `Paste FEN`) |
+| Ctrl+V, Ctrl+Shift+V | Paste PGN, paste FEN (v2: Ctrl+V reads by content, see Analysis board; Ctrl+Shift+V takes a FEN only) |
+| Ctrl+Shift+E | Set up a position in the board editor (v2) |
 | Ctrl+Z | Undo the last repertoire add |
 | Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+W | Next / previous tab of the reading card; close the tab that is up (v2) |
 | / | Focus the move field under the board (v2) |

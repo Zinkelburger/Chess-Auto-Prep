@@ -60,6 +60,18 @@ Bughouse mode is offered when its engine assets are present.
   timers; Resume reclaims the board in the visible Train pane. Back to lines
   ends it explicitly. Accepted ratings finish saving while paused; a changed
   source invalidates the retained lesson. Training records remain under Documents.
+- The analysis board (`chess/pgn/analysis_board.dart`, `DocumentSession.showAnalysisBoard`)
+  takes the clipboard and the board editor through `app/board_doors.dart`.
+  Ctrl+V reads by content: a FEN (quoted, a `[FEN "…"]` tag, or cut short and
+  filled in as `w - - 0 1`), a PGN or bare moves becomes an analysis board,
+  except a PGN in the builder or trainer with a chapter up, which becomes a
+  repertoire; Ctrl+Shift+V takes a FEN only. A FEN faces the side to move. A
+  blank board (nothing played or edited) is reused rather than opening another
+  tab. Tactics, the trainer and the modes without a board send the board to the
+  Repertoire builder; the Bughouse lab names its own paste. `Set up position…`
+  (Ctrl+Shift+E) opens the shared `workspace/board_editor.dart` on the board's
+  position and returns an analysis board the same way up. While the Analysis
+  tab is up, both fill that tab's scratch game instead.
 - Viewer owns collections, selection/filter/sort and held edits; analysis tabs
   preserve their source draft. Export uses the exclusive PGN exporter. It opens
   on the moves alone (`viewerTabs`), has its own Explorer starting on `This
