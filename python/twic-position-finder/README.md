@@ -128,7 +128,9 @@ Booking uses the same API server and `PUBLIC_API_URL`. Schedule env (defaults ta
 
 Endpoints: `GET /health`, `GET /api/slots` (returns window, `blocked_dates`, `available_weekdays`, `available_date_exceptions`, slot grid metadata, and open `slots`), `POST /api/book`, `GET /api/bookings` (admin, `X-API-Key`). Offered times use a 90-minute grid from noon; each lesson is 90 minutes and the last start is 7:30 PM (ends 9 PM). Weekends are closed except dates listed in `BOOKING_AVAILABLE_DATES`. See `booking-service/README.md` for full API notes.
 
-### BughouseDB (`/bughousedb`)
+### BughouseDB API
+
+Its `/bughousedb` web page was retired in October 2026; the API below remains.
 
 A shared, precomputed Hivemind book for bughouse, like chessdb.cn: every
 legal move on both boards, scored for the priority cases Hivemind can tell

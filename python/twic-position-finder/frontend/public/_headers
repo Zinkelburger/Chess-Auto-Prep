@@ -1,5 +1,10 @@
+# Stockfish runs as a worker inside the Expectimax page's worker, which is
+# bundled under /_astro/ and so isolated (below): a worker started from an
+# isolated worker must be isolated too, or the browser refuses to start it.
 /stockfish/*
   Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: same-origin
 
 /piece/*
   Cache-Control: public, max-age=31536000, immutable
@@ -13,20 +18,26 @@
 /bughouse-puzzles/index.json
   Cache-Control: public, max-age=600
 
-# Crazyhouse Analysis runs Lichess's multi-threaded Fairy-Stockfish, which needs
-# SharedArrayBuffer, so only this page and its engine files are cross-origin isolated.
-/crazyhouse
+# The bughouse board runs Hivemind's network on several CPU threads when the
+# browser has no WebGPU, which needs SharedArrayBuffer, so only this page and
+# its engine files are cross-origin isolated.
+/bughouse
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
 
-/crazyhouse/*
+/bughouse/*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
 
-/crazyhouse-engine/*
+/bughouse-engine/*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
   Cross-Origin-Resource-Policy: same-origin
 
-/crazyhouse-engine/net-*
-  Cache-Control: public, max-age=31536000, immutable
+# An isolated page may start a worker only from a script that is isolated too;
+# the engine worker is bundled here. Every bundled worker is then isolated, so
+# a worker it starts must be isolated as well (see /stockfish/* above).
+/_astro/*
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: same-origin
+

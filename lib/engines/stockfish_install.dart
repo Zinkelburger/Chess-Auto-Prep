@@ -84,26 +84,19 @@ final class StockfishInstall {
         );
         return await helper.exists()
             ? StockfishReady(helper.path)
-            : const StockfishMissing(
-                'This build has no signed Stockfish helper',
-              );
+            : _missing('no signed helper at ${helper.path}', _noEngine);
       }
     }
     final bytes = await readAsset(_lockAsset);
-    if (bytes == null) {
-      return const StockfishMissing('This build has no Stockfish checksums');
-    }
+    if (bytes == null) return _missing('$_lockAsset is not bundled', _noEngine);
     final _Release? release;
     try {
       release = _release(bytes);
     } on FormatException catch (e) {
-      log.e('read $_lockAsset', e);
-      return StockfishMissing('$_lockAsset is damaged: $e');
+      return _missing('$_lockAsset is damaged: $e', _damaged);
     }
     if (release == null) {
-      return StockfishMissing(
-        'This build has no Stockfish checksums for $_lockKey',
-      );
+      return _missing('$_lockAsset has no entry for $_lockKey', _noEngine);
     }
     final binary = File(p.join(supportDirectory.path, _binaryName));
     final stamp = File('${binary.path}.origin');
@@ -111,9 +104,9 @@ final class StockfishInstall {
     try {
       installed = await binary.exists() ? await _stamped(stamp) : null;
     } on FileSystemException catch (e) {
-      log.e('read ${stamp.path}', e);
-      return StockfishMissing(
-        'Could not read the Stockfish stamp: ${e.message}',
+      return _missing(
+        'read the stamp ${stamp.path}: $e',
+        'The installed Stockfish could not be checked.',
       );
     }
     // Every launch, not only an install: a relaunch soon after a killed
@@ -154,8 +147,11 @@ final class StockfishInstall {
   ) async {
     final compressed = await readAsset('assets/executables/$_binaryName.gz');
     if (compressed == null) {
-      return const StockfishMissing(
-        'This build has no bundled Stockfish; run tools/fetch_assets.py',
+      // A development checkout that has not fetched its engines.
+      return _missing(
+        'assets/executables/$_binaryName.gz is not bundled; '
+        'run tools/fetch_assets.py',
+        _noEngine,
       );
     }
     try {
@@ -163,8 +159,7 @@ final class StockfishInstall {
     } catch (e) {
       // A corrupt asset, a full disk, a read-only support folder: the pane
       // says so and starts without an engine rather than hanging.
-      log.e('install $_binaryName', e);
-      return StockfishMissing('Could not install $_binaryName: $e');
+      return _missing('$e', 'Stockfish could not be installed.');
     }
   }
 
@@ -192,12 +187,13 @@ final class StockfishInstall {
       final problem = await Isolate.run(
         () => _unpack(compressed, expected, partial.path),
       );
-      if (problem != null) return StockfishMissing(problem);
+      if (problem != null) return _missing(problem, _damaged);
       if (!Platform.isWindows) {
         final chmod = await Process.run('chmod', ['+x', partial.path]);
         if (chmod.exitCode != 0) {
-          return StockfishMissing(
-            'Could not make $_binaryName runnable: ${chmod.stderr}',
+          return _missing(
+            'chmod +x ${partial.path}: ${chmod.stderr}',
+            'Stockfish could not be made runnable.',
           );
         }
       }
@@ -262,6 +258,16 @@ String? _unpack(Uint8List compressed, String expectedSha256, String partial) {
   File(partial).writeAsBytesSync(engine, flush: true);
   return null;
 }
+
+/// What the player reads is one plain sentence; what a developer needs —
+/// the file, the checksum, the command to run — goes to the log.
+StockfishMissing _missing(String detail, String reason) {
+  log.e('install $_binaryName', detail);
+  return StockfishMissing(reason);
+}
+
+const _noEngine = 'This build has no Stockfish.';
+const _damaged = 'The bundled Stockfish is damaged.';
 
 Future<String?> _stamped(File stamp) async =>
     await stamp.exists() ? (await stamp.readAsString()).trim() : null;

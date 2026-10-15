@@ -30,6 +30,6 @@ target_link_options(hivemind PRIVATE
   -sENVIRONMENT=web,worker,node -sALLOW_MEMORY_GROWTH=1
   -sINITIAL_MEMORY=67108864 -sMAXIMUM_MEMORY=536870912 -sSTACK_SIZE=2097152
   -sASYNCIFY=1 -sASYNCIFY_STACK_SIZE=131072
-  "-sEXPORTED_FUNCTIONS=['_bh_init','_bh_position','_bh_search','_bh_search_nodes','_bh_values']"
-  "-sEXPORTED_RUNTIME_METHODS=['ccall','HEAPF32']")
+  "-sEXPORTED_FUNCTIONS=['_bh_init','_bh_position','_bh_search','_bh_search_nodes','_bh_values','_bh_frozen_search']"
+  "-sEXPORTED_RUNTIME_METHODS=['ccall','HEAPF32','UTF8ToString']")
 set_target_properties(hivemind PROPERTIES SUFFIX ".mjs")

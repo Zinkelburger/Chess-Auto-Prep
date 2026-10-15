@@ -4,12 +4,12 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 const result = await build({
-  entryPoints: [fileURLToPath(new URL('../tests/crazyhouse.ts', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../tests/analysis.ts', import.meta.url))],
   bundle: true, write: false, platform: 'node', format: 'esm', target: 'node22',
 });
-const dir = await mkdtemp(path.join(tmpdir(), 'crazyhouse-test-'));
+const dir = await mkdtemp(path.join(tmpdir(), 'analysis-test-'));
 try {
-  const file = path.join(dir, 'test.mjs');
+  const file = path.join(dir, 'analysis.mjs');
   await writeFile(file, result.outputFiles[0].text);
   await import(pathToFileURL(file).href);
 } finally { await rm(dir, { recursive: true, force: true }); }

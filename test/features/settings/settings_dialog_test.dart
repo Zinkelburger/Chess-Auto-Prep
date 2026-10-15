@@ -49,6 +49,7 @@ void main() {
   List<SettingGroup> rows() => settingGroups(
     store: store,
     coresAvailable: 8,
+    analysisEngines: const [('engine-1', 'Komodo Dragon 3')],
     account: account,
     openLogFolder: () => opened++,
     openLicences: () => licences++,
@@ -148,14 +149,14 @@ void main() {
     await selectPlace(tester, 'Engine');
     await tester.pumpAndSettle();
     expect(find.text('CPU cores'), findsOneWidget);
-    expect(find.text('of 8 on this computer'), findsOneWidget);
+    expect(find.text('of 8 on this computer; half by default'), findsOneWidget);
     final plus = find.widgetWithIcon(IconButton, Icons.add).first;
     await tester.tap(plus);
     await tester.pumpAndSettle();
-    expect(store.value.engineCores, 2);
+    expect(store.value.engineCores, 5, reason: 'one more than half of 8');
     final boxes = find.byType(TextField);
-    // The first box after the search field is the cores box.
-    await tester.enterText(boxes.at(1), '99');
+    // After the search field and the engine's name, the cores box.
+    await tester.enterText(boxes.at(2), '99');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
     expect(store.value.engineCores, 8, reason: 'kept inside the range');
@@ -260,10 +261,53 @@ void main() {
     await selectPlace(tester, 'Engine');
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    await tester.scrollUntilVisible(
+      find.byTooltip('Increase CPU cores'),
+      100,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView).last,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Increase CPU cores'));
     await tester.pumpAndSettle();
-    expect(store.value.engineCores, 2);
+    expect(store.value.engineCores, 5);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the analysis engine is typed or picked from the registered '
+      'ones; words that name none change nothing', (tester) async {
+    await pump(tester);
+    await selectPlace(tester, 'Engine');
+    await tester.pumpAndSettle();
+    final field = find.byType(TextField).at(1);
+    expect(
+      tester.widget<TextField>(field).controller!.text,
+      'Stockfish 19 (built in)',
+    );
+    await tester.tap(field);
+    await tester.pumpAndSettle();
+    await tester.enterText(field, 'drag');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Komodo Dragon 3').last);
+    await tester.pumpAndSettle();
+    expect(store.value.analysisEngine, 'engine-1');
+    expect(tester.widget<TextField>(field).controller!.text, 'Komodo Dragon 3');
+
+    await tester.tap(field);
+    await tester.enterText(field, 'Houdini');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(store.value.analysisEngine, 'engine-1');
+
+    await tester.tap(field);
+    await tester.enterText(field, 'stockfish 19 (built in)');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(store.value.analysisEngine, '');
   });
 
   Future<void> accounts(WidgetTester tester) async {

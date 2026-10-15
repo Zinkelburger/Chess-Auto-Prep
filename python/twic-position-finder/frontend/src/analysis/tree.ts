@@ -1,12 +1,16 @@
 /**
- * The analysis tree for one crazyhouse board, with hands that can be edited
+ * The analysis tree for one bughouse board, with hands that can be edited
  * between moves. A hand edit is kept on its node as a change against the
  * position its move produced, and is carried through every move after it, as
  * material arriving from a partner would be. Replaying after an earlier edit
  * re-applies each later edit; a continuation that is no longer legal (a drop
  * of a piece no longer in hand) is cut. The tree never checks material counts: any hand chessops accepts
- * is allowed (no kings, at most 64 pieces), capped per piece at what
- * Fairy-Stockfish's NNUE can represent.
+ * is allowed (no kings, at most 64 pieces), capped per piece.
+ *
+ * Bughouse rules for one board, as the engine plays them with its partner board held still:
+ * a capture leaves the board for the partner instead of going to the
+ * capturer's hand, and pieces arrive only through a hand edit. Positions are
+ * kept in chessops' crazyhouse form, which reads and writes hands in FENs.
  */
 import { makeFen, parseFen, INITIAL_FEN } from 'chessops/fen';
 import { makeSan as chessopsSan, parseSan } from 'chessops/san';
@@ -18,10 +22,25 @@ import { chessgroundDests } from 'chessops/compat';
 import type { Color, Move, Role, SquareName } from 'chessops/types';
 
 export const START_FEN = INITIAL_FEN.replace(' w ', '[] w ');
-/** Fairy-Stockfish's NNUE has 16 slots per piece type and side for counts in hand. */
+/** The most of one piece a hand holds (a full board's worth of pawns and then some). */
 export const MAX_IN_HAND = 16;
 export const HAND_ROLES: Role[] = ['pawn', 'knight', 'bishop', 'rook', 'queen'];
 const LETTER: Record<Role, string> = { pawn: 'p', knight: 'n', bishop: 'b', rook: 'r', queen: 'q', king: 'k' };
+
+/** Plays a legal move by bughouse rules: chessops banks a capture in the mover's hand, but it goes to the partner. */
+function playMove(pos: Crazyhouse, move: Move) {
+  const turn = pos.turn;
+  const hand = pos.pockets![turn].clone();
+  pos.play(move);
+  if ('role' in move) hand[move.role]--;
+  pos.pockets![turn] = hand;
+}
+
+/** Checkmate or stalemate; null while play goes on. */
+export function outcomeOf(fen: string): 'Checkmate' | 'Stalemate' | null {
+  const pos = positionOf(fen);
+  return pos.isCheckmate() ? 'Checkmate' : pos.isStalemate() ? 'Stalemate' : null;
+}
 
 export interface TreeNode {
   id: string;
@@ -186,7 +205,7 @@ export function playLine(fen: string, ucis: string[], limit = ucis.length): Line
     const move = readMove(pos, uci);
     if (!move) break;
     const san = makeSan(pos, move);
-    pos.play(move);
+    playMove(pos, move);
     out.push({ uci, san, fen: fenOf(pos) });
   }
   return out;
@@ -302,7 +321,7 @@ export class Tree {
     const parent = this.parent(id);
     if (!parent) return this.loadedFen;
     const pos = positionOf(parent.fen);
-    pos.play(parseUci(node.uci)!);
+    playMove(pos, parseUci(node.uci)!);
     return fenOf(pos);
   }
 
@@ -315,7 +334,7 @@ export class Tree {
     const existing = parent.children.find((c) => c.uci === makeUci(move));
     if (existing) return existing;
     const san = makeSan(pos, move);
-    pos.play(move);
+    playMove(pos, move);
     const child: TreeNode = { id: newId(), ply: parent.ply + 1, uci: makeUci(move), san, fen: fenOf(pos), children: [] };
     parent.children.push(child);
     this.index(child, parent);
@@ -338,9 +357,9 @@ export class Tree {
     for (const child of node.children) {
       const pos = positionOf(node.fen);
       const move = parseUci(child.uci);
-      if (!move || !pos.isLegal(move)) { this.unindex(child); continue; }
+      if (!move || !readMove(pos, child.uci)) { this.unindex(child); continue; }
       child.san = makeSan(pos, move);
-      pos.play(move);
+      playMove(pos, move);
       child.fen = applyDelta(fenOf(pos), child.hand);
       kept.push(child);
       this.replay(child);
@@ -465,7 +484,7 @@ export class Tree {
   }
 
   private headers(): string[] {
-    const headers = ['[Event "Crazyhouse analysis"]', '[Site "https://chessautoprep.com/crazyhouse"]', '[Variant "Crazyhouse"]'];
+    const headers = ['[Event "Bughouse analysis"]', '[Site "https://chessautoprep.com/bughouse"]', '[Variant "Bughouse"]'];
     if (this.root.fen !== START_FEN) headers.push(`[FEN "${this.root.fen}"]`, '[SetUp "1"]');
     return headers;
   }
@@ -508,7 +527,7 @@ export class Tree {
     out.push(node.san);
   }
 
-  /** A tree from a crazyhouse PGN (the first game; any variant tag is read as crazyhouse). */
+  /** A tree from a bughouse or crazyhouse PGN (the first game; any variant tag is read as this page's rules). */
   static fromPgn(text: string): Tree | null {
     const game = parsePgn(text)[0];
     if (!game) return null;

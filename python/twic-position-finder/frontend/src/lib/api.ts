@@ -267,68 +267,6 @@ export async function logout(token: string): Promise<void> {
   }
 }
 
-// ── BughouseDB (bughousedb.py) ─────────────────────────────────────
-
-/** Which team may choose not to move: ahead = A + B's priority, behind = C + D's. */
-export type Clock = 'ahead' | 'even' | 'behind' | 'both';
-export type Team = 'AB' | 'CD';
-
-export interface BookScore { q: number | null; cp: number | null; mate: number | null; pv: string }
-
-export interface BookMove {
-  board: 'A' | 'B';
-  uci: string;
-  san: string;
-  seat: 'A' | 'B' | 'C' | 'D';
-  /** The team that searches the position after this move. */
-  answerer: Team;
-  child_fen: string;
-  scores: Record<Clock, BookScore> | null;
-}
-
-export interface BookPick { clock: Clock; team: Team; best: string; q: number | null; cp: number | null; mate: number | null; pv: string }
-
-export interface BookPosition {
-  key: string;
-  fen: string;
-  found: boolean;
-  turn: { A: 'white' | 'black'; B: 'white' | 'black' };
-  /** Teams with a legal move somewhere. */
-  teams: Team[];
-  moves: BookMove[];
-  picks: BookPick[];
-  expectimax?: BughouseExpectimaxTables;
-  evaluations?: { profile: string; nodes: number; analysis: import('../bughouse/types').Analysis }[];
-  /** `computers`: how many computers have analysed it; the first one's scores are shown. */
-  meta: { source: string; engine: string; nodes: number; child_nodes: number; created_at: number; computers: number } | null;
-}
-
-export interface RawSearch { q: number | null; mate: number | null; pv: string[]; best: string | null; nodes: number }
-
-export interface BookUpload {
-  ticket: string;
-  fen: string;
-  engine: string;
-  nodes: number;
-  child_nodes: number;
-  own: { team: Team; ahead: boolean; search: RawSearch }[];
-  moves: { board: 'A' | 'B'; uci: string; on: RawSearch | null; off: RawSearch | null }[];
-}
-
-/** The position after `moves` (board-tagged UCI, e.g. ["A:e2e4", "B:P@e6"]) from `fen`. */
-export function bookPosition(fen: string, moves: string[] = []): Promise<BookPosition> {
-  const line = moves.length ? `&moves=${encodeURIComponent(moves.join(' '))}` : '';
-  return request(`/api/bughousedb/position?fen=${encodeURIComponent(fen)}${line}`, { fallback: 'Could not load the position.' });
-}
-
-export function bookTicket(fen: string): Promise<{ ticket: string; key: string; expires_in: number }> {
-  return request('/api/bughousedb/ticket', { method: 'POST', body: { fen }, fallback: 'Could not start the analysis.' });
-}
-
-export function bookUpload(body: BookUpload): Promise<{ key: string; moves: number; computers: number; position?: BookPosition }> {
-  return request('/api/bughousedb/position', { method: 'POST', body, fallback: 'Could not upload the analysis.' });
-}
-
 // ── Small DOM helpers shared by the alert pages ───────────────────
 
 export type AlertKind = 'success' | 'error' | 'info' | 'warn';
@@ -348,40 +286,4 @@ export function hideAlert(el: HTMLElement): void {
 export function messageOf(err: unknown, fallback = 'Something went wrong.'): string {
   if (err instanceof ApiError) return err.message;
   return fallback;
-}
-
-
-export interface BughouseExpectedMove {
-  uci: string; san: string; probability: number;
-  eval: number; white: number; black: number; coverage: number;
-  nodes: number; depth: number | null; replies: BughouseExpectedMove[];
-}
-export interface BughouseExpectimax {
-  model: string; plies: number; nodes: number; updated: number;
-  perspective: 'white-on-selected-board'; rows: BughouseExpectedMove[];
-}
-export type BughouseExpectimaxTables = Record<'A' | 'B', BughouseExpectimax | null>;
-export function bughouseExpectimax(fen: string): Promise<BughouseExpectimaxTables> {
-  return request(`/api/bughousedb/expectimax?fen=${encodeURIComponent(fen)}`);
-}
-
-// Shared Lab evaluations are distinct from a completed expectimax tree.
-export interface EvaluationSettings {
-  fen: string; team: 'white' | 'black'; required: string; clock: string; nodes: number;
-}
-export function savedEvaluation(settings: EvaluationSettings): Promise<{ analysis: import('../bughouse/types').Analysis | null }> {
-  const query = new URLSearchParams(Object.entries(settings).map(([k, v]) => [k, String(v)]));
-  return request(`/api/bughousedb/evaluation?${query}`, { timeoutMs: 5000 });
-}
-export function evaluationTicket(fen: string): Promise<{ ticket: string }> {
-  return request('/api/bughousedb/evaluation/ticket', { timeoutMs: 10000, method: 'POST', body: { fen } });
-}
-export function uploadEvaluation(settings: EvaluationSettings, ticket: string, result: import('../bughouse/types').Analysis): Promise<{ analysis: import('../bughouse/types').Analysis }> {
-  const raw = (s: import('../bughouse/types').RawEvaluation | null) => s ? {
-    q: s.q, mate: s.mate, nodes: s.nodes, best: s.best?.uci ?? null, pv: s.pv ?? [],
-  } : null;
-  return request('/api/bughousedb/evaluation', { timeoutMs: 10000, method: 'POST', body: {
-    ...settings, ticket, ours: raw(result.raw!.ours), theirs: raw(result.raw!.theirs),
-    static_values: result.raw!.static_values, candidates: result.lines.flatMap(line => line.best ? [line.best.uci] : []),
-  } });
 }

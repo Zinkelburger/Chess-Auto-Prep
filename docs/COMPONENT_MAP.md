@@ -60,6 +60,18 @@ Bughouse mode is offered when its engine assets are present.
   timers; Resume reclaims the board in the visible Train pane. Back to lines
   ends it explicitly. Accepted ratings finish saving while paused; a changed
   source invalidates the retained lesson. Training records remain under Documents.
+- The analysis board (`chess/pgn/analysis_board.dart`, `DocumentSession.showAnalysisBoard`)
+  takes the clipboard and the board editor through `app/board_doors.dart`.
+  Ctrl+V reads by content: a FEN (quoted, a `[FEN "…"]` tag, or cut short and
+  filled in as `w - - 0 1`), a PGN or bare moves becomes an analysis board,
+  except a PGN in the builder or trainer with a chapter up, which becomes a
+  repertoire; Ctrl+Shift+V takes a FEN only. A FEN faces the side to move. A
+  blank board (nothing played or edited) is reused rather than opening another
+  tab. Tactics, the trainer and the modes without a board send the board to the
+  Repertoire builder; the Bughouse lab names its own paste. `Set up position…`
+  (Ctrl+Shift+E) opens the shared `workspace/board_editor.dart` on the board's
+  position and returns an analysis board the same way up. While the Analysis
+  tab is up, both fill that tab's scratch game instead.
 - Viewer owns collections, selection/filter/sort and held edits; analysis tabs
   preserve their source draft. Export uses the exclusive PGN exporter. It opens
   on the moves alone (`viewerTabs`), has its own Explorer starting on `This
@@ -160,9 +172,28 @@ Bughouse mode is offered when its engine assets are present.
   of held edits confirms the named document and refuses stale dialog callbacks.
 - Settings includes accounts, engine/training controls, diagnostics, shortcuts,
   licenses and verified update downloads/install-on-close.
-  The engine pane's gear swaps its lines in place for Lines, CPU cores and
-  Memory sliders; both views write the same settings, which the workspace
-  wiring applies to the running engine. The Expectimax tab's gear does the
+  The engine pane (`workspace/engine_pane.dart`) is the switch, one status
+  line and 28px rows of score gutter plus moves; the status
+  (`workspace/engine_status.dart`) says depth, speed and nodes from UCI
+  `info` (`EngineLine.nodes`/`nps`), then the engine's `id name`, and leaves
+  out the depth a found mate runs out to. Its gear swaps the lines in place
+  for typeable Lines shown, CPU cores and Memory steppers
+  (`workspace/engine_settings.dart`, wording shared with Settings ▸ Engine
+  through `EngineSettingCopy`); both write the same settings, which the
+  workspace wiring applies to the running engine. CPU cores is automatic
+  until chosen (`Settings.autoCores`, resolved by `Settings.coresOn` to half
+  the machine) and the table defaults to 256 MB; a file written before
+  `engineDefaults` holds the old 1 core / 128 MB defaults, which read as the
+  new ones. Settings ▸ Engine ▸ Analysis engine picks the bundled Stockfish
+  or an engine registered in Engine tournament (`Settings.analysisEngine`,
+  the registry's id). `AppEnvironment.startAnalysisEngine` starts it for the
+  board's lines and the Analysis tab through `engines/analysis_launch.dart`,
+  with the same threads and table and only the UCI options the engine lists;
+  one that is gone or does not start gives way to Stockfish with a
+  `Started.notice` the status ends with. Fills, reviews and audits keep
+  Stockfish. Stockfish install failures give the player one plain sentence;
+  the file, checksum or `tools/fetch_assets.py` hint goes to the log. The
+  Expectimax tab's gear does the
   same for the search (`workspace/search_settings.dart`): its rows and
   Settings ▸ Expectimax write `Settings.expectimax`
   (`chess/generation/expectimax_options.dart`), and every way of starting a

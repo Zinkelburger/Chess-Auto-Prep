@@ -14,7 +14,7 @@ const {
   title,
   wide = false,
   fill = false,
-  description = 'Chess Auto Prep — TWIC alerts, tactics from your games, Bughouse Lab and puzzles, crazyhouse analysis, and the Charles Clock.',
+  description = 'Chess Auto Prep — TWIC alerts, tactics from your games, bughouse analysis and puzzles, and the Charles Clock.',
 } = Astro.props;
 const path = Astro.url.pathname.replace(/\/$/, '') || '/';
 
@@ -23,10 +23,8 @@ const NAV = [
   { href: '/expectimax', label: 'Expectimax', match: ['/expectimax'] },
   { href: '/twic-notifications', label: 'TWIC Alerts', match: ['/twic-notifications', '/dashboard', '/verify', '/unsubscribe'] },
   { href: '/tactics', label: 'Tactics Trainer', match: ['/tactics'] },
-  { href: '/bughouse', label: 'Bughouse Lab', match: ['/bughouse'] },
+  { href: '/bughouse', label: 'Bughouse', match: ['/bughouse'] },
   { href: '/bughouse-puzzles', label: 'Bughouse Puzzles', match: ['/bughouse-puzzles'] },
-  { href: '/bughousedb', label: 'BughouseDB', match: ['/bughousedb'] },
-  { href: '/crazyhouse', label: 'Crazyhouse', match: ['/crazyhouse'] },
   { href: '/charles-clock', label: 'Charles Clock', match: ['/charles-clock'] },
 ];
 ---
@@ -58,6 +56,13 @@ const NAV = [
       </div>
     </div>
   </nav>
+  <script is:inline>
+    // A scrolled link row starts with the current page in view.
+    (() => {
+      const row = document.querySelector('.nav-links'), active = row && row.querySelector('a.active');
+      if (active && row.scrollWidth > row.clientWidth) row.scrollLeft = active.offsetLeft - (row.clientWidth - active.offsetWidth) / 2;
+    })();
+  </script>
   <main id="content" class:list={[{ wide, fill }]}>
     <slot />
   </main>
@@ -154,7 +159,7 @@ const NAV = [
     backdrop-filter: blur(10px);
   }
   .nav-inner {
-    max-width: 1100px;
+    max-width: 1680px;
     margin: 0 auto;
     padding: 0 24px;
     display: flex;
@@ -170,25 +175,33 @@ const NAV = [
     text-decoration: none;
     letter-spacing: -0.02em;
     white-space: nowrap;
+    flex: none;
   }
   .nav-logo:hover { color: var(--text); }
-  .nav-links { display: flex; gap: 4px; }
+  /* One row that scrolls sideways when the links do not fit; never wraps. */
+  .nav-links { position: relative; display: flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .nav-links::-webkit-scrollbar { display: none; }
   .nav-links a {
     font-size: 0.88rem;
     font-weight: 600;
     color: var(--text-dim);
     text-decoration: none;
-    padding: 6px 14px;
+    padding: 6px 12px;
     border-radius: 6px;
     white-space: nowrap;
     transition: color 0.15s, background 0.15s;
   }
   .nav-links a:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
   .nav-links a.active { color: var(--accent); background: var(--accent-bg); }
-  @media (max-width: 1180px) {
-    .nav-inner { flex-direction: column; height: auto; padding: 10px 16px; gap: 6px; }
-    .nav-links { flex-wrap: wrap; justify-content: center; }
+  @media (max-width: 1279px) {
+    .nav-inner { padding: 0 16px; }
     .nav-links a { font-size: 0.82rem; padding: 5px 10px; }
+  }
+  /* Phones: the name on top, the links in one scrolling row under it. */
+  @media (max-width: 560px) {
+    .nav-inner { flex-direction: column; align-items: stretch; height: auto; padding: 8px 0 6px; gap: 4px; }
+    .nav-logo { align-self: center; }
+    .nav-links { padding: 0 12px; }
   }
 
   /* ── Main / footer ───────────────────────────────────────────────── */

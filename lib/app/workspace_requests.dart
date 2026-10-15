@@ -412,8 +412,12 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// The clipboard as a new repertoire, the same way.
   Future<RequestResult> pasteRepertoire() async {
     final ticket = _nextRequest();
-    final text = (await _input.clipboard())?.trim() ?? '';
+    final text = await _input.clipboard() ?? '';
     if (_overtaken(ticket)) return const RequestDropped();
+    return _importPasted(ticket, text.trim());
+  }
+
+  Future<RequestResult> _importPasted(int ticket, String text) async {
     if (text.isEmpty) return _refused('Nothing to paste: copy a PGN first.');
     final result = await _library.importText(text, name: Library.pastedName);
     if (_overtaken(ticket)) return const RequestDropped();
@@ -505,41 +509,73 @@ final class WorkspaceRequests extends ChangeNotifier {
     return const RequestDone();
   }
 
-  /// Ctrl+V: the clipboard onto the analysis board while it is up, else a
-  /// new repertoire in the builder; anywhere else it does nothing.
-  Future<RequestResult> paste() async {
-    if (_session.isScratch) return pasteOntoBoard();
-    if (_inLibrary) return pasteRepertoire();
-    return const RequestDropped();
-  }
+  /// Ctrl+V: the clipboard, taken for what it holds. A FEN, a PGN or bare
+  /// moves come up as a new analysis board, except that in the builder and
+  /// the trainer, with a chapter up, a PGN becomes a new repertoire.
+  Future<RequestResult> paste() => _paste(repertoire: true);
 
   /// The clipboard — a PGN, bare moves or a FEN — as a new analysis board.
-  Future<RequestResult> pasteOntoBoard() => _pasteAsBoard(boards.pastedBoard);
+  Future<RequestResult> pasteOntoBoard() => _paste();
 
-  /// Ctrl+Shift+V: a FEN on the clipboard as a new analysis board, from
-  /// whatever is up.
-  Future<RequestResult> pasteFen() => _pasteAsBoard(boards.pastedPosition);
+  /// Ctrl+Shift+V: a FEN on the clipboard, and nothing else, as a new
+  /// analysis board.
+  Future<RequestResult> pasteFen() => _paste(positionOnly: true);
 
-  /// The clipboard read by [read] and, when it holds what [read] takes, put
-  /// up as the analysis board — with the question about a file's draft
-  /// asked only then, so a clipboard that holds nothing costs nothing.
-  Future<RequestResult> _pasteAsBoard(
-    boards.Pasted Function(String text, {required Side side}) read,
-  ) async {
+  Future<RequestResult> _paste({
+    bool positionOnly = false,
+    bool repertoire = false,
+  }) async {
     final ticket = _nextRequest();
     final text = await _input.clipboard() ?? '';
     if (_overtaken(ticket)) return const RequestDropped();
-    final boards.PastedBoard pasted;
-    switch (read(text, side: _session.orientation)) {
-      case boards.PasteRefused(:final reason):
-        return _refused(reason);
-      case final boards.PastedBoard board:
-        pasted = board;
+    if (_mode == Mode.bughouse) {
+      return _refused(
+        'The Bughouse lab pastes from Actions: Paste dual FEN or Paste moves.',
+      );
     }
+    if (repertoire &&
+        _inLibrary &&
+        !_session.isScratch &&
+        text.trim().isNotEmpty &&
+        boards.pastedFen(text) == null) {
+      return _importPasted(ticket, text.trim());
+    }
+    return switch (positionOnly
+        ? boards.pastedPosition(text)
+        : boards.pastedBoard(text, side: _session.orientation)) {
+      boards.PasteRefused(:final reason) => _refused(reason),
+      boards.PastedBoard(:final chapter) => _toBoard(ticket, chapter),
+    };
+  }
+
+  /// A position set up by hand as a new analysis board, seen from [side].
+  Future<RequestResult> openPosition(Fen fen, {required Side side}) =>
+      _toBoard(_nextRequest(), boards.analysisBoard(side: side, root: fen));
+
+  /// The modes that show the analysis board where they are. The rest have
+  /// no board, or one a lesson or a puzzle may hold, and send it to the
+  /// builder.
+  static const _keepBoard = {
+    Mode.repertoires,
+    Mode.pgnViewer,
+    Mode.study,
+    Mode.myGames,
+    Mode.playerAnalysis,
+  };
+
+  /// [board] up as the analysis board, with the question about a file's
+  /// draft asked only now, so a clipboard that holds nothing costs nothing.
+  Future<RequestResult> _toBoard(int ticket, Chapter board) async {
     final leave = await _leavingFile();
     if (_overtaken(ticket) || leave == null) return const RequestDropped();
-    if (!await _session.showAnalysisBoard(pasted.chapter)) {
+    final from = _here;
+    if (!await _session.showAnalysisBoard(board) || _overtaken(ticket)) {
       return const RequestDropped();
+    }
+    if (!_keepBoard.contains(_mode)) {
+      _remember(from);
+      _mode = Mode.repertoires;
+      notifyListeners();
     }
     _saidCopy(leave);
     return const RequestDone();

@@ -26,11 +26,16 @@ final class UciEngine implements PlayingEngine, EngineProcess {
   /// Handshakes and applies [options]. Throws [TimeoutException] when the
   /// process does not answer within [patience] and [EngineFailure] when it
   /// exits first.
+  ///
+  /// With [advertisedOnly], an option the engine did not list between
+  /// `uci` and `uciok` is left out rather than sent: an engine the user
+  /// registered need not have `Threads` or `Hash`.
   static Future<UciEngine> start(
     UciProcess process, {
     Map<String, String> options = const {},
     Duration patience = const Duration(seconds: 10),
     Duration finitePatience = defaultFinitePatience,
+    bool advertisedOnly = false,
   }) async {
     if (finitePatience <= Duration.zero) {
       throw ArgumentError.value(
@@ -48,6 +53,10 @@ final class UciEngine implements PlayingEngine, EngineProcess {
         ._expect('uciok')
         .timeout(patience, onTimeout: () => silent('uciok'));
     for (final MapEntry(:key, :value) in options.entries) {
+      if (advertisedOnly && !engine._offers(key)) {
+        log.i('${engine._name} has no option $key; not set');
+        continue;
+      }
       engine._send('setoption name $key value $value');
     }
     engine._send('isready');
@@ -61,6 +70,11 @@ final class UciEngine implements PlayingEngine, EngineProcess {
   final Duration _finitePatience;
   final _exited = Completer<EngineExit>();
   String _name = 'UCI engine';
+
+  /// The option names the engine listed in its handshake, lower case.
+  final _options = <String>{};
+
+  bool _offers(String option) => _options.contains(option.toLowerCase());
 
   /// Set when we kill the engine for saying nothing, so its exit says why.
   bool _unresponsive = false;
@@ -143,7 +157,10 @@ final class UciEngine implements PlayingEngine, EngineProcess {
     }
     if (search.isDone) return; // stopped before it began
     _current = search;
-    _send('setoption name MultiPV value ${request.multiPv}');
+    // An engine that lists its options and not MultiPV gives one line.
+    if (_options.isEmpty || _offers('MultiPV')) {
+      _send('setoption name MultiPV value ${request.multiPv}');
+    }
     _send(request.position);
     _send(request.go);
     search.markRunning();
@@ -222,7 +239,13 @@ final class UciEngine implements PlayingEngine, EngineProcess {
       _awaited = null;
       awaited.completer.complete();
     } else if (line.startsWith('id name ')) {
-      _name = line.substring('id name '.length);
+      _name = line.substring('id name '.length).trim();
+    } else if (line.startsWith('option name ')) {
+      final rest = line.substring('option name '.length);
+      final type = rest.indexOf(' type ');
+      _options.add(
+        (type < 0 ? rest : rest.substring(0, type)).trim().toLowerCase(),
+      );
     } else if (line.startsWith('bestmove')) {
       final words = line.trim().split(RegExp(r'\s+'));
       _current?.finish(bestMove: words.length > 1 ? words[1] : null);

@@ -1,4 +1,10 @@
-# Static Bughouse Lab
+# Static Hivemind build
+
+> October 2026: the website's Bughouse Lab, BughouseDB and Bughouse Single
+> Board pages were folded into one `/bughouse` page: one board with the
+> partner board held still (`bh_frozen_search`), run on the GPU through
+> WebGPU in batches, or on CPU threads (see the frontend README). The Lab
+> page described below, and its browser check, no longer exist on the site.
 
 `/bughouse` runs **entirely in the visitor's browser**. Cloudflare Pages only
 serves static files. The API stores completed position evaluations; it runs no engine. No account
@@ -52,11 +58,12 @@ Use the existing Chess Auto Prep Pages project:
 The `prebuild` step first runs the state regressions and Astro type check, then downloads the existing checksum-pinned Hivemind network,
 splits its gzip bytes into two files smaller than 25 MiB, and copies the ONNX
 Runtime Web files from the pinned npm dependency. The compressed network is
-about 32 MB; the complete initial engine download is about 44 MB. The browser
-verifies the chunks and uncompressed model, assembles them in memory, and
-caches model chunks when Cache Storage is available. No special headers or
-cross-origin isolation are necessary: both the engine and inference are
-single-threaded inside a Web Worker.
+about 32 MB; with ONNX Runtime's WebGPU build (about 22 MB, listed in
+`model.json` as `runtime`) the first download is about 55 MB. The browser
+downloads both itself, showing progress, verifies every part and the
+uncompressed model against `model.json`, and keeps them in Cache Storage when
+it is available. The page is cross-origin isolated so the CPU fallback can
+use threads; see the frontend README.
 
 The small compiled Hivemind module and its source archive are committed. Pages does **not** compile
 C++, install Emscripten, run Python after deployment, or start an engine
@@ -87,7 +94,13 @@ can be reopened offline: there is no page-caching service worker.
 ## Engine port
 
 `CMakeLists.txt` compiles the pinned Hivemind source revision
-`5508ba9daf4164e48a8a8a9b39e101efdc60e97a` plus three browser adapters:
+`5508ba9daf4164e48a8a8a9b39e101efdc60e97a`, with `patches/*.patch` applied
+in name order, plus three browser adapters. `patches/frozen-board.patch` adds
+`g_frozenBoardB` for Bughouse Single Board: board B gets no moves, a check on
+A that a drop could block lets the checked side drop the blocker it waits for
+(a pawn, or a knight where a pawn cannot stand), nobody's sit plane is set,
+and `g_frozenValueOffset` is subtracted from every network value. With the
+flag off (the Lab, BughouseDB) searches are unchanged. The adapters:
 
 * `bridge.cc`: validated position/SAN/UCI interface and bounded MCTS searches.
   It uses the existing `Board`, `SearchThread` and `Node` implementations.
@@ -101,6 +114,21 @@ can be reopened offline: there is no page-caching service worker.
   actions, with that board's policy prior and their summed visits, most
   visited first. BughouseDB's in-browser analysis scores only each board's
   first four. The worker exposes it as the `search` action.
+* `bh_frozen_search(fen, nodes, millisCap,
+  lines, reportMs, batch, keep)` searches one board's FEN (hands in brackets) for the side
+  to move. Board B is the starting position held still, the opponent's colour
+  to move there, with every piece missing from A in the pocket of whoever
+  captured it (bughouse conserves pieces; without them the network barely
+  notices a missing queen). Two static inferences first measure the
+  network's shared offset (both seats with no sit plane rate themselves about
+  −0.5); the search subtracts it, so q is a winning chance from the side to
+  move and the start position reads about 0. It reports to
+  `Module.onFrozenReport` every `reportMs` and returns up to five lines with
+  board A's moves only. `batch` leaves are evaluated together (32 on a GPU,
+  1 on the CPU). With `keep`, the search keeps its tree, and a later `keep`
+  search of the same FEN carries on from it: node count and depth continue,
+  and `resumed_nodes` says how many came from before. The page's analysis
+  keeps; the sit panel's rows do not.
 * `engine_web.cc`: replaces native ONNX Runtime with an Asyncify call to
   ONNX Runtime Web, keeping the existing plane encoder and neural outputs.
 * `thread_web.cc`: supplies Fairy-Stockfish's thread-local counters without
@@ -157,7 +185,8 @@ Install/activate Emscripten SDK **4.0.15**, then from the repository root:
 scripts/ci.sh with -- python3 tools/bughouse_web/build.py --emsdk /path/to/emsdk
 ```
 
-The script checks out the pinned Hivemind revision under ignored `build/`.
+The script checks out the pinned Hivemind revision under ignored `build/`,
+exports it to `build/bughouse-web-patched/` and applies `patches/*.patch`.
 `--source /path/to/hivemind` can reuse an existing clean checkout at that
 revision; it never edits that checkout. `public/bughouse-engine/build.json`
 records the source revision, compiler version, bridge hashes and output
@@ -174,9 +203,7 @@ exact engine source, browser adapters, licenses and compilation instructions.
 ## Verification
 
 ```sh
-scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test:bughouse
 scripts/ci.sh with -- python3 tools/bughouse_web/test_rules.py
-scripts/ci.sh with -- python3 tools/bughouse_web/check_browser.py
 scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend exec -- \
   astro check --root python/twic-position-finder/frontend
 scripts/ci.sh analyze lint

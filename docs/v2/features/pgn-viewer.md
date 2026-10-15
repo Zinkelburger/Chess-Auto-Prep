@@ -262,7 +262,7 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
   and opens that copy, `Add to a study…` makes them a new study chapter. The
   standing read-only notice stays hidden while the viewer holds edits.
 - **No colour for the unsaved state**, and **no snackbars anywhere in v2**: deletions say nothing
-  (Ctrl+Z undoes them), and a failure goes to the status bar under the top bar, which has a Close
+  (Ctrl+Z undoes them), and a failure goes to the status sentence in the top bar, which has a Close
   button and, when there is a way out, one action such as Reload.
 
 ## Built 2026-09-27

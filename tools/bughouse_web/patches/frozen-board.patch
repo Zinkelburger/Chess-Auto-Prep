@@ -1,0 +1,222 @@
+diff --git a/engine/src/common/globals.cc b/engine/src/common/globals.cc
+index f69e3c5..3b4794d 100644
+--- a/engine/src/common/globals.cc
++++ b/engine/src/common/globals.cc
+@@ -8,6 +8,8 @@ LogLevel g_logLevel = LOG_NONE;
+ 
+ // Board the team must move on (default: neither, so passing stays legal)
+ RequiredMoveBoard g_requiredMoveBoard = REQUIRE_MOVE_NONE;
++bool g_frozenBoardB = false;
++float g_frozenValueOffset = 0.0f;
+ 
+ std::unordered_map<std::string, int> POLICY_INDEX;
+ int POLICY_TABLE_NORMAL[2][64][64][2];
+diff --git a/engine/src/common/globals.h b/engine/src/common/globals.h
+index e4d5bfb..dfd4c60 100644
+--- a/engine/src/common/globals.h
++++ b/engine/src/common/globals.h
+@@ -36,6 +36,21 @@ enum RequiredMoveBoard {
+  */
+ extern RequiredMoveBoard g_requiredMoveBoard;
+ 
++/**
++ * One-board analysis: board B is a fixed backdrop. Nothing moves there, captures
++ * on A still feed B's hands, and nobody's sit plane is set (nothing ever arrives).
++ * A check on A that a drop could block is not mate (chess.com rule): when the
++ * side in check has no other move, it may drop the cheapest blocker it does not
++ * have yet (a pawn, or a knight where a pawn cannot stand), as if the partner
++ * had just sent it.
++ */
++extern bool g_frozenBoardB;
++
++/// Frozen mode: subtracted from every network value. With no sit plane the
++/// network rates both seats about equally badly; the caller measures that
++/// shared offset at the root, so values at odd and even depths agree.
++extern float g_frozenValueOffset;
++
+ /**
+  * @brief Parse a required-move board string ("none", "a"/"1", "b"/"2").
+  * @return The corresponding RequiredMoveBoard, REQUIRE_MOVE_NONE if unrecognized.
+diff --git a/engine/src/environment/board.cc b/engine/src/environment/board.cc
+index a92b172..7239167 100644
+--- a/engine/src/environment/board.cc
++++ b/engine/src/environment/board.cc
+@@ -1,4 +1,5 @@
+ #include "environment/board.h"
++#include "common/globals.h"
+ 
+ #include <stdexcept>
+ 
+@@ -91,8 +92,15 @@ Board::Board(const Board& board) {
+ // Executes a move on the board and updates the corresponding state.
+ // Also adds a piece to the opponent's hand if necessary.
+ void Board::push_move(int board_num, Stockfish::Move move) {
++    Stockfish::Piece blocker = Stockfish::NO_PIECE;
++    if (g_frozenBoardB && board_num == 0 && Stockfish::type_of(move) == Stockfish::DROP
++        && pos[0]->virtual_drop(move)) {
++        blocker = Stockfish::make_piece(pos[0]->side_to_move(), Stockfish::in_hand_piece_type(move));
++        pos[0]->add_to_hand_with_key(blocker);
++    }
+     states[board_num]->emplace_back();
+     pos[board_num]->do_move(move, states[board_num]->back());
++    if (blocker) frozenBlockers.emplace_back(states[0]->size(), blocker);
+     Stockfish::Piece p = states[board_num]->back().pieceToHand; 
+     if (p) {
+         pos[1 - board_num]->add_to_hand_with_key(p);
+@@ -107,7 +115,33 @@ bool Board::is_legal_move(int board_num, Stockfish::Move move) const {
+         || Stockfish::MoveList<Stockfish::LEGAL>(*pos[board_num]).contains(move);
+ }
+ 
++std::vector<Stockfish::Move> Board::frozen_blocks() const {
++    // Fairy-Stockfish only generates virtual drops that give check, so the
++    // waiting blockers are built here: every empty square between the king
++    // and a single sliding checker. A dropped piece pins nothing and is
++    // pinned by nothing new, so each of these drops answers the check.
++    std::vector<Stockfish::Move> blocks;
++    const Stockfish::Position& position = *pos[0];
++    const Stockfish::Bitboard checkers = position.checkers();
++    if (!checkers || Stockfish::more_than_one(checkers)) {
++        return blocks;
++    }
++    const Stockfish::Color us = position.side_to_move();
++    const Stockfish::Bitboard empty = Stockfish::between_bb(
++        position.square<Stockfish::KING>(us), Stockfish::lsb(checkers))
++        & ~position.pieces() & position.board_bb();
++    for (Stockfish::PieceType blocker : {Stockfish::PAWN, Stockfish::KNIGHT}) {
++        Stockfish::Bitboard squares = empty & position.drop_region(us, blocker);
++        while (squares) {
++            blocks.push_back(Stockfish::make_drop(Stockfish::pop_lsb(squares), blocker, blocker));
++        }
++        if (!blocks.empty()) break;
++    }
++    return blocks;
++}
++
+ bool Board::has_any_legal_move(int board_num) const {
++    if (g_frozenBoardB && board_num == 1) return false;
+     const Stockfish::Position& position = *pos[board_num];
+     if (position.is_immediate_game_end()) {
+         return false;
+@@ -140,7 +174,7 @@ bool Board::has_any_legal_move(int board_num) const {
+             return true;
+         }
+     }
+-    return false;
++    return g_frozenBoardB && board_num == 0 && !frozen_blocks().empty();
+ }
+ 
+ // Reverts the last move on the board and updates the state.
+@@ -151,8 +185,14 @@ void Board::pop_move(int board_num) {
+     if (p) {
+         pos[1 - board_num]->remove_from_hand_with_key(p);
+     }
++    Stockfish::Piece blocker = Stockfish::NO_PIECE;
++    if (board_num == 0 && !frozenBlockers.empty() && frozenBlockers.back().first == states[0]->size()) {
++        blocker = frozenBlockers.back().second;
++        frozenBlockers.pop_back();
++    }
+     pos[board_num]->undo_move(m); 
+     states[board_num]->pop_back();
++    if (blocker) pos[0]->remove_from_hand_with_key(blocker);
+     // Remove position from history
+     unrecord_position(board_num);
+     if (!moveHistory[board_num].empty()) {
+@@ -163,9 +203,11 @@ void Board::pop_move(int board_num) {
+ // Returns a list of legal moves for the specified board index.
+ std::vector<Stockfish::Move> Board::legal_moves(int board_num) {
+     std::vector<Stockfish::Move> legal_moves;
++    if (g_frozenBoardB && board_num == 1) return legal_moves;
+     for (const Stockfish::ExtMove& move : Stockfish::MoveList<Stockfish::LEGAL>(*pos[board_num])) {
+         legal_moves.emplace_back(move);
+     }
++    if (g_frozenBoardB && board_num == 0 && legal_moves.empty()) return frozen_blocks();
+     return legal_moves;
+ }
+ 
+@@ -378,8 +420,15 @@ void Board::make_moves(Stockfish::Move moveA, Stockfish::Move moveB) {
+         if (move == Stockfish::MOVE_NONE) {
+             return;
+         }
++        Stockfish::Piece blocker = Stockfish::NO_PIECE;
++        if (g_frozenBoardB && boardNum == 0 && Stockfish::type_of(move) == Stockfish::DROP
++            && pos[0]->virtual_drop(move)) {
++            blocker = Stockfish::make_piece(pos[0]->side_to_move(), Stockfish::in_hand_piece_type(move));
++            pos[0]->add_to_hand_with_key(blocker);
++        }
+         states[boardNum]->emplace_back();
+         pos[boardNum]->do_move(move, states[boardNum]->back());
++        if (blocker) frozenBlockers.emplace_back(states[0]->size(), blocker);
+         Stockfish::Piece p = states[boardNum]->back().pieceToHand;
+         if (p) {
+             pos[1 - boardNum]->add_to_hand_with_key(p);
+@@ -401,8 +450,15 @@ void Board::unmake_moves(Stockfish::Move moveA, Stockfish::Move moveB) {
+         if (p) {
+             pos[1 - boardNum]->remove_from_hand_with_key(p);
+         }
++        Stockfish::Piece blocker = Stockfish::NO_PIECE;
++        if (boardNum == 0 && !frozenBlockers.empty()
++            && frozenBlockers.back().first == states[0]->size()) {
++            blocker = frozenBlockers.back().second;
++            frozenBlockers.pop_back();
++        }
+         pos[boardNum]->undo_move(move);
+         states[boardNum]->pop_back();
++        if (blocker) pos[0]->remove_from_hand_with_key(blocker);
+         unrecord_position(boardNum);
+         moveHistory[boardNum].pop_back();
+     };
+diff --git a/engine/src/environment/board.h b/engine/src/environment/board.h
+index e643065..b14d7f8 100644
+--- a/engine/src/environment/board.h
++++ b/engine/src/environment/board.h
+@@ -35,6 +35,11 @@ class Board {
+         std::vector<Stockfish::Move> moveHistory[2];
+         std::unordered_map<uint64_t, uint32_t> repetitionCounts[2];
+         uint64_t repetitionFingerprint[2] = {0, 0};
++        /// Frozen mode: blockers added to A's hand for a waiting drop, keyed by
++        /// the state depth of the drop, so undoing it takes the piece back out.
++        std::vector<std::pair<size_t, Stockfish::Piece>> frozenBlockers;
++        /// Frozen mode: the waiting blocker drops on A when its side has no move.
++        std::vector<Stockfish::Move> frozen_blocks() const;
+ 
+         Board();
+         Board(const Board& board);
+diff --git a/engine/src/interface/uci.cc b/engine/src/interface/uci.cc
+index 64f9b2c..8708e22 100644
+--- a/engine/src/interface/uci.cc
++++ b/engine/src/interface/uci.cc
+@@ -351,6 +351,9 @@ void UCI::setoption(std::istringstream& is) {
+         } else if (value == "black") {
+             teamSide = Stockfish::BLACK;
+         }
++    } else if (name == "FrozenB") {
++        g_frozenBoardB = value == "true";
++        std::cout << "info string FrozenB set to " << value << std::endl;
+     } else if (name == "RequireMoveOn") {
+         g_requiredMoveBoard = parseRequiredMoveBoard(value);
+         std::cout << "info string RequireMoveOn set to "
+diff --git a/engine/src/search/searchthread.cc b/engine/src/search/searchthread.cc
+index 6d2d127..b35a203 100644
+--- a/engine/src/search/searchthread.cc
++++ b/engine/src/search/searchthread.cc
+@@ -431,7 +431,8 @@ void SearchThread::collect_batch(SearchBatch& batch, Board& board,
+         ctx.leaf = leaf;
+         ctx.hasEvaluationReservation = selection.hasEvaluationReservation;
+         ctx.teamToPlay = leaf->get_team_to_play();
+-        ctx.sitPlaneActive = (ctx.teamToPlay == root->get_team_to_play()) == teamHasTimeAdvantage;
++        ctx.sitPlaneActive = !g_frozenBoardB
++            && (ctx.teamToPlay == root->get_team_to_play()) == teamHasTimeAdvantage;
+         
+         // Check for terminal states
+         // Track search moves independently per board. A combined tree depth is
+@@ -735,6 +736,10 @@ void SearchThread::process_batch(
+                 }
+             }
+ 
++            if (g_frozenBoardB) {
++                neuralValue -= g_frozenValueOffset;
++            }
++
+             if (batchMovesLeft && runtimeConfig.movesLeftDiscount > 0.0f) {
+                 // Assuming the network predicts plies/100 in [0,1].
+                 const float normalizedPlies = std::clamp(

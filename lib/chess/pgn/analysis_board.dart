@@ -1,6 +1,7 @@
 import 'package:dartchess/dartchess.dart' show Side;
 
 import '../fen.dart';
+import '../position_setup.dart';
 import 'chapter.dart';
 import 'game_text.dart';
 import 'pgn_reader.dart';
@@ -61,19 +62,18 @@ final class PasteRefused extends Pasted {
   final String reason;
 }
 
-/// [text] as an analysis board played from [side]: a FEN, a PGN — its first
-/// game, variations and comments included — or bare moves such as
-/// `1.e4 c5 2.Nf3`. Text that holds no position and no move is refused
-/// rather than shown as an empty board, which would look like a paste that
-/// worked.
+/// [text] as an analysis board: a FEN, at that position and seen from the
+/// side to move; a PGN — its first game, variations and comments included —
+/// or bare moves such as `1.e4 c5 2.Nf3`, played from [side], or from the
+/// side to move when the game starts from a position of its own. Text that
+/// holds no position and no move is refused rather than shown as an empty
+/// board, which would look like a paste that worked.
 Pasted pastedBoard(String text, {required Side side}) {
   final trimmed = text.trim();
   if (trimmed.isEmpty) {
     return const PasteRefused('Nothing to paste: copy a PGN or FEN first.');
   }
-  if (pastedPosition(trimmed, side: side) case final PastedBoard board) {
-    return board;
-  }
+  if (_fenFields(trimmed) != null) return pastedPosition(trimmed);
   final games = splitChapterText(trimmed).games;
   // A file is cut into games at their `[Event` lines, so moves pasted with
   // no header, or a header without that tag, are given one to be a game.
@@ -91,41 +91,83 @@ Pasted pastedBoard(String text, {required Side side}) {
           : 'The clipboard holds no game that can be read: $why.',
     );
   }
+  final facing = tree.rootFen == Fen.initial ? side : _toMove(tree.rootFen);
   // Moves after the first one that cannot be read are dropped, as a chapter
   // would drop them; the board shows what could be played, from the game's
   // own start, so the rest of the text is never half-shown.
   if (read.issues.isNotEmpty) {
     return PastedBoard(
-      analysisBoard(side: side, root: tree.rootFen, sans: mainlineSans(tree)),
+      analysisBoard(side: facing, root: tree.rootFen, sans: mainlineSans(tree)),
     );
   }
-  return PastedBoard(_chapterOf(side, game));
+  return PastedBoard(_chapterOf(facing, game));
 }
 
-/// [text] as an analysis board at the position it holds, played from
-/// [side], when it is one FEN and nothing else: what Ctrl+Shift+V pastes.
-Pasted pastedPosition(String text, {required Side side}) {
-  final fen = _asFen(text.trim());
-  if (fen == null) return const PasteRefused('The clipboard holds no FEN.');
-  return PastedBoard(analysisBoard(side: side, root: fen));
+/// [text] as an analysis board at the position it holds, seen from the
+/// side to move, when it is one FEN and nothing else: what Ctrl+Shift+V
+/// pastes.
+Pasted pastedPosition(String text) {
+  if (text.trim().isEmpty) {
+    return const PasteRefused('Nothing to paste: copy a FEN first.');
+  }
+  final fen = pastedFen(text);
+  if (fen != null) {
+    return PastedBoard(analysisBoard(side: _toMove(fen), root: fen));
+  }
+  final fields = _fenFields(text);
+  final cause = fields == null
+      ? null
+      : SetupEdits.read(fields.join(' '))?.illegal;
+  return PasteRefused(switch (cause) {
+    final cause? => 'Not a playable FEN. ${illegalSetupReason(cause)}',
+    null when fields != null => 'That FEN cannot be read.',
+    null => 'The clipboard holds no FEN.',
+  });
 }
 
-/// [text] as a position when it is one FEN and nothing else.
-Fen? _asFen(String text) {
-  if (!text.contains('/') || text.contains('\n')) return null;
-  final fields = text.split(RegExp(r'\s+'));
-  if (fields.length < 4 || fields.length > 6) return null;
-  // A FEN without its two counters is still a position; they are filled in
-  // so the board and every cache see the six fields they expect.
-  final fen = Fen(
-    [
-      ...fields,
-      if (fields.length < 5) '0',
-      if (fields.length < 6) '1',
-    ].join(' '),
-  );
-  return positionOf(fen) == null ? null : fen;
+/// [text] as a position a game can start from, when it is one FEN and
+/// nothing else. It may be quoted, or a PGN's `[FEN "…"]` tag, and may stop
+/// after any field: the side to move is then White, the castling rights
+/// and the en-passant square none, the counters 0 and 1. Rights the board
+/// does not allow are dropped.
+Fen? pastedFen(String text) {
+  final fields = _fenFields(text);
+  return fields == null ? null : playableFen(fields.join(' '));
 }
+
+/// The fields of the one FEN [text] holds — its board has eight ranks — or
+/// null when it holds anything else.
+List<String>? _fenFields(String text) {
+  var fen = text.trim();
+  if (_fenTag.firstMatch(fen) case final tag?) fen = tag.group(1)!;
+  fen = _unquoted(fen.trim());
+  if (fen.contains('\n')) return null;
+  final fields = fen.split(RegExp(r'\s+'));
+  if (fields.length > 6 || '/'.allMatches(fields.first).length != 7) {
+    return null;
+  }
+  return [
+    fields.first,
+    if (fields.length > 1) fields[1].toLowerCase(),
+    ...fields.skip(2),
+  ];
+}
+
+final _fenTag = RegExp(r'^\[FEN\s+"([^"]*)"\]$');
+
+const _quotes = {'"': '"', "'": "'", '`': '`', '\u201c': '\u201d'};
+
+String _unquoted(String text) {
+  var inner = text;
+  while (inner.length > 1) {
+    final close = _quotes[inner[0]];
+    if (close == null || !inner.endsWith(close)) break;
+    inner = inner.substring(1, inner.length - 1).trim();
+  }
+  return inner;
+}
+
+Side _toMove(Fen fen) => fen.whiteToMove ? Side.white : Side.black;
 
 Chapter _chapterOf(Side side, String game) => parseChapter(
   name: analysisBoardName,

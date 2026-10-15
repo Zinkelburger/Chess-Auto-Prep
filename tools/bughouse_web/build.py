@@ -41,9 +41,20 @@ def main():
     compiler = subprocess.check_output([str(emcmake.parent / "emcc"), "--version"], text=True).splitlines()[0]
     if " 4.0.15 " not in compiler:
         raise SystemExit(f"This browser build pins Emscripten 4.0.15; found {compiler}")
+    # The pinned revision plus our patches (patches/*.patch, in name order),
+    # exported beside the checkout so the checkout itself is never edited.
+    patches = sorted((Path(__file__).parent / "patches").glob("*.patch"))
+    patched = ROOT / "build/bughouse-web-patched"
+    shutil.rmtree(patched, ignore_errors=True)
+    patched.mkdir(parents=True)
+    with tarfile.open(fileobj=io.BytesIO(subprocess.check_output([
+            "git", "-C", str(source), "archive", "--format=tar", REVISION, "engine", "LICENSE"]))) as tree:
+        tree.extractall(patched, filter="tar")
+    for patch in patches:
+        subprocess.run(["patch", "-p1", "--batch", "--forward", "-i", str(patch)], cwd=patched, check=True)
     build = ROOT / "build/bughouse-wasm"
     subprocess.run([str(emcmake), "cmake", "-S", str(Path(__file__).parent), "-B", str(build),
-                    f"-DHIVEMIND_SOURCE={source.resolve()}", "-DCMAKE_BUILD_TYPE=Release"], check=True)
+                    f"-DHIVEMIND_SOURCE={patched.resolve()}", "-DCMAKE_BUILD_TYPE=Release"], check=True)
     subprocess.run(["cmake", "--build", str(build), "--parallel", "2"], check=True)
     public = ROOT / "python/twic-position-finder/frontend/public/bughouse-engine"
     public.mkdir(parents=True, exist_ok=True)
@@ -53,6 +64,7 @@ def main():
         hashes[name] = hashlib.sha256((public / name).read_bytes()).hexdigest()
     sources = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
                for p in Path(__file__).parent.iterdir() if p.suffix in (".cc", ".txt")}
+    sources.update({f"patches/{p.name}": hashlib.sha256(p.read_bytes()).hexdigest() for p in patches})
     # Ship corresponding source beside the WASM, including the exact upstream
     # revision and adapters. Downloading the running engine's source must not
     # depend on a moving GitHub branch or a future app publication.
@@ -70,7 +82,8 @@ def main():
             add("browser/" + name, (Path(__file__).parent / name).read_bytes())
         add("README.txt", (
             f"Hivemind browser source at {REVISION}\n{REPOSITORY}\n\n"
-            "Install and activate Emscripten 4.0.15. From this extracted directory:\n"
+            "Install and activate Emscripten 4.0.15. From this extracted directory, apply\n"
+            "browser/patches/*.patch to hivemind/ in name order (cd hivemind && patch -p1 -i ../browser/patches/NAME), then:\n"
             "emcmake cmake -S browser -B build -DHIVEMIND_SOURCE=\"$PWD/hivemind\" -DCMAKE_BUILD_TYPE=Release\n"
             "cmake --build build --parallel 2\n\n"
             "Outputs: build/hivemind.mjs and build/hivemind.wasm.\n"

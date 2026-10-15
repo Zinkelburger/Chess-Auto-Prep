@@ -1,4 +1,4 @@
-/* Crazyhouse Analysis: lichess.org/analysis/crazyhouse's layout. The board on
+/* The bughouse board: lichess.org/analysis/crazyhouse's layout. The board on
    the left with FEN and PGN under it; on the right a column as tall as the
    board with a hand at each end and the engine and moves between them; the
    move buttons under that column. Board squares and the pocket well come from
@@ -19,6 +19,8 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
   row-gap: 10px;
   justify-content: center;
   align-items: start;
+  /* Faint text (move numbers, engine info) at 4.5:1 on the panels. */
+  --text-faint: #949eab;
 }
 .ch[data-mode="editor"] { --ch-sq: calc(var(--ch-board) / 10); }
 
@@ -56,9 +58,15 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-step:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .ch-step:active:not(:disabled) { background: var(--accent-bg); }
 .ch-step:disabled { opacity: 0.25; cursor: default; }
+/* Laptop screens: lower steppers leave the move list its rows. */
+@media (max-height: 900px) { .ch-step { height: 30px; font-size: 1.45rem; } }
+@media (max-height: 800px) { .ch-step { height: 26px; font-size: 1.3rem; } }
 
-.ch-tools { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+/* The move list keeps four rows; when the column is too short for that, the
+   whole panel scrolls instead of the move list vanishing. */
+.ch-tools { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; overflow-x: hidden; overflow-y: auto; }
 .ch-analysis, .ch-editor { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ch-analysis { flex: 1 0 auto; }
 .ch-analysis { position: relative; }
 .ch-tools.menu-open .ch-analysis { display: none; }
 .ch-analysis.practising .ch-ceval, .ch-analysis.practising .ch-settings, .ch-analysis.practising .ch-pvs { display: none; }
@@ -67,6 +75,9 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 /* Engine header: switch, eval, engine name and depth, gear. */
 .ch-ceval { position: relative; display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 10px; border-bottom: 1px solid var(--border); min-height: 52px; }
 .ch-ceval .ch-pearl { margin: 0 4px; }
+.ch-ceval .btn { flex: none; }
+/* Waiting for the player or failed: the message takes the eval's place. */
+.ch-ceval.ch-waiting .ch-pearl { display: none; }
 /* Lichess's search progress line along the bottom of the engine header. */
 .ch-bar { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; pointer-events: none; }
 .ch-bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.3s linear; }
@@ -83,7 +94,7 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ch-pearl { min-width: 3.4em; font-size: 1.6rem; font-weight: 700; line-height: 1; text-align: center; }
 .ch-engine { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.25; }
-.ch-engine-name { font-size: 0.85rem; color: var(--text-dim); }
+.ch-engine-name { font-size: 0.85rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ch-engine-info { font-size: 0.8rem; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ch-engine-info.ch-failed { color: var(--danger); white-space: normal; }
 .ch-ceval.off .ch-engine-name { color: var(--text-faint); }
@@ -127,7 +138,7 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-pv-hand-piece em { position: absolute; right: -2px; bottom: -2px; padding: 0 2px; border-radius: 3px; background: #d64f00; color: #fff; font: 700 9px/1.2 var(--sans); font-style: normal; }
 
 /* Moves: lila's column view, variations interrupting the columns. */
-.ch-moves { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: 2.4em 1fr 1fr; align-content: start; font-size: 0.95rem; }
+.ch-moves { flex: 1 1 0; min-height: 7.6em; overflow-y: auto; display: grid; grid-template-columns: 2.4em 1fr 1fr; align-content: start; font-size: 0.95rem; }
 .ch-moves index { display: grid; place-items: center; background: var(--bg-input); color: var(--text-faint); font-size: 0.85rem; border-right: 1px solid var(--border); }
 .ch-move, .ch-empty { display: flex; align-items: center; gap: 4px; min-height: 1.9em; padding: 0 8px; border: 0; background: none; color: var(--text); font: inherit; font-weight: 600; text-align: left; }
 .ch-move { cursor: pointer; }
@@ -166,7 +177,6 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-toast[hidden] { display: none; }
 .ch-edit { margin-left: 4px; padding: 0 4px; border-radius: 3px; background: var(--warn-bg); color: var(--warn); font-size: 0.72rem; font-weight: 600; font-family: var(--mono); }
 .ch-root-edit { grid-column: 1 / -1; padding: 6px 10px; color: var(--warn); font-size: 0.85rem; border-bottom: 1px solid var(--border); }
-.ch-moves-empty { grid-column: 1 / -1; padding: 14px 12px; color: var(--text-faint); font-size: 0.9rem; }
 
 .ch-menu { position: fixed; z-index: 50; display: flex; flex-direction: column; min-width: 170px; padding: 4px; background: var(--bg-raised); border: 1px solid var(--border-strong); border-radius: 6px; box-shadow: var(--shadow); }
 .ch-menu-title { margin: 0; padding: 4px 10px 6px; color: var(--text-faint); font-size: 0.8rem; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
@@ -265,6 +275,13 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-controls .ch-nav { width: 52px; height: 38px; }
 .ch-controls .ch-nav svg { width: 24px; height: 24px; }
 
+/* Short laptop screens (1366×768, 1280×720): tighter rows keep the moves in view. */
+@media (max-height: 800px) and (min-width: 861px) {
+  .ch-ceval { min-height: 44px; padding-top: 4px; padding-bottom: 4px; }
+  .ch-pv { height: 1.8em; }
+  .ch-moves { min-height: 5.7em; }
+}
+
 /* ── Narrow screens: one column ───────────────────────────────── */
 @media (max-width: 860px) {
   .ch {
@@ -275,5 +292,11 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
   .ch-side, .ch-side-inner { display: contents; }
   #ch-hand-top { grid-area: top; }
   #ch-hand-bottom { grid-area: bottom; }
-  .ch-tools { grid-area: tools; height: 60dvh; }
+  /* As tall as its content, up to most of the screen. */
+  .ch-tools { grid-area: tools; max-height: 70dvh; }
+  .ch-moves { flex: 1 1 auto; }
+  .ch-step { height: 32px; }
+  /* The move arrows give up width first, so the row fits a 320 px phone. */
+  .ch-controls { gap: 2px; }
+  .ch-controls .ch-nav { flex: 0 1 52px; min-width: 28px; }
 }

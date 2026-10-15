@@ -133,6 +133,7 @@ std::string joint_json(Board& board, const JointActionCandidate& action) {
 }
 
 EM_JS(int, cancelled, (), { return Module.cancelled ? 1 : 0; });
+EM_JS(void, frozen_report, (const char* json), { Module.onFrozenReport?.(UTF8ToString(json)); });
 
 namespace {
 // Principal variation in the native UCI "pv" text format: joint actions
@@ -264,6 +265,145 @@ std::string run_search(const char* fen, int team, int timeAdvantage, int require
 }
 }
 
+namespace {
+// One-board analysis. Board B is the starting position held still behind
+// board A (see g_frozenBoardB), with the opponent's colour to move there, so
+// our team only ever moves on A. Nobody's sit plane is set: nothing arrives.
+struct FrozenScope {
+    FrozenScope() { g_frozenBoardB = true; g_frozenValueOffset = 0; g_requiredMoveBoard = REQUIRE_MOVE_NONE; }
+    ~FrozenScope() { g_frozenBoardB = false; g_frozenValueOffset = 0; }
+};
+
+// Pieces are conserved in bughouse: a piece missing from board A (on the
+// board, as a promoted pawn, or in a hand) was captured there and went to the
+// capturer's partner. Putting it in that pocket on B lets the network count
+// A's material; without it the network barely notices a missing queen.
+std::string conserved_pockets(const Position& a) {
+    std::string pocket;
+    for (Color c : {WHITE, BLACK}) {
+        for (PieceType t : {PAWN, KNIGHT, BISHOP, ROOK, QUEEN}) {
+            int have = popcount(a.pieces(c, t) & ~a.promotedPieces) + a.count_in_hand(c, t);
+            if (t == PAWN) have += popcount(a.pieces(c) & a.promotedPieces);
+            const int full = t == PAWN ? 8 : t == QUEEN ? 1 : 2;
+            pocket += std::string(std::max(0, full - have), a.piece_to_char()[make_piece(c, t)]);
+        }
+    }
+    return pocket;
+}
+
+std::unique_ptr<Board> load_frozen(const std::string& fen, Color& side) {
+    if (fen.find('|') != std::string::npos) throw std::runtime_error("Give one board's FEN.");
+    if (validate_fen(fen) > 64) throw std::runtime_error("One board cannot hold more than 64 pieces.");
+    side = fen.find(" w ") != std::string::npos ? WHITE : BLACK;
+    auto board = std::make_unique<Board>();
+    board->set(fen + "|" + start);
+    std::string backdrop = start;
+    backdrop.replace(backdrop.find("[]"), 2, "[" + conserved_pockets(*board->pos[0]) + "]");
+    if (side == BLACK) backdrop.replace(backdrop.find(" w "), 3, " b ");
+    board->set(fen + "|" + backdrop);
+    const auto& p = *board->pos[0];
+    if (p.attackers_to(p.square<KING>(~p.side_to_move())) & p.pieces(p.side_to_move()))
+        throw std::runtime_error("The side that just moved cannot leave its king in check.");
+    return board;
+}
+
+// Board A's moves along a line, from a "(a,b)" pv token list.
+std::string frozen_line(Board board, std::shared_ptr<Node> node, int index,
+                        const SearchParams::RuntimeConfig& config, int maxDepth) {
+    std::string out = "[";
+    for (int depth = 0; depth < maxDepth && node && index >= 0; depth++) {
+        const JointActionCandidate action = node->get_joint_action(index);
+        if (action.moveA == MOVE_NONE) break;
+        if (depth) out += ',';
+        out += quote(move_uci(board, 0, action.moveA));
+        board.make_moves(action.moveA, action.moveB);
+        node = node->get_child(index);
+        if (!node || !node->is_expanded()) break;
+        auto visits = node->get_child_visits();
+        if (visits.empty()) break;
+        index = node->get_best_move_idx_with_q_weight(config.qVetoDelta, config.qValueWeight);
+        if (index < 0) index = static_cast<int>(std::max_element(visits.begin(), visits.end()) - visits.begin());
+    }
+    return out + "]";
+}
+
+// Mate distance in plies from the root side for a root child, or "null".
+std::string child_mate(const std::shared_ptr<Node>& root, int index) {
+    auto child = root->get_child(index);
+    if (!child) return "null";
+    // The child is from the opponent's side: their loss is our win.
+    if (child->get_node_type() == NodeType::LOSS) return std::to_string(child->get_end_in_ply() + 1);
+    if (child->get_node_type() == NodeType::WIN) return std::to_string(-(child->get_end_in_ply() + 1));
+    return "null";
+}
+
+// The network's value from the side to move and from the other side, each
+// with no sit plane. Their mean is the shared offset; half their difference
+// is the static score from the side to move.
+std::array<float, 2> frozen_values(Board& board, Color side, Engine& engine) {
+    std::vector<float> input(NB_INPUT_VALUES());
+    std::array<float, 2> values{};
+    for (int i = 0; i < 2; i++) {
+        board_to_planes(board, input.data(), i ? ~side : side, false);
+        Engine::HalfInferenceOutputs output;
+        if (cancelled() || !engine.enqueueInferenceHalf(input.data())
+            || !engine.synchronizeInferenceHalf(output))
+            throw std::runtime_error("Static evaluation interrupted.");
+        values[i] = output.value[0];
+    }
+    return values;
+}
+
+std::string frozen_json(Board& board, const std::shared_ptr<Node>& root, const SearchInfo& info,
+                        const SearchParams::RuntimeConfig& config, int lines, bool done) {
+    std::vector<int> visits = root->get_child_visits();
+    const int best = root->get_best_move_idx_with_q_weight();
+    std::vector<int> order;
+    for (size_t i = 0; i < visits.size(); i++) if (visits[i] > 0 || static_cast<int>(i) == best) order.push_back(static_cast<int>(i));
+    std::stable_sort(order.begin(), order.end(), [&](int a, int b) {
+        if (a == best || b == best) return a == best && b != best;
+        return visits[a] > visits[b];
+    });
+    std::string mate = "null";
+    const auto type = root->get_node_type();
+    if (type == NodeType::WIN || type == NodeType::LOSS)
+        mate = std::to_string((type == NodeType::WIN ? 1 : -1) * std::max(1, root->get_end_in_ply()));
+    float q = best >= 0 ? root->get_child_q(best) : root->Q();
+    if (type != NodeType::UNSOLVED) q = root->Q();
+    std::string out = "{\"q\":" + std::to_string(q) + ",\"mate\":" + mate
+        + ",\"nodes\":" + std::to_string(info.nodes.load())
+        + ",\"depth\":" + std::to_string(info.get_max_depth())
+        + ",\"elapsed_ms\":" + std::to_string(info.elapsed())
+        + ",\"offset\":" + std::to_string(g_frozenValueOffset)
+        + ",\"done\":" + (done ? "true" : "false") + ",\"lines\":[";
+    for (size_t i = 0; i < order.size() && static_cast<int>(i) < lines; i++) {
+        const int index = order[i];
+        if (i) out += ',';
+        out += "{\"q\":" + std::to_string(root->get_child_q(index)) + ",\"mate\":" + child_mate(root, index)
+            + ",\"visits\":" + std::to_string(visits[index])
+            + ",\"prior\":" + std::to_string(root->get_joint_action(index).priorA)
+            + ",\"pv\":" + frozen_line(board, root, index, config, 16) + "}";
+    }
+    return out + "]}";
+}
+
+// The last search asked to keep its tree (the shown position's analysis), so
+// a later search of the same position carries on from it instead of starting
+// again: infinite analysis after the sit panel's rows, or a position the
+// player comes back to.
+struct KeptSearch {
+    std::string fen;
+    std::unique_ptr<Board> board;
+    Color side = WHITE;
+    std::shared_ptr<Node> root;
+    float offset = 0;
+    float staticScore = 0;
+    int nodes = 0;
+    int depth = 0;
+};
+KeptSearch g_kept;
+}
+
 extern "C" {
 void bh_init() {
     pieceMap.init(); variants.init(); Bitboards::init(); Position::init();
@@ -374,4 +514,79 @@ const char* bh_search_nodes(const char* fen, int team, int timeAdvantage, int re
     } catch (const std::exception& e) { result = "{\"error\":" + quote(e.what()) + '}'; }
     return result.c_str();
 }
+}
+
+extern "C" {
+// One board searched with the partner board held still (g_frozenBoardB) for
+// the side to move. Stops at the node budget (1..1000000), the time cap
+// (1..3600000 ms), a solved root or Stop. Every reportMs it hands the current
+// lines to Module.onFrozenReport. q values are from the side to move. `batch`
+// (1..64) leaves are evaluated together: one at a time suits a CPU, while a
+// GPU needs batches to be fast. With `keep`, the search keeps its tree for
+// later and carries on from the kept tree when that was the same position;
+// its node count and depth then continue from the kept search, and
+// "resumed_nodes" says how many of the nodes were searched before.
+const char* bh_frozen_search(const char* fen, int nodes, int millisCap, int lines, int reportMs, int batch, int keep) {
+    try {
+        FrozenScope frozen;
+        SearchParams::RuntimeConfig config;
+        // The offset is measured on the value head alone.
+        config.enableWdlEval = false;
+        Engine engine(0, std::clamp(batch, 1, 64));
+        const bool resume = keep && g_kept.root && g_kept.fen == fen;
+        KeptSearch run;
+        if (resume) run = std::move(g_kept);
+        else {
+            // A new tree replaces the kept one; free that one first.
+            if (keep) g_kept = KeptSearch{};
+            run.fen = fen;
+            run.board = load_frozen(fen, run.side);
+            if (!run.board->has_any_legal_move(0)) throw std::runtime_error("The side to move has no move.");
+            // The static values evaluate one position each; the search fills whole batches.
+            Engine single(0, 1);
+            const auto values = frozen_values(*run.board, run.side, single);
+            run.offset = (values[0] + values[1]) / 2;
+            run.staticScore = (values[0] - values[1]) / 2;
+            run.root = std::make_shared<Node>(run.side);
+            run.root->configure_root_search(config, false);
+        }
+        g_frozenValueOffset = run.offset;
+        frozen_report(("{\"static\":" + std::to_string(run.staticScore) + "}").c_str());
+        Board& board = *run.board;
+        const auto& root = run.root;
+        SearchInfo info(std::chrono::steady_clock::now(), std::clamp(millisCap, 1, 3600000));
+        info.nodes.store(run.nodes);
+        info.maxDepth.store(run.depth);
+        SearchThread search;
+        search.set_search_info(&info); search.set_root_node(root); search.set_runtime_config(config);
+        const int cap = std::clamp(nodes, 1, 1000000);
+        lines = std::clamp(lines, 1, 5);
+        double lastReport = 0;
+        const auto json = [&](bool done) {
+            std::string out = frozen_json(board, root, info, config, lines, done);
+            out.insert(out.size() - 1, ",\"resumed_nodes\":" + std::to_string(run.nodes));
+            return out;
+        };
+        // A kept tree that is already solved or past the cap answers at once.
+        if (!resume || (info.nodes < cap && root->get_node_type() == NodeType::UNSOLVED)) {
+            do {
+                search.run_iteration(board, &engine, false);
+                if (reportMs > 0 && info.elapsed() - lastReport >= reportMs && root->is_expanded()) {
+                    lastReport = info.elapsed();
+                    frozen_report(json(false).c_str());
+                }
+            } while (!cancelled() && info.nodes < cap && root->get_node_type() == NodeType::UNSOLVED
+                     && (info.nodes < 2 || info.remaining_time() > 0));
+            search.finish_pending_iteration(board, &engine, false);
+        }
+        result = json(true);
+        if (keep) {
+            run.nodes = info.nodes.load();
+            run.depth = info.get_max_depth();
+            g_kept = std::move(run);
+        }
+    } catch (const std::exception& e) { result = "{\"error\":" + quote(e.what()) + '}'; }
+    return result.c_str();
+}
+
 }

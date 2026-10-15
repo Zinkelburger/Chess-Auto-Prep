@@ -22,7 +22,7 @@ export interface Puzzle {
   kind: PuzzleKind;
   /** This board's FEN with both reserves, solver to move. */
   fen: string;
-  /** Both boards at the puzzle, for opening it in Bughouse Lab. */
+  /** Both boards at the puzzle, as the archive recorded them. */
   dual: string;
   board: BoardName;
   /** The opponent's move that led here, as UCI. */
@@ -242,17 +242,7 @@ export function formatTimeControl(tc: string): string {
   return Number.isFinite(minutes) ? `${minutes} ${inc ?? 0}` : tc;
 }
 
-/**
- * The puzzle's real two-board position as a Bughouse Lab link. The Lab's
- * `team` is the colour our team holds on board A; partners hold opposite
- * colours, so a solver on board B is on the team that has the other colour on A.
- */
-export function labLink(puzzle: Puzzle, solver: Colour): string {
-  const team = puzzle.board === 'A' ? solver : other(solver);
-  const session = {
-    version: 1,
-    line: { moves: [], upto: { A: 0, B: 0 }, focus: puzzle.board, root: puzzle.dual },
-    settings: { team, required: 'none', budget: '10000', clock: 'even', flipped: false },
-  };
-  return `/bughouse#lab=${encodeURIComponent(JSON.stringify(session))}`;
+/** The puzzle's board, solver to move, on the bughouse analysis board. */
+export function analysisLink(puzzle: Puzzle): string {
+  return `/bughouse?fen=${encodeURIComponent(puzzle.fen)}`;
 }

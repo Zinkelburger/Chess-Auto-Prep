@@ -1,0 +1,53 @@
+/* The bughouse board: the analysis layout (analysis.css) plus the sit panel
+   under the engine lines. */
+
+/* ── Sit panel: move now, or wait for one more piece ──────────── */
+/* Its own section of the tools column: a strip of page background parts it
+   from the engine lines, and the ladder is a ruled table so each score lines
+   up with its option and its move. */
+.bs-sit { flex: none; border-top: 8px solid var(--bg); border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+.bs-sit[hidden] { display: none; }
+.ch-analysis.practising .bs-sit { display: none; }
+
+.bs-sit-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-variant-numeric: tabular-nums; }
+.bs-sit-table th {
+  padding: 4px 10px; border-bottom: 1px solid var(--border-strong);
+  color: var(--text-dim); font-size: 0.78rem; font-weight: 600; text-align: left; white-space: nowrap;
+}
+.bs-sit-table th:nth-child(1) { width: 40%; }
+.bs-sit-table th:nth-child(2) { width: 22%; }
+.bs-sit-table td { height: 2.15em; padding: 0 10px; border-top: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Vertical rules between the columns. */
+.bs-sit-table th + th, .bs-sit-table td + td { border-left: 1px solid var(--border); }
+.bs-sit-table th:nth-child(2), .bs-sit-eval { text-align: right; }
+
+/* Moving now is the baseline the five waits are measured against. */
+.bs-sit-now td { border-bottom: 2px solid var(--border-strong); font-weight: 700; }
+.bs-sit-eval { font-weight: 700; }
+.bs-sit-eval .ch-spinner { width: 14px; height: 14px; vertical-align: middle; }
+.bs-sit-move { font-weight: 600; }
+.bs-sit-failed { color: var(--danger); font-weight: 400; white-space: normal; }
+
+.bs-sit-table td.bs-sit-option { padding: 0; }
+.bs-sit-label {
+  display: flex; align-items: center; gap: 4px; width: 100%; height: 2.15em; padding: 0 10px;
+  border: 0; background: none; color: var(--text); font: inherit; text-align: left;
+}
+button.bs-sit-label { cursor: pointer; }
+.bs-sit-option img { flex: none; width: 24px; height: 24px; }
+.bs-sit-name { overflow: hidden; text-overflow: ellipsis; }
+
+tr[data-role] { cursor: pointer; }
+tr[data-role]:hover td { background: var(--accent-bg); }
+.bs-sit-label:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.bs-sit-mates .bs-sit-eval, .bs-sit-mates .bs-sit-move { color: var(--ok); }
+
+@media (max-height: 800px) and (min-width: 861px) {
+  .bs-sit { border-top-width: 4px; }
+  .bs-sit-table th { padding-top: 2px; padding-bottom: 2px; }
+  .bs-sit-table td, .bs-sit-label { height: 1.8em; }
+  .bs-sit-option img { width: 20px; height: 20px; }
+}
+@media (max-width: 860px) {
+  .bs-sit-table td, .bs-sit-label { height: 2.8em; }
+}

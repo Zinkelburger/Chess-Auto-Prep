@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 
 import '../chess/generation/evaluation_source.dart';
 
@@ -10,6 +9,7 @@ import '../engines/fixed_depth.dart';
 import '../workspace/repertoire_catalog.dart';
 import '../storage/eval_cache.dart' show CachedEvaluator;
 import '../storage/my_games_files.dart';
+import '../storage/settings.dart';
 import '../workspace/board_book.dart';
 import '../workspace/books.dart';
 import '../workspace/chapter_audit.dart';
@@ -89,14 +89,14 @@ final class WorkspaceWiring {
     finds: _finds,
     myGamesTree: _myGamesTree,
     openings: _openings,
-    coresAvailable: Platform.numberOfProcessors,
+    coresAvailable: _env.coresAvailable,
   );
 
   late final _openings = OpeningNames(_env.openingBook);
 
   late final _analysis = EngineAnalysis(
     _session,
-    _env.startEngine,
+    _env.startAnalysisEngine,
     multiPv: _env.settings.value.engineLines,
     elsewhere: _tree.board,
   );
@@ -123,7 +123,7 @@ final class WorkspaceWiring {
   late final _inspection = CollectionAnalysis(
     source: _session,
     store: _env.store,
-    launch: _env.startEngine,
+    launch: _env.startAnalysisEngine,
     sourceEngine: _analysis,
     multiPv: _env.settings.value.engineLines,
   );
@@ -272,7 +272,7 @@ final class WorkspaceWiring {
   Future<void> start() async {
     if (_disposed) return;
     final s = _env.settings.value;
-    _engineRunsWith = (s.engineCores, s.engineMemoryMb);
+    _engineRunsWith = _runsWith(s);
     _analysis
       ..setLines(s.engineLines)
       ..showThreat(s.engineThreat);
@@ -281,17 +281,22 @@ final class WorkspaceWiring {
   }
 
   /// What the engine was last started with, so a settings change that
-  /// touches neither its threads nor its table does not restart it.
-  (int, int)? _engineRunsWith;
+  /// touches neither which engine it is, its threads nor its table does not
+  /// restart it.
+  (String, int, int)? _engineRunsWith;
 
-  /// More lines at once, or a new process for new threads or a new table.
+  static (String, int, int) _runsWith(Settings s) =>
+      (s.analysisEngine, s.engineCores, s.engineMemoryMb);
+
+  /// More lines at once, or a new process for another engine, new threads
+  /// or a new table.
   void _engineSettings() {
     final s = _env.settings.value;
     _analysis
       ..setLines(s.engineLines)
       ..showThreat(s.engineThreat);
     _inspection.engine.setLines(s.engineLines);
-    final wanted = (s.engineCores, s.engineMemoryMb);
+    final wanted = _runsWith(s);
     if (_engineRunsWith != wanted) {
       _engineRunsWith = wanted;
       unawaited(_analysis.restart());

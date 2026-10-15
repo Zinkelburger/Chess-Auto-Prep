@@ -4,10 +4,10 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 const result = await build({
-  entryPoints: [fileURLToPath(new URL('../tests/bughouse-state.ts', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../tests/puzzles.ts', import.meta.url))],
   bundle: true, write: false, platform: 'node', format: 'esm', target: 'node22',
 });
-const dir = await mkdtemp(path.join(tmpdir(), 'bughouse-state-test-'));
+const dir = await mkdtemp(path.join(tmpdir(), 'puzzles-test-'));
 try {
   const file = path.join(dir, 'test.mjs');
   await writeFile(file, result.outputFiles[0].text);

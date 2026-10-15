@@ -46,6 +46,11 @@ void main() {
 
     expect(store.value.engineCores, 3);
     expect(store.value.engineMemoryMb, 512);
+    expect(
+      number('CPU cores').value,
+      4,
+      reason: 'the rows were built before: half of 8 until chosen',
+    );
     expect(store.value.boardCoordinates, isFalse);
 
     // The Expectimax rows write what the tab's gear shows.

@@ -66,7 +66,9 @@ void main() {
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
     expect(find.text('Open PGN file…'), findsOneWidget);
-    expect(find.text('Paste PGN'), findsOneWidget);
+    expect(find.text('Paste PGN as repertoire'), findsOneWidget);
+    expect(find.text('Paste PGN or FEN'), findsOneWidget);
+    expect(find.text('Set up position…'), findsOneWidget);
     expect(find.text('Ctrl+V'), findsOneWidget);
     expect(find.text('Close file'), findsNothing);
     await tester.tap(find.text('Actions'));
@@ -79,7 +81,7 @@ void main() {
     await tester.pumpAndSettle();
     // The viewer's own empty list offers the file dialog too.
     expect(find.text('Open PGN file…'), findsAtLeastNWidgets(1));
-    expect(find.text('Paste PGN'), findsNothing);
+    expect(find.text('Paste PGN as repertoire'), findsNothing);
     expect(find.text('Close file'), findsNothing);
   });
 
@@ -97,12 +99,14 @@ void main() {
     expect(find.text('Which side is Main for?'), findsOneWidget);
   });
 
-  testWidgets('Paste PGN in the Actions menu does the same', (tester) async {
+  testWidgets('Paste PGN as repertoire in the Actions menu does the same', (
+    tester,
+  ) async {
     await pump(tester);
     clipboardHolds(tester, pasted);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Paste PGN'));
+    await tester.tap(find.text('Paste PGN as repertoire'));
     await tester.pumpAndSettle();
     expect(w.session.source?.path, '/repertoires/Pasted repertoire/Main.pgn');
   });
@@ -111,7 +115,10 @@ void main() {
     await pumpWithChapter(tester);
     clipboardHolds(tester, null);
     await pressCtrl(tester, LogicalKeyboardKey.keyV);
-    expect(find.text('Nothing to paste: copy a PGN first.'), findsOneWidget);
+    expect(
+      find.text('Nothing to paste: copy a PGN or FEN first.'),
+      findsOneWidget,
+    );
     expect(w.session.source, kid);
   });
 

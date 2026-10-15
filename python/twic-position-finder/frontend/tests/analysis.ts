@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import {
   MAX_IN_HAND, START_FEN, Tree, adjustHand, boardDests, dropSquares, handEdit, handLetters, playLine, readFen, sanLine, threatFen,
-} from '../src/crazyhouse/tree';
-import { liveGlyph, povDiff, verdict, winningChances } from '../src/crazyhouse/judge';
+  outcomeOf, positionOf, readMove,
+} from '../src/analysis/tree';
+import { liveGlyph, povDiff, verdict, winningChances } from '../src/analysis/judge';
+import { centipawns, mateMoves, toResult } from '../src/analysis/engine';
 
 const ITALIAN = 'r1bqkb1r/pppp1ppp/2n2n2/4p3/4P3/2N2N2/PPPP1PPP/R1BQKB1R[] w KQkq - 4 4';
 
@@ -13,13 +15,13 @@ assert.equal(readFen('8/8/8/8/8/8/8/8[] w - - 0 1').ok, false, 'no kings is refu
 assert.equal(readFen('nonsense').ok, false);
 assert.match((readFen('4k3/8/8/8/8/8/8/4K3[Kk] w - - 0 1') as { error: string }).error, /king/i);
 
-// + and − on a hand: one at a time, never below zero, capped at the NNUE's 16.
+// + and − on a hand: one at a time, never below zero, capped at 16.
 let fen = adjustHand(ITALIAN, 'black', 'pawn', 1)!;
 assert.equal(handLetters(fen), 'p');
 assert.equal(adjustHand(ITALIAN, 'black', 'pawn', -1), null, 'no pawn to take away');
 for (let i = 1; i < MAX_IN_HAND; i++) fen = adjustHand(fen, 'black', 'pawn', 1)!;
 assert.equal(handLetters(fen), 'p'.repeat(16));
-assert.equal(adjustHand(fen, 'black', 'pawn', 1), null, 'a 17th pawn would not be seen by the net');
+assert.equal(adjustHand(fen, 'black', 'pawn', 1), null, 'no 17th pawn');
 // The 64-piece limit (board plus hands).
 let full = '4k3/8/8/8/8/8/8/4K3[] w - - 0 1';
 for (const role of ['queen', 'rook', 'bishop', 'knight'] as const)
@@ -39,6 +41,19 @@ const castled = castle.play(castle.root.id, 'e1g1')!;
 assert.equal(castled.san, 'O-O');
 assert.equal(castle.play(castle.root.id, 'e1h1'), castled, 'both castling forms are one move');
 
+// Bughouse rules: a capture leaves the board for the partner; nothing lands in the capturer's hand.
+const captures = new Tree('rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR[] w KQkq d6 0 2');
+const exd5 = captures.play(captures.root.id, 'e4d5')!;
+assert.equal(handLetters(exd5.fen), '', 'exd5 banks nothing');
+assert.ok(captures.adjustHand(exd5.id, 'black', 'knight', 1));
+const nf6 = captures.play(exd5.id, 'N@f6')!;
+assert.equal(handLetters(nf6.fen), '', 'a drop spends the piece');
+assert.equal(captures.expectedFen(nf6.id), nf6.fen);
+assert.ok(!captures.play(nf6.id, 'P@e4'), 'no pawn in hand, no pawn drop');
+// A check a drop could block is mate when the hand is empty, as the engine plays it.
+assert.equal(outcomeOf('4R1k1/5ppp/8/8/8/8/5PPP/6K1[] b - - 0 1'), 'Checkmate');
+assert.ok(readMove(positionOf('4R1k1/5ppp/8/8/8/8/5PPP/6K1[n] b - - 0 1'), 'N@f8'), 'with a knight in hand it blocks');
+
 // A hand edit is carried through later moves; a drop that no longer has its piece is cut.
 const tree = new Tree(ITALIAN);
 const a = tree.play(tree.root.id, 'd2d4')!;
@@ -49,12 +64,12 @@ assert.equal(drop.san, 'N@d5');
 const reply = tree.play(drop.id, 'f6d5')!;
 assert.equal(handEdit(tree.expectedFen(b.id), b.fen), '+N');
 assert.equal(handEdit(tree.expectedFen(drop.id), drop.fen), '', 'the move after an edit is not an edit');
-assert.equal(handLetters(reply.fen), 'np');
+assert.equal(handLetters(reply.fen), '', 'both captures went to the partners');
 
 // An earlier edit keeps the later one: Black gets a pawn at the start, White still gets the knight.
 assert.ok(tree.adjustHand(tree.root.id, 'black', 'pawn', 1));
 assert.equal(tree.get(reply.id), reply, 'the line survives');
-assert.equal(handLetters(reply.fen), 'npp');
+assert.equal(handLetters(reply.fen), 'p');
 assert.equal(handEdit(tree.loadedFen, tree.root.fen), '+p');
 
 // Taking the knight away again cuts the drop that needed it.
@@ -81,13 +96,13 @@ assert.deepEqual(sanLine(dropFen, ['N@d5', 'f6d5']), ['N@d5', 'Nxd5']);
 assert.deepEqual(sanLine(START_FEN, ['e2e5']), [], 'stops at an illegal move');
 
 // PGN out and back in, variations and drops included.
-const game = new Tree();
+const game = new Tree('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[P] w KQkq - 0 1');
 let n = game.root;
 for (const uci of ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1c4', 'g8f6', 'f3g5', 'd7d5', 'e4d5', 'f6d5', 'g5f7', 'e8f7', 'P@e6'])
   n = game.play(n.id, uci)!;
 game.play(game.root.children[0].id, 'c7c5');
 const pgn = game.pgn();
-assert.match(pgn, /\[Variant "Crazyhouse"\]/);
+assert.match(pgn, /\[Variant "Bughouse"\]/);
 assert.match(pgn, /1\. e4 e5 \( 1\.\.\. c5 \) 2\. Nf3/);
 assert.match(pgn, /P@e6/);
 const back = Tree.fromPgn(pgn)!;
@@ -182,4 +197,19 @@ assert.equal(liveGlyph('black', { cp: -30 }, { cp: 60 })?.symbol, '?!');
 assert.equal(verdict('white', { cp: 50 }, { cp: 45 }), 'goodMove');
 assert.equal(verdict('black', { cp: 0 }, { cp: 900 }), 'blunder');
 
-console.log('crazyhouse tree: ok');
+// Hivemind's winning chances read as Lichess's centipawns, from White's side.
+assert.equal(centipawns(0), 0);
+assert.ok(centipawns(0.5) > 290 && centipawns(0.5) < 300);
+assert.ok(Math.abs(winningChances({ cp: centipawns(0.3) }) - 0.3) < 0.01, 'the inverse of lila\'s winning chances');
+assert.equal(mateMoves(1), 1);
+assert.equal(mateMoves(2), 1);
+assert.equal(mateMoves(-3), -2);
+const black = toResult('8/8/8/8/8/8/8/k6K[] b - - 0 1', {
+  q: 0.5, mate: null, nodes: 100, depth: 3, elapsed_ms: 5000, done: true,
+  lines: [{ q: 0.5, mate: null, visits: 60, pv: ['a1a2'] }, { q: 0.2, mate: 2, visits: 40, pv: ['a1b2'] }],
+}, true);
+assert.ok(black.lines[0].cp! < 0, 'good for Black is negative');
+assert.equal(black.lines[1].mate, -1, 'Black mates in one');
+assert.equal(black.info, '100 positions · 20/s');
+
+console.log('bughouse analysis tree: ok');

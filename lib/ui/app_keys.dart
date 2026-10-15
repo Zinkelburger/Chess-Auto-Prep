@@ -56,13 +56,17 @@ enum AppKey {
     SingleActivator(LogicalKeyboardKey.keyV, control: true),
     SingleActivator(LogicalKeyboardKey.keyV, meta: true),
   ]),
-  pastePosition('Paste the position only', KeyPlace.window, [
+  pastePosition('Paste FEN', KeyPlace.window, [
     SingleActivator(LogicalKeyboardKey.keyV, control: true, shift: true),
     SingleActivator(LogicalKeyboardKey.keyV, meta: true, shift: true),
   ]),
   analysisBoard('New analysis board', KeyPlace.window, [
     SingleActivator(LogicalKeyboardKey.keyN, control: true),
     SingleActivator(LogicalKeyboardKey.keyN, meta: true),
+  ]),
+  setUpPosition('Set up position', KeyPlace.window, [
+    SingleActivator(LogicalKeyboardKey.keyE, control: true, shift: true),
+    SingleActivator(LogicalKeyboardKey.keyE, meta: true, shift: true),
   ]),
   search('Search from the board', KeyPlace.window, [
     SingleActivator(LogicalKeyboardKey.keyG, control: true),

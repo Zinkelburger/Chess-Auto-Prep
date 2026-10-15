@@ -7,6 +7,7 @@ import 'package:chess_auto_prep/features/library/outline_panel.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/recent_pgn_files.dart';
+import 'package:chess_auto_prep/workspace/board_view.dart';
 import 'package:chess_auto_prep/workspace/search_pane.dart';
 import 'package:chess_auto_prep/workspace/document_saver.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
@@ -190,6 +191,24 @@ void main() {
     expect(w.session.isScratch, isTrue);
     expect(find.text('Main is no longer on disk'), findsOneWidget);
   });
+  testWidgets('a sentence in the top bar moves and resizes nothing on the '
+      'page', (tester) async {
+    await pump(tester);
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    await tester.pumpAndSettle();
+    final board = find.byType(BoardView);
+    final quiet = tester.getRect(board);
+    w.requests.say('The clipboard holds no FEN.');
+    await tester.pumpAndSettle();
+    expect(find.text('The clipboard holds no FEN.'), findsOneWidget);
+    expect(tester.getRect(board), quiet);
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+    expect(find.text('The clipboard holds no FEN.'), findsNothing);
+    expect(tester.getRect(board), quiet);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('another chapter is not opened over a frozen document until '
       'the user says so', (tester) async {
     await pump(tester);

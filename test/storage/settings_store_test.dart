@@ -218,6 +218,67 @@ void main() {
     expect(Settings.fromJson('{"x": 1}'), Settings.defaults);
   });
 
+  group('the engine defaults', () {
+    test('fresh settings use half of the machine and a desktop table', () {
+      const fresh = Settings.defaults;
+      expect(fresh.engineCores, Settings.autoCores);
+      expect(fresh.coresOn(22), 11);
+      expect(fresh.coresOn(1), 1);
+      expect(fresh.engineMemoryMb, Settings.defaultMemoryMb);
+      expect(fresh.analysisEngine, Settings.builtInEngine);
+      final text = fresh.toJson();
+      expect(
+        jsonDecode(text) as Map,
+        isNot(contains('engineCores')),
+        reason: 'automatic is not a number an older build would hand on',
+      );
+      expect(Settings.fromJson(text), fresh);
+    });
+
+    test('a chosen number is kept, inside the machine', () {
+      final chosen = Settings.fromJson(
+        Settings.defaults
+            .copyWith(engineCores: 1, engineMemoryMb: 128)
+            .toJson(),
+      );
+      expect(chosen.engineCores, 1, reason: 'chosen after the change');
+      expect(chosen.engineMemoryMb, 128);
+      expect(chosen.coresOn(22), 1);
+      expect(
+        Settings.defaults.copyWith(engineCores: 16).coresOn(8),
+        8,
+        reason: 'a file carried to a smaller computer',
+      );
+    });
+
+    test('a file from before keeps what was chosen; the old defaults it '
+        'wrote for everyone read as the new ones', () {
+      final untouched = Settings.fromJson(
+        '{"engineCores": 1, "engineMemoryMb": 128, "engineLines": 3}',
+      );
+      expect(untouched.engineCores, Settings.autoCores);
+      expect(untouched.coresOn(22), 11);
+      expect(untouched.engineMemoryMb, Settings.defaultMemoryMb);
+
+      final chosen = Settings.fromJson(
+        '{"engineCores": 6, "engineMemoryMb": 1024}',
+      );
+      expect(chosen.engineCores, 6);
+      expect(chosen.engineMemoryMb, 1024);
+    });
+
+    test('the analysis engine round-trips', () async {
+      final store = SettingsStore(support: support);
+      addTearDown(store.dispose);
+      await store.update(store.value.copyWith(analysisEngine: 'engine-1'));
+      final next = SettingsStore(support: support);
+      addTearDown(next.dispose);
+      await next.load();
+      expect(next.value.analysisEngine, 'engine-1');
+      expect(next.value, store.value);
+    });
+  });
+
   test('a field an older file lacks keeps its default', () {
     final read = Settings.fromJson('{"engineCores": 2, "engineLines": "x"}');
     expect(read.engineCores, 2);

@@ -3,14 +3,15 @@
   "revision": "5508ba9daf4164e48a8a8a9b39e101efdc60e97a",
   "emscripten": "4.0.15",
   "sha256": {
-    "hivemind.mjs": "e07d9bbbb16bed05456e82994b7b840e99d01e85c6fe411ec2dec4a89acd2bb7",
-    "hivemind.wasm": "5c554c39ce28fb7ae16b1597006b307626405845c4f70f8ee889d46a9b1babde",
-    "hivemind-source.tar.gz": "74a3e64b5e66b922eb9306d66ecc629aa440cf134ab4c399b508686cabcf9689"
+    "hivemind.mjs": "37147f0474c4926450757fb989f4c1598ba54c6938253b22aae4b1bda2a9400c",
+    "hivemind.wasm": "952b220e22a8f5f723b536fc208f4a2966c818ff6d1acfa82695b3c3c38c328b",
+    "hivemind-source.tar.gz": "837768f6ec68a100ab4f7e4e556097f8ebb7b7dc65d68053ebcb0f847193f7db"
   },
   "bridge_sha256": {
-    "CMakeLists.txt": "4b83c373f122b4a0cdeb24a0e2555ee3c202e87dad51dbd594d16bfca2392f1e",
-    "bridge.cc": "3bd1d0e2b116f2ec7ce2117c813d1536ac62b676ded5f453a6b92943b7a64821",
+    "CMakeLists.txt": "0e0721168d85f95bf71b01aa41cdb8ea780275c03d3548e3fd8ae975e323617e",
     "engine_web.cc": "53896306b676525ee834fa753f75477da7afae833bc41e47ec3da9cc9a2b20b5",
-    "thread_web.cc": "e5f3a9a692c3d0367fecdb81f4e5087a2d7e600fe989f92f1f9c7f1f4302fa93"
+    "thread_web.cc": "e5f3a9a692c3d0367fecdb81f4e5087a2d7e600fe989f92f1f9c7f1f4302fa93",
+    "bridge.cc": "614b44ca0600318900a2497e463c7ab33bff86a9edfeb1a42c17fce9af14b3fb",
+    "patches/frozen-board.patch": "90fe653729b4ed7b479753265a898fada3fca834131a2f4f59df6a9bfbeeaae7"
   }
 }

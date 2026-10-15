@@ -1,21 +1,19 @@
 import assert from 'node:assert/strict';
-import http from 'node:http';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
+import { serveDist } from './static-server.mjs';
 const frontend = fileURLToPath(new URL('..', import.meta.url));
 const root = path.resolve(frontend, '../../..');
 const output = path.join(root, 'build/prep-web');
 await fs.mkdir(output, { recursive: true });
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.svg': 'image/svg+xml', '.webp': 'image/webp' };
-const server = http.createServer(async (req, res) => {
-  try { let file = path.join(frontend, 'dist', decodeURIComponent(new URL(req.url, 'http://localhost').pathname)); if ((await fs.stat(file)).isDirectory()) file = path.join(file, 'index.html'); res.setHeader('Content-Type', types[path.extname(file)] || 'application/octet-stream'); res.end(await fs.readFile(file)); }
-  catch { res.writeHead(404); res.end(); }
-});
-await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-const origin = `http://127.0.0.1:${server.address().port}`;
-const browser = await puppeteer.launch({ executablePath: process.env.CHROME_BIN || '/usr/bin/google-chrome', headless: true, args: ['--disable-dev-shm-usage'] });
+// Served with public/_headers, as Cloudflare serves it: Stockfish must start under the bundled worker's isolation.
+const { origin, close } = await serveDist(frontend);
+// Chrome's singleton socket path must stay short; the job runner's TMPDIR is too long.
+const chromeTmp = await fs.mkdtemp(path.join(os.homedir(), '.cache', 'ppt-'));
+const browser = await puppeteer.launch({ executablePath: process.env.CHROME_BIN || '/usr/bin/google-chrome', headless: true, args: ['--disable-dev-shm-usage'], env: { ...process.env, TMPDIR: chromeTmp } });
 try {
   const page = await browser.newPage(); page.setDefaultTimeout(30000);
   const errors = []; page.on('pageerror', e => errors.push(e.message));
@@ -127,4 +125,4 @@ try {
   console.log('PGN tactics mining with real Stockfish, solution, local viewer link and persisted training passed.');
   assert.deepEqual(errors, [], 'no browser exceptions');
   console.log(`Screenshots: ${output}`);
-} finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
+} finally { await browser.close(); close(); await fs.rm(chromeTmp, { recursive: true, force: true }); }
