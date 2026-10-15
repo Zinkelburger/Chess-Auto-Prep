@@ -108,9 +108,41 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-icon:disabled { opacity: 0.35; cursor: default; }
 .ch-icon[aria-pressed="true"], .ch-icon[aria-expanded="true"] { background: var(--accent-bg); color: var(--accent); }
 
-.ch-settings { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 10px; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
-.ch-settings label { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--text-dim); }
-.ch-settings input[type="number"] { width: 4.6em; padding: 3px 6px; font-size: 0.88rem; }
+/* The gear: lila's engine settings, a panel dropped over the engine lines
+   (so nothing under it moves), one slider per row with its value at the end. */
+.ch-settings {
+  position: absolute; left: 0; right: 0; z-index: 8;
+  display: flex; flex-direction: column; gap: 14px; padding: 16px 16px 18px;
+  background: var(--bg-raised); border-top: 2px solid var(--accent); border-bottom: 1px solid var(--border-strong);
+  box-shadow: 0 12px 20px -8px rgb(0 0 0 / 0.55); font-size: 0.88rem;
+}
+.ch-settings[hidden], .ch-setting[hidden] { display: none; }
+.ch-setting { display: grid; grid-template-columns: 7.4em minmax(0, 1fr) 3.4em; align-items: center; column-gap: 12px; white-space: nowrap; }
+.ch-setting label { margin: 0; color: var(--text-dim); }
+.ch-setting-value { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+.ch-setting-choice { grid-column: 2 / -1; }
+.ch-setting-choice button { padding: 5px 8px; }
+
+/* Sliders in the page's colours: a quiet track, a light thumb that takes the
+   accent under the pointer or keyboard. The thumb is 14 px; gear.ts places
+   the threads tick from that. */
+.ch-range-track { position: relative; display: flex; align-items: center; }
+/* The site's input box (border, fill, padding) does not belong on a slider. */
+.ch-range { width: 100%; height: 22px; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; cursor: pointer; -webkit-appearance: none; appearance: none; }
+.ch-range::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--border-strong); }
+.ch-range::-moz-range-track { height: 4px; border-radius: 2px; background: var(--border-strong); }
+.ch-range::-webkit-slider-thumb { width: 14px; height: 14px; margin-top: -5px; border: 0; border-radius: 50%; background: var(--text); box-shadow: 0 1px 3px rgb(0 0 0 / 0.5); -webkit-appearance: none; appearance: none; }
+.ch-range::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 50%; background: var(--text); box-shadow: 0 1px 3px rgb(0 0 0 / 0.5); }
+.ch-range:hover::-webkit-slider-thumb, .ch-range:active::-webkit-slider-thumb { background: var(--accent); }
+.ch-range:hover::-moz-range-thumb, .ch-range:active::-moz-range-thumb { background: var(--accent); }
+.ch-range:focus-visible { outline: none; }
+.ch-range:focus-visible::-webkit-slider-thumb { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-bg); }
+.ch-range:focus-visible::-moz-range-thumb { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-bg); }
+/* lila's recommended-threads tick, under the track; click it to use that count. */
+.ch-tick { position: absolute; top: 17px; width: 14px; height: 10px; margin-left: -7px; padding: 0; border: 0; background: none; cursor: pointer; }
+.ch-tick::before { content: ''; position: absolute; left: 6px; top: 0; width: 2px; height: 7px; border-radius: 1px; background: var(--text-faint); }
+.ch-tick:hover::before, .ch-tick.recommended::before { background: var(--accent); }
+.ch-tick:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 2px; }
 .ch-check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .ch-check input { margin: 0; accent-color: var(--accent); }
 

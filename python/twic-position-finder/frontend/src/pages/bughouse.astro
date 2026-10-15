@@ -61,11 +61,7 @@ const icon = {
               </button>
               <div class="ch-bar" aria-hidden="true"><span id="ch-bar"></span></div>
             </div>
-            <div class="ch-settings" id="ch-settings" hidden>
-              <label>Lines <input type="number" id="ch-set-lines" inputmode="numeric" /></label>
-              <label title="Positions searched for each row of the sit panel. Empty: 800 on a GPU, 200 on a CPU">Sit search <input type="number" id="ch-set-sit" inputmode="numeric" step="50" /> <span class="dim">positions</span></label>
-              <label class="ch-check"><input type="checkbox" id="ch-set-infinite" /> Infinite analysis</label>
-            </div>
+            <div class="ch-settings" id="ch-settings" role="group" aria-label="Engine settings" hidden></div>
             <div class="ch-practice" id="ch-practice" aria-live="polite" hidden></div>
             <div class="ch-pvs" id="ch-pvs"></div>
             <div class="bs-sit" id="bs-sit" role="group" aria-label="Sit or move" hidden></div>

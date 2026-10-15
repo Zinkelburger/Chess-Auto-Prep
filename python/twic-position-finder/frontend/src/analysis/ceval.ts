@@ -11,7 +11,7 @@ import { Chessground } from '@lichess-org/chessground';
 import type { Api } from '@lichess-org/chessground/api';
 import type { Key } from '@lichess-org/chessground/types';
 import type { Color, Role } from 'chessops/types';
-import { SEARCH_MS, type EngineLine, type EngineResult, type EngineStatus } from './engine';
+import { type EngineLine, type EngineResult, type EngineStatus } from './engine';
 import { el } from './moves';
 import { HAND_ROLES, playLine, positionOf, type LineMove } from './tree';
 
@@ -25,6 +25,8 @@ export interface CevalState {
   ply: number;
   multiPv: number;
   infinite: boolean;
+  /** The search time, for the progress bar. */
+  searchMs: number;
   result: EngineResult | undefined;
   status: EngineStatus;
   threat: boolean;
@@ -136,7 +138,7 @@ export class CevalView {
     pearl.textContent = formatEval(result.lines[0]);
     info.textContent = result.info;
     if (result.done && !state.threat) this.speak(state.fen, result);
-    const progress = result.millis / SEARCH_MS;
+    const progress = result.millis / state.searchMs;
     bar.style.width = `${result.done || state.infinite ? 100 : Math.min(100, 100 * progress)}%`;
     for (let i = 0; i < state.multiPv; i++) pvs.append(this.row(state, result.lines[i]));
     // The board stays while the pointer is on a line of this position; engine updates redraw the rows under it.
