@@ -73,7 +73,7 @@ jobs:
           else
             flutter test integration_test/v2_desktop_test.dart -d '${{ matrix.target.device }}' --reporter expanded 2>&1 | tee desktop-integration.log
           fi
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: desktop-contracts-${{ matrix.target.os }}
