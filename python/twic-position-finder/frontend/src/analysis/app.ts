@@ -16,13 +16,14 @@ import { Material } from 'chessops/setup';
 import type { Color, Role } from 'chessops/types';
 import { CrazyBoard, type Brush } from './board';
 import { CevalView } from './ceval';
-import { Engine, type EngineResult, type EngineStatus } from './engine';
+import { Engine, type EngineResult, type EngineStatus, type SearchSettings } from './engine';
 import { renderHand } from './hand';
 import { liveGlyph, type Glyph } from './judge';
 import { openHelp, renderMenu } from './menu';
 import { MoveList } from './moves';
 import { PRACTICE_NODES, Practice } from './practice';
-import { clamp, loadSettings, saveSettings, sitNodesFor, type Settings, type Toggle } from './settings';
+import { GearPanel } from './gear';
+import { loadSettings, maxThreads, recommendedThreads, saveSettings, sitNodesFor, threadsFor, type Settings, type Toggle } from './settings';
 import { SitPanel } from './sit';
 import { engineShapes, glyphShape, moveShapes, threatShapes, variationShapes } from './shapes';
 import {
@@ -116,6 +117,7 @@ export class BughouseApp {
   private toastTimer = 0;
   private lastDepth = new Map<string, number>();
   private readonly extra: Extra;
+  private gear!: GearPanel;
 
   constructor() {
     this.settings = loadSettings();
@@ -135,9 +137,10 @@ export class BughouseApp {
     if (read && !read.ok) this.flash(`Could not open the linked position: ${read.error}`);
     if (positionOf(this.tree.root.fen).turn === 'black') this.orientation = 'black';
 
-    const onStatus = (status: EngineStatus) => { this.engineStatus = status; this.renderCeval(); this.renderSitSetting(); this.extra?.update(); };
+    const onStatus = (status: EngineStatus) => { this.engineStatus = status; this.renderCeval(); this.renderGear(); this.extra?.update(); };
     const onResult = (result: EngineResult) => this.engineResult(result);
     this.engine = new Engine(onStatus, onResult);
+    this.engine.configure({ gpu: this.settings.gpu, threads: threadsFor(this.settings) });
     this.board = new CrazyBoard($('ch-board-wrap'), $('ch-board'), {
       move: (orig, dest) => void this.boardMove(orig, dest),
       drop: (role, key) => this.play(`${LETTER[role]}@${key}`, 'user'),
@@ -415,17 +418,24 @@ export class BughouseApp {
   private search() {
     if (this.mode === 'editor') { this.engine.stop(); return; }
     if (outcomeOf(this.current.fen)) { this.engine.stop(); this.renderCeval(); return; }
-    if (this.practice) this.engine.analyse(this.current.fen, { ...this.settings, multiPv: 1, infinite: false, nodes: PRACTICE_NODES });
+    if (this.practice) this.engine.analyse(this.current.fen, { ...this.searchSettings(), multiPv: 1, infinite: false, nodes: PRACTICE_NODES });
     else if (!this.settings.engineOn) { this.engine.stop(); return; }
     else {
       const fen = this.threat ? threatFen(this.current.fen) : this.current.fen;
       // A position already searched to its limit is shown as it was, as Lichess keeps its evaluations;
       // the engine's time then goes to the sit panel.
       const kept = this.evals.get(fen);
-      if (kept?.complete && kept.lines.length >= this.settings.multiPv && !this.settings.infinite) this.engine.stop();
-      else this.engine.analyse(fen, this.settings);
+      const search = this.searchSettings();
+      if (kept?.complete && kept.budget >= search.searchMs && kept.lines.length >= search.multiPv && !search.infinite) this.engine.stop();
+      else this.engine.analyse(fen, search);
     }
     this.engine.load().catch(() => { /* Shown in the engine header. */ });
+  }
+
+  /** The analysis's search: ∞ searches 10 s first, then carries on once the sit panel is done. */
+  private searchSettings(): SearchSettings {
+    const seconds = this.settings.searchSeconds;
+    return { multiPv: this.settings.multiPv, infinite: seconds === 0, searchMs: (seconds || 10) * 1000 };
   }
 
   private engineResult(result: EngineResult) {
@@ -475,7 +485,8 @@ export class BughouseApp {
       fen,
       ply: this.current.ply,
       multiPv: this.settings.multiPv,
-      infinite: this.settings.infinite,
+      infinite: this.settings.searchSeconds === 0,
+      searchMs: this.searchSettings().searchMs,
       result: this.evals.get(fen),
       status: this.engineStatus,
       threat: this.threat,
@@ -867,37 +878,34 @@ export class BughouseApp {
     $('ch-engine-on').onchange = (e) => this.toggleEngine((e.target as HTMLInputElement).checked);
     $('ch-threat').onclick = () => this.toggleThreat();
 
+    // The gear: lila's engine settings, dropped over the engine lines; a click elsewhere or Esc closes it.
     const settings = $('ch-settings');
-    $('ch-gear').onclick = () => {
-      settings.hidden = !settings.hidden;
-      $('ch-gear').setAttribute('aria-expanded', String(!settings.hidden));
+    const gearButton = $('ch-gear');
+    const showGear = (open: boolean) => {
+      settings.hidden = !open;
+      gearButton.setAttribute('aria-expanded', String(open));
+      if (open) this.renderGear();
     };
-    const lines = $<HTMLInputElement>('ch-set-lines');
-    lines.min = '1';
-    lines.max = '5';
-    lines.value = String(this.settings.multiPv);
-    lines.onchange = () => {
-      this.settings.multiPv = clamp(lines.value, 1, 5, this.settings.multiPv);
-      lines.value = String(this.settings.multiPv);
+    gearButton.onclick = () => showGear(settings.hidden);
+    document.addEventListener('pointerdown', (e) => {
+      const target = e.target as Node;
+      if (!settings.hidden && !settings.contains(target) && !gearButton.contains(target)) showGear(false);
+    });
+    this.closeGear = () => { if (settings.hidden) return false; showGear(false); gearButton.focus(); return true; };
+    const changed = (restart: boolean) => {
       saveSettings(this.settings);
-      this.evals.clear();
+      this.renderGear();
+      if (restart) this.engine.configure({ gpu: this.settings.gpu, threads: threadsFor(this.settings) });
       this.renderCeval();
       this.analyse();
     };
-    // Empty goes back to the default for the engine's backend.
-    const sit = $<HTMLInputElement>('ch-set-sit');
-    sit.min = '20';
-    sit.max = '5000';
-    this.renderSitSetting();
-    sit.onchange = () => {
-      this.settings.sitNodes = sit.value.trim() ? clamp(sit.value, 20, 5000, sitNodesFor(this.settings, this.engine.gpu)) : null;
-      saveSettings(this.settings);
-      this.renderSitSetting();
-      this.analyse();
-    };
-    const infinite = $<HTMLInputElement>('ch-set-infinite');
-    infinite.checked = this.settings.infinite;
-    infinite.onchange = () => { this.settings.infinite = infinite.checked; saveSettings(this.settings); this.analyse(); };
+    this.gear = new GearPanel(settings, {
+      searchSeconds: (seconds) => { this.settings.searchSeconds = seconds; changed(false); },
+      lines: (n) => { this.settings.multiPv = n; this.evals.clear(); changed(false); },
+      gpu: (on) => { this.settings.gpu = on; changed(true); },
+      threads: (n) => { this.settings.threads = n; changed(true); },
+      sitNodes: (n) => { this.settings.sitNodes = n; changed(false); },
+    });
 
     // Editor panel
     for (const b of document.querySelectorAll<HTMLButtonElement>('#ch-turn button'))
@@ -928,9 +936,20 @@ export class BughouseApp {
     document.addEventListener('keydown', (e) => this.key(e));
   }
 
-  private renderSitSetting() {
-    const sit = $<HTMLInputElement>('ch-set-sit');
-    if (document.activeElement !== sit) sit.value = String(sitNodesFor(this.settings, this.engine?.gpu ?? false));
+  private closeGear: () => boolean = () => false;
+
+  private renderGear() {
+    if (!this.gear || $('ch-settings').hidden) return;
+    const max = maxThreads();
+    this.gear.render({
+      settings: this.settings,
+      sitNodes: sitNodesFor(this.settings, this.engine.gpu),
+      gpuAvailable: this.engine.gpuAvailable,
+      onGpu: this.engine.gpu,
+      maxThreads: max,
+      recommendedThreads: recommendedThreads(max),
+      threads: threadsFor(this.settings),
+    });
   }
 
   private flashCopied() {
@@ -941,8 +960,11 @@ export class BughouseApp {
 
   private key(e: KeyboardEvent) {
     const target = e.target as HTMLElement;
+    // Esc closes the gear from its own sliders too.
+    if (e.key === 'Escape' && target.closest('#ch-settings') && this.closeGear()) return;
     if (target.closest('input, textarea, [contenteditable], dialog') || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === 'Escape') {
+      if (this.closeGear()) return;
       if (this.moves.menuOpen) { this.moves.closeMenu(); return; }
       if (this.menuOpen) { this.closeActionMenu(); return; }
       if (this.dropping) { this.dropping = null; this.renderBoard(); this.renderHands(); return; }

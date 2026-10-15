@@ -231,11 +231,27 @@ try {
   assert.equal(await page.$$eval('#bs-sit .bs-sit-row', (rows) => rows.filter((r) => r.getBoundingClientRect().height > 20).length), 6);
   await page.screenshot({ path: path.join(output, 'laptop-1366x768.png') });
 
-  // Infinite analysis carries on from the first search's tree after the sit rows, instead of starting again.
+  // The gear: lila's sliders. ∞ search time is infinite analysis, which carries on from the first search's tree after the sit rows.
   await page.setViewport({ width: 1440, height: 900 });
+  const slide = (selector, value, event = 'input') => page.$eval(selector, (el, [v, ev]) => {
+    el.value = String(v);
+    el.dispatchEvent(new Event(ev, { bubbles: true }));
+  }, [value, event]);
   await page.click('#ch-gear');
-  await page.click('#ch-set-infinite');
+  const rows = () => page.$$eval('#ch-settings .ch-setting', (rs) => rs.filter((r) => !r.hidden).map((r) => r.querySelector('label').textContent));
+  const backend = await text(page, '#ch-engine-name');
+  console.log('gear rows on', backend, '→', (await rows()).join(', '));
+  assert.deepEqual((await rows()).filter((r) => r !== 'Hardware' && r !== 'Threads'), ['Search time', 'Multiple lines', 'Sit search']);
+  assert.equal((await rows()).includes('Threads'), !backend.includes('GPU'), 'threads only for the CPU path');
+  assert.equal(await text(page, '#ch-settings .ch-setting:first-child .ch-setting-value'), '10s');
+  await page.screenshot({ path: path.join(output, 'gear.png') });
+  await page.keyboard.press('Escape');
+  assert.equal(await page.$eval('#ch-settings', (el) => el.hidden), true, 'Esc closes the gear');
   await page.click('#ch-gear');
+  await slide('#ch-set-search', 12); // ∞
+  assert.equal(await text(page, '#ch-settings .ch-setting:first-child .ch-setting-value'), '∞');
+  await page.mouse.click(300, 300); // on the board: a click elsewhere closes it
+  assert.equal(await page.$eval('#ch-settings', (el) => el.hidden), true, 'a click elsewhere closes the gear');
   await page.goto(url('r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R[] w KQkq - 4 4'));
   await evaluated(page);
   await sitDone(page);
@@ -243,9 +259,17 @@ try {
   const first = await positions();
   await page.waitForFunction((n) => parseInt(document.querySelector('#ch-engine-info').textContent.replace(/,/g, ''), 10) > n, { timeout: 5_000 }, first);
   console.log('infinite analysis resumed past', first, 'positions:', await text(page, '#ch-engine-info'));
-  await page.click('#ch-gear'); // closed by the reload
-  await page.click('#ch-set-infinite');
   await page.click('#ch-gear');
+  await slide('#ch-set-search', 4); // back to 10 s
+  // On the CPU, Threads starts a new engine with that many threads.
+  if (!backend.includes('GPU')) {
+    const max = Number(await page.$eval('#ch-set-threads', (el) => el.max));
+    const want = Math.max(1, Math.min(max, 2));
+    await slide('#ch-set-threads', want, 'change');
+    await until(page, '#ch-engine-name', new RegExp(`CPU × ${want}$`));
+    await evaluated(page);
+  }
+  await page.keyboard.press('Escape');
 
   // A phone: board, hands with + and −, engine and sit panel.
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });

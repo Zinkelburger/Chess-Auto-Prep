@@ -4,8 +4,8 @@
  *
  * The network runs on the GPU through WebGPU when the browser has it, with
  * leaves evaluated in batches (a GPU is fast only on batches). Otherwise it
- * runs on the CPU, one leaf at a time, on up to four threads when the page is
- * cross-origin isolated. A GPU that fails while searching is dropped for the
+ * runs on the CPU, one leaf at a time, on the threads the page asks for (the
+ * gear's Threads) when the page is cross-origin isolated. A GPU that fails while searching is dropped for the
  * CPU and the search runs again there. The network (about 32 MB) and ONNX
  * Runtime's WebGPU build (about 22 MB) download once, with their progress,
  * and are kept in the browser's cache.
@@ -26,9 +26,10 @@ interface Wasm {
 }
 interface Chunk { file: string; sha256: string; bytes: number }
 interface Manifest { model_sha256: string; chunks: Chunk[]; runtime?: Chunk; input: string; outputs: Record<string, string> }
-export interface Backend { kind: 'gpu' | 'cpu'; threads: number; batch: number }
+/** `gpuAvailable`: the browser offers WebGPU, whichever backend was chosen. */
+export interface Backend { kind: 'gpu' | 'cpu'; threads: number; batch: number; gpuAvailable: boolean }
 export type WorkerRequest =
-  | { type: 'load'; prefer: 'auto' | 'cpu' }
+  | { type: 'load'; prefer: 'auto' | 'cpu'; threads: number }
   /** `keep`: keep the search tree, and carry on from the kept one for the same position. */
   | { type: 'search'; id: number; fen: string; nodes: number; millis: number; lines: number; reportMs: number; keep: boolean }
   | { type: 'cancel' };
@@ -137,6 +138,7 @@ const tick = (() => {
 })();
 
 let model: ArrayBuffer | null = null;
+let webgpu = false;
 let manifest: Manifest | null = null;
 let net: ort.InferenceSession | null = null;
 const SESSION_OPTIONS = { graphOptimizationLevel: 'all', logSeverityLevel: 3 } as const;
@@ -149,13 +151,13 @@ async function warmUp(session: ort.InferenceSession, batch: number) {
   for (const t of Object.values(result)) t.dispose();
 }
 
-/** The network on the CPU, on up to four threads when the page is cross-origin isolated. */
+/** The network on the CPU, on the threads set at load. */
 async function cpuSession(): Promise<Backend> {
   net = await ort.InferenceSession.create(model!, { ...SESSION_OPTIONS, executionProviders: ['wasm'] });
-  return { kind: 'cpu', threads: ort.env.wasm.numThreads ?? 1, batch: 1 };
+  return { kind: 'cpu', threads: ort.env.wasm.numThreads ?? 1, batch: 1, gpuAvailable: webgpu };
 }
 
-async function load(prefer: 'auto' | 'cpu'): Promise<Backend> {
+async function load(prefer: 'auto' | 'cpu', threads: number): Promise<Backend> {
   send({ type: 'progress', text: 'Starting Hivemind…' });
   const url = new URL(DIRECTORY + 'hivemind.mjs', self.location.href).href;
   const { default: createHivemind } = await import(/* @vite-ignore */ url);
@@ -170,14 +172,16 @@ async function load(prefer: 'auto' | 'cpu'): Promise<Backend> {
   if (files.runtime) ort.env.wasm.wasmBinary = files.runtime;
   // ORT notes that shape operations stay on the CPU under WebGPU, as an error-level console line.
   ort.env.logLevel = 'error';
-  const cores = navigator.hardwareConcurrency || 2;
-  ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.max(1, Math.min(4, cores - 1)) : 1;
+  // Threads need SharedArrayBuffer, so a page that is not isolated runs one.
+  const cores = navigator.hardwareConcurrency || 1;
+  ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.max(1, Math.min(cores, Math.round(threads) || 1)) : 1;
+  webgpu = await gpuAvailable();
   let chosen: Backend | null = null;
-  if (prefer === 'auto' && await gpuAvailable()) {
+  if (prefer === 'auto' && webgpu) {
     try {
       net = await ort.InferenceSession.create(model, { ...SESSION_OPTIONS, executionProviders: ['webgpu'] });
       await warmUp(net, GPU_BATCH);
-      chosen = { kind: 'gpu', threads: 1, batch: GPU_BATCH };
+      chosen = { kind: 'gpu', threads: 1, batch: GPU_BATCH, gpuAvailable: true };
     } catch {
       try { await net?.release(); } catch { /* Already gone. */ }
       net = null;
@@ -247,7 +251,7 @@ let queue: Promise<void> = Promise.resolve();
 self.onmessage = ({ data }: MessageEvent<WorkerRequest>) => {
   if (data.type === 'cancel') { if (engine) engine.cancelled = true; return; }
   if (data.type === 'load') {
-    loading ??= load(data.prefer);
+    loading ??= load(data.prefer, data.threads);
     loading.then((b) => { backend = b; send({ type: 'ready', backend: b }); },
       (error) => { loading = null; send({ type: 'failed', error: error instanceof Error ? error.message : String(error) }); });
     return;

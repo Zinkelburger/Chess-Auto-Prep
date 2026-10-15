@@ -58,8 +58,8 @@ Cloudflare Pages' 25 MiB asset limit.
   runs the engine's WebAssembly build and its network with ONNX Runtime Web:
   on the GPU through WebGPU when the browser has it, evaluating 32 positions
   per batch (about 350 positions a second on a laptop's integrated GPU), and
-  otherwise on up to four CPU threads, one position at a time (about 25 a
-  second). One worker serves everything: the shown position is searched first
+  otherwise on CPU threads, one position at a time (about 25 a second on
+  four). One worker serves everything: the shown position is searched first
   for 10 seconds (reports several times a second, as Lichess's engine), then
   the sit panel's rows (`sit.ts`: the side to move's position again with one
   more pawn, knight, bishop, rook or queen, mating rows marked; 800 positions
@@ -75,7 +75,14 @@ Cloudflare Pages' 25 MiB asset limit.
   for 30 s past its limit stops the engine with a Try again button (a hang
   retries on the CPU), the sit rows show a dash meanwhile, and a GPU error
   during a search moves the worker to the CPU and runs the search again.
-  `localStorage['bughouse-engine-backend'] = 'cpu'` forces the CPU path. `board.ts` is the chessground board in analysis and editor modes;
+  The engine gear (`gear.ts`) is lila's: sliders for Search time (2 s to ∞,
+  which is infinite analysis), Multiple lines, Threads (1 to every thread,
+  with a tick on the recommended count: ONNX Runtime's own choice, half the
+  threads up to four, since one evaluation at a time gains little past
+  that) and Sit search, plus GPU | CPU when the browser has WebGPU. Threads
+  and hardware start a new worker that carries on with the same search.
+  `localStorage['bughouse-engine-backend'] = 'cpu'` (or Hardware: CPU)
+  forces the CPU path. `board.ts` is the chessground board in analysis and editor modes;
   `hand.ts` draws a hand with a + above and a − below each piece; `moves.ts`
   is the move list (column or inline, folds, live ?!/?/?? marks, the
   right-click menu with Promote, Make main line, Force variation, Copy PGN,
