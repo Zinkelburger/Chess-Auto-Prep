@@ -9,9 +9,14 @@
  * comes first: it reports a few times a second and stops at its time limit,
  * as Lichess's engine does. Background evaluations (the sit panel's rows) run
  * after it, one at a time. A new position stops whatever is running. With
- * infinite analysis, the position is searched again without a limit once the
- * background evaluations are done; that search is shown once it has looked
- * at more positions than the first.
+ * infinite analysis, the position's search carries on without a limit once
+ * the background evaluations are done: the worker keeps the analysis's tree,
+ * so it goes on from where it stopped.
+ *
+ * A search that stops answering, or a worker that crashes, is stopped and
+ * reported, and the next search starts a new worker (on the CPU after a hang).
+ * On a phone or a data-saving connection the engine waits for the player
+ * before its first download.
  *
  * Hivemind's value is a winning chance from the side to move. Lines carry it
  * as Lichess's centipawns for that chance, from White's side, so the panel,
@@ -37,6 +42,8 @@ export interface EngineResult {
   lines: EngineLine[];
   /** The search ended by itself (its time or node limit). */
   done: boolean;
+  /** Searched to the analysis's own limit, not practice's short search. */
+  complete: boolean;
   /** "1,234 positions · 380/s", under the engine name. */
   info: string;
 }
@@ -50,8 +57,12 @@ export interface SearchSettings {
 
 export type EngineStatus =
   | { kind: 'off' }
-  | { kind: 'loading'; text: string }
-  | { kind: 'ready'; backend: string }
+  /** Waits for the player before downloading `megabytes` (phones and data saving). */
+  | { kind: 'ask'; megabytes: number }
+  /** `fraction` of the download, while downloading. */
+  | { kind: 'loading'; text: string; fraction?: number }
+  /** `error`: the last analysis of `fen` failed; the engine still runs. */
+  | { kind: 'ready'; backend: string; gpu: boolean; error?: { fen: string; text: string } }
   | { kind: 'failed'; text: string };
 
 /** Without infinite analysis a position is searched this long. */
@@ -59,12 +70,20 @@ export const SEARCH_MS = 10_000;
 const INFINITE_MS = 3_600_000;
 const REPORT_MS = 400;
 const MAX_NODES = 1_000_000;
+/** A search silent this long past its time limit has hung (a lost GPU device, a stuck inference). */
+const HANG_MS = 30_000;
 /** Tests can force the CPU path: localStorage `bughouse-engine-backend` = `cpu`. */
 const BACKEND_KEY = 'bughouse-engine-backend';
+/** Set once the engine has loaded in this browser: its files are then in the cache. */
+const LOADED_KEY = 'bughouse-engine-loaded';
+/** The first download: the network and ONNX Runtime's WebGPU build. */
+export const DOWNLOAD_MB = 55;
 
 /** A frozen-board search report from the worker; values from the side to move, mate in plies. */
 export interface FrozenSearch {
   q: number; mate: number | null; nodes: number; depth: number; elapsed_ms: number; done: boolean;
+  /** Nodes a resumed search had before this one started. */
+  resumed_nodes?: number;
   lines: { q: number; mate: number | null; visits: number; pv: string[] }[];
 }
 
@@ -80,7 +99,7 @@ export function mateMoves(plies: number): number {
 }
 
 /** One search report as an engine result, scored from White's side. */
-export function toResult(fen: string, report: FrozenSearch, done: boolean): EngineResult {
+export function toResult(fen: string, report: FrozenSearch, done: boolean, complete = done): EngineResult {
   const sign = fen.split(' ')[1] === 'b' ? -1 : 1;
   const lines: EngineLine[] = report.lines.map((line, i) => ({
     multipv: i + 1,
@@ -89,9 +108,9 @@ export function toResult(fen: string, report: FrozenSearch, done: boolean): Engi
     ...(line.mate !== null ? { mate: sign * mateMoves(line.mate) } : { cp: sign * centipawns(line.q) }),
   }));
   const seconds = report.elapsed_ms / 1000;
-  const rate = seconds > 0.2 ? Math.round(report.nodes / seconds) : 0;
+  const rate = seconds > 0.2 ? Math.round((report.nodes - (report.resumed_nodes ?? 0)) / seconds) : 0;
   return {
-    fen, depth: report.depth, nodes: report.nodes, millis: report.elapsed_ms, lines, done,
+    fen, depth: report.depth, nodes: report.nodes, millis: report.elapsed_ms, lines, done, complete,
     info: `${report.nodes.toLocaleString()} positions${rate ? ` · ${rate.toLocaleString()}/s` : ''}`,
   };
 }
@@ -105,8 +124,10 @@ interface Job {
   main: boolean;
   /** Infinite analysis: search on without a limit after the background evaluations. */
   infinite?: boolean;
-  /** Reports are shown from this many positions on (the unlimited search repeats the first one's work). */
-  shownFrom?: number;
+  /** Practice's short search: its result is not the analysis's. */
+  short?: boolean;
+  /** Infinite analysis's unlimited search, which gives way to background evaluations. */
+  continued?: boolean;
   settle?: (result: EngineResult | null) => void;
 }
 
@@ -119,9 +140,18 @@ export class Engine {
   private background: Job[] = [];
   /** Infinite analysis's unlimited search, waiting for the background evaluations. */
   private continuation: Job | null = null;
-  /** `superseded`: stopped for other work; `dropped`: its evaluation was cancelled. */
-  private running: { job: Job; id: number; superseded: boolean; dropped: boolean } | null = null;
+  /**
+   * `superseded`: stopped for other work; `dropped`: its evaluation was
+   * cancelled; `paused`: the unlimited search gave way to an evaluation and
+   * carries on after it.
+   */
+  private running: { job: Job; id: number; superseded: boolean; dropped: boolean; paused?: boolean } | null = null;
   private serial = 0;
+  private watchdog = 0;
+  /** After a hang the next worker runs on the CPU. */
+  private preferCpu = false;
+  /** The player agreed to the first download (or it is not asked for). */
+  private allowed = false;
 
   constructor(
     private readonly onStatus: (status: EngineStatus) => void,
@@ -135,43 +165,84 @@ export class Engine {
     this.onStatus(status);
   }
 
+  get gpu(): boolean { return this.backend?.kind === 'gpu'; }
+
+  /** Whether the first download waits for the player: a phone, a tablet or a data-saving connection, before the files are cached. */
+  private mustAsk(): boolean {
+    if (this.allowed) return false;
+    try { if (localStorage.getItem(LOADED_KEY)) return false; } catch { /* Ask. */ }
+    const connection = (navigator as Navigator & { connection?: { saveData?: boolean; type?: string } }).connection;
+    return !!connection?.saveData || connection?.type === 'cellular' || matchMedia('(pointer: coarse)').matches;
+  }
+
+  /** The player asked for the engine: download it now. */
+  allow() {
+    this.allowed = true;
+    void this.load().catch(() => undefined);
+  }
+
   /** Starts the worker and loads the network; later calls share the same start. */
   load(): Promise<void> {
+    if (!this.loading && this.mustAsk()) {
+      if (this.status.kind !== 'ask') this.setStatus({ kind: 'ask', megabytes: DOWNLOAD_MB });
+      return Promise.reject(new Error('waiting for the player'));
+    }
     this.loading ??= new Promise<void>((resolve, reject) => {
       this.setStatus({ kind: 'loading', text: 'Starting Hivemind…' });
       const worker = new Worker(new URL('./hivemind.worker.ts', import.meta.url), { type: 'module' });
       this.worker = worker;
       worker.onmessage = ({ data }: MessageEvent<WorkerReply>) => {
-        if (data.type === 'progress') { if (!this.backend) this.setStatus({ kind: 'loading', text: data.text }); return; }
+        if (worker !== this.worker) return;
+        if (data.type === 'progress') {
+          if (!this.backend) this.setStatus({ kind: 'loading', text: data.text, fraction: data.total ? (data.done ?? 0) / data.total : undefined });
+          return;
+        }
         if (data.type === 'ready') {
+          // Again after a GPU failure: the worker carries on on the CPU.
           this.backend = data.backend;
-          this.setStatus({ kind: 'ready', backend: data.backend.kind === 'gpu' ? 'GPU' : `CPU × ${data.backend.threads}` });
+          const gpu = data.backend.kind === 'gpu';
+          this.setStatus({ kind: 'ready', gpu, backend: gpu ? 'GPU' : `CPU × ${data.backend.threads}` });
+          try { localStorage.setItem(LOADED_KEY, '1'); } catch { /* Asked again next visit. */ }
           resolve();
           this.next();
           return;
         }
         if (data.type === 'failed' && data.id === undefined) {
-          this.loading = null;
-          this.worker?.terminate();
-          this.worker = null;
-          this.setStatus({ kind: 'failed', text: data.error });
+          this.reset(data.error);
           reject(new Error(data.error));
           return;
         }
         this.reply(data);
       };
-      worker.onerror = () => {
-        this.loading = null;
-        this.worker = null;
-        this.setStatus({ kind: 'failed', text: 'The engine stopped. Reload to try again.' });
+      worker.onerror = (event) => {
+        event.preventDefault();
+        if (worker !== this.worker) return;
+        this.reset('The engine stopped.');
         reject(new Error('worker error'));
       };
-      let prefer: 'auto' | 'cpu' = 'auto';
+      let prefer: 'auto' | 'cpu' = this.preferCpu ? 'cpu' : 'auto';
       try { if (localStorage.getItem(BACKEND_KEY) === 'cpu') prefer = 'cpu'; } catch { /* Auto. */ }
       this.post({ type: 'load', prefer });
     });
     this.loading.catch(() => undefined);
     return this.loading;
+  }
+
+  /**
+   * Drops the worker after a failure: the running search is lost (a
+   * background one answers null), and the next load starts a new worker.
+   */
+  private reset(text: string) {
+    clearTimeout(this.watchdog);
+    this.worker?.terminate();
+    this.worker = null;
+    this.loading = null;
+    this.backend = null;
+    const running = this.running;
+    this.running = null;
+    if (running && !running.job.main && !running.dropped) running.job.settle?.(null);
+    this.continuation = null;
+    this.setStatus({ kind: 'failed', text });
   }
 
   /** Searches `fen` from now on, before any background evaluation; a search in progress is stopped first. */
@@ -181,9 +252,10 @@ export class Engine {
       nodes: settings.nodes ?? MAX_NODES,
       millis: settings.nodes ? 120_000 : SEARCH_MS,
       infinite: settings.infinite && !settings.nodes,
+      short: !!settings.nodes,
     };
     this.continuation = null;
-    if (this.running) this.supersede();
+    if (this.running) { this.running.paused = false; this.supersede(); }
     else this.next();
   }
 
@@ -191,7 +263,7 @@ export class Engine {
   stop() {
     this.main = null;
     this.continuation = null;
-    if (this.running?.job.main) this.supersede();
+    if (this.running?.job.main) { this.running.paused = false; this.supersede(); }
   }
 
   /** Searches `fen` for `nodes` positions once the analysis is done; null when cancelled or failed. */
@@ -199,6 +271,8 @@ export class Engine {
     return new Promise((settle) => {
       this.background.push({ fen, nodes, millis: 120_000, lines: 1, main: false, settle });
       if (!this.running) this.next();
+      // The unlimited search gives way, and carries on from its tree afterwards.
+      else if (this.running.job.continued && !this.running.superseded) { this.running.paused = true; this.supersede(); }
     });
   }
 
@@ -230,7 +304,18 @@ export class Engine {
     if (job === this.continuation) this.continuation = null;
     const id = ++this.serial;
     this.running = { job, id, superseded: false, dropped: false };
-    this.post({ type: 'search', id, fen: job.fen, nodes: job.nodes, millis: job.millis, lines: job.lines, reportMs: job.main ? REPORT_MS : 0 });
+    this.post({ type: 'search', id, fen: job.fen, nodes: job.nodes, millis: job.millis, lines: job.lines, reportMs: job.main ? REPORT_MS : 0, keep: job.main });
+    // The analysis reports a few times a second; a background search answers once, at its end.
+    this.guard(job.main ? REPORT_MS : job.millis);
+  }
+
+  /** Restarts the hang timer: a search silent for `millis` and HANG_MS more has hung. */
+  private guard(millis: number) {
+    clearTimeout(this.watchdog);
+    this.watchdog = window.setTimeout(() => {
+      this.preferCpu = true;
+      this.reset('The engine stopped answering.');
+    }, millis + HANG_MS);
   }
 
   private reply(data: WorkerReply) {
@@ -238,26 +323,36 @@ export class Engine {
     if (!running || !('id' in data) || data.id !== running.id) return;
     const { job } = running;
     if (data.type === 'report') {
+      if (job.main) this.guard(REPORT_MS);
       const report = data.data as FrozenSearch;
-      if (job.main && !running.superseded && report.lines?.length && report.nodes >= (job.shownFrom ?? 0))
-        this.onResult(toResult(job.fen, report, false));
+      if (job.main && !running.superseded && report.lines?.length) this.onResult(toResult(job.fen, report, false));
       return;
     }
+    clearTimeout(this.watchdog);
     this.running = null;
     if (data.type === 'done') {
       const final = data.data as FrozenSearch;
-      const result = final.lines.length ? toResult(job.fen, final, !running.superseded) : null;
+      const done = !running.superseded;
+      const result = final.lines.length ? toResult(job.fen, final, done, done && !job.short) : null;
       if (job.main) {
-        if (result && !running.superseded && final.nodes >= (job.shownFrom ?? 0)) this.onResult(result);
+        if (result && !running.superseded) this.onResult(result);
         if (job.infinite && !running.superseded && !this.main)
-          this.continuation = { ...job, millis: INFINITE_MS, infinite: false, shownFrom: final.nodes };
+          this.continuation = { ...job, millis: INFINITE_MS, infinite: false, continued: true };
+        if (running.paused && !this.main) this.continuation = job;
+        this.clearError(job.fen);
       } else if (running.dropped) { /* Settled when it was cancelled. */ }
       else if (running.superseded) this.background.unshift(job); // stopped for the analysis: run it again later
       else job.settle?.(result);
     } else if (data.type === 'failed') {
-      if (job.main && !running.superseded) this.setStatus({ kind: 'failed', text: data.error });
-      if (!running.dropped) job.settle?.(null);
+      // One position failing leaves the engine running: the next search may well succeed.
+      if (job.main && !running.superseded && this.status.kind === 'ready')
+        this.setStatus({ ...this.status, error: { fen: job.fen, text: data.error } });
+      if (!job.main && !running.dropped) job.settle?.(null);
     }
     this.next();
+  }
+
+  private clearError(fen: string) {
+    if (this.status.kind === 'ready' && this.status.error?.fen === fen) this.setStatus({ kind: 'ready', backend: this.status.backend, gpu: this.status.gpu });
   }
 }

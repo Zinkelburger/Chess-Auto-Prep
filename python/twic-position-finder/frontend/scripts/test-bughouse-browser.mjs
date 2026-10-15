@@ -2,34 +2,18 @@
 // npm run build && node scripts/test-bughouse-browser.mjs. Screenshots land
 // in build/bughouse-web/ at the repository root.
 import assert from 'node:assert/strict';
-import http from 'node:http';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
+import { serveDist } from './static-server.mjs';
 
 const frontend = fileURLToPath(new URL('..', import.meta.url));
 const output = path.resolve(frontend, '../../../build/bughouse-web');
 await fs.mkdir(output, { recursive: true });
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.svg': 'image/svg+xml', '.bin': 'application/octet-stream' };
-// The same isolation headers as public/_headers.
-const server = http.createServer(async (req, res) => {
-  try {
-    const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
-    let file = path.join(frontend, 'dist', pathname);
-    if ((await fs.stat(file)).isDirectory()) file = path.join(file, 'index.html');
-    if (pathname === '/bughouse' || pathname.startsWith('/bughouse/') || pathname.startsWith('/bughouse-engine/')) {
-      res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-      res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
-    }
-    if (pathname.startsWith('/_astro/')) res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
-    res.setHeader('Content-Type', types[path.extname(file)] || 'application/octet-stream');
-    res.end(await fs.readFile(file));
-  } catch { res.writeHead(404); res.end(); }
-});
-await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-const origin = `http://127.0.0.1:${server.address().port}`;
+// Served with public/_headers, as Cloudflare serves it.
+const { origin, close } = await serveDist(frontend);
 // Chrome's singleton socket path must stay short; the job runner's TMPDIR is too long.
 const chromeTmp = await fs.mkdtemp(path.join(os.homedir(), '.cache', 'bht-'));
 const browser = await puppeteer.launch({
@@ -70,7 +54,7 @@ try {
   // BUGHOUSE_BACKEND=cpu checks the CPU path on a machine that has WebGPU.
   await page.evaluate((backend) => {
     localStorage.clear();
-    localStorage.setItem('bughouse-analysis-v2', JSON.stringify({ sitNodes: 100 }));
+    localStorage.setItem('bughouse-analysis-v3', JSON.stringify({ sitNodes: 100 }));
     if (backend) localStorage.setItem('bughouse-engine-backend', backend);
   }, process.env.BUGHOUSE_BACKEND ?? '');
   await page.goto(url('r1bqkb1r/pppp1ppp/2n2n2/4p3/4P3/2N2N2/PPPP1PPP/R1BQKB1R[] w KQkq - 4 4'));
@@ -98,7 +82,8 @@ try {
   }, { timeout: 120_000 }, before);
   const after = await page.$eval('#ch-pearl', (el) => el.textContent);
   console.log('eval with a knight in Black’s hand:', after);
-  assert.ok(Number(after) < Number(before), 'a knight for Black is good for Black');
+  // Hivemind's winning chance, as centipawns: a knight in hand is worth a few tenths here.
+  assert.ok(Number(after) < Number(before) - 0.2, 'a knight for Black is clearly good for Black');
   assert.match(await page.$eval('#ch-moves', (el) => el.textContent), /Hands edited at the start: \+n/);
 
   // − takes it back; − at zero is disabled.
@@ -174,6 +159,10 @@ try {
   await page.waitForSelector('#ch-moves .ch-move');
   assert.equal(await fen(page), kept);
   assert.match(await page.$eval('#ch-moves', (el) => el.textContent), /N@d5/);
+  // So does a plain /bughouse, as from the site's menu.
+  await page.goto(`${origin}/bughouse/`);
+  await page.waitForSelector('#ch-moves .ch-move');
+  assert.equal(await fen(page), kept, 'the menu link comes back to the saved analysis');
   // Practice with computer: White is the player (board not flipped); after a White move the engine answers.
   await page.keyboard.press('ArrowLeft');
   await until(page, '#ch-fen', / w /);
@@ -230,6 +219,34 @@ try {
   assert.match(await fen(page), /\[N\] w/);
   await page.waitForFunction(() => document.querySelector('#ch-pearl').textContent.startsWith('#'), { timeout: 120_000 });
 
+  // A laptop screen: the move list keeps its rows and the sit panel all six.
+  await page.setViewport({ width: 1366, height: 768 });
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  // At least three rows of moves in view, without scrolling the panel.
+  const visible = await page.$eval('#ch-moves', (el) => {
+    const moves = el.getBoundingClientRect(), tools = document.querySelector('#ch-tools').getBoundingClientRect();
+    return Math.min(moves.bottom, tools.bottom) - moves.top;
+  });
+  assert.ok(visible >= 70, `the move list is in view at 1366×768 (${Math.round(visible)} px)`);
+  assert.equal(await page.$$eval('#bs-sit .bs-sit-row', (rows) => rows.filter((r) => r.getBoundingClientRect().height > 20).length), 6);
+  await page.screenshot({ path: path.join(output, 'laptop-1366x768.png') });
+
+  // Infinite analysis carries on from the first search's tree after the sit rows, instead of starting again.
+  await page.setViewport({ width: 1440, height: 900 });
+  await page.click('#ch-gear');
+  await page.click('#ch-set-infinite');
+  await page.click('#ch-gear');
+  await page.goto(url('r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R[] w KQkq - 4 4'));
+  await evaluated(page);
+  await sitDone(page);
+  const positions = async () => parseInt((await text(page, '#ch-engine-info')).replace(/,/g, ''), 10);
+  const first = await positions();
+  await page.waitForFunction((n) => parseInt(document.querySelector('#ch-engine-info').textContent.replace(/,/g, ''), 10) > n, { timeout: 5_000 }, first);
+  console.log('infinite analysis resumed past', first, 'positions:', await text(page, '#ch-engine-info'));
+  await page.click('#ch-gear'); // closed by the reload
+  await page.click('#ch-set-infinite');
+  await page.click('#ch-gear');
+
   // A phone: board, hands with + and −, engine and sit panel.
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await page.goto(url('r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R[] w KQkq - 4 4'));
@@ -250,9 +267,43 @@ try {
   }
 
   assert.deepEqual(errors.filter((e) => !e.includes('favicon')), []);
+
+  // A fresh browser on a phone asks before the first download.
+  const phone = await browser.createBrowserContext();
+  const fresh = await phone.newPage();
+  fresh.setDefaultTimeout(30_000);
+  await fresh.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await fresh.goto(url(HOLE));
+  await fresh.waitForSelector('#ch-engine-action:not([hidden])');
+  assert.equal(await fresh.$eval('#ch-engine-action', (b) => b.textContent), 'Download');
+  assert.match(await fresh.$eval('#ch-engine-info', (el) => el.textContent), /MB, once/);
+  assert.equal(await fresh.$$eval('#bs-sit .ch-spinner', (s) => s.length), 0, 'no spinners while the engine waits');
+  await fresh.click('#ch-engine-action');
+  await evaluated(fresh);
+  await phone.close();
+
+  // A failed download says so, with one button to try again; the sit rows stop spinning.
+  const broken = await browser.createBrowserContext();
+  const desk = await broken.newPage();
+  desk.setDefaultTimeout(30_000);
+  await desk.setViewport({ width: 1440, height: 900 });
+  let block = true;
+  await desk.setRequestInterception(true);
+  desk.on('request', (req) => (block && req.url().includes('/bughouse-engine/model-') ? req.abort() : req.continue()));
+  await desk.goto(url(HOLE));
+  await desk.waitForSelector('#ch-engine-action:not([hidden])', { timeout: 60_000 });
+  assert.equal(await desk.$eval('#ch-engine-action', (b) => b.textContent), 'Try again');
+  assert.match(await desk.$eval('#ch-engine-info', (el) => el.textContent), /download failed/);
+  assert.equal(await desk.$$eval('#bs-sit .ch-spinner', (s) => s.length), 0, 'no endless spinners after a failure');
+  await desk.screenshot({ path: path.join(output, 'download-failed.png') });
+  block = false;
+  await desk.click('#ch-engine-action');
+  await evaluated(desk);
+  await sitDone(desk);
+  await broken.close();
   console.log('bughouse browser: ok');
 } finally {
   await browser.close();
-  server.close();
+  close();
   await fs.rm(chromeTmp, { recursive: true, force: true });
 }

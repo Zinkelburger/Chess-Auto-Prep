@@ -25,6 +25,7 @@ const icon = {
   title="Bughouse"
   description="Analyse one bughouse board with Hivemind, the bughouse engine, in your browser. Add pieces to either hand with + and see the evaluation, the best move, and which piece is worth sitting for."
 >
+  <h1 class="visually-hidden">Bughouse analysis board</h1>
   <div class="ch" id="ch" data-mode="analysis">
     <section class="ch-stage" aria-label="Board">
       <div class="ch-spare" id="ch-spare-top" role="toolbar" aria-label="Spare pieces" hidden></div>
@@ -45,11 +46,13 @@ const icon = {
                 <input type="checkbox" id="ch-engine-on" aria-label="Engine" />
                 <span aria-hidden="true"></span>
               </label>
-              <span class="ch-pearl num" id="ch-pearl" aria-live="polite"></span>
+              <span class="ch-pearl num" id="ch-pearl"></span>
               <div class="ch-engine">
                 <span class="ch-engine-name" id="ch-engine-name">Hivemind</span>
                 <span class="ch-engine-info num" id="ch-engine-info"></span>
               </div>
+              <button type="button" class="btn btn-outline btn-sm" id="ch-engine-action" hidden></button>
+              <p class="visually-hidden" id="ch-eval-live" aria-live="polite"></p>
               <button type="button" class="ch-icon" id="ch-threat" title="Show threat (X)" aria-label="Show threat" aria-pressed="false">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.threat}/></svg>
               </button>
@@ -60,7 +63,7 @@ const icon = {
             </div>
             <div class="ch-settings" id="ch-settings" hidden>
               <label>Lines <input type="number" id="ch-set-lines" inputmode="numeric" /></label>
-              <label title="How far the engine searches each row of the sit panel">Sit search <input type="number" id="ch-set-sit" inputmode="numeric" step="50" /> <span class="dim">positions</span></label>
+              <label title="Positions searched for each row of the sit panel. Empty: 800 on a GPU, 200 on a CPU">Sit search <input type="number" id="ch-set-sit" inputmode="numeric" step="50" /> <span class="dim">positions</span></label>
               <label class="ch-check"><input type="checkbox" id="ch-set-infinite" /> Infinite analysis</label>
             </div>
             <div class="ch-practice" id="ch-practice" aria-live="polite" hidden></div>
@@ -109,22 +112,6 @@ const icon = {
       </div>
     </section>
 
-    <section class="ch-under" aria-label="Position">
-      <div class="ch-fen-row">
-        <label for="ch-fen">FEN</label>
-        <input id="ch-fen" class="mono" spellcheck="false" autocomplete="off" />
-        <button type="button" class="btn btn-outline btn-sm" id="ch-fen-copy">Copy</button>
-      </div>
-      <p class="ch-error" id="ch-fen-error" role="alert"></p>
-      <label class="ch-pgn-label" for="ch-pgn">PGN</label>
-      <textarea id="ch-pgn" class="mono" rows="4" spellcheck="false"></textarea>
-      <div class="ch-pgn-row">
-        <p class="ch-error" id="ch-pgn-error" role="alert"></p>
-        <button type="button" class="btn btn-outline btn-sm" id="ch-pgn-copy">Copy PGN</button>
-        <button type="button" class="btn btn-outline btn-sm" id="ch-pgn-import" disabled>Import PGN</button>
-      </div>
-    </section>
-
     <div class="ch-controls" id="ch-controls" role="toolbar" aria-label="Board controls">
       <button type="button" class="ch-icon" id="ch-flip" title="Flip board (F)" aria-label="Flip board">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.flip}/></svg>
@@ -153,6 +140,22 @@ const icon = {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.menu}/></svg>
       </button>
     </div>
+
+    <section class="ch-under" aria-label="Position">
+      <div class="ch-fen-row">
+        <label for="ch-fen">FEN</label>
+        <input id="ch-fen" class="mono" spellcheck="false" autocomplete="off" />
+        <button type="button" class="btn btn-outline btn-sm" id="ch-fen-copy">Copy</button>
+      </div>
+      <p class="ch-error" id="ch-fen-error" role="alert"></p>
+      <label class="ch-pgn-label" for="ch-pgn">PGN</label>
+      <textarea id="ch-pgn" class="mono" rows="4" spellcheck="false"></textarea>
+      <div class="ch-pgn-row">
+        <p class="ch-error" id="ch-pgn-error" role="alert"></p>
+        <button type="button" class="btn btn-outline btn-sm" id="ch-pgn-copy">Copy PGN</button>
+        <button type="button" class="btn btn-outline btn-sm" id="ch-pgn-import" disabled>Import PGN</button>
+      </div>
+    </section>
   </div>
 </Base>
 

@@ -3,7 +3,9 @@
  * depth, "Show threat", the gear, a progress bar, and the engine lines.
  * Hovering a line shows its first move on the board; hovering a move in it
  * shows a small board of that position (the wheel steps along the line);
- * clicking a move plays the line up to it.
+ * clicking a move plays the line up to it. When the engine waits for the
+ * player (a phone's first download) or has failed, one button starts it.
+ * Screen readers hear the evaluation once a search ends, not every update.
  */
 import { Chessground } from '@lichess-org/chessground';
 import type { Api } from '@lichess-org/chessground/api';
@@ -38,6 +40,8 @@ export interface CevalHooks {
   hover(uci: string | null): void;
   /** Plays a line up to and including move `upTo`. */
   play(pv: string[], upTo: number): void;
+  /** Downloads the engine, or tries again after a failure. */
+  start(): void;
 }
 
 export function formatEval(line: Pick<EngineLine, 'cp' | 'mate'>): string {
@@ -50,13 +54,18 @@ export class CevalView {
   private mini: Api | null = null;
   private hovered: { fen: string; moves: LineMove[]; index: number } | null = null;
   private state: CevalState | null = null;
+  private spoken = '';
 
   constructor(
-    private readonly els: { header: HTMLElement; pearl: HTMLElement; name: HTMLElement; info: HTMLElement; bar: HTMLElement; threat: HTMLButtonElement; pvs: HTMLElement; board: HTMLElement; switch: HTMLInputElement },
+    private readonly els: {
+      header: HTMLElement; pearl: HTMLElement; name: HTMLElement; info: HTMLElement; bar: HTMLElement; threat: HTMLButtonElement;
+      pvs: HTMLElement; board: HTMLElement; switch: HTMLInputElement; action: HTMLButtonElement; live: HTMLElement;
+    },
     hooks: CevalHooks,
     private readonly engineName = 'Hivemind',
   ) {
     const { pvs } = els;
+    els.action.onclick = () => hooks.start();
     pvs.addEventListener('mouseover', (e) => {
       const target = e.target as HTMLElement;
       const row = target.closest<HTMLElement>('.ch-pv');
@@ -82,7 +91,7 @@ export class CevalView {
 
   render(state: CevalState) {
     this.state = state;
-    const { header, pearl, name, info, bar, threat, pvs, switch: toggle } = this.els;
+    const { header, pearl, name, info, bar, threat, pvs, switch: toggle, action } = this.els;
     toggle.checked = state.enabled;
     header.classList.toggle('off', !state.enabled);
     header.classList.toggle('ch-threat-mode', state.threat);
@@ -90,6 +99,8 @@ export class CevalView {
     threat.setAttribute('aria-pressed', String(state.threat));
     name.textContent = state.threat ? 'Show threat' : state.status.kind === 'ready' ? `${this.engineName} · ${state.status.backend}` : this.engineName;
     info.classList.remove('ch-failed');
+    action.hidden = true;
+    header.classList.remove('ch-waiting');
     pvs.replaceChildren();
     bar.style.width = '0';
     bar.classList.toggle('threat', state.threat);
@@ -97,19 +108,49 @@ export class CevalView {
     if (!state.enabled) { pearl.textContent = ''; info.textContent = 'Off · press L to turn on'; this.hideBoard(); return; }
     if (!state.result) this.hideBoard();
     const result = state.result;
+    const status = state.status;
+    const error = status.kind === 'ready' && status.error?.fen === state.fen ? status.error.text : null;
     if (!result) {
-      pearl.innerHTML = '<span class="ch-spinner" aria-hidden="true"></span>';
-      info.textContent = state.status.kind === 'loading' || state.status.kind === 'failed' ? state.status.text : 'Calculating…';
-      info.classList.toggle('ch-failed', state.status.kind === 'failed');
+      const waiting = status.kind === 'ask' || status.kind === 'failed' || error !== null;
+      header.classList.toggle('ch-waiting', waiting);
+      if (waiting) pearl.textContent = '';
+      else pearl.innerHTML = '<span class="ch-spinner" aria-hidden="true"></span>';
+      if (status.kind === 'ask') {
+        info.textContent = `Runs in this browser · ${status.megabytes} MB, once`;
+        action.textContent = 'Download';
+        action.hidden = false;
+      } else if (status.kind === 'failed') {
+        info.textContent = status.text;
+        info.classList.add('ch-failed');
+        action.textContent = 'Try again';
+        action.hidden = false;
+      } else if (error !== null) {
+        info.textContent = error;
+        info.classList.add('ch-failed');
+      } else if (status.kind === 'loading') {
+        info.textContent = status.text;
+        if (status.fraction !== undefined) bar.style.width = `${Math.round(100 * status.fraction)}%`;
+      } else info.textContent = 'Calculating…';
       return;
     }
     pearl.textContent = formatEval(result.lines[0]);
     info.textContent = result.info;
+    if (result.done && !state.threat) this.speak(state.fen, result);
     const progress = result.millis / SEARCH_MS;
     bar.style.width = `${result.done || state.infinite ? 100 : Math.min(100, 100 * progress)}%`;
     for (let i = 0; i < state.multiPv; i++) pvs.append(this.row(state, result.lines[i]));
     // The board stays while the pointer is on a line of this position; engine updates redraw the rows under it.
     if (this.hovered && this.hovered.fen !== state.fen) this.hideBoard();
+  }
+
+  /** Tells a screen reader the finished evaluation and best move, once per result. */
+  private speak(fen: string, result: EngineResult) {
+    const best = result.lines[0];
+    const san = playLine(fen, best.pv, 1)[0]?.san;
+    const text = `Evaluation ${formatEval(best)}${san ? `, best move ${san}` : ''}`;
+    if (text === this.spoken) return;
+    this.spoken = text;
+    this.els.live.textContent = text;
   }
 
   private row(state: CevalState, line: EngineLine | undefined): HTMLElement {

@@ -58,11 +58,12 @@ Use the existing Chess Auto Prep Pages project:
 The `prebuild` step first runs the state regressions and Astro type check, then downloads the existing checksum-pinned Hivemind network,
 splits its gzip bytes into two files smaller than 25 MiB, and copies the ONNX
 Runtime Web files from the pinned npm dependency. The compressed network is
-about 32 MB; the complete initial engine download is about 44 MB. The browser
-verifies the chunks and uncompressed model, assembles them in memory, and
-caches model chunks when Cache Storage is available. No special headers or
-cross-origin isolation are necessary: both the engine and inference are
-single-threaded inside a Web Worker.
+about 32 MB; with ONNX Runtime's WebGPU build (about 22 MB, listed in
+`model.json` as `runtime`) the first download is about 55 MB. The browser
+downloads both itself, showing progress, verifies every part and the
+uncompressed model against `model.json`, and keeps them in Cache Storage when
+it is available. The page is cross-origin isolated so the CPU fallback can
+use threads; see the frontend README.
 
 The small compiled Hivemind module and its source archive are committed. Pages does **not** compile
 C++, install Emscripten, run Python after deployment, or start an engine
@@ -114,7 +115,7 @@ flag off (the Lab, BughouseDB) searches are unchanged. The adapters:
   visited first. BughouseDB's in-browser analysis scores only each board's
   first four. The worker exposes it as the `search` action.
 * `bh_frozen_search(fen, nodes, millisCap,
-  lines, reportMs)` searches one board's FEN (hands in brackets) for the side
+  lines, reportMs, batch, keep)` searches one board's FEN (hands in brackets) for the side
   to move. Board B is the starting position held still, the opponent's colour
   to move there, with every piece missing from A in the pocket of whoever
   captured it (bughouse conserves pieces; without them the network barely
@@ -123,7 +124,11 @@ flag off (the Lab, BughouseDB) searches are unchanged. The adapters:
   −0.5); the search subtracts it, so q is a winning chance from the side to
   move and the start position reads about 0. It reports to
   `Module.onFrozenReport` every `reportMs` and returns up to five lines with
-  board A's moves only. The worker exposes it as the `frozen` action.
+  board A's moves only. `batch` leaves are evaluated together (32 on a GPU,
+  1 on the CPU). With `keep`, the search keeps its tree, and a later `keep`
+  search of the same FEN carries on from it: node count and depth continue,
+  and `resumed_nodes` says how many came from before. The page's analysis
+  keeps; the sit panel's rows do not.
 * `engine_web.cc`: replaces native ONNX Runtime with an Asyncify call to
   ONNX Runtime Web, keeping the existing plane encoder and neural outputs.
 * `thread_web.cc`: supplies Fairy-Stockfish's thread-local counters without

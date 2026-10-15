@@ -45,18 +45,22 @@ def main():
         name = f"model-{lock['source_sha256'][:12]}-{index}.bin"
         (PUBLIC / name).write_bytes(chunk)
         chunks.append({"file": name, "bytes": len(chunk), "sha256": digest(chunk)})
-    manifest = {
-        "model_sha256": lock["payload_sha256"], "chunks": chunks,
-        "input": "data", "outputs": {"value": "value", "policyA": "pi_a", "policyB": "pi_b",
-                                      "wdl": "wdl_out", "movesLeft": "moves_left"},
-    }
-    (PUBLIC / "model.json").write_text(json.dumps(manifest, indent=2) + "\n")
     runtime = FRONTEND / "node_modules/onnxruntime-web/dist"
     # The plain runtime serves the Expectimax page's Maia; the .jsep pair is the
     # WebGPU build the bughouse board's Hivemind runs on (and its CPU fallback).
     for name in ["ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded.wasm",
                  "ort-wasm-simd-threaded.jsep.mjs", "ort-wasm-simd-threaded.jsep.wasm"]:
         shutil.copyfile(runtime / name, PUBLIC / name)
+    # The bughouse worker downloads the WebGPU runtime itself, to show its
+    # progress and keep it in the browser's cache beside the network.
+    wasm = (PUBLIC / "ort-wasm-simd-threaded.jsep.wasm").read_bytes()
+    manifest = {
+        "model_sha256": lock["payload_sha256"], "chunks": chunks,
+        "runtime": {"file": "ort-wasm-simd-threaded.jsep.wasm", "bytes": len(wasm), "sha256": digest(wasm)},
+        "input": "data", "outputs": {"value": "value", "policyA": "pi_a", "policyB": "pi_b",
+                                      "wdl": "wdl_out", "movesLeft": "moves_left"},
+    }
+    (PUBLIC / "model.json").write_text(json.dumps(manifest, indent=2) + "\n")
     for name in ["HIVEMIND_LICENSE.txt", "ONNXRUNTIME_LICENSE.txt", "ONNXRUNTIME_THIRD_PARTY_NOTICES.txt"]:
         shutil.copyfile(ROOT / "assets/licenses" / name, PUBLIC / name)
     shutil.copyfile(ROOT / "LICENSE", PUBLIC / "CHESS_AUTO_PREP_LICENSE.txt")

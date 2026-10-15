@@ -3,15 +3,15 @@
   "revision": "5508ba9daf4164e48a8a8a9b39e101efdc60e97a",
   "emscripten": "4.0.15",
   "sha256": {
-    "hivemind.mjs": "0c2c4ae767f5541859c14dd4fed56a37a38233c256b3b93627a6d2aaf947fa88",
-    "hivemind.wasm": "16c65c96f9f8f043dad0a1d0a65ee720304ada5e6e6f29df42ff50371f29ff01",
-    "hivemind-source.tar.gz": "9ea0618137692e74f3a5fb658c7efe37af6a40d6339893eec7abd3d489b1ecce"
+    "hivemind.mjs": "37147f0474c4926450757fb989f4c1598ba54c6938253b22aae4b1bda2a9400c",
+    "hivemind.wasm": "952b220e22a8f5f723b536fc208f4a2966c818ff6d1acfa82695b3c3c38c328b",
+    "hivemind-source.tar.gz": "837768f6ec68a100ab4f7e4e556097f8ebb7b7dc65d68053ebcb0f847193f7db"
   },
   "bridge_sha256": {
     "CMakeLists.txt": "0e0721168d85f95bf71b01aa41cdb8ea780275c03d3548e3fd8ae975e323617e",
-    "bridge.cc": "ce0ea8b636592d4dd46564f711a431083c3fe705269f28105bd419470311fcc2",
     "engine_web.cc": "53896306b676525ee834fa753f75477da7afae833bc41e47ec3da9cc9a2b20b5",
     "thread_web.cc": "e5f3a9a692c3d0367fecdb81f4e5087a2d7e600fe989f92f1f9c7f1f4302fa93",
+    "bridge.cc": "614b44ca0600318900a2497e463c7ab33bff86a9edfeb1a42c17fce9af14b3fb",
     "patches/frozen-board.patch": "90fe653729b4ed7b479753265a898fada3fca834131a2f4f59df6a9bfbeeaae7"
   }
 }

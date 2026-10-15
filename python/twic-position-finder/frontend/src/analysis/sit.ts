@@ -4,6 +4,8 @@
  * from its partner, with the best move once that piece arrives. Each row is
  * its own Hivemind search of the same size, run after the analysis of the
  * position, so the rows compare like with like. A row that mates is marked.
+ * While the engine has failed or waits for the player, rows show a dash; they
+ * are searched once it runs again.
  */
 import type { Color, Role } from 'chessops/types';
 import type { Extra, ExtraHost } from './app';
@@ -50,18 +52,23 @@ export class SitPanel implements Extra {
 
   update() {
     clearTimeout(this.timer);
-    const { fen, settings } = this.host;
+    const { fen, sitNodes } = this.host;
     if (!this.host.active || outcomeOf(fen) === 'Checkmate' || outcomeOf(fen) === 'Stalemate') {
       this.stop();
       this.render(null);
       return;
     }
-    const key = keyOf(fen, settings.sitNodes);
+    const key = keyOf(fen, sitNodes);
     const known = this.ladders.get(key);
-    if (known) { this.stop(); this.render(known); if (known.rows.some((r) => r.fen && !r.result && !r.failed)) this.schedule(known); return; }
+    if (known) {
+      this.stop();
+      this.render(known);
+      if (this.host.engineReady && known.rows.some((r) => r.fen && !r.result && !r.failed)) this.schedule(known);
+      return;
+    }
     const turn = positionOf(fen).turn;
     const ladder: Ladder = {
-      fen, nodes: settings.sitNodes, turn,
+      fen, nodes: sitNodes, turn,
       rows: ROLES.map((role) => ({ role, fen: role ? adjustHand(fen, turn, role, 1) : fen })),
     };
     this.render(ladder);
@@ -90,6 +97,8 @@ export class SitPanel implements Extra {
     for (const row of ladder.rows.filter((r) => r.fen && !r.result)) {
       const found = await this.host.evaluate(row.fen!, ladder.nodes);
       if (generation !== this.generation) return;
+      // The engine stopped under this row: it is searched again when the engine runs.
+      if (!found && !this.host.engineReady) { if (this.shown === ladder) this.render(ladder); return; }
       const line = found?.lines[0];
       if (!line) row.failed = 'No search';
       else {
@@ -106,7 +115,7 @@ export class SitPanel implements Extra {
     this.box.hidden = !ladder;
     if (!ladder) { this.box.replaceChildren(); return; }
     const table = el('table', 'bs-sit-table');
-    table.title = `Each row is its own search of ${ladder.nodes.toLocaleString()} positions`;
+    table.title = `Each row is its own search of ${ladder.nodes.toLocaleString()} positions, so the rows compare with each other; the analysis above searches longer`;
     const heading = el('tr', '');
     for (const label of ['Option', 'Eval', 'Best move']) {
       const th = el('th', '', label); th.setAttribute('scope', 'col'); heading.append(th);
@@ -144,6 +153,7 @@ export class SitPanel implements Extra {
     const move = el('td', 'bs-sit-move');
     if (!row.fen) { score.textContent = '—'; move.textContent = 'Hand is full'; }
     else if (row.failed) { score.textContent = '—'; move.textContent = row.failed; move.classList.add('bs-sit-failed'); }
+    else if (!row.result && this.host.engineStopped) score.textContent = '—';
     else if (!row.result) score.append(el('span', 'ch-spinner', ''));
     else {
       score.textContent = formatEval(row.result);

@@ -22,7 +22,7 @@ import { liveGlyph, type Glyph } from './judge';
 import { openHelp, renderMenu } from './menu';
 import { MoveList } from './moves';
 import { PRACTICE_NODES, Practice } from './practice';
-import { clamp, loadSettings, saveSettings, type Settings, type Toggle } from './settings';
+import { clamp, loadSettings, saveSettings, sitNodesFor, type Settings, type Toggle } from './settings';
 import { SitPanel } from './sit';
 import { engineShapes, glyphShape, moveShapes, threatShapes, variationShapes } from './shapes';
 import {
@@ -40,10 +40,14 @@ const TREE_KEY = 'bughouse-analysis-tree-v1';
 export interface ExtraHost {
   readonly fen: string;
   readonly settings: Settings;
+  /** Each row's search, in positions: the setting, or the default for the engine's backend. */
+  readonly sitNodes: number;
   /** The engine is on and the board is in analysis (not the editor or practice). */
   readonly active: boolean;
   /** The engine has loaded (its files are in this browser's cache). */
   readonly engineReady: boolean;
+  /** The engine failed or waits for the player: rows have nothing to wait for. */
+  readonly engineStopped: boolean;
   evalOf(fen: string): EngineResult | undefined;
   /** One more of this piece in the hand of the side to move, as if the partner sent it. */
   give(role: Role): void;
@@ -120,7 +124,8 @@ export class BughouseApp {
     const target = read?.ok ? fenOf(read.pos) : START_FEN;
     const saved = loadSavedTree(TREE_KEY);
     const restored = saved ? Tree.restore(saved) : null;
-    if (restored && restored.current.fen === target && !(read && !read.ok)) {
+    // A plain /bughouse comes back to the saved analysis; a linked position opens it unless it is the saved one.
+    if (restored && (!fen || (read?.ok && restored.current.fen === target))) {
       this.tree = restored.tree;
       this.current = restored.current;
     } else {
@@ -130,7 +135,7 @@ export class BughouseApp {
     if (read && !read.ok) this.flash(`Could not open the linked position: ${read.error}`);
     if (positionOf(this.tree.root.fen).turn === 'black') this.orientation = 'black';
 
-    const onStatus = (status: EngineStatus) => { this.engineStatus = status; this.renderCeval(); this.extra?.update(); };
+    const onStatus = (status: EngineStatus) => { this.engineStatus = status; this.renderCeval(); this.renderSitSetting(); this.extra?.update(); };
     const onResult = (result: EngineResult) => this.engineResult(result);
     this.engine = new Engine(onStatus, onResult);
     this.board = new CrazyBoard($('ch-board-wrap'), $('ch-board'), {
@@ -159,15 +164,19 @@ export class BughouseApp {
     this.ceval = new CevalView({
       header: $('ch-ceval'), pearl: $('ch-pearl'), name: $('ch-engine-name'), info: $('ch-engine-info'), bar: $('ch-bar'),
       threat: $<HTMLButtonElement>('ch-threat'), pvs: $('ch-pvs'), board: $('ch-pv-board'), switch: $<HTMLInputElement>('ch-engine-on'),
+      action: $<HTMLButtonElement>('ch-engine-action'), live: $('ch-eval-live'),
     }, {
       hover: (uci) => this.hover(uci, 'paleBlue'),
       play: (pv, upTo) => this.playLine(pv, upTo),
+      start: () => this.startEngine(),
     });
     this.extra = new SitPanel({
       get fen() { return app.current.fen; },
       get settings() { return app.settings; },
+      get sitNodes() { return sitNodesFor(app.settings, app.engine.gpu); },
       get active() { return app.mode === 'analysis' && !app.practice && app.settings.engineOn; },
       get engineReady() { return app.engineStatus.kind === 'ready'; },
+      get engineStopped() { return app.engineStatus.kind === 'failed' || app.engineStatus.kind === 'ask'; },
       evalOf: (fen) => this.evals.get(fen),
       give: (role) => this.adjust(positionOf(this.current.fen).turn, role, 1),
       hover: (uci) => this.hover(uci, 'blue'),
@@ -413,7 +422,7 @@ export class BughouseApp {
       // A position already searched to its limit is shown as it was, as Lichess keeps its evaluations;
       // the engine's time then goes to the sit panel.
       const kept = this.evals.get(fen);
-      if (kept?.done && kept.lines.length >= this.settings.multiPv && !this.settings.infinite) this.engine.stop();
+      if (kept?.complete && kept.lines.length >= this.settings.multiPv && !this.settings.infinite) this.engine.stop();
       else this.engine.analyse(fen, this.settings);
     }
     this.engine.load().catch(() => { /* Shown in the engine header. */ });
@@ -474,6 +483,12 @@ export class BughouseApp {
       over: outcomeOf(this.current.fen),
       orientation: this.orientation,
     });
+  }
+
+  /** The engine panel's button: download the engine (phones ask first), or try again after a failure. */
+  private startEngine() {
+    if (this.engineStatus.kind === 'ask') this.engine.allow();
+    else this.analyse();
   }
 
   private toggleEngine(on = !this.settings.engineOn) {
@@ -857,23 +872,29 @@ export class BughouseApp {
       settings.hidden = !settings.hidden;
       $('ch-gear').setAttribute('aria-expanded', String(!settings.hidden));
     };
-    const number = (id: string, key: 'multiPv' | 'sitNodes', lo: number, hi: number) => {
-      const input = document.getElementById(id) as HTMLInputElement | null;
-      if (!input) return;
-      input.min = String(lo);
-      input.max = String(hi);
-      input.value = String(this.settings[key]);
-      input.onchange = () => {
-        this.settings[key] = clamp(input.value, lo, hi, this.settings[key]);
-        input.value = String(this.settings[key]);
-        saveSettings(this.settings);
-        if (key === 'multiPv') this.evals.clear();
-        this.renderCeval();
-        this.analyse();
-      };
+    const lines = $<HTMLInputElement>('ch-set-lines');
+    lines.min = '1';
+    lines.max = '5';
+    lines.value = String(this.settings.multiPv);
+    lines.onchange = () => {
+      this.settings.multiPv = clamp(lines.value, 1, 5, this.settings.multiPv);
+      lines.value = String(this.settings.multiPv);
+      saveSettings(this.settings);
+      this.evals.clear();
+      this.renderCeval();
+      this.analyse();
     };
-    number('ch-set-lines', 'multiPv', 1, 5);
-    number('ch-set-sit', 'sitNodes', 20, 5000);
+    // Empty goes back to the default for the engine's backend.
+    const sit = $<HTMLInputElement>('ch-set-sit');
+    sit.min = '20';
+    sit.max = '5000';
+    this.renderSitSetting();
+    sit.onchange = () => {
+      this.settings.sitNodes = sit.value.trim() ? clamp(sit.value, 20, 5000, sitNodesFor(this.settings, this.engine.gpu)) : null;
+      saveSettings(this.settings);
+      this.renderSitSetting();
+      this.analyse();
+    };
     const infinite = $<HTMLInputElement>('ch-set-infinite');
     infinite.checked = this.settings.infinite;
     infinite.onchange = () => { this.settings.infinite = infinite.checked; saveSettings(this.settings); this.analyse(); };
@@ -905,6 +926,11 @@ export class BughouseApp {
     $('ch-pgn-copy').onclick = () => void navigator.clipboard?.writeText(this.tree.pgn()).then(() => this.toast('PGN copied'));
 
     document.addEventListener('keydown', (e) => this.key(e));
+  }
+
+  private renderSitSetting() {
+    const sit = $<HTMLInputElement>('ch-set-sit');
+    if (document.activeElement !== sit) sit.value = String(sitNodesFor(this.settings, this.engine?.gpu ?? false));
   }
 
   private flashCopied() {

@@ -386,6 +386,22 @@ std::string frozen_json(Board& board, const std::shared_ptr<Node>& root, const S
     }
     return out + "]}";
 }
+
+// The last search asked to keep its tree (the shown position's analysis), so
+// a later search of the same position carries on from it instead of starting
+// again: infinite analysis after the sit panel's rows, or a position the
+// player comes back to.
+struct KeptSearch {
+    std::string fen;
+    std::unique_ptr<Board> board;
+    Color side = WHITE;
+    std::shared_ptr<Node> root;
+    float offset = 0;
+    float staticScore = 0;
+    int nodes = 0;
+    int depth = 0;
+};
+KeptSearch g_kept;
 }
 
 extern "C" {
@@ -506,40 +522,69 @@ extern "C" {
 // (1..3600000 ms), a solved root or Stop. Every reportMs it hands the current
 // lines to Module.onFrozenReport. q values are from the side to move. `batch`
 // (1..64) leaves are evaluated together: one at a time suits a CPU, while a
-// GPU needs batches to be fast.
-const char* bh_frozen_search(const char* fen, int nodes, int millisCap, int lines, int reportMs, int batch) {
+// GPU needs batches to be fast. With `keep`, the search keeps its tree for
+// later and carries on from the kept tree when that was the same position;
+// its node count and depth then continue from the kept search, and
+// "resumed_nodes" says how many of the nodes were searched before.
+const char* bh_frozen_search(const char* fen, int nodes, int millisCap, int lines, int reportMs, int batch, int keep) {
     try {
         FrozenScope frozen;
-        Color side;
-        auto board = load_frozen(fen, side);
-        if (!board->has_any_legal_move(0)) throw std::runtime_error("The side to move has no move.");
-        // The static values evaluate one position each; the search fills whole batches.
-        Engine single(0, 1);
-        Engine engine(0, std::clamp(batch, 1, 64));
-        const auto values = frozen_values(*board, side, single);
-        g_frozenValueOffset = (values[0] + values[1]) / 2;
-        frozen_report(("{\"static\":" + std::to_string((values[0] - values[1]) / 2) + "}").c_str());
         SearchParams::RuntimeConfig config;
         // The offset is measured on the value head alone.
         config.enableWdlEval = false;
-        auto root = std::make_shared<Node>(side);
-        root->configure_root_search(config, false);
+        Engine engine(0, std::clamp(batch, 1, 64));
+        const bool resume = keep && g_kept.root && g_kept.fen == fen;
+        KeptSearch run;
+        if (resume) run = std::move(g_kept);
+        else {
+            // A new tree replaces the kept one; free that one first.
+            if (keep) g_kept = KeptSearch{};
+            run.fen = fen;
+            run.board = load_frozen(fen, run.side);
+            if (!run.board->has_any_legal_move(0)) throw std::runtime_error("The side to move has no move.");
+            // The static values evaluate one position each; the search fills whole batches.
+            Engine single(0, 1);
+            const auto values = frozen_values(*run.board, run.side, single);
+            run.offset = (values[0] + values[1]) / 2;
+            run.staticScore = (values[0] - values[1]) / 2;
+            run.root = std::make_shared<Node>(run.side);
+            run.root->configure_root_search(config, false);
+        }
+        g_frozenValueOffset = run.offset;
+        frozen_report(("{\"static\":" + std::to_string(run.staticScore) + "}").c_str());
+        Board& board = *run.board;
+        const auto& root = run.root;
         SearchInfo info(std::chrono::steady_clock::now(), std::clamp(millisCap, 1, 3600000));
+        info.nodes.store(run.nodes);
+        info.maxDepth.store(run.depth);
         SearchThread search;
         search.set_search_info(&info); search.set_root_node(root); search.set_runtime_config(config);
         const int cap = std::clamp(nodes, 1, 1000000);
         lines = std::clamp(lines, 1, 5);
         double lastReport = 0;
-        do {
-            search.run_iteration(*board, &engine, false);
-            if (reportMs > 0 && info.elapsed() - lastReport >= reportMs && root->is_expanded()) {
-                lastReport = info.elapsed();
-                frozen_report(frozen_json(*board, root, info, config, lines, false).c_str());
-            }
-        } while (!cancelled() && info.nodes < cap && root->get_node_type() == NodeType::UNSOLVED
-                 && (info.nodes < 2 || info.remaining_time() > 0));
-        search.finish_pending_iteration(*board, &engine, false);
-        result = frozen_json(*board, root, info, config, lines, true);
+        const auto json = [&](bool done) {
+            std::string out = frozen_json(board, root, info, config, lines, done);
+            out.insert(out.size() - 1, ",\"resumed_nodes\":" + std::to_string(run.nodes));
+            return out;
+        };
+        // A kept tree that is already solved or past the cap answers at once.
+        if (!resume || (info.nodes < cap && root->get_node_type() == NodeType::UNSOLVED)) {
+            do {
+                search.run_iteration(board, &engine, false);
+                if (reportMs > 0 && info.elapsed() - lastReport >= reportMs && root->is_expanded()) {
+                    lastReport = info.elapsed();
+                    frozen_report(json(false).c_str());
+                }
+            } while (!cancelled() && info.nodes < cap && root->get_node_type() == NodeType::UNSOLVED
+                     && (info.nodes < 2 || info.remaining_time() > 0));
+            search.finish_pending_iteration(board, &engine, false);
+        }
+        result = json(true);
+        if (keep) {
+            run.nodes = info.nodes.load();
+            run.depth = info.get_max_depth();
+            g_kept = std::move(run);
+        }
     } catch (const std::exception& e) { result = "{\"error\":" + quote(e.what()) + '}'; }
     return result.c_str();
 }

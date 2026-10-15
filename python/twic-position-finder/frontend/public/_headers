@@ -1,5 +1,10 @@
+# Stockfish runs as a worker inside the Expectimax page's worker, which is
+# bundled under /_astro/ and so isolated (below): a worker started from an
+# isolated worker must be isolated too, or the browser refuses to start it.
 /stockfish/*
   Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: same-origin
 
 /piece/*
   Cache-Control: public, max-age=31536000, immutable
@@ -30,7 +35,8 @@
   Cross-Origin-Resource-Policy: same-origin
 
 # An isolated page may start a worker only from a script that is isolated too;
-# the engine worker is bundled here. The headers change nothing for other pages.
+# the engine worker is bundled here. Every bundled worker is then isolated, so
+# a worker it starts must be isolated as well (see /stockfish/* above).
 /_astro/*
   Cross-Origin-Embedder-Policy: require-corp
   Cross-Origin-Resource-Policy: same-origin

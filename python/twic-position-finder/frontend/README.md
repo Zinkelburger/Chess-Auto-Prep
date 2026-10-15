@@ -62,10 +62,20 @@ Cloudflare Pages' 25 MiB asset limit.
   second). One worker serves everything: the shown position is searched first
   for 10 seconds (reports several times a second, as Lichess's engine), then
   the sit panel's rows (`sit.ts`: the side to move's position again with one
-  more pawn, knight, bishop, rook or queen, mating rows marked). Hivemind's
-  value is a winning chance; lines show it as Lichess's centipawns for that
-  chance. `localStorage['bughouse-engine-backend'] = 'cpu'` forces the CPU
-  path. `board.ts` is the chessground board in analysis and editor modes;
+  more pawn, knight, bishop, rook or queen, mating rows marked; 800 positions
+  a row on the GPU, 200 on the CPU, unless the gear's Sit search says
+  otherwise). The worker keeps the analysis's search tree, so infinite
+  analysis carries on from it after the rows (a row pauses it), and so does a
+  position searched again. Hivemind's value is a winning chance; lines show it
+  as Lichess's centipawns for that chance. The first download (network and
+  ONNX Runtime's WebGPU build, about 55 MB) shows its progress in the engine
+  header and is kept in the Cache API, checked against `model.json`'s
+  checksums; on a phone, tablet or data-saving connection the header asks
+  first (Download). A failed download, a crashed worker or a search silent
+  for 30 s past its limit stops the engine with a Try again button (a hang
+  retries on the CPU), the sit rows show a dash meanwhile, and a GPU error
+  during a search moves the worker to the CPU and runs the search again.
+  `localStorage['bughouse-engine-backend'] = 'cpu'` forces the CPU path. `board.ts` is the chessground board in analysis and editor modes;
   `hand.ts` draws a hand with a + above and a − below each piece; `moves.ts`
   is the move list (column or inline, folds, live ?!/?/?? marks, the
   right-click menu with Promote, Make main line, Force variation, Copy PGN,
@@ -75,16 +85,21 @@ Cloudflare Pages' 25 MiB asset limit.
   `practice.ts` Practice with computer; `menu.ts` the ☰ menu (replay mode,
   the analysis switches) and the keyboard help; `settings.ts` the saved
   settings; `app.ts` wires the page. The tree is kept in `localStorage` and
-  comes back on reload when the address still points at its position. A hand
+  comes back on a plain `/bughouse` and on reload; a `?fen=` link opens that
+  position unless it is the saved one. A hand
   edit is kept on its position and carried through the moves after it; the
   engine always gets a bare FEN. Hands are capped at 16 of a piece and 64
   pieces in all. The CPU path's threads need SharedArrayBuffer, so `/bughouse`
   and `/bughouse-engine/*` are cross-origin isolated, and `/_astro/*` (where
   the worker is bundled) carries COEP too (`public/_headers`, and the dev
-  server in `astro.config.mjs`). After `npm run build`,
-  `npm run test:bughouse:browser` drives the page in headless Chrome with the
-  real engine, at desktop and phone widths, and writes screenshots to
-  `build/bughouse-web/`; `BUGHOUSE_BACKEND=cpu` runs it on the CPU path.
+  server in `astro.config.mjs`). Every bundled worker is then isolated, so
+  `/stockfish/*`, which the Expectimax page's worker starts, is isolated as
+  well. After `npm run build`, `npm run test:bughouse:browser` drives the page
+  in headless Chrome with the real engine, at desktop, 1366×768 and phone
+  sizes, through a failed download and a phone's first visit, and writes
+  screenshots to `build/bughouse-web/`; `BUGHOUSE_BACKEND=cpu` runs it on the
+  CPU path. Both browser checks serve `dist/` with `public/_headers` applied
+  (`scripts/static-server.mjs`), so an isolation mistake fails locally.
 - `public/stockfish/` — stockfish.js 18 single-threaded build (`stockfish.js` +
   `stockfish.wasm`). `public/piece/` — cburnett SVGs used by both board renderers.
 
