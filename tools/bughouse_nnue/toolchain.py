@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -40,6 +41,9 @@ class Pin:
     url: str
     sha: str
 
+
+#: Every piece of a bughouse game can end up on one board, counting the hands.
+MAX_PIECES = 64
 
 PINS = {
     "variant-nnue-tools": Pin(
@@ -149,6 +153,15 @@ def write_trainer_config(binary: Path, out: Path) -> dict[str, str]:
             f"{VARIANT} is configured without pockets in {out / 'variant.h'}; "
             "the net would not see pieces in hand"
         )
+    # The tools size the trainer's loader for one board's starting material
+    # (34 here), but a bughouse board also holds what the partner sent: on the
+    # 2017 sample 22% of positions had more than 34 pieces counting the hands,
+    # up to 50.  The loader uses PIECE_COUNT for its buffers and corrupts
+    # memory past it, so give it room for every piece in the game.
+    patched = re.sub(r"#define PIECE_COUNT \d+", f"#define PIECE_COUNT {MAX_PIECES}",
+                     files["variant.h"])
+    (out / "variant.h").write_text(patched)
+    files["variant.h"] = patched
     return files
 
 

@@ -51,6 +51,8 @@ done
 [[ -f $CONFIG/variant.h && -f $CONFIG/variant.py ]] || { echo "no variant.h/variant.py in $CONFIG" >&2; exit 2; }
 grep -q 'POCKETS true' "$CONFIG/variant.h" || { echo "$CONFIG/variant.h has no pockets; wrong variant" >&2; exit 2; }
 OUT=${OUT:-pocketknight-lambda${LAMBDA}-e${EPOCHS}.nnue}
+# Fairy-Stockfish only uses a net whose file name starts with the variant.
+case $(basename "$OUT") in pocketknight*) ;; *) echo "--out must start with 'pocketknight' or the engine ignores the net" >&2; exit 2 ;; esac
 TRAIN=$(realpath "$TRAIN"); VAL=$(realpath "$VAL"); CONFIG=$(realpath "$CONFIG")
 [[ -n $RESUME ]] && RESUME=$(realpath "$RESUME")
 case $OUT in /*) ;; *) OUT=$PWD/$OUT ;; esac

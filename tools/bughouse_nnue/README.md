@@ -84,8 +84,25 @@ Beyond that: the 14 FICS opening positions in
 ## Loading the net
 
 Fairy-Stockfish takes it with `setoption name EvalFile value <net>` and
-`Use NNUE pure`; the site's wasm build loads the crazyhouse net the same way, in
-chunks, so a pocketknight net goes through the same door.
+`Use NNUE pure`. **The file name must start with `pocketknight`**: the engine
+restricts nets to their variant by name and otherwise keeps the classical eval
+without saying so (`evaluate.cpp`, `NNUE::init`). `train.sh` and `evaluate`
+both enforce this. The site's browser build (`fsf_14.js`, lichess's
+stockfish-web API) takes the bytes with `setNnueBuffer(net, 0)` after
+`UCI_Variant` is set, as the old crazyhouse page did.
+
+## Verified without a GPU (Oct 15 2026)
+
+- The trainer's own C++ data loader reads the packed sample back with the
+  right side to move, outcome, score and feature count for every position,
+  including the pieces in hand — once `PIECE_COUNT` is raised. The tools write
+  34 (one board's starting material) but a bughouse board also holds what the
+  partner sent: 22% of sample positions exceed 34 pieces counting the hands,
+  up to 50, and the loader corrupts memory past its limit. `setup` now writes
+  `PIECE_COUNT 64` (`toolchain.MAX_PIECES`).
+- An untrained net written by the trainer's serializer (CPU PyTorch, no CUDA)
+  loads and searches in the native Fairy-Stockfish 151026 and in the site's
+  FSF 14 browser build.
 
 ## Pins
 

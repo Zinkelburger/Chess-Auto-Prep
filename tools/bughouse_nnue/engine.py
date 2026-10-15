@@ -40,12 +40,20 @@ class Engine:
         if options and options.get("Use NNUE", "false") != "false":
             # A net that does not load is only reported on the first search,
             # after which the engine exits; find out now, with the message.
+            # And a net whose file name does not start with the variant is
+            # ignored without a word (evaluate.cpp restricts nets to their
+            # variant by name), so insist on seeing it switched on.
             self.send("position startpos")
             self.send("go depth 1")
             lines = self.read_until("bestmove")
             errors = [l for l in lines if "ERROR" in l]
             if errors:
                 raise RuntimeError("engine rejected the net:\n" + "\n".join(errors))
+            if not any("NNUE evaluation using" in l for l in lines):
+                raise RuntimeError(
+                    f"engine kept its classical eval; a {variant} net's file name must "
+                    f"start with '{variant}' (got {options.get('EvalFile')})"
+                )
 
     # ── Plumbing ──────────────────────────────────────────────────────────
 

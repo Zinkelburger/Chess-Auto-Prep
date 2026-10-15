@@ -263,6 +263,16 @@ class Summary(unittest.TestCase):
 
 @unittest.skipUnless(tools_binary().exists(), "tools binary not built (python3 -m bughouse_nnue setup)")
 class WithEngine(unittest.TestCase):
+    def test_trainer_config_has_pockets_and_room_for_arrivals(self):
+        from bughouse_nnue import toolchain
+
+        with tempfile.TemporaryDirectory() as tmp:
+            files = toolchain.write_trainer_config(tools_binary(), Path(tmp))
+            self.assertIn("#define POCKETS true", files["variant.h"])
+            self.assertIn(f"#define PIECE_COUNT {toolchain.MAX_PIECES}", files["variant.h"])
+            self.assertEqual((Path(tmp) / "variant.h").read_text(), files["variant.h"])
+            self.assertIn("USE_POCKETS = True", files["variant.py"])
+
     def test_search_and_pack(self):
         from bughouse_nnue.engine import Engine
         from bughouse_nnue.paths import VARIANT
