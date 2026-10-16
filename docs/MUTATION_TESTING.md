@@ -3,9 +3,8 @@
 Line coverage answers "did this line run in the suite?". It does not answer the
 question you actually care about: **would anything fail if this line were
 wrong?** Those come apart badly. When this was first run here, three files at
-100% line coverage scored 100%, 78% and 56% — the last one, the trick scoring
-helpers (now part of `hole_scoring.dart`),
-had nearly half its logic executed by the suite and defended by none of it.
+100% line coverage scored 100%, 78% and 56% — the last had nearly half its
+logic executed by the suite and defended by none of it.
 
 `scripts/mutation_test.py` makes a small semantic change to a source file (a
 "mutant" — flip `>=` to `>`, drop a `!`, change `+ 1` to `- 1`) and re-runs that
@@ -16,12 +15,16 @@ and it names the exact line.
 
 ```
 scripts/ci.sh with -- python3 scripts/mutation_test.py \
-    --target lib/services/generation/tree_prune.dart \
-    --tests  test/services/generation/tree_prune_test.dart
+    --target lib/chess/game_filter.dart \
+    --tests  test/chess/game_filter_test.dart
 
 scripts/mutation_sweep.sh                 # every pair in mutation_targets.txt
 scripts/mutation_sweep.sh --max 30        # more mutants per file
 ```
+
+`scripts/mutation_targets.txt` currently lists no targets (its pairs named
+files removed with the old app), so a sweep runs nothing until targets are
+added; see [Adding a target](#adding-a-target).
 
 Always go through `scripts/ci.sh with --`. A campaign is dozens of `flutter
 test` runs; inside one `ci.sh with` they queue for the machine-wide Flutter lock
@@ -55,8 +58,8 @@ callback's index) and some are worth a lot (`loss >= kBlunderCp ? 'Blunder' :
   `x == null || x.foo` genuinely breaks Dart's null promotion, so the mutant
   cannot compile and is correctly excluded — the tests never got a say.
 - A mutant that hangs is counted as killed (the behaviour changed observably).
-- **A score is a sample, not a measurement.** `move_annotation.dart` has 103
-  possible mutants; a `--max 24` run tests 24 of them. The same file scored
+- **A score is a sample, not a measurement.** One file with 103 possible
+  mutants was run at `--max 24`, testing 24 of them. The same file scored
   100% at `--max 18` and 62% at `--max 24` — both true, and only the second
   told anyone anything. So quote the file, the seed AND the max together, never
   a bare percentage, and do not compare two numbers taken at different `--max`.
@@ -71,9 +74,8 @@ callback's index) and some are worth a lot (`loss >= kBlunderCp ? 'Blunder' :
 
 Running only the target's own test file is what keeps a campaign to seconds a
 mutant, and it is also the method's biggest trap: almost nothing here is
-covered by its same-named test alone. When this was first run,
-`line_extractor.dart` was imported by fifteen other test files, and
-`game_filter.dart` by sixteen — so a mutant the paired file misses may be
+covered by its same-named test alone. A file such as `game_filter.dart` is
+imported by many other test files, so a mutant the paired file misses may be
 caught next door, and reporting it as a hole sends someone to write a test
 that already exists.
 
@@ -82,9 +84,9 @@ those against the wider suite. Survivors are few, so the second pass is cheap:
 
 ```
 scripts/ci.sh with -- python3 scripts/mutation_test.py \
-    --target lib/services/game_store/game_store.dart \
-    --tests   test/services/game_store/game_store_test.dart \
-    --confirm-tests test/services/game_store test/services/storage
+    --target lib/storage/game_store.dart \
+    --tests   test/storage/game_store_test.dart \
+    --confirm-tests test/storage
 ```
 
 Anything the wider suite kills is reported as killed and counted that way, with

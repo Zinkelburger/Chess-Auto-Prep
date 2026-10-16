@@ -29,7 +29,7 @@ export const LIMITS = {
   workers: { min: 1, max: Math.max(1, navigator.hardwareConcurrency || 2) },
 };
 
-export function defaultSettings(): Settings {
+function defaultSettings(): Settings {
   return {
     lichessUser: '',
     chesscomUser: '',

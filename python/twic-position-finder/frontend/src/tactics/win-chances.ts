@@ -4,14 +4,10 @@
  * Thresholds are lila's `Advice.scala`: blunder ≥ 0.3, mistake ≥ 0.2,
  * inaccuracy ≥ 0.1 of winning chances lost.
  */
+import { winningChances as chances } from '../analysis/judge';
 
-export const LICHESS_MULTIPLIER = -0.00368208;
-
-/** [-1, 1] from the perspective of whoever [cp] is for. */
-export function winningChances(cp: number): number {
-  const capped = Math.max(-1000, Math.min(1000, cp));
-  return 2 / (1 + Math.exp(LICHESS_MULTIPLIER * capped)) - 1;
-}
+/** [-1, 1] from the perspective of whoever [cp] is for (capped at ±1000, as lila). */
+export const winningChances = (cp: number): number => chances({ cp });
 
 export function winPercent(cp: number): number {
   return 50 + 50 * winningChances(cp);

@@ -228,8 +228,8 @@ typedef _SessionCalls = ({
 /// before the session exists. Memory patterns are off because with this
 /// runtime and this model the first run and every later run otherwise
 /// disagree in the fourth decimal — 0.9220 against 0.9206 for the same
-/// position (docs/PARALLEL_EXPECTIMAX.md) — and a tree built from numbers
-/// that change on the second ask cannot be reproduced or compared. One
+/// position (docs/ALGORITHM.md#maia-repeatability) — and a tree built from
+/// numbers that change on the second ask cannot be reproduced or compared. One
 /// intra-op thread is the other half of that: the runtime's thread pool
 /// sums partial results in whatever order the threads finish.
 ///

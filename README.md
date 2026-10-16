@@ -1,8 +1,5 @@
 # Chess Auto Prep
 
-The renewal app (v2) is now the only implementation: run `lib/main.dart`.
-V1 source has been retired; existing Documents and Support files stay in place.
-
 A desktop chess app for building and practicing opening repertoires, reviewing
 PGN games, analyzing positions, and training tactics. Runs on Windows, Linux,
 and macOS. Stockfish and Maia are included.
@@ -40,7 +37,7 @@ close it (Windows installer, AppImage, .deb, .rpm and the Linux ZIP). Update
 options are under **Settings → App**. The Flatpak, macOS and the Windows ZIP
 update from the release page. Keep backups of important work before upgrading.
 
-[Technical documentation](docs/COMPONENT_MAP.md) · [License: AGPL-3.0](LICENSE)
+[Mode specs](docs/features/README.md) · [Technical documentation](docs/COMPONENT_MAP.md) · [License: AGPL-3.0](LICENSE)
 
 ## Development and release checks
 

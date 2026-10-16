@@ -51,9 +51,8 @@ export const DEFAULT_FILTER: Filter = { kind: 'all', length: 'all', difficulty: 
 export const LENGTHS: LengthFilter[] = ['1', '2', '3', '4'];
 export const DIFFICULTIES: Difficulty[] = [1, 2, 3];
 export const DIFFICULTY_LABELS: Record<Difficulty, string> = { 1: 'Easy', 2: 'Medium', 3: 'Hard' };
-export const KIND_LABELS: Record<PuzzleKind, string> = { mate: 'Mate', advantage: 'Tactic' };
 
-export function matches(entry: IndexEntry, f: Filter): boolean {
+function matches(entry: IndexEntry, f: Filter): boolean {
   if (f.kind !== 'all' && entry.kind !== f.kind) return false;
   if (f.length !== 'all' && (f.length === '4' ? entry.moves < 4 : entry.moves !== Number(f.length))) return false;
   if (f.difficulty !== 'all' && entry.difficulty !== f.difficulty) return false;
@@ -149,7 +148,7 @@ export function normalizeFilter(raw: unknown): Filter {
   return f;
 }
 
-export function isIndex(value: unknown): value is PuzzleIndex {
+function isIndex(value: unknown): value is PuzzleIndex {
   const v = value as PuzzleIndex;
   return !!v && v.version === 2 && Array.isArray(v.shards) && Array.isArray(v.puzzles);
 }

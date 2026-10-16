@@ -3,8 +3,10 @@
 Flutter desktop app for Linux, Windows and macOS: chess preparation,
 repertoires, training, player analysis and studies.
 
-V2 is the only app: `lib/main.dart`, production under `lib/`, tests under
-`test/`. V1 and backward-compatibility parity are retired (owner, 2026-09-30).
+`lib/main.dart` boots the one app; production code is under `lib/`, tests
+under `test/`. What each mode does, and the owner's decisions about it, is in
+[the mode specs](docs/features/README.md). An older app was deleted on
+2026-09-30; do not restore its code or treat its behaviour as a requirement.
 
 ## Working with the owner
 
@@ -95,6 +97,8 @@ starts at the root and later edits a subdirectory.
 | Dart code (`**/*.dart`) | [Dart conventions](docs/agents/dart.md) |
 | Widgets, screens, theme or UI tests | [UI conventions](docs/agents/ui.md) |
 | Tools, engines, MCP, packaging or the separate web service | [Tooling map](docs/agents/tooling.md), then only the relevant skill/README |
+| Changing what a mode does | Its spec under [docs/features/](docs/features/README.md) |
+| Storage, recovery, ownership or cross-mode wiring | [Architecture](docs/ARCHITECTURE.md) |
 | Documenting behavior/API/layout changes or changing the backlog | [Documentation](docs/agents/documentation.md) |
 | Changing agent rules, skills or their loading | [Rule maintenance](docs/agents/README.md) |
 

@@ -16,7 +16,7 @@ const PIECE_URLS: Record<string, string> = {
 export type BoardCell = string | null;
 
 /** Parse the placement field of a FEN into 64 cells (a8 … h1), or an error. */
-export function parsePlacement(fen: string): { cells: BoardCell[] } | { error: string } {
+function parsePlacement(fen: string): { cells: BoardCell[] } | { error: string } {
   const placement = fen.trim().split(/\s+/)[0] ?? '';
   const ranks = placement.split('/');
   if (ranks.length !== 8) return { error: 'Invalid FEN — need 8 ranks separated by /' };

@@ -41,6 +41,13 @@ export interface BoardHooks {
 }
 
 const SQUARE_ROLES: Role[] = ['queen', 'knight', 'rook', 'bishop'];
+const SPARE_ROLES: Role[] = ['king', 'queen', 'rook', 'bishop', 'knight', 'pawn'];
+
+/** Piece letters as SAN and drops write them. */
+export const ROLE_LETTER: Record<Role, string> = { pawn: 'P', knight: 'N', bishop: 'B', rook: 'R', queen: 'Q', king: 'K' };
+
+/** A piece's cburnett image under /piece/. */
+export const pieceSrc = (color: Color, role: Role) => `/piece/${color === 'white' ? 'w' : 'b'}${ROLE_LETTER[role]}.svg`;
 
 export class CrazyBoard {
   readonly cg: Api;
@@ -151,6 +158,55 @@ export class CrazyBoard {
     this.cg.dragNewPiece(piece, e, force);
   }
 
+  /**
+   * One of lila's spare-piece strips beside the editor: the hand cursor, one
+   * colour's six pieces and the bin. Choosing one makes it the brush; pressing
+   * a piece also drags a new one onto the board.
+   */
+  spareStrip(color: Color, brush: Brush, choose: (brush: Brush) => void): HTMLElement[] {
+    const items: HTMLElement[] = [];
+    const tool = (name: 'pointer' | 'trash', label: string, svg: string) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = `ch-spare-tool ch-${name}`;
+      b.title = label;
+      b.setAttribute('aria-label', label);
+      b.setAttribute('aria-pressed', String(brush === name));
+      b.innerHTML = svg;
+      b.onclick = () => choose(name);
+      return b;
+    };
+    items.push(tool('pointer', 'Move pieces: drag one off the board to remove it', POINTER_SVG));
+    for (const role of SPARE_ROLES) {
+      const piece: Piece = { role, color };
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ch-spare-piece';
+      const selected = typeof brush !== 'string' && brush.role === role && brush.color === color;
+      b.setAttribute('aria-pressed', String(selected));
+      const name = `${color} ${role}`;
+      b.title = `Place ${name}s: click or drag across squares`;
+      b.setAttribute('aria-label', `Place ${name}s`);
+      const img = document.createElement('img');
+      img.src = pieceSrc(color, role);
+      img.alt = '';
+      img.draggable = false;
+      b.append(img);
+      const press = (e: MouseEvent | TouchEvent) => {
+        if (e instanceof MouseEvent && e.button !== 0) return;
+        e.preventDefault();
+        choose(piece);
+        this.dragNew({ ...piece }, e, true);
+      };
+      b.addEventListener('mousedown', press);
+      b.addEventListener('touchstart', press, { passive: false });
+      b.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(piece); } };
+      items.push(b);
+    }
+    items.push(tool('trash', 'Remove pieces: click or drag across squares', TRASH_SVG));
+    return items;
+  }
+
   private keyAt(e: MouseEvent | TouchEvent): Key | undefined {
     const point = 'touches' in e ? e.touches[0] ?? e.changedTouches[0] : e;
     if (!point) return undefined;
@@ -209,7 +265,7 @@ export class CrazyBoard {
         button.style.top = `${(top ? i : 7 - i) * 12.5}%`;
         button.setAttribute('aria-label', `Promote to ${role}`);
         const img = document.createElement('img');
-        img.src = `/piece/${color === 'white' ? 'w' : 'b'}${role === 'knight' ? 'N' : role[0].toUpperCase()}.svg`;
+        img.src = pieceSrc(color, role);
         img.alt = '';
         button.append(img);
         button.onclick = (e) => { e.stopPropagation(); done(role); };
@@ -226,3 +282,6 @@ export class CrazyBoard {
     this.promotion = null;
   }
 }
+
+const POINTER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0v0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>';
+const TRASH_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';

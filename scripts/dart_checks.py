@@ -65,8 +65,10 @@ def run(gate, flutter, extra=()):
         actual = json.JSONDecoder().raw_decode(text, text.index('{'))[0]['frameworkVersion']
         if actual != expected:
             raise RuntimeError(
-                f'Flutter {expected} required by .fvmrc; found {actual}. '
-                'Set FLUTTER to the pinned SDK executable.'
+                f'Flutter {expected} required by .fvmrc; found {actual} at '
+                f'{Path(executable).resolve().parents[1]}. Check out the pinned '
+                f'tag there (git checkout {expected}), set FLUTTER to a pinned '
+                'SDK, or bump .fvmrc in its own commit after testing the new SDK.'
             )
         dart = str(Path(executable).resolve().with_name('dart'))
         if candidate:
