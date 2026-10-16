@@ -67,7 +67,7 @@ export type EngineStatus =
   /** `fraction` of the download, while downloading. */
   | { kind: 'loading'; text: string; fraction?: number }
   /** `error`: the last analysis of `fen` failed; the engine still runs. */
-  | { kind: 'ready'; backend: string; gpu: boolean; error?: { fen: string; text: string } }
+  | { kind: 'ready'; gpu: boolean; threads: number; error?: { fen: string; text: string } }
   | { kind: 'failed'; text: string };
 
 /** Where the network runs and on how many CPU threads. */
@@ -242,7 +242,7 @@ export class Engine {
           this.backend = data.backend;
           this.webgpu = data.backend.gpuAvailable;
           const gpu = data.backend.kind === 'gpu';
-          this.setStatus({ kind: 'ready', gpu, backend: gpu ? 'GPU' : `CPU × ${data.backend.threads}` });
+          this.setStatus({ kind: 'ready', gpu, threads: data.backend.threads });
           try { localStorage.setItem(LOADED_KEY, '1'); } catch { /* Asked again next visit. */ }
           resolve();
           this.next();
@@ -396,6 +396,6 @@ export class Engine {
   }
 
   private clearError(fen: string) {
-    if (this.status.kind === 'ready' && this.status.error?.fen === fen) this.setStatus({ kind: 'ready', backend: this.status.backend, gpu: this.status.gpu });
+    if (this.status.kind === 'ready' && this.status.error?.fen === fen) this.setStatus({ kind: 'ready', gpu: this.status.gpu, threads: this.status.threads });
   }
 }

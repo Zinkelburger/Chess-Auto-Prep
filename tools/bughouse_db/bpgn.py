@@ -46,6 +46,19 @@ class BpgnGame:
     #: `(board, san)` in real time order.  `board` keeps BPGN's case, so it
     #: carries the mover as well as the board: `A`/`a`, `B`/`b`.
     moves: list[tuple[str, str]] = field(default_factory=list)
+    #: How FICS said it ended -- `swthandleforever checkmated`, `BugBug
+    #: resigns`, `NAME forfeits on time`, `NAME aborted on move 1` -- or ''
+    #: when the record has no closing comment.  The first word is a player
+    #: handle, which is how [ended_on] knows which board it happened on.
+    termination: str = ""
+
+    def ended_on(self) -> str | None:
+        """`A` or `B`: the board the closing event names, else None."""
+        handle = self.termination.split(" ", 1)[0] if self.termination else ""
+        for tag in PLAYER_TAGS:
+            if handle and self.tags.get(tag) == handle:
+                return tag[-1]
+        return None
 
     @property
     def game_no(self) -> int:
@@ -99,7 +112,14 @@ class BpgnGame:
 def _build(tags: dict[str, str], movetext: str) -> BpgnGame:
     cleaned = COMMENT_RE.sub(" ", movetext)
     moves = [(board, san) for _, board, san in MOVE_RE.findall(cleaned)]
-    return BpgnGame(tags=tags, moves=moves)
+    # Braces hold three things: the bughouse-db banner (`C:...`), a clock
+    # after every move (`{119.859}`), and last of all how the game ended.
+    closing = [
+        c[1:-1].strip()
+        for c in COMMENT_RE.findall(movetext)
+        if not c.startswith("{C:") and any(ch.isalpha() for ch in c)
+    ]
+    return BpgnGame(tags=tags, moves=moves, termination=closing[-1] if closing else "")
 
 
 def iter_games(lines):

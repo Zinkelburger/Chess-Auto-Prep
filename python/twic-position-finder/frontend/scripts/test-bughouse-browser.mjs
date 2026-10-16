@@ -266,7 +266,9 @@ try {
     const max = Number(await page.$eval('#ch-set-threads', (el) => el.max));
     const want = Math.max(1, Math.min(max, 2));
     await slide('#ch-set-threads', want, 'change');
-    await until(page, '#ch-engine-name', new RegExp(`CPU × ${want}$`));
+    await until(page, '.ch-setting:has(#ch-set-threads) .ch-setting-value', new RegExp(`^${want} / `));
+    await page.waitForSelector(`#ch-engine-name[data-threads="${want}"]`);
+    assert.doesNotMatch(await text(page, '#ch-engine-name'), /×|CPU/, 'no thread count in the engine name');
     await evaluated(page);
   }
   await page.keyboard.press('Escape');
