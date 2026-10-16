@@ -2,6 +2,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../ui/status_bar.dart';
 import '../ui/theme.dart';
 import 'solitaire.dart';
 import '../ui/app_keys.dart';
@@ -313,11 +314,9 @@ class _Done extends StatelessWidget {
         onPressed: () async {
           final pgn = solitaire.reviewPgn;
           if (pgn == null) return;
+          final say = StatusScope.of(context);
           await Clipboard.setData(ClipboardData(text: pgn));
-          if (context.mounted)
-            ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-              const SnackBar(content: Text('Session PGN copied')),
-            );
+          say('Session PGN copied.', problem: false);
         },
         icon: const Icon(Icons.copy_outlined),
         label: const Text('Copy session PGN'),
