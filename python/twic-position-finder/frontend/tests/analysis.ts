@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {
-  MAX_IN_HAND, START_FEN, Tree, adjustHand, boardDests, dropSquares, handEdit, handLetters, playLine, readFen, sanLine, threatFen,
+  MAX_IN_HAND, START_FEN, Tree, adjustHand, boardDests, dropSquares, enPassantSquares, fenOf, handEdit, handLetters, playLine, readFen, sanLine, threatFen,
   outcomeOf, positionOf, readMove,
 } from '../src/analysis/tree';
 import { liveGlyph, povDiff, verdict, winningChances } from '../src/analysis/judge';
@@ -212,6 +212,24 @@ const black = toResult('8/8/8/8/8/8/8/k6K[] b - - 0 1', {
 assert.ok(black.lines[0].cp! < 0, 'good for Black is negative');
 assert.equal(black.lines[1].mate, -1, 'Black mates in one');
 assert.equal(black.info, '100 positions · 20/s');
+
+// Move counters and en passant survive the analysis board, as on Lichess: the move number numbers the moves.
+const afterD5 = 'rnbqkbnr/ppp1pppp/8/3pP3/8/8/PPPP1PPP/RNBQKBNR[] w KQkq d6 0 3';
+const counted = readFen(afterD5);
+assert.ok(counted.ok);
+assert.equal(fenOf(counted.pos), afterD5, 'en passant square, halfmove clock and move number kept');
+const fromThree = new Tree(afterD5);
+const exd6 = fromThree.play(fromThree.root.id, 'e5d6')!;
+assert.equal(exd6.san, 'exd6');
+assert.match(fromThree.pgn(), /\n3\. exd6 \*/, 'numbered from move 3');
+assert.match(exd6.fen, / b KQkq - 0 3$/);
+const later = fromThree.play(exd6.id, 'g8f6')!;
+assert.match(later.fen, / w KQkq - 1 4$/, 'a quiet move counts the halfmove clock; Black’s move ends move 3');
+// The editor's en passant squares: only where a pawn could just have pushed two with a pawn beside it.
+assert.deepEqual(enPassantSquares('rnbqkbnr/ppp1pppp/8/3pP3/8/8/PPPP1PPP/RNBQKBNR', 'white'), ['d6']);
+assert.deepEqual(enPassantSquares('rnbqkbnr/ppp1pppp/3p4/4P3/8/8/PPPP1PPP/RNBQKBNR', 'white'), [], 'not after d6 then a pawn on d5');
+assert.deepEqual(enPassantSquares('rnbqkbnr/pppp1ppp/8/8/3Pp3/8/PPP1PPPP/RNBQKBNR', 'black'), ['d3']);
+assert.deepEqual(enPassantSquares('rnbqkbnr/pppp1ppp/8/8/3Pp3/8/PPP1PPPP/RNBQKBNR', 'white'), [], 'not for the side that pushed');
 
 // The pages' links, as lila's: the starting position is the plain page; ?color= only when the board is turned.
 assert.equal(editorUrl(START_FEN, 'white'), '/bughouse/editor/');

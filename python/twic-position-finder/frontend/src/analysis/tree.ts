@@ -12,7 +12,7 @@
  * capturer's hand, and pieces arrive only through a hand edit. Positions are
  * kept in chessops' crazyhouse form, which reads and writes hands in FENs.
  */
-import { makeFen, parseFen, INITIAL_FEN } from 'chessops/fen';
+import { makeFen, parseBoardFen, parseFen, INITIAL_FEN } from 'chessops/fen';
 import { makeSan as chessopsSan, parseSan } from 'chessops/san';
 import { parsePgn, startingPosition, type PgnNodeData, type Node as PgnNode } from 'chessops/pgn';
 import { Crazyhouse } from 'chessops/variant';
@@ -560,6 +560,29 @@ function applyEditComment(tree: Tree, node: TreeNode, comment: string) {
     for (let i = 0; i < (Number(count) || 1); i++)
       tree.adjustHand(node.id, color, roles[letter.toLowerCase()], sign === '+' ? 1 : -1);
   }
+}
+
+/**
+ * The en passant squares a board allows the side to move, as lila's editor
+ * offers them: a pawn that could just have moved two squares (both squares
+ * behind it empty) with a pawn of the side to move beside it.
+ */
+export function enPassantSquares(boardFen: string, turn: Color): SquareName[] {
+  const board = parseBoardFen(boardFen.replace(/\[.*$/, ''));
+  if (board.isErr) return [];
+  const at = (rank: number, file: number) => board.value.get(rank * 8 + file);
+  const rank = turn === 'white' ? 4 : 3, dir = turn === 'white' ? 1 : -1;
+  const out: SquareName[] = [];
+  for (let file = 0; file < 8; file++) {
+    const pushed = at(rank, file);
+    if (pushed?.role !== 'pawn' || pushed.color === turn || at(rank + dir, file) || at(rank + 2 * dir, file)) continue;
+    const beside = [file - 1, file + 1].some((f) => {
+      const p = f >= 0 && f < 8 ? at(rank, f) : undefined;
+      return p?.role === 'pawn' && p.color === turn;
+    });
+    if (beside) out.push(makeSquare((rank + dir) * 8 + file));
+  }
+  return out;
 }
 
 function plyOf(fen: string): number {

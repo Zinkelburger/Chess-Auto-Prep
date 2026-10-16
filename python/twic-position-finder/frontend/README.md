@@ -84,7 +84,9 @@ Cloudflare Pages' 25 MiB asset limit.
   `localStorage['bughouse-engine-backend'] = 'cpu'` (or Hardware: CPU)
   forces the CPU path. `board.ts` is the chessground board in analysis and editor modes;
   `editor.ts` is the board editor page (`/bughouse/editor/?fen=…&color=…`,
-  lila's `/editor`: the URL follows every edit and is its only memory);
+  lila's `/editor`: the URL follows every edit and is its only memory; the
+  move counters come from the FEN it opened, reset only by Starting position,
+  Clear board or a new FEN);
   `links.ts` builds both pages' links;
   `hand.ts` draws a hand with a + above and a − below each piece; `moves.ts`
   is the move list (column or inline, folds, live ?!/?/?? marks, the

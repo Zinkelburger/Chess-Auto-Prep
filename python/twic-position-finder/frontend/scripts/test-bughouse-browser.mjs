@@ -186,13 +186,12 @@ try {
   await until(page, '#ch-fen', /\/3N4\/.*\[\] b/);
 
   // Board editor: its own page, as lila's /editor, opened on the analysed position.
-  const fields = (f) => f.split(' ').slice(0, 3).join(' ');
   const analysed = await fen(page);
   const moveCount = await page.$$eval('#ch-moves .ch-move', (els) => els.length);
   await Promise.all([page.waitForNavigation(), page.click('#ch-edit')]);
   assert.match(page.url(), /\/bughouse\/editor\/\?fen=/);
   assert.equal(await page.$eval('#ch', (el) => el.dataset.mode), 'editor');
-  assert.equal(fields(await fen(page)), fields(analysed), 'the editor opens on the analysed position');
+  assert.equal(await fen(page), analysed, 'the editor opens on the analysed position, move number and all, as lila');
   // A white queen painted on h5, a black pawn removed and a queen added to Black's hand.
   await page.waitForSelector('#ch-spare-bottom .ch-spare-piece');
   const queen = await page.$('#ch-spare-bottom .ch-spare-piece:nth-child(3)');
@@ -220,6 +219,15 @@ try {
   await page.goForward();
   await page.waitForSelector('#ch-spare-bottom .ch-spare-piece');
   assert.equal(await fen(page), edited);
+  const counters = (f) => f.split(' ').slice(4).join(' ');
+  assert.equal(counters(edited), counters(analysed), 'edits keep the halfmove clock and move number');
+  assert.match(analysed, / 5$/);
+  // lila's resets: Clear board is an empty board at move 1 with the side to move kept; Starting position is move 1.
+  await page.click('#ch-editor-clear');
+  assert.equal(await fen(page), '8/8/8/8/8/8/8/8[] b - - 0 1');
+  await page.click('#ch-editor-start');
+  assert.equal(await fen(page), 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1');
+  assert.equal(new URL(page.url()).search, '', 'the starting position is the plain editor page');
   // Black to play, then "Analysis board" opens the position fresh, turned as in the editor (lila's ?color=).
   await page.click('#ch-turn button[data-turn="black"]');
   await Promise.all([page.waitForNavigation(), page.click('#ch-editor-analyse')]);

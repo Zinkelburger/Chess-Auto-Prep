@@ -4,6 +4,12 @@
  * As on lila, the URL follows every edit, so a reload, Back and a copied
  * link all show this position, and "Analysis board" is a plain link to
  * /bughouse/?fen=…. Nothing else is kept: the URL is the editor's memory.
+ *
+ * The move counters are lila's too: the halfmove clock and move number come
+ * from the FEN the editor opened (the analysis passes its current position,
+ * so an editor opened at move 6 is at move 6), and only Starting position,
+ * Clear board or a new FEN set them again. An en passant square is kept
+ * while the board still allows it and dropped when the side to move changes.
  */
 import type { Piece } from '@lichess-org/chessground/types';
 import { makePockets } from 'chessops/fen';
@@ -12,7 +18,7 @@ import type { Color, Role } from 'chessops/types';
 import { CrazyBoard, type Brush } from './board';
 import { renderHand } from './hand';
 import { analysisUrl, editorUrl, linkedOrientation } from './links';
-import { HAND_ROLES, START_FEN, fenOf, readFen } from './tree';
+import { HAND_ROLES, START_FEN, enPassantSquares, fenOf, readFen } from './tree';
 
 const LETTER: Record<Role, string> = { pawn: 'P', knight: 'N', bishop: 'B', rook: 'R', queen: 'Q', king: 'K' };
 const SPARE_ROLES: Role[] = ['king', 'queen', 'rook', 'bishop', 'knight', 'pawn'];
@@ -28,6 +34,8 @@ export class BughouseEditor {
   private turn: Color = 'white';
   private castling: Castling = { K: true, Q: true, k: true, q: true };
   private hands = Material.empty();
+  private enPassant = '-';
+  private halfmoves = 0;
   private fullmoves = 1;
   private brush: Brush = 'pointer';
   private readonly board: CrazyBoard;
@@ -53,7 +61,9 @@ export class BughouseEditor {
   private fen(): string {
     const c = this.castling;
     const castling = `${c.K ? 'K' : ''}${c.Q ? 'Q' : ''}${c.k ? 'k' : ''}${c.q ? 'q' : ''}` || '-';
-    return `${this.board.boardFen()}[${makePockets(this.hands)}] ${this.turn === 'white' ? 'w' : 'b'} ${castling} - 0 ${this.fullmoves}`;
+    const board = this.board.boardFen();
+    const ep = (enPassantSquares(board, this.turn) as string[]).includes(this.enPassant) ? this.enPassant : '-';
+    return `${board}[${makePockets(this.hands)}] ${this.turn === 'white' ? 'w' : 'b'} ${castling} ${ep} ${this.halfmoves} ${this.fullmoves}`;
   }
 
   private pieceCount(): number {
@@ -75,7 +85,9 @@ export class BughouseEditor {
     this.turn = parts[1] === 'b' ? 'black' : 'white';
     const castling = parts[2] ?? '-';
     this.castling = { K: castling.includes('K'), Q: castling.includes('Q'), k: castling.includes('k'), q: castling.includes('q') };
-    this.fullmoves = Math.max(1, Number(parts[5]) || 1);
+    this.enPassant = /^[a-h][36]$/.test(parts[3] ?? '') ? parts[3] : '-';
+    this.halfmoves = Math.max(0, Math.floor(Number(parts[4])) || 0);
+    this.fullmoves = Math.max(1, Math.floor(Number(parts[5])) || 1);
     this.board.cg.set({ fen: parts[0].replace(/\[.*$/, '') });
     this.changed();
     return null;
@@ -97,10 +109,14 @@ export class BughouseEditor {
     this.changed();
   }
 
+  /** lila's Clear board: an empty board at move 1, the side to move kept. */
   private clear() {
     this.board.cg.set({ fen: EMPTY_BOARD });
     this.hands = Material.empty();
     this.castling = { K: false, Q: false, k: false, q: false };
+    this.enPassant = '-';
+    this.halfmoves = 0;
+    this.fullmoves = 1;
     this.changed();
   }
 
@@ -221,7 +237,7 @@ export class BughouseEditor {
   // ── Wiring ──────────────────────────────────────────────────────
   private bind() {
     for (const b of document.querySelectorAll<HTMLButtonElement>('#ch-turn button'))
-      b.onclick = () => { this.turn = b.dataset.turn as Color; this.changed(); };
+      b.onclick = () => { this.turn = b.dataset.turn as Color; this.enPassant = '-'; this.changed(); };
     for (const box of document.querySelectorAll<HTMLInputElement>('#ch-castling input'))
       box.onchange = () => { this.castling[box.dataset.right as keyof Castling] = box.checked; this.changed(); };
     $('ch-editor-start').onclick = () => { this.setFen(START_FEN); this.fenError(null); };
