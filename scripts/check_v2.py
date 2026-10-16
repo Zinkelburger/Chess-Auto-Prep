@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mechanical checks for lib and test, from docs/ARCHITECTURE_RENEWAL.md.
+"""Mechanical checks for lib and test, from docs/ARCHITECTURE.md.
 
 Everything here is a number or a pattern, so it fails instead of being argued
 about: file and function length, nesting, `part`, `dynamic`, `late`, the

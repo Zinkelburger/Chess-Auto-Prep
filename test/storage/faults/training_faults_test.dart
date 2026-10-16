@@ -2,7 +2,7 @@
 // (its review, its move's streak and a history row: three files) and an
 // answer logged (one file), each with its ProgressOperation as the retry
 // token. Training answers are not journaled ("each training file is
-// replaced atomically", docs/ARCHITECTURE_RENEWAL.md), so a kill between
+// replaced atomically", docs/ARCHITECTURE.md), so a kill between
 // the rating's files may leave part of it by design: the crash families
 // run on the answer, whose one file lands whole or not at all, and the
 // rating runs the families in which the same session must finish it, once.

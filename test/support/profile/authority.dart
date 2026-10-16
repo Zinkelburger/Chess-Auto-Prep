@@ -1,4 +1,4 @@
-// The Authority table of docs/ARCHITECTURE_RENEWAL.md as code: which bytes
+// The Authority table of docs/ARCHITECTURE.md as code: which bytes
 // under a profile are the system of record and which may be discarded. The
 // contracts project a profile onto its authoritative paths, so a store that
 // writes somewhere new has to say here what that path is. An unclassified
