@@ -1157,7 +1157,7 @@ requirements; current-app correctness and release validation still apply.
 **Correctness across features.** Existing stores and Linux hardening are the
 foundation, not proof that every new cross-mode command is safe. For linked
 studies, [rename and delete refuse while player/group links name the
-file](../lib/features/study/studies.dart); [Players reuses stored prep
+file](../lib/features/study/study_file_changes.dart); [Players reuses stored prep
 paths](../lib/app/player_wiring.dart). Acceptance must cover a linked
 study's creation, failed link write, rename, deletion, restore and referenced
 chapter rename/removal. No successful command may silently leave a dangling

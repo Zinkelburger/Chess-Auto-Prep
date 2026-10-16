@@ -14,6 +14,7 @@ import '../features/pgn_viewer/pgn_viewer.dart';
 import '../chess/pgn/study.dart' show ChapterDraft;
 import '../workspace/draft_keeper.dart';
 import '../features/study/studies.dart';
+import '../features/study/studies_state.dart';
 import '../storage/chapter_files.dart';
 import '../workspace/books.dart';
 import '../workspace/chapter_commands.dart';

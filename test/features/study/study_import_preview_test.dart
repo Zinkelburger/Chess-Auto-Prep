@@ -1,5 +1,5 @@
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
-import 'package:chess_auto_prep/features/study/studies.dart';
+import 'package:chess_auto_prep/features/study/studies_state.dart';
 import 'package:chess_auto_prep/features/study/study_import_source.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
