@@ -6,17 +6,52 @@
  * clicking a move plays the line up to it. When the engine waits for the
  * player (a phone's first download) or has failed, one button starts it.
  * Screen readers hear the evaluation once a search ends, not every update.
+ * Hivemind on the bughouse board and Stockfish on the PGN page both use it;
+ * the small board shows the hands where the page has places for them.
  */
 import { Chessground } from '@lichess-org/chessground';
 import type { Api } from '@lichess-org/chessground/api';
 import type { Key } from '@lichess-org/chessground/types';
+import type { Material } from 'chessops/setup';
 import type { Color, Role } from 'chessops/types';
-import { type EngineLine, type EngineResult, type EngineStatus } from './engine';
+import type { EngineLine } from './engine';
 import { el } from './moves';
-import { HAND_ROLES, playLine, positionOf, type LineMove } from './tree';
+import type { LineMove } from './variation-tree';
+import { pieceSrc } from './board';
 
 const PV_MOVES = 16;
-const LETTER: Record<Role, string> = { pawn: 'P', knight: 'N', bishop: 'B', rook: 'R', queen: 'Q', king: 'K' };
+const HAND_ROLES: Role[] = ['pawn', 'knight', 'bishop', 'rook', 'queen'];
+
+/** What the panel shows of an engine: Hivemind reports every kind, Stockfish loading, ready and failed. */
+export type CevalStatus =
+  | { kind: 'off' }
+  /** Waits for the player before downloading `megabytes` (phones and data saving). */
+  | { kind: 'ask'; megabytes: number }
+  /** `fraction` of the download, while downloading. */
+  | { kind: 'loading'; text: string; fraction?: number }
+  /** `error`: the last analysis of `fen` failed; the engine still runs. */
+  | { kind: 'ready'; gpu?: boolean; threads?: number; error?: { fen: string; text: string } }
+  | { kind: 'failed'; text: string };
+
+/** A search's report as the panel shows it. */
+export interface CevalResult {
+  lines: EngineLine[];
+  /** Time since the search started. */
+  millis: number;
+  done: boolean;
+  /** "Depth 21 · 640 kn/s", under the engine name. */
+  info: string;
+}
+
+export interface CevalOptions {
+  engineName: string;
+  /** A line's moves with SAN and the position after each, by the board's rules. */
+  playLine(fen: string, ucis: string[], limit?: number): LineMove[];
+  /** The evaluation's tooltip once the search has finished. */
+  doneTitle?: string;
+  /** The hands of a position, shown around the small board of a hovered move. */
+  hands?(fen: string): Material | undefined;
+}
 
 export interface CevalState {
   enabled: boolean;
@@ -27,8 +62,8 @@ export interface CevalState {
   infinite: boolean;
   /** The search time, for the progress bar. */
   searchMs: number;
-  result: EngineResult | undefined;
-  status: EngineStatus;
+  result: CevalResult | undefined;
+  status: CevalStatus;
   threat: boolean;
   /** The current side is in check: no threat to show. */
   inCheck: boolean;
@@ -64,7 +99,7 @@ export class CevalView {
       pvs: HTMLElement; board: HTMLElement; switch: HTMLInputElement; action: HTMLButtonElement; live: HTMLElement;
     },
     hooks: CevalHooks,
-    private readonly engineName = 'Hivemind',
+    private readonly options: CevalOptions,
   ) {
     const { pvs } = els;
     els.action.onclick = () => hooks.start();
@@ -99,9 +134,10 @@ export class CevalView {
     header.classList.toggle('ch-threat-mode', state.threat);
     threat.hidden = !state.enabled || state.inCheck || !!state.over;
     threat.setAttribute('aria-pressed', String(state.threat));
-    name.textContent = state.threat ? 'Show threat' : state.status.kind === 'ready' && state.status.gpu ? `${this.engineName} · GPU` : this.engineName;
+    const { engineName } = this.options;
+    name.textContent = state.threat ? 'Show threat' : state.status.kind === 'ready' && state.status.gpu ? `${engineName} · GPU` : engineName;
     // The running engine's thread count, for the browser test: the gear's label changes before the restart.
-    if (state.status.kind === 'ready') name.dataset.threads = String(state.status.threads); else delete name.dataset.threads;
+    if (state.status.kind === 'ready' && state.status.threads !== undefined) name.dataset.threads = String(state.status.threads); else delete name.dataset.threads;
     info.classList.remove('ch-failed');
     action.hidden = true;
     header.classList.remove('ch-waiting');
@@ -138,6 +174,7 @@ export class CevalView {
       return;
     }
     pearl.textContent = formatEval(result.lines[0]);
+    if (this.options.doneTitle !== undefined) pearl.title = result.done ? this.options.doneTitle : '';
     info.textContent = result.info;
     if (result.done && !state.threat) this.speak(state.fen, result);
     const progress = result.millis / state.searchMs;
@@ -148,9 +185,9 @@ export class CevalView {
   }
 
   /** Tells a screen reader the finished evaluation and best move, once per result. */
-  private speak(fen: string, result: EngineResult) {
+  private speak(fen: string, result: CevalResult) {
     const best = result.lines[0];
-    const san = playLine(fen, best.pv, 1)[0]?.san;
+    const san = this.options.playLine(fen, best.pv, 1)[0]?.san;
     const text = `Evaluation ${formatEval(best)}${san ? `, best move ${san}` : ''}`;
     if (text === this.spoken) return;
     this.spoken = text;
@@ -165,7 +202,7 @@ export class CevalView {
     row.classList.toggle('ch-pv-threat', state.threat);
     row.append(el('strong', '', formatEval(line)));
     let ply = state.ply + (state.threat ? 1 : 0);
-    playLine(state.fen, line.pv, PV_MOVES).forEach((move, i) => {
+    this.options.playLine(state.fen, line.pv, PV_MOVES).forEach((move, i) => {
       ply++;
       const white = ply % 2 === 1;
       if (white || i === 0) row.append(el('span', 'ch-pv-num', `${Math.floor((ply + 1) / 2)}.${white ? '' : '..'}`));
@@ -180,7 +217,7 @@ export class CevalView {
 
   private showBoard(row: HTMLElement, index: number) {
     if (!this.state) return;
-    const moves = playLine(this.state.fen, row.dataset.pv!.split(' '), PV_MOVES);
+    const moves = this.options.playLine(this.state.fen, row.dataset.pv!.split(' '), PV_MOVES);
     if (!moves[index]) return;
     const box = this.els.board;
     box.hidden = false;
@@ -202,19 +239,22 @@ export class CevalView {
     }
     this.mini.set({ fen: move.fen.split(' ')[0].replace(/\[.*$/, ''), orientation, lastMove });
     this.mini.redrawAll();
-    const pos = positionOf(move.fen);
-    for (const [side, hand] of [['white', box.querySelector<HTMLElement>('.ch-pv-hand-white')!], ['black', box.querySelector<HTMLElement>('.ch-pv-hand-black')!]] as const) {
-      hand.replaceChildren(...HAND_ROLES.flatMap((role) => {
-        const n = pos.pockets?.[side][role] ?? 0;
-        if (!n) return [];
-        const span = el('span', 'ch-pv-hand-piece');
-        const img = document.createElement('img');
-        img.src = `/piece/${side === 'white' ? 'w' : 'b'}${LETTER[role]}.svg`;
-        img.alt = '';
-        span.append(img);
-        if (n > 1) span.append(el('em', '', String(n)));
-        return [span];
-      }));
+    const white = box.querySelector<HTMLElement>('.ch-pv-hand-white'), black = box.querySelector<HTMLElement>('.ch-pv-hand-black');
+    if (this.options.hands && white && black) {
+      const hands = this.options.hands(move.fen);
+      for (const [side, hand] of [['white', white], ['black', black]] as const) {
+        hand.replaceChildren(...HAND_ROLES.flatMap((role) => {
+          const n = hands?.[side][role] ?? 0;
+          if (!n) return [];
+          const span = el('span', 'ch-pv-hand-piece');
+          const img = document.createElement('img');
+          img.src = pieceSrc(side, role);
+          img.alt = '';
+          span.append(img);
+          if (n > 1) span.append(el('em', '', String(n)));
+          return [span];
+        }));
+      }
     }
     box.classList.toggle('ch-pv-board-flipped', orientation === 'black');
     box.setAttribute('aria-label', `After ${move.san}`);

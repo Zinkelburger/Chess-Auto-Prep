@@ -82,7 +82,7 @@ const BACKEND_KEY = 'bughouse-engine-backend';
 /** Set once the engine has loaded in this browser: its files are then in the cache. */
 const LOADED_KEY = 'bughouse-engine-loaded';
 /** The first download: the network and ONNX Runtime's WebGPU build. */
-export const DOWNLOAD_MB = 55;
+const DOWNLOAD_MB = 55;
 
 /** A frozen-board search report from the worker; values from the side to move, mate in plies. */
 export interface FrozenSearch {

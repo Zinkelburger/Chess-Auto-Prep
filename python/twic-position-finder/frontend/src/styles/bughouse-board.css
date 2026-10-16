@@ -1,25 +1,5 @@
-/* Shared by Bughouse Lab and BughouseDB: two boards on the left with their
-   move lists and setup boxes, the page's own panel on the right, one screen.
-   The boards are chessground, Lichess's own (styles come with the package). */
-.bb-app {
-  --board: clamp(240px, min(calc(100dvh - var(--nav-h) - 440px), calc((100vw - 640px) / 2)), 480px);
-  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 28px; flex: 1; min-height: 0;
-}
-.bb-left { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
-.bb-right { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-.bb-boards { display: flex; gap: 20px; }
-.bb-board-panel { width: var(--board); display: flex; flex-direction: column; min-height: 0; }
-
-.bb-player { display: flex; align-items: center; gap: 6px; min-height: 40px; padding: 4px 0; }
-.bb-player .zh-pocket { margin-left: auto; }
-.bb-player .who { color: var(--text-dim); font-size: 14px; white-space: nowrap; margin-right: 4px; }
-.bb-player .turn { width: 11px; height: 11px; border-radius: 50%; flex: none; visibility: hidden; }
-.bb-player .turn.white { background: #fff; }
-.bb-player .turn.black { background: #000; border: 1px solid var(--border-strong); }
-.bb-player.to-move .turn { visibility: visible; }
-.bb-player.to-move .who { color: var(--text); }
-
-.bb-board-wrap { position: relative; width: var(--board); height: var(--board); flex: none; }
+/* The boards of /bughouse, its puzzles and the PGN page, with lila's
+   crazyhouse pockets and promotion picker. */
 /* The board itself is chessground's: its pieces (cburnett), move dots, last-move
    and selection colours come from @lichess-org/chessground's assets. That
    package's brown board is only a demo (black squares at 20% over cream), so
@@ -56,45 +36,6 @@
 .zh-slot[aria-pressed="true"], .zh-slot[aria-pressed="true"]:not(:disabled):hover { background-color: rgb(20 85 30 / 0.5); }
 .zh-slot:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 1; }
 
-.bb-history { list-style: none; margin: 6px 0 0; padding: 4px 0; height: 80px; overflow-y: auto; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 13px; }
-.bb-history:empty::before { content: 'No moves yet'; display: block; padding: 2px 6px; color: var(--text-faint); font-family: var(--sans); }
-.bb-history li { display: grid; grid-template-columns: 2.6em 1fr 1fr; align-items: center; }
-.bb-history .num { color: var(--text-faint); }
-.bb-history button, .bb-history .ply { border: 0; background: none; color: var(--text); font: inherit; text-align: left; padding: 2px 6px; border-radius: 3px; }
-.bb-history button { cursor: pointer; }
-.bb-history button:hover { background: var(--bg-raised); }
-.bb-history button.future { color: var(--text-faint); }
-.bb-history button[aria-current="true"], .bb-history .ply.current { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
-.bb-history .none { color: var(--text-faint); padding: 2px 6px; }
-
-.bb-setup { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
-.bb-setup input { width: 100%; min-width: 0; padding: 6px 8px; font-size: 12px; }
-.bb-setup input[aria-invalid="true"] { border-color: var(--danger); }
-.bb-reserves { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.bb-reserves label { display: flex; align-items: center; gap: 6px; margin: 0; }
-.bb-reserves span { color: var(--text-dim); font-size: 13px; }
-.bb-fen-error { margin: 0; font-size: 13px; color: var(--danger); }
-.bb-fen-error:empty { display: none; }
-.bb-outstanding { display: flex; align-items: center; gap: 8px; }
-.bb-set { margin-left: auto; flex: none; }
-.bb-balance { margin: 0; font-size: 13px; color: var(--text-dim); display: flex; flex-wrap: wrap; gap: 2px 12px; }
-.bb-balance .extra { color: var(--danger); }
-.bb-info { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--border-strong); border-radius: 50%; color: var(--text-dim); font: italic 600 12px/1 Georgia, serif; cursor: help; }
-
-.bb-nav { display: flex; gap: 4px; margin-top: 6px; }
-.bb-nav .btn-icon { width: 30px; height: 28px; padding: 6px; }
-.bb-nav .btn-icon:disabled { opacity: 0.3; }
-.bb-nav svg { width: 14px; height: 14px; }
-/* The board the arrow keys step through. */
-.bb-board-panel.focused .bb-history { border-top-color: var(--accent); }
-
-/* Narrow or short screens: one column that scrolls. */
-@media (max-width: 1000px), (max-height: 600px) {
-  .bb-app { --board: min(calc(100vw - 32px), 460px); grid-template-columns: minmax(0, 1fr); }
-  .bb-boards { flex-direction: column; align-items: center; }
-}
-
-.bb-board-title { font-size: 13px; font-weight: 500; color: var(--text-dim); margin: 0; }
 
 /* lila's promotion picker (ui/lib/css/chess/_promotion.scss): the board
    dimmed, four grey circles on the promotion file that open into squares with

@@ -14,8 +14,8 @@
  * the player browses.
  */
 import type { Color } from 'chessops/types';
+import { formatEval } from '../analysis/ceval';
 import { el } from '../analysis/moves';
-import { formatEval } from './ceval';
 import { DEFAULT_OPTIONS, valueText, type ExpectimaxOptions } from './expectimax';
 import type { ExpectimaxRunner, FoundAt } from './expectimax-runner';
 import { outcomeOf } from './tree';
@@ -65,8 +65,6 @@ const engineText = (cp: number) => (Math.abs(cp) > 9000 ? formatEval({ mate: Mat
 
 export class ExpectimaxView {
   private readonly button: HTMLButtonElement;
-  private readonly elo: HTMLInputElement;
-  private readonly plies: HTMLInputElement;
   private readonly gear: HTMLButtonElement;
   private readonly settings: HTMLElement;
   private readonly status: HTMLElement;
@@ -118,8 +116,6 @@ export class ExpectimaxView {
     };
     const elo = stepper('elo', 'Rating', 'px-elo', 600, 2600, 100, 'The rating Maia plays the replies at');
     const plies = stepper('plies', 'Depth', 'px-plies', 1, 8, 1, 'Half-moves the search looks ahead. Each one costs several times the last.');
-    this.elo = elo.input;
-    this.plies = plies.input;
     this.steppers = [elo, plies];
     this.gear = el('button', 'ch-icon') as HTMLButtonElement;
     this.gear.type = 'button';

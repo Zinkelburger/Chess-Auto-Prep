@@ -49,7 +49,7 @@ export const DEFAULT_OPTIONS: ExpectimaxOptions = {
 };
 
 /** Positions one side's search may hold, so a deep setting cannot run away. */
-export const MAX_POSITIONS = 8000;
+const MAX_POSITIONS = 8000;
 
 export interface XNode {
   fen: string;
@@ -146,7 +146,7 @@ function child(parent: XNode, uci: string, cp: number, side: Side, reach: number
 }
 
 /** Recomputes values from the leaves up: the best of ours, the weighted average of theirs. */
-export function backup(node: XNode, side: Side): number {
+function backup(node: XNode, side: Side): number {
   if (!node.children?.length) return node.value;
   const values = node.children.map((c) => backup(c, side));
   node.value = turnOf(node.fen) === side

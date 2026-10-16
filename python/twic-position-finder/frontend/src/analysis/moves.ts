@@ -1,37 +1,49 @@
 /**
- * The move list as on lichess.org/analysis: lila's column view with
- * variations interrupting it, or inline notation; fold buttons in disclosure
- * mode; live annotations; the moves after this one to choose from (the fork);
- * and the right-click menu of a move.
+ * The move list as on lichess.org/analysis: lila's column view with comments
+ * and variations interrupting it, or inline notation; fold buttons in
+ * disclosure mode; the game's own annotation glyphs and, where it has none,
+ * live ones; the moves after this one to choose from (the fork); and the
+ * right-click menu of a move. Both boards use it: the PGN page adds comments
+ * and glyphs, the bughouse board its hand edits.
  */
 import type { Glyph } from './judge';
 import type { Settings } from './settings';
-import { handEdit, type Tree, type TreeNode } from './tree';
+import type { VariationNode, VariationTree } from './variation-tree';
 
-export interface MoveListHost {
-  readonly tree: Tree;
-  readonly current: TreeNode;
+export interface MoveListHost<N extends VariationNode> {
+  readonly tree: VariationTree<N>;
+  readonly current: N;
   readonly settings: Settings;
   /** The move's live annotation, when that setting is on and the engine has seen both positions. */
-  glyph(node: TreeNode): Glyph | undefined;
+  glyph(node: N): Glyph | undefined;
   /** The fork choice (↑/↓) among the current position's moves. */
   readonly forkIndex: number;
-  goTo(node: TreeNode): void;
+  goTo(node: N): void;
   /** The tree changed shape (promote, delete, fold): save it and redraw. */
   treeChanged(): void;
   /** A move and everything after it was deleted. */
-  deleted(parent: TreeNode, hadCurrent: boolean): void;
+  deleted(parent: N, hadCurrent: boolean): void;
   copied(text: string): void;
+  /** What stands before the first move (a game's opening comment, an edit of the starting hands). */
+  intro?(): HTMLElement | null;
+  /** A move's comment as shown; empty when it has none. */
+  comment?(node: N): string;
+  /** The game's own annotation glyph, shown instead of a live one; `cls` names lila's colour. */
+  ownGlyph?(node: N): { symbol: string; name: string; cls: string } | undefined;
+  /** A chip written after the move (a hand edit). */
+  chip?(node: N): HTMLElement | null;
+  /** The right-click menu's Comment item for a move, on a page that edits comments. */
+  commentItem?(node: N): { text: string; open(): void };
 }
 
 const GLYPH_CLASS: Record<Glyph['symbol'], string> = { '?!': 'inaccuracy', '?': 'mistake', '??': 'blunder' };
 
-export class MoveList {
+export class MoveList<N extends VariationNode> {
   private menu: HTMLElement | null = null;
   /** Moves an open menu item would copy or delete, highlighted as on Lichess. */
   private pending: { ids: Set<string>; kind: 'copy' | 'delete' } | null = null;
 
-  constructor(private readonly box: HTMLElement, private readonly fork: HTMLElement, private readonly host: MoveListHost) {
+  constructor(private readonly box: HTMLElement, private readonly fork: HTMLElement, private readonly host: MoveListHost<N>) {
     box.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
       const fold = target.closest<HTMLElement>('[data-fold]');
@@ -54,7 +66,7 @@ export class MoveList {
 
   get menuOpen(): boolean { return !!this.menu; }
 
-  private nodeAt(target: HTMLElement): TreeNode | undefined {
+  private nodeAt(target: HTMLElement): N | undefined {
     const id = target.closest<HTMLElement>('[data-id]')?.dataset.id;
     return id ? this.host.tree.get(id) : undefined;
   }
@@ -62,8 +74,8 @@ export class MoveList {
   render() {
     const { tree, settings } = this.host;
     const out: HTMLElement[] = [];
-    const rootEdit = handEdit(tree.loadedFen, tree.root.fen);
-    if (rootEdit) out.push(el('div', 'ch-root-edit', `Hands edited at the start: ${rootEdit}`));
+    const intro = this.host.intro?.();
+    if (intro) out.push(intro);
     if (settings.inline) out.push(this.inlineView());
     else out.push(...this.columns());
     this.box.classList.toggle('ch-moves-inline', settings.inline);
@@ -92,7 +104,14 @@ export class MoveList {
         else if (needIndex) { out.push(el('index', '', String(Math.floor((main.ply + 1) / 2)))); out.push(el('span', 'ch-empty', '…')); }
         out.push(this.moveEl(main, 'ch-move'));
         needIndex = false;
-        if (alternatives.length && white) out.push(el('span', 'ch-empty', '…'));
+        const comment = this.commentOf(main);
+        if ((alternatives.length || comment) && white) out.push(el('span', 'ch-empty', '…'));
+        if (comment) {
+          const box = el('div', 'ch-interrupt');
+          box.append(el('p', 'px-comment', comment));
+          out.push(box);
+          needIndex = true;
+        }
       }
       if (alternatives.length) {
         out.push(this.interrupt(node, alternatives));
@@ -104,7 +123,7 @@ export class MoveList {
     return out;
   }
 
-  private interrupt(parent: TreeNode, lines: TreeNode[]): HTMLElement {
+  private interrupt(parent: N, lines: N[]): HTMLElement {
     const box = el('div', 'ch-interrupt');
     if (this.host.settings.disclosure) {
       box.append(this.foldButton(parent));
@@ -118,7 +137,7 @@ export class MoveList {
     return box;
   }
 
-  private foldButton(parent: TreeNode): HTMLElement {
+  private foldButton(parent: N): HTMLElement {
     const folded = !!parent.collapsed;
     const count = parent.children.length - (this.host.tree.mainChild(parent) ? 1 : 0);
     const b = el('button', 'ch-fold', folded ? `+ ${count} ${count === 1 ? 'variation' : 'variations'}` : '−');
@@ -141,14 +160,15 @@ export class MoveList {
   }
 
   /** All lines from a position written inline: the first, then the others in brackets. */
-  private siblings(parent: TreeNode, out: HTMLElement) {
+  private siblings(parent: N, out: HTMLElement) {
     const [first, ...rest] = parent.children;
     out.append(this.moveEl(first, 'ch-vmove', true));
+    const commented = this.inlineComment(first, out);
     this.variations(parent, rest, out);
-    this.continueInline(first, out, rest.length > 0);
+    this.continueInline(first, out, commented || rest.length > 0);
   }
 
-  private variations(parent: TreeNode, alternatives: TreeNode[], out: HTMLElement) {
+  private variations(parent: N, alternatives: N[], out: HTMLElement) {
     if (!alternatives.length) return;
     if (this.host.settings.disclosure && parent.collapsed) { out.append(this.foldButton(parent)); return; }
     if (this.host.settings.disclosure) out.append(this.foldButton(parent));
@@ -160,25 +180,38 @@ export class MoveList {
   }
 
   /** A line written inline from `start`: `12...Nf6 13.N@e5 (13.Bd3 P@h6) Qe7`. */
-  private inline(start: TreeNode, out: HTMLElement, numbered: boolean) {
+  private inline(start: N, out: HTMLElement, numbered: boolean) {
     out.append(this.moveEl(start, 'ch-vmove', numbered));
-    this.continueInline(start, out, false);
+    const commented = this.inlineComment(start, out);
+    this.continueInline(start, out, commented);
   }
 
-  private continueInline(from: TreeNode, out: HTMLElement, needNumber: boolean) {
+  private continueInline(from: N, out: HTMLElement, needNumber: boolean) {
     let node = from;
     let number = needNumber;
     while (node.children.length) {
       const [main, ...alternatives] = node.children;
       out.append(this.moveEl(main, 'ch-vmove', number));
-      number = false;
+      number = this.inlineComment(main, out);
       if (alternatives.length) { this.variations(node, alternatives, out); number = true; }
       node = main;
     }
   }
 
-  private moveEl(node: TreeNode, cls: string, numbered = false): HTMLElement {
-    const { current, tree } = this.host;
+  /** A move's comment written after it in a line; true when there was one (the next move then takes its number). */
+  private inlineComment(node: N, out: HTMLElement): boolean {
+    const text = this.commentOf(node);
+    if (!text) return false;
+    out.append(el('span', 'px-comment px-comment-inline', text));
+    return true;
+  }
+
+  private commentOf(node: N): string {
+    return this.host.comment?.(node) ?? '';
+  }
+
+  private moveEl(node: N, cls: string, numbered = false): HTMLElement {
+    const { current } = this.host;
     const b = document.createElement('button');
     b.type = 'button';
     b.className = cls + (node === current ? ' active' : '');
@@ -188,6 +221,14 @@ export class MoveList {
     const number = Math.floor((node.ply + 1) / 2);
     if (cls === 'ch-vmove' && (white || numbered)) b.append(el('span', 'ch-num', `${number}.${white ? '' : '..'}`));
     b.append(document.createTextNode(node.san));
+    const own = this.host.ownGlyph?.(node);
+    if (own) {
+      const g = el('span', `ch-glyph px-nag-${own.cls}`, own.symbol);
+      g.title = own.name;
+      b.append(g);
+      b.classList.add(`px-move-${own.cls}`);
+      return b;
+    }
     const glyph = this.host.glyph(node);
     if (glyph) {
       const g = el('span', `ch-glyph ch-glyph-${GLYPH_CLASS[glyph.symbol]}`, glyph.symbol);
@@ -195,12 +236,8 @@ export class MoveList {
       b.append(g);
       b.classList.add(`ch-move-${GLYPH_CLASS[glyph.symbol]}`);
     }
-    const edit = handEdit(tree.expectedFen(node.id), node.fen);
-    if (edit) {
-      const chip = el('span', 'ch-edit', edit);
-      chip.title = 'Hands edited after this move';
-      b.append(chip);
-    }
+    const chip = this.host.chip?.(node);
+    if (chip) b.append(chip);
     return b;
   }
 
@@ -225,7 +262,7 @@ export class MoveList {
   }
 
   // ── Right-click menu (lila treeView/contextMenu.ts) ─────────────
-  openMenu(node: TreeNode, x: number, y: number) {
+  openMenu(node: N, x: number, y: number) {
     this.closeMenu();
     const { tree } = this.host;
     const menu = el('div', 'ch-menu');
@@ -249,6 +286,8 @@ export class MoveList {
       menu.append(b);
     };
     const onMainline = tree.isMainline(node.id);
+    const comment = this.host.commentItem?.(node);
+    if (comment) item('comment', comment.text, () => comment.open());
     if (this.host.settings.disclosure && tree.someCollapsible(false)) item('collapse', 'Collapse all', () => { tree.setCollapsedAll(true); this.host.treeChanged(); });
     if (this.host.settings.disclosure && tree.someCollapsible(true)) item('expand', 'Expand all', () => { tree.setCollapsedAll(false); this.host.treeChanged(); });
     if (!onMainline && this.canPromote(node)) item('promote', 'Promote variation', () => { tree.promote(node.id, false); this.host.treeChanged(); });
@@ -257,7 +296,7 @@ export class MoveList {
     const copy = tree.copyLine(node.id, !onMainline);
     item('copy', onMainline ? 'Copy main line PGN' : 'Copy variation PGN', () => this.host.copied(copy.pgn), { ids: copy.ids, kind: 'copy' });
     const below = new Set<string>();
-    const walk = (n: TreeNode) => { below.add(n.id); n.children.forEach(walk); };
+    const walk = (n: N) => { below.add(n.id); n.children.forEach(walk); };
     walk(node);
     item('delete', 'Delete from here', () => {
       const hadCurrent = tree.path(this.host.current.id).includes(node);
@@ -273,11 +312,11 @@ export class MoveList {
   }
 
   /** Lichess offers "Promote variation" unless the move already heads the first variation of its main-line fork. */
-  private canPromote(node: TreeNode): boolean {
+  private canPromote(node: N): boolean {
     const { tree } = this.host;
-    let fork: TreeNode = tree.root;
+    let fork: N = tree.root;
     for (const n of tree.path(node.id)) { if (tree.isMainline(n.id)) fork = n; else break; }
-    for (let it: TreeNode | undefined = fork.children[1]; it; it = it.children[0]) if (it === node) return false;
+    for (let it: N | undefined = fork.children[1]; it; it = it.children[0]) if (it === node) return false;
     return true;
   }
 
@@ -291,6 +330,7 @@ export class MoveList {
 
 /** Lichess's context-menu glyphs (lila public/font/lichess.ttf), 512-unit outlines. */
 const GLYPHS = {
+  comment: 'M64 64H448Q461 64 470.5 73.5Q480 83 480 96V352Q480 365 470.5 374.5Q461 384 448 384H224L112 464V384H64Q51 384 41.5 374.5Q32 365 32 352V96Q32 83 41.5 73.5Q51 64 64 64ZM112 176V208H400V176ZM112 256V288H320V256Z',
   collapse: 'M293 293H384Q391 293 397 287Q402 282 402 274V238Q402 230 397 225Q391 219 384 219L212 220L128 219Q121 219 115 225Q110 230 110 238V274Q110 282 115 287Q121 293 128 293ZM475 119V393Q475 427 451 451Q427 475 393 475H119Q85 475 61 451Q37 427 37 393V119Q37 85 61 61Q85 37 119 37H393Q427 37 451 61Q475 85 475 119Z',
   expand: 'M402 274V238Q402 230 397 225Q391 219 384 219H293V128Q293 121 287 115Q282 110 274 110H238Q230 110 225 115Q219 121 219 128V219H128Q121 219 115 225Q110 230 110 238V274Q110 282 115 287Q121 293 128 293H219V384Q219 391 225 397Q230 402 238 402H274Q282 402 287 397Q293 391 293 384V293H384Q391 293 397 287Q402 282 402 274ZM475 119V393Q475 427 451 451Q427 475 393 475H119Q85 475 61 451Q37 427 37 393V119Q37 85 61 61Q85 37 119 37H393Q427 37 451 61Q475 85 475 119Z',
   promote: 'M480 352 256 128 32 352Z',

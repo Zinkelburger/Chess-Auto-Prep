@@ -23,7 +23,7 @@ const KEY = 'analysis-v1';
 /** The PGN workspace before October 2026, read once when nothing newer is saved. */
 const OLD_KEY = 'current';
 
-export const MAX_GAMES = 20_000;
+const MAX_GAMES = 20_000;
 
 export function splitGames(text: string): Promise<StoredGame[]> {
   if (new Blob([text]).size > MAX_PGN_BYTES) return Promise.reject(new Error('Open a PGN smaller than 10 MB.'));

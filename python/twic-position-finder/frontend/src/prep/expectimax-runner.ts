@@ -145,6 +145,6 @@ export class ExpectimaxRunner {
   }
 }
 
-export function sameOptions(a: ExpectimaxOptions, b: ExpectimaxOptions): boolean {
+function sameOptions(a: ExpectimaxOptions, b: ExpectimaxOptions): boolean {
   return (Object.keys(a) as (keyof ExpectimaxOptions)[]).every((k) => a[k] === b[k]);
 }
