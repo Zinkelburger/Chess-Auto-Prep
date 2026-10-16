@@ -65,7 +65,8 @@ console.log('Analysis tree, PGN round trip, castling, illegal moves, custom star
 // Expectimax: our turns take the best of the shortlist, theirs the renormalised average of Maia's likeliest replies.
 assert.equal(utility(0), 0.5);
 assert.equal(utility(9999), 1);
-assert.equal(valueText(0.5), '+0.00');
+assert.equal(valueText(0.5), '0.00');
+assert.equal(valueText(0.49999), '0.00', 'no minus sign on a level score');
 assert.equal(lineCp({ mate: 3 }), 9997);
 assert.equal(lineCp({ mate: -2 }), -9998);
 assert.deepEqual(keptReplies({ a: 0.5, b: 0.3, c: 0.15, d: 0.05 }, 0.9, 5).map(([u]) => u), ['a', 'b', 'c']);

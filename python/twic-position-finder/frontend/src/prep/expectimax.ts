@@ -110,6 +110,7 @@ export function valueText(value: number): string {
   const v = Math.min(0.995, Math.max(0.005, value));
   const cp = -Math.log(1 / v - 1) / SLOPE;
   const pawns = (cp / 100).toFixed(2);
+  if (pawns === '0.00' || pawns === '-0.00') return '0.00';
   return cp < 0 ? pawns : `+${pawns}`;
 }
 

@@ -71,6 +71,7 @@ export class ExpectimaxView {
   private readonly settings: HTMLElement;
   private readonly status: HTMLElement;
   private readonly table: HTMLElement;
+  private readonly steppers: { input: HTMLInputElement; minus: HTMLButtonElement; plus: HTMLButtonElement; min: number; max: number; key: 'elo' | 'plies' }[];
   private readonly sliders: { key: keyof ExpectimaxOptions; input: HTMLInputElement; value: HTMLElement; ticks: number[]; text: (v: number) => string }[] = [];
 
   constructor(box: HTMLElement, private readonly runner: ExpectimaxRunner, private readonly host: ExpectimaxHost) {
@@ -79,34 +80,47 @@ export class ExpectimaxView {
     this.button.type = 'button';
     this.button.id = 'px-run';
     this.button.onclick = () => this.press();
-    const field = (label: string, id: string, min: number, max: number, step: number, title: string) => {
-      const wrap = el('label', 'px-field') as HTMLLabelElement;
-      wrap.htmlFor = id;
+    // Rating and Depth: a box to type in with − and + beside it, as the desktop's steppers.
+    const stepper = (key: 'elo' | 'plies', label: string, id: string, min: number, max: number, step: number, title: string) => {
+      const wrap = el('div', 'px-field');
       wrap.title = title;
+      const name = el('label', '', label) as HTMLLabelElement;
+      name.htmlFor = id;
       const input = document.createElement('input');
-      input.type = 'number';
+      input.type = 'text';
       input.id = id;
-      input.min = String(min);
-      input.max = String(max);
-      input.step = String(step);
       input.inputMode = 'numeric';
-      wrap.append(el('span', '', label), input);
-      return { wrap, input };
-    };
-    const elo = field('Rating', 'px-elo', 600, 2600, 100, 'The rating Maia plays the replies at');
-    const plies = field('Depth', 'px-plies', 1, 8, 1, 'Half-moves the search looks ahead. Each one costs several times the last.');
-    this.elo = elo.input;
-    this.plies = plies.input;
-    const commit = (input: HTMLInputElement, key: 'elo' | 'plies', lo: number, hi: number) => {
-      input.onchange = () => {
-        const n = Math.round(Number(input.value));
-        host.options[key] = Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : DEFAULT_OPTIONS[key];
+      input.autocomplete = 'off';
+      input.setAttribute('aria-valuemin', String(min));
+      input.setAttribute('aria-valuemax', String(max));
+      const set = (n: number) => {
+        host.options[key] = Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n / step) * step)) : DEFAULT_OPTIONS[key];
         host.optionsChanged();
         this.render();
       };
+      input.onchange = () => set(Number(input.value));
+      input.onkeydown = (e) => {
+        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+        e.preventDefault();
+        e.stopPropagation();
+        set(host.options[key] + (e.key === 'ArrowUp' ? step : -step));
+      };
+      const button = (sign: 1 | -1) => {
+        const b = el('button', 'px-step', sign > 0 ? '+' : '−') as HTMLButtonElement;
+        b.type = 'button';
+        b.setAttribute('aria-label', `${sign > 0 ? 'More' : 'Less'} ${label.toLowerCase()}`);
+        b.onclick = () => set(host.options[key] + sign * step);
+        return b;
+      };
+      const minus = button(-1), plus = button(1);
+      wrap.append(name, minus, input, plus);
+      return { wrap, input, minus, plus, min, max, key };
     };
-    commit(this.elo, 'elo', 600, 2600);
-    commit(this.plies, 'plies', 1, 8);
+    const elo = stepper('elo', 'Rating', 'px-elo', 600, 2600, 100, 'The rating Maia plays the replies at');
+    const plies = stepper('plies', 'Depth', 'px-plies', 1, 8, 1, 'Half-moves the search looks ahead. Each one costs several times the last.');
+    this.elo = elo.input;
+    this.plies = plies.input;
+    this.steppers = [elo, plies];
     this.gear = el('button', 'ch-icon') as HTMLButtonElement;
     this.gear.type = 'button';
     this.gear.id = 'px-gear';
@@ -208,8 +222,13 @@ export class ExpectimaxView {
     this.button.classList.toggle('btn-outline', !!running);
     const over = outcomeOf(fen);
     this.button.disabled = !running && !!over;
-    if (document.activeElement !== this.elo) this.elo.value = String(options.elo);
-    if (document.activeElement !== this.plies) this.plies.value = String(options.plies);
+    for (const s of this.steppers) {
+      const v = options[s.key];
+      if (document.activeElement !== s.input) s.input.value = String(v);
+      s.input.setAttribute('aria-valuenow', String(v));
+      s.minus.disabled = v <= s.min;
+      s.plus.disabled = v >= s.max;
+    }
     for (const s of this.sliders) {
       const v = options[s.key];
       const i = Math.max(0, s.ticks.indexOf(v));

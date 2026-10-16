@@ -52,11 +52,18 @@
 .ch-move.active[class*="px-move-"] { color: var(--accent); }
 
 /* ── Expectimax: bar, status, table ─────────────────────────────── */
-.px-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: 8px 6px 8px 10px; border-bottom: 1px solid var(--border); }
+.px-bar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 6px 8px 10px; border-bottom: 1px solid var(--border); }
 .px-run { flex: none; min-width: 5.6em; }
-.px-field { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--text-dim); font-size: 0.85rem; white-space: nowrap; }
-.px-field input { width: 4.6em; padding: 4px 6px; font-size: 0.88rem; font-variant-numeric: tabular-nums; }
-#px-plies { width: 3.4em; }
+.px-field { display: flex; align-items: center; margin: 0; color: var(--text-dim); font-size: 0.85rem; white-space: nowrap; }
+.px-field label { margin: 0 6px 0 0; color: inherit; font-size: inherit; }
+/* − box +, one control: the buttons share the box's border. */
+.px-field input { width: 3.4em; height: 28px; padding: 0 4px; border-radius: 0; text-align: center; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+#px-plies { width: 2.2em; }
+.px-step { width: 26px; height: 28px; padding: 0; border: 1px solid var(--border-strong); background: var(--bg-raised); color: var(--text); font: 600 1rem/1 var(--sans); cursor: pointer; }
+.px-step:first-of-type { border-radius: 4px 0 0 4px; border-right: 0; }
+.px-step:last-of-type { border-radius: 0 4px 4px 0; border-left: 0; }
+.px-step:hover:not(:disabled) { color: var(--accent); background: var(--accent-bg); }
+.px-step:disabled { color: var(--text-faint); cursor: default; }
 .px-top { position: relative; flex: none; }
 .px-settings { top: 100%; }
 .px-settings .px-reset { align-self: flex-end; font-size: 0.85rem; }
@@ -90,6 +97,7 @@ button.px-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 @media (max-width: 860px) {
   .ch.px { grid-template-areas: 'stage' 'controls' 'tools' 'under'; }
   .ch.px .ch-tools { min-height: 60dvh; }
-  .px-bar { gap: 8px; }
+  .px-bar { column-gap: 8px; padding-left: 8px; }
+  .px-field label { margin-right: 4px; }
   .px-row { grid-template-columns: minmax(3em, 1fr) 3.2em 4em 4em 4em; padding: 0 8px; }
 }

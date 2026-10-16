@@ -318,8 +318,9 @@ Lichess.
   whole; positions are searched once at the Engine depth (12), a reply the next
   ply expands with the shortlist's width straight away. Leaves score
   1 / (1 + e^(−0.00368208·cp)); checkmate and the rules' draws are exact;
-  threefold repetition is not known from a FEN. Depth (1–8 plies, default 4)
-  and Rating sit on the bar; the rest in its gear. A side holds at most 8,000
+  threefold repetition is not known from a FEN. Rating (600–2600, steps of
+  100, default 1600) and Depth (1–8 plies, default 4) sit on the bar as − box +
+  steppers (type a value, or ↑/↓ in the box); the rest in its gear. A side holds at most 8,000
   positions.
   The table at the board's position shows Move, Played (Maia's share),
   White, Black (each side's value, as an engine score from White's side, the

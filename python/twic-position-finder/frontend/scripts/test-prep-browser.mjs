@@ -98,6 +98,16 @@ try {
   await page.setViewport({ width: 1440, height: 1100 });
   await page.reload(); await page.waitForFunction(() => document.querySelectorAll('button.px-row').length > 0);
   assert.match(await text('.px-status'), /2 of 2 plies/, 'searches come back after a reload');
+  // − and + step Rating by 100 and Depth by 1, within their limits; typing works too.
+  await click('[aria-label="More rating"]');
+  assert.equal(await page.$eval('#px-elo', el => el.value), '1700');
+  await click('[aria-label="Less rating"]');
+  assert.equal(await page.$eval('#px-elo', el => el.value), '1600');
+  await fill('#px-plies', '9');
+  assert.equal(await page.$eval('#px-plies', el => el.value), '8', 'Depth stops at its limit');
+  assert.equal(await page.$eval('[aria-label="More depth"]', el => el.disabled), true);
+  await click('[aria-label="Less depth"]');
+  assert.equal(await page.$eval('#px-plies', el => el.value), '7');
   await fill('#px-plies', '6'); await click('#px-run');
   await page.waitForFunction(() => document.querySelector('.px-status').textContent.startsWith('Searching'));
   await click('#px-run');
