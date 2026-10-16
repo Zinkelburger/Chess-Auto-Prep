@@ -29,6 +29,8 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-board-wrap { position: relative; width: var(--ch-board); height: var(--ch-board); flex: none; }
 .ch[data-mode="editor"] .ch-board-wrap { width: calc(var(--ch-sq) * 8); height: calc(var(--ch-sq) * 8); }
 .ch-board-wrap .bb-board cg-container { width: 100%; height: 100%; }
+/* A promoted piece: a small dot in the top-left corner, clear of the coordinates (it goes back as a pawn when taken). */
+.ch-board-wrap cg-board square.ch-promoted { background: radial-gradient(circle at 14% 14%, var(--accent) 0 7%, transparent 8%); }
 .ch-board-wrap.ch-editing[data-brush="piece"] cg-board,
 .ch-board-wrap.ch-editing[data-brush="trash"] cg-board { cursor: var(--ch-cursor, crosshair); }
 

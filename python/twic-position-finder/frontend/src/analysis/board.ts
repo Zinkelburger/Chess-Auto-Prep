@@ -96,7 +96,7 @@ export class CrazyBoard {
       },
       events: {
         select: (key) => { if (this.mode === 'analysis') hooks.clickSquare(key); },
-        change: () => { if (this.mode === 'editor') hooks.edited(); },
+        change: () => { if (this.mode === 'editor') { this.markPromoted(); hooks.edited(); } },
       },
     });
     // A board with no size (a window shrunk to nothing) has no coordinates for arrows: wait for one.
@@ -135,8 +135,8 @@ export class CrazyBoard {
       draggable: { enabled: true, deleteOnDropOff: false },
       selectable: { enabled: true },
       drawable: { enabled: true },
-      highlight: { custom: new Map(view.dropSquares.map((sq) => [sq, 'move-dest'])) },
     });
+    this.markPromoted(new Map(view.dropSquares.map((sq) => [sq, 'move-dest'])));
     this.setShapes(view.shapes);
     this.wrap.classList.remove('ch-editing');
   }
@@ -161,8 +161,8 @@ export class CrazyBoard {
       check: false,
       movable: { free: true, color: 'both', dests: new Map() },
       draggable: { deleteOnDropOff: true },
-      highlight: { custom: new Map() },
     });
+    this.markPromoted();
     this.cg.setAutoShapes([]);
     this.cg.selectSquare(null);
     this.setBrush(brush);
@@ -200,7 +200,32 @@ export class CrazyBoard {
     return this.cg.getKeyAtDomPos([point.clientX, point.clientY]);
   }
 
+  /**
+   * Marks promoted pieces, which go back to the partner as pawns when taken. Chessground keeps
+   * the flag (a ~ in the FEN) but draws nothing for it.
+   */
+  private markPromoted(custom = new Map<Key, string>()) {
+    for (const [key, piece] of this.cg.state.pieces)
+      if (piece.promoted) custom.set(key, `${custom.get(key) ?? ''} ch-promoted`.trim());
+    this.cg.set({ highlight: { custom } });
+  }
+
+  /** Shift-click in the editor marks a queen, rook, bishop or knight promoted, or not. */
+  private togglePromoted(e: MouseEvent | TouchEvent): boolean {
+    if (this.mode !== 'editor' || !(e instanceof MouseEvent) || !e.shiftKey || e.button !== 0) return false;
+    const key = this.keyAt(e);
+    const here = key && this.cg.state.pieces.get(key);
+    if (!key || !here || here.role === 'king' || here.role === 'pawn') return false;
+    e.preventDefault();
+    e.stopPropagation();
+    this.cg.setPieces(new Map([[key, { ...here, promoted: !here.promoted }]]));
+    this.markPromoted();
+    this.hooks.edited();
+    return true;
+  }
+
   private pressed(e: MouseEvent | TouchEvent) {
+    if (this.togglePromoted(e)) return;
     if (this.mode !== 'editor' || this.brush === 'pointer') return;
     if (e instanceof MouseEvent && e.button !== 0) return;
     const key = this.keyAt(e);
@@ -230,6 +255,7 @@ export class CrazyBoard {
     if (!piece && !here) return;
     if (piece && here && here.role === piece.role && here.color === piece.color) return;
     this.cg.setPieces(new Map([[key, piece ? { ...piece } : undefined]]));
+    this.markPromoted();
     this.hooks.edited();
   }
 

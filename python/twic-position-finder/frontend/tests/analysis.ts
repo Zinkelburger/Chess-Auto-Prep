@@ -20,6 +20,7 @@ assert.equal(castlingOf('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQBKNR[] w KQkq - 
 assert.equal(castlingOf('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/1RBQKBNR[] w KQkq - 0 1'), 'Kkq', 'a rook off a1 is not a Chess960 right');
 assert.equal(castlingOf('rnbqkbn1/pppppppr/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1'), 'KQq', 'a rook off h8 loses only that side');
 assert.equal(castlingOf(START_FEN), 'KQkq');
+assert.equal(fenOf(positionOf('4k3/8/8/8/8/8/8/Q~3K3[] w - - 0 1')).split(' ')[0], '4k3/8/8/8/8/8/8/Q~3K3[]', 'a promoted queen stays marked');
 const pieceAtFen = (fen: string) => { const pos = positionOf(fen); return (sq: string) => pos.board.get(parseSquare(sq)!); };
 // After 1.e4 d5 2.e5 f5 the board allows d6 and f6, as a FEN may name either.
 const EP = 'rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR[] w KQkq f6 0 3';

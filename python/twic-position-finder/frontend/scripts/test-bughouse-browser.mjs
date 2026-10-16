@@ -206,6 +206,19 @@ try {
   await page.waitForSelector('#ch-board-wrap .cg-wrap.orientation-white');
   await click(page, 'h5');
   await until(page, '#ch-fen', /\/3N3Q\//); // the queen is on h5
+  // Shift-click marks it promoted, with a dot in its square, and again clears it.
+  // Chessground draws on the next frame, and hides squares it no longer needs rather than removing them.
+  const marks = (n) => page.waitForFunction((n) => [...document.querySelectorAll('#ch-board-wrap square.ch-promoted')]
+    .filter((q) => q.style.display !== 'none').length === n, { timeout: 5000 }, n);
+  const shiftClick = async (key) => { await page.keyboard.down('Shift'); await click(page, key); await page.keyboard.up('Shift'); };
+  await shiftClick('h5');
+  await until(page, '#ch-fen', /\/3N3Q~\//);
+  await marks(1);
+  await shiftClick('h5');
+  await until(page, '#ch-fen', /\/3N3Q\//);
+  await marks(0);
+  await shiftClick('h5');
+  await until(page, '#ch-fen', /\/3N3Q~\//); // kept promoted, to be analysed so
   await page.click('#ch-spare-top .ch-trash');
   await click(page, 'a7');
   await until(page, '#ch-fen', /^r1bqkb1r\/1ppp/); // the a7 pawn is gone
@@ -225,6 +238,8 @@ try {
   await page.click('#ch-editor-apply');
   assert.equal(await page.$eval('#ch', (el) => el.dataset.mode), 'analysis');
   assert.match(await fen(page), / b /);
+  assert.match(await fen(page), /\/3N3Q~\//, 'the promoted queen reaches the analysis');
+  await marks(1); // and is marked there
   await evaluated(page);
 
   // Clear board: castling follows a king and rook put home; the engine waits for a legal position.
