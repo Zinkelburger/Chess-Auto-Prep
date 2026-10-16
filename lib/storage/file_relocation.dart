@@ -12,6 +12,7 @@ import 'moved_path.dart';
 import 'mutation_guards.dart';
 import 'operation_id.dart';
 import 'operation_journal.dart';
+import 'operation_participants.dart';
 import 'document_probe.dart';
 import 'document_ref.dart';
 import 'directory_snapshot.dart';

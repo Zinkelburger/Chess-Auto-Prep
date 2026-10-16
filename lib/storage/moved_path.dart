@@ -4,7 +4,7 @@ import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
 import 'directory_entries.dart';
-import 'operation_journal.dart';
+import 'operation_participants.dart';
 import 'recovery_files.dart';
 import 'relocation_record.dart';
 

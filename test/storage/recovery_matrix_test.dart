@@ -21,7 +21,7 @@ import 'package:chess_auto_prep/storage/compound_commit.dart';
 import 'package:chess_auto_prep/storage/compound_write.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/file_relocation.dart';
-import 'package:chess_auto_prep/storage/operation_journal.dart';
+import 'package:chess_auto_prep/storage/operation_participants.dart';
 import 'package:chess_auto_prep/storage/recovery_gate.dart';
 import 'package:chess_auto_prep/storage/training_rows.dart';
 import 'package:chess_auto_prep/storage/training_store.dart';

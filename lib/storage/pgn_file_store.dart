@@ -15,7 +15,7 @@ import 'book_references.dart';
 import 'compound_commit.dart';
 import 'line_progress.dart';
 import 'compound_write.dart';
-import 'operation_journal.dart';
+import 'operation_participants.dart';
 import 'document_probe.dart';
 import 'document_ref.dart';
 import 'edit_scope.dart';
