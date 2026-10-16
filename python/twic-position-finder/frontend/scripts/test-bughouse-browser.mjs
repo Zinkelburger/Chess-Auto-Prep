@@ -193,6 +193,12 @@ try {
   await page.click('#ch-spare-top .ch-trash');
   await click(page, 'a7');
   await until(page, '#ch-fen', /^r1bqkb1r\/1ppp/); // the a7 pawn is gone
+  // Binning the h1 rook takes White's O-O away instead of leaving an unplayable right.
+  assert.match(await fen(page), / KQkq /);
+  await click(page, 'h1');
+  await until(page, '#ch-fen', / Qkq /);
+  assert.equal(await page.$eval('#ch-castling input[data-right="K"]', (el) => el.disabled && !el.checked), true);
+  assert.equal(await text(page, '#ch-editor-error'), '');
   await page.click('#ch-hand-top .ch-step[data-role="queen"][data-step="more"]'); // Black +Q in the editor
   assert.match(await fen(page), /\[[^\]]*q[^\]]*\]/);
   await page.screenshot({ path: path.join(output, 'editor.png') });

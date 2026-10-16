@@ -27,8 +27,8 @@ import { loadSettings, maxThreads, recommendedThreads, saveSettings, sitNodesFor
 import { SitPanel } from './sit';
 import { engineShapes, glyphShape, moveShapes, threatShapes, variationShapes } from './shapes';
 import {
-  HAND_ROLES, START_FEN, Tree, boardDests, dropSquares, fenOf, outcomeOf, positionOf, readFen, readMove, threatFen,
-  type SavedTree, type TreeNode,
+  HAND_ROLES, START_FEN, Tree, boardDests, castlingPossible, dropSquares, fenOf, outcomeOf, positionOf, readFen, readMove, threatFen,
+  type CastlingRight, type SavedTree, type TreeNode,
 } from './tree';
 import { makeUci } from 'chessops/util';
 
@@ -654,9 +654,13 @@ export class BughouseApp {
 
   private draftFen(): string {
     const d = this.draft!;
-    const c = d.castling;
-    const castling = `${c.K ? 'K' : ''}${c.Q ? 'Q' : ''}${c.k ? 'k' : ''}${c.q ? 'q' : ''}` || '-';
+    const castling = (['K', 'Q', 'k', 'q'] as const).filter((right) => d.castling[right] && this.draftCanCastle(right)).join('') || '-';
     return `${this.board.boardFen()}[${makePockets(d.hands)}] ${d.turn === 'white' ? 'w' : 'b'} ${castling} - 0 ${d.fullmoves}`;
+  }
+
+  /** A ticked right counts only while its king and rook stand on their starting squares. */
+  private draftCanCastle(right: CastlingRight): boolean {
+    return castlingPossible(right, (square) => this.board.cg.state.pieces.get(square));
   }
 
   private draftPieceCount(): number {
@@ -755,8 +759,11 @@ export class BughouseApp {
     const d = this.draft!;
     for (const b of document.querySelectorAll<HTMLButtonElement>('#ch-turn button'))
       b.setAttribute('aria-checked', String(b.dataset.turn === d.turn));
-    for (const box of document.querySelectorAll<HTMLInputElement>('#ch-castling input'))
-      box.checked = d.castling[box.dataset.right as keyof Draft['castling']];
+    for (const box of document.querySelectorAll<HTMLInputElement>('#ch-castling input')) {
+      const right = box.dataset.right as CastlingRight;
+      box.disabled = !this.draftCanCastle(right);
+      box.checked = d.castling[right] && !box.disabled;
+    }
     const read = readFen(this.draftFen());
     const error = $('ch-editor-error');
     error.textContent = read.ok ? '' : read.error;

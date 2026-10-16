@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {
-  MAX_IN_HAND, START_FEN, Tree, adjustHand, boardDests, dropSquares, handEdit, handLetters, playLine, readFen, sanLine, threatFen,
+  MAX_IN_HAND, START_FEN, Tree, adjustHand, boardDests, dropSquares, fenOf, handEdit, handLetters, playLine, readFen, sanLine, threatFen,
   outcomeOf, positionOf, readMove,
 } from '../src/analysis/tree';
 import { liveGlyph, povDiff, verdict, winningChances } from '../src/analysis/judge';
@@ -14,6 +14,11 @@ assert.ok(loaded.ok, 'three extra queens a side is a position');
 assert.equal(readFen('8/8/8/8/8/8/8/8[] w - - 0 1').ok, false, 'no kings is refused');
 assert.equal(readFen('nonsense').ok, false);
 assert.match((readFen('4k3/8/8/8/8/8/8/4K3[Kk] w - - 0 1') as { error: string }).error, /king/i);
+const castlingOf = (fen: string) => fenOf((readFen(fen) as { pos: Parameters<typeof fenOf>[0] }).pos).split(' ')[2];
+assert.equal(castlingOf('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQBKNR[] w KQkq - 0 1'), 'kq', 'a moved king loses both rights');
+assert.equal(castlingOf('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/1RBQKBNR[] w KQkq - 0 1'), 'Kkq', 'a rook off a1 is not a Chess960 right');
+assert.equal(castlingOf('rnbqkbn1/pppppppr/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1'), 'KQq', 'a rook off h8 loses only that side');
+assert.equal(castlingOf(START_FEN), 'KQkq');
 
 // + and − on a hand: one at a time, never below zero, capped at 16.
 let fen = adjustHand(ITALIAN, 'black', 'pawn', 1)!;

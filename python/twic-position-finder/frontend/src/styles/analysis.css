@@ -145,6 +145,7 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-tick:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 2px; }
 .ch-check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .ch-check input { margin: 0; accent-color: var(--accent); }
+.ch-check:has(input:disabled) { cursor: default; opacity: 0.45; }
 
 /* Engine lines, one row each, as on Lichess. */
 .ch-pvs { flex: none; border-bottom: 1px solid var(--border); }

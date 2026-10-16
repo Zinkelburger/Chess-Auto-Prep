@@ -16,7 +16,8 @@ import { makeFen, parseFen, INITIAL_FEN } from 'chessops/fen';
 import { makeSan as chessopsSan, parseSan } from 'chessops/san';
 import { parsePgn, startingPosition, type PgnNodeData, type Node as PgnNode } from 'chessops/pgn';
 import { Crazyhouse } from 'chessops/variant';
-import { makeSquare, makeUci, parseUci } from 'chessops/util';
+import { makeSquare, makeUci, parseSquare, parseUci } from 'chessops/util';
+import { SquareSet } from 'chessops/squareSet';
 import { normalizeMove } from 'chessops/chess';
 import { chessgroundDests } from 'chessops/compat';
 import type { Color, Move, Role, SquareName } from 'chessops/types';
@@ -85,9 +86,31 @@ const ERRORS: Record<string, string> = {
   ERR_VARIANT: 'More than 64 pieces on the board and in hand.',
 };
 
+export type CastlingRight = 'K' | 'Q' | 'k' | 'q';
+
+const CASTLING: Record<CastlingRight, readonly [Color, SquareName, SquareName]> = {
+  K: ['white', 'e1', 'h1'], Q: ['white', 'e1', 'a1'], k: ['black', 'e8', 'h8'], q: ['black', 'e8', 'a8'],
+};
+
+/** Whether a castling right can stand: its king on e1/e8 and its rook in the corner, as in standard chess. */
+export function castlingPossible(right: CastlingRight, pieceAt: (square: SquareName) => { role: Role; color: Color } | undefined): boolean {
+  const [color, king, rook] = CASTLING[right];
+  const k = pieceAt(king), r = pieceAt(rook);
+  return k?.role === 'king' && k.color === color && r?.role === 'rook' && r.color === color;
+}
+
 export function readFen(fen: string): PositionResult {
   const setup = parseFen(fen.trim());
   if (setup.isErr) return { ok: false, error: 'That is not a FEN.' };
+  // chessops would keep a right whose king or rook has moved as Chess960 castling; drop it, as Lichess's editor does.
+  const board = setup.value.board;
+  const pieceAt = (square: SquareName) => board.get(parseSquare(square)!);
+  let rights = SquareSet.empty();
+  for (const right of Object.keys(CASTLING) as CastlingRight[]) {
+    const rook = parseSquare(CASTLING[right][2])!;
+    if (setup.value.castlingRights.has(rook) && castlingPossible(right, pieceAt)) rights = rights.with(rook);
+  }
+  setup.value.castlingRights = rights;
   const pos = Crazyhouse.fromSetup(setup.value);
   if (pos.isErr) return { ok: false, error: ERRORS[pos.error.message] ?? 'That position is not playable.' };
   return { ok: true, pos: pos.value };
