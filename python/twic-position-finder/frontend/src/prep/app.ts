@@ -1,277 +1,1014 @@
-import { Chess } from 'chess.js';
-import type { Key } from 'chessground/types';
-import { TrainerBoard } from '../tactics/board';
-import { MAX_PGN_BYTES, moveLabel, readPgn, writePgn } from './pgn';
-import { parsePgnAsync } from './pgn-client';
-import { workspaceStore } from './storage';
-import type { SearchOptions, SearchResult, SearchNode } from './search';
-const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
-const example = '[Event "Example: Italian and Ruy Lopez"]\n[White "White"]\n[Black "Black"]\n[Result "*"]\n\n1. e4 e5 2. Nf3 Nc6 3. Bc4 {The Italian Game.} (3. Bb5 {The Ruy Lopez.} a6 4. Ba4 Nf6) 3... Bc5 4. c3 Nf6 *';
-interface Saved { version: number; pgn: string; game: number; cursor: number; path?: string[]; result?: SearchResult; orientation: 'white' | 'black' }
-const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
-export class PrepApp {
-  private games = readPgn('*');
-  private gameIndex = 0;
-  private cursor = 0;
-  private orientation: 'white' | 'black' = 'white';
-  private board: TrainerBoard;
-  private worker: Worker | null = null;
-  private busy = false;
-  private id = 0;
-  private result?: SearchResult;
-  private shown = 2000;
-  private importId = 0;
-  private revision = 0;
-  private savedRevision = 0;
-  private saveQueue: Promise<void> = Promise.resolve();
-  private saveTimer: ReturnType<typeof setTimeout> | undefined;
-  constructor() {
-    this.board = new TrainerBoard($('prep-board'), { onMove: uci => this.play(uci) });
-    this.bind(); this.render(); void this.restore();
-    window.addEventListener('beforeunload', event => { if (this.savedRevision !== this.revision || this.busy) { event.preventDefault(); } });
-    window.addEventListener('pagehide', () => { this.worker?.terminate(); });
-    window.addEventListener('pageshow', event => { if (event.persisted) { this.worker = null; this.setBusy(false); } });
-  }
-  private get game() { return this.games[this.gameIndex]; }
-  private get node() { return this.game.nodes[this.cursor]; }
-  private fail(error: unknown) { $('prep-error').textContent = errorText(error); $('prep-error').hidden = false; }
-  private clearError() { $('prep-error').hidden = true; }
-  private async restore() {
-    const revision = this.revision, importId = this.importId;
-    try {
-      const saved = await workspaceStore('read') as Saved | undefined;
-      if (revision !== this.revision || importId !== this.importId) return;
-      if (saved?.version === 1) {
-        const games = await parsePgnAsync(saved.pgn);
-        if (revision !== this.revision || importId !== this.importId) return;
-        this.games = games; this.gameIndex = Math.max(0, Math.min(games.length - 1, saved.game || 0));
-        this.cursor = Math.max(0, Math.min(this.game.nodes.length - 1, saved.cursor || 0));
-        if (saved.path) { this.cursor = 0; for (const uci of saved.path) { const next = this.node.children.find(id => this.game.nodes[id].uci === uci); if (next === undefined) break; this.cursor = next; } }
-        this.orientation = saved.orientation === 'black' ? 'black' : 'white';
-        if (saved.result?.root && saved.result.options) { this.result = saved.result; this.applyOptions(saved.result.options); }
-        $('save-status').textContent = 'Restored from this browser.';
-      } else $('save-status').textContent = 'Open a PGN or play moves to begin. No account needed.';
-      const fen = new URL(location.href).searchParams.get('fen');
-      if (fen) {
-        const position = new Chess(fen).fen();
-        const existing = this.games.findIndex(game => game.nodes[0].fen === position);
-        if (existing >= 0) this.gameIndex = existing;
-        else {
-          this.games.push(...readPgn(`[Event "Analysis position"]\n[SetUp "1"]\n[FEN "${position}"]\n*`));
-          this.gameIndex = this.games.length - 1;
-        }
-        this.cursor = 0;
-        const url = new URL(location.href); url.searchParams.delete('fen'); history.replaceState(null, '', url);
-        this.changed();
-      }
-      this.render();
-    } catch (error) { this.fail(error); $('save-status').textContent = 'Work in this tab; export PGN to keep a copy.'; }
-  }
-  private async open(text: string) {
-    const id = ++this.importId;
-    this.clearError();
-    try {
-      if (new Blob([text]).size > MAX_PGN_BYTES) throw new Error('Open a PGN smaller than 10 MB.');
-      const games = await parsePgnAsync(text);
-      if (id !== this.importId) return;
-      // Accepted imports replace the workspace only after a durable write of the prior one.
-      await this.saveNow();
-      this.stop(); this.games = games; this.gameIndex = this.cursor = 0; this.shown = 2000;
-      this.result = undefined; $('import-panel').removeAttribute('open'); this.changed(); this.render();
-    } catch (error) { this.fail(error); }
-  }
-  private changed() {
-    this.revision++; $('save-status').textContent = 'Saving in this browser…';
-    clearTimeout(this.saveTimer); this.saveTimer = setTimeout(() => void this.saveNow(), 300);
-  }
-  private saveNow(): Promise<void> {
-    clearTimeout(this.saveTimer);
-    const revision = this.revision;
-    const path: string[] = [];
-    for (let n = this.node; n.parent !== null; n = this.game.nodes[n.parent]) path.unshift(n.uci);
-    const saved: Saved = { path, version: 1, pgn: writePgn(this.games), game: this.gameIndex, cursor: this.cursor, orientation: this.orientation, result: this.result };
-    this.saveQueue = this.saveQueue.then(async () => {
-      try {
-        await workspaceStore('write', saved); this.savedRevision = revision;
-        if (revision === this.revision) $('save-status').textContent = 'Saved in this browser.';
-      } catch (error) { if (revision === this.revision) $('save-status').textContent = errorText(error); }
-    });
-    return this.saveQueue;
-  }
-  private bind() {
-    $('pgn-file').addEventListener('change', async () => {
-      const input = $<HTMLInputElement>('pgn-file'), file = input.files?.[0];
-      try { if (file) { if (file.size > MAX_PGN_BYTES) throw new Error('Open a PGN smaller than 10 MB.'); await this.open(await file.text()); } } catch (error) { this.fail(error); }
-      input.value = '';
-    });
-    $('import-pgn').onclick = () => void this.open($<HTMLTextAreaElement>('pgn-text').value);
-    $('example-pgn').onclick = () => void this.open(example);
-    $('export-pgn').onclick = () => this.download('chess-auto-prep.pgn', writePgn(this.games), 'application/x-chess-pgn');
-    $('export-search').onclick = () => this.download('expectimax.json', JSON.stringify(this.result, null, 2), 'application/json');
-    $('fen-form').onsubmit = event => {
-      event.preventDefault();
-      try { const fen = new Chess($<HTMLInputElement>('fen-input').value.trim()).fen(); void this.open(`[SetUp "1"]\n[FEN "${fen}"]\n*`); } catch { this.fail('Invalid FEN. Check the pieces, turn, castling rights and move counters.'); }
-    };
-    $('move-form').onsubmit = event => { event.preventDefault(); this.play($<HTMLInputElement>('move-input').value.trim()); };
-    $('first-move').onclick = () => this.go(0);
-    $('previous-move').onclick = () => this.go(this.node.parent ?? 0);
-    $('next-move').onclick = () => this.go(this.node.children[0] ?? this.cursor);
-    $('last-move').onclick = () => { let id = this.cursor; while (this.game.nodes[id].children.length) id = this.game.nodes[id].children[0]; this.go(id); };
-    $('flip-board').onclick = () => { this.orientation = this.orientation === 'white' ? 'black' : 'white'; this.changed(); this.renderPosition(); };
-    $('game-filter').oninput = () => this.renderGames();
-    $('more-moves').onclick = () => { this.shown += 2000; this.renderMoves(); };
-    $('moves-tab').onclick = () => this.tab('moves'); $('search-tab').onclick = () => this.tab('search');
-    for (const [i, name] of ['moves', 'search'].entries()) $(name + '-tab').onkeydown = event => {
-      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); const next = i === 0 ? 'search' : 'moves'; this.tab(next); $(next + '-tab').focus(); }
-    };
-    $('search-form').onsubmit = event => { event.preventDefault(); void this.run(false); };
-    $('resume-search').onclick = () => void this.run(true);
-    $('stop-search').onclick = () => this.stop();
-    $('analyse-position').onclick = () => void this.run(false, true);
-    $('train-pgn').onclick = event => { try { sessionStorage.setItem('cap-tactics-import', writePgn(this.games)); } catch { event.preventDefault(); this.fail('Could not send this PGN to Tactics. Export it and open the file in Tactics instead.'); } };
-    window.addEventListener('keydown', event => {
-      if ((event.target as HTMLElement).closest('input,textarea,select,button,[contenteditable=true]') || event.ctrlKey || event.metaKey || event.altKey) return;
-      const targets: Record<string, string> = { ArrowLeft: 'previous-move', ArrowRight: 'next-move', Home: 'first-move', End: 'last-move' };
-      if (targets[event.key]) { event.preventDefault(); $(targets[event.key]).click(); }
-    });
-    this.tab($('prep').dataset.mode === 'search' ? 'search' : 'moves');
-  }
-  private download(name: string, text: string, type: string) { const url = URL.createObjectURL(new Blob([text], { type })); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
-  private tab(name: string) {
-    for (const panel of ['moves', 'search']) { $(panel + '-panel').hidden = panel !== name; $(panel + '-tab').setAttribute('aria-selected', String(panel === name)); $(panel + '-tab').tabIndex = panel === name ? 0 : -1; }
-  }
-  private go(id: number) { if (this.busy) this.stop(); this.cursor = id; this.changed(); this.renderPosition(); this.renderMoves(); this.renderResults(); }
-  private play(text: string) {
-    if (this.busy) { this.renderPosition(); return; }
-    try {
-      const chess = new Chess(this.node.fen);
-      const move = /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(text) ? chess.move({ from: text.slice(0, 2), to: text.slice(2, 4), promotion: text[4] }) : chess.move(text);
-      const uci = move.from + move.to + (move.promotion || '');
-      let id = this.node.children.find(n => this.game.nodes[n].uci === uci);
-      if (id === undefined) {
-        if (this.game.nodes.length >= 40000) throw new Error('This game is too large. Start a new PGN.');
-        id = this.game.nodes.length;
-        this.game.nodes.push({ id, parent: this.cursor, fen: chess.fen(), san: move.san, uci, comments: [], nags: [], children: [] }); this.node.children.push(id);
-      }
-      this.clearError(); $<HTMLInputElement>('move-input').value = ''; this.go(id);
-    } catch { this.fail('That move is not legal here. Use SAN (Nf3, O-O, a8=N) or UCI (g1f3).'); this.renderPosition(); }
-  }
-  private render() { this.renderGames(); this.renderPosition(); this.renderMoves(); this.renderResults(); }
-  private renderGames() {
-    const container = $('game-list'); container.replaceChildren();
-    const filter = $<HTMLInputElement>('game-filter').value.toLowerCase();
-    this.games.forEach((game, i) => {
-      if (!Object.values(game.headers).join(' ').toLowerCase().includes(filter)) return;
-      const button = document.createElement('button'); button.textContent = `${i + 1}. ${game.headers.White || 'White'} – ${game.headers.Black || 'Black'} · ${game.headers.Event || 'Analysis'}`;
-      button.setAttribute('aria-current', String(i === this.gameIndex));
-      button.onclick = () => { this.stop(); this.gameIndex = i; this.cursor = 0; this.shown = 2000; this.changed(); this.render(); }; container.append(button);
-    });
-    if (!container.children.length) container.textContent = 'No games match your search.';
-    const h = this.game.headers;
-    $('game-title').textContent = `${h.White || 'White'} – ${h.Black || 'Black'}`;
-    $('game-details').textContent = [h.Event, h.Date, this.game.result].filter(Boolean).join(' · ');
-  }
-  private renderPosition() {
-    const n = this.node;
-    this.board.setPosition(n.fen, n.uci ? [n.uci.slice(0, 2) as Key, n.uci.slice(2, 4) as Key] : undefined);
-    this.board.setOrientation(this.orientation); this.board.setInteractive(!this.busy);
-    const chess = new Chess(n.fen);
-    $('prep-board').setAttribute('aria-label', `Chess position: ${n.fen}`);
-    $('position-description').textContent = chess.isCheckmate() ? 'Checkmate.' : chess.isDraw() ? 'Drawn position.' : `${chess.turn() === 'w' ? 'White' : 'Black'} to move${chess.inCheck() ? ' · Check' : ''}`;
-    $('position-comment').textContent = n.comments.join('\n');
-    $('position-score').textContent = '';
-    for (const id of ['first-move', 'previous-move']) $<HTMLButtonElement>(id).disabled = this.cursor === 0;
-    for (const id of ['next-move', 'last-move']) $<HTMLButtonElement>(id).disabled = n.children.length === 0;
-  }
-  private renderMoves() {
-    const el = $('move-tree'); el.replaceChildren();
-    const pending: (number | string)[] = this.game.nodes[0].children.length ? [this.game.nodes[0].children[0]] : [];
-    let count = 0;
-    while (pending.length && count < this.shown) {
-      const item = pending.pop()!;
-      if (typeof item === 'string') { const span = document.createElement('span'); span.className = 'prep-variation'; span.textContent = item; el.append(span); continue; }
-      const n = this.game.nodes[item], button = document.createElement('button'); count++;
-      button.className = 'move-button'; button.textContent = moveLabel(n, this.game) + (n.nags.length ? ' ' + n.nags.join(' ') : ''); button.dataset.node = String(item);
-      button.setAttribute('aria-current', String(item === this.cursor)); button.onclick = () => this.go(item); el.append(button);
-      if (n.comments.length) { const text = document.createElement('span'); text.className = 'prep-move-comment'; text.textContent = ' ' + n.comments.join(' ').slice(0, 160) + ' '; el.append(text); }
-      if (n.children.length) pending.push(n.children[0]);
-      const siblings = this.game.nodes[n.parent!].children;
-      if (siblings[0] === item) for (let i = siblings.length - 1; i > 0; i--) pending.push(' ) ', siblings[i], ' ( ');
-    }
-    if (!el.children.length) el.textContent = 'Play a move on the board, or open a PGN to explore its lines.';
-    $('more-moves').hidden = !pending.length;
-  }
-  private options(): SearchOptions {
-    const n = (id: string) => Number($<HTMLInputElement>(id).value);
-    return { side: document.querySelector<HTMLInputElement>('input[name=side]:checked')!.value as 'w' | 'b', plies: n('search-plies'), depth: n('search-depth'), elo: n('search-elo'), maxNodes: n('search-nodes'), maxReplies: n('search-replies'), replyMass: n('search-mass') / 100 };
-  }
-  private applyOptions(o: SearchOptions) {
-    for (const [id, value] of Object.entries({ 'search-plies': o.plies, 'search-depth': o.depth, 'search-elo': o.elo, 'search-nodes': o.maxNodes, 'search-replies': o.maxReplies, 'search-mass': o.replyMass * 100 })) $<HTMLInputElement>(id).value = String(value);
-    document.querySelector<HTMLInputElement>(`input[name=side][value=${o.side}]`)!.checked = true;
-  }
-  private setBusy(value: boolean) {
-    this.busy = value; $<HTMLFieldSetElement>('search-fields').disabled = value;
-    for (const id of ['start-search', 'analyse-position', 'resume-search']) $<HTMLButtonElement>(id).disabled = value;
-    $<HTMLButtonElement>('stop-search').disabled = !value;
-    $<HTMLInputElement>('move-input').disabled = value; this.board.setInteractive(!value);
-  }
-  private stop() { if (this.busy) { this.worker?.postMessage({ action: 'stop' }); $('search-status').textContent = 'Stopping after the current operation…'; } }
-  private async run(resume: boolean, evaluation = false) {
-    if (this.busy || !$<HTMLFormElement>('search-form').reportValidity()) return;
-    this.clearError();
-    if (!this.worker) {
-      this.worker = new Worker(new URL('./analysis.worker.ts', import.meta.url), { type: 'module' });
-      this.worker.onmessage = event => {
-        const data = event.data; if (data.id !== this.id) return;
-        if (data.status) $('search-status').textContent = data.status;
-        if (data.progress || data.result) { this.result = data.result || { ...data.progress, reason: 'stopped' }; this.changed(); this.renderResults(); }
-        if (data.evaluation && data.evaluation.fen === this.node.fen) {
-          const cp = data.evaluation.cp * (this.node.fen.split(' ')[1] === 'w' ? 1 : -1);
-          $('position-score').textContent = `${Math.abs(cp) > 9000 ? (cp > 0 ? 'White has mate' : 'Black has mate') : (cp >= 0 ? '+' : '') + (cp / 100).toFixed(2)} · depth ${data.evaluation.depth}`;
-          $('search-status').textContent = 'Position analysis complete. Scores are from White’s perspective.';
-        }
-        if (data.error) { this.fail(data.error); $('search-status').textContent = data.error; }
-        if (data.done) { this.setBusy(false); if (this.result) this.renderResults(); void this.saveNow(); }
-      };
-      this.worker.onerror = () => { this.fail('Analysis stopped unexpectedly. Your PGN is kept. Retry the search.'); this.worker?.terminate(); this.worker = null; this.setBusy(false); };
-    }
-    const options = this.options();
-    if (!resume && !evaluation) this.result = undefined;
-    this.setBusy(true); this.renderResults();
-    this.worker.postMessage({ action: evaluation ? 'evaluate' : 'search', id: ++this.id, fen: this.node.fen, options, seed: resume ? this.result : undefined });
-  }
-  private renderResults() {
-    const el = $('search-results'); el.replaceChildren();
-    $('resume-search').hidden = !this.result || this.result.reason === 'complete' || this.result.root.fen !== this.node.fen;
-    $('export-search').hidden = !this.result;
-    if (!this.result) return;
-    const r = this.result;
-    $('search-status').textContent = `${this.busy ? 'Searching' : r.reason === 'complete' ? 'Complete within the selected limits' : r.reason === 'budget' ? 'Position budget reached · partial result' : 'Stopped · partial result'} · ${r.nodes} positions · ${r.expanded} expanded`;
-    const nodes = [r.root];
-    let selected: SearchNode | undefined;
-    for (let i = 0; i < nodes.length; i++) { if (nodes[i].fen === this.node.fen) { selected = nodes[i]; break; } nodes.push(...nodes[i].children); }
-    if (!selected) {
-      const p = document.createElement('p'); p.className = 'dim'; p.textContent = 'Saved results belong to another position.';
-      const button = document.createElement('button'); button.className = 'btn btn-text'; button.textContent = 'Return to search position';
-      button.onclick = () => {
-        for (let i = 0; i < this.games.length; i++) { const n = this.games[i].nodes.find(n => n.fen === r.root.fen); if (n) { this.gameIndex = i; this.go(n.id); this.renderGames(); return; } }
-        this.fail('This search belongs to a previously opened PGN. Export its JSON to keep it.');
-      }; el.append(p, button); return;
-    }
-    const table = document.createElement('table'); table.className = 'prep-results-table';
-    const caption = table.createCaption(); caption.textContent = `Expected score for ${r.options.side === 'w' ? 'White' : 'Black'}: ${selected.value.toFixed(3)} · ${Math.max(0, r.options.plies - selected.ply)} plies remaining · depth ${r.options.depth} · Maia ${r.options.elo}`;
-    const row = table.createTHead().insertRow();
-    for (const title of ['Move', 'Expected', 'Engine', 'Reply share']) { const th = document.createElement('th'); th.textContent = title; th.scope = 'col'; row.append(th); }
-    const body = table.createTBody(), ours = selected.fen.split(' ')[1] === r.options.side;
-    const children = [...selected.children].sort((a, b) => ours ? b.value - a.value : b.probability - a.probability);
-    for (const child of children) {
-      const tr = body.insertRow(), button = document.createElement('button'); button.className = 'move-button'; button.textContent = child.san; button.disabled = this.busy; button.onclick = () => this.play(child.uci); tr.insertCell().append(button);
-      tr.insertCell().textContent = child.value.toFixed(3); tr.insertCell().textContent = this.cp(child);
-      tr.insertCell().textContent = ours ? '—' : `${(child.probability * 100).toFixed(1)}%`;
-    }
-    el.append(table);
-    if (!children.length) { const p = document.createElement('p'); p.className = 'prep-help'; p.textContent = selected.terminal ? 'This branch ends in a terminal position.' : 'This position is a search leaf. Its value comes from Stockfish; run a new search here to look deeper.'; el.append(p); }
-    if (r.reason === 'budget') { const p = document.createElement('p'); p.className = 'prep-help'; p.textContent = 'Increase the position budget and resume, or reduce the look-ahead and start a new search.'; el.append(p); }
-  }
-  private cp(node: SearchNode) { return Math.abs(node.cp) > 9000 ? (node.cp > 0 ? 'Mate' : '−Mate') : `${node.cp >= 0 ? '+' : ''}${(node.cp / 100).toFixed(2)}`; }
+/**
+ * The analysis board behind /pgn and /expectimax: lichess.org/analysis for
+ * standard chess, with Stockfish's lines above two tabs.
+ *
+ * - PGN: the games opened from a file or pasted (a list to pick from when
+ *   there are several) and the move list, with comments and variations.
+ * - Expectimax: the practical search's table for the board's position
+ *   (expectimax-view.ts), searched only when the player asks.
+ *
+ * This file wires the parts together: the tree and the current position, the
+ * board (shared with /bughouse), Stockfish's panel, the move list, the games,
+ * the ☰ menu, the board editor and the FEN and PGN boxes under the board.
+ */
+import type { DrawShape } from '@lichess-org/chessground/draw';
+import type { Key, Piece } from '@lichess-org/chessground/types';
+import type { Color, Role } from 'chessops/types';
+import { makeUci } from 'chessops/util';
+import { CrazyBoard, type Brush } from '../analysis/board';
+import { liveGlyph, type Glyph } from '../analysis/judge';
+import { openHelp, renderMenu } from '../analysis/menu';
+import { el } from '../analysis/moves';
+import { loadSettings, saveSettings, type Settings, type Toggle } from '../analysis/settings';
+import { engineShapes, glyphShape, moveShapes, threatShapes, variationShapes } from '../analysis/shapes';
+import { CevalView } from './ceval';
+import { DEFAULT_OPTIONS, type ExpectimaxOptions } from './expectimax';
+import { ExpectimaxRunner } from './expectimax-runner';
+import { ExpectimaxView } from './expectimax-view';
+import { loadCollection, saveCollection, splitGames, type StoredGame } from './games';
+import { GearPanel } from './gear';
+import { LiveEngine, type EngineResult, type EngineStatus } from './live-engine';
+import { MoveList } from './moves';
+import {
+  START_FEN, Tree, boardDests, fenOf, gameTitle, headerValue, outcomeOf, positionOf, readFen, readMove, threatFen, type TreeNode,
+} from './tree';
+
+const LETTER: Record<Role, string> = { pawn: 'P', knight: 'N', bishop: 'B', rook: 'R', queen: 'Q', king: 'K' };
+const SPARE_ROLES: Role[] = ['king', 'queen', 'rook', 'bishop', 'knight', 'pawn'];
+const SETTINGS_KEY = 'prep-analysis-v1';
+const HELP_KEYS: [string, string][] = [['E', 'PGN or Expectimax tab']];
+const OPTIONS_KEY = 'prep-expectimax-v1';
+type Tab = 'pgn' | 'expectimax';
+
+interface Draft {
+  turn: Color;
+  castling: { K: boolean; Q: boolean; k: boolean; q: boolean };
+  fullmoves: number;
+  brush: Brush;
 }
+
+const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+
+const squaresOf = (uci: string) => [uci.slice(0, 2), uci.slice(2, 4)] as Key[];
+const legalMoves = (fen: string) => [...boardDests(fen).values()].reduce((n, d) => n + d.length, 0);
+
+function loadOptions(): ExpectimaxOptions {
+  const out = { ...DEFAULT_OPTIONS };
+  try {
+    const saved = JSON.parse(localStorage.getItem(OPTIONS_KEY) ?? '{}') as Partial<ExpectimaxOptions>;
+    for (const key of Object.keys(out) as (keyof ExpectimaxOptions)[])
+      if (typeof saved[key] === 'number' && Number.isFinite(saved[key])) out[key] = saved[key]!;
+  } catch { /* Defaults. */ }
+  return out;
+}
+
+export class PrepApp {
+  private games: StoredGame[] = [];
+  private gameIndex = 0;
+  private tree: Tree;
+  private current: TreeNode;
+  private orientation: Color = 'white';
+  private mode: 'analysis' | 'editor' = 'analysis';
+  private tab: Tab;
+  private settings: Settings;
+  private options: ExpectimaxOptions;
+  private evals = new Map<string, EngineResult>();
+  private engineStatus: EngineStatus = { kind: 'loading' };
+  private readonly engine: LiveEngine;
+  private readonly board: CrazyBoard;
+  private readonly moves: MoveList;
+  private readonly ceval: CevalView;
+  private readonly runner: ExpectimaxRunner;
+  private readonly expectimax: ExpectimaxView;
+  private gear!: GearPanel;
+  private draft: Draft | null = null;
+  private pgnDirty = false;
+  private threat = false;
+  private forkIndex = 0;
+  private hoverUci: string | null = null;
+  private hoverBrush = 'paleBlue';
+  private menuOpen = false;
+  private listOpen = false;
+  private autoplay: { delay: number; timer: number } | null = null;
+  private stepping = false;
+  private saveTimer = 0;
+  private toastTimer = 0;
+  private xRenderQueued = false;
+  private lastDepth = new Map<string, number>();
+  private restored = false;
+
+  constructor() {
+    this.settings = loadSettings(SETTINGS_KEY, []);
+    this.options = loadOptions();
+    this.tab = $('ch').dataset.tab === 'expectimax' ? 'expectimax' : 'pgn';
+    this.tree = new Tree();
+    this.current = this.tree.root;
+    this.games = [{ headers: {}, pgn: this.tree.pgn() }];
+
+    this.engine = new LiveEngine(
+      (status) => { this.engineStatus = status; this.renderCeval(); },
+      (result) => this.engineResult(result),
+    );
+    this.board = new CrazyBoard($('ch-board-wrap'), $('ch-board'), {
+      move: (orig, dest) => void this.boardMove(orig, dest),
+      drop: () => undefined,
+      clickSquare: () => undefined,
+      wheel: (forward) => forward ? this.next() : this.prev(),
+      edited: () => this.draftChanged(),
+    });
+    const app = this;
+    this.moves = new MoveList($('ch-moves'), $('ch-fork'), {
+      get tree() { return app.tree; },
+      get current() { return app.current; },
+      get settings() { return app.settings; },
+      get forkIndex() { return app.forkIndex; },
+      glyph: (node) => this.glyph(node),
+      goTo: (node) => this.goTo(node),
+      treeChanged: () => { this.treeChanged(); this.renderMoves(); this.renderShapes(); },
+      deleted: (parent, hadCurrent) => {
+        this.treeChanged();
+        if (hadCurrent) this.goTo(parent); else { this.renderMoves(); this.renderShapes(); }
+      },
+      copied: (text) => this.copy(text, 'PGN copied'),
+      editComment: (node) => this.editComment(node),
+    });
+    this.ceval = new CevalView({
+      header: $('ch-ceval'), pearl: $('ch-pearl'), name: $('ch-engine-name'), info: $('ch-engine-info'), bar: $('ch-bar'),
+      threat: $<HTMLButtonElement>('ch-threat'), pvs: $('ch-pvs'), board: $('ch-pv-board'), switch: $<HTMLInputElement>('ch-engine-on'),
+      action: $<HTMLButtonElement>('ch-engine-action'), live: $('ch-eval-live'),
+    }, {
+      hover: (uci) => this.hover(uci, 'paleBlue'),
+      play: (pv, upTo) => this.playLine(pv, upTo),
+      start: () => this.analyse(),
+    });
+    this.runner = new ExpectimaxRunner(() => this.queueExpectimax());
+    this.expectimax = new ExpectimaxView($('px-expectimax'), this.runner, {
+      get fen() { return app.current.fen; },
+      get orientation() { return app.orientation; },
+      get options() { return app.options; },
+      set options(o) { app.options = o; },
+      optionsChanged: () => { try { localStorage.setItem(OPTIONS_KEY, JSON.stringify(this.options)); } catch { /* For this visit. */ } },
+      hover: (uci) => this.hover(uci, 'blue'),
+      play: (uci) => this.play(uci),
+    });
+
+    this.bind();
+    this.renderAll();
+    void this.restore();
+  }
+
+  /** The saved games and searches, then a linked position (?fen=) as a new game beside them. */
+  private async restore() {
+    const status = $('px-save');
+    let collection = null;
+    try { collection = await loadCollection(); } catch (e) { status.textContent = (e as Error).message; }
+    if (collection) {
+      this.games = collection.games;
+      this.orientation = collection.orientation === 'black' ? 'black' : 'white';
+      this.openGame(Math.min(collection.index, this.games.length - 1), collection.path);
+    }
+    // From here an edit is saved; before, it would overwrite the games being read.
+    this.restored = true;
+    const linked = new URLSearchParams(location.search).get('fen');
+    if (linked) {
+      const read = readFen(linked);
+      if (read.ok) this.newGame(fenOf(read.pos), { Event: 'Analysis' });
+      else this.toast(`Could not open the linked position: ${read.error}`);
+      const url = new URL(location.href);
+      url.searchParams.delete('fen');
+      history.replaceState(null, '', url);
+    }
+    await this.runner.restore();
+    this.renderAll();
+    this.analyse();
+  }
+
+  // ── Games ──────────────────────────────────────────────────────
+  /** Shows a game of the collection, at a move given by child indexes (its last main-line move by default). */
+  private openGame(index: number, path?: number[]) {
+    const read = Tree.fromPgn(this.games[index]?.pgn ?? '');
+    this.gameIndex = index;
+    this.tree = read?.tree ?? new Tree();
+    if (read?.skipped) this.toast(`${read.skipped} ${read.skipped === 1 ? 'move' : 'moves'} of this game could not be played and were left out`);
+    this.current = path ? this.tree.follow(path) : this.tree.root;
+    if (positionOf(this.tree.root.fen).turn === 'black' && !path) this.orientation = 'black';
+    this.pgnDirty = false;
+    this.listOpen = false;
+    this.goTo(this.current);
+  }
+
+  private newGame(fen: string, headers: Record<string, string> = {}) {
+    const tree = new Tree(fen, new Map(Object.entries(headers)));
+    this.games.push({ headers, pgn: tree.pgn() });
+    this.openGame(this.games.length - 1);
+    this.scheduleSave();
+  }
+
+  /** Replaces the open games with a PGN's, as opening a file does. */
+  private async openPgn(text: string, name: string) {
+    const error = $('ch-pgn-error');
+    error.textContent = '';
+    try {
+      const games = await splitGames(text);
+      // A paste with nothing playable in it leaves the open games as they are.
+      if (!games.some((g) => 'FEN' in g.headers || (Tree.fromPgn(g.pgn)?.tree.root.children.length ?? 0) > 0)) throw new Error('No playable moves in that PGN.');
+      this.games = games;
+      this.orientation = 'white';
+      this.openGame(0);
+      this.scheduleSave();
+      this.toast(games.length === 1 ? `Opened ${name}` : `Opened ${games.length.toLocaleString()} games from ${name}`);
+      if (games.length > 1) { this.listOpen = true; this.renderGames(); }
+    } catch (e) {
+      error.textContent = (e as Error).message;
+    }
+  }
+
+  private renderGames() {
+    const headers = this.tree.headers;
+    const title = gameTitle(headers, 'Analysis');
+    const result = headers.get('Result');
+    // A game without players is titled by its event, which then is not repeated under it.
+    const named = !!(headerValue(headers, 'White') || headerValue(headers, 'Black'));
+    const details = [named ? headerValue(headers, 'Event') : '', headerValue(headers, 'Date')].filter(Boolean).join(' · ');
+    $('px-game-title').textContent = title + (result && result !== '*' ? `  ${result}` : '');
+    $('px-game-details').textContent = details;
+    $('px-game-count').textContent = this.games.length > 1 ? `${this.gameIndex + 1} / ${this.games.length.toLocaleString()}` : '';
+    $<HTMLButtonElement>('px-game-prev').disabled = this.gameIndex === 0;
+    $<HTMLButtonElement>('px-game-next').disabled = this.gameIndex >= this.games.length - 1;
+    $('px-game-prev').hidden = $('px-game-next').hidden = this.games.length < 2;
+    $('px-game-list').setAttribute('aria-expanded', String(this.listOpen));
+    $('px-pgn').classList.toggle('list-open', this.listOpen);
+    $('px-games').hidden = !this.listOpen;
+    if (this.listOpen) this.renderGameList();
+  }
+
+  private renderGameList() {
+    const filter = $<HTMLInputElement>('px-games-filter').value.trim().toLowerCase();
+    const list = $('px-games-list');
+    const rows: HTMLElement[] = [];
+    for (let i = 0; i < this.games.length && rows.length < 400; i++) {
+      const h = this.games[i].headers;
+      const text = [gameTitle(h, `Game ${i + 1}`), headerValue(h, 'Event'), headerValue(h, 'Date')].join(' ');
+      if (filter && !text.toLowerCase().includes(filter)) continue;
+      const b = el('button', 'px-games-row') as HTMLButtonElement;
+      b.type = 'button';
+      b.dataset.game = String(i);
+      if (i === this.gameIndex) b.classList.add('active');
+      b.append(el('span', 'px-games-num', String(i + 1)), el('span', 'px-games-name', gameTitle(h, `Game ${i + 1}`)), el('span', 'px-games-result', h.Result && h.Result !== '*' ? h.Result : ''));
+      const sub = [headerValue(h, 'White') || headerValue(h, 'Black') ? headerValue(h, 'Event') : '', headerValue(h, 'Date')].filter(Boolean).join(' · ');
+      if (sub) b.append(el('span', 'px-games-sub', sub));
+      rows.push(b);
+    }
+    if (!rows.length) rows.push(el('p', 'px-games-empty dim', 'No game matches.'));
+    list.replaceChildren(...rows);
+  }
+
+  private toggleList(open = !this.listOpen) {
+    this.listOpen = open;
+    this.renderGames();
+    if (open) $('px-games-filter').focus({ preventScroll: true });
+  }
+
+  // ── Tabs ───────────────────────────────────────────────────────
+  private setTab(tab: Tab) {
+    if (tab === this.tab) return;
+    this.tab = tab;
+    const path = `/${tab}${location.pathname.endsWith('/') ? '/' : ''}`;
+    history.replaceState(null, '', path + location.search);
+    document.title = `${tab === 'pgn' ? 'PGN Viewer' : 'Expectimax'} — Chess Auto Prep`;
+    for (const a of document.querySelectorAll<HTMLAnchorElement>('.nav-links a')) {
+      const on = a.getAttribute('href') === `/${tab}`;
+      a.classList.toggle('active', on);
+      if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    }
+    this.renderTabs();
+    this.renderShapes();
+  }
+
+  private renderTabs() {
+    $('ch').dataset.tab = this.tab;
+    for (const t of ['pgn', 'expectimax'] as const) {
+      $(`px-tab-${t}`).setAttribute('aria-selected', String(this.tab === t));
+      $(`px-tab-${t}`).tabIndex = this.tab === t ? 0 : -1;
+      $(`px-${t}`).hidden = this.tab !== t;
+    }
+    if (this.tab === 'expectimax') this.expectimax.render();
+    else this.moves.render();
+  }
+
+  private queueExpectimax() {
+    if (this.xRenderQueued) return;
+    this.xRenderQueued = true;
+    setTimeout(() => {
+      this.xRenderQueued = false;
+      if (this.tab === 'expectimax' && this.mode === 'analysis') this.expectimax.render();
+    }, 200);
+  }
+
+  // ── Navigation and moves ─────────────────────────────────────────
+  private goTo(node: TreeNode) {
+    const from = this.current;
+    if (!this.stepping) this.stopAutoplay();
+    this.moves.closeMenu();
+    this.current = node;
+    if (node !== from) { this.threat = false; this.forkIndex = 0; this.hoverUci = null; }
+    this.renderAll();
+    this.analyse();
+    this.scheduleSave();
+  }
+
+  private prev() { const p = this.tree.parent(this.current.id); if (p) this.goTo(p); }
+  private next() { const c = this.current.children[this.forkIndex] ?? this.current.children[0]; if (c) this.goTo(c); }
+  private first() { if (this.current !== this.tree.root) this.goTo(this.tree.root); }
+  private last() { const end = this.tree.lineEnd(this.current.id); if (end !== this.current) this.goTo(end); }
+
+  private forkStep(dir: 1 | -1): boolean {
+    const n = this.current.children.length;
+    if (n < 2) return false;
+    this.forkIndex = (this.forkIndex + dir + n) % n;
+    this.moves.render();
+    this.renderShapes();
+    return true;
+  }
+
+  private play(uci: string): boolean {
+    const node = this.tree.play(this.current.id, uci);
+    if (!node) { this.renderBoard(); return false; }
+    this.treeChanged();
+    this.goTo(node);
+    return true;
+  }
+
+  private async boardMove(orig: Key, dest: Key) {
+    const pos = positionOf(this.current.fen);
+    const piece = pos.board.get((orig.charCodeAt(0) - 97) + (Number(orig[1]) - 1) * 8);
+    if (piece?.role === 'pawn' && (dest[1] === '1' || dest[1] === '8')) {
+      const role = await this.board.pickPromotion(dest, piece.color, this.orientation);
+      if (!role) { this.renderBoard(); return; }
+      this.play(orig + dest + (role === 'knight' ? 'n' : role[0]));
+      return;
+    }
+    this.play(orig + dest);
+  }
+
+  private playBest() {
+    const best = this.evals.get(this.current.fen)?.lines[0]?.pv[0];
+    if (best) this.play(best);
+  }
+
+  private playLine(pv: string[], upTo: number) {
+    let node = this.current;
+    for (const uci of pv.slice(0, upTo + 1)) {
+      const next = this.tree.play(node.id, uci);
+      if (!next) break;
+      node = next;
+    }
+    if (node !== this.current) { this.treeChanged(); this.goTo(node); }
+  }
+
+  private treeChanged() {
+    this.games[this.gameIndex] = { headers: Object.fromEntries(this.tree.headers), pgn: this.tree.pgn() };
+    this.renderPgn();
+    this.scheduleSave();
+  }
+
+  private editComment(node: TreeNode) {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'ch-help px-comment-dialog';
+    const label = node === this.tree.root ? 'Comment before the first move' : `Comment after ${Math.floor((node.ply + 1) / 2)}${node.ply % 2 ? '.' : '...'} ${node.san}`;
+    dialog.setAttribute('aria-label', label);
+    const area = document.createElement('textarea');
+    area.rows = 5;
+    area.value = (node.comments ?? []).join(' ');
+    const save = el('button', 'btn btn-primary btn-sm', 'Save') as HTMLButtonElement;
+    const cancel = el('button', 'btn btn-outline btn-sm', 'Cancel') as HTMLButtonElement;
+    save.type = cancel.type = 'button';
+    save.onclick = () => { this.tree.setComment(node.id, area.value); this.treeChanged(); this.renderMoves(); dialog.close(); };
+    cancel.onclick = () => dialog.close();
+    const row = el('div', 'ch-editor-row ch-editor-actions');
+    row.append(cancel, save);
+    dialog.append(el('h2', '', label), area, row);
+    dialog.addEventListener('close', () => dialog.remove());
+    document.body.append(dialog);
+    dialog.showModal();
+    area.focus();
+  }
+
+  // ── Replay mode ─────────────────────────────────────────────────
+  private replay(delay: number | null) {
+    this.stopAutoplay();
+    if (delay === null) { this.renderActionMenu(); return; }
+    if (!this.current.children.length) this.goTo(this.tree.root);
+    this.closeActionMenu();
+    const step = () => {
+      const child = this.current.children[0];
+      if (!child) { this.stopAutoplay(); return; }
+      this.stepping = true;
+      this.goTo(child);
+      this.stepping = false;
+      this.autoplay = { delay, timer: window.setTimeout(step, delay) };
+    };
+    this.autoplay = { delay, timer: window.setTimeout(step, delay) };
+    this.renderControls();
+  }
+
+  private stopAutoplay() {
+    if (!this.autoplay) return;
+    clearTimeout(this.autoplay.timer);
+    this.autoplay = null;
+    this.renderControls();
+    if (this.menuOpen) this.renderActionMenu();
+  }
+
+  // ── Board ───────────────────────────────────────────────────────
+  private renderBoard() {
+    if (this.mode === 'editor') return;
+    const node = this.current;
+    const pos = positionOf(node.fen);
+    const over = !!outcomeOf(node.fen);
+    this.board.showAnalysis({
+      fen: node.fen,
+      orientation: this.orientation,
+      turn: pos.turn,
+      dests: over ? new Map() : boardDests(node.fen) as Map<Key, Key[]>,
+      lastMove: node.uci ? squaresOf(node.uci) : [],
+      check: pos.isCheck(),
+      shapes: this.shapes(),
+      dropping: null,
+      dropSquares: [],
+    });
+    $('ch-board').setAttribute('aria-label', `Chessboard: ${node.fen}`);
+  }
+
+  private shapes(): DrawShape[] {
+    const pos = positionOf(this.current.fen);
+    const turn = pos.turn, other: Color = turn === 'white' ? 'black' : 'white';
+    let shapes: DrawShape[] = [];
+    const over = !!outcomeOf(this.current.fen);
+    const on = this.settings.engineOn && !over;
+    if (this.hoverUci && !over) shapes.push(...moveShapes(this.threat ? other : turn, this.hoverUci, this.hoverBrush));
+    else if (on && this.settings.bestArrows) {
+      const result = this.evals.get(this.current.fen);
+      if (result) shapes.push(...engineShapes(turn, result.lines, this.settings.maneuverArrows));
+    }
+    const threat = this.threat ? threatFen(this.current.fen) : null;
+    if (on && threat) {
+      const result = this.evals.get(threat);
+      if (result) shapes.push(...threatShapes(other, result.lines, this.settings.maneuverArrows));
+    }
+    const glyph = this.settings.glyphsOnBoard ? this.glyph(this.current) : undefined;
+    if (glyph) shapes.push(glyphShape(this.current.uci, this.current.san, glyph));
+    if (this.settings.variationArrows && this.current.children.length > 1)
+      shapes = shapes.concat(variationShapes(turn, this.current.children.map((c) => c.uci), this.forkIndex, shapes));
+    return shapes;
+  }
+
+  private hover(uci: string | null, brush: string) {
+    if (uci === this.hoverUci && brush === this.hoverBrush) return;
+    this.hoverUci = uci;
+    this.hoverBrush = brush;
+    this.renderShapes();
+  }
+
+  private renderShapes() {
+    if (this.mode === 'analysis') this.board.setShapes(this.shapes());
+  }
+
+  private flip() {
+    this.orientation = this.orientation === 'white' ? 'black' : 'white';
+    if (this.mode === 'editor') {
+      this.board.cg.set({ orientation: this.orientation });
+      this.renderSpares();
+    } else this.renderAll();
+    this.scheduleSave();
+  }
+
+  // ── Engine ──────────────────────────────────────────────────────
+  private searchFen(): string | null {
+    return this.threat ? threatFen(this.current.fen) : this.current.fen;
+  }
+
+  private analyse() {
+    if (this.mode === 'editor' || !this.settings.engineOn || outcomeOf(this.current.fen)) { this.engine.stop(); this.renderCeval(); return; }
+    const fen = this.searchFen();
+    if (!fen) { this.engine.stop(); return; }
+    const seconds = this.settings.searchSeconds;
+    const kept = this.evals.get(fen);
+    const search = { multiPv: this.settings.multiPv, infinite: seconds === 0, searchMs: (seconds || 10) * 1000 };
+    // A position already searched to its limit is shown as it was, as Lichess keeps its evaluations.
+    if (kept?.done && !search.infinite && kept.budget >= search.searchMs && kept.lines.length >= Math.min(search.multiPv, legalMoves(fen))) { this.engine.stop(); return; }
+    this.engine.analyse(fen, search);
+  }
+
+  private engineResult(result: EngineResult) {
+    const kept = this.evals.get(result.fen);
+    if (!kept || result.depth >= kept.depth || result.lines.length > kept.lines.length || kept.lines.length > this.settings.multiPv)
+      this.evals.set(result.fen, result);
+    if (result.fen !== this.current.fen && result.fen !== this.searchFen()) return;
+    this.renderCeval();
+    this.renderShapes();
+    if (this.settings.liveGlyphs && this.lastDepth.get(result.fen) !== result.depth) {
+      this.lastDepth.set(result.fen, result.depth);
+      this.renderMoves();
+    }
+  }
+
+  /** Whether an engine move is the tree's move. */
+  private sameMove(fen: string, engineUci: string | undefined, node: TreeNode): boolean {
+    if (!engineUci) return false;
+    if (engineUci === node.uci) return true;
+    const pos = positionOf(fen);
+    const a = readMove(pos, engineUci), b = readMove(pos, node.uci);
+    return !!a && !!b && makeUci(a) === makeUci(b);
+  }
+
+  /** Lichess's live annotation: what the move lost against the engine's best before it. */
+  private glyph(node: TreeNode): Glyph | undefined {
+    if (!this.settings.liveGlyphs) return undefined;
+    const parent = this.tree.parent(node.id);
+    const before = parent && this.evals.get(parent.fen);
+    if (!parent || !before) return undefined;
+    const best = before.lines[0];
+    if (!best || this.sameMove(parent.fen, best.pv[0], node)) return undefined;
+    const after = before.lines.find((l) => this.sameMove(parent.fen, l.pv[0], node)) ?? this.evals.get(node.fen)?.lines[0];
+    if (!after) return undefined;
+    return liveGlyph(positionOf(parent.fen).turn, best, after);
+  }
+
+  private renderCeval() {
+    const pos = positionOf(this.current.fen);
+    const fen = this.searchFen() ?? this.current.fen;
+    const outcome = outcomeOf(this.current.fen);
+    this.ceval.render({
+      enabled: this.settings.engineOn,
+      fen,
+      ply: this.current.ply,
+      multiPv: this.settings.multiPv,
+      infinite: this.settings.searchSeconds === 0,
+      searchMs: (this.settings.searchSeconds || 10) * 1000,
+      result: this.evals.get(fen),
+      status: this.engineStatus,
+      threat: this.threat,
+      inCheck: pos.isCheck() || !threatFen(this.current.fen),
+      over: outcome === 'Draw' ? 'Stalemate' : outcome,
+      orientation: this.orientation,
+    });
+    if (outcome === 'Draw') { $('ch-pearl').textContent = '½'; $('ch-engine-info').textContent = pos.halfmoves >= 100 ? 'Draw by the fifty-move rule' : 'Draw: insufficient material'; }
+  }
+
+  private toggleEngine(on = !this.settings.engineOn) {
+    this.settings.engineOn = on;
+    if (!on) this.threat = false;
+    saveSettings(this.settings, SETTINGS_KEY);
+    this.renderCeval();
+    this.renderShapes();
+    this.analyse();
+  }
+
+  private toggleThreat(on = !this.threat) {
+    if (on === this.threat || !this.settings.engineOn || outcomeOf(this.current.fen) || (on && !threatFen(this.current.fen))) return;
+    this.threat = on;
+    this.hoverUci = null;
+    this.renderCeval();
+    this.renderShapes();
+    this.analyse();
+  }
+
+  private toggleSetting(key: Toggle) {
+    this.settings[key] = !this.settings[key];
+    saveSettings(this.settings, SETTINGS_KEY);
+    this.renderMoves();
+    this.renderShapes();
+    if (this.menuOpen) this.renderActionMenu();
+  }
+
+  private renderMoves() {
+    if (this.mode === 'analysis' && this.tab === 'pgn') this.moves.render();
+  }
+
+  // ── ☰ menu ──────────────────────────────────────────────────────
+  private toggleActionMenu(open = !this.menuOpen) {
+    this.menuOpen = open && this.mode === 'analysis';
+    this.renderActionMenu();
+  }
+
+  private closeActionMenu() { if (this.menuOpen) this.toggleActionMenu(false); }
+
+  private renderActionMenu() {
+    $('ch-tools').classList.toggle('menu-open', this.menuOpen);
+    $('ch-menu-toggle').setAttribute('aria-expanded', String(this.menuOpen));
+    const box = $('ch-action-menu');
+    box.hidden = !this.menuOpen;
+    if (!this.menuOpen) { box.replaceChildren(); return; }
+    let mainline = 0;
+    for (let n = this.tree.root; n.children[0]; n = n.children[0]) mainline++;
+    renderMenu(box, {
+      settings: this.settings,
+      practising: false,
+      autoplay: this.autoplay?.delay ?? null,
+      canReplay: mainline > 3,
+      hasMoves: this.tree.root.children.length > 0,
+      flip: () => { this.flip(); this.closeActionMenu(); },
+      editor: () => { this.closeActionMenu(); this.openEditor(); },
+      help: () => openHelp(HELP_KEYS),
+      clearMoves: () => this.clearMoves(),
+      replay: (delay) => this.replay(delay),
+      toggle: (key) => this.toggleSetting(key),
+      extra: [
+        { icon: 'M12 5v14M5 12h14', text: 'New analysis', title: 'Add an empty game to the games open here', action: () => { this.closeActionMenu(); this.newGame(START_FEN); } },
+        { icon: 'M13 2 3 14h9l-1 8 10-12h-9z', text: 'Find tactics', title: 'Mine puzzles from these games in the Tactics Trainer', action: () => this.sendToTactics() },
+      ],
+    });
+  }
+
+  private clearMoves() {
+    this.tree = new Tree(this.tree.root.fen, this.tree.headers);
+    this.pgnDirty = false;
+    this.treeChanged();
+    this.closeActionMenu();
+    this.goTo(this.tree.root);
+  }
+
+  private sendToTactics() {
+    try {
+      sessionStorage.setItem('cap-tactics-import', this.games.map((g) => g.pgn).join('\n\n'));
+      location.href = '/tactics/';
+    } catch { this.toast('These games are too large to send. Download the PGN and open it in Tactics.'); }
+  }
+
+  // ── Editor ──────────────────────────────────────────────────────
+  private openEditor() {
+    if (this.mode === 'editor') return;
+    this.stopAutoplay();
+    this.closeActionMenu();
+    const pos = positionOf(this.current.fen);
+    const castling = this.current.fen.split(' ')[2] ?? '-';
+    this.draft = {
+      turn: pos.turn,
+      castling: { K: castling.includes('K'), Q: castling.includes('Q'), k: castling.includes('k'), q: castling.includes('q') },
+      fullmoves: pos.fullmoves,
+      brush: 'pointer',
+    };
+    this.mode = 'editor';
+    this.threat = false;
+    this.engine.stop();
+    this.moves.closeMenu();
+    $('ch').dataset.mode = 'editor';
+    this.board.showEditor(this.current.fen, this.orientation, 'pointer');
+    this.renderAll();
+  }
+
+  private closeEditor(apply: boolean) {
+    if (this.mode !== 'editor') return;
+    const fen = this.draftFen();
+    this.mode = 'analysis';
+    this.draft = null;
+    $('ch').dataset.mode = 'analysis';
+    if (apply && readFen(fen).ok) { this.newGame(fen, { Event: 'Analysis' }); return; }
+    this.renderAll();
+    this.analyse();
+  }
+
+  private draftFen(): string {
+    const d = this.draft!;
+    const c = d.castling;
+    const castling = `${c.K ? 'K' : ''}${c.Q ? 'Q' : ''}${c.k ? 'k' : ''}${c.q ? 'q' : ''}` || '-';
+    return `${this.board.boardFen()} ${d.turn === 'white' ? 'w' : 'b'} ${castling} - 0 ${d.fullmoves}`;
+  }
+
+  private draftChanged() {
+    this.renderEditorPanel();
+    this.renderUnder();
+  }
+
+  private setDraftFen(fen: string): string | null {
+    const parts = fen.trim().split(/\s+/);
+    if (!/^[1-8pnbrqkPNBRQK/]+$/.test(parts[0] ?? '')) return 'That is not a FEN.';
+    const d = this.draft!;
+    d.turn = parts[1] === 'b' ? 'black' : 'white';
+    const castling = parts[2] ?? '-';
+    d.castling = { K: castling.includes('K'), Q: castling.includes('Q'), k: castling.includes('k'), q: castling.includes('q') };
+    d.fullmoves = Math.max(1, Number(parts[5]) || 1);
+    this.board.cg.set({ fen: parts[0] });
+    this.draftChanged();
+    return null;
+  }
+
+  private renderSpares() {
+    const editing = this.mode === 'editor';
+    const top: Color = this.orientation === 'white' ? 'black' : 'white';
+    for (const [id, color] of [['ch-spare-top', top], ['ch-spare-bottom', top === 'white' ? 'black' : 'white']] as const) {
+      const box = $(id);
+      box.hidden = !editing;
+      if (!editing) { box.replaceChildren(); continue; }
+      const brush = this.draft!.brush;
+      const items: HTMLElement[] = [];
+      const tool = (name: 'pointer' | 'trash', label: string, svg: string) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = `ch-spare-tool ch-${name}`;
+        b.title = label;
+        b.setAttribute('aria-label', label);
+        b.setAttribute('aria-pressed', String(brush === name));
+        b.innerHTML = svg;
+        b.onclick = () => this.setBrush(name);
+        return b;
+      };
+      items.push(tool('pointer', 'Move pieces: drag one off the board to remove it', POINTER_SVG));
+      for (const role of SPARE_ROLES) {
+        const piece: Piece = { role, color };
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'ch-spare-piece';
+        const selected = typeof brush !== 'string' && brush.role === role && brush.color === color;
+        b.setAttribute('aria-pressed', String(selected));
+        const name = `${color} ${role}`;
+        b.title = `Place ${name}s: click or drag across squares`;
+        b.setAttribute('aria-label', `Place ${name}s`);
+        const img = document.createElement('img');
+        img.src = `/piece/${color === 'white' ? 'w' : 'b'}${LETTER[role]}.svg`;
+        img.alt = '';
+        img.draggable = false;
+        b.append(img);
+        const press = (e: MouseEvent | TouchEvent) => {
+          if (e instanceof MouseEvent && e.button !== 0) return;
+          e.preventDefault();
+          this.setBrush(piece);
+          this.board.dragNew({ ...piece }, e, true);
+        };
+        b.addEventListener('mousedown', press);
+        b.addEventListener('touchstart', press, { passive: false });
+        b.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.setBrush(piece); } };
+        items.push(b);
+      }
+      items.push(tool('trash', 'Remove pieces: click or drag across squares', TRASH_SVG));
+      box.replaceChildren(...items);
+    }
+  }
+
+  private setBrush(brush: Brush) {
+    this.draft!.brush = brush;
+    this.board.setBrush(brush);
+    this.renderSpares();
+  }
+
+  private renderEditorPanel() {
+    if (this.mode !== 'editor') return;
+    const d = this.draft!;
+    for (const b of document.querySelectorAll<HTMLButtonElement>('#ch-turn button'))
+      b.setAttribute('aria-checked', String(b.dataset.turn === d.turn));
+    for (const box of document.querySelectorAll<HTMLInputElement>('#ch-castling input'))
+      box.checked = d.castling[box.dataset.right as keyof Draft['castling']];
+    const read = readFen(this.draftFen());
+    $('ch-editor-error').textContent = read.ok ? '' : read.error;
+    $<HTMLButtonElement>('ch-editor-apply').disabled = !read.ok;
+  }
+
+  // ── Under the board: FEN and PGN ─────────────────────────────────
+  private renderUnder() {
+    const fen = $<HTMLInputElement>('ch-fen');
+    if (document.activeElement !== fen) fen.value = this.mode === 'editor' ? this.draftFen() : this.current.fen;
+    fen.removeAttribute('aria-invalid');
+  }
+
+  private renderPgn() {
+    const area = $<HTMLTextAreaElement>('ch-pgn');
+    if (!this.pgnDirty) area.value = this.games[this.gameIndex]?.pgn ?? this.tree.pgn();
+    $<HTMLButtonElement>('ch-pgn-import').disabled = !this.pgnDirty;
+  }
+
+  private loadFen(text: string) {
+    if (this.mode === 'editor') { this.fenError(this.setDraftFen(text)); return; }
+    const read = readFen(text);
+    if (!read.ok) { this.fenError(read.error); return; }
+    this.fenError(null);
+    const fen = fenOf(read.pos);
+    if (fen !== this.current.fen) this.newGame(fen, { Event: 'Analysis' });
+  }
+
+  private fenError(error: string | null) {
+    const input = $<HTMLInputElement>('ch-fen');
+    if (error) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid');
+    $('ch-fen-error').textContent = error ?? '';
+  }
+
+  private download() {
+    const text = this.games.map((g) => g.pgn.trim()).join('\n\n') + '\n';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'application/x-chess-pgn' }));
+    const name = this.games.length === 1 ? gameTitle(this.tree.headers, 'analysis').replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '') : 'games';
+    a.download = `${name || 'analysis'}.pgn`;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  private scheduleSave() {
+    if (!this.restored) return;
+    clearTimeout(this.saveTimer);
+    this.saveTimer = window.setTimeout(() => {
+      const status = $('px-save');
+      saveCollection({ version: 1, games: this.games, index: this.gameIndex, path: this.tree.indexPath(this.current.id), orientation: this.orientation })
+        .then(() => { status.textContent = ''; }, (e: Error) => { status.textContent = e.message; });
+    }, 400);
+  }
+
+  private copy(text: string, done: string) {
+    void navigator.clipboard?.writeText(text).then(() => this.toast(done), () => this.toast('Copying was blocked by the browser'));
+  }
+
+  private toast(text: string) {
+    const box = $('ch-toast');
+    box.textContent = text;
+    box.hidden = false;
+    clearTimeout(this.toastTimer);
+    this.toastTimer = window.setTimeout(() => { box.hidden = true; }, 2600);
+  }
+
+  // ── Rendering and wiring ────────────────────────────────────────
+  private renderAll() {
+    $('ch').dataset.mode = this.mode;
+    this.renderBoard();
+    this.renderSpares();
+    if (this.mode === 'analysis') {
+      this.renderCeval();
+      this.renderGames();
+      this.renderTabs();
+    } else this.renderEditorPanel();
+    this.renderActionMenu();
+    this.renderControls();
+    this.renderUnder();
+    this.renderPgn();
+  }
+
+  private renderControls() {
+    const analysis = this.mode === 'analysis';
+    const atRoot = this.current === this.tree.root, atEnd = !this.current.children.length;
+    $<HTMLButtonElement>('ch-first').disabled = !analysis || atRoot;
+    $<HTMLButtonElement>('ch-prev').disabled = !analysis || atRoot;
+    $<HTMLButtonElement>('ch-next').disabled = !analysis || atEnd;
+    $<HTMLButtonElement>('ch-last').disabled = !analysis || atEnd;
+    $('ch-edit').setAttribute('aria-pressed', String(!analysis));
+    $<HTMLButtonElement>('ch-menu-toggle').disabled = !analysis;
+    $('ch-controls').classList.toggle('replaying', !!this.autoplay);
+  }
+
+  private bind() {
+    $('ch-first').onclick = () => this.first();
+    $('ch-prev').onclick = () => this.prev();
+    $('ch-next').onclick = () => this.next();
+    $('ch-last').onclick = () => this.last();
+    $('ch-flip').onclick = () => this.flip();
+    $('ch-edit').onclick = () => this.mode === 'editor' ? this.closeEditor(false) : this.openEditor();
+    $('ch-menu-toggle').onclick = () => this.toggleActionMenu();
+    $('ch-engine-on').onchange = (e) => this.toggleEngine((e.target as HTMLInputElement).checked);
+    $('ch-threat').onclick = () => this.toggleThreat();
+    for (const t of ['pgn', 'expectimax'] as const) $(`px-tab-${t}`).onclick = () => this.setTab(t);
+    $('px-tabs').onkeydown = (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      e.stopPropagation();
+      const next = this.tab === 'pgn' ? 'expectimax' : 'pgn';
+      this.setTab(next);
+      $(`px-tab-${next}`).focus();
+    };
+
+    // Games
+    $('px-game-prev').onclick = () => { if (this.gameIndex > 0) this.openGame(this.gameIndex - 1); };
+    $('px-game-next').onclick = () => { if (this.gameIndex < this.games.length - 1) this.openGame(this.gameIndex + 1); };
+    $('px-game-list').onclick = () => this.toggleList();
+    $('px-games-filter').oninput = () => this.renderGameList();
+    $('px-games-list').onclick = (e) => {
+      const row = (e.target as HTMLElement).closest<HTMLElement>('[data-game]');
+      if (row) this.openGame(Number(row.dataset.game));
+    };
+
+    // The engine gear, dropped over the engine lines; a click elsewhere or Esc closes it.
+    const settings = $('ch-settings');
+    const gearButton = $('ch-gear');
+    const showGear = (open: boolean) => {
+      settings.hidden = !open;
+      gearButton.setAttribute('aria-expanded', String(open));
+      if (open) this.gear.render(this.settings);
+    };
+    gearButton.onclick = () => showGear(settings.hidden);
+    document.addEventListener('pointerdown', (e) => {
+      const target = e.target as Node;
+      if (!settings.hidden && !settings.contains(target) && !gearButton.contains(target)) showGear(false);
+    });
+    this.closeGear = () => { if (settings.hidden) return false; showGear(false); gearButton.focus(); return true; };
+    const changed = () => {
+      saveSettings(this.settings, SETTINGS_KEY);
+      this.gear.render(this.settings);
+      this.renderCeval();
+      this.analyse();
+    };
+    this.gear = new GearPanel(settings, {
+      searchSeconds: (s) => { this.settings.searchSeconds = s; changed(); },
+      lines: (n) => { this.settings.multiPv = n; this.evals.clear(); changed(); },
+    });
+
+    // Editor panel
+    for (const b of document.querySelectorAll<HTMLButtonElement>('#ch-turn button'))
+      b.onclick = () => { this.draft!.turn = b.dataset.turn as Color; this.draftChanged(); };
+    for (const box of document.querySelectorAll<HTMLInputElement>('#ch-castling input'))
+      box.onchange = () => { this.draft!.castling[box.dataset.right as keyof Draft['castling']] = box.checked; this.draftChanged(); };
+    $('ch-editor-start').onclick = () => this.setDraftFen(START_FEN);
+    $('ch-editor-clear').onclick = () => {
+      this.board.cg.set({ fen: '8/8/8/8/8/8/8/8' });
+      this.draft!.castling = { K: false, Q: false, k: false, q: false };
+      this.draftChanged();
+    };
+    $('ch-editor-apply').onclick = () => this.closeEditor(true);
+    $('ch-editor-cancel').onclick = () => this.closeEditor(false);
+
+    // FEN and PGN
+    const fen = $<HTMLInputElement>('ch-fen');
+    fen.onchange = () => this.loadFen(fen.value);
+    fen.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); this.loadFen(fen.value); } };
+    fen.onblur = () => { if (!fen.getAttribute('aria-invalid')) this.renderUnder(); };
+    $('ch-fen-copy').onclick = () => this.copy(fen.value, 'FEN copied');
+    const pgn = $<HTMLTextAreaElement>('ch-pgn');
+    pgn.oninput = () => { this.pgnDirty = true; $<HTMLButtonElement>('ch-pgn-import').disabled = false; };
+    $('ch-pgn-import').onclick = () => void this.openPgn(pgn.value, 'the pasted PGN');
+    $('ch-pgn-copy').onclick = () => this.copy(this.tree.pgn(), 'PGN copied');
+    $('ch-pgn-download').onclick = () => this.download();
+    const file = $<HTMLInputElement>('ch-pgn-file');
+    file.onchange = async () => {
+      const chosen = file.files?.[0];
+      file.value = '';
+      if (chosen) await this.openPgn(await chosen.text(), chosen.name);
+    };
+    // A PGN file dropped anywhere on the page opens it.
+    document.addEventListener('dragover', (e) => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault(); });
+    document.addEventListener('drop', async (e) => {
+      const chosen = e.dataTransfer?.files?.[0];
+      if (!chosen) return;
+      e.preventDefault();
+      await this.openPgn(await chosen.text(), chosen.name);
+    });
+    // Pasting a FEN or PGN anywhere outside a text box opens it, as on Lichess.
+    document.addEventListener('paste', (e) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('input, textarea, [contenteditable]')) return;
+      const text = e.clipboardData?.getData('text')?.trim();
+      if (!text) return;
+      if (readFen(text).ok) { e.preventDefault(); this.loadFen(text); }
+      else if (/\d\.\s*[a-hNBRQKO]/.test(text) || text.startsWith('[')) { e.preventDefault(); void this.openPgn(text, 'the pasted PGN'); }
+    });
+
+    document.addEventListener('keydown', (e) => this.key(e));
+  }
+
+  private closeGear: () => boolean = () => false;
+
+  private key(e: KeyboardEvent) {
+    const target = e.target as HTMLElement;
+    if (e.key === 'Escape' && target.closest('#ch-settings') && this.closeGear()) return;
+    if (e.key === 'Escape' && target.closest('.px-settings') && this.expectimax.closeSettings()) return;
+    if (e.key === 'Escape' && this.listOpen && target.closest('#px-games')) { this.toggleList(false); return; }
+    if (target.closest('input, textarea, [contenteditable], dialog') || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'Escape') {
+      if (this.closeGear() || this.expectimax.closeSettings()) return;
+      if (this.moves.menuOpen) { this.moves.closeMenu(); return; }
+      if (this.menuOpen) { this.closeActionMenu(); return; }
+      if (this.listOpen) { this.toggleList(false); return; }
+      if (this.mode === 'editor') { this.closeEditor(false); return; }
+      if (this.autoplay) { this.stopAutoplay(); return; }
+    }
+    if (this.mode === 'editor') return;
+    const shift = e.shiftKey;
+    const actions: Record<string, () => void> = shift ? {
+      ArrowLeft: () => this.goTo(this.tree.previousBranch(this.current.id)),
+      K: () => this.goTo(this.tree.previousBranch(this.current.id)),
+      ArrowRight: () => this.goTo(this.tree.nextBranch(this.current.id, this.forkIndex)),
+      J: () => this.goTo(this.tree.nextBranch(this.current.id, this.forkIndex)),
+      ArrowUp: () => this.goTo(this.tree.stepLine(this.current.id, 'prev')),
+      ArrowDown: () => this.goTo(this.tree.stepLine(this.current.id, 'next')),
+      I: () => this.toggleSetting('inline'),
+      '?': () => openHelp(HELP_KEYS),
+      $: () => this.last(),
+    } : {
+      ArrowLeft: () => this.prev(), ArrowRight: () => this.next(),
+      ArrowUp: () => { if (!this.forkStep(-1)) this.first(); },
+      ArrowDown: () => { if (!this.forkStep(1)) this.last(); },
+      Home: () => this.first(), End: () => this.last(), '0': () => this.first(),
+      j: () => this.next(), k: () => this.prev(),
+      f: () => this.flip(), l: () => this.toggleEngine(), x: () => this.toggleThreat(),
+      a: () => this.toggleSetting('bestArrows'), v: () => this.toggleSetting('variationArrows'),
+      b: () => this.openEditor(), h: () => this.toggleActionMenu(),
+      e: () => this.setTab(this.tab === 'pgn' ? 'expectimax' : 'pgn'),
+      ' ': () => { if (this.settings.engineOn) this.playBest(); else this.toggleEngine(true); },
+    };
+    const action = actions[e.key];
+    if (!action) return;
+    if (target.closest('button') && (e.key === ' ' || e.key === 'Enter')) return;
+    e.preventDefault();
+    this.moves.closeMenu();
+    action();
+  }
+}
+
+const POINTER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0v0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>';
+const TRASH_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';

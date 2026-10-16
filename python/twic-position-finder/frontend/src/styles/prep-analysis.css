@@ -1,0 +1,103 @@
+/* The analysis board of /pgn and /expectimax: the bughouse board's layout
+   (analysis.css) without the hands, so the right column is the engine, the
+   PGN | Expectimax tabs and the tab's panel, as tall as the board. */
+
+/* ── Tabs under the engine lines ───────────────────────────────── */
+.px-tabs { flex: none; display: flex; border-bottom: 1px solid var(--border); }
+.px-tabs button { flex: 1; padding: 8px 10px 7px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text-dim); font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
+.px-tabs button:hover { color: var(--text); background: var(--bg-raised); }
+.px-tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.px-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ch.px .ch-analysis { flex: 1 1 0; min-height: 0; }
+.px-panel { flex: 1 1 0; min-height: 9em; display: flex; flex-direction: column; }
+.px-panel[hidden] { display: none; }
+
+/* ── PGN: the game, the list of games, the moves ─────────────────── */
+.px-game { flex: none; display: flex; align-items: center; gap: 4px; min-height: 44px; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+.px-game-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.px-game-title { font-weight: 600; font-size: 0.92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.px-game-details { color: var(--text-faint); font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.px-game-details:empty { display: none; }
+.px-game-count { color: var(--text-faint); font-size: 0.8rem; white-space: nowrap; }
+.px-game-count:empty { display: none; }
+.px-game .ch-icon { width: 30px; height: 30px; }
+.px-game .ch-icon[hidden] { display: none; }
+
+.px-games { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+.px-games[hidden] { display: none; }
+#px-pgn.list-open .ch-moves, #px-pgn.list-open .ch-fork { display: none; }
+.px-games input { flex: none; margin: 8px; width: calc(100% - 16px); padding: 6px 8px; font-size: 0.88rem; }
+.px-games-list { flex: 1 1 0; min-height: 0; overflow-y: auto; }
+.px-games-row { display: grid; grid-template-columns: 3.2em minmax(0, 1fr) auto; column-gap: 6px; width: 100%; padding: 5px 10px 5px 4px; border: 0; border-top: 1px solid var(--border); background: none; color: var(--text); font: inherit; font-size: 0.88rem; text-align: left; cursor: pointer; }
+.px-games-row:hover { background: var(--bg-raised); }
+.px-games-row.active { background: var(--accent-bg); color: var(--accent); }
+.px-games-num { color: var(--text-faint); text-align: right; font-variant-numeric: tabular-nums; }
+.px-games-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.px-games-result { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.px-games-sub { grid-column: 2 / -1; color: var(--text-faint); font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.px-games-empty { padding: 10px 12px; }
+
+/* Comments read as text between the moves, as on lila. */
+.px-comment { margin: 0; color: var(--text-dim); font-size: 0.88rem; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.px-comment-inline { margin: 0 4px; }
+.ch-interrupt .px-comment + .ch-fold, .ch-interrupt .px-comment + .ch-line { margin-top: 4px; }
+.px-intro { color: var(--text-dim); }
+/* The game's own glyphs, in lila's colours. */
+.px-nag-good, .px-move-good { color: #22ac38; }
+.px-nag-brilliant, .px-move-brilliant { color: #168226; }
+.px-nag-interesting, .px-move-interesting { color: #ea45d8; }
+.px-nag-inaccuracy, .px-move-inaccuracy { color: #56b4e9; }
+.px-nag-mistake, .px-move-mistake { color: #e69f00; }
+.px-nag-blunder, .px-move-blunder { color: #df5353; }
+.ch-move.active[class*="px-move-"] { color: var(--accent); }
+
+/* ── Expectimax: bar, status, table ─────────────────────────────── */
+.px-bar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 6px 8px 10px; border-bottom: 1px solid var(--border); }
+.px-run { flex: none; min-width: 5.6em; }
+.px-field { display: flex; align-items: center; margin: 0; color: var(--text-dim); font-size: 0.85rem; white-space: nowrap; }
+.px-field label { margin: 0 6px 0 0; color: inherit; font-size: inherit; }
+/* − box +, one control: the buttons share the box's border. */
+.px-field input { width: 3.4em; height: 28px; padding: 0 4px; border-radius: 0; text-align: center; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+#px-plies { width: 2.2em; }
+.px-step { width: 26px; height: 28px; padding: 0; border: 1px solid var(--border-strong); background: var(--bg-raised); color: var(--text); font: 600 1rem/1 var(--sans); cursor: pointer; }
+.px-step:first-of-type { border-radius: 4px 0 0 4px; border-right: 0; }
+.px-step:last-of-type { border-radius: 0 4px 4px 0; border-left: 0; }
+.px-step:hover:not(:disabled) { color: var(--accent); background: var(--accent-bg); }
+.px-step:disabled { color: var(--text-faint); cursor: default; }
+.px-top { position: relative; flex: none; }
+.px-settings { top: 100%; }
+.px-settings .px-reset { align-self: flex-end; font-size: 0.85rem; }
+.px-status { flex: none; margin: 0; padding: 6px 10px; min-height: 2.2em; color: var(--text-dim); font-size: 0.82rem; line-height: 1.4; border-bottom: 1px solid var(--border); }
+.px-status.px-status-error { color: var(--danger); }
+.px-table { flex: 1 1 0; min-height: 0; overflow-y: auto; font-size: 0.9rem; }
+.px-table:empty { display: none; }
+.px-row { display: grid; grid-template-columns: minmax(3.5em, 1fr) 3.6em 4.4em 4.4em 4.4em; align-items: center; column-gap: 4px; width: 100%; min-height: 2em; padding: 0 10px; border: 0; border-top: 1px solid var(--border); background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.px-row:first-child { border-top: 0; }
+button.px-row:hover { background: var(--accent-bg); }
+button.px-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.px-head { position: sticky; top: 0; z-index: 1; min-height: 1.8em; background: var(--bg-card); border-bottom: 1px solid var(--border); color: var(--text-faint); font-size: 0.78rem; cursor: default; }
+.px-head + .px-row { border-top: 0; }
+.px-move { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.px-head .px-move { font-weight: 400; }
+.px-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.px-share, .px-engine { color: var(--text-dim); }
+.px-best { color: var(--accent); font-weight: 700; }
+
+/* ── Under the board ────────────────────────────────────────────── */
+/* Four buttons: they wrap under a narrow board, the message above them. */
+.ch.px .ch-pgn-row { flex-wrap: wrap; justify-content: flex-end; }
+.ch.px .ch-pgn-row .ch-error { flex: 1 0 100%; }
+.ch.px .ch-pgn-row .ch-error:empty { display: none; }
+.ch-pgn-row label.btn { flex: none; margin: 0; cursor: pointer; }
+.ch-pgn-row label.btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.px-note { margin: 2px 0 0; font-size: 0.8rem; }
+.px-comment-dialog textarea { width: 100%; margin: 4px 0 12px; font-size: 0.9rem; resize: vertical; }
+
+/* Narrow screens: one column without the hands' rows. */
+@media (max-width: 860px) {
+  .ch.px { grid-template-areas: 'stage' 'controls' 'tools' 'under'; }
+  .ch.px .ch-tools { min-height: 60dvh; }
+  .px-bar { column-gap: 8px; padding-left: 8px; }
+  .px-field label { margin-right: 4px; }
+  .px-row { grid-template-columns: minmax(3em, 1fr) 3.2em 4em 4em 4em; padding: 0 8px; }
+}

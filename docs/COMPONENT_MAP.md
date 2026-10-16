@@ -257,10 +257,14 @@ save/reopen, conflict, process-kill and recovery tests remain.
 ## Static browser preparation
 
 The separately deployed Astro frontend now exposes `/pgn`, `/expectimax`,
-`/tactics` and `/bughouse` from one site navigation. The PGN/expectimax workspace
-is `python/twic-position-finder/frontend/src/prep/`, with worker-owned parsing,
-Stockfish/Maia search and transactional browser storage. Local PGNs can move
-from the viewer into tactics; both accept custom FEN starts. These browser
-owners do not import Flutter/native storage. See the
+`/tactics` and `/bughouse` from one site navigation. `/pgn` and `/expectimax`
+are one lila-style analysis board with PGN and Expectimax tabs
+(`python/twic-position-finder/frontend/src/prep/`): Stockfish 18 lines over the
+board, PGN games with comments and variations, and the desktop's practical
+expectimax (both sides, Played / White / Black / Engine) run on a Stockfish
+worker pool and Maia in the browser. It shares the board, judge, shapes and
+menu with `/bughouse` (`src/analysis/`). Local PGNs can move from the viewer
+into tactics; both accept custom FEN starts. These browser owners do not
+import Flutter/native storage. See the
 [frontend guide](../python/twic-position-finder/frontend/README.md#pgn-workspace-and-browser-expectimax)
 for persistence, search semantics, asset preparation and browser verification.
