@@ -123,6 +123,9 @@ scripts/chesscom_titled_analysis/data/
 # Sample TWIC input -- re-fetch with python/twic-position-finder/downloader.py
 twic*.pgn
 
+# Local results of the removed fast_vs_pure benchmark harness
+tools/experiments/fast_vs_pure/
+
 # benko_master harness: keep the scripts, not the runs (trees, engine copies, pids)
 tools/experiments/benko_master/run_*/
 tools/experiments/benko_master/ab_*/
