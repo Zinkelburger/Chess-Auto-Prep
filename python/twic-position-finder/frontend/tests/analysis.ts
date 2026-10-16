@@ -5,6 +5,7 @@ import {
 } from '../src/analysis/tree';
 import { liveGlyph, povDiff, verdict, winningChances } from '../src/analysis/judge';
 import { centipawns, mateMoves, toResult } from '../src/analysis/engine';
+import { analysisUrl, editorUrl, linkedOrientation } from '../src/analysis/links';
 
 const ITALIAN = 'r1bqkb1r/pppp1ppp/2n2n2/4p3/4P3/2N2N2/PPPP1PPP/R1BQKB1R[] w KQkq - 4 4';
 
@@ -211,5 +212,16 @@ const black = toResult('8/8/8/8/8/8/8/k6K[] b - - 0 1', {
 assert.ok(black.lines[0].cp! < 0, 'good for Black is negative');
 assert.equal(black.lines[1].mate, -1, 'Black mates in one');
 assert.equal(black.info, '100 positions · 20/s');
+
+// The pages' links, as lila's: the starting position is the plain page; ?color= only when the board is turned.
+assert.equal(editorUrl(START_FEN, 'white'), '/bughouse/editor/');
+assert.equal(editorUrl(START_FEN, 'black'), '/bughouse/editor/?color=black');
+assert.equal(analysisUrl(START_FEN, 'white'), '/bughouse/');
+const blackToMove = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR[] b KQkq - 0 1';
+assert.equal(analysisUrl(blackToMove, 'black'), `/bughouse/?fen=${encodeURIComponent(blackToMove).replace(/%20/g, '+')}`, 'Black to move shows Black below by itself');
+assert.match(analysisUrl(blackToMove, 'white'), /&color=white$/);
+assert.equal(new URLSearchParams(editorUrl(ITALIAN, 'white').split('?')[1]).get('fen'), ITALIAN, 'the position survives the URL');
+assert.equal(linkedOrientation(new URLSearchParams('color=black')), 'black');
+assert.equal(linkedOrientation(new URLSearchParams('color=purple')), null);
 
 console.log('bughouse analysis tree: ok');

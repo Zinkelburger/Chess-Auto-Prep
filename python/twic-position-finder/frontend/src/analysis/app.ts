@@ -1,24 +1,24 @@
 /**
  * Bughouse analysis: lichess.org/analysis on one bughouse board, with a +
- * above and − below every piece in both hands and lila's board editor.
+ * above and − below every piece in both hands. The board editor is its own
+ * page (editor.ts), as lila's.
  * Captures leave for the partner and nothing arrives unless you add it, so
  * the hands are exactly what you set. Hivemind searches it, and the
  * sit panel (sit.ts) shows what one more piece is worth to the side to move.
  *
  * This file wires the parts together: the tree and the current position,
  * the engine, the board, the move list (moves.ts), the engine panel
- * (ceval.ts), practice (practice.ts), the ☰ menu (menu.ts) and the editor.
+ * (ceval.ts), practice (practice.ts) and the ☰ menu (menu.ts).
  */
 import type { DrawShape } from '@lichess-org/chessground/draw';
-import type { Key, Piece } from '@lichess-org/chessground/types';
-import { makePockets } from 'chessops/fen';
-import { Material } from 'chessops/setup';
+import type { Key } from '@lichess-org/chessground/types';
 import type { Color, Role } from 'chessops/types';
-import { CrazyBoard, type Brush } from './board';
+import { CrazyBoard } from './board';
 import { CevalView } from './ceval';
 import { Engine, type EngineResult, type EngineStatus, type SearchSettings } from './engine';
 import { renderHand } from './hand';
 import { liveGlyph, type Glyph } from './judge';
+import { defaultOrientation, editorUrl, linkedOrientation } from './links';
 import { openHelp, renderMenu } from './menu';
 import { MoveList } from './moves';
 import { PRACTICE_NODES, Practice } from './practice';
@@ -33,7 +33,6 @@ import {
 import { makeUci } from 'chessops/util';
 
 const LETTER: Record<Role, string> = { pawn: 'P', knight: 'N', bishop: 'B', rook: 'R', queen: 'Q', king: 'K' };
-const SPARE_ROLES: Role[] = ['king', 'queen', 'rook', 'bishop', 'knight', 'pawn'];
 /** The analysis tree, kept in this browser so a reload comes back to it (Lichess keeps it too). */
 const TREE_KEY = 'bughouse-analysis-tree-v1';
 
@@ -43,7 +42,7 @@ export interface ExtraHost {
   readonly settings: Settings;
   /** Each row's search, in positions: the setting, or the default for the engine's backend. */
   readonly sitNodes: number;
-  /** The engine is on and the board is in analysis (not the editor or practice). */
+  /** The engine is on and the board is in analysis (not practice). */
   readonly active: boolean;
   /** The engine has loaded (its files are in this browser's cache). */
   readonly engineReady: boolean;
@@ -63,14 +62,6 @@ export interface ExtraHost {
 export interface Extra {
   /** The position, the engine switch or the settings changed. */
   update(): void;
-}
-
-interface Draft {
-  turn: Color;
-  castling: { K: boolean; Q: boolean; k: boolean; q: boolean };
-  hands: Material;
-  fullmoves: number;
-  brush: Brush;
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -93,7 +84,6 @@ export class BughouseApp {
   private tree: Tree;
   private current: TreeNode;
   private orientation: Color = 'white';
-  private mode: 'analysis' | 'editor' = 'analysis';
   private dropping: Role | null = null;
   private settings: Settings;
   private evals = new Map<string, EngineResult>();
@@ -102,7 +92,6 @@ export class BughouseApp {
   private readonly board: CrazyBoard;
   private readonly moves: MoveList;
   private readonly ceval: CevalView;
-  private draft: Draft | null = null;
   private pgnDirty = false;
   private threat = false;
   private practice: Practice | null = null;
@@ -114,6 +103,7 @@ export class BughouseApp {
   private autoplay: { delay: number; timer: number } | null = null;
   private stepping = false;
   private saveTimer = 0;
+  private savePending = false;
   private toastTimer = 0;
   private lastDepth = new Map<string, number>();
   private readonly extra: Extra;
@@ -121,7 +111,8 @@ export class BughouseApp {
 
   constructor() {
     this.settings = loadSettings();
-    const fen = new URLSearchParams(location.search).get('fen');
+    const params = new URLSearchParams(location.search);
+    const fen = params.get('fen');
     const read = fen ? readFen(fen) : null;
     const target = read?.ok ? fenOf(read.pos) : START_FEN;
     const saved = loadSavedTree(TREE_KEY);
@@ -136,7 +127,7 @@ export class BughouseApp {
       this.current = this.tree.root;
     }
     if (read && !read.ok) this.flash(`Could not open the linked position: ${read.error}`);
-    if (positionOf(this.tree.root.fen).turn === 'black') this.orientation = 'black';
+    this.orientation = linkedOrientation(params) ?? defaultOrientation(this.tree.root.fen);
 
     const onStatus = (status: EngineStatus) => { this.engineStatus = status; this.renderCeval(); this.renderGear(); this.extra?.update(); };
     const onResult = (result: EngineResult) => this.engineResult(result);
@@ -147,7 +138,7 @@ export class BughouseApp {
       drop: (role, key) => this.play(`${LETTER[role]}@${key}`, 'user'),
       clickSquare: (key) => this.clickSquare(key),
       wheel: (forward) => forward ? this.next() : this.prev(),
-      edited: () => this.draftChanged(),
+      edited: () => { /* Only the editor page edits. */ },
     });
 
     const app = this;
@@ -178,7 +169,7 @@ export class BughouseApp {
       get fen() { return app.current.fen; },
       get settings() { return app.settings; },
       get sitNodes() { return sitNodesFor(app.settings, app.engine.gpu); },
-      get active() { return app.mode === 'analysis' && !app.practice && app.settings.engineOn; },
+      get active() { return !app.practice && app.settings.engineOn; },
       get engineReady() { return app.engineStatus.kind === 'ready'; },
       get engineStopped() { return app.engineStatus.kind === 'failed' || app.engineStatus.kind === 'ask'; },
       evalOf: (fen) => this.evals.get(fen),
@@ -303,15 +294,6 @@ export class BughouseApp {
 
   // ── Hands ───────────────────────────────────────────────────────
   private adjust(color: Color, role: Role, delta: 1 | -1) {
-    if (this.mode === 'editor') {
-      const draft = this.draft!;
-      const next = draft.hands[color][role] + delta;
-      if (next < 0 || next > 16) return;
-      if (delta > 0 && this.draftPieceCount() >= 64) return;
-      draft.hands[color][role] = next;
-      this.draftChanged();
-      return;
-    }
     if (!this.tree.adjustHand(this.current.id, color, role, delta)) return;
     this.dropping = null;
     this.treeChanged();
@@ -323,18 +305,17 @@ export class BughouseApp {
 
   private renderHands() {
     const top: Color = this.orientation === 'white' ? 'black' : 'white';
-    const editing = this.mode === 'editor';
-    const pos = editing ? null : positionOf(this.current.fen);
-    const total = editing ? this.draftPieceCount() : pos!.board.occupied.size() + (pos!.pockets?.size() ?? 0);
+    const pos = positionOf(this.current.fen);
+    const total = pos.board.occupied.size() + (pos.pockets?.size() ?? 0);
     for (const [boxId, color] of [['ch-hand-top', top], ['ch-hand-bottom', this.orientation === 'white' ? 'white' : 'black']] as const) {
-      const material = editing ? this.draft!.hands[color] : pos!.pockets![color];
+      const material = pos.pockets![color];
       const counts = Object.fromEntries(HAND_ROLES.map((r) => [r, material[r]])) as Record<Role, number>;
       renderHand($(boxId), {
         color,
         counts,
         roomForMore: total < 64,
-        picked: !editing && pos!.turn === color ? this.dropping : null,
-        usable: (role) => !editing && pos!.turn === color && !outcomeOf(this.current.fen) && dropSquares(this.current.fen, role).length > 0,
+        picked: pos.turn === color ? this.dropping : null,
+        usable: (role) => pos.turn === color && !outcomeOf(this.current.fen) && dropSquares(this.current.fen, role).length > 0,
       }, {
         adjust: (c, role, delta) => this.adjust(c, role, delta),
         drag: (c, role, e) => { this.dropping = null; this.board.dragNew({ role, color: c }, e); },
@@ -350,7 +331,6 @@ export class BughouseApp {
 
   // ── Board ───────────────────────────────────────────────────────
   private renderBoard() {
-    if (this.mode === 'editor') return;
     const node = this.current;
     const pos = positionOf(node.fen);
     const over = !!outcomeOf(node.fen);
@@ -398,16 +378,13 @@ export class BughouseApp {
   }
 
   private renderShapes() {
-    if (this.mode === 'analysis') this.board.setShapes(this.shapes());
+    this.board.setShapes(this.shapes());
   }
 
   private flip() {
     this.orientation = this.orientation === 'white' ? 'black' : 'white';
-    if (this.mode === 'editor') {
-      this.board.cg.set({ orientation: this.orientation });
-      this.renderSpares();
-      this.renderHands();
-    } else this.renderAll();
+    this.renderAll();
+    this.updateUrl();
   }
 
   // ── Engine ──────────────────────────────────────────────────────
@@ -417,7 +394,6 @@ export class BughouseApp {
   }
 
   private search() {
-    if (this.mode === 'editor') { this.engine.stop(); return; }
     if (outcomeOf(this.current.fen)) { this.engine.stop(); this.renderCeval(); return; }
     if (this.practice) this.engine.analyse(this.current.fen, { ...this.searchSettings(), multiPv: 1, infinite: false, nodes: PRACTICE_NODES });
     else if (!this.settings.engineOn) { this.engine.stop(); return; }
@@ -534,7 +510,7 @@ export class BughouseApp {
 
   // ── Practice ────────────────────────────────────────────────────
   private togglePractice(on = !this.practice) {
-    if (on === !!this.practice || this.mode === 'editor') return;
+    if (on === !!this.practice) return;
     this.stopAutoplay();
     this.closeActionMenu();
     if (on) {
@@ -566,12 +542,12 @@ export class BughouseApp {
 
   // ── Move list ───────────────────────────────────────────────────
   private renderMoves() {
-    if (this.mode === 'analysis') this.moves.render();
+    this.moves.render();
   }
 
   // ── ☰ menu ──────────────────────────────────────────────────────
   private toggleActionMenu(open = !this.menuOpen) {
-    this.menuOpen = open && this.mode === 'analysis';
+    this.menuOpen = open;
     this.renderActionMenu();
   }
 
@@ -592,7 +568,7 @@ export class BughouseApp {
       canReplay: mainline > 3,
       hasMoves: this.tree.root.children.length > 0,
       flip: () => { this.flip(); this.closeActionMenu(); },
-      editor: () => { this.closeActionMenu(); this.openEditor(); },
+      editor: () => this.openEditor(),
       practice: () => this.togglePractice(),
       help: () => openHelp(),
       clearMoves: () => this.clearMoves(),
@@ -610,164 +586,16 @@ export class BughouseApp {
   }
 
   // ── Editor ──────────────────────────────────────────────────────
+  /** The board editor is its own page, as lila's /editor: Back returns here. */
   private openEditor() {
-    if (this.mode === 'editor') return;
-    if (this.practice) this.togglePractice(false);
-    this.stopAutoplay();
-    this.closeActionMenu();
-    const pos = positionOf(this.current.fen);
-    const castling = this.current.fen.split(' ')[2] ?? '-';
-    this.draft = {
-      turn: pos.turn,
-      castling: { K: castling.includes('K'), Q: castling.includes('Q'), k: castling.includes('k'), q: castling.includes('q') },
-      hands: pos.pockets ? pos.pockets.clone() : Material.empty(),
-      fullmoves: pos.fullmoves,
-      brush: 'pointer',
-    };
-    this.mode = 'editor';
-    this.dropping = null;
-    this.threat = false;
-    this.engine.stop();
-    this.moves.closeMenu();
-    $('ch').dataset.mode = 'editor';
-    this.board.showEditor(this.current.fen, this.orientation, 'pointer');
-    this.renderAll();
-  }
-
-  private closeEditor(apply: boolean) {
-    if (this.mode !== 'editor') return;
-    if (apply) {
-      const read = readFen(this.draftFen());
-      if (!read.ok) return;
-      this.tree = new Tree(fenOf(read.pos));
-      this.current = this.tree.root;
-      this.evals.clear();
-      this.pgnDirty = false;
-      this.scheduleSave();
-    }
-    this.mode = 'analysis';
-    this.draft = null;
-    $('ch').dataset.mode = 'analysis';
-    this.renderAll();
-    this.analyse();
-    this.updateUrl();
-  }
-
-  private draftFen(): string {
-    const d = this.draft!;
-    const c = d.castling;
-    const castling = `${c.K ? 'K' : ''}${c.Q ? 'Q' : ''}${c.k ? 'k' : ''}${c.q ? 'q' : ''}` || '-';
-    return `${this.board.boardFen()}[${makePockets(d.hands)}] ${d.turn === 'white' ? 'w' : 'b'} ${castling} - 0 ${d.fullmoves}`;
-  }
-
-  private draftPieceCount(): number {
-    return this.board.cg.state.pieces.size + this.draft!.hands.size();
-  }
-
-  private draftChanged() {
-    this.renderHands();
-    this.renderEditorPanel();
-    this.renderUnder();
-  }
-
-  private setDraftFen(fen: string): string | null {
-    const setupFen = fen.trim();
-    const read = readFen(setupFen);
-    // The editor takes positions the analysis board would refuse too; only the FEN itself must parse.
-    const parts = setupFen.split(/\s+/);
-    if (!read.ok && !/^[1-8pnbrqkPNBRQK~/]+(\[[pnbrqPNBRQ]*\])?$/.test(parts[0] ?? '')) return 'That is not a FEN.';
-    const d = this.draft!;
-    const board = parts[0].replace(/\[.*$/, '');
-    const hand = /\[([^\]]*)\]/.exec(parts[0])?.[1] ?? '';
-    d.hands = Material.empty();
-    for (const ch of hand) {
-      const role = (({ p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen' }) as Record<string, Role>)[ch.toLowerCase()];
-      if (role) d.hands[ch === ch.toUpperCase() ? 'white' : 'black'][role]++;
-    }
-    d.turn = parts[1] === 'b' ? 'black' : 'white';
-    const castling = parts[2] ?? '-';
-    d.castling = { K: castling.includes('K'), Q: castling.includes('Q'), k: castling.includes('k'), q: castling.includes('q') };
-    d.fullmoves = Math.max(1, Number(parts[5]) || 1);
-    this.board.cg.set({ fen: board });
-    this.draftChanged();
-    return null;
-  }
-
-  private renderSpares() {
-    const editing = this.mode === 'editor';
-    const top: Color = this.orientation === 'white' ? 'black' : 'white';
-    for (const [id, color] of [['ch-spare-top', top], ['ch-spare-bottom', top === 'white' ? 'black' : 'white']] as const) {
-      const box = $(id);
-      box.hidden = !editing;
-      if (!editing) { box.replaceChildren(); continue; }
-      const brush = this.draft!.brush;
-      const items: HTMLElement[] = [];
-      const tool = (name: 'pointer' | 'trash', label: string, svg: string) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = `ch-spare-tool ch-${name}`;
-        b.title = label;
-        b.setAttribute('aria-label', label);
-        b.setAttribute('aria-pressed', String(brush === name));
-        b.innerHTML = svg;
-        b.onclick = () => this.setBrush(name);
-        return b;
-      };
-      items.push(tool('pointer', 'Move pieces: drag one off the board to remove it', POINTER_SVG));
-      for (const role of SPARE_ROLES) {
-        const piece: Piece = { role, color };
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'ch-spare-piece';
-        const selected = typeof brush !== 'string' && brush.role === role && brush.color === color;
-        b.setAttribute('aria-pressed', String(selected));
-        const name = `${color} ${role}`;
-        b.title = `Place ${name}s: click or drag across squares`;
-        b.setAttribute('aria-label', `Place ${name}s`);
-        const img = document.createElement('img');
-        img.src = `/piece/${color === 'white' ? 'w' : 'b'}${LETTER[role]}.svg`;
-        img.alt = '';
-        img.draggable = false;
-        b.append(img);
-        const press = (e: MouseEvent | TouchEvent) => {
-          if (e instanceof MouseEvent && e.button !== 0) return;
-          e.preventDefault();
-          this.setBrush(piece);
-          this.board.dragNew({ ...piece }, e, true);
-        };
-        b.addEventListener('mousedown', press);
-        b.addEventListener('touchstart', press, { passive: false });
-        b.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.setBrush(piece); } };
-        items.push(b);
-      }
-      items.push(tool('trash', 'Remove pieces: click or drag across squares', TRASH_SVG));
-      box.replaceChildren(...items);
-    }
-  }
-
-  private setBrush(brush: Brush) {
-    this.draft!.brush = brush;
-    this.board.setBrush(brush);
-    this.renderSpares();
-  }
-
-  private renderEditorPanel() {
-    if (this.mode !== 'editor') return;
-    const d = this.draft!;
-    for (const b of document.querySelectorAll<HTMLButtonElement>('#ch-turn button'))
-      b.setAttribute('aria-checked', String(b.dataset.turn === d.turn));
-    for (const box of document.querySelectorAll<HTMLInputElement>('#ch-castling input'))
-      box.checked = d.castling[box.dataset.right as keyof Draft['castling']];
-    const read = readFen(this.draftFen());
-    const error = $('ch-editor-error');
-    error.textContent = read.ok ? '' : read.error;
-    $<HTMLButtonElement>('ch-editor-apply').disabled = !read.ok;
+    this.saveNow();
+    location.assign(editorUrl(this.current.fen, this.orientation));
   }
 
   // ── Under the board: FEN and PGN ─────────────────────────────────
   private renderUnder() {
     const fen = $<HTMLInputElement>('ch-fen');
-    if (document.activeElement !== fen) fen.value = this.mode === 'editor' ? this.draftFen() : this.current.fen;
+    if (document.activeElement !== fen) fen.value = this.current.fen;
     fen.removeAttribute('aria-invalid');
   }
 
@@ -778,11 +606,6 @@ export class BughouseApp {
   }
 
   private loadFen(text: string) {
-    if (this.mode === 'editor') {
-      const error = this.setDraftFen(text);
-      this.fenError(error);
-      return;
-    }
     const read = readFen(text);
     if (!read.ok) { this.fenError(read.error); return; }
     const fen = fenOf(read.pos);
@@ -817,14 +640,26 @@ export class BughouseApp {
     // The fen stays in the URL while there is an analysis to come back to, so a reload at the root keeps it.
     if (this.current.fen === START_FEN && !this.tree.root.children.length) url.searchParams.delete('fen');
     else url.searchParams.set('fen', this.current.fen);
+    // As lila's ?color=: only a board turned from its default (the side to move at the start) is written.
+    if (this.orientation === defaultOrientation(this.tree.root.fen)) url.searchParams.delete('color');
+    else url.searchParams.set('color', this.orientation);
     history.replaceState(null, '', url);
+    $<HTMLAnchorElement>('ch-edit').href = editorUrl(this.current.fen, this.orientation);
   }
 
   private scheduleSave() {
     clearTimeout(this.saveTimer);
-    this.saveTimer = window.setTimeout(() => {
-      try { localStorage.setItem(TREE_KEY, JSON.stringify(this.tree.save(this.current.id))); } catch { /* Kept for this visit only. */ }
-    }, 300);
+    this.savePending = true;
+    this.saveTimer = window.setTimeout(() => this.saveNow(), 300);
+  }
+
+  /** A save still waiting, written before leaving so Back to this page finds the moves just made.
+   *  A page left untouched writes nothing and leaves the last analysis as it was. */
+  private saveNow() {
+    clearTimeout(this.saveTimer);
+    if (!this.savePending) return;
+    this.savePending = false;
+    try { localStorage.setItem(TREE_KEY, JSON.stringify(this.tree.save(this.current.id))); } catch { /* Kept for this visit only. */ }
   }
 
   private flash(text: string) {
@@ -841,15 +676,11 @@ export class BughouseApp {
 
   // ── Rendering and wiring ────────────────────────────────────────
   private renderAll() {
-    $('ch').dataset.mode = this.mode;
     this.renderBoard();
     this.renderHands();
-    this.renderSpares();
-    if (this.mode === 'analysis') {
-      this.renderCeval();
-      this.renderMoves();
-      this.renderPractice();
-    } else this.renderEditorPanel();
+    this.renderCeval();
+    this.renderMoves();
+    this.renderPractice();
     this.renderActionMenu();
     this.renderControls();
     this.renderUnder();
@@ -857,15 +688,11 @@ export class BughouseApp {
   }
 
   private renderControls() {
-    const analysis = this.mode === 'analysis';
     const atRoot = this.current === this.tree.root, atEnd = !this.current.children.length;
-    $<HTMLButtonElement>('ch-first').disabled = !analysis || atRoot;
-    $<HTMLButtonElement>('ch-prev').disabled = !analysis || atRoot;
-    $<HTMLButtonElement>('ch-next').disabled = !analysis || atEnd;
-    $<HTMLButtonElement>('ch-last').disabled = !analysis || atEnd;
-    $('ch-edit').setAttribute('aria-pressed', String(!analysis));
-    $<HTMLButtonElement>('ch-practice-toggle').disabled = !analysis;
-    $<HTMLButtonElement>('ch-menu-toggle').disabled = !analysis;
+    $<HTMLButtonElement>('ch-first').disabled = atRoot;
+    $<HTMLButtonElement>('ch-prev').disabled = atRoot;
+    $<HTMLButtonElement>('ch-next').disabled = atEnd;
+    $<HTMLButtonElement>('ch-last').disabled = atEnd;
     $('ch-controls').classList.toggle('replaying', !!this.autoplay);
   }
 
@@ -875,7 +702,9 @@ export class BughouseApp {
     $('ch-next').onclick = () => this.next();
     $('ch-last').onclick = () => this.last();
     $('ch-flip').onclick = () => this.flip();
-    $('ch-edit').onclick = () => this.mode === 'editor' ? this.closeEditor(false) : this.openEditor();
+    // A plain link to the editor's page; saved first so Back comes back to these moves.
+    $('ch-edit').addEventListener('click', () => this.saveNow());
+    window.addEventListener('pagehide', () => this.saveNow());
     $('ch-practice-toggle').onclick = () => this.togglePractice();
     $('ch-menu-toggle').onclick = () => this.toggleActionMenu();
     $('ch-engine-on').onchange = (e) => this.toggleEngine((e.target as HTMLInputElement).checked);
@@ -909,21 +738,6 @@ export class BughouseApp {
       threads: (n) => { this.settings.threads = n; changed(true); },
       sitNodes: (n) => { this.settings.sitNodes = n; changed(false); },
     });
-
-    // Editor panel
-    for (const b of document.querySelectorAll<HTMLButtonElement>('#ch-turn button'))
-      b.onclick = () => { this.draft!.turn = b.dataset.turn as Color; this.draftChanged(); };
-    for (const box of document.querySelectorAll<HTMLInputElement>('#ch-castling input'))
-      box.onchange = () => { this.draft!.castling[box.dataset.right as keyof Draft['castling']] = box.checked; this.draftChanged(); };
-    $('ch-editor-start').onclick = () => this.setDraftFen(START_FEN);
-    $('ch-editor-clear').onclick = () => {
-      this.board.cg.set({ fen: '8/8/8/8/8/8/8/8' });
-      this.draft!.hands = Material.empty();
-      this.draft!.castling = { K: false, Q: false, k: false, q: false };
-      this.draftChanged();
-    };
-    $('ch-editor-apply').onclick = () => this.closeEditor(true);
-    $('ch-editor-cancel').onclick = () => this.closeEditor(false);
 
     // FEN and PGN
     const fen = $<HTMLInputElement>('ch-fen');
@@ -971,10 +785,8 @@ export class BughouseApp {
       if (this.moves.menuOpen) { this.moves.closeMenu(); return; }
       if (this.menuOpen) { this.closeActionMenu(); return; }
       if (this.dropping) { this.dropping = null; this.renderBoard(); this.renderHands(); return; }
-      if (this.mode === 'editor') { this.closeEditor(false); return; }
       if (this.autoplay) { this.stopAutoplay(); return; }
     }
-    if (this.mode === 'editor') return;
     const shift = e.shiftKey;
     const actions: Record<string, () => void> = shift ? {
       ArrowLeft: () => this.goTo(this.tree.previousBranch(this.current.id)),
@@ -1009,6 +821,3 @@ export class BughouseApp {
 function squareIndex(key: Key): number {
   return (key.charCodeAt(0) - 97) + (Number(key[1]) - 1) * 8;
 }
-
-const POINTER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0v0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>';
-const TRASH_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';

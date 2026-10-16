@@ -185,10 +185,16 @@ try {
   await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowRight');
   await until(page, '#ch-fen', /\/3N4\/.*\[\] b/);
 
-  // Board editor: a white queen painted on h5 and a black pawn removed, then analysed.
-  await page.click('#ch-edit');
+  // Board editor: its own page, as lila's /editor, opened on the analysed position.
+  const fields = (f) => f.split(' ').slice(0, 3).join(' ');
+  const analysed = await fen(page);
+  const moveCount = await page.$$eval('#ch-moves .ch-move', (els) => els.length);
+  await Promise.all([page.waitForNavigation(), page.click('#ch-edit')]);
+  assert.match(page.url(), /\/bughouse\/editor\/\?fen=/);
   assert.equal(await page.$eval('#ch', (el) => el.dataset.mode), 'editor');
-  await page.waitForSelector('#ch-spare-bottom:not([hidden]) .ch-spare-piece');
+  assert.equal(fields(await fen(page)), fields(analysed), 'the editor opens on the analysed position');
+  // A white queen painted on h5, a black pawn removed and a queen added to Black's hand.
+  await page.waitForSelector('#ch-spare-bottom .ch-spare-piece');
   const queen = await page.$('#ch-spare-bottom .ch-spare-piece:nth-child(3)');
   await queen.click();
   await new Promise((r) => setTimeout(r, 200));
@@ -197,13 +203,31 @@ try {
   await page.click('#ch-spare-top .ch-trash');
   await click(page, 'a7');
   await until(page, '#ch-fen', /^r1bqkb1r\/1ppp/); // the a7 pawn is gone
-  await page.click('#ch-hand-top .ch-step[data-role="queen"][data-step="more"]'); // Black +Q in the editor
-  assert.match(await fen(page), /\[[^\]]*q[^\]]*\]/);
+  await page.click('#ch-hand-top .ch-step[data-role="queen"][data-step="more"]'); // Black +Q
+  const edited = await fen(page);
+  assert.match(edited, /\[[^\]]*q[^\]]*\]/);
+  assert.equal(new URL(page.url()).searchParams.get('fen'), edited, 'the URL follows every edit');
+  assert.equal(await page.$eval('#ch-url', (el) => el.value), page.url());
   await page.screenshot({ path: path.join(output, 'editor.png') });
+  // A reload keeps the edits; Back is the analysis with its moves, Forward the edits again.
+  await page.reload();
+  await page.waitForSelector('#ch-spare-bottom .ch-spare-piece');
+  assert.equal(await fen(page), edited, 'a reload keeps the edits');
+  await page.goBack();
+  await page.waitForSelector('#ch-moves .ch-move');
+  assert.equal(await fen(page), analysed, 'Back returns to the analysis');
+  assert.equal(await page.$$eval('#ch-moves .ch-move', (els) => els.length), moveCount, 'with its moves');
+  await page.goForward();
+  await page.waitForSelector('#ch-spare-bottom .ch-spare-piece');
+  assert.equal(await fen(page), edited);
+  // Black to play, then "Analysis board" opens the position fresh, turned as in the editor (lila's ?color=).
   await page.click('#ch-turn button[data-turn="black"]');
-  await page.click('#ch-editor-apply');
+  await Promise.all([page.waitForNavigation(), page.click('#ch-editor-analyse')]);
   assert.equal(await page.$eval('#ch', (el) => el.dataset.mode), 'analysis');
   assert.match(await fen(page), / b /);
+  assert.equal(await page.$$eval('#ch-moves .ch-move', (els) => els.length), 0, 'a new analysis');
+  assert.match(page.url(), /&color=white$/);
+  assert.equal(await page.$eval('#ch-board', (el) => el.classList.contains('orientation-white')), true, 'White stays below');
   await evaluated(page);
 
   // The g7 hole: a knight would mate, and its row is marked as mating.

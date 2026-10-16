@@ -2,8 +2,9 @@
    the left with FEN and PGN under it; on the right a column as tall as the
    board with a hand at each end and the engine and moves between them; the
    move buttons under that column. Board squares and the pocket well come from
-   bughouse-board.css. In the editor the board shrinks so lila's spare-piece
-   rows fit above and below it in the same height. */
+   bughouse-board.css. The board editor (/bughouse/editor/) is its own page on
+   the same grid; there the board shrinks so lila's spare-piece rows fit above
+   and below it in the same height, and FEN and URL sit under it. */
 
 /* The page scrolls like Lichess's: board and right column fill the first
    screen, FEN and PGN sit below it. */
@@ -70,7 +71,6 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-analysis { position: relative; }
 .ch-tools.menu-open .ch-analysis { display: none; }
 .ch-analysis.practising .ch-ceval, .ch-analysis.practising .ch-settings, .ch-analysis.practising .ch-pvs { display: none; }
-.ch[data-mode="analysis"] .ch-editor, .ch[data-mode="editor"] .ch-analysis { display: none; }
 
 /* Engine header: switch, eval, engine name and depth, gear. */
 .ch-ceval { position: relative; display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 10px; border-bottom: 1px solid var(--border); min-height: 52px; }
@@ -293,6 +293,7 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-under { grid-area: under; display: flex; flex-direction: column; gap: 6px; width: var(--ch-board); min-width: 0; }
 .ch-fen-row { display: flex; align-items: center; gap: 8px; }
 .ch-fen-row label, .ch-pgn-label { margin: 0; font-size: 0.85rem; color: var(--text-dim); }
+.ch-fen-row label { flex: none; min-width: 2.2em; }
 .ch-fen-row input { flex: 1; min-width: 0; padding: 5px 8px; font-size: 0.82rem; }
 .ch-fen-row input[aria-invalid="true"] { border-color: var(--danger); }
 .ch-under textarea { width: 100%; padding: 6px 8px; font-size: 0.8rem; resize: vertical; }

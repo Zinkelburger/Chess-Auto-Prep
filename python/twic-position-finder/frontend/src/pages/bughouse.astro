@@ -28,11 +28,9 @@ const icon = {
   <h1 class="visually-hidden">Bughouse analysis board</h1>
   <div class="ch" id="ch" data-mode="analysis">
     <section class="ch-stage" aria-label="Board">
-      <div class="ch-spare" id="ch-spare-top" role="toolbar" aria-label="Spare pieces" hidden></div>
       <div class="ch-board-wrap" id="ch-board-wrap">
         <div id="ch-board" class="bb-board" role="group" aria-label="Bughouse board"></div>
       </div>
-      <div class="ch-spare" id="ch-spare-bottom" role="toolbar" aria-label="Spare pieces" hidden></div>
     </section>
 
     <section class="ch-side" aria-label="Analysis">
@@ -76,32 +74,6 @@ const icon = {
           </div>
 
           <div class="ch-action-menu" id="ch-action-menu" aria-label="Analysis menu" hidden></div>
-
-          <div class="ch-editor" aria-label="Board editor">
-            <p class="ch-editor-tip dim">Pick a piece or the bin above or below the board, then click or drag across squares. With the hand, drag pieces around or off the board.</p>
-            <div class="ch-choice" id="ch-turn" role="radiogroup" aria-label="Side to move">
-              <button type="button" role="radio" data-turn="white" aria-checked="true">White to play</button>
-              <button type="button" role="radio" data-turn="black" aria-checked="false">Black to play</button>
-            </div>
-            <fieldset class="ch-castling" id="ch-castling">
-              <legend>Castling</legend>
-              <span>White</span>
-              <label class="ch-check"><input type="checkbox" data-right="K" /> O-O</label>
-              <label class="ch-check"><input type="checkbox" data-right="Q" /> O-O-O</label>
-              <span>Black</span>
-              <label class="ch-check"><input type="checkbox" data-right="k" /> O-O</label>
-              <label class="ch-check"><input type="checkbox" data-right="q" /> O-O-O</label>
-            </fieldset>
-            <div class="ch-editor-row">
-              <button type="button" class="btn btn-outline btn-sm" id="ch-editor-start">Starting position</button>
-              <button type="button" class="btn btn-outline btn-sm" id="ch-editor-clear">Clear board</button>
-            </div>
-            <p class="ch-editor-error" id="ch-editor-error" role="alert"></p>
-            <div class="ch-editor-row ch-editor-actions">
-              <button type="button" class="btn btn-outline" id="ch-editor-cancel" title="Back to the analysis without changes (Esc)">Cancel</button>
-              <button type="button" class="btn btn-primary" id="ch-editor-apply">Analyse this position</button>
-            </div>
-          </div>
         </div>
 
         <div class="ch-hand" id="ch-hand-bottom"></div>
@@ -112,9 +84,9 @@ const icon = {
       <button type="button" class="ch-icon" id="ch-flip" title="Flip board (F)" aria-label="Flip board">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.flip}/></svg>
       </button>
-      <button type="button" class="ch-icon" id="ch-edit" title="Board editor (B)" aria-label="Board editor" aria-pressed="false">
+      <a class="ch-icon" id="ch-edit" href="/bughouse/editor/" title="Board editor (B)" aria-label="Board editor">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.edit}/></svg>
-      </button>
+      </a>
       <button type="button" class="ch-icon" id="ch-practice-toggle" title="Practice with computer" aria-label="Practice with computer" aria-pressed="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.practice}/></svg>
       </button>

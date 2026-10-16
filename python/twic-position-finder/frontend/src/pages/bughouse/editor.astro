@@ -1,0 +1,79 @@
+---
+import Base from '../../layouts/Base.astro';
+// Chessground's own styles first, so the shared board look overrides them.
+import '@lichess-org/chessground/assets/chessground.base.css';
+import '@lichess-org/chessground/assets/chessground.brown.css';
+import '@lichess-org/chessground/assets/chessground.cburnett.css';
+import '../../styles/bughouse-board.css';
+import '../../styles/analysis.css';
+---
+<Base
+  title="Bughouse board editor"
+  description="Set up a bughouse position: place pieces, fill both hands, choose the side to move, then open it on the analysis board."
+>
+  <h1 class="visually-hidden">Bughouse board editor</h1>
+  <div class="ch" id="ch" data-mode="editor">
+    <section class="ch-stage" aria-label="Board">
+      <div class="ch-spare" id="ch-spare-top" role="toolbar" aria-label="Spare pieces"></div>
+      <div class="ch-board-wrap" id="ch-board-wrap">
+        <div id="ch-board" class="bb-board" role="group" aria-label="Bughouse board"></div>
+      </div>
+      <div class="ch-spare" id="ch-spare-bottom" role="toolbar" aria-label="Spare pieces"></div>
+    </section>
+
+    <section class="ch-side" aria-label="Board editor">
+      <div class="ch-side-inner">
+        <div class="ch-hand" id="ch-hand-top"></div>
+
+        <div class="ch-tools">
+          <div class="ch-editor">
+            <p class="ch-editor-tip dim">Pick a piece or the bin above or below the board, then click or drag across squares. With the hand, drag pieces around or off the board.</p>
+            <div class="ch-choice" id="ch-turn" role="radiogroup" aria-label="Side to move">
+              <button type="button" role="radio" data-turn="white" aria-checked="true">White to play</button>
+              <button type="button" role="radio" data-turn="black" aria-checked="false">Black to play</button>
+            </div>
+            <fieldset class="ch-castling" id="ch-castling">
+              <legend>Castling</legend>
+              <span>White</span>
+              <label class="ch-check"><input type="checkbox" data-right="K" /> O-O</label>
+              <label class="ch-check"><input type="checkbox" data-right="Q" /> O-O-O</label>
+              <span>Black</span>
+              <label class="ch-check"><input type="checkbox" data-right="k" /> O-O</label>
+              <label class="ch-check"><input type="checkbox" data-right="q" /> O-O-O</label>
+            </fieldset>
+            <div class="ch-editor-row">
+              <button type="button" class="btn btn-outline btn-sm" id="ch-editor-start">Starting position</button>
+              <button type="button" class="btn btn-outline btn-sm" id="ch-editor-clear">Clear board</button>
+              <button type="button" class="btn btn-outline btn-sm" id="ch-editor-flip" title="Flip board (F)">Flip board</button>
+            </div>
+            <p class="ch-editor-error" id="ch-editor-error" role="alert"></p>
+            <div class="ch-editor-row ch-editor-actions">
+              <a class="btn btn-primary" id="ch-editor-analyse" title="Analysis board (A)">Analysis board</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="ch-hand" id="ch-hand-bottom"></div>
+      </div>
+    </section>
+
+    <section class="ch-under" aria-label="Position">
+      <div class="ch-fen-row">
+        <label for="ch-fen">FEN</label>
+        <input id="ch-fen" class="mono" spellcheck="false" autocomplete="off" />
+        <button type="button" class="btn btn-outline btn-sm" id="ch-fen-copy">Copy</button>
+      </div>
+      <p class="ch-error" id="ch-fen-error" role="alert"></p>
+      <div class="ch-fen-row">
+        <label for="ch-url">URL</label>
+        <input id="ch-url" class="mono" readonly />
+        <button type="button" class="btn btn-outline btn-sm" id="ch-url-copy">Copy</button>
+      </div>
+    </section>
+  </div>
+</Base>
+
+<script>
+  import { BughouseEditor } from '../../analysis/editor';
+  new BughouseEditor();
+</script>

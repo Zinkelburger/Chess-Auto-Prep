@@ -106,7 +106,7 @@ const KEYS: [string, string][] = [
   ['B', 'Board editor'],
   ['H', 'Menu'],
   ['Shift I', 'Inline notation'],
-  ['Esc', 'Close menus, drop a picked piece, leave the editor'],
+  ['Esc', 'Close menus, drop a picked piece'],
   ['?', 'This help'],
 ];
 
