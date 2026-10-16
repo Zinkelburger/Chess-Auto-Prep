@@ -70,7 +70,11 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-analysis { position: relative; }
 .ch-tools.menu-open .ch-analysis { display: none; }
 .ch-analysis.practising .ch-ceval, .ch-analysis.practising .ch-settings, .ch-analysis.practising .ch-pvs { display: none; }
-.ch[data-mode="analysis"] .ch-editor, .ch[data-mode="editor"] .ch-analysis { display: none; }
+.ch[data-mode="analysis"] .ch-editor { display: none; }
+/* The editor keeps the engine header and its lines above the editor's own controls, as lila does. */
+.ch[data-mode="editor"] .ch-analysis { flex: none; }
+.ch[data-mode="editor"] .ch-analysis > :not(.ch-ceval, .ch-settings, .ch-pvs, .ch-pv-board) { display: none; }
+.ch[data-mode="editor"] .ch-editor { flex: 1 0 auto; }
 
 /* Engine header: switch, eval, engine name and depth, gear. */
 .ch-ceval { position: relative; display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 10px; border-bottom: 1px solid var(--border); min-height: 52px; }

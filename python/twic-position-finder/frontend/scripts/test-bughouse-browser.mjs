@@ -188,6 +188,22 @@ try {
   const queen = await page.$('#ch-spare-bottom .ch-spare-piece:nth-child(3)');
   await queen.click();
   await new Promise((r) => setTimeout(r, 200));
+  // The cursor is the piece in hand, as on lila.
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('#ch-board-wrap cg-board')).cursor.includes('data:image/svg+xml'), { timeout: 5000 });
+  // Right-click takes the other colour, and again back.
+  const pressed = (strip) => page.$eval(`#ch-spare-${strip} .ch-spare-piece:nth-child(3)`, (el) => el.getAttribute('aria-pressed'));
+  const right = async (key) => { const p = await square(page, key); await page.mouse.click(p.x, p.y, { button: 'right' }); };
+  await right('a3');
+  assert.equal(await pressed('top'), 'true', 'right-click takes the black queen');
+  assert.equal(await pressed('bottom'), 'false');
+  await right('a3');
+  assert.equal(await pressed('bottom'), 'true', 'and back to the white one');
+  assert.doesNotMatch(await fen(page), /\/Q7\/|\/q7\//, 'right-clicks place nothing');
+  // F flips the board in the editor too.
+  await page.keyboard.press('f');
+  await page.waitForSelector('#ch-board-wrap .cg-wrap.orientation-black');
+  await page.keyboard.press('f');
+  await page.waitForSelector('#ch-board-wrap .cg-wrap.orientation-white');
   await click(page, 'h5');
   await until(page, '#ch-fen', /\/3N3Q\//); // the queen is on h5
   await page.click('#ch-spare-top .ch-trash');
@@ -203,10 +219,42 @@ try {
   assert.match(await fen(page), /\[[^\]]*q[^\]]*\]/);
   await page.screenshot({ path: path.join(output, 'editor.png') });
   await page.click('#ch-turn button[data-turn="black"]');
+  // The engine follows the position being set up.
+  assert.equal(await page.$eval('#ch-ceval', (el) => el.offsetParent !== null), true, 'the engine header shows in the editor');
+  await evaluated(page);
   await page.click('#ch-editor-apply');
   assert.equal(await page.$eval('#ch', (el) => el.dataset.mode), 'analysis');
   assert.match(await fen(page), / b /);
   await evaluated(page);
+
+  // Clear board: castling follows a king and rook put home; the engine waits for a legal position.
+  await page.click('#ch-edit');
+  await page.click('#ch-editor-clear');
+  // A FEN must parse: two boards run together are refused.
+  await page.$eval('#ch-fen', (el) => { el.focus(); el.select(); });
+  await page.keyboard.type('8/8/8/8/8/8/8/8/8/8/8/8[] w - - 0 1');
+  await page.keyboard.press('Enter');
+  await until(page, '#ch-fen-error', /not a FEN/);
+  await page.$eval('#ch-fen', (el) => el.blur()); // a focused box keeps what was typed
+  await until(page, '#ch-engine-info', /Waiting for a legal position/);
+  await page.click('#ch-spare-bottom .ch-spare-piece:nth-child(2)'); // white king
+  await click(page, 'e1');
+  await page.click('#ch-spare-bottom .ch-spare-piece:nth-child(4)'); // white rook
+  await click(page, 'h1');
+  await until(page, '#ch-fen', /\] [wb] K - /);
+  assert.equal(await page.$eval('#ch-castling input[data-right="K"]', (el) => el.checked), true);
+  // En passant: kept from a FEN and chosen among the squares the board allows.
+  await page.$eval('#ch-fen', (el) => { el.focus(); el.select(); });
+  await page.keyboard.type('rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR[] w KQkq f6 0 3');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('#ch-ep:not([hidden])');
+  assert.deepEqual(await page.$$eval('#ch-ep button', (bs) => bs.map((b) => `${b.textContent}:${b.getAttribute('aria-checked')}`)), ['None:false', 'd6:false', 'f6:true']);
+  await page.click('#ch-ep button:nth-child(2)');
+  await until(page, '#ch-fen', / KQkq d6 /);
+  await page.click('#ch-ep button:nth-child(1)');
+  await until(page, '#ch-fen', / KQkq - /);
+  await page.click('#ch-editor-cancel');
+  assert.equal(await page.$eval('#ch', (el) => el.dataset.mode), 'analysis');
 
   // The g7 hole: a knight would mate, and its row is marked as mating.
   await page.goto(url(HOLE));

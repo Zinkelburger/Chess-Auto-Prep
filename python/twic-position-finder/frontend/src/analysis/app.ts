@@ -11,7 +11,7 @@
  */
 import type { DrawShape } from '@lichess-org/chessground/draw';
 import type { Key, Piece } from '@lichess-org/chessground/types';
-import { makePockets } from 'chessops/fen';
+import { makePockets, parseFen } from 'chessops/fen';
 import { Material } from 'chessops/setup';
 import type { Color, Role, SquareName } from 'chessops/types';
 import { CrazyBoard, type Brush } from './board';
@@ -118,6 +118,7 @@ export class BughouseApp {
   private autoplay: { delay: number; timer: number } | null = null;
   private stepping = false;
   private saveTimer = 0;
+  private editorSearchTimer = 0;
   private toastTimer = 0;
   private lastDepth = new Map<string, number>();
   private readonly extra: Extra;
@@ -178,7 +179,7 @@ export class BughouseApp {
       action: $<HTMLButtonElement>('ch-engine-action'), live: $('ch-eval-live'),
     }, {
       hover: (uci) => this.hover(uci, 'paleBlue'),
-      play: (pv, upTo) => this.playLine(pv, upTo),
+      play: (pv, upTo) => { if (this.mode === 'analysis') this.playLine(pv, upTo); },
       start: () => this.startEngine(),
     });
     this.extra = new SitPanel({
@@ -423,13 +424,22 @@ export class BughouseApp {
     this.extra?.update();
   }
 
+  /** The position the engine looks at: the current move, or the editor's position while it is legal. */
+  private enginePosition(): { fen: string; ply: number } | null {
+    if (this.mode === 'analysis') return { fen: this.current.fen, ply: this.current.ply };
+    const read = readFen(this.draftFen());
+    if (!read.ok) return null;
+    return { fen: fenOf(read.pos), ply: (read.pos.fullmoves - 1) * 2 + (read.pos.turn === 'black' ? 1 : 0) };
+  }
+
   private search() {
-    if (this.mode === 'editor') { this.engine.stop(); return; }
-    if (outcomeOf(this.current.fen)) { this.engine.stop(); this.renderCeval(); return; }
+    clearTimeout(this.editorSearchTimer);
+    const at = this.enginePosition();
+    if (!at || outcomeOf(at.fen)) { this.engine.stop(); this.renderCeval(); return; }
     if (this.practice) this.engine.analyse(this.current.fen, { ...this.searchSettings(), multiPv: 1, infinite: false, nodes: PRACTICE_NODES });
     else if (!this.settings.engineOn) { this.engine.stop(); return; }
     else {
-      const fen = this.threat ? threatFen(this.current.fen) : this.current.fen;
+      const fen = this.threat ? threatFen(at.fen) : at.fen;
       // A position already searched to its limit is shown as it was, as Lichess keeps its evaluations;
       // the engine's time then goes to the sit panel.
       const kept = this.evals.get(fen);
@@ -451,8 +461,10 @@ export class BughouseApp {
     // A position searched again starts from nothing: keep the further search until the new one passes it.
     if (!kept || result.nodes >= kept.nodes || result.lines.length > kept.lines.length || kept.lines.length > this.settings.multiPv)
       this.evals.set(result.fen, result);
-    const searched = this.threat ? threatFen(this.current.fen) : this.current.fen;
-    if (result.fen !== this.current.fen && result.fen !== searched) return;
+    const at = this.enginePosition();
+    if (!at) return;
+    const searched = this.threat ? threatFen(at.fen) : at.fen;
+    if (result.fen !== at.fen && result.fen !== searched) return;
     if (this.practice) { this.practice.check(); return; }
     this.renderCeval();
     this.renderShapes();
@@ -486,20 +498,21 @@ export class BughouseApp {
   }
 
   private renderCeval() {
-    const pos = positionOf(this.current.fen);
-    const fen = this.threat ? threatFen(this.current.fen) : this.current.fen;
+    const at = this.enginePosition();
+    const fen = at ? (this.threat ? threatFen(at.fen) : at.fen) : '';
     this.ceval.render({
       enabled: this.settings.engineOn,
       fen,
-      ply: this.current.ply,
+      ply: at?.ply ?? 0,
       multiPv: this.settings.multiPv,
       infinite: this.settings.searchSeconds === 0,
       searchMs: this.searchSettings().searchMs,
-      result: this.evals.get(fen),
+      result: at ? this.evals.get(fen) : undefined,
       status: this.engineStatus,
       threat: this.threat,
-      inCheck: pos.isCheck(),
-      over: outcomeOf(this.current.fen),
+      inCheck: !!at && positionOf(at.fen).isCheck(),
+      over: at && outcomeOf(at.fen),
+      unplayable: at ? null : 'Waiting for a legal position',
       orientation: this.orientation,
     });
   }
@@ -522,8 +535,8 @@ export class BughouseApp {
 
   /** Lichess's "Show threat" (X): what the other side would play if it were its move. */
   private toggleThreat(on = !this.threat) {
-    const pos = positionOf(this.current.fen);
-    if (on === this.threat || this.practice || !this.settings.engineOn || pos.isCheck() || outcomeOf(this.current.fen)) return;
+    const at = this.enginePosition();
+    if (on === this.threat || this.practice || !this.settings.engineOn || !at || positionOf(at.fen).isCheck() || outcomeOf(at.fen)) return;
     this.threat = on;
     this.hoverUci = null;
     this.renderCeval();
@@ -636,11 +649,12 @@ export class BughouseApp {
     this.mode = 'editor';
     this.dropping = null;
     this.threat = false;
-    this.engine.stop();
     this.moves.closeMenu();
     $('ch').dataset.mode = 'editor';
     this.board.showEditor(this.current.fen, this.orientation, 'pointer');
     this.renderAll();
+    // As on lila, the engine follows the position being set up; the sit panel stands down.
+    this.analyse();
   }
 
   private closeEditor(apply: boolean) {
@@ -650,7 +664,6 @@ export class BughouseApp {
       if (!read.ok) return;
       this.tree = new Tree(fenOf(read.pos));
       this.current = this.tree.root;
-      this.evals.clear();
       this.pgnDirty = false;
       this.scheduleSave();
     }
@@ -689,14 +702,18 @@ export class BughouseApp {
     this.renderHands();
     this.renderEditorPanel();
     this.renderUnder();
+    // A position painted square by square is searched once the brush rests.
+    this.threat = false;
+    this.renderCeval();
+    clearTimeout(this.editorSearchTimer);
+    this.editorSearchTimer = window.setTimeout(() => this.search(), 150);
   }
 
   private setDraftFen(fen: string): string | null {
     const setupFen = fen.trim();
-    const read = readFen(setupFen);
     // The editor takes positions the analysis board would refuse too; only the FEN itself must parse.
+    if (parseFen(setupFen).isErr) return 'That is not a FEN.';
     const parts = setupFen.split(/\s+/);
-    if (!read.ok && !/^[1-8pnbrqkPNBRQK~/]+(\[[pnbrqPNBRQ]*\])?$/.test(parts[0] ?? '')) return 'That is not a FEN.';
     const d = this.draft!;
     const board = parts[0].replace(/\[.*$/, '');
     const hand = /\[([^\]]*)\]/.exec(parts[0])?.[1] ?? '';
@@ -886,7 +903,10 @@ export class BughouseApp {
       this.renderCeval();
       this.renderMoves();
       this.renderPractice();
-    } else this.renderEditorPanel();
+    } else {
+      this.renderCeval();
+      this.renderEditorPanel();
+    }
     this.renderActionMenu();
     this.renderControls();
     this.renderUnder();
@@ -971,7 +991,13 @@ export class BughouseApp {
     // FEN and PGN
     const fen = $<HTMLInputElement>('ch-fen');
     fen.onchange = () => this.loadFen(fen.value);
-    fen.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); this.loadFen(fen.value); } };
+    // Enter loads and leaves the box, as on lila; a later click would otherwise reload it under the pointer.
+    fen.onkeydown = (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      this.loadFen(fen.value);
+      if (!fen.getAttribute('aria-invalid')) fen.blur();
+    };
     fen.onblur = () => { if (!fen.getAttribute('aria-invalid')) this.renderUnder(); };
     $('ch-fen-copy').onclick = () => void navigator.clipboard?.writeText(fen.value).then(() => this.flashCopied());
     const pgn = $<HTMLTextAreaElement>('ch-pgn');
@@ -1020,7 +1046,7 @@ export class BughouseApp {
     const shift = e.shiftKey;
     // The editor keeps the keys that make sense without moves, as lila's editor does.
     const actions: Record<string, () => void> = this.mode === 'editor' ? {
-      f: () => this.flip(), '?': () => openHelp(),
+      f: () => this.flip(), l: () => this.toggleEngine(), x: () => this.toggleThreat(), '?': () => openHelp(),
     } : shift ? {
       ArrowLeft: () => this.goTo(this.tree.previousBranch(this.current.id)),
       K: () => this.goTo(this.tree.previousBranch(this.current.id)),

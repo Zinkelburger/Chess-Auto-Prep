@@ -34,6 +34,8 @@ export interface CevalState {
   inCheck: boolean;
   /** Checkmate or stalemate on the board. */
   over: string | null;
+  /** Why there is nothing to search: the editor's position is not legal yet. */
+  unplayable?: string | null;
   orientation: Color;
 }
 
@@ -97,7 +99,7 @@ export class CevalView {
     toggle.checked = state.enabled;
     header.classList.toggle('off', !state.enabled);
     header.classList.toggle('ch-threat-mode', state.threat);
-    threat.hidden = !state.enabled || state.inCheck || !!state.over;
+    threat.hidden = !state.enabled || state.inCheck || !!state.over || !!state.unplayable;
     threat.setAttribute('aria-pressed', String(state.threat));
     name.textContent = state.threat ? 'Show threat' : state.status.kind === 'ready' ? `${this.engineName} · ${state.status.backend}` : this.engineName;
     info.classList.remove('ch-failed');
@@ -108,6 +110,7 @@ export class CevalView {
     bar.classList.toggle('threat', state.threat);
     if (state.over) { pearl.textContent = state.over === 'Checkmate' ? '#' : '½'; info.textContent = state.over; this.hideBoard(); return; }
     if (!state.enabled) { pearl.textContent = ''; info.textContent = 'Off · press L to turn on'; this.hideBoard(); return; }
+    if (state.unplayable) { pearl.textContent = ''; info.textContent = state.unplayable; this.hideBoard(); return; }
     if (!state.result) this.hideBoard();
     const result = state.result;
     const status = state.status;
