@@ -50,7 +50,7 @@ APPROVED: dict[str, tuple[int, str]] = {
     "lib/storage/master_games_import.dart": (1, "v2 master games database: SQLite reports it damaged or not a database, so it is renamed aside with its sidecars (never deleted) and a new one started"),
     "lib/storage/settings_store.dart": (2, "v2 preferences: a settings.json that cannot be read is renamed aside into Support/recovery-quarantine, never deleted"),
     "lib/storage/atomic_write.dart": (3, "v2 atomic publication: staged temporary and sweep; replacement/flush use document_file_io"),
-    "lib/storage/file_relocation.dart": (1, "v2 journaled file relocation: remove only an empty directory this attempt created and still owns after a refused native rename"),
+    "lib/storage/moved_path.dart": (1, "v2 journaled file relocation: remove only an empty directory this attempt created and still owns after a refused native rename"),
     "lib/storage/journal_records.dart": (1, "v2 journals under Support: one removal takes away a stopped journal write's staged copy, a following or aside marker whose record is gone, a record with its marker once its operation finished, and an aside marker once its record moved; unreadable records are moved aside"),
     "lib/storage/recovery_files.dart": (2, "v2 staged copies: remove a stopped write's leftover stage, as a link when it is one so its target is never touched; restore a recorded absence (an undone edit's books.json) only where the caller has just read exactly the bytes the operation recorded"),
     "lib/storage/recovery_quarantine.dart": (1, "v2 quarantine: move an unreadable or unfinishable record aside under Support, never delete it"),
