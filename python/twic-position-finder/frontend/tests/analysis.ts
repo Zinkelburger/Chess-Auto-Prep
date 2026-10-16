@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import { parseSquare } from 'chessops/util';
 import {
-  MAX_IN_HAND, START_FEN, Tree, adjustHand, boardDests, dropSquares, fenOf, handEdit, handLetters, playLine, readFen, sanLine, threatFen,
+  MAX_IN_HAND, START_FEN, Tree, adjustHand, boardDests, dropSquares, enPassantOptions, fenOf, handEdit, handLetters, playLine, readFen, sanLine, threatFen,
   outcomeOf, positionOf, readMove,
 } from '../src/analysis/tree';
 import { liveGlyph, povDiff, verdict, winningChances } from '../src/analysis/judge';
@@ -19,6 +20,13 @@ assert.equal(castlingOf('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQBKNR[] w KQkq - 
 assert.equal(castlingOf('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/1RBQKBNR[] w KQkq - 0 1'), 'Kkq', 'a rook off a1 is not a Chess960 right');
 assert.equal(castlingOf('rnbqkbn1/pppppppr/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1'), 'KQq', 'a rook off h8 loses only that side');
 assert.equal(castlingOf(START_FEN), 'KQkq');
+const pieceAtFen = (fen: string) => { const pos = positionOf(fen); return (sq: string) => pos.board.get(parseSquare(sq)!); };
+// After 1.e4 d5 2.e5 f5 the board allows d6 and f6, as a FEN may name either.
+const EP = 'rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR[] w KQkq f6 0 3';
+assert.deepEqual(enPassantOptions('white', pieceAtFen(EP)), ['d6', 'f6'], 'd5 and f5 both stand beside e5 with nothing behind them');
+assert.equal(fenOf(positionOf(EP)).split(' ')[3], 'f6', 'the en passant square survives reading');
+assert.deepEqual(enPassantOptions('black', pieceAtFen(EP)), [], 'no white pawn stepped two squares');
+assert.deepEqual(enPassantOptions('white', pieceAtFen('rnbqkbnr/pppp1ppp/4p3/4P3/8/8/PPPP1PPP/RNBQKBNR[] w KQkq - 0 3')), [], 'a pawn with a pawn behind it did not step two');
 
 // + and − on a hand: one at a time, never below zero, capped at 16.
 let fen = adjustHand(ITALIAN, 'black', 'pawn', 1)!;

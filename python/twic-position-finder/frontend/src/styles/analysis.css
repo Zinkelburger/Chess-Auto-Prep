@@ -286,6 +286,10 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-castling legend { padding: 0; margin-bottom: 6px; font-size: 0.85rem; color: var(--text-dim); }
 .ch-castling > span { color: var(--text-dim); }
 .ch-castling label { white-space: nowrap; }
+.ch-ep { display: flex; align-items: center; gap: 14px; font-size: 0.9rem; }
+.ch-ep[hidden] { display: none; }
+.ch-ep > span { color: var(--text-dim); }
+.ch-ep .ch-choice button { flex: none; padding: 5px 12px; }
 .ch-editor-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .ch-editor-actions { margin-top: auto; justify-content: flex-end; }
 .ch-editor-error { min-height: 1.3em; color: var(--danger); font-size: 0.88rem; }

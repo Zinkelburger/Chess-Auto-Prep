@@ -13,7 +13,7 @@ import type { DrawShape } from '@lichess-org/chessground/draw';
 import type { Key, Piece } from '@lichess-org/chessground/types';
 import { makePockets } from 'chessops/fen';
 import { Material } from 'chessops/setup';
-import type { Color, Role } from 'chessops/types';
+import type { Color, Role, SquareName } from 'chessops/types';
 import { CrazyBoard, type Brush } from './board';
 import { CevalView } from './ceval';
 import { Engine, type EngineResult, type EngineStatus, type SearchSettings } from './engine';
@@ -27,10 +27,10 @@ import { loadSettings, maxThreads, recommendedThreads, saveSettings, sitNodesFor
 import { SitPanel } from './sit';
 import { engineShapes, glyphShape, moveShapes, threatShapes, variationShapes } from './shapes';
 import {
-  HAND_ROLES, START_FEN, Tree, boardDests, castlingPossible, dropSquares, fenOf, outcomeOf, positionOf, readFen, readMove, threatFen,
+  HAND_ROLES, START_FEN, Tree, boardDests, castlingPossible, dropSquares, enPassantOptions, fenOf, outcomeOf, positionOf, readFen, readMove, threatFen,
   type CastlingRight, type SavedTree, type TreeNode,
 } from './tree';
-import { makeUci } from 'chessops/util';
+import { makeSquare, makeUci } from 'chessops/util';
 
 const LETTER: Record<Role, string> = { pawn: 'P', knight: 'N', bishop: 'B', rook: 'R', queen: 'Q', king: 'K' };
 const SPARE_ROLES: Role[] = ['king', 'queen', 'rook', 'bishop', 'knight', 'pawn'];
@@ -68,6 +68,8 @@ export interface Extra {
 interface Draft {
   turn: Color;
   castling: { K: boolean; Q: boolean; k: boolean; q: boolean };
+  /** The en passant square asked for; it counts only while the board allows it. */
+  ep: string | null;
   hands: Material;
   fullmoves: number;
   brush: Brush;
@@ -619,6 +621,7 @@ export class BughouseApp {
     this.draft = {
       turn: pos.turn,
       castling: { K: castling.includes('K'), Q: castling.includes('Q'), k: castling.includes('k'), q: castling.includes('q') },
+      ep: pos.epSquare === undefined ? null : makeSquare(pos.epSquare),
       hands: pos.pockets ? pos.pockets.clone() : Material.empty(),
       fullmoves: pos.fullmoves,
       brush: 'pointer',
@@ -655,12 +658,17 @@ export class BughouseApp {
   private draftFen(): string {
     const d = this.draft!;
     const castling = (['K', 'Q', 'k', 'q'] as const).filter((right) => d.castling[right] && this.draftCanCastle(right)).join('') || '-';
-    return `${this.board.boardFen()}[${makePockets(d.hands)}] ${d.turn === 'white' ? 'w' : 'b'} ${castling} - 0 ${d.fullmoves}`;
+    const ep = d.ep && this.draftEpOptions().includes(d.ep as SquareName) ? d.ep : '-';
+    return `${this.board.boardFen()}[${makePockets(d.hands)}] ${d.turn === 'white' ? 'w' : 'b'} ${castling} ${ep} 0 ${d.fullmoves}`;
   }
 
   /** A ticked right counts only while its king and rook stand on their starting squares. */
   private draftCanCastle(right: CastlingRight): boolean {
     return castlingPossible(right, (square) => this.board.cg.state.pieces.get(square));
+  }
+
+  private draftEpOptions(): SquareName[] {
+    return enPassantOptions(this.draft!.turn, (square) => this.board.cg.state.pieces.get(square));
   }
 
   private draftPieceCount(): number {
@@ -690,6 +698,7 @@ export class BughouseApp {
     d.turn = parts[1] === 'b' ? 'black' : 'white';
     const castling = parts[2] ?? '-';
     d.castling = { K: castling.includes('K'), Q: castling.includes('Q'), k: castling.includes('k'), q: castling.includes('q') };
+    d.ep = /^[a-h][36]$/.test(parts[3] ?? '') ? parts[3] : null;
     d.fullmoves = Math.max(1, Number(parts[5]) || 1);
     this.board.cg.set({ fen: board });
     this.draftChanged();
@@ -764,6 +773,19 @@ export class BughouseApp {
       box.disabled = !this.draftCanCastle(right);
       box.checked = d.castling[right] && !box.disabled;
     }
+    const options = this.draftEpOptions();
+    const ep = $('ch-ep');
+    ep.hidden = !options.length;
+    const choice = d.ep && options.includes(d.ep as SquareName) ? d.ep : null;
+    ep.querySelector('.ch-choice')!.replaceChildren(...[null, ...options].map((square) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(square === choice));
+      b.textContent = square ?? 'None';
+      b.onclick = () => { this.draft!.ep = square; this.draftChanged(); };
+      return b;
+    }));
     const read = readFen(this.draftFen());
     const error = $('ch-editor-error');
     error.textContent = read.ok ? '' : read.error;
@@ -916,7 +938,7 @@ export class BughouseApp {
 
     // Editor panel
     for (const b of document.querySelectorAll<HTMLButtonElement>('#ch-turn button'))
-      b.onclick = () => { this.draft!.turn = b.dataset.turn as Color; this.draftChanged(); };
+      b.onclick = () => { this.draft!.turn = b.dataset.turn as Color; this.draft!.ep = null; this.draftChanged(); };
     for (const box of document.querySelectorAll<HTMLInputElement>('#ch-castling input'))
       box.onchange = () => { this.draft!.castling[box.dataset.right as keyof Draft['castling']] = box.checked; this.draftChanged(); };
     $('ch-editor-start').onclick = () => this.setDraftFen(START_FEN);

@@ -99,6 +99,27 @@ export function castlingPossible(right: CastlingRight, pieceAt: (square: SquareN
   return k?.role === 'king' && k.color === color && r?.role === 'rook' && r.color === color;
 }
 
+/**
+ * The squares a pawn could be taken en passant on: a pawn of the side not to move that could have
+ * just stepped two squares, with an enemy pawn beside it. Lichess's editor offers the same list.
+ */
+export function enPassantOptions(turn: Color, pieceAt: (square: SquareName) => { role: Role; color: Color } | undefined): SquareName[] {
+  const [rank, behind, start] = turn === 'white' ? ['5', '6', '7'] : ['4', '3', '2'];
+  const options: SquareName[] = [];
+  for (const file of 'abcdefgh') {
+    const pawn = pieceAt(`${file}${rank}` as SquareName);
+    if (pawn?.role !== 'pawn' || pawn.color === turn) continue;
+    if (pieceAt(`${file}${behind}` as SquareName) || pieceAt(`${file}${start}` as SquareName)) continue;
+    const beside = [-1, 1].some((d) => {
+      const f = String.fromCharCode(file.charCodeAt(0) + d);
+      const p = f >= 'a' && f <= 'h' ? pieceAt(`${f}${rank}` as SquareName) : undefined;
+      return p?.role === 'pawn' && p.color === turn;
+    });
+    if (beside) options.push(`${file}${behind}` as SquareName);
+  }
+  return options;
+}
+
 export function readFen(fen: string): PositionResult {
   const setup = parseFen(fen.trim());
   if (setup.isErr) return { ok: false, error: 'That is not a FEN.' };
