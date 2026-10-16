@@ -33,24 +33,38 @@ from pathlib import Path
 from . import openings
 from .engine import Engine
 from .paths import VARIANT, nets_dir
-from .selfplay import Settings, eval_options, load_openings, play
+from .selfplay import Settings, eval_options, failed, game_settings, load_openings, play
 from .toolchain import require_binary
 
 
+_engines: tuple[Engine, Engine] | None = None  # per worker process, started on first use
+
+
 def _play_pair(args) -> tuple[int, list[int], dict]:
-    """One opening, two games with the teams swapped.  Scores are for eval one."""
+    """One opening, two games with the teams swapped.  Scores are for eval one.
+
+    Each game gets its own rng from the same seed, so any random plies are the
+    same in both and the swap cancels the opening out.  A pair where either
+    game fails counts neither.
+    """
     index, seed, binary, settings, nets, opening = args
     global _engines
-    try:
-        engines = _engines
-    except NameError:
-        engines = _engines = tuple(Engine(binary, VARIANT, eval_options(net)) for net in nets)
-    rng = random.Random(seed)
     scores: list[int] = []
     ends: Counter = Counter()
-    for swap in (False, True):
-        pair = (engines[1], engines[0]) if swap else (engines[0], engines[1])
-        _, outcome = play(pair, settings, rng, opening)
+    try:
+        if _engines is None:
+            _engines = tuple(Engine(binary, VARIANT, eval_options(net)) for net in nets)
+        outcomes = [
+            play((_engines[1], _engines[0]) if swap else _engines, settings, random.Random(seed), opening)[1]
+            for swap in (False, True)
+        ]
+    except Exception as error:  # noqa: BLE001 -- one bad pair must not stop the match
+        for engine in _engines or ():
+            engine.close()
+        _engines = None
+        ends[failed(error)["termination"]] += 2
+        return index, scores, {"termination": ends}
+    for swap, outcome in zip((False, True), outcomes):
         ends[outcome["termination"]] += 1
         if outcome["team_one"] is None:
             continue
@@ -103,7 +117,8 @@ def match(net_one: Path | None, net_two: Path | None, games: int, settings: Sett
     )
     started = time.time()
     tasks = [
-        (i, seed * 1_000_003 + i, binary, settings, nets, starts[i % len(starts)] if starts else None)
+        (i, seed * 1_000_003 + i, binary, game_settings(settings, i, starts), nets,
+         starts[i % len(starts)] if starts else None)
         for i in range(pairs)
     ]
     scores: list[int] = []

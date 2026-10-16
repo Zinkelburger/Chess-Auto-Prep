@@ -11,6 +11,7 @@ Run:
 
 from __future__ import annotations
 
+import contextlib
 import io
 import json
 import math
@@ -24,9 +25,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import chess  # noqa: E402
+import chess.variant  # noqa: E402
 
 from bughouse_db.bpgn import iter_games  # noqa: E402
-from bughouse_nnue import convert, evaluate, extract, records  # noqa: E402
+from bughouse_nnue import __main__ as cli  # noqa: E402
+from bughouse_nnue import convert, evaluate, extract, records, selfplay  # noqa: E402
+from bughouse_nnue.engine import Engine  # noqa: E402
 from bughouse_nnue.paths import tools_binary  # noqa: E402
 
 # Board A: 1. e4 d5 2. exd5 -- the pawn goes to BlackB's hand, who drops it.
@@ -147,7 +151,7 @@ class Sampling(unittest.TestCase):
     def sample(self, text, **settings):
         (game,) = games(text)
         snaps = extract.replay(game, extract.new_stats("x"))
-        s = extract.Settings(**settings)
+        s = extract.Settings(**{"quiet_only": False, **settings})
         out = extract.sample(game, snaps, s, random.Random(1), extract.RESULTS[game.result],
                              game.ended_on())
         return [records.parse(r) for r in out]
@@ -178,6 +182,17 @@ class Sampling(unittest.TestCase):
         self.assertEqual(start_a["ply"], "1")
         self.assertTrue(by_fen)
 
+    def test_quiet_only_drops_captures_and_checks(self):
+        every = self.sample(GAME_ONE, min_elo=0, per_board=10, min_ply=0, other_board=1.0)
+        quiet = self.sample(GAME_ONE, min_elo=0, per_board=10, min_ply=0, other_board=1.0,
+                            quiet_only=True)
+        self.assertLess(len(quiet), len(every))
+        for rec in quiet:
+            board = chess.variant.CrazyhouseBoard(rec["fen"])
+            self.assertFalse(board.is_check())
+            move = chess.Move.from_uci(rec["move"])
+            self.assertFalse(move.drop is None and board.is_capture(move))
+
     def test_min_ply_skips_the_opening(self):
         recs = self.sample(GAME_ONE, min_elo=0, per_board=10, min_ply=3, other_board=1.0)
         self.assertTrue(all(int(r["ply"]) >= 4 for r in recs))
@@ -192,7 +207,7 @@ class YearFile(unittest.TestCase):
             out = Path(tmp) / "plain"
             out.mkdir()
             settings = extract.Settings(min_elo=0, per_board=2, min_ply=0, other_board=1.0,
-                                        validation_percent=1)
+                                        validation_percent=1, terminations=(), quiet_only=False)
             name, stats = extract.extract_year((src, out, settings))
             self.assertEqual(name, "export2016.bpgn")
             self.assertEqual(stats["games"], 4)
@@ -212,6 +227,20 @@ class YearFile(unittest.TestCase):
                 rec = records.parse(text)
                 self.assertEqual(set(rec), set(records.FIELDS))
                 self.assertRegex(rec["fen"], r"^\S+\[\w*\] [wb] ")
+
+
+    def test_only_checkmates_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "export2016.bpgn"
+            src.write_text(GAME_ONE + GAME_TWO + NO_CLOSING, encoding="latin-1")
+            out = Path(tmp) / "plain"
+            out.mkdir()
+            settings = extract.Settings(min_elo=0, per_board=2, min_ply=0, quiet_only=False)
+            _, stats = extract.extract_year((src, out, settings))
+            self.assertEqual(stats["used"], 1)
+            self.assertEqual(stats["termination"], {"checkmated": 1})
+            self.assertEqual(stats["skipped"], {"termination": 2})
+            self.assertEqual(stats["skipped_termination"], {"resigns": 1, "unknown": 1})
 
 
 class Records(unittest.TestCase):
@@ -259,6 +288,37 @@ class Summary(unittest.TestCase):
         out = evaluate.summarise([(300, -1), (-300, 1)])
         self.assertEqual(out["sign_accuracy"], 0.0)
         self.assertGreater(out["log_loss"], math.log(2) - 0.01)
+
+
+class EngineGames(unittest.TestCase):
+    def test_a_check_a_drop_could_block_is_not_mate(self):
+        # No legal move now, but any piece dropped on b1-g1 blocks the rook.
+        board = chess.variant.CrazyhouseBoard("4k3/8/8/8/8/8/PP6/K6r[] w - - 0 1")
+        self.assertFalse(any(True for _ in board.legal_moves))
+        self.assertTrue(selfplay.could_be_rescued(board))
+
+    def test_contact_mate_is_mate(self):
+        board = chess.variant.CrazyhouseBoard("4k3/8/8/8/8/2n5/PP6/Kq6[] w - - 0 1")
+        self.assertTrue(board.is_checkmate())
+        self.assertFalse(selfplay.could_be_rescued(board))
+
+    def test_a_reused_opening_gets_random_plies_after_it(self):
+        settings = selfplay.Settings(opening_plies=10)
+        starts = [[("A", "e4")]] * 3
+        self.assertIs(selfplay.game_settings(settings, 2, starts), settings)
+        reused = selfplay.game_settings(settings, 3, starts)
+        self.assertEqual(reused.random_plies, 10 + selfplay.REUSE_RANDOM_PLIES)
+
+    def test_search_refuses_an_unbounded_search(self):
+        with self.assertRaises(ValueError):
+            Engine.search(None, chess.STARTING_FEN)  # type: ignore[arg-type]
+
+    def test_cli_rejects_unknown_terminations_and_zero_nodes(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                cli.main(["extract", "--terminations", "checkmate"])
+            with self.assertRaises(SystemExit):
+                cli.main(["selfplay", "--nodes", "0"])
 
 
 @unittest.skipUnless(tools_binary().exists(), "tools binary not built (python3 -m bughouse_nnue setup)")

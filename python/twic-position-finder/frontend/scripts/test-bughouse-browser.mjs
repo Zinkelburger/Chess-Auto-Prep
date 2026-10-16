@@ -159,14 +159,10 @@ try {
   await page.waitForSelector('#ch-moves .ch-move');
   assert.equal(await fen(page), kept);
   assert.match(await page.$eval('#ch-moves', (el) => el.textContent), /N@d5/);
-  // A plain /bughouse, as from the site's menu, is a clean board; the analysis is still there behind its link.
+  // So does a plain /bughouse, as from the site's menu.
   await page.goto(`${origin}/bughouse/`);
-  await page.waitForSelector('#ch-fen');
-  assert.equal(await fen(page), 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1', 'the menu link opens a clean board');
-  assert.equal(await page.$$eval('#ch-moves .ch-move', (els) => els.length), 0);
-  await page.goto(url(kept));
   await page.waitForSelector('#ch-moves .ch-move');
-  assert.equal(await fen(page), kept, 'the link to the saved position reopens the analysis');
+  assert.equal(await fen(page), kept, 'the menu link comes back to the saved analysis');
   // Practice with computer: White is the player (board not flipped); after a White move the engine answers.
   await page.keyboard.press('ArrowLeft');
   await until(page, '#ch-fen', / w /);
@@ -271,6 +267,7 @@ try {
     const want = Math.max(1, Math.min(max, 2));
     await slide('#ch-set-threads', want, 'change');
     await until(page, '.ch-setting:has(#ch-set-threads) .ch-setting-value', new RegExp(`^${want} / `));
+    await page.waitForSelector(`#ch-engine-name[data-threads="${want}"]`);
     assert.doesNotMatch(await text(page, '#ch-engine-name'), /×|CPU/, 'no thread count in the engine name');
     await evaluated(page);
   }

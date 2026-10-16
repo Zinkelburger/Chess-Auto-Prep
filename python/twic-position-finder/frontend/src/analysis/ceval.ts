@@ -100,6 +100,8 @@ export class CevalView {
     threat.hidden = !state.enabled || state.inCheck || !!state.over;
     threat.setAttribute('aria-pressed', String(state.threat));
     name.textContent = state.threat ? 'Show threat' : state.status.kind === 'ready' && state.status.gpu ? `${this.engineName} · GPU` : this.engineName;
+    // The running engine's thread count, for the browser test: the gear's label changes before the restart.
+    if (state.status.kind === 'ready') name.dataset.threads = String(state.status.threads); else delete name.dataset.threads;
     info.classList.remove('ch-failed');
     action.hidden = true;
     header.classList.remove('ch-waiting');

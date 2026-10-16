@@ -9,12 +9,17 @@ eval and only the result counts.
 
 Both boards move in turn, A then B, one half-move each, so each side gets
 the same number of searches: a fixed-nodes stand-in for equal clocks.
-Nobody sits and there is no clock; a checkmate on either board ends the
-game, and a board with no legal move and no check is scored a draw.  Games
+There is no clock.  A player with no legal move whom a dropped piece could
+save -- block the check, or have something to play -- is not mated: they sit,
+and the other board plays on until the partner sends a piece.  Only a board
+no drop could rescue ends the game, as checkmate or (no check) a draw.  Games
 start from real openings out of the FICS archive (`opening_plies` per
 board), which is what keeps a deterministic engine from playing the same
 game twice; `random_plies` of uniformly random moves is the fallback when
-the archive is not there.
+the archive is not there.  When there are fewer openings than games, a
+reused opening is followed by `REUSE_RANDOM_PLIES` random moves a board, so
+no game is played twice.  A game that fails (an engine with no move, a move
+the board rejects) is counted and skipped; the run goes on.
 
 Every searched position carries the search score *and* the game result,
 from the side to move's point of view, so any `--lambda` works.  By default
@@ -35,10 +40,11 @@ import random
 import sys
 import time
 from collections import Counter
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 import chess
+import chess.variant
 
 from . import openings
 from .engine import Engine
@@ -49,6 +55,8 @@ from .toolchain import require_binary
 sys.path.insert(0, str(REPO / "tools" / "mcp"))
 
 NAME = "selfplay"
+REUSE_RANDOM_PLIES = 2
+DROPPABLE = (chess.PAWN, chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN)
 
 
 @dataclass(frozen=True)
@@ -84,6 +92,14 @@ def on_team_one(letter: str, turn: bool) -> bool:
     return (turn == chess.WHITE) == TEAM_ONE_IS_WHITE[letter]
 
 
+def could_be_rescued(board: chess.variant.CrazyhouseBoard) -> bool:
+    """Would some legal move exist if the partner sent any one piece?"""
+    rescued = board.copy(stack=False)
+    for piece_type in DROPPABLE:
+        rescued.pockets[rescued.turn].add(piece_type)
+    return any(True for _ in rescued.legal_moves)
+
+
 def play(engines: tuple[Engine, Engine], settings: Settings, rng: random.Random,
          opening: openings.Opening | None = None) -> tuple[dict[str, list[Searched]], dict]:
     """One game: team one's engine plays WhiteA and BlackB, team two's the rest.
@@ -110,6 +126,8 @@ def play(engines: tuple[Engine, Engine], settings: Settings, rng: random.Random,
         letter = "A" if step % 2 == 0 else "B"
         board = dual.board(letter)
         legal = list(board.legal_moves)
+        if not legal and could_be_rescued(board):
+            continue  # sits until the partner sends a piece; both sitting runs out max_plies
         if not legal:
             outcome["ended_on"] = letter
             if board.is_check():
@@ -151,17 +169,38 @@ def sample(searched: dict[str, list[Searched]], outcome: dict, settings: Setting
     return out
 
 
+def failed(error: Exception) -> dict:
+    """The outcome of a game that broke: abandoned, with why."""
+    print(f"  game skipped: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
+    return {"team_one": None, "ended_on": None, "termination": "error", "plies": {"A": 0, "B": 0}}
+
+
+_engine: Engine | None = None  # one engine per worker process, started on first use
+
+
 def _play_one(args) -> tuple[int, list[str], dict]:
     index, seed, binary, settings, opening = args
-    global _engine  # one engine per worker process, started on first use
-    try:
-        engine = _engine
-    except NameError:
-        engine = _engine = Engine(binary, VARIANT, eval_options(settings.net))
+    global _engine
     rng = random.Random(seed)
-    searched, outcome = play((engine, engine), settings, rng, opening)
+    try:
+        if _engine is None:
+            _engine = Engine(binary, VARIANT, eval_options(settings.net))
+        searched, outcome = play((_engine, _engine), settings, rng, opening)
+    except Exception as error:  # noqa: BLE001 -- one bad game must not stop the run
+        if _engine is not None:
+            _engine.close()  # it may be wedged mid-search; the next game starts a fresh one
+            _engine = None
+        return index, [], failed(error)
     records = sample(searched, outcome, settings, rng) if outcome["team_one"] is not None else []
     return index, records, outcome
+
+
+def game_settings(settings: Settings, index: int, starts: list[openings.Opening]) -> Settings:
+    """A reused opening gets a few random plies after it, so it is not the same game again."""
+    if index < len(starts):
+        return settings
+    after = settings.opening_plies + REUSE_RANDOM_PLIES
+    return settings if settings.random_plies >= after else replace(settings, random_plies=after)
 
 
 def load_openings(games: int, plies: int, rng: random.Random) -> list[openings.Opening]:
@@ -197,7 +236,8 @@ def selfplay(games: int, settings: Settings, jobs: int, seed: int | None) -> int
     }
     started = time.time()
     tasks = [
-        (i, seed * 1_000_003 + i, binary, settings, starts[i % len(starts)] if starts else None)
+        (i, seed * 1_000_003 + i, binary, game_settings(settings, i, starts),
+         starts[i % len(starts)] if starts else None)
         for i in range(games)
     ]
     with open(train_path, "a") as train, open(val_path, "a") as val, mp.Pool(jobs) as pool:

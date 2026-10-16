@@ -114,6 +114,8 @@ class Engine:
 
     def search(self, fen: str, depth: int | None = None, nodes: int | None = None) -> tuple[int, str]:
         """(score in internal units from the side to move, best move)."""
+        if not nodes and not depth:
+            raise ValueError("search needs nodes or depth; without one the engine never stops")
         self.send(f"position fen {fen}")
         self.send(f"go nodes {nodes}" if nodes else f"go depth {depth}")
         lines = self.read_until("bestmove")

@@ -22,6 +22,13 @@ def _years(raw: str | None) -> list[int] | None:
     return out
 
 
+def _positive(raw: str) -> int:
+    value = int(raw)
+    if value < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return value
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="bughouse_nnue", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -57,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     p_score.add_argument("--jobs", type=int, default=0, help="engine processes (default: all cores)")
 
     def game_options(p, per_board: bool) -> None:
-        p.add_argument("--nodes", type=int, default=10000, help="search nodes per move (default 10000)")
+        p.add_argument("--nodes", type=_positive, default=10000, help="search nodes per move (default 10000)")
         p.add_argument("--opening-plies", type=int, default=10,
                        help="plies per board taken from a real archive game to start from (default 10)")
         p.add_argument("--random-plies", type=int, default=0,
@@ -86,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
     p_convert = sub.add_parser("convert", help="interleave the plain files and pack them to .bin")
     p_convert.add_argument("--only", help="years to include (default: all extracted)")
     p_convert.add_argument("--source", help="a non-year source, e.g. selfplay (default: the archive years)")
-    p_convert.add_argument("--name", default="pocketknight", help="dataset name (default pocketknight)")
+    p_convert.add_argument("--name", help="dataset name (default pocketknight, or pocketknight-<source>)")
     p_convert.add_argument("--scored", action="store_true", help="use the scored files")
 
     p_eval = sub.add_parser("evaluate", help="how well an eval predicts held-out outcomes")
@@ -112,10 +119,13 @@ def main(argv: list[str] | None = None) -> int:
         from .toolchain import setup
         return setup(args.jobs, args.arch)
     if args.command == "extract":
-        from .extract import Settings, extract
+        from .extract import TERMINATIONS, Settings, extract
         ends = () if args.terminations.strip() == "all" else tuple(
             t.strip() for t in args.terminations.split(",") if t.strip()
         )
+        unknown = [t for t in ends if t not in TERMINATIONS]
+        if unknown:
+            parser.error(f"unknown --terminations {', '.join(unknown)}; choose from {', '.join(TERMINATIONS)} or all")
         return extract(
             _years(args.only),
             Settings(min_elo=args.min_elo, per_board=args.per_board, min_ply=args.min_ply,
@@ -146,7 +156,8 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.command == "convert":
         from .convert import convert
-        return convert(_years(args.only), args.name, args.scored, args.source)
+        name = args.name or (f"pocketknight-{args.source}" if args.source else "pocketknight")
+        return convert(_years(args.only), name, args.scored, args.source)
     if args.command == "evaluate":
         from .evaluate import evaluate
         return evaluate(args.net, args.positions, args.depth, _years(args.only), args.jobs,

@@ -64,8 +64,9 @@ def _notebook(slug: str, name: str, args: str) -> dict[str, object]:
             "metadata": {},
             "outputs": [],
             "source": ["!ls -la /kaggle/working/*.nnue\n", "# then: Output -> download, and locally\n",
-                       "#   python3 -m bughouse_nnue match --net-one pocketknight-lambda0.0.nnue --games 400\n",
-                       "#   python3 -m bughouse_nnue evaluate --net pocketknight-lambda0.0.nnue"],
+                       "# (pocketknight.nnue; pocketknight-lambda<L>.nnue for each value of several --lambda)\n",
+                       "#   python3 -m bughouse_nnue match --net-one pocketknight.nnue --games 400\n",
+                       "#   python3 -m bughouse_nnue evaluate --net pocketknight.nnue"],
         },
     ]
     return {

@@ -10,8 +10,8 @@
 #                    with the lowest validation loss is the one serialized
 #   --epoch-size N   positions per epoch (default 20M; use ~1M for a smoke test)
 #   --val-size N     positions per validation pass (default 1M)
-#   --out NAME       the net to write (default pocketknight-lambda<L>.nnue; with
-#                    several lambdas, -lambda<L> is inserted before .nnue)
+#   --out NAME       the net to write (default pocketknight.nnue; with several
+#                    lambdas, -lambda<L> is inserted before .nnue)
 #   --trainer DIR    an existing variant-nnue-pytorch checkout (default: clone the pin)
 #   --resume FILE    continue from a .nnue or .pt
 #   --keep-captures  do not skip positions whose move was a capture
@@ -145,7 +145,7 @@ for L in "${LAMBDAS[@]}"; do
   BEST=$(python3 pick_best.py "$RUN")
   echo "serializing $BEST"
   python3 serialize.py --features="$FEATURES" "$BEST" "$NET" \
-    --description "pocketknight NNUE, lambda=$L, best of $EPOCHS epochs, FICS bughouse checkmates"
+    --description "pocketknight NNUE, lambda=$L, best of $EPOCHS epochs, trained on $(basename "$TRAIN")"
   echo "wrote $NET"
 done
 echo "gate it: python3 -m bughouse_nnue match --net-one <net>   (and evaluate --net <net> for the outcome fit)"

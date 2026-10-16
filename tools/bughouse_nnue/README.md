@@ -114,7 +114,7 @@ something PyTorch's Intel XPU backend can run.
 ```
 python3 -m bughouse_nnue selfplay --games 20000 --nodes 10000        # hand-written eval
 python3 -m bughouse_nnue selfplay --games 20000 --net nets/pocketknight-x.nnue
-python3 -m bughouse_nnue convert --source selfplay --name pocketknight-selfplay
+python3 -m bughouse_nnue convert --source selfplay   # -> dataset/pocketknight-selfplay.bin
 ```
 
 Four single-board searches play a whole bughouse game, two boards moving in
@@ -131,8 +131,12 @@ results describe how that eval plays. Two identical engines at fixed nodes
 also produce near coin-flip results, so for self-play data the search score
 (`--lambda` above 0) carries most of the information; Stockfish's self-play
 data was labelled with search scores for that reason. The game it plays is
-not quite bughouse either — no clock, no sitting, boards in lockstep — which
-is fine for "what is the best move here" and not for anything about tempo.
+not quite bughouse either — no clock, boards in lockstep, and a player sits
+only when nothing else is legal (a mate a dropped piece could block is not
+mate; they wait for the partner's piece) — which is fine for "what is the
+best move here" and not for anything about tempo. Fewer openings than games
+means a reused opening gets two random plies a board after it, so no game
+repeats; a game that breaks is counted as `error` and the run goes on.
 
 Measured: about 0.5 games/s per core at 5000 nodes a move, ~60 plies per
 board.

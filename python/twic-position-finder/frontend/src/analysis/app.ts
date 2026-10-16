@@ -126,9 +126,8 @@ export class BughouseApp {
     const target = read?.ok ? fenOf(read.pos) : START_FEN;
     const saved = loadSavedTree(TREE_KEY);
     const restored = saved ? Tree.restore(saved) : null;
-    // A plain /bughouse is a clean board. A linked position that is the saved analysis's
-    // current one reopens that analysis (a reload keeps the moves); any other link opens fresh.
-    if (restored && fen && read?.ok && restored.current.fen === target) {
+    // A plain /bughouse comes back to the saved analysis; a linked position opens it unless it is the saved one.
+    if (restored && (!fen || (read?.ok && restored.current.fen === target))) {
       this.tree = restored.tree;
       this.current = restored.current;
     } else {
@@ -814,9 +813,7 @@ export class BughouseApp {
 
   private updateUrl() {
     const url = new URL(location.href);
-    // The fen stays in the URL while there is an analysis to come back to, so a reload at the root keeps it.
-    if (this.current.fen === START_FEN && !this.tree.root.children.length) url.searchParams.delete('fen');
-    else url.searchParams.set('fen', this.current.fen);
+    if (this.current.fen === START_FEN) url.searchParams.delete('fen'); else url.searchParams.set('fen', this.current.fen);
     history.replaceState(null, '', url);
   }
 

@@ -70,7 +70,7 @@ def _sources(years: list[int] | None, scored: bool,
         t, v = plain_dir() / f"{source}{suffix}", plain_dir() / f"{source}.val{suffix}"
         if not t.exists():
             raise SystemExit(f"missing {t}")
-        return [t], [v] if v.exists() else []
+        return [t], [v] if _has_records(v) else []
     for stats in sorted(plain_dir().glob("????.stats.json")):
         year = stats.name[:4]
         if years and int(year) not in years:
@@ -79,16 +79,26 @@ def _sources(years: list[int] | None, scored: bool,
         if not t.exists():
             raise SystemExit(f"missing {t}" + (" -- run `score` first" if scored else ""))
         train.append(t)
-        if v.exists():
+        if _has_records(v):
             val.append(v)
     if not train:
         raise SystemExit(f"nothing extracted in {plain_dir()}; run `extract` first")
     return train, val
 
 
+def _has_records(path: Path) -> bool:
+    """Self-play opens its validation file up front, so an empty one is normal."""
+    return path.exists() and path.stat().st_size > 0
+
+
 def convert(years: list[int] | None, name: str, scored: bool, source: str | None = None) -> int:
     binary = require_binary()
     train, val = _sources(years, scored, source)
+    if not val:
+        raise SystemExit(
+            "no validation records to pack" + (f" for {source}" if source else "")
+            + "; the trainer needs both sets -- play or extract more games"
+        )
     out = dataset_dir()
     out.mkdir(parents=True, exist_ok=True)
     rng = random.Random(SEED)
