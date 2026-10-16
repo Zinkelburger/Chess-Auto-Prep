@@ -8,7 +8,7 @@ import { HoverBoard } from '../lib/board-preview';
 import { TrainerBoard } from './board';
 import { EnginePool } from './engine/engine-pool';
 import { EngineAbortError } from './engine/uci-worker';
-import { lineToSan, mineGame, trainablePlyCount, userColorOf, type Puzzle } from './miner';
+import { mineGame, trainablePlyCount, userColorOf, type Puzzle } from './miner';
 import { fetchChesscomGames, fetchLichessGames, SourceError, type SourceGame } from './sources';
 import { ALL_TIME_CLASSES, LIMITS, loadSettings, saveSettings, type Settings } from './settings';
 import { puzzlesAtSeverity, recordSatisfies, TacticsStore } from './store';
@@ -856,4 +856,3 @@ export class TacticsApp {
 }
 
 // Keep the SAN helper reachable for the page's debugging console.
-export { lineToSan };

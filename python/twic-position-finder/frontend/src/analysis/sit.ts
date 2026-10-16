@@ -12,9 +12,9 @@ import type { Extra, ExtraHost } from './app';
 import { formatEval } from './ceval';
 import { el } from './moves';
 import { adjustHand, outcomeOf, positionOf, sanLine } from './tree';
+import { pieceSrc } from './board';
 
 const ROLES: (Role | null)[] = [null, 'pawn', 'knight', 'bishop', 'rook', 'queen'];
-const LETTER: Record<Role, string> = { pawn: 'P', knight: 'N', bishop: 'B', rook: 'R', queen: 'Q', king: 'K' };
 const ARTICLE: Record<Role, string> = { pawn: 'a pawn', knight: 'a knight', bishop: 'a bishop', rook: 'a rook', queen: 'a queen', king: 'a king' };
 const SETTLE_MS = 250;
 
@@ -143,7 +143,7 @@ export class SitPanel implements Extra {
     }
     if (row.role) {
       const img = document.createElement('img');
-      img.src = `/piece/${color === 'white' ? 'w' : 'b'}${LETTER[row.role]}.svg`;
+      img.src = pieceSrc(color, row.role);
       img.alt = '';
       label.append(img, el('span', 'bs-sit-name', row.role[0].toUpperCase() + row.role.slice(1)));
     } else label.textContent = 'Move now';

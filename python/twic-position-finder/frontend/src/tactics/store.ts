@@ -16,7 +16,7 @@ import type { MinSeverity, Puzzle } from './miner';
 
 const DB_NAME = 'cap-tactics';
 const DB_VERSION = 1;
-export const OPENING_FULLMOVE = 12;
+const OPENING_FULLMOVE = 12;
 
 export interface GameRecord {
   key: string;
@@ -107,7 +107,7 @@ function idbClear(db: IDBDatabase, store: string): Promise<void> {
   });
 }
 
-export function isOpeningFen(fen: string): boolean {
+function isOpeningFen(fen: string): boolean {
   const fullmove = Number(fen.split(' ')[5]);
   return Number.isFinite(fullmove) && fullmove <= OPENING_FULLMOVE;
 }

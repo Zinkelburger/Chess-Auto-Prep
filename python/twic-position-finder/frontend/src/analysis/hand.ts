@@ -6,9 +6,9 @@
  */
 import type { Color, Role } from 'chessops/types';
 import { HAND_ROLES, MAX_IN_HAND } from './tree';
+import { pieceSrc } from './board';
 
 const NAMES: Record<Role, string> = { pawn: 'pawn', knight: 'knight', bishop: 'bishop', rook: 'rook', queen: 'queen', king: 'king' };
-const LETTER: Record<Role, string> = { pawn: 'P', knight: 'N', bishop: 'B', rook: 'R', queen: 'Q', king: 'K' };
 
 export interface HandView {
   color: Color;
@@ -42,7 +42,7 @@ export function renderHand(box: HTMLElement, view: HandView, hooks: HandHooks) {
     slot.dataset.nb = String(count);
     slot.dataset.role = role;
     const img = document.createElement('img');
-    img.src = `/piece/${view.color === 'white' ? 'w' : 'b'}${LETTER[role]}.svg`;
+    img.src = pieceSrc(view.color, role);
     img.alt = '';
     img.draggable = false;
     slot.append(img);
