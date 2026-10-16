@@ -95,6 +95,21 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   size lasts for the window.
   Moves alone on the card has no tab strip and no frame. The game or chapter
   heading is the top of the Moves text, not a block above the tabs.
+- **Document tabs belong to modes** (v2, 2026-10-16) — the strip above the
+  workspace lists every open document as `Mode · name`; the mode is the one
+  the document came up in (or the one a handoff such as `Open in Builder`
+  or a pasted board sent it to) and never changes because the user went to
+  another mode. Going to a mode with the board brings up its own most recent
+  tab, at the game and move it was left on, with a viewer draft restored; a
+  mode with nothing of its own gets the empty analysis board, which no mode
+  keeps for itself, so visiting modes adds no tabs. So Study never shows the
+  viewer's game, nor Tactics the game My games opened. Picking a tab of
+  another mode goes to that mode; closing a mode's tab brings up its next tab,
+  or the empty board, in the same mode. The builder and the trainer share their
+  documents (one repertoire list). Modes with a screen of their own (Books,
+  Players & prep, Databases, Engine tournament, Bughouse lab) leave the board
+  as it is. Owners: `DocumentTabs` (`app/document_tabs.dart`), `switchTo` in
+  `app/workspace_requests.dart`.
   Replies retains the Maia-3 table and Next gap described in `repertoires.md`.
 - **Explorer (Database dock)** — sources: Engine evals, ChessDB, Repertoire, Opening explorer,
   Local PGN. Live explorer: Lichess, Masters, TWIC (with a download action when missing), behind a

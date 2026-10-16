@@ -230,8 +230,7 @@ final class PlayerModes {
   Future<void> openStudy(Player player) async {
     final ref = await _study(player);
     if (_disposed || ref == null) return;
-    requests.switchTo(Mode.study);
-    await requests.open(ref, game: 0);
+    await requests.openStudy(ref);
   }
 
   Future<void> linkStudy(Player player) async {
@@ -284,8 +283,7 @@ final class PlayerModes {
       index = match.index;
     }
     if (_disposed) return;
-    requests.switchTo(Mode.study);
-    await requests.open(ref, game: index);
+    await requests.openStudy(ref, chapter: index);
   }
 
   Future<void> openGroupStudy(PlayerGroup group) async {

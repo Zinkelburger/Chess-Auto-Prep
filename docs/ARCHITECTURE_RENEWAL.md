@@ -151,7 +151,11 @@ cancel superseded opens even when the latest request selects the current file.
 file/section projection and `document_history.dart` owns held edits and board
 undo. These helpers have no widget or persistence side effects.
 `DocumentTabs` keeps file destinations, cursors, viewer drafts with their original
-save revisions, and independent temporary analysis boards. Analyze copies the
+save revisions, and independent temporary analysis boards. Each tab belongs to
+the mode its document came up in; `WorkspaceRequests.switchTo` brings up the
+mode's own latest tab (or the empty analysis board), while handoffs that open a
+document for a mode change the mode without that restore (see
+[the workspace](v2/features/workspace.md), Document tabs belong to modes). Analyze copies the
 whole current game (variations and comments included), at the current move;
 changes in that tab never write the source. Tabs have left-aligned compact labels,
 visible close buttons, drag ordering, and a plus button. Pane tabs use the same

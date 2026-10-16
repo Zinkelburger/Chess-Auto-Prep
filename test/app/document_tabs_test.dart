@@ -88,16 +88,20 @@ void main() {
     expect(w.session.tree!.children.single.san, 'g3');
   });
 
-  test('file tabs show and restore their selected mode', () async {
+  test('file tabs show and restore the mode they were opened in', () async {
     await w.requests.open(kidMain);
     expect(w.requests.documents.tabs.tabOf(kidMain).title, 'Builder · Main');
     w.requests.switchTo(Mode.pgnViewer);
-    expect(w.requests.documents.tabs.tabOf(kidMain).title, 'Viewer · Main');
+    await pumpEventQueue();
+    expect(w.requests.documents.tabs.tabOf(kidMain).title, 'Builder · Main');
     await w.requests.open(benkoMain);
+    expect(w.requests.documents.tabs.tabOf(benkoMain).title, 'Viewer · Main');
     w.requests.switchTo(Mode.repertoires);
-    await w.requests.documents.select(kidMain);
+    await pumpEventQueue();
+    expect(w.session.source, kidMain);
+    await w.requests.documents.select(benkoMain);
     expect(w.requests.mode, Mode.pgnViewer);
-    expect(w.requests.documents.tabs.tabOf(kidMain).title, 'Viewer · Main');
+    expect(w.requests.documents.tabs.tabOf(benkoMain).title, 'Viewer · Main');
   });
 
   test('a viewer draft survives visiting an analysis tab', () async {
