@@ -1,18 +1,23 @@
 # Pure expectimax contract
 
-The Dart app and standalone C builder now use the same finite-horizon search
-rules. `stockfishExpectimax` defaults to Pure. The optional
-[Fast mode (four-ply lookahead)](ROLLING_SEARCH_AND_STUDY_LINES.md) uses the same local
-model with approximate receding lookahead. Legacy Fast is retired; an old Fast
-setting cannot activate heuristic pruning. This document defines Pure. Database exploration and the ChessDB mainline book remain
-separate build sources.
+The app's search (`lib/chess/generation/search.dart`), the standalone C builder
+(`tree_builder/`) and the chess-prep MCP, which launches that builder, share
+one finite-horizon recurrence and the v4 tree format. This document defines
+that contract, called **Pure**. The C builder and MCP can also run an
+approximate receding-horizon variant, [Fast](#fast-search-c-builder-and-mcp-only);
+the app has no Fast and refuses to open Fast trees. The app's Search tab runs
+Pure with a narrower candidate policy, described under
+[Interactive Expectimax](#interactive-expectimax-search-tab). The ChessDB
+mainline book (`lib/chess/generation/mainline_book.dart`) and the C builder's
+database build modes are separate build sources.
 
 ## What is optimized
 
 Choose a fixed repertoire side, a horizon H in half-moves from the supplied
 root, an engine depth D, a maximum engine loss L in centipawns, and an opponent
-policy. The default horizon is 4 plies. A larger horizon is exponentially more
-expensive, even with just a few plies of preparation.
+policy. The default horizon is 4 plies (C `-d`, Dart `SearchConfig`). A larger
+horizon is exponentially more expensive, even with just a few plies of
+preparation.
 
 For each of our positions, enumerate **every legal move**, including all four
 promotions. Evaluate each resulting position at depth D, using the repertoire
@@ -30,48 +35,52 @@ V(opponent) = sum policy(move | position) * V(child)
 ```
 
 `U(cp) = 1 / (1 + exp(-0.00368208 * cp))`; packed mate scores with magnitude
-above 9000 saturate to 0 or 1. This is a bounded **expected-score estimate**,
-not a calibrated human win probability. The engine-loss constraint and leaf
-utility depend on Stockfish's estimates. Search correctness does not prove
-that those estimates, the opponent model, or the resulting move are objectively
-correct chess. Stockfish itself remains a selective engine search.
+above 9000 saturate to 0 or 1 (`expectedScore` in
+`lib/chess/generation/eval.dart`). This is a bounded **expected-score
+estimate**, not a calibrated human win probability. The engine-loss constraint
+and leaf utility depend on Stockfish's estimates. Search correctness does not
+prove that those estimates, the opponent model, or the resulting move are
+objectively correct chess. Stockfish itself remains a selective engine search.
 
 The selected move uses exactly the same scorer as the maximizing backup.
-Ties use engine evaluation, then UCI, then SAN. There are no novelty bonuses,
-confidence blends, setup preferences, memorability bonuses, skeleton overrides,
-reply-count preferences, or separate selection objectives.
+Ties use engine evaluation, then UCI, then SAN (`compareCandidates`). There are
+no novelty bonuses, confidence blends, setup preferences, memorability bonuses,
+skeleton overrides, reply-count preferences, or separate selection objectives.
 
 ## Opponent model
 
-**Pure and Fast use Stockfish + Maia only.** Stockfish supplies position
-estimates and the own-move loss constraint. Maia, at the displayed opponent
-rating, supplies every opponent position's move probabilities. The legal
-probabilities are normalized to sum to one; every positive-probability legal
-reply remains in the search. There are no master counts, database fallbacks,
-blends, probability-temperature changes, or hidden reply caps.
+**The C builder and MCP use Stockfish + Maia only.** Stockfish supplies
+position estimates and the own-move loss constraint. Maia, at the requested
+opponent rating, supplies every opponent position's move probabilities. The
+legal probabilities are normalized to sum to one; every positive-probability
+legal reply remains in the search. There are no master counts, database
+fallbacks, blends, probability-temperature changes, or hidden reply caps.
+For Stockfish expectimax, `main.c` forces `maia_only` on and master games off,
+whatever `--masters`, `--lichess` or a `--resume`d setting says; those flags
+apply only to the database build modes. The app's Search tab uses Maia by
+default and can instead take replies from a game database
+([Where the replies come from](#where-the-replies-come-from)).
 
-The C builder can instead apply the app's reply cut (see
-[V2 interactive Expectimax](#v2-interactive-expectimax)) when asked:
-`--reply-mass <share>` keeps the likeliest replies until they cover that share
-and `--max-replies <N>` caps their number; the kept shares are renormalized to
-sum to one (`pure_cut_replies`, mirroring `likeliestReplies`). The chess-prep
-MCP `expectimax_run` always passes the app's values (90%, at most five). A
-saved tree records the cut as `v2_reply_mass` / `v2_max_replies`; the builder
-continues a tree with its own cut when no flag is given and refuses a
-different one, so a tree built before the cut keeps every reply.
+The C builder can apply the app's reply cut when asked: `--reply-mass <share>`
+keeps the likeliest replies until they cover that share and `--max-replies <N>`
+caps their number; the kept shares are renormalized to sum to one
+(`pure_cut_replies`, mirroring the app's `likeliestReplies`). The chess-prep
+MCP `expectimax_run` passes the app's values (90%, at most five) unless it is
+continuing a tree that records another cut. A saved tree records the cut as
+`v2_reply_mass` / `v2_max_replies`; the builder continues a tree with its own
+cut when no flag is given and refuses a different one, so a tree built before
+the cut keeps every reply.
 
 A missing or invalid Maia policy is an error. It never triggers a switch to a
-game database. Master targeting and automatic downloads are unavailable for
-Stockfish expectimax, including when an old preset enables their legacy flags.
-The separate database build modes keep their own data workflows.
+game database: C refuses to start without a Maia model, and the app's search
+stops with `PolicyMissing`, keeping the tree it had.
 
-Saved trees record `opponent_book_source: "none"` and
-`use_master_games: false`. C also records `maia_only: true`. Earlier trees
-built with master probabilities cannot resume under this policy: start a fresh
-build. Maia-only trees with `maia_policy_version: 1` can continue with the same position, rating,
-evaluation settings and search method. Changes to the Maia or Stockfish model
-versions can still affect newly evaluated positions. Older inference versions
-require a fresh build; see [parallel search and Maia repeatability](PARALLEL_EXPECTIMAX.md).
+Saved trees record `opponent_book_source: "none"`, `use_master_games: false`
+and `maia_only` (true unless a database answered the replies), plus
+`maia_policy_version: 1` (see [Maia repeatability](#maia-repeatability)). The
+C builder refuses to continue a tree with any other policy version, and trees
+built with master probabilities cannot resume: start a fresh build. Changes to
+the Maia or Stockfish model files can still affect newly evaluated positions.
 
 ## Chess state and draw convention
 
@@ -89,7 +98,8 @@ rather than asking the engine about a finished game. Insufficient material is
 detected by the chess rules implementation. The model assumes both players immediately
 claim a draw at the third occurrence or 100 half-moves, with checkmate taking
 precedence. Repetition keys include side to move, castling rights, and legal
-en-passant availability. History before the supplied root is unknown.
+en-passant availability. History before the supplied root is unknown
+(`lib/chess/generation/terminal.dart`).
 
 This is an explicit draw-claim convention, not full modeling of optional or
 prospective draw claims. General dead positions beyond recognized insufficient
@@ -98,12 +108,15 @@ this model. “100% correct chess” would require those inputs and additional r
 
 ## Completion, budgets, and resume
 
-An expansion is committed atomically: first construct its complete action set
-and evaluations, then attach it to the tree. Cancellation, time limits, or a
-node budget never leave a partial probability distribution or partial legal
-candidate enumeration. A node budget may leave some allowance unused when the
-next complete expansion cannot fit. An in-flight engine evaluation may finish
-after a requested time limit.
+Both builders expand breadth-first: the shallowest unexpanded node goes first,
+so an unfinished search has seen the whole choice shallowly rather than one
+line deeply. An expansion is committed atomically: first construct its complete
+action set and evaluations, then attach it to the tree. Cancellation, time
+limits, or a node budget never leave a partial probability distribution or
+partial legal candidate enumeration. The budget is checked against every legal
+move before the first evaluation, so a node budget may leave some allowance
+unused when the next complete expansion cannot fit. An in-flight engine
+evaluation may finish after a requested time limit.
 
 Unresolved frontier values are provisional. Their bounds are [0,1]; exact
 terminals and evaluated horizon leaves have equal bounds. Bounds propagate by
@@ -111,107 +124,185 @@ max at our nodes and probability-weighted sum at opponent nodes. They bound
 the defined finite model, not Stockfish error or real-world playing strength.
 An incomplete result is labeled as such and does not claim its leader is solved.
 
-Resume requires the same root, repertoire side, engine depth, engine-loss
-limit, opponent rating, master-target setting, and book source. The horizon can
-increase, but cannot shrink. Already expanded policies/evaluations are retained;
-new frontier queries use the currently available engine/model/data. For a
-uniform fresh comparison after changing any of these sources, start a new run.
-Legacy heuristic trees must be rebuilt. Legacy files remain readable for review;
-cyclic history-free value dependencies are rejected instead of iterated an
-arbitrary number of times.
+The C builder resumes only with the same root, repertoire side, engine depth,
+engine-loss limit, Maia rating, book source (`none`), search method and reply
+cut. The horizon can increase, but cannot shrink. Already expanded
+policies/evaluations are retained; new frontier queries use the currently
+available engine and model. For a uniform fresh comparison after changing any
+of these sources, start a new run. Legacy heuristic trees (no `history_aware`
+root) must be rebuilt; they remain readable for review. The app's resume rules
+are under [Interactive Expectimax](#interactive-expectimax-search-tab). The
+app's reader (`tree_wire_v4_reader.dart`) refuses heuristic trees, Fast trees
+and trees from the retired bounded database mode (`bounded_database: true`).
 
 ## Export and verification
 
-Export follows the maximizing policy and every positive-probability opponent
-reply. Pure paths are not folded by FEN or discarded by diversity, cumulative
-probability, or absolute evaluation windows. Optional output products such as
-trap-only collections and extra explanatory variations remain output choices;
-they are not the tree's optimized policy. Engine tails are disabled for Pure.
+The C builder's export follows the maximizing policy and every
+positive-probability opponent reply. Pure paths are not folded by FEN or
+discarded by diversity, cumulative probability, or absolute evaluation windows.
+Optional output products such as trap-only collections remain output choices;
+they are not the tree's optimized policy.
 
 There is no separate deep-verification pass for Pure. To strengthen evaluation,
 rebuild at the desired engine depth, so all legal moves are admitted or rejected
-at that depth. The legacy verifier re-evaluates its entire saved tree, commits
-only a completed pass, and always recomputes values and selection. It can only
-check saved candidates; it cannot recover moves a legacy build omitted.
+at that depth. The C legacy verifier (`--verify-depth`) works only on legacy
+heuristic trees: it re-evaluates the entire saved tree, commits only a completed
+pass, and always recomputes values and selection. It can only check saved
+candidates; it cannot recover moves a legacy build omitted.
+
+## Fast search (C builder and MCP only)
+
+Fast is an approximate receding-horizon variant of Pure, implemented only in
+`rolling_build` (`tree_builder/src/pure_search.c`). The app never had it in
+v2 and its reader refuses Fast trees. The opponent model, engine-loss
+constraint, fixed engine depth, history, draw convention and leaf utility are
+identical to Pure. At each of our decisions:
+
+1. Search every admissible move and every positive-probability opponent reply
+   through four more plies, or the requested final horizon if closer.
+2. Complete that comparison before committing our next move. Keep its UCI,
+   absolute comparison horizon, and comparison value in the saved tree.
+3. Continue every modeled opponent reply after that move. At each resulting
+   decision, repeat the four-ply comparison. Previously searched nodes are reused.
+
+This chooses **one of our moves**, not a single predicted sequence of opponent
+moves; every modeled opponent branch is still followed. It is limited lookahead
+and can miss a refutation or benefit beyond its window. It is not a guaranteed
+policy improvement over Pure or a proven chess-strength improvement. Four plies
+is fixed; the preparation horizon still controls how far the resulting policy
+continues.
+
+A saved comparison value answers “which next move won this completed short
+comparison?” The final expected-score value instead evaluates the **committed
+policy** to the requested horizon; it does not maximize again over siblings
+searched to different depths. The MCP result therefore puts the committed move
+first and suppresses a margin over those siblings.
+
+A budget stop cannot commit an unfinished comparison. Uncommitted own decisions
+are unresolved, with bounds [0,1], and are not exported as guessed repertoire
+moves. Completed local commitments can appear in incomplete preparation, which
+is labeled incomplete. Equal final bounds describe the committed finite policy,
+not the best possible full-horizon policy or true chess strength. Resume keeps
+commitments whose four-ply windows were complete; increasing the horizon
+reopens a decision whose comparison had stopped short of four plies. Pure and
+Fast cannot be interchanged on an existing tree.
+
+- CLI: `tree_builder --search fast ...` (`rolling` is an alias); omit it for
+  Pure. Continuing a tree without `--search` keeps the tree's method.
+- MCP: `expectimax_run` accepts `search: "fast"` or `"pure"` (`rolling` is an
+  alias) and launches the builder with `--search rolling`. Its result reports
+  `search_method`, `decision_lookahead` and a `score_kind` that names the
+  committed Fast policy.
+- Saved v4 trees keep `search_algorithm: "rolling"` and
+  `algorithm_version: 3`; Fast nodes add `committed_move_uci`,
+  `decision_horizon` and `decision_value`. PGN exports carry
+  `[Search "Fast (4-ply, approximate)"]`.
+
+**Measurements.** The independent oracle `test/fixtures/generate_rolling_oracles.py`
+builds 12 complete binary chance/decision trees, eight plies deep, both
+repertoire colors, with deliberate horizon failures; `make test-pure` checks the
+C builder against every commitment and policy value. Across these synthetic
+cases Fast visits 2,388 distinct nodes versus 6,132 for full search (61.1%
+fewer); its mean loss against the full finite-tree optimum is 0.0474
+expected-score units, worst 0.1470. These are synthetic algorithm checks, not a
+chess benchmark or a wall-clock claim.
+
+On 5 September 2026 the retired v1 Dart implementation was timed on the pawn
+ending `8/8/8/8/8/4k3/P7/4K3 w - - 0 1` (White preparing): Stockfish 18 at
+depth 8, one engine thread, 40 cp loss limit, Maia 2200, fresh processes and
+storage, startup excluded, 600-second cap. At **6 plies Fast built 11,029 nodes
+versus Pure's 30,945** (64.4% fewer; 11,314 versus 31,390 engine calls) and
+finished in 89.88 s versus 188.35 s, **2.10× faster**. Fast chose Kf1 (value
+0.7557), Pure Kd1 (0.7644); that gap is not a calibrated loss. At 4 plies both
+built 860 nodes and chose Kf1: there is no saving at or below the window. Two
+master-opening cases (Italian, QGD; 6 plies, 90 s cap) completed in neither
+mode, so there is no measured speedup in openings. The raw data
+(`docs/benchmarks/fast-pure-2026-09-05.json`) and harness
+(`tools/experiments/fast_vs_pure/`) were removed in October 2026 and remain in
+git history.
 
 ## Implementation and checks
 
-- Dart: `pure_position.dart`, `pure_tree_builder.dart`, `eca_calculator.dart`,
-  `repertoire_selector.dart` under `lib/services/generation/`.
-- C: `tree_builder/src/pure_search.c`; chesslib adapter in `san_convert.c`.
-- Both use the v4 tree wire format with `history_aware`, terminal values,
-  lower/upper bounds, and `algorithm_version: 3` in configuration.
-- C JSON uses 17 significant digits so saved probabilities survive round trips.
-- Shared fixture: 30 independently solved trees, both colors, chance nodes,
-  constrained max nodes, exact terminals, and deterministic policy checks.
-- Dart tests cover legal action enumeration, master/Maia support, tiny replies,
-  cancellation/budget behavior, resume restrictions, promotion and repetition.
-- C tests exercise the same oracle, legal-move fixtures, and the real builder
-  through a deterministic UCI process. Run `make test-pure` in `tree_builder/`.
+- Dart: `lib/chess/generation/` — `search.dart` (`buildSearchTree`),
+  `search_node.dart` (backup, bounds, `compareCandidates`), `terminal.dart`,
+  `eval.dart`, `sources.dart` (`likeliestReplies`), `tree_wire_v4.dart` and
+  `tree_wire_v4_reader.dart`. The Search tab drives it from
+  `lib/workspace/fill_gaps.dart`, `fill_states.dart` and
+  `search_opponents.dart`; Maia inference is `lib/engines/maia/`.
+- C: `tree_builder/src/pure_search.c` (Pure and Fast); chesslib adapter in
+  `san_convert.c`; `tree.c` dispatches the default build mode to
+  `pure_tree_build`.
+- Both write the v4 tree format with `history_aware`, terminal values,
+  lower/upper bounds, and `algorithm_version: 3` in configuration (4 for the
+  app's shortlisted trees). C JSON uses 17 significant digits so saved
+  probabilities survive round trips.
+- Shared fixture: `test/fixtures/pure_expectimax_oracles.json`, 30
+  independently solved trees (both colors, chance nodes, constrained max nodes,
+  exact terminals), generated by `generate_pure_oracles.py`. Dart checks it in
+  `test/chess/generation/pure_oracle_test.dart` and
+  `pure_search_oracle_test.dart`; the rest of `test/chess/generation/` covers
+  legal enumeration, terminals, the reply cut, shortlists, pins and reply
+  floor, budgets, resume and the wire format.
+- C: `make test-pure` in `tree_builder/` runs the Pure oracle, the Fast oracle,
+  the real builder against a deterministic UCI process, and the parallel-pool
+  checks.
 
-Correctness-preserving speedups can follow: reusable fixed-depth evaluations,
-parallel evaluation, and rigorous bounded chance-node pruning. Rolling is
-explicitly approximate and tested against this reference. Study selection and
-exercise boundaries are a separate, reversible output layer.
+**Parallel evaluation.** Engine work is the expensive part, and siblings do not
+depend on each other. The app asks for all of one node's children at once
+(`Future.wait` in `_leavesOf`) and reads the answers back in move order, so a
+failure always reports the first failing move. The C builder evaluates all
+legal candidates of a node together and batches up to 256 horizon leaves,
+including leaves from different reply branches, through its engine pool. Maia
+inference and tree bookkeeping stay serial in both. More workers do not remove
+exponential branching. Real Stockfish hash histories can give slightly
+different fixed-depth scores across schedules; the objective is unchanged.
 
-## Bounded local database exploration
+### Maia repeatability
 
-The Builder Generate pane explicitly sets `bounded_database: true`; normal Pure
-builds keep their exhaustive contract. Engine-move count and Maia coverage are
-adjustable in the pane, starting at four and 60%. At every position it explores the union of the top four Stockfish MultiPV
-candidates and the most likely Maia moves until cumulative probability reaches
-at least 60% (the move crossing the threshold is included). Strong but rare
-opponent replies therefore remain in the database. Child evaluations use the
-same configured engine depth. It does not impose a separate reply-count
-cap. These are local reply probabilities, not whole-repertoire coverage.
+With the bundled Maia model and ONNX Runtime 1.15.1, the first inference for
+`8/8/8/8/P7/3k4/8/4K3 b - - 0 2` gave `d3c4` probability 0.92199 and every
+later one 0.92059, with no concurrent Maia call. Turning ONNX Runtime's memory
+patterns off (they reuse the first run's allocation pattern) made first and
+repeated results agree; the internal cause was not established. Both
+implementations still disable them: Dart calls `DisableMemPattern` through the
+ORT C API in `createMaiaSession` (`lib/engines/maia/maia_model.dart`), because
+the Dart wrapper lacks the option, and C does the same in `maia.c`. Both also
+request one intra-op thread, since the runtime's pool otherwise sums partial
+results in thread-finish order. Trees built this way record
+`maia_policy_version: 1`; older trees need a fresh build rather than mixing
+probabilities from the two inference configurations.
 
-This mode is approximate. Omitted Maia mass stays unnormalized: backup uses the
-node engine value (or neutral value when unavailable) for its estimate and keeps
-that missing mass in the uncertainty interval. The configured engine-loss guard
-still applies to the final choice among evaluated own moves. Serialized configs
-record the mode and thresholds; resume cannot silently switch their semantics.
-The shared normal Pure and Fast options continue to use all positive Maia support.
+## Interactive Expectimax (Search tab)
 
-Generation indexes newly attached nodes incrementally and looks up only the
-board’s legal continuations on UI updates, allowing engine scores to appear
-during expansion without repeatedly traversing the entire saved database.
-Bounded probes retain their own root histories and policy distributions; the
-latest position analysis overlays the lookup without grafting into Pure trees. Expected
-scores appear when backup has computed them. The per-move play-circle is a
-separate direct Stockfish PV request. Only the searched position receives that
-engine score; its continuation is saved as independent UCI PV metadata (never inserted into
-Maia policy children), and no expected score
-is fabricated for a single engine line.
-
-## V2 interactive Expectimax
-
-The Builder's interactive Expectimax uses a bounded candidate policy rather than
-an exhaustive Pure tree. From the root down, Stockfish at the panel's Engine
-depth (default 14) supplies a
-MultiPV shortlist of our moves: Root moves (default four) for our first move,
-at the root or under each first reply, and Candidates (default four) after it.
-Only those child positions get separate fixed-depth evaluations and recursive
+The app's Expectimax uses a bounded candidate policy rather than an exhaustive
+Pure tree, and no engine-loss window. From the root down, Stockfish at the
+configured Engine depth (default 14) supplies a MultiPV shortlist of our moves
+(`FixedDepthCandidates`): First move (default four) for our first move, at the
+root or under each first reply, and Later moves (default four) after it. Only
+those child positions get separate fixed-depth evaluations and recursive
 expansion. A failed or incomplete shortlist stops with a visible error.
 Callers without a ranking source score all candidates before retaining the best
-N. Other callers retain their existing exhaustive defaults. The panel exposes
-Maia rating, root moves, candidate count, depth in half-moves (blank for no limit),
-engine depth and reply coverage directly above the results. Coverage is expressed as one in N
-games, default 100; zero expands every reply. Settings apply to the next search
-and are disabled during a run.
+N. The Search tab's Expectimax bar and gear, mirrored in Settings ▸ Expectimax,
+set the Maia rating, First move, Later moves, Depth in half-moves (blank for no
+limit), Engine depth, evaluation source and `Search replies met once in N`
+games (default 100; zero searches every reply). Settings apply to the next
+search and are shown but locked during a run.
 
 A practical search is run twice from the same board at once, on the one
 engine (`FillGaps._buildMirror`): for the side at the bottom of the board, and
 for the other side with the roles swapped, so the same position is our choice
 in one tree and Maia's reply in the other. Each tree has its own 25,000-node
-budget and is saved as its own run. The second exists for its values: the
+budget (`fillNodeBudget`) and is saved as its own run. The second exists for its values: the
 table sets a move's expected score when White is the prepared side beside its
 score when Black is, and beside the engine's. The gap between the engine and
 the other side's column is how far a human on the move is expected to drift
 from best play. The board's tree alone drives status, Positions and drafted
 lines; the second stops with it unless the first ran its whole depth.
 
-**Where the replies come from** (2026-10-01) is the bar's `Replies from`
-choice: Maia (the default), Lichess masters, Lichess players at the speeds and
+### Where the replies come from
+
+The bar's `Replies from` choice (2026-10-01): Maia (the default), Lichess
+masters, Lichess players at the speeds and
 ratings the Explorer tab is set to, or the TWIC games on this machine
 (`DatabaseOpponent` in `workspace/search_opponents.dart`). A database answers a
 position with each legal reply weighted by its games (`playedPolicy`); a move
@@ -238,48 +329,55 @@ it on the Played share only: a database share is plain, a Maia stand-in reads
 `Maia 2200; Lichess masters has under 10 games here`). A Maia-only search and a
 tree saved before sources were kept show neither marker nor tooltip.
 
-Opponent nodes keep Maia's likeliest replies until they cover 90% of its
+### Reply cut, reach floor and saved settings
+
+Opponent nodes keep the likeliest replies until they cover 90% of the
 distribution, at most five, and renormalize the kept shares to sum to one
 (`fillReplyMass`, `fillMaxReplies`). Maia's softmax gives every legal move some
 weight, so without the cut each opponent position cost 30–40 engine
-evaluations, most of them for replies under 2%. Kept paths below the configured
-cumulative reach threshold (default 1%) stop at their engine estimate instead of
-expanding further. The 25,000
-new-node budget still bounds a batch. This is approximate candidate selection and
-selective depth; an omitted engine candidate might have a better practical score.
+evaluations, most of them for replies under 2%. Kept paths whose reach falls
+below one in N games (default 1%, `SearchConfig.replyFloor`) stop at their
+engine estimate instead of expanding further. The 25,000 new-node budget still
+bounds a batch. This is approximate candidate selection and selective depth;
+an omitted engine candidate might have a better practical score.
+
 Saved v4 configuration records `v2_max_our_moves`, `v2_root_moves`,
-`v2_reply_floor`, `v2_reply_mass` and `v2_max_replies`; resumed interactive runs
-require matching settings, except that a tree saved before the reply cut is cut
-on load (`cutReplies`) rather than refused. Existing exhaustive trees
-(including MCP-built chapter searches) can seed an interactive run; their completed
-branches are retained, cut to the likeliest replies, while new expansions use the shortlist. Narrowed
-trees carry algorithm version 4 so older exhaustive-only app/C/MCP readers refuse
-to resume them under the wrong branching assumptions. Exhaustive exports stay at
-algorithm version 3.
+`v2_reply_floor`, `v2_reply_mass` and `v2_max_replies`; a resumed run requires
+matching settings, except that a tree saved before the reply cut is cut on load
+(`cutReplies`) rather than refused. An exhaustive tree with no loss window can
+seed an interactive run; its completed branches are retained, cut to the
+likeliest replies, while new expansions use the shortlist. A tree saved with a
+loss window, which includes every C and MCP build, is refused. Shortlisted
+trees carry algorithm version 4, which the MCP's chapter reader
+(`expectimax_chapters.py`) refuses; exhaustive trees stay at version 3.
+
+### Following the board and resuming
 
 An active search follows board moves, move-list navigation and back/forward.
 Navigation interrupts the old engine, saves its committed expansions, and starts
 from the latest board only after that save finishes. A manual stop or a change
-of document/side cancels the pending restart. Up to 16 previous roots are retained
-in memory, so backing up displays their results immediately and a new search
-reuses compatible values. Chapter searches also keep their existing saved trees
-on disk. A stopped search stays stopped while browsing. The one Expectimax
-button reads Resume expectimax when a compatible search covers the board, and
-continues from the current board, not the old root, with its retained values.
-Otherwise it loads a saved tree starting at the board (after restarting the
-app), and when none fits it starts afresh there. Rating, evaluation source,
-engine depth, candidate count and reply coverage must match to reuse an
-interactive tree. The status line says only how far it got: Stopped at depth N
-· X positions. Interactive trees saved before
-the root was shortlisted (no `v2_root_moves`) are refused; start a new search.
-Raising Root moves, or starting from a deeper node of an earlier search, evaluates
-only the root moves that are missing and keeps the work below the others. Engine evaluations continue to use the shared
-persistent cache independently of these in-memory search roots.
+of document or side cancels the pending restart. Up to 32 earlier trees (two
+per practical search) are retained in memory, so backing up displays their results immediately
+and a new search reuses compatible values. Searches also keep their saved trees
+on disk. A stopped search stays stopped while browsing. The one search button
+reads Resume when a compatible search covers the board, and continues from the
+current board, not the old root, with its retained values. Otherwise it loads a
+saved tree starting at the board (after restarting the app), and when none fits
+it starts afresh there. Rating, evaluation source, reply source, engine depth,
+Later moves and reply floor must match to reuse an interactive tree. The status
+line says only how far it got: `Stopped at depth N · X positions`. Interactive
+trees saved before the root was shortlisted (no `v2_root_moves`) are refused;
+start a new search. Raising First move, or starting from a deeper node of an
+earlier search, evaluates only the root moves that are missing and keeps the
+work below the others. Engine evaluations also use the persistent
+`eval_cache.db` (`lib/storage/eval_cache.dart`), independently of these
+in-memory search roots.
 
 ## Bughouse expectimax
 
-Bughouse Lab's Expectimax tab and the API's `/api/bughousedb/expectimax`
-(once read by the retired `/bughouse` Lab and `/bughousedb` web pages) share `bughouse_expectimax.db`. This is a single-board approximation:
+Bughouse Lab's Expectimax view and the API's `/api/bughousedb/expectimax`
+(which no web page currently reads) share `bughouse_expectimax.db`. This is a
+single-board approximation:
 ordinary moves and drops alternate on the selected board; captures feed the
 partner's pocket, but no partner moves, clocks or sitting are expanded.
 
@@ -287,9 +385,9 @@ partner's pocket, but no partner moves, clocks or sitting are expanded.
 All stored numbers are Q from White's side on the selected board. At a White
 turn, White expectimax takes the maximum and Black expectimax averages the
 children; at a Black turn, Black takes the minimum and White averages. Thus
-White/Black columns are different decision models, not complements. The normal
-repertoire builder already shows both columns in Practical mode; its deliberate
-Mainline mode remains a single-side book.
+White/Black columns are different decision models, not complements. The Search
+tab likewise shows both columns for Maia practical searches; ChessDB mainline
+remains a single-side book.
 
 At each node, retain Hivemind's best legal move plus the four highest CrazyAra
 probabilities **strictly above 1%**, deduplicated. Only Hivemind's best move may
@@ -306,8 +404,8 @@ postprocessing temperature 1.5. Diagnostic probabilities rounded to zero get a
 policy: the held-out FICS experiment predicted 47.9% of moves; calibration does
 not make its probabilities exact for every position or rating.
 
-Hivemind searches each evaluated position (desktop default 1,500 nodes; overnight
-builder default 3,000), with TimeAdvantage false and RequireMoveOn set to the
+Hivemind searches each evaluated position (default 800 nodes in the Lab, the
+Dart worker and `tools/bughouse_db/expectimax.py`), with TimeAdvantage false and RequireMoveOn set to the
 selected board. Since the opposite team can have neither board on move, its
 searched value is not always available. The evaluator measures the position's
 offset from both teams' static `policy` values, then subtracts that offset from

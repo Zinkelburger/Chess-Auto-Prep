@@ -1,7 +1,7 @@
 // Changes another program makes to a profile while this app is down: after
 // a crash left an operation half done, and before the restart finishes it.
-// Each says what recovery must then do, from "How a save and its recovery
-// work" in docs/ARCHITECTURE_RENEWAL.md.
+// Each says what recovery must then do, from "Save and recovery" in
+// docs/ARCHITECTURE.md.
 //
 // Another program sees the files where they are now, so a change to a
 // chapter an operation moves names it at whichever end of the move it

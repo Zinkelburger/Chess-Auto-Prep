@@ -109,8 +109,8 @@ studies, Chessbook) do not offer in one place:
 
 - The running app, driven headless with disposable data:
   `python3 scripts/app_driver.py start`.
-- Component and data-flow reference: `docs/COMPONENT_MAP.md`. Per-mode specs
-  and screenshots: `docs/v2/features/`.
+- Component and data-flow reference: `docs/COMPONENT_MAP.md`. Per-mode specs:
+  `docs/features/`.
 - Algorithm detail for the generator: `docs/ALGORITHM.md`.
 - Theme tokens and shared controls: `lib/ui/theme.dart`, `lib/ui/`.
 - Wireframe pages the owner liked: `docs/design/`.
