@@ -151,6 +151,10 @@ export class BughouseApp {
       clickSquare: (key) => this.clickSquare(key),
       wheel: (forward) => forward ? this.next() : this.prev(),
       edited: () => this.draftChanged(),
+      swapBrushColor: () => {
+        const brush = this.draft?.brush;
+        if (brush && typeof brush !== 'string') this.setBrush({ role: brush.role, color: brush.color === 'white' ? 'black' : 'white' });
+      },
     });
 
     const app = this;

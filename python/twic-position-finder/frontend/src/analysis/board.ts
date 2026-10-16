@@ -38,6 +38,8 @@ export interface BoardHooks {
   wheel: (forward: boolean) => void;
   /** The editor's pieces changed. */
   edited: () => void;
+  /** A right-click in the editor with a piece in hand: the same piece in the other colour. */
+  swapBrushColor: () => void;
 }
 
 const SQUARE_ROLES: Role[] = ['queen', 'knight', 'rook', 'bishop'];
@@ -84,6 +86,13 @@ export class CrazyBoard {
       wrap.addEventListener(type, (e) => this.pressed(e), { capture: true, passive: false });
     for (const type of ['mousemove', 'touchmove'] as const)
       document.addEventListener(type, (e) => this.dragged(e), { passive: false });
+    // As on lila: with a piece in hand, right-click takes the other colour (shapes need the hand).
+    wrap.addEventListener('contextmenu', (e) => {
+      if (this.mode !== 'editor' || typeof this.brush === 'string') return;
+      e.preventDefault();
+      this.cg.cancelMove();
+      hooks.swapBrushColor();
+    });
     for (const type of ['mouseup', 'touchend', 'touchcancel'] as const)
       document.addEventListener(type, () => { this.painting = null; });
   }
@@ -97,8 +106,10 @@ export class CrazyBoard {
       lastMove: view.lastMove,
       check: view.check ? view.turn : false,
       movable: { free: false, color: view.turn, dests: view.dests, showDests: true },
-      draggable: { deleteOnDropOff: false },
+      // The editor's brush turns these off; analysis always has them.
+      draggable: { enabled: true, deleteOnDropOff: false },
       selectable: { enabled: true },
+      drawable: { enabled: true },
       highlight: { custom: new Map(view.dropSquares.map((sq) => [sq, 'move-dest'])) },
     });
     this.setShapes(view.shapes);
@@ -136,7 +147,7 @@ export class CrazyBoard {
   setBrush(brush: Brush) {
     this.brush = brush;
     const painting = brush !== 'pointer';
-    this.cg.set({ selectable: { enabled: !painting }, draggable: { enabled: !painting } });
+    this.cg.set({ selectable: { enabled: !painting }, draggable: { enabled: !painting }, drawable: { enabled: !painting } });
     this.wrap.dataset.brush = typeof brush === 'string' ? brush : 'piece';
   }
 
