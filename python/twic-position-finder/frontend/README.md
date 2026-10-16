@@ -82,7 +82,12 @@ Cloudflare Pages' 25 MiB asset limit.
   that) and Sit search, plus GPU | CPU when the browser has WebGPU. Threads
   and hardware start a new worker that carries on with the same search.
   `localStorage['bughouse-engine-backend'] = 'cpu'` (or Hardware: CPU)
-  forces the CPU path. `board.ts` is the chessground board in analysis and editor modes;
+  forces the CPU path. `board.ts` is the chessground board in analysis and editor modes.
+  The editor follows lila's: a castling right counts only while its king and rook
+  are home (and is ticked by the board after Clear board), en passant is chosen
+  among the squares the board allows, right-click swaps the colour of the piece in
+  hand, F flips, the engine follows the edited position, and Shift-click marks a
+  piece promoted (a dot on its square, in analysis too);
   `hand.ts` draws a hand with a + above and a − below each piece; `moves.ts`
   is the move list (column or inline, folds, live ?!/?/?? marks, the
   right-click menu with Promote, Make main line, Force variation, Copy PGN,
