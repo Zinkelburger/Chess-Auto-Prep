@@ -70,6 +70,8 @@ interface Draft {
   castling: { K: boolean; Q: boolean; k: boolean; q: boolean };
   /** The en passant square asked for; it counts only while the board allows it. */
   ep: string | null;
+  /** After Clear board, castling follows the board (a king and rook put home tick it) until a box is touched. */
+  guessCastling: boolean;
   hands: Material;
   fullmoves: number;
   brush: Brush;
@@ -622,6 +624,7 @@ export class BughouseApp {
       turn: pos.turn,
       castling: { K: castling.includes('K'), Q: castling.includes('Q'), k: castling.includes('k'), q: castling.includes('q') },
       ep: pos.epSquare === undefined ? null : makeSquare(pos.epSquare),
+      guessCastling: false,
       hands: pos.pockets ? pos.pockets.clone() : Material.empty(),
       fullmoves: pos.fullmoves,
       brush: 'pointer',
@@ -676,6 +679,9 @@ export class BughouseApp {
   }
 
   private draftChanged() {
+    const d = this.draft!;
+    if (d.guessCastling)
+      for (const right of ['K', 'Q', 'k', 'q'] as const) d.castling[right] = this.draftCanCastle(right);
     this.renderHands();
     this.renderEditorPanel();
     this.renderUnder();
@@ -699,6 +705,7 @@ export class BughouseApp {
     const castling = parts[2] ?? '-';
     d.castling = { K: castling.includes('K'), Q: castling.includes('Q'), k: castling.includes('k'), q: castling.includes('q') };
     d.ep = /^[a-h][36]$/.test(parts[3] ?? '') ? parts[3] : null;
+    d.guessCastling = false;
     d.fullmoves = Math.max(1, Number(parts[5]) || 1);
     this.board.cg.set({ fen: board });
     this.draftChanged();
@@ -940,12 +947,18 @@ export class BughouseApp {
     for (const b of document.querySelectorAll<HTMLButtonElement>('#ch-turn button'))
       b.onclick = () => { this.draft!.turn = b.dataset.turn as Color; this.draft!.ep = null; this.draftChanged(); };
     for (const box of document.querySelectorAll<HTMLInputElement>('#ch-castling input'))
-      box.onchange = () => { this.draft!.castling[box.dataset.right as keyof Draft['castling']] = box.checked; this.draftChanged(); };
+      box.onchange = () => {
+        this.draft!.castling[box.dataset.right as keyof Draft['castling']] = box.checked;
+        this.draft!.guessCastling = false;
+        this.draftChanged();
+      };
     $('ch-editor-start').onclick = () => this.setDraftFen(START_FEN);
     $('ch-editor-clear').onclick = () => {
       this.board.cg.set({ fen: '8/8/8/8/8/8/8/8' });
       this.draft!.hands = Material.empty();
       this.draft!.castling = { K: false, Q: false, k: false, q: false };
+      this.draft!.ep = null;
+      this.draft!.guessCastling = true;
       this.draftChanged();
     };
     $('ch-editor-apply').onclick = () => this.closeEditor(true);
