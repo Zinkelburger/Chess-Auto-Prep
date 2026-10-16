@@ -5,9 +5,11 @@ Exploration of [github.com/benini/scid](https://github.com/benini/scid) at
 which is a fork with a different, older codebase. Everything below is read from
 that source, not from documentation.
 
-Originally findings only. **Sections 1-6 are the exploration; section 8
-records what was then built from it** — a Scid v5 writer verified byte-for-byte
-against Scid's own output.
+**Sections 1-6 are the exploration; section 8 records the Scid v5 writer that
+was built from it** (verified byte-for-byte against Scid's own output) and was
+removed with the old app on 2026-09-30. The current app has no Scid export;
+it is deferred in [Databases](features/databases.md). The reference harness
+in `tools/scid_reference/` remains for when it is rebuilt.
 
 ---
 
@@ -181,7 +183,7 @@ Position search is multithreaded (`searchpos.h` includes `<thread>`).
   scheme (`A00`, `A00a`, `A00a1`…`A00z4`) finer than plain ECO. We already
   carry an `eco` column; this would let us fill it properly.
 - **Crosstables** (`src/crosstab.cpp`) — we already have one for engine
-  tournaments (`lib/services/crosstable_builder.dart`); this handles real
+  tournaments (`lib/chess/tournament/standings.dart`); this handles real
   events, up to 500 players / 60 rounds, with country and score sorting.
 - **Sort cache** (`src/sortcache.cpp`) — maintained sorted orderings of the
   index for large result lists.
@@ -239,9 +241,10 @@ earlier measurement stands — Scid has no persistent position index, and our
 
 ---
 
-## 8. What was built (Sept 4 2026)
+## 8. What was built (Sept 4 2026, removed 2026-09-30)
 
-`lib/services/scid/` writes SCID v5 databases. Verified, not merely believed:
+The old app's Dart writer produced SCID v5 databases. It is gone; this section
+is the specification a rebuild must meet. Verified, not merely believed:
 
 | check | result |
 |---|---|
@@ -257,7 +260,7 @@ stay correct, they just skip that shortcut. Carrying the table would mean
 porting `stored.cpp`'s data; the accelerator is worth having on *our* side
 (section 3) but not for files we hand to Scid.
 
-### The pieces
+### The pieces (as the removed writer split them)
 
 - `scid_piece_list.dart` — the per-side piece list the move encoding indexes
   into. This is the part that silently corrupts a stream if it drifts: fixed
@@ -272,8 +275,6 @@ porting `stored.cpp`'s data; the accelerator is worth having on *our* side
 - `scid_namebase.dart` — the append-only `varint(len*8+type)` name file.
 - `scid_writer.dart` — the three files, written to temporaries and renamed
   together so an interrupted export leaves no half-database.
-- The command-line `tools/scid_export.dart` was removed with the old app's
-  code; a v2 Scid export is deferred.
 
 ### How it is verified
 

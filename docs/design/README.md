@@ -11,6 +11,7 @@ inside panes; tabular numerals in any table of numbers.
 - `example-builder-wireframes.html` — Repertoire Builder layout options.
 - `example-plan-wireframes.html` — the "plan a build" flow.
 
-The TWIC site (`python/twic-position-finder/frontend/src/layouts/Base.astro`)
-carries the same tokens (dark values, since the site is dark-only). Change
-colours there and here together.
+This stylesheet is for design pages and wireframes only. The app's own values
+live in `lib/ui/theme.dart` and [DESIGN.md](../../DESIGN.md); the website keeps
+its own tokens in `python/twic-position-finder/frontend/src/layouts/Base.astro`
+(muted blue accent, not this amber).

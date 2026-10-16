@@ -1,5 +1,5 @@
-// The data contracts of docs/ARCHITECTURE_RENEWAL.md ("Data correctness
-// contracts", "Data safety") as checks over what a FaultyDisk run leaves:
+// The data contracts of docs/ARCHITECTURE.md ("Data correctness",
+// "Data safety") as checks over what a FaultyDisk run leaves:
 // snapshots of the profile, what reading it answered, and the trace. Each
 // returns the violations it finds, with the replay key that shows them,
 // rather than failing a test, so one run reports all of them.

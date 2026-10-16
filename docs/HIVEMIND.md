@@ -11,8 +11,9 @@ numbers are in [Why everything reads 0.00](#why-everything-reads-000).
 
 Calling the thing is documented elsewhere: [`bughouse-mcp`
 skill](../.agents/skills/bughouse-mcp/SKILL.md) for the MCP tools,
-[Bughouse matches](BUGHOUSE_MATCHES.md) for engine-vs-engine games,
-[Component map](COMPONENT_MAP.md) for the Flutter surfaces.
+[Bughouse lab](features/bughouse-lab.md) for the desktop lab and its
+engine-vs-engine matches, [Component map](COMPONENT_MAP.md) for the Flutter
+surfaces.
 
 ## What it is
 
@@ -43,7 +44,7 @@ resemblance:
 | Backends | `tensorrt` (FP16, default upstream) or `onnxruntime` (FP32, portable) — **we ship ORT** |
 | Corresponding source, vendored | `tools/bughouse_windows/hivemind-source.tar.gz` and `python/twic-position-finder/frontend/public/bughouse-engine/hivemind-source.tar.gz` |
 
-There is no Hivemind checkout on this machine. When you need to read the
+The repository holds no Hivemind checkout. When you need to read the
 engine's own code, unpack one of those two tarballs; when you need to
 *change* it, clone upstream at that revision and rebuild with
 `--hivemind <checkout>` (see [Rebuilding](#rebuilding-and-repackaging)).
@@ -76,7 +77,7 @@ engine's own code, unpack one of those two tarballs; when you need to
         ├── Bughouse Lab            lib/features/bughouse/
         ├── bughouse MCP server     tools/mcp/bughouse/
         ├── the browser (WASM)      python/twic-position-finder/frontend/
-        └── engine matches          BUGHOUSE_MATCHES.md
+        └── engine matches          lib/features/bughouse/match_runner.dart
 ```
 
 ## What the network sees
@@ -332,15 +333,16 @@ Three options, cheapest first. None requires touching the engine.
 
 1. **Read `win%`, not the score.** It is already linear in `advantage`
    (`50·(1 + advantage)`), so gains and losses read symmetrically, and 58.8%
-   is much harder to misread than +0.51. It is exposed today on
-   `BughouseEval.winLabel` and as `win_percent` from the MCP server. Caveat:
+   is much harder to misread than +0.51. It is exposed today as
+   `win_percent` from the MCP server (the desktop lab does not show it). Caveat:
    it is a re-centred engine estimate, **not** a calibrated probability, and
    it is not the network's WDL.
 2. **Anchor the displayed scale on a pawn-in-hand instead of the tangent.**
    One pawn delivered to your partner is 0.104 of Q, so `pawns ≈ 9.6 ×
    advantage` gives knight 1.7, rook 1.5, queen 4.1 — a scale that is
    bughouse-native, monotone, and readable by anyone. This is a display
-   change in `BughouseEval.score` / `calibration.to_score`, and it is the
+   change in `scoreOf` (`lib/chess/bughouse/hivemind.dart`) /
+   `calibration.to_score`, and it is the
    single highest-value improvement available. It needs a proper fit across
    more positions than the ten above before it ships.
 3. **Surface the network's own WDL.** It exists (`wdl_out`), the engine
@@ -411,29 +413,25 @@ Four consumers, one engine, sharing only files.
 
 | | |
 |---|---|
-| **Bughouse Lab** (desktop) | `lib/features/bughouse/` — `bughouse_engine.dart` owns the process, `bughouse_engine_protocol.dart` parses, `bughouse_eval.dart` calibrates, `bughouse_bundle.dart` unpacks the assets on first analysis |
+| **Bughouse Lab** (desktop) | `lib/engines/hivemind_engine.dart` owns the process and parses its output, `lib/engines/hivemind_install.dart` installs and checks the assets before each launch, `lib/chess/bughouse/hivemind.dart` calibrates, `lib/storage/bughouse_books.dart` reads and writes the books; the lab itself is `lib/features/bughouse/` |
 | **`bughouse` MCP server** | `tools/mcp/bughouse/` — `engine.py` the UCI client, `board.py` the cross-board rule, `calibration.py` the offset, `analysis.py` the three question shapes (`analyse` / `compare` / `playout`), `tools.py` the schemas |
 | **The browser** | `tools/bughouse_web/` and `frontend/src/analysis/hivemind.worker.ts` — the same C++ compiled to WASM, ORT-web for inference on WebGPU (batches of 32) or CPU threads |
-| **Engine matches** | [Bughouse matches](BUGHOUSE_MATCHES.md) — one process drives both teams |
+| **Engine matches** | [Bughouse lab → Matches](features/bughouse-lab.md) — one process drives both teams |
 
 `tools/mcp/bughouse/paths.py:locate()` finds the engine in this order:
 `HIVEMIND_BIN`/`HIVEMIND_MODEL`/`HIVEMIND_LIB` → the desktop app's support
 directory → `~/.local/share/chess-prep/bughouse/` → ungzip
 `assets/bughouse/*.gz`. It never writes inside the app's directory.
 
-On this machine, only the MCP server's copy exists — the Flutter app has never
-unpacked its own:
+The desktop app installs its own copy into `<support>/bughouse/` from
+`assets/bughouse/` and checks each file against `manifest.json` (size and
+SHA-256) before every launch. The unpacked Linux files are about 3.7 MB
+(`hivemind-linux`), 54 MB (`hivemind.onnx`) and 28 MB
+(`libonnxruntime.so.1`).
 
-```
-~/.local/share/chess-prep/bughouse/
-  hivemind-linux         3,729,088     (not stripped; RPATH from a GH Actions build)
-  hivemind.onnx         54,415,625
-  libonnxruntime.so.1   28,497,752
-```
-
-`assets/bughouse/` in the checkout is empty (gitignored). Refill it with
-`python3 tools/fetch_assets.py --only bughouse`; checksums live in
-`tools/assets.lock.json`.
+The `*.gz` payloads in `assets/bughouse/` are gitignored and fetched, not
+committed. Fill them with `python3 tools/fetch_assets.py --only bughouse`;
+checksums live in `tools/assets.lock.json`.
 
 ### Budgets
 
@@ -473,7 +471,7 @@ the engine's existing coupling described in the study.
 Two different databases, confusingly both called "the bughouse DB". They
 share one thing: the position key, FNV-1a over the canonical dual FEN
 truncated to four FEN fields per board (`tools/bughouse_db/poskey.py`,
-mirrored in `bughouse_book.dart`).
+mirrored in `TablePosition.bookKey`, `lib/chess/bughouse/table.dart`).
 
 **The FICS book** — statistics from real games. `tools/bughouse_db/fetch.py`
 scrapes `bughouse-db.org/dl/export<year>.bpgn.bz2` (2005→present, ~2.1 GB,
@@ -495,21 +493,15 @@ gated ticket. The server runs no engine and rebuilds all move text from its
 own move generation. Stored values are calibrated Q; served as
 `cp = 543.17·atanh(Q)`.
 
-### What exists on this machine: nothing
+### Building the books locally
 
-Both pipelines are code-complete and **no data has been generated here**:
-
-| Artifact | Path | Status |
-|---|---|---|
-| data home | `~/.local/share/chess-prep/bughouse-db/` | does not exist |
-| BPGN corpus (~2.1 GB) | `…/bughouse-db/corpus/export*.bpgn.bz2` | absent — no `*.bpgn*` anywhere on disk |
-| FICS book (~177 MB built) | `…/bughouse-db/bughouse_book.db` | absent |
-| Hivemind eval book | `…/bughouse-db/hivemind_book.db` | absent |
-| server DB | `python/twic-position-finder/bughousedb.db` | absent (lives on the deployed API) |
-
-So the deployed API holds whatever the retired `/bughousedb` page
-accumulated from visitors, and there is no local seed corpus to compare it
-against. To build one:
+Both pipelines are code-complete; whether a machine has the data is its own
+business. The files live under `$BUGHOUSE_DB_HOME`, else
+`~/.local/share/chess-prep/bughouse-db/` (`corpus/export*.bpgn.bz2`,
+`bughouse_book.db`, `hivemind_book.db`, `bughouse_expectimax.db`); the
+server's `bughousedb.db` lives on the deployed API. Checksummed snapshots of
+both books are kept in `data/bughouse-books/` (restore with
+`tools/bughouse_db/snapshot.py`). To build from scratch:
 
 ```
 python3 -m bughouse_db fetch          # ~2.1 GB, kept bz2
@@ -520,8 +512,8 @@ python3 -m bughouse_db.hivemind_book run --expand-fics --width 4 --max-ply 12
 python3 -m bughouse_db.hivemind_book push --url https://api.chessautoprep.com
 ```
 
-The app's Databases screen tells the user to run the first two by hand; it
-never downloads the book itself, and a machine without one is the normal case.
+The app never downloads the books itself; the lab works without them and
+shows the FICS archive and saved scores only when the files are present.
 
 ## The web payload
 
@@ -587,7 +579,7 @@ That last one must be *measured*, not assumed. Policy/value networks are
 often fine under int8 dynamic quantisation and occasionally fall apart, and
 Hivemind already has the harness to tell you: `engine/scripts/` has
 `run_strength_sweep.py` and the binary has a `tournament` subcommand, plus
-this repo's own [engine matches](BUGHOUSE_MATCHES.md). Quantise, then run a
+this repo's own [engine matches](features/bughouse-lab.md). Quantise, then run a
 few hundred games quantised-vs-FP32 at a fixed node count before shipping it.
 If int8 costs real strength, per-channel or int8-weights-only (keeping
 activations FP32) is the usual middle ground.
@@ -609,13 +601,13 @@ has to do the work.
 2. **Surface WDL.** The network's own win/draw/loss exists and nothing reads
    it. It is the only calibrated probability in the system.
 3. **Web payload**, in the order above.
-4. **Build the books.** Both pipelines are complete and unrun here; the FICS
-   book would also give the eval work a popularity-ordered queue and give the
-   app its opening explorer.
+4. **Grow the books.** The FICS book gives the eval work its
+   popularity-ordered queue and the lab its archive rows; a wider or deeper
+   Hivemind book means fewer positions the lab must search live.
 5. **Note in the tooling**: python-chess is a hard dependency of the
-   `bughouse` MCP server and was missing from this machine's `python3`, which
-   is why the server reported `CONNECTION_CLOSED`. `python3 -m pip install
-   --user python-chess`.
+   `bughouse` MCP server; without it in `python3` the server exits at start
+   and the client reports `CONNECTION_CLOSED`. `python3 -m pip install --user
+   python-chess`.
 
 **Upstream, in the engine:**
 
@@ -662,10 +654,11 @@ python3 tools/mcp/test_bughouse.py --engine      # adds the searches, ~1 min
 scripts/ci.sh test test/features/bughouse
 ```
 
-`bughouse_tournament_engine_test.dart` and the other engine-backed Dart tests
-run only when `HIVEMIND_BIN` / `HIVEMIND_MODEL` are set, and skip otherwise.
-The Windows build needs its `hivemind_ort.dll` loaded by absolute path — see
-`tools/bughouse_windows/README.md` and `windows_loader_check.dart`.
+`test/engines/hivemind_real_test.dart` drives the real engine named by
+`HIVEMIND_BIN` / `HIVEMIND_MODEL` / `HIVEMIND_LIB` (it must run when they are
+set), else the copy the app installed on a Linux machine, and skips when there
+is neither. The Windows build needs its `hivemind_ort.dll` loaded by absolute
+path — see `tools/bughouse_windows/README.md`.
 
 ## Reproducing the measurements
 
