@@ -20,10 +20,10 @@ import 'mode.dart';
 /// up its own most recent tab ([entered]); one with none gets the empty
 /// analysis board. So no mode shows, or names, another mode's document.
 final class DocumentTabs {
-  DocumentTabs({required this.session, required this.requests, this.drafts}) {
+  DocumentTabs({required this.session, required this.requests, this.drafts})
+    : _shown = session.source ?? session.analysisPage {
     final page = _page();
     _pages[page.id] = page;
-    _shown = page.id;
     _recent.add(page.id);
     tabs = PaneTabs([PaneTab(page.id, _title(page))]);
     session.anyChange.addListener(_follow);
@@ -40,7 +40,7 @@ final class DocumentTabs {
   final _pages = <Object, _DocumentPage>{};
 
   /// The tab of the document last seen on the board.
-  late Object _shown;
+  Object _shown;
 
   /// Tabs in the order their documents were last up, the latest last.
   final _recent = <Object>[];
@@ -173,8 +173,9 @@ final class DocumentTabs {
         final result = page.viewedFile
             ? await requests.openFile(source, game: page.game)
             : await requests.open(source, game: page.game);
-        if (_disposed || result is! RequestDone || session.source != source)
+        if (_disposed || result is! RequestDone || session.source != source) {
           return;
+        }
         if (draft != null && !await _restore(page, source, draft)) return;
       } else if (page.board case final board?) {
         final result = await requests.analysisBoard(page: board);
