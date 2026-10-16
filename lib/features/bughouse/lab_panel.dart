@@ -9,6 +9,7 @@ import 'archive_moves.dart';
 import 'bughouse_lab.dart';
 import 'move_tables.dart';
 import 'table_search.dart';
+import 'table_scores.dart';
 import '../../ui/app_keys.dart';
 
 /// The compact engine panel: clock setting, live joint lines, saved-analysis

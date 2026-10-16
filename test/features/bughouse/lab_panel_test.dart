@@ -7,6 +7,7 @@ import 'package:chess_auto_prep/features/bughouse/table_boards.dart';
 import 'package:chess_auto_prep/ui/app_keys.dart';
 import 'package:chessground/chessground.dart';
 import 'package:chess_auto_prep/features/bughouse/table_search.dart';
+import 'package:chess_auto_prep/features/bughouse/table_scores.dart';
 import 'package:chess_auto_prep/storage/bughouse_books.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:dartchess/dartchess.dart' show Side;

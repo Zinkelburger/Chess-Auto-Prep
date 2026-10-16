@@ -7,7 +7,7 @@ import '../../ui/theme.dart';
 import '../../workspace/explorer_pane.dart' show ResultBar;
 import 'archive_moves.dart';
 import 'bughouse_lab.dart';
-import 'table_search.dart';
+import 'table_scores.dart';
 import '../../ui/move_notation.dart';
 
 /// Each board's legal moves with their scores for the chosen clock, a

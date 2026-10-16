@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/engines/hivemind_engine.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_lab.dart';
 import 'package:chess_auto_prep/features/bughouse/table_search.dart';
+import 'package:chess_auto_prep/features/bughouse/table_scores.dart';
 import 'package:chess_auto_prep/storage/bughouse_books.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:flutter_test/flutter_test.dart';
