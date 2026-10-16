@@ -1017,9 +1017,11 @@ export class BughouseApp {
       if (this.mode === 'editor') { this.closeEditor(false); return; }
       if (this.autoplay) { this.stopAutoplay(); return; }
     }
-    if (this.mode === 'editor') return;
     const shift = e.shiftKey;
-    const actions: Record<string, () => void> = shift ? {
+    // The editor keeps the keys that make sense without moves, as lila's editor does.
+    const actions: Record<string, () => void> = this.mode === 'editor' ? {
+      f: () => this.flip(), '?': () => openHelp(),
+    } : shift ? {
       ArrowLeft: () => this.goTo(this.tree.previousBranch(this.current.id)),
       K: () => this.goTo(this.tree.previousBranch(this.current.id)),
       ArrowRight: () => this.goTo(this.tree.nextBranch(this.current.id, this.forkIndex)),

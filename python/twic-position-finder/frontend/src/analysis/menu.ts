@@ -121,7 +121,8 @@ export function openHelp() {
   const table = el('dl', 'ch-help-keys');
   for (const [keys, what] of KEYS) table.append(el('dt', '', keys), el('dd', '', what));
   const note = el('p', 'ch-help-note', 'Right-click a move for Promote variation, Make main line, Force variation, Copy PGN and Delete from here.');
-  dialog.append(el('h2', '', 'Keyboard shortcuts'), close, table, note);
+  const editor = el('p', 'ch-help-note', 'In the board editor, F flips the board and right-click with a piece in hand takes the other colour.');
+  dialog.append(el('h2', '', 'Keyboard shortcuts'), close, table, note, editor);
   dialog.addEventListener('click', (e) => { if (e.target === dialog) dialog.close(); });
   dialog.addEventListener('close', () => dialog.remove());
   document.body.append(dialog);
