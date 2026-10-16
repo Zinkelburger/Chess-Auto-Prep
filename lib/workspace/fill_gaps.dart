@@ -2,21 +2,14 @@ import 'dart:async';
 
 import 'package:dartchess/dartchess.dart' show Position, Side;
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as p;
 
 import '../chess/fen.dart';
-import '../chess/openings.dart';
-import '../chess/generation/draft_chapter.dart';
-import '../chess/generation/draft_lines.dart';
 import '../chess/generation/mainline_book.dart';
 import '../chess/generation/search.dart';
 import '../chess/generation/search_config.dart';
 import '../chess/generation/search_node.dart';
 import '../chess/generation/search_result.dart';
-import '../chess/generation/traps.dart';
 import '../chess/generation/tree_wire_v4.dart';
-import '../chess/pgn/chapter.dart';
-import '../chess/pgn/chapter_heading.dart';
 import '../chess/pgn/tree_edit.dart' show positionOf;
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
@@ -30,6 +23,7 @@ import 'finds.dart';
 import 'opening_names.dart';
 import 'generated_draft.dart';
 
+import 'fill_lines.dart';
 import 'fill_states.dart';
 import 'search_opponents.dart';
 
@@ -99,9 +93,18 @@ final class FillGaps extends ChangeNotifier {
   /// book builds none.
   FillFound? _mirror;
   LinesState? _lines;
-  GeneratedDraft? _draft;
-  int _draftLines = 0;
-  PendingObligation<DraftPublication>? _draftSave;
+  late final _drafts = FillLines(
+    owner: this,
+    jobs: _jobs,
+    store: _store,
+    tools: _tools,
+    pending: _pending,
+    engineDepths: _engineDepths,
+    bestLines: _bestLines,
+    clock: _clock,
+    closed: () => _disposed,
+    openings: openings,
+  );
   final _treeResource = Object();
   String? treeSaveProblem;
   bool get canRetryTree => _pending.unfinished(_treeResource).isNotEmpty;
@@ -127,15 +130,14 @@ final class FillGaps extends ChangeNotifier {
   }
 
   void discardDraftSave() {
-    if (_draftSave?.discard() != true) return;
-    _draftSave = null;
+    if (!_drafts.discard()) return;
     _lines = const LinesFailed(
       'Draft save abandoned. Any file already written was kept.',
     );
     if (!_disposed) notifyListeners();
   }
 
-  bool get canDiscardDraft => _lines is LinesFailed && _draftSave != null;
+  bool get canDiscardDraft => _lines is LinesFailed && _drafts.saving;
 
   Future<void> Function()? _release;
   Future<void>? _releasing;
@@ -285,7 +287,7 @@ final class FillGaps extends ChangeNotifier {
       !_disposed &&
       !_jobs.heldByOther(this) &&
       !_active &&
-      _draftSave == null &&
+      !_drafts.saving &&
       !canRetryTree &&
       _lines is! LinesWriting &&
       !running &&
@@ -315,7 +317,7 @@ final class FillGaps extends ChangeNotifier {
       return _jobs.blockingMessage;
     }
     if (canRetryTree) return 'Finish saving the previous search tree first.';
-    if (_draftSave != null || _lines is LinesWriting) {
+    if (_drafts.saving || _lines is LinesWriting) {
       return 'Finish saving the accepted draft first.';
     }
     final chapter = _session.chapter;
@@ -370,7 +372,7 @@ final class FillGaps extends ChangeNotifier {
         ? null
         : FillFound(target: mirror, request: request, tree: mirrorSeed);
     _lines = null;
-    _draft = null;
+    _drafts.forget();
     _set(
       FillRunning(
         nodes: seed == null ? 1 : nodesIn(seed),
@@ -738,7 +740,9 @@ final class FillGaps extends ChangeNotifier {
     final (chapter, source) = drafting;
     _lines = const LinesWriting();
     notifyListeners();
-    final work = _writeLines(found, chapter, source).catchError((Object error) {
+    final work = _drafts.write(found, chapter, source).catchError((
+      Object error,
+    ) {
       log.w('generate repertoire lines', error);
       return (DraftNotWritten('The draft could not be prepared: $error'), 0);
     });
@@ -758,125 +762,6 @@ final class FillGaps extends ChangeNotifier {
         _lines = LinesFailed(reason);
     }
     notifyListeners();
-  }
-
-  Future<(DraftPublication, int)> _writeLines(
-    FillFound found,
-    Chapter chapter,
-    ChapterRef source,
-  ) async {
-    if (_draftSave case final saved?) {
-      final result = await saved.run();
-      if (saved.committed) _draftSave = null;
-      return (result, _draftLines);
-    }
-    final heading = readHeading(chapter.preamble);
-    final prefix = chapter.tree.lineTo(found.target.cursor);
-    final rootFen = chapter.tree.rootFen;
-    final rootMoves = heading.rootFen == rootFen
-        ? heading.rootMoves
-        : const <String>[];
-    final created = _clock();
-    final (plan, traps) = await foundIn(
-      found.tree,
-      known: chapterDecisions(chapter),
-    );
-    if (plan.lines == 0) {
-      return (
-        const DraftNotWritten(
-          'The search found no line the chapter does not already have.',
-        ),
-        0,
-      );
-    }
-    final lines = withTraps(plan, traps);
-    await _scoreLineEnds(found.request, lineEnds(lines));
-    final continued = withContinuations(lines, _bestLines);
-    final names = await openings?.load() ?? Openings.none;
-    // Checked last, so a chapter moved while line ends were scored is refused;
-    // the instant before create is accepted rather than change every store.
-    if (_draft == null) {
-      final gone = switch (await _store.open(source)) {
-        store.Opened() => null,
-        store.Absent() =>
-          'The chapter was moved, renamed or deleted since '
-              'the search. Search again to make lines.',
-        store.Unreadable(:final detail) =>
-          'The chapter cannot be read: $detail',
-      };
-      if (gone != null) return (DraftNotWritten(gone), 0);
-    }
-    final draft = _draft ??= GeneratedDraft(
-      documents: _store,
-      folder: p.dirname(source.path),
-      chapter: source.name,
-      textFor: (name) => draftChapterText(
-        name: name,
-        side: chapter.side,
-        rootFen: rootFen,
-        rootMoves: rootMoves,
-        prefix: prefix,
-        plan: continued,
-        created: created,
-        openings: names,
-      ),
-    );
-    _draftLines = plan.lines;
-    final entry = _draftSave = _pending.accept<DraftPublication>(
-      resource: draft,
-      label: 'Generated draft',
-      work: draft.write,
-      problem: (result) => result is DraftNotWritten ? result.reason : null,
-    );
-    final result = await entry.run();
-    if (entry.committed) _draftSave = null;
-    return (result, plan.lines);
-  }
-
-  /// Asks the engine for its best line at each of [ends] this session has
-  /// none for — a score the cache answered, or a search resumed from a
-  /// saved tree — so every drafted line can be continued. The board's
-  /// engine waits meanwhile, as it does for a search. A line whose end the
-  /// engine cannot read is written as it is. A mainline book ends where
-  /// ChessDB knows no more, and is written so.
-  Future<void> _scoreLineEnds(FillRequest request, Set<Fen> ends) async {
-    if (request.method == SearchMethod.mainline) return;
-    final missing = [
-      for (final end in ends)
-        if (!_bestLines.containsKey(end.position)) end,
-    ];
-    // Another job holding the machine keeps it: the lines are written as
-    // they are.
-    if (missing.isEmpty ||
-        !_jobs.take(
-          this,
-          'Paused while making lines',
-          kind: EngineJobKind.makingLines,
-        )) {
-      return;
-    }
-    try {
-      final tools = await _tools(request);
-      if (tools is! FillReady) return;
-      try {
-        final engine = tools.continuations;
-        for (final end in missing) {
-          final position = positionOf(end);
-          if (engine == null || position == null || _disposed) break;
-          await EngineAnswers(
-            engine,
-            depths: _engineDepths,
-            lines: _bestLines,
-          ).evaluate(position);
-        }
-      } finally {
-        await tools.release();
-      }
-    } on Object catch (error) {
-      log.w('continue drafted lines', error);
-    } finally {
-      _jobs.release(this);
-    }
   }
 
   /// Stops the run where it is and forgets it. The engine is handed back at
