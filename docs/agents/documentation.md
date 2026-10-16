@@ -6,13 +6,19 @@ ceremony. Read and update the affected section, not every document.
 
 | Document | Role |
 |---|---|
-| `docs/COMPONENT_MAP.md` | Implemented components, public APIs and data flows |
-| `docs/FUTURE_FEATURES.md` | Unbuilt/incomplete backlog; use Not started, Partial or Deferred |
-| `docs/ARCHITECTURE_RENEWAL.md` | Architecture contracts and renewal history; v2 is the sole app under `lib/` |
-| `docs/ALGORITHM.md` | Tree-generation pipeline detail |
-| `docs/tree-display-architecture.md` | Eval-tree graph design |
+| `docs/features/*.md` | One spec per mode: screen, actions, data, owner decisions, not built |
+| `docs/COMPONENT_MAP.md` | Where components live, public APIs and data flows |
+| `docs/ARCHITECTURE.md` | Contracts every change follows: layers, ownership, writes, recovery, engines, UI |
+| `docs/DATA_INTEGRITY.md` | Every store, its format and its recovery files |
+| `docs/FUTURE_FEATURES.md` | Backlog and known defects; statuses Not started, Partial or Deferred |
+| `docs/ALGORITHM.md` | Expectimax and tree-generation detail (app, C builder, MCP) |
+| `docs/HIVEMIND.md` | The bughouse engine end to end |
+| `docs/ENGINE_TOURNAMENT.md`, `docs/OPPONENT_PREP.md`, `docs/BROADCAST_GAMES.md` | MCP and command-line tools for tournaments, players and broadcast collections |
+| `docs/SCID_FORMAT_FINDINGS.md`, `docs/MUTATION_TESTING.md` | Scid format reference; the mutation-testing harness |
+| `DESIGN.md`, `PRODUCT.md` | Visual and copy specification; product purpose and principles |
 
-Rewrite stale descriptions in the affected section. When implementing a
-backlog item, remove it or update its remaining scope/status. Cross-link
-algorithm details rather than duplicating them. Do not add one-off feature
-specs under `docs/specs/`; extend the relevant existing document.
+Describe the current app only. Rewrite stale lines instead of appending dated
+history; Git keeps the past. When implementing a backlog item, delete its row
+and its spec's *Not built* line. Cross-link algorithm details rather than
+duplicating them. Do not add one-off plans, audits or specs as new files;
+extend the relevant existing document.

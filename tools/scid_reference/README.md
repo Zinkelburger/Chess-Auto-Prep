@@ -1,11 +1,14 @@
 # Scid reference harness
 
-Two tiny C++ programs that link **Scid's own codec** so a Dart writer (the old app's
-`lib/services/scid/`, and any future v2 export) can be checked against ground truth rather than against a
-reading of the format docs.
+Two tiny C++ programs that link **Scid's own codec** so a Dart Scid writer can
+be checked against ground truth rather than against a reading of the format
+docs. The app currently has no Scid export: the old app's writer and its
+fixtures were removed on 2026-09-30 (`1f7a6036`). A rebuilt export starts from
+[the format findings](../../docs/SCID_FORMAT_FINDINGS.md); the old fixtures can
+be restored with `git show 1f7a6036^:test/services/scid/fixtures/fixture.pgn`.
 
 - `refgen.cpp` — PGN → `.si4`/`.sg4`/`.sn4` or `.si5`/`.sg5`/`.sn5`.
-  Produces the fixtures in `test/services/scid/fixtures/`.
+  Produces reference databases for a writer's tests.
 - `dumpdb.cpp` — opens a Scid database and prints it as PGN. This is how a
   *Dart-written* database is proved readable: dump it, dump Scid's own, diff.
 
@@ -18,9 +21,9 @@ Scid's GUI needs Tcl/Tk, but the codec does not. The eight sources below are
 exactly the Tcl-free subset Scid's own `gtest` target uses.
 
 ```sh
-git clone --depth 1 https://github.com/benini/scid.git /tmp/scid
+git clone --depth 1 https://github.com/benini/scid.git $HOME/src/scid
 cd tools/scid_reference
-SRC=/tmp/scid/src
+SRC=$HOME/src/scid/src
 for prog in refgen dumpdb; do
   g++ -std=c++20 -O1 -I"$SRC" -o $prog $prog.cpp \
     "$SRC"/codec_scid4.cpp "$SRC"/scidbase.cpp "$SRC"/sortcache.cpp \
@@ -33,10 +36,9 @@ done
 
 ```sh
 cd tools/scid_reference
-./refgen SCID4 ../../test/services/scid/fixtures/fixture.pgn ref4
-./refgen SCID5 ../../test/services/scid/fixtures/fixture.pgn ref5
-cp ref4.si4 ref4.sg4 ref4.sn4 ref5.si5 ref5.sg5 ref5.sn5 \
-   ../../test/services/scid/fixtures/
+./refgen SCID4 path/to/fixture.pgn ref4
+./refgen SCID5 path/to/fixture.pgn ref5
+# copy ref4.* and ref5.* next to the writer's tests
 ```
 
 `fixture.pgn` is four real TWIC games — chosen to cover castling both sides, a
@@ -49,16 +51,16 @@ comparison then passes while proving nothing.
 ## Verifying a Dart-written database
 
 ```sh
-dart run tools/scid_export.dart some.pgn /tmp/out mydb
-tools/scid_reference/dumpdb SCID5 /tmp/out/mydb > dart.pgn
-tools/scid_reference/refgen SCID5 some.pgn /tmp/out/scidref
-tools/scid_reference/dumpdb SCID5 /tmp/out/scidref > scid.pgn
+# write some.pgn to out/mydb with the Dart writer under test, then:
+tools/scid_reference/dumpdb SCID5 out/mydb > dart.pgn
+tools/scid_reference/refgen SCID5 some.pgn out/scidref
+tools/scid_reference/dumpdb SCID5 out/scidref > scid.pgn
 diff scid.pgn dart.pgn        # must be empty
 ```
 
 ## Licence
 
 Scid is GPL-2.0; these two files link it, so treat any *built binary* as GPL.
-Nothing here is linked into the app — `lib/services/scid/` is an independent
+Nothing here is linked into the app; a Dart writer is an independent
 implementation written from the format description in
 `docs/SCID_FORMAT_FINDINGS.md`, and file formats are not copyrightable.
