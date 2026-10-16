@@ -99,7 +99,7 @@ export class CevalView {
     header.classList.toggle('ch-threat-mode', state.threat);
     threat.hidden = !state.enabled || state.inCheck || !!state.over;
     threat.setAttribute('aria-pressed', String(state.threat));
-    name.textContent = state.threat ? 'Show threat' : state.status.kind === 'ready' ? `${this.engineName} · ${state.status.backend}` : this.engineName;
+    name.textContent = state.threat ? 'Show threat' : state.status.kind === 'ready' && state.status.gpu ? `${this.engineName} · GPU` : this.engineName;
     info.classList.remove('ch-failed');
     action.hidden = true;
     header.classList.remove('ch-waiting');

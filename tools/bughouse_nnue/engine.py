@@ -84,6 +84,11 @@ class Engine:
         self.send("isready")
         return self.read_until("readyok")
 
+    def new_game(self) -> None:
+        """Clear the hash table, so one game's search does not steer the next."""
+        self.send("ucinewgame")
+        self.ready()
+
     def command(self, text: str) -> list[str]:
         """Run a synchronous tools command and return what it printed."""
         self.send(text)
@@ -107,10 +112,10 @@ class Engine:
 
     # ── Searching ─────────────────────────────────────────────────────────
 
-    def search(self, fen: str, depth: int) -> tuple[int, str]:
+    def search(self, fen: str, depth: int | None = None, nodes: int | None = None) -> tuple[int, str]:
         """(score in internal units from the side to move, best move)."""
         self.send(f"position fen {fen}")
-        self.send(f"go depth {depth}")
+        self.send(f"go nodes {nodes}" if nodes else f"go depth {depth}")
         lines = self.read_until("bestmove")
         score = 0
         for line in lines:

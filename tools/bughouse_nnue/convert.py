@@ -62,9 +62,15 @@ def pack(engine: Engine, plain: Path, out: Path) -> list[str]:
     return engine.command(f"convert_bin targetfile {plain} output_file_name {out}")
 
 
-def _sources(years: list[int] | None, scored: bool) -> tuple[list[Path], list[Path]]:
+def _sources(years: list[int] | None, scored: bool,
+             source: str | None = None) -> tuple[list[Path], list[Path]]:
     suffix = ".scored.plain" if scored else ".plain"
     train, val = [], []
+    if source:
+        t, v = plain_dir() / f"{source}{suffix}", plain_dir() / f"{source}.val{suffix}"
+        if not t.exists():
+            raise SystemExit(f"missing {t}")
+        return [t], [v] if v.exists() else []
     for stats in sorted(plain_dir().glob("????.stats.json")):
         year = stats.name[:4]
         if years and int(year) not in years:
@@ -80,9 +86,9 @@ def _sources(years: list[int] | None, scored: bool) -> tuple[list[Path], list[Pa
     return train, val
 
 
-def convert(years: list[int] | None, name: str, scored: bool) -> int:
+def convert(years: list[int] | None, name: str, scored: bool, source: str | None = None) -> int:
     binary = require_binary()
-    train, val = _sources(years, scored)
+    train, val = _sources(years, scored, source)
     out = dataset_dir()
     out.mkdir(parents=True, exist_ok=True)
     rng = random.Random(SEED)
@@ -108,7 +114,8 @@ def convert(years: list[int] | None, name: str, scored: bool) -> int:
     stamp = toolchain_dir() / "toolchain.json"
     manifest = {
         "variant": VARIANT,
-        "years": [p.name[:4] for p in train],
+        "years": [p.name[:4] for p in train] if not source else [],
+        "source": source,
         "scored": scored,
         "seed": SEED,
         "shuffle_buffer": SHUFFLE_BUFFER,

@@ -242,7 +242,7 @@ export class Engine {
           this.backend = data.backend;
           this.webgpu = data.backend.gpuAvailable;
           const gpu = data.backend.kind === 'gpu';
-          this.setStatus({ kind: 'ready', gpu, backend: gpu ? 'GPU' : `CPU × ${data.backend.threads}` });
+          this.setStatus({ kind: 'ready', gpu, backend: gpu ? 'GPU' : 'CPU' });
           try { localStorage.setItem(LOADED_KEY, '1'); } catch { /* Asked again next visit. */ }
           resolve();
           this.next();

@@ -25,9 +25,18 @@ is on the team that *loses* a `1-0`.
 Sampling: `per_board` positions from each board, chosen at random from its
 plies past `min_ply`, and fewer (`other_board` of that) from the board the
 game did not end on, since that board's position says less about the
-result.  Games with no result, unrated games, and boards with a player under
-`min_elo` are skipped.  A fixed share of games, by game number, goes to the
-validation files instead.
+result.  Only quiet positions are candidates by default (`quiet_only`): not
+in check, and the move played was not a capture.  The engine only ever asks
+the net about quiet positions -- captures and checks are resolved by the
+search first -- and a static value for the middle of a tactic is a bad
+target (Stockfish's trainer skips the same positions).
+
+Only games that ended by checkmate are used by default (`terminations`).
+A game lost on time or by disconnection says little about the positions in
+it, and a resignation is a guess; mate is the one result the position itself
+decides.  Unrated games, games with no result, and boards with a player
+under `min_elo` are skipped too.  A fixed share of games, by game number,
+goes to the validation files instead.
 
 Each year also gets a `stats.json`: how games ended and on which board, and
 which pieces arrived in the hands at which stage of the game -- the arrival
@@ -64,6 +73,10 @@ TEAM_ONE_IS_WHITE = {"A": True, "B": False}
 ELO_TAGS = {"A": ("WhiteAElo", "BlackAElo"), "B": ("WhiteBElo", "BlackBElo")}
 
 
+#: How FICS says a game ended, with the player's handle stripped.
+TERMINATIONS = ("checkmated", "resigns", "forfeits on time", "forfeits by disconnection")
+
+
 @dataclass(frozen=True)
 class Settings:
     min_elo: int = 1800
@@ -72,6 +85,9 @@ class Settings:
     other_board: float = 0.5
     validation_percent: int = 2
     max_games: int = 0
+    #: Which endings to learn from; empty means every decisive game.
+    terminations: tuple[str, ...] = ("checkmated",)
+    quiet_only: bool = True
 
 
 @dataclass
@@ -82,6 +98,7 @@ class Snapshot:
     move: str
     turn: bool
     ply: int  # half-moves already played on this board
+    quiet: bool = True  # not in check, and the move played was no capture
 
 
 def record(fen: str, move: str, ply: int, result: int, score: int = 0) -> str:
@@ -145,14 +162,18 @@ def replay(game: BpgnGame, stats: dict) -> dict[str, list[Snapshot]] | None:
             other = dual.board("B" if letter == "A" else "A")
             fen = board.fen()
             mover = board.turn
+            in_check = board.is_check()
             pocket_before = str(other.pockets[not mover])
             ply = dual.push(letter, san)
-            if "x" in ply.san:
+            capture = "x" in ply.san
+            if capture:
                 gained = _arrived(pocket_before, str(other.pockets[not mover]))
                 for piece in gained:
                     arrivals["by_piece"][piece.upper()] += 1
                     arrivals["by_decile"][str(min(plies[letter] // 10, 9))] += 1
-            snapshots[letter].append(Snapshot(fen, ply.uci, mover, plies[letter]))
+            snapshots[letter].append(
+                Snapshot(fen, ply.uci, mover, plies[letter], quiet=not (in_check or capture))
+            )
             plies[letter] += 1
     except Exception:  # noqa: BLE001 -- a corrupt game must not stop a year
         return None
@@ -169,7 +190,10 @@ def sample(game: BpgnGame, snapshots: dict[str, list[Snapshot]], settings: Setti
         want = settings.per_board
         if ended_on is not None and ended_on != board:
             want = round(want * settings.other_board)
-        candidates = [s for s in snapshots[board] if s.ply >= settings.min_ply]
+        candidates = [
+            s for s in snapshots[board]
+            if s.ply >= settings.min_ply and (s.quiet or not settings.quiet_only)
+        ]
         if want <= 0 or not candidates:
             continue
         for snap in rng.sample(candidates, min(want, len(candidates))):
@@ -184,6 +208,7 @@ def new_stats(source: str) -> dict:
         "games": 0,
         "used": 0,
         "skipped": Counter(),
+        "skipped_termination": Counter(),
         "ended_on": Counter(),
         "termination": Counter(),
         "positions": Counter(),
@@ -212,13 +237,18 @@ def extract_year(args) -> tuple[str, dict]:
             if game.result not in RESULTS:
                 stats["skipped"]["no result"] += 1
                 continue
+            kind = termination_kind(game.termination)
+            if settings.terminations and kind not in settings.terminations:
+                stats["skipped"]["termination"] += 1
+                stats["skipped_termination"][kind or "unknown"] += 1
+                continue
             snapshots = replay(game, stats)
             if snapshots is None:
                 stats["skipped"]["unreplayable"] += 1
                 continue
             ended_on = game.ended_on()
             stats["ended_on"][ended_on or "unknown"] += 1
-            stats["termination"][termination_kind(game.termination) or "unknown"] += 1
+            stats["termination"][kind or "unknown"] += 1
             rng = random.Random(game_key(game))
             records = sample(game, snapshots, settings, rng, RESULTS[game.result], ended_on)
             if not records:
@@ -252,6 +282,8 @@ def extract(years: list[int] | None, settings: Settings, jobs: int) -> int:
     print(
         f"extracting {len(sources)} year(s) on {jobs} core(s): "
         f"{settings.per_board} per board, Elo >= {settings.min_elo}, "
+        f"{'quiet positions only' if settings.quiet_only else 'any position'}, "
+        f"games ending by {' / '.join(settings.terminations) or 'any result'}, "
         f"{settings.validation_percent}% held out -> {out_dir}"
     )
     started = time.time()
@@ -266,7 +298,7 @@ def extract(years: list[int] | None, settings: Settings, jobs: int) -> int:
             )
             for key in ("games", "used"):
                 total[key] += stats[key]
-            for key in ("skipped", "ended_on", "termination", "positions"):
+            for key in ("skipped", "skipped_termination", "ended_on", "termination", "positions"):
                 total[key].update(stats[key])
             for key in ("by_piece", "by_decile"):
                 total["arrivals"][key].update(stats["arrivals"][key])
