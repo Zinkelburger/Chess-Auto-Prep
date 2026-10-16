@@ -1,14 +1,10 @@
 # Component map
 
-V2 is the sole application as of 2026-09-30. Production code lives directly in
-`lib/`, tests in `test/`, and `lib/main.dart` is the entry point for local and
-release builds. V1 source and its old layering/debt ledgers have been removed.
-The owner's switch-over decision explicitly excludes legacy/backward-compatibility
-requirements. Existing user files are neither migrated nor deleted.
-
-Use [architecture contracts](ARCHITECTURE_RENEWAL.md),
-[mode specifications](v2/features/README.md), [the backlog](FUTURE_FEATURES.md)
-and [tooling map](agents/tooling.md) for details and remaining product scope.
+Where things live in the code and how the pieces connect. Production code is
+under `lib/`, tests under `test/`; `lib/main.dart` is the entry point for local
+and release builds. Use [the architecture contracts](ARCHITECTURE.md),
+[mode specifications](features/README.md), [the backlog](FUTURE_FEATURES.md)
+and [the tooling map](agents/tooling.md) for detail and remaining scope.
 
 ## Entry points and ownership
 
@@ -83,7 +79,7 @@ Bughouse mode is offered when its engine assets are present.
   `chess/pgn/solitaire_record.dart` builds a spoiler-free progress tree and
   full annotated review; `MoveTreeView.preview` reads these without document
   edits. The final PGN can be copied or added to a study. See
-  [Solitaire behavior](v2/features/pgn-viewer.md#game-buttons-and-solitaire-2026-09-28).
+  [the viewer spec](features/pgn-viewer.md#actions).
 - Study uses the same document session for chapters, tags, starts, cleanup,
   quiz markers, import/export and retained retry commands. `studyTabs` and
   `Train study` expose the shared trainer without leaving Study. The chapter
@@ -91,7 +87,7 @@ Bughouse mode is offered when its engine assets are present.
   PGN files, pasted PGN and Lichess URLs with new/current-study destinations.
   `TrainingSide` separates practice choices from board orientation, with chapter
   or whole-study scope. Deleted-study restoration retains uncertain moves for
-  exact retry. See [Study](v2/features/study.md).
+  exact retry. See [Study](features/study.md).
 - Tactics mines downloaded games into `tactics_sets/Default.pgn`, trains puzzles
   on the shared board and can inspect the source game. Text search and filters
   define both the visible puzzle list and Play's counted queue.
@@ -205,8 +201,6 @@ Bughouse mode is offered when its engine assets are present.
   Played share marks a Maia stand-in `~` with a tooltip naming the source
   and a visible legend explaining the marker.
 
-Unported conveniences remain in the feature specs/backlog; the presence of a
-mode is not a claim of every historical v1 control being reproduced.
 
 ## Persistence and shutdown
 
@@ -214,12 +208,11 @@ The app uses its existing Documents, Support and cache locations. The document
 session owns the draft; storage owns commit/revision checks and compound
 operations. Accepted writes survive panel disposal. Close flushes user data
 before engine shutdown. Unreadable authoritative recovery data is kept or
-quarantined; derived views can be rebuilt. Foreign v1 journals are no longer
-processed or used to block current saves, and are left untouched.
+quarantined; derived views can be rebuilt. See
+[DATA_INTEGRITY.md](DATA_INTEGRITY.md) for every store and recovery file.
 
-Line IDs, serialized records and retained fixtures may still describe older
-formats. They are data contracts, not dependencies on deleted source. Current
-save/reopen, conflict, process-kill and recovery tests remain.
+Line IDs, serialized records and fixtures may carry formats written by earlier
+builds; they are data contracts the current code reads and keeps.
 
 ## Checks and tools
 
@@ -227,8 +220,8 @@ save/reopen, conflict, process-kill and recovery tests remain.
   scripted ports, fixtures and property generators.
 - [`integration_test/v2_desktop_test.dart`](../integration_test/v2_desktop_test.dart)
   exercises the actual desktop app. Engine/native checks have separate targets.
-- [`scripts/check_v2.py`](../scripts/check_v2.py) retains its filename but now
-  enforces the sole app's architecture under `lib/` and `test/`.
+- [`scripts/check_v2.py`](../scripts/check_v2.py) enforces the architecture
+  rules under `lib/` and `test/` (the name is historical).
 - `scripts/ci.sh analyze lint`, `scripts/ci.sh test` and `scripts/ci.sh tools`
   run through bounded jobs. The headless driver defaults to `lib/main.dart`.
 - Platform runners, `packages/document_file_io`, engine assets/updaters,

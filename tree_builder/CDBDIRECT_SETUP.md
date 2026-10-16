@@ -1,6 +1,6 @@
 # cdbdirect Setup Guide
 
-**cdbdirect** probes a local copy of the [ChessDB](https://www.chessdb.cn/) TerarkDB snapshot (~50B positions, ~1TB). It is the fastest eval source in Chess-Auto-Prep’s chain when you have the full dump on disk—typically 5–20 ms per lookup on HDD vs. network API latency.
+**cdbdirect** probes a local copy of the [ChessDB](https://www.chessdb.cn/) TerarkDB snapshot (~50B positions, ~1TB). It is the fastest eval source in `tree_builder`’s chain when you have the full dump on disk—typically 5–20 ms per lookup on HDD vs. network API latency.
 
 ## System requirements
 
@@ -11,7 +11,7 @@
 | RAM | 8 GB | 16 GB+ (TerarkDB opens with a 1 GB page cache) |
 | CPU | 4 cores | 8+ cores for faster TerarkDB compile |
 
-**HDD vs SSD:** The dump works on a spinning HDD. Enable `--cdbdirect-read-ahead` and `--batch-eval-lookups` in the CLI (or the matching toggles in the Flutter UI). Expect ~5–20 ms/lookup on HDD vs. sub-ms on NVMe.
+**HDD vs SSD:** The dump works on a spinning HDD. Enable `--cdbdirect-read-ahead` and `--batch-eval-lookups` on the command line. Expect ~5–20 ms/lookup on HDD vs. sub-ms on NVMe.
 
 ## Prerequisites
 
@@ -52,7 +52,7 @@ The script:
 1. Checks for required packages (prints install commands if anything is missing)
 2. Clones [noobpwnftw/terarkdb](https://github.com/noobpwnftw/terarkdb) and [vondele/cdbdirect](https://github.com/vondele/cdbdirect) into `deps/` (gitignored)
 3. Builds TerarkDB with `-fPIC`, Release, no tests/tools
-4. Builds `libcdbdirect.a` + `libcdbdirect.so` (C API wrapper for tree_builder and Flutter)
+4. Builds `libcdbdirect.a` + `libcdbdirect.so` (C API wrapper for tree_builder)
 5. Installs everything under `deps/install/`
 6. Prints `TERARKDBROOT` / `CHESSDB_PATH` lines for `~/.bashrc`
 7. Runs a smoke test if `--dump-path` points at a valid dump
@@ -110,16 +110,6 @@ Mock tests (no TerarkDB required):
 ```bash
 make test-cdbdirect-mock
 ```
-
-## Flutter app
-
-1. Complete setup so `deps/install/lib/libcdbdirect.so` exists.
-2. From the repo root: `./run_with_cdbdirect.sh` (sets `LD_LIBRARY_PATH` and `TERARKDBROOT` for dev runs).
-3. In the app: **Repertoire → Actions → Database Downloads → Local ChessDB (full dump)**.
-4. Browse to your dump’s **data** directory (folder containing `CURRENT` and `.sst` files).
-5. On HDD: enable **HDD read-ahead hint** and **Batch eval lookups**.
-
-The Dart provider loads `libcdbdirect.so` from the bundled app `lib/`, `LD_LIBRARY_PATH`, `TERARKDBROOT/lib`, or `tree_builder/deps/install/lib/` when run from the repo.
 
 ## CLI usage (HDD-optimized)
 
@@ -206,7 +196,7 @@ Ensure your user can read the data directory and all `.sst` files. Avoid running
 
 ### FEN not found / unexpected misses
 
-cdbdirect expects strict [X-FEN](https://en.wikipedia.org/wiki/X-FEN): ep square `-` when no legal en passant, 4-field keys (move counters ignored). Chess-Auto-Prep canonicalizes FENs before lookup; if probes fail in external tools, compare against the project’s canonical form.
+cdbdirect expects strict [X-FEN](https://en.wikipedia.org/wiki/X-FEN): ep square `-` when no legal en passant, 4-field keys (move counters ignored). `tree_builder` canonicalizes FENs before lookup (`eval_canonicalize_fen`); if probes fail in external tools, compare against the project’s canonical form.
 
 ### Slow on HDD
 
@@ -231,7 +221,7 @@ tree_builder/deps/
     lib/
       libterarkdb.a
       libcdbdirect.a
-      libcdbdirect.so   # Flutter FFI + runtime linking
+      libcdbdirect.so   # runtime linking
 ```
 
 Set `TERARKDBROOT` to `tree_builder/deps/install`.

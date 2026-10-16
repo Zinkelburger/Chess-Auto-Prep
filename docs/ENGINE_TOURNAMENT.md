@@ -1,88 +1,32 @@
 # Engine tournaments
 
-Put two engines in a position and let them settle it. The games are ordinary
-PGN, so the whole match opens in the PGN Viewer and you click through it like
-any other collection.
+UCI engines play a position out, and the games are saved as ordinary PGN that
+the PGN Viewer opens as one collection. The app, a terminal and an agent all
+run the same Dart code and write to the same folder:
 
 ```
- a position ─▶ Engine Tournament ─▶ Documents/engine_tournaments/<slug>/
+ a position ─▶ Engine tournament ─▶ Documents/engine_tournaments/match-<µs>/
                                      ├── games.pgn        ← the PGN Viewer opens this
                                      └── tournament.json  ← config + per-game results
 ```
 
-Everything is on disk as it happens: a match interrupted by a crash, a quit,
-or a power cut keeps the games it had already played.
+Each game is saved as soon as it finishes, so a crash or a quit keeps every
+finished game. The in-app screen, its controls, the defaults and the files are
+specified in [Engine tournament](features/engine-tournament.md). This page
+covers what lies outside the app: the agent tools, the headless runner and
+where the code lives.
 
-## In the app
+The settings follow [Scid vs. PC's Computer Tournament][scid] and
+[cutechess-cli][cutechess], so each setting means what users of those tools
+expect. An engine that crashes, hangs or plays an illegal move **loses that
+game**; the tournament carries on.
 
-**Engine Tournament** in the mode menu. New tournament asks for the engines,
-the starting position (a FEN, the board's current position, or the clipboard),
-the time control, the schedule, and the adjudication rules. The **Engine controls**
-tab exposes the selected tournament's setup, including the board editor and
-per-participant cores and memory using the shared engine controls. **Start new run**
-creates a separate tournament with those settings. **Edit & run again** also
-opens the saved setup for changes before starting. Running games keep their
-captured settings. While a tournament runs you get the live board and the game
-in progress; when it is done you get the crosstable and one row per game.
-**Show final positions** switches between board thumbnails and compact rows;
-the choice is remembered. Thumbnails replay the saved PGN, including matches
-created by older versions. Length is shown in **Moves**, counting a final
-unpaired half-move as a move. Clicking a row opens that game in the PGN
-Viewer with the whole match still loaded, so Prev/Next walk the rest of it.
-
-### History
-
-The left rail is the record of every match ever run — including ones started
-headlessly or by an agent, since they all land in the same directory. Rows are
-newest first, grouped by day (Today / Yesterday / month), and each one carries
-its own score (`Stockfish #1 5½–4½ Stockfish #2`), the games played, the time
-control, when it started and how long it took. Past six runs a filter box
-appears above the list; it matches on name, engine and opening. Nothing has to
-be opened in a file manager to find out what happened.
-
-### Move comments
-
-The PGN is written *without* per-move engine comments by default. Tick
-**Annotate every move with the engine's eval** to get cutechess's
-`{+0.31/24 2.001s}` after every move — what engine-testing tools read, at the
-cost of the viewer putting each move on its own line. The viewer also filters
-comments in that shape out of games recorded before this was a choice, and out
-of PGNs written by cutechess-cli or Arena.
-
-### Parameters
-
-Modelled on [Scid vs. PC's Computer Tournament][scid] and
-[cutechess-cli][cutechess], so the knobs mean what someone used to those tools
-expects.
-
-| | Options | Default |
-|---|---|---|
-| Time control | Per move; a clock (base + increment, optionally `40/600+10`); fixed depth; fixed nodes | **2 s per move** |
-| Schedule | Round robin or gauntlet; games per pairing; alternating colours | 10 games, colours alternating |
-| Concurrency | Games in flight at once | 1 — concurrent games share the CPU and make every result noisier |
-| Per engine | Hash, threads, permanent thinking, extra `setoption` pairs | 128 MB, 1 thread, no pondering |
-| Draw adjudication | From move N, both engines within X cp for Y moves | from move 40, within 10 cp for 8 moves |
-| Resign adjudication | Below −X cp for Y moves, optionally with the winner agreeing | −900 cp for 4 moves, both agreeing |
-| Hard stop | Move ceiling, filed as a draw | 300 moves |
-
-Games also end the ordinary ways: checkmate, stalemate, insufficient material,
-the fifty-move rule, threefold repetition. An engine that crashes, hangs, or
-plays an illegal move **loses that game** rather than aborting the tournament —
-which is the whole point of running one.
-
-The crosstable shows score, W/D/L and bounded head-to-head summaries for each
-opponent. **Show rating statistics** adds draw rate, Sonneborn-Berger, the
-rating difference with its 95% interval, and the likelihood of superiority. Read the interval before the estimate: `+0 ±252` after ten games
-means the match has not decided anything.
-
-### Your own engines
-
-The rest of the app only ever runs the bundled Stockfish. **Manage engines…** in Engine controls is the one place a binary you chose gets launched, and nothing
-gets into the list without passing a real check: the process must start, answer
-`uci` with `uciok`, answer `isready`, and play a **legal** move from the
-starting position. A wrapper script, an XBoard-only engine, or a binary for the
-wrong architecture is reported as a sentence — with the engine's own output
-attached — instead of turning into a match of silent forfeits.
+Engines enter the registry only after a real check: the process must start,
+complete the UCI handshake, and play a **legal** move from the start position.
+The app's check lives in `Engines` → `Add UCI engine…`. The headless one is
+`--verify`. A failure is reported as a sentence plus the engine's own first
+output lines. A registered engine with its own binary can also be chosen as
+the analysis engine in Settings.
 
 ## From an agent
 
@@ -101,36 +45,38 @@ tournament_open {}            # app opens on it, or jumps there if already runni
 
 | Tool | |
 |---|---|
-| `tournament_run` | Start a match from a position; returns as soon as the directory exists and (by default) opens the app on it |
+| `tournament_run` | Start a match from a position; returns as soon as the directory exists and (by default, `open_app`) opens the app on it |
 | `tournament_status` | Progress, results and endings so far, whether it is still running |
 | `tournament_list` | Every saved tournament, newest first |
 | `tournament_crosstable` | Standings, Elo ± interval, LOS, head-to-head grid |
 | `tournament_games` | One row per game |
-| `tournament_game_pgn` | One game, with the engines' evals in the move comments |
-| `tournament_stop` | Stop cleanly after the game in flight |
+| `tournament_game_pgn` | One game's PGN as saved (eval comments only if the run annotated moves; the headless runner does not) |
+| `tournament_stop` | Send the runner SIGINT: the games in flight end after their current move and are saved unfinished |
 | `tournament_open` | Open the app on a tournament |
 | `tournament_engines` | What is available to play |
 | `tournament_add_engine` | Verify a UCI binary and register it |
 
-`tournament_run` leaves the games playing in a detached process and comes back
-in seconds, because a ten-game match at two seconds a move takes about half an
-hour. Poll `tournament_status`; the app's screen fills in on its own.
+`tournament_run` starts the games in a detached process and returns within
+seconds; a ten-game match at two seconds a move takes about half an hour.
+Poll `tournament_status`. The app's screen updates by itself because it
+watches the folder.
 
-Two things make this work without the app and the agent talking to each other:
+Two design choices let this work without the app and the agent talking to
+each other:
 
 - **The chess is not re-implemented.** Every tool that needs the arbiter, the
-  engine check, or the standings maths shells out to
-  `tools/run_engine_tournament.dart` — the same code the app runs. The Elo an
-  agent quotes is the Elo on screen.
-- **The hand-off is a file.** `tournament_open` writes `open_request.json` into
-  the tournaments directory. A running app sees it appear and jumps there; a
-  closed one honours it on next launch. Requests older than a day are ignored,
-  so a forgotten one cannot hijack an unrelated launch.
+  engine check or the standings maths shells out to
+  `tools/run_engine_tournament.dart`, which runs the same code as the app. The
+  Elo an agent quotes is the Elo on screen.
+- **The hand-off is a file.** `tournament_open` writes `open_request.json`
+  (`tournamentId`, `requestedAt`) into the tournaments directory. A running
+  app sees it appear and switches to the tournament; a closed app opens it at
+  the next launch. Requests older than a day are ignored, so a forgotten one
+  cannot take over an unrelated launch.
 
 ## Headless
 
-The same runner works from a terminal, and writes into the same place the app
-reads:
+The runner works from a terminal too, and writes to the folder the app reads:
 
 ```
 dart run tools/run_engine_tournament.dart \
@@ -143,23 +89,30 @@ dart run tools/run_engine_tournament.dart --show <tournament-id>
 ```
 
 `--engine "Name=/path/to/binary"` (repeatable) replaces the default of the
-bundled Stockfish playing itself. `--tc 60+0.6` takes a clock instead of a
-fixed think time. Ctrl-C stops after the games in flight. `--root` elsewhere
-than `Documents/engine_tournaments` keeps its recovery records in
+bundled Stockfish playing itself. `--tc 60+0.6` (or `40/60+0.6`) sets a clock,
+and `--depth N` a fixed depth, in place of a fixed think time. `--opening`
+fills the PGN `Opening` tag, which the app's setup dialog does not offer.
+Ctrl-C stops the run: games in flight end after their current move. A `--root`
+other than `Documents/engine_tournaments` keeps its recovery records in
 `<root>/.support` instead of the app's support folder (`--support` overrides).
+`--help` lists every flag.
 
 ## Where the code lives
 
 | | |
 |---|---|
-| `lib/chess/tournament/` | Config, schedule, results and standings (Elo, SB, LOS) |
+| `lib/chess/tournament/` | Config, time presets, schedule, results and standings (Elo, SB, LOS) |
 | `lib/features/tournaments/game_runner.dart` | One game: engines, clocks, the arbiter, the PGN |
-| `lib/storage/tournaments.dart` | `tournament.json` + `games.pgn` as one recoverable save |
+| `lib/features/tournaments/schedule.dart`, `engine_check.dart` | Runs games concurrently; the engine check |
+| `lib/features/tournaments/tournament_run.dart` | The app's owner: history, runs, retries, registry |
+| `lib/storage/tournaments.dart`, `tournament_inbox.dart` | `tournament.json` + `games.pgn` saved together as one recoverable save; folder watch and open requests |
+| `lib/engines/tournament_launch.dart` | Starts one seat (a binary or the bundled Stockfish) |
 | `tools/run_engine_tournament.dart` | The headless entry point; also `--verify` and `--show` |
 | `tools/mcp/chess_prep/engine_tournament.py` | The MCP tools |
 
-Those three are Flutter-free `dart:io` on purpose — that is what lets one
-implementation serve the app, the terminal (`dart run`), and an agent.
+None of the runner, schedule, check, storage or launch code imports Flutter.
+That is what lets one implementation serve the app, the terminal (`dart run`)
+and an agent.
 
 [scid]: https://scidvspc.sourceforge.net/doc/Tourney.htm
 [cutechess]: https://github.com/cutechess/cutechess/blob/master/docs/cutechess-cli.6
