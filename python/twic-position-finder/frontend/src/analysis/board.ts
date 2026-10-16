@@ -44,6 +44,31 @@ export interface BoardHooks {
 
 const SQUARE_ROLES: Role[] = ['queen', 'knight', 'rook', 'bishop'];
 
+/** The bin as a cursor: white strokes over a dark outline, readable on both square colours. */
+const TRASH_PATH = 'M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2';
+const TRASH_CURSOR = svgCursor(`<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="-2 -2 28 28" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="${TRASH_PATH}" stroke="#000" stroke-width="4.5"/><path d="${TRASH_PATH}" stroke="#fff" stroke-width="2"/></svg>`, 14);
+/** Piece cursors, made once per piece from the board's own piece images. */
+const pieceCursors = new Map<string, Promise<string | null>>();
+
+function svgCursor(svg: string, hotspot: number): string {
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${hotspot} ${hotspot}, crosshair`;
+}
+
+/** The piece as a cursor, as lila's editor shows it; null when the image cannot be read. */
+function pieceCursor(piece: Piece): Promise<string | null> {
+  const name = `${piece.color === 'white' ? 'w' : 'b'}${piece.role === 'knight' ? 'N' : piece.role[0].toUpperCase()}`;
+  let cursor = pieceCursors.get(name);
+  if (!cursor) {
+    // A cursor image needs its own size and cannot load other files, so the SVG is inlined with one.
+    cursor = fetch(`/piece/${name}.svg`)
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
+      .then((svg) => svgCursor(svg.replace('<svg ', '<svg width="44" height="44" '), 22))
+      .catch(() => null);
+    pieceCursors.set(name, cursor);
+  }
+  return cursor;
+}
+
 export class CrazyBoard {
   readonly cg: Api;
   private mode: 'analysis' | 'editor' = 'analysis';
@@ -149,6 +174,12 @@ export class CrazyBoard {
     const painting = brush !== 'pointer';
     this.cg.set({ selectable: { enabled: !painting }, draggable: { enabled: !painting }, drawable: { enabled: !painting } });
     this.wrap.dataset.brush = typeof brush === 'string' ? brush : 'piece';
+    this.wrap.style.removeProperty('--ch-cursor');
+    if (brush === 'trash') this.wrap.style.setProperty('--ch-cursor', TRASH_CURSOR);
+    else if (brush !== 'pointer')
+      void pieceCursor(brush).then((cursor) => {
+        if (cursor && this.brush === brush) this.wrap.style.setProperty('--ch-cursor', cursor);
+      });
   }
 
   /** The editor's board as a FEN board field. */

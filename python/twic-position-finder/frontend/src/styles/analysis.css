@@ -30,7 +30,7 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch[data-mode="editor"] .ch-board-wrap { width: calc(var(--ch-sq) * 8); height: calc(var(--ch-sq) * 8); }
 .ch-board-wrap .bb-board cg-container { width: 100%; height: 100%; }
 .ch-board-wrap.ch-editing[data-brush="piece"] cg-board,
-.ch-board-wrap.ch-editing[data-brush="trash"] cg-board { cursor: crosshair; }
+.ch-board-wrap.ch-editing[data-brush="trash"] cg-board { cursor: var(--ch-cursor, crosshair); }
 
 /* lila's spare pieces: pointer, six pieces, bin; one square each. */
 .ch-spare { display: grid; grid-template-columns: repeat(8, var(--ch-sq)); height: var(--ch-sq); flex: none; background: var(--bg-card); border-radius: 4px; }
