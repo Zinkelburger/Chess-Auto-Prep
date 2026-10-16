@@ -53,7 +53,7 @@ const DEFAULTS: Settings = {
   bestArrows: true, maneuverArrows: false, variationArrows: true,
 };
 
-export function clamp(value: unknown, lo: number, hi: number, fallback: number): number {
+function clamp(value: unknown, lo: number, hi: number, fallback: number): number {
   const n = Math.round(Number(value));
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
 }

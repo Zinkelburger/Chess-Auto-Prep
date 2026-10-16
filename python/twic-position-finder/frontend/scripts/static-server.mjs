@@ -12,7 +12,7 @@ const TYPES = {
 };
 
 /** The rules of a Cloudflare `_headers` file: a path pattern, then indented `Name: value` lines. */
-export function parseHeaders(text) {
+function parseHeaders(text) {
   const rules = [];
   for (const line of text.split('\n')) {
     if (!line.trim() || line.trim().startsWith('#')) continue;

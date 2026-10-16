@@ -226,20 +226,13 @@ export class Attempt {
   }
 }
 
-export function squaresOf(uci: string): string[] {
+function squaresOf(uci: string): string[] {
   return uci[1] === '@' ? [uci.slice(2, 4)] : [uci.slice(0, 2), uci.slice(2, 4)];
 }
 
 /** A mate other than the line's: its SAN is not in the data, so spell it simply. */
 function altSan(uci: string): string {
   return uci[1] === '@' ? `${uci[0].toUpperCase()}@${uci.slice(2, 4)}#` : `${uci.slice(0, 2)}-${uci.slice(2, 4)}#`;
-}
-
-/** "2 0" — FICS writes a time control as minutes and increment seconds. */
-export function formatTimeControl(tc: string): string {
-  const [base, inc] = tc.split('+');
-  const minutes = Number(base) / 60;
-  return Number.isFinite(minutes) ? `${minutes} ${inc ?? 0}` : tc;
 }
 
 /** The puzzle's board, solver to move, on the bughouse analysis board. */

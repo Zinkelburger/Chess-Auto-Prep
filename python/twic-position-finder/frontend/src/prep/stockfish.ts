@@ -162,13 +162,13 @@ function parseInfo(line: string, black: boolean): { line: EngineLine; nodes?: nu
 }
 
 /** Engine workers for many fixed-depth searches at once: leave a core for the page, and spare a phone's memory. */
-export function poolSize(): number {
+function poolSize(): number {
   const cores = navigator.hardwareConcurrency || 2;
   const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8;
   return Math.max(1, Math.min(memory <= 4 ? 2 : 6, cores - 1));
 }
 
-export class EngineStopped extends Error {
+class EngineStopped extends Error {
   constructor() { super('Stopped'); this.name = 'EngineStopped'; }
 }
 

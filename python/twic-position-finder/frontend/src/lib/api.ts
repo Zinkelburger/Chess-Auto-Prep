@@ -1,7 +1,7 @@
 /** API client for the TWIC alerts backend (server.py). */
 
-export const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000';
-export const AUTH_KEY = 'twic_auth_token';
+const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000';
+const AUTH_KEY = 'twic_auth_token';
 
 export interface MatchedGame {
   id: number;
@@ -79,7 +79,7 @@ export class ApiError extends Error {
   }
 }
 
-export const NETWORK_ERROR = 'Could not reach the server. Check your connection and try again.';
+const NETWORK_ERROR = 'Could not reach the server. Check your connection and try again.';
 
 // ── Auth token ─────────────────────────────────────────────────────
 

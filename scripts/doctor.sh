@@ -45,7 +45,7 @@ if [[ -x "$flutter_bin" ]]; then
   ok "flutter $ver ($flutter_bin)"
   pinned=$(python3 -c 'import json; print(json.load(open(".fvmrc"))["flutter"])' 2>/dev/null)
   if [[ -n "$pinned" && -n "$ver" && "$ver" != "?" && "$ver" != "$pinned" ]]; then
-    note "CI pins Flutter $pinned but this machine has $ver — \`dart format\` output can differ from CI's"
+    bad "Flutter $ver at $froot, but .fvmrc pins $pinned; scripts/ci.sh refuses it. Fix: git -C $froot checkout $pinned (then run flutter once), or bump .fvmrc after checking the new SDK"
   fi
 else
   bad "flutter not found (tried \$FLUTTER, ~/sdk/flutter/bin/flutter, PATH)"

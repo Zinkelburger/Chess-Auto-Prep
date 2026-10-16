@@ -12,29 +12,26 @@
  * the ☰ menu, the board editor and the FEN and PGN boxes under the board.
  */
 import type { DrawShape } from '@lichess-org/chessground/draw';
-import type { Key, Piece } from '@lichess-org/chessground/types';
-import type { Color, Role } from 'chessops/types';
+import type { Key } from '@lichess-org/chessground/types';
+import type { Color } from 'chessops/types';
 import { makeUci } from 'chessops/util';
 import { CrazyBoard, type Brush } from '../analysis/board';
+import { CevalView } from '../analysis/ceval';
+import { SearchGear } from '../analysis/gear';
 import { liveGlyph, type Glyph } from '../analysis/judge';
 import { openHelp, renderMenu } from '../analysis/menu';
-import { el } from '../analysis/moves';
+import { MoveList, el } from '../analysis/moves';
 import { loadSettings, saveSettings, type Settings, type Toggle } from '../analysis/settings';
 import { engineShapes, glyphShape, moveShapes, threatShapes, variationShapes } from '../analysis/shapes';
-import { CevalView } from './ceval';
 import { DEFAULT_OPTIONS, type ExpectimaxOptions } from './expectimax';
 import { ExpectimaxRunner } from './expectimax-runner';
 import { ExpectimaxView } from './expectimax-view';
 import { loadCollection, saveCollection, splitGames, type StoredGame } from './games';
-import { GearPanel } from './gear';
-import { LiveEngine, type EngineResult, type EngineStatus } from './live-engine';
-import { MoveList } from './moves';
+import { LiveEngine, STARTING, type EngineResult, type EngineStatus } from './live-engine';
 import {
-  START_FEN, Tree, boardDests, fenOf, gameTitle, headerValue, outcomeOf, positionOf, readFen, readMove, threatFen, type TreeNode,
+  START_FEN, Tree, boardDests, commentsOf, fenOf, gameTitle, headerValue, nagGlyph, outcomeOf, playLine, positionOf, readFen, readMove, threatFen, type TreeNode,
 } from './tree';
 
-const LETTER: Record<Role, string> = { pawn: 'P', knight: 'N', bishop: 'B', rook: 'R', queen: 'Q', king: 'K' };
-const SPARE_ROLES: Role[] = ['king', 'queen', 'rook', 'bishop', 'knight', 'pawn'];
 const SETTINGS_KEY = 'prep-analysis-v1';
 const HELP_KEYS: [string, string][] = [['E', 'PGN or Expectimax tab']];
 const OPTIONS_KEY = 'prep-expectimax-v1';
@@ -73,14 +70,14 @@ export class PrepApp {
   private settings: Settings;
   private options: ExpectimaxOptions;
   private evals = new Map<string, EngineResult>();
-  private engineStatus: EngineStatus = { kind: 'loading' };
+  private engineStatus: EngineStatus = { kind: 'loading', text: STARTING };
   private readonly engine: LiveEngine;
   private readonly board: CrazyBoard;
-  private readonly moves: MoveList;
+  private readonly moves: MoveList<TreeNode>;
   private readonly ceval: CevalView;
   private readonly runner: ExpectimaxRunner;
   private readonly expectimax: ExpectimaxView;
-  private gear!: GearPanel;
+  private gear!: SearchGear;
   private draft: Draft | null = null;
   private pgnDirty = false;
   private threat = false;
@@ -130,7 +127,13 @@ export class PrepApp {
         if (hadCurrent) this.goTo(parent); else { this.renderMoves(); this.renderShapes(); }
       },
       copied: (text) => this.copy(text, 'PGN copied'),
-      editComment: (node) => this.editComment(node),
+      intro: () => {
+        const text = commentsOf(app.tree.root);
+        return text ? el('div', 'ch-interrupt px-intro', text) : null;
+      },
+      comment: (node) => commentsOf(node),
+      ownGlyph: (node) => nagGlyph(node),
+      commentItem: (node) => ({ text: node.comments?.length ? 'Edit comment' : 'Comment', open: () => this.editComment(node) }),
     });
     this.ceval = new CevalView({
       header: $('ch-ceval'), pearl: $('ch-pearl'), name: $('ch-engine-name'), info: $('ch-engine-info'), bar: $('ch-bar'),
@@ -140,7 +143,7 @@ export class PrepApp {
       hover: (uci) => this.hover(uci, 'paleBlue'),
       play: (pv, upTo) => this.playLine(pv, upTo),
       start: () => this.analyse(),
-    });
+    }, { engineName: 'Stockfish 18', playLine, doneTitle: 'The engine has finished this position' });
     this.runner = new ExpectimaxRunner(() => this.queueExpectimax());
     this.expectimax = new ExpectimaxView($('px-expectimax'), this.runner, {
       get fen() { return app.current.fen; },
@@ -701,48 +704,7 @@ export class PrepApp {
       const box = $(id);
       box.hidden = !editing;
       if (!editing) { box.replaceChildren(); continue; }
-      const brush = this.draft!.brush;
-      const items: HTMLElement[] = [];
-      const tool = (name: 'pointer' | 'trash', label: string, svg: string) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = `ch-spare-tool ch-${name}`;
-        b.title = label;
-        b.setAttribute('aria-label', label);
-        b.setAttribute('aria-pressed', String(brush === name));
-        b.innerHTML = svg;
-        b.onclick = () => this.setBrush(name);
-        return b;
-      };
-      items.push(tool('pointer', 'Move pieces: drag one off the board to remove it', POINTER_SVG));
-      for (const role of SPARE_ROLES) {
-        const piece: Piece = { role, color };
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'ch-spare-piece';
-        const selected = typeof brush !== 'string' && brush.role === role && brush.color === color;
-        b.setAttribute('aria-pressed', String(selected));
-        const name = `${color} ${role}`;
-        b.title = `Place ${name}s: click or drag across squares`;
-        b.setAttribute('aria-label', `Place ${name}s`);
-        const img = document.createElement('img');
-        img.src = `/piece/${color === 'white' ? 'w' : 'b'}${LETTER[role]}.svg`;
-        img.alt = '';
-        img.draggable = false;
-        b.append(img);
-        const press = (e: MouseEvent | TouchEvent) => {
-          if (e instanceof MouseEvent && e.button !== 0) return;
-          e.preventDefault();
-          this.setBrush(piece);
-          this.board.dragNew({ ...piece }, e, true);
-        };
-        b.addEventListener('mousedown', press);
-        b.addEventListener('touchstart', press, { passive: false });
-        b.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.setBrush(piece); } };
-        items.push(b);
-      }
-      items.push(tool('trash', 'Remove pieces: click or drag across squares', TRASH_SVG));
-      box.replaceChildren(...items);
+      box.replaceChildren(...this.board.spareStrip(color, this.draft!.brush, (brush) => this.setBrush(brush)));
     }
   }
 
@@ -890,7 +852,7 @@ export class PrepApp {
     const showGear = (open: boolean) => {
       settings.hidden = !open;
       gearButton.setAttribute('aria-expanded', String(open));
-      if (open) this.gear.render(this.settings);
+      if (open) this.gear.renderSearch(this.settings);
     };
     gearButton.onclick = () => showGear(settings.hidden);
     document.addEventListener('pointerdown', (e) => {
@@ -900,14 +862,14 @@ export class PrepApp {
     this.closeGear = () => { if (settings.hidden) return false; showGear(false); gearButton.focus(); return true; };
     const changed = () => {
       saveSettings(this.settings, SETTINGS_KEY);
-      this.gear.render(this.settings);
+      this.gear.renderSearch(this.settings);
       this.renderCeval();
       this.analyse();
     };
-    this.gear = new GearPanel(settings, {
+    this.gear = new SearchGear(settings, {
       searchSeconds: (s) => { this.settings.searchSeconds = s; changed(); },
       lines: (n) => { this.settings.multiPv = n; this.evals.clear(); changed(); },
-    });
+    }, 'Stockfish');
 
     // Editor panel
     for (const b of document.querySelectorAll<HTMLButtonElement>('#ch-turn button'))
@@ -1009,6 +971,3 @@ export class PrepApp {
     action();
   }
 }
-
-const POINTER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0v0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>';
-const TRASH_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';

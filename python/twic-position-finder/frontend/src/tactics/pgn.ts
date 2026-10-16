@@ -69,7 +69,7 @@ function parseEvalComment(comment: string): PgnEval | null {
   return Number.isFinite(cp) ? { cp, mate: null } : null;
 }
 
-export function parseMovetext(text: string): PgnMove[] {
+function parseMovetext(text: string): PgnMove[] {
   const moves: PgnMove[] = [];
   let depth = 0; // variation nesting
   let pos = 0;

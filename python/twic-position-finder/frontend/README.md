@@ -49,7 +49,12 @@ Cloudflare Pages' 25 MiB asset limit.
   the filter builder; `board-preview.ts` is the dependency-free FEN renderer
   and the floating `HoverBoard`.
 - `src/tactics/` — see below.
-- `src/analysis/` — the bughouse board (`/bughouse`). `tree.ts` is the move
+- `src/analysis/` — the bughouse board (`/bughouse`), and the lila analysis
+  pieces the PGN page shares with it: the board and its editor strips
+  (`board.ts`), the move list (`moves.ts`), the engine panel (`ceval.ts`), the
+  gear's search sliders (`gear.ts`), the ☰ menu, judgements, arrows and
+  settings, and the rules-free move tree they walk (`variation-tree.ts`:
+  variations, promote, force variation, folds). `tree.ts` is the move
   tree and the hand edits, with bughouse rules for one board: a capture goes
   to the partner and leaves the board, and nothing arrives unless a hand is
   edited (pure, `npm run test:analysis`). `engine.ts` runs Hivemind, the
@@ -217,8 +222,9 @@ the Tactics Trainer), the board and pocket in `src/styles/bughouse-board.css`
 
 ## Smoke-testing
 
-`npm run test:bughouse` bundles the focused TypeScript state tests with esbuild
-and runs them in Node. `astro check` + `npm run build` check the site,
+`npm run test:analysis`, `test:puzzles` and `test:prep` bundle the focused
+TypeScript state tests with esbuild and run them in Node (`npm run build` runs
+all three first). `astro check` + `npm run build` check the site,
 and a headless Chrome run (`puppeteer-core` is a dev dependency, Chrome must be
 installed) exercises the real pages. Lichess answers non-browser user agents
 with 404, so a headless run needs `page.setUserAgent(...)`.
@@ -288,14 +294,15 @@ No population job starts merely by updating or opening the app.
 `src/prep/app.ts`) opened on the tab its address names; switching tabs (or E)
 changes the address and the highlighted nav link without reloading. It is the
 bughouse board's lila layout without the hands, and shares its chessground
-board, live annotations, arrows and ☰ menu (`src/analysis/board.ts`,
-`judge.ts`, `shapes.ts`, `menu.ts`, `settings.ts`). Above the tabs is
-Stockfish's panel (`ceval.ts`, `live-engine.ts`): Stockfish 18's
+board, move list, engine panel, gear, live annotations, arrows and ☰ menu
+(`src/analysis/board.ts`, `moves.ts`, `ceval.ts`, `gear.ts`, `judge.ts`,
+`shapes.ts`, `menu.ts`, `settings.ts`). Above the tabs is
+Stockfish's panel (`live-engine.ts` drives it): Stockfish 18's
 single-threaded build from `public/stockfish/`, the gear's search time (2 s to
 ∞) and 1 to 5 lines, Show threat, hover boards and click-to-play lines, as on
 Lichess.
 
-- **PGN** (`tree.ts`, `moves.ts`, `games.ts`): a file (Open file, drag and drop),
+- **PGN** (`tree.ts`, `games.ts`): a file (Open file, drag and drop),
   a paste under the board or anywhere on the page, or a `?fen=` link opens
   games. A file or paste replaces the open games; a FEN, the board editor and
   ☰ New analysis add one. A worker splits files with chessops (10 MiB, 20,000

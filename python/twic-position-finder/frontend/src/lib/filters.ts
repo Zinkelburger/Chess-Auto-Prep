@@ -23,7 +23,7 @@ export interface FilterDef {
   tooltip?: string;
 }
 
-export const FILTER_DEFS: FilterDef[] = [
+const FILTER_DEFS: FilterDef[] = [
   {
     key: 'fen',
     label: 'Position (FEN)',
