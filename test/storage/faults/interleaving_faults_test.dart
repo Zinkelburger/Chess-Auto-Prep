@@ -3,7 +3,7 @@
 // its scope twice, a chapter moved while a rating is written, and a book
 // edited while a chapter moves. Each must end as one of the two serial
 // orders ends, and a read begun after the rating was accepted must see it
-// ("Later reads see the rating", docs/ARCHITECTURE_RENEWAL.md). See
+// ("Later reads see the rating", docs/ARCHITECTURE.md). See
 // interleavings.dart.
 @TestOn('linux')
 // Every case runs a fault matrix of isolates: four times the default

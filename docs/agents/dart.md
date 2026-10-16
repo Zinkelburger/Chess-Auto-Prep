@@ -2,8 +2,8 @@
 
 ## Layout and dependencies
 
-The renewal app is the only app. `lib/main.dart` boots it; production code
-lives directly under `lib/`, with matching tests under `test/`.
+`lib/main.dart` boots the app; production code lives directly under `lib/`,
+with matching tests under `test/`.
 
 - `chess/`: pure chess, PGN, generation, training and tournament values and algorithms.
 - `storage/`: files, databases, settings, revisions, locking, recovery and backups.
@@ -16,9 +16,9 @@ lives directly under `lib/`, with matching tests under `test/`.
 - `diagnostics/`: logging; `debug/`: opt-in driver and packaged-app checks.
 
 `scripts/check_v2.py` enforces the dependency table, pure layers, write ownership
-and complexity limits. See [the architecture contracts](../ARCHITECTURE_RENEWAL.md).
-Do not recreate v1's services/core/models/widgets layers, dependency adapters,
-Provider container, localization generator, debt ledgers or Widgetbook.
+and complexity limits. See [the architecture contracts](../ARCHITECTURE.md).
+Do not add parallel layers (`services/`, `models/`, `widgets/`), a dependency
+container, code generation, a localization step or debt ledgers.
 
 ## Ownership and lifecycle
 
