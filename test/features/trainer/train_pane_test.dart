@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/chess/training/records.dart';
 import 'package:chess_auto_prep/chess/training/schedule.dart';
 import 'package:chess_auto_prep/chess/training/sitting.dart';
 import 'package:chess_auto_prep/features/trainer/trainer.dart';
+import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/features/trainer/training_scope.dart';
 import 'package:chess_auto_prep/features/trainer/lesson_view.dart';
 import 'package:chess_auto_prep/features/trainer/train_pane.dart';

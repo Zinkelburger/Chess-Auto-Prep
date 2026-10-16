@@ -17,7 +17,7 @@ import '../features/settings/setting_rows.dart';
 import '../features/settings/settings_dialog.dart';
 import '../features/tactics/my_games_block.dart';
 import '../features/trainer/train_pane.dart';
-import '../features/trainer/trainer.dart';
+import '../features/trainer/trainer_state.dart';
 import '../features/trainer/training_outline.dart';
 import '../ui/app_action.dart';
 import '../ui/app_keys.dart';

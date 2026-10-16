@@ -15,6 +15,7 @@ import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'progress.dart';
 import 'trainer.dart';
+import 'trainer_state.dart';
 import 'study_training_controls.dart';
 import 'trainer_words.dart';
 import '../../ui/move_notation.dart';

@@ -16,6 +16,7 @@ import '../features/pgn_viewer/pgn_viewer_panel.dart';
 import '../features/pgn_viewer/player_side_choice.dart';
 import '../features/study/study_panel.dart';
 import '../features/trainer/trainer.dart';
+import '../features/trainer/trainer_state.dart';
 import '../ui/app_action.dart';
 import '../ui/pane_tabs.dart';
 import '../workspace/board_book.dart';

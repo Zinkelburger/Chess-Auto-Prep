@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/features/library/library_state.dart';
-import 'package:chess_auto_prep/features/trainer/trainer.dart';
+import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';

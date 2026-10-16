@@ -18,6 +18,7 @@ import '../features/players/saved_games.dart';
 import '../features/study/studies.dart';
 import '../features/trainer/trainer.dart';
 import '../storage/chapter_files.dart';
+import '../features/trainer/trainer_state.dart';
 import '../storage/my_games_files.dart';
 import '../storage/my_accounts.dart';
 import '../storage/pgn_file_import.dart';
