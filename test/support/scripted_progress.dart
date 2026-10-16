@@ -2,6 +2,7 @@ import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/chess/training/records.dart';
 import 'package:chess_auto_prep/chess/training/schedule.dart';
 import 'package:chess_auto_prep/storage/training_store.dart';
+import 'package:chess_auto_prep/storage/training_progress.dart';
 
 /// Training progress held in memory, answering what the test scripts: the
 /// rows a read finds, and what the next write or log says instead of
