@@ -16,11 +16,14 @@ export interface MenuHost {
   readonly hasMoves: boolean;
   flip(): void;
   editor(): void;
-  practice(): void;
+  /** Practice with computer; left out of the menu where the page has none. */
+  practice?(): void;
   help(): void;
   clearMoves(): void;
   replay(delay: number | null): void;
   toggle(key: Toggle): void;
+  /** The page's own tools, after the shared ones. */
+  extra?: { icon: string; text: string; title: string; action: () => void }[];
 }
 
 const ICONS = {
@@ -50,9 +53,11 @@ export function renderMenu(box: HTMLElement, host: MenuHost) {
   tools.append(
     tool(ICONS.flip, 'Flip board', 'Flip board (F)', () => host.flip()),
     tool(ICONS.edit, 'Board editor', 'Board editor (B)', () => host.editor()),
-    tool(ICONS.practice, host.practising ? 'Stop practice' : 'Practice with computer', 'Play the side at the bottom against the engine', () => host.practice(), host.practising),
-    tool(ICONS.keys, 'Keyboard shortcuts', 'Keyboard shortcuts (?)', () => host.help()),
   );
+  const practice = host.practice;
+  if (practice) tools.append(tool(ICONS.practice, host.practising ? 'Stop practice' : 'Practice with computer', 'Play the side at the bottom against the engine', () => practice(), host.practising));
+  tools.append(tool(ICONS.keys, 'Keyboard shortcuts', 'Keyboard shortcuts (?)', () => host.help()));
+  for (const x of host.extra ?? []) tools.append(tool(x.icon, x.text, x.title, x.action));
   if (host.hasMoves) tools.append(tool(ICONS.trash, 'Clear moves', 'Remove every move and start again from the first position', () => host.clearMoves()));
   const parts: HTMLElement[] = [tools];
 
@@ -110,7 +115,8 @@ const KEYS: [string, string][] = [
   ['?', 'This help'],
 ];
 
-export function openHelp() {
+/** The keyboard help; a page adds its own keys after the shared ones. */
+export function openHelp(extra: [string, string][] = []) {
   const dialog = document.createElement('dialog');
   dialog.className = 'ch-help';
   dialog.setAttribute('aria-label', 'Keyboard shortcuts');
@@ -119,7 +125,7 @@ export function openHelp() {
   close.setAttribute('aria-label', 'Close');
   close.onclick = () => dialog.close();
   const table = el('dl', 'ch-help-keys');
-  for (const [keys, what] of KEYS) table.append(el('dt', '', keys), el('dd', '', what));
+  for (const [keys, what] of [...KEYS, ...extra]) table.append(el('dt', '', keys), el('dd', '', what));
   const note = el('p', 'ch-help-note', 'Right-click a move for Promote variation, Make main line, Force variation, Copy PGN and Delete from here.');
   dialog.append(el('h2', '', 'Keyboard shortcuts'), close, table, note);
   dialog.addEventListener('click', (e) => { if (e.target === dialog) dialog.close(); });

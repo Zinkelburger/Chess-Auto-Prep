@@ -5,8 +5,8 @@ Static Astro site deployed to Cloudflare Pages. Browser preparation tools, one s
 | Route                 | What                                                                 | Code                                   |
 | --------------------- | -------------------------------------------------------------------- | -------------------------------------- |
 | `/twic-notifications` | TWIC Alerts — create alerts anonymously, or manage them signed in    | `src/lib/alerts-page.ts` + `src/lib/*` |
-| `/pgn`               | PGN viewer, variations, comments, move entry, local save and export     | `src/prep/*` |
-| `/expectimax`        | Stockfish + Maia expectimax computed on this device                    | `src/prep/*` |
+| `/pgn`               | Analysis board on its PGN tab: lichess.org/analysis with Stockfish 18, PGN games, comments and variations | `src/prep/*` |
+| `/expectimax`        | The same board on its Expectimax tab: practical moves for both sides against Maia's replies, on this device | `src/prep/*` |
 | `/tactics`            | Tactics Trainer — Stockfish in the browser mines puzzles from games  | `src/tactics/*`                        |
 | `/bughouse`           | Bughouse — one bughouse board on lichess.org/analysis's layout, with + and − on every piece in both hands, lila's board editor and a sit panel; Hivemind in the browser, on the GPU through WebGPU | `src/analysis/*`, `../../../tools/bughouse_web/` |
 | `/bughouse-puzzles`   | Bughouse Puzzles — mates and tactics mined from FICS games, reserves frozen | `src/bughouse-puzzles/*`, `public/bughouse-puzzles/` |
@@ -284,43 +284,61 @@ No population job starts merely by updating or opening the app.
 
 ## PGN workspace and browser expectimax
 
-`/pgn` and `/expectimax` share `PrepWorkspace.astro`. PGN parsing runs in a
-worker; 10 MiB / 40,000-move limits bound imports. Variations, comments, NAGs,
-headers and custom FEN starts survive PGN export. Illegal imports leave the
-accepted workspace intact. Board moves extend the current variation, including
-underpromotions through SAN/UCI entry. The workspace saves to IndexedDB after
-transactions commit; the cursor is a move path so export ordering cannot change
-its meaning. Opening a tactics FEN adds an analysis game while preserving the
-existing workspace, and consumes the URL parameter so reload retains edits.
-Save failures remain visible. This is device-local storage: export
-PGN for backups and desktop interchange; it is not account sync.
+`/pgn` and `/expectimax` are one page (`src/components/AnalysisPage.astro`,
+`src/prep/app.ts`) opened on the tab its address names; switching tabs (or E)
+changes the address and the highlighted nav link without reloading. It is the
+bughouse board's lila layout without the hands, and shares its chessground
+board, live annotations, arrows and ☰ menu (`src/analysis/board.ts`,
+`judge.ts`, `shapes.ts`, `menu.ts`, `settings.ts`). Above the tabs is
+Stockfish's panel (`ceval.ts`, `live-engine.ts`): Stockfish 18's
+single-threaded build from `public/stockfish/`, the gear's search time (2 s to
+∞) and 1 to 5 lines, Show threat, hover boards and click-to-play lines, as on
+Lichess.
 
-The search worker owns one Stockfish worker and one lazy ONNX Runtime Web Maia
-session. `tools/prepare_prep_web.py` compresses the committed Maia model into
-three checksum-verified chunks below Pages' 25 MiB limit (about 40 MiB total).
-Maia uses the desktop encoder, mirrored black positions, rating inputs and
-legal-move softmax. It runs with one WASM thread using the runtime already
-prepared for bughouse, without cross-origin-isolation headers. Failed downloads
-can be retried; verified chunks are cached when browser storage allows it.
-
-Search expands breadth first. Every legal own move is retained; opponent
-replies are ranked by Maia, cut to the configured coverage and count, and
-renormalized. Leaves use Stockfish at the requested depth, converted to the
-prepared side and the desktop logistic expected-score scale. Own turns take a
-maximum; opponent turns take a weighted average. Engine scores shown in the
-table also use the prepared side. These values are estimates, not empirical
-win probabilities. Checkmate, stalemate, insufficient material and the 50-move
-rule terminate search; threefold repetition is not inferred from FEN-only nodes.
-The browser search does not claim identical trees or performance to desktop.
-
-Expansions commit atomically. Stop/budget results are explicitly partial and
-save along with the PGN; Resume accepts the same settings and an increased
-position budget. Following a searched line displays its saved subtree. Export
-JSON preserves the tree and search configuration.
-Stockfish's in-memory evaluation cache survives repeated searches in the tab;
-full result snapshots survive reload. Closing the tab ends computation. There
-is no service worker: an already-loaded worker can analyse offline, but reopening
-the website offline is not promised.
+- **PGN** (`tree.ts`, `moves.ts`, `games.ts`): a file (Open file, drag and drop),
+  a paste under the board or anywhere on the page, or a `?fen=` link opens
+  games. A file or paste replaces the open games; a FEN, the board editor and
+  ☰ New analysis add one. A worker splits files with chessops (10 MiB, 20,000
+  games at most); a paste with nothing playable in it is refused and the open
+  games stay. Several games get a list with a filter and ‹ › between them.
+  The move list is lila's, with comments (clock and eval tokens hidden, kept in
+  the PGN), the game's own glyphs in lila's colours, and a right-click Comment
+  beside Promote, Make main line, Copy and Delete. Games, the game shown, the
+  move shown and the orientation are saved in IndexedDB (`analysis-v1`) 400 ms
+  after a change, and come back on reload; the October 2 workspace (`current`)
+  is read once when nothing newer exists. Download writes every open game.
+- **Expectimax** (`expectimax.ts`, `expectimax-runner.ts`, `expectimax-view.ts`):
+  the desktop's practical search (docs/ALGORITHM.md, "V2 interactive
+  Expectimax"). One Search press runs it twice from the board, with White and
+  then Black as the prepared side. Our moves are Stockfish's MultiPV shortlist
+  (First moves 4, Later moves 4); their replies are Maia's likeliest at the
+  Rating until they cover the Reply share (90%), at most Replies (5),
+  renormalised; a line met less than once in Rare lines (100) games keeps its
+  engine score. Breadth first, one ply at a time, each expansion attached
+  whole; positions are searched once at the Engine depth (12), a reply the next
+  ply expands with the shortlist's width straight away. Leaves score
+  1 / (1 + e^(−0.00368208·cp)); checkmate and the rules' draws are exact;
+  threefold repetition is not known from a FEN. Depth (1–8 plies, default 4)
+  and Rating sit on the bar; the rest in its gear. A side holds at most 8,000
+  positions.
+  The table at the board's position shows Move, Played (Maia's share),
+  White, Black (each side's value, as an engine score from White's side, the
+  side to move's best in the accent colour) and Engine; clicking a row plays
+  it, hovering draws it. Browsing never searches: a position no search
+  reached says so. Searches are found again by position (a transposition
+  shows too), kept in IndexedDB (`expectimax-v1`, the last 16), saved after
+  each complete ply, and a search the page closed on comes back as stopped.
+  Stockfish runs on a pool of workers (cores − 1, at most 6; 2 on a phone with
+  4 GB or less) started one at a time, so a slow machine is not asked to
+  compile every engine at once; a worker that fails hands its job to another.
+  Maia runs in its own worker on ONNX Runtime Web's WASM build (one thread,
+  the runtime already prepared for bughouse, no cross-origin isolation):
+  `tools/prepare_prep_web.py` compresses the committed model into three
+  checksum-verified chunks below Pages' 25 MiB limit (about 40 MiB), kept in
+  the Cache API once verified. A failed download says so on the status line;
+  the next Search tries again. Lines and Maia's answers are remembered for the
+  visit, so searching again is quicker. These are model estimates, not
+  measured win probabilities, and closing the tab ends a search.
 
 Tactics accepts local PGNs (choose White or Black), including custom starts,
 as well as the existing account downloads. Uploaded PGNs stay on the device.
@@ -336,9 +354,11 @@ scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run buil
 scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test:prep:browser
 ```
 
-The browser check serves the static build on loopback, uses a fresh headless
-Chrome profile, blocks external requests, and exercises actual Stockfish/Maia,
-PGN export/reload, cancellation, budgets/resume, offline inference and uploaded
-PGN tactics. Desktop/phone screenshots are under `build/prep-web/`. It does not
+The browser check serves the static build on loopback with `public/_headers`,
+uses a fresh headless Chrome profile, blocks external requests, and exercises
+the PGN tab (games list, comments, variations, an engine line's move, reload,
+a refused paste, the `?fen=` handoff, Download), real Stockfish and Maia
+expectimax for both sides (table, following a move, reload, Stop, a search
+offline) and uploaded PGN tactics. Desktop/phone screenshots are under `build/prep-web/`. It does not
 access personal files or public shared analysis. The existing bughouse browser
 suite uses its own isolated API database; see the static Bughouse guide above.
