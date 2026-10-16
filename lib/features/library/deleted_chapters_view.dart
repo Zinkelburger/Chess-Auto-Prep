@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../storage/chapter_files.dart';
+import '../../storage/deleted_chapters.dart';
 import '../../ui/status_bar.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/relative_time.dart';

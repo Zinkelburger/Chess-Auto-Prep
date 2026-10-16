@@ -573,7 +573,7 @@ Copy the shape of these files; they are what the rules above look like:
 | `lib/features/library/library.dart` | Sealed states and results, a stale check after `await` |
 | `lib/workspace/move_tree_view.dart` | A widget built from an owner, private sub-widgets, no I/O; lines built once per tree, a cursor move redraws two moves |
 | `lib/app/workspace_requests.dart` | Cross-mode requests as an owner: sealed results, questions behind an interface, a disposed check after every `await` |
-| `lib/storage/chapter_files.dart` | An interface at a real boundary (the filesystem) with sealed results, and its one adapter |
+| `lib/storage/chapter_files.dart`, `chapter_directory.dart` | An interface at a real boundary (the filesystem) with sealed results, and its one adapter in its own file |
 | `lib/engines/uci_engine.dart` | A protocol over a pipe: serialised searches, each with its own stream, so stale output cannot land |
 | `lib/workspace/engine_analysis.dart` | An owner over a background job: enable/disable, stale checks, a 200 ms snapshot buffer, `dispose` |
 | `test/workspace/engine_analysis_test.dart` | Fake time, a scripted double, assertions on the owner and never on private state |

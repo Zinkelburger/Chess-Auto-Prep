@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 
 import 'directory_entries.dart';
 import 'chapter_files.dart';
+import 'deleted_chapters.dart';
 import 'recovery_gate.dart';
 import 'recovery_files.dart';
 import 'relocation_notes.dart' show recoveryFolder;

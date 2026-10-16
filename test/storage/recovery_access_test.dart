@@ -12,6 +12,8 @@ import 'package:chess_auto_prep/storage/file_lock.dart';
 import 'package:chess_auto_prep/storage/file_relocation.dart';
 import 'package:chess_auto_prep/storage/training_rows.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/deleted_chapters.dart';
+import 'package:chess_auto_prep/storage/chapter_directory.dart';
 import 'package:chess_auto_prep/storage/study_files.dart';
 import 'package:chess_auto_prep/storage/training_store.dart';
 import 'package:chess_auto_prep/storage/pgn_file_import.dart';
