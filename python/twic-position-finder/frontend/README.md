@@ -237,56 +237,11 @@ format, cache boundaries and real-engine browser verification command.
 
 ## Bughouse expectimax
 
-The lab and BughouseDB display saved `Exp White` and `Exp Black` tables from
-`GET /api/bughousedb/expectimax?fen=<dual FEN>` (also included in `/position`).
-Both are White's perspective on the selected board. CrazyAra probabilities are
-an FICS-calibrated proxy for human moves, not a human-trained model. Each tree
-retains Hivemind's best move plus the top four probabilities strictly above 1%.
-No clocks or sitting enter the tree; captures still transfer to the partner.
-
-The shared desktop builder lives in `tools/bughouse_db/expectimax.py`; see
-[the algorithm](../../../docs/ALGORITHM.md#bughouse-expectimax). The API reads
-`BUGHOUSE_EXPECTIMAX_PATH` (default `bughouse_expectimax.db` beside the server).
-The builder's `run --publish-to SSH_HOST --publish-path /absolute/book.db`
-publishes completed snapshots every five minutes by transactional SQLite merge.
-An interrupted build preserves each engine evaluation locally. Only completed
-trees are published, and old profiles remain available. `publish` also runs one
-sync immediately. Alternatively, POST batches of up to 20 `{fen,board,data}`
-records to `/api/bughousedb/expectimax/import` with the existing admin API key.
-
-Saved expectimax requires the API; the existing in-browser Hivemind analysis
-continues to work without it. Set `PUBLIC_API_URL=https://api.chessautoprep.com`
-when building for the public site.
-
-## Shared analysis and manual overnight population
-
-Both browser entry points and desktop bulk analysis default to 800 Hivemind
-nodes. Lab Analyze submits raw two-seat searches to `/api/bughousedb/evaluation`
-using `/evaluation/ticket`; the server derives the calibrated value, validates
-legal moves and budget completion, and preserves a deeper result. Exact
-position/team/required-board/clock profiles stay separate. Saved results load
-on navigation. A single position evaluation is not an expectimax tree.
-BughouseDB's move-table upload returns the stored position, which renders
-immediately; a failed upload keeps its payload for Retry save.
-
-From the repository root, manually start a resumable, eight-core overnight run:
-
-```sh
-python3 tools/bughouse_db/overnight.py start --hours 8 --cores 8
-python3 tools/bughouse_db/overnight.py status
-python3 tools/bughouse_db/overnight.py stop
-```
-
-This creates one bounded systemd user service, not a timer. It queues up to
-10,000 popular FICS positions, prioritizes positions contributed from the Lab,
-then runs the existing clock-free two-ply builder at 800 nodes. It retains
-Hivemind's best move plus the top four CrazyAra probabilities above 1%, saves
-both colour columns, reuses deeper compatible evaluations, and publishes
-completed tables every five minutes. Interrupted work resumes on the next
-start; failed jobs are retried once per new run. Defaults use the owner's
-`twic-vps` SSH alias and existing website database paths; `--local-only`
-disables remote reads/writes. `--help` lists path, worker and budget overrides.
-No population job starts merely by updating or opening the app.
+The API still serves saved tables from `BUGHOUSE_EXPECTIMAX_PATH` (default
+`bughouse_expectimax.db` beside the server) at
+`GET /api/bughousedb/expectimax?fen=<dual FEN>`, and accepts admin imports at
+`/api/bughousedb/expectimax/import`. No page reads them, and the builder that
+made them was removed with the desktop app's expectimax (October 2026).
 
 ## PGN workspace and browser expectimax
 

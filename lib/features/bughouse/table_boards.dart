@@ -7,28 +7,21 @@ import '../../chess/bughouse/table_line.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/theme.dart';
 import 'bughouse_lab.dart';
-import 'archive_moves.dart';
-import 'move_tables.dart';
 import '../../ui/move_notation.dart';
 
-/// Both boards side by side, each with its two players and their
-/// reserves, its own move list, step buttons and FICS continuations.
+/// The boards on screen, each with its two players' hands: board 1 alone,
+/// or both side by side, each with its own move list and step buttons.
 ///
 /// Board 1 has A (White) and C (Black), board 2 D (White) and B (Black); our
 /// team's colour is at the bottom of board 1 unless the boards are flipped.
-/// A piece moves by click or drag; a reserve piece is dragged onto a square,
+/// A piece moves by click or drag; a hand's piece is dragged onto a square,
 /// or clicked and then its square clicked, the squares it may go to ringed.
+/// The + above and − below each hand's piece add one or take one away.
 class TableBoards extends StatefulWidget {
-  const TableBoards({
-    super.key,
-    required this.lab,
-    required this.boardSize,
-    this.archive,
-  });
+  const TableBoards({super.key, required this.lab, required this.boardSize});
 
   final BughouseLab lab;
   final double boardSize;
-  final ArchiveMoves? archive;
 
   @override
   State<TableBoards> createState() => _TableBoardsState();
@@ -105,19 +98,19 @@ class _TableBoardsState extends State<TableBoards> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([_lab, ?widget.archive]),
+      listenable: _lab,
       builder: (context, _) {
         final picked = _stillPicked(_lab.position);
+        final shown = _lab.single ? [BoardNumber.one] : BoardNumber.values;
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final board in BoardNumber.values) ...[
+            for (final board in shown) ...[
               if (board == BoardNumber.two) const SizedBox(width: labBoardGap),
               _BoardColumn(
                 lab: _lab,
                 board: board,
                 size: widget.boardSize,
-                archive: widget.archive,
                 picked: picked?.board == board ? picked!.role : null,
                 onPick: (role) => _pick(board, role),
                 onTouched: (square) => _touched(board, square),
@@ -140,11 +133,9 @@ class _BoardColumn extends StatelessWidget {
     required this.onPick,
     required this.onTouched,
     required this.onMove,
-    this.archive,
   });
 
   final BughouseLab lab;
-  final ArchiveMoves? archive;
   final BoardNumber board;
   final double size;
   final Role? picked;
@@ -156,7 +147,7 @@ class _BoardColumn extends StatelessWidget {
   Widget build(BuildContext context) {
     final bottom = lab.bottom(board);
     Widget seat(Side side) => _SeatRow(
-      position: lab.position,
+      lab: lab,
       board: board,
       side: side,
       square: size / 8,
@@ -170,10 +161,14 @@ class _BoardColumn extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              board.label,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
+            if (!lab.single)
+              SizedBox(
+                height: labBoardLabelHeight,
+                child: Text(
+                  board.label,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
             seat(bottom.opposite),
             ValueListenableBuilder(
               valueListenable: lab.preview,
@@ -189,9 +184,7 @@ class _BoardColumn extends StatelessWidget {
               ),
             ),
             seat(bottom),
-            BoardMoves(lab: lab, board: board),
-            if (archive case final archive? when archive.available)
-              ArchiveBlock(lab: lab, archive: archive, board: board),
+            if (!lab.single) BoardMoves(lab: lab, board: board),
           ],
         ),
       ),
@@ -227,13 +220,15 @@ class _BoardColumn extends StatelessWidget {
   }
 }
 
-/// A player's reserve as lila's crazyhouse pocket: five slots, each the size
-/// of a board square, in a grey well beside the seat's letter. Pieces held
-/// show in full with their count; empty slots stay in place, faint. Only
-/// the player on move can drop, by click then square, or drag.
+/// A player's hand as lila's crazyhouse pocket: five slots, each the size
+/// of a board square, in a grey well beside the turn dot and, with both
+/// boards shown, the seat's letter. Pieces held show in full with their
+/// count; empty slots stay in place, faint. Only the player on move can
+/// drop, by click then square, or drag. A + above each slot adds one of
+/// that piece and a − below takes one away.
 class _SeatRow extends StatelessWidget {
   const _SeatRow({
-    required this.position,
+    required this.lab,
     required this.board,
     required this.side,
     required this.square,
@@ -241,11 +236,11 @@ class _SeatRow extends StatelessWidget {
     required this.onPick,
   });
 
-  final TablePosition position;
+  final BughouseLab lab;
   final BoardNumber board;
   final Side side;
 
-  /// A square of the board, the size of a reserve piece.
+  /// A square of the board, the size of a hand's piece.
   final double square;
   final Role? picked;
   final ValueChanged<Role> onPick;
@@ -253,50 +248,122 @@ class _SeatRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final position = lab.position;
     final seat = Seat.of(board, side);
     final toMove = position.turn(board) == side;
     final pockets = position.board(board).pockets!;
-    return SizedBox(
-      height: square + labSeatPadding,
+    Widget steps(int delta) => Row(
+      children: [
+        for (final role in reserveRoles)
+          _HandStep(
+            side: side,
+            role: role,
+            delta: delta,
+            width: square,
+            enabled: delta > 0
+                ? pockets.of(side, role) < handLimit
+                : pockets.of(side, role) > 0,
+            onPressed: () => lab.adjustHand(board, side, role, delta),
+          ),
+      ],
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: labSeatPadding / 2),
       child: Row(
         children: [
           _TurnDot(side: side, shown: toMove),
           const SizedBox(width: Space.s),
-          SizedBox(
-            width: Space.l,
-            child: Text(
-              seat.letter,
-              style: TextStyle(
-                color: toMove ? scheme.onSurface : scheme.onSurfaceVariant,
-                fontWeight: toMove ? FontWeight.w600 : null,
+          if (!lab.single)
+            SizedBox(
+              width: Space.l,
+              child: Text(
+                seat.letter,
+                style: TextStyle(
+                  color: toMove ? scheme.onSurface : scheme.onSurfaceVariant,
+                  fontWeight: toMove ? FontWeight.w600 : null,
+                ),
               ),
             ),
-          ),
-          Container(
-            width: square * reserveRoles.length,
-            height: square,
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              gradient: labPocketWell,
-              borderRadius: BorderRadius.circular(Space.xs),
-            ),
-            child: Row(
-              children: [
-                for (final role in reserveRoles)
-                  _ReservePiece(
-                    key: ValueKey(('reserve', seat, role)),
-                    piece: Piece(color: side, role: role),
-                    count: pockets.of(side, role),
-                    seat: seat,
-                    size: square,
-                    live: toMove && pockets.of(side, role) > 0,
-                    picked: toMove && picked == role,
-                    onPick: () => onPick(role),
-                  ),
-              ],
-            ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              steps(1),
+              Container(
+                width: square * reserveRoles.length,
+                height: square,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  gradient: labPocketWell,
+                  borderRadius: BorderRadius.circular(Space.xs),
+                ),
+                child: Row(
+                  children: [
+                    for (final role in reserveRoles)
+                      _ReservePiece(
+                        key: ValueKey(('reserve', seat, role)),
+                        piece: Piece(color: side, role: role),
+                        count: pockets.of(side, role),
+                        owner: lab.single
+                            ? (side == Side.white ? 'White' : 'Black')
+                            : 'Player ${seat.letter}',
+                        size: square,
+                        live: toMove && pockets.of(side, role) > 0,
+                        picked: toMove && picked == role,
+                        onPick: () => onPick(role),
+                      ),
+                  ],
+                ),
+              ),
+              steps(-1),
+            ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// One + or − over a hand's slot.
+class _HandStep extends StatelessWidget {
+  const _HandStep({
+    required this.side,
+    required this.role,
+    required this.delta,
+    required this.width,
+    required this.enabled,
+    required this.onPressed,
+  });
+
+  final Side side;
+  final Role role;
+  final int delta;
+  final double width;
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colour = side == Side.white ? 'White' : 'Black';
+    final tip = delta > 0
+        ? 'One more ${role.name} for $colour'
+        : 'One ${role.name} fewer for $colour';
+    return SizedBox(
+      width: width,
+      height: labStepHeight,
+      child: IconButton(
+        tooltip: tip,
+        onPressed: enabled ? onPressed : null,
+        icon: Icon(delta > 0 ? Icons.add : Icons.remove),
+        iconSize: IconSize.action,
+        style: IconButton.styleFrom(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          fixedSize: Size(width, labStepHeight),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(Space.xs),
+          ),
+        ),
       ),
     );
   }
@@ -333,7 +400,7 @@ class _ReservePiece extends StatefulWidget {
     super.key,
     required this.piece,
     required this.count,
-    required this.seat,
+    required this.owner,
     required this.size,
     required this.live,
     required this.picked,
@@ -342,7 +409,9 @@ class _ReservePiece extends StatefulWidget {
 
   final Piece piece;
   final int count;
-  final Seat seat;
+
+  /// Whose hand: `White`, or `Player A` with both boards shown.
+  final String owner;
   final double size;
 
   /// Whether its player is on move, so it may be dropped now.
@@ -404,12 +473,10 @@ class _ReservePieceState extends State<_ReservePiece> {
         ],
       ),
     );
-    final label = 'Player ${widget.seat.letter}: $count $role in reserve';
+    final label = '${widget.owner}: $count $role in hand';
     if (!widget.live) {
       return Tooltip(
-        message: count == 0
-            ? 'No $role in reserve'
-            : '$label · waiting for turn',
+        message: count == 0 ? 'No $role in hand' : '$label · waiting for turn',
         child: Semantics(label: label, child: face),
       );
     }
@@ -517,11 +584,19 @@ class _BoardState extends State<_Board> {
 
 /// A board's own moves, numbered as that board counts them, the current
 /// one marked and the ones stepped past faint, with the four step buttons.
+/// Under a board the list is a few rows tall; with [fill] it takes the
+/// height its parent leaves.
 class BoardMoves extends StatelessWidget {
-  const BoardMoves({super.key, required this.lab, required this.board});
+  const BoardMoves({
+    super.key,
+    required this.lab,
+    required this.board,
+    this.fill = false,
+  });
 
   final BughouseLab lab;
   final BoardNumber board;
+  final bool fill;
 
   @override
   Widget build(BuildContext context) {
@@ -529,21 +604,22 @@ class BoardMoves extends StatelessWidget {
     final upto = line.upto(board);
     final total = line.of(board).length;
     final scheme = Theme.of(context).colorScheme;
-    final focused = lab.focus == board;
+    final focused = lab.focus == board && !lab.single;
+    final list = Container(
+      height: fill ? null : labMoveListHeight,
+      decoration: BoxDecoration(
+        border: Border.symmetric(
+          horizontal: BorderSide(
+            color: focused ? scheme.primary : scheme.outline,
+          ),
+        ),
+      ),
+      child: _MoveRows(lab: lab, board: board),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          height: labMoveListHeight,
-          decoration: BoxDecoration(
-            border: Border.symmetric(
-              horizontal: BorderSide(
-                color: focused ? scheme.primary : scheme.outline,
-              ),
-            ),
-          ),
-          child: _MoveRows(lab: lab, board: board),
-        ),
+        if (fill) Expanded(child: list) else list,
         const SizedBox(height: Space.xs),
         Row(
           children: [
@@ -579,7 +655,7 @@ class BoardMoves extends StatelessWidget {
 
   Widget _step(IconData icon, String tip, bool enabled, int to) => IconButton(
     icon: Icon(icon, size: IconSize.action),
-    tooltip: '$tip, ${board.label.toLowerCase()}',
+    tooltip: lab.single ? tip : '$tip, ${board.label.toLowerCase()}',
     visualDensity: VisualDensity.compact,
     onPressed: enabled ? () => lab.go(board, to) : null,
   );
@@ -627,15 +703,7 @@ class _MoveRowsState extends State<_MoveRows> {
   Widget build(BuildContext context) {
     final moves = lab.line.of(board);
     final scheme = Theme.of(context).colorScheme;
-    if (moves.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(Space.xs),
-        child: Text(
-          'No moves yet',
-          style: TextStyle(color: scheme.onSurfaceVariant),
-        ),
-      );
-    }
+    if (moves.isEmpty) return const SizedBox.expand();
     final rows = _pairs(moves);
     final upto = lab.line.upto(board);
     _reveal(

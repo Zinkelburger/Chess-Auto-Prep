@@ -278,3 +278,38 @@ String readablePv(TablePosition position, List<JointMove> pv, {int limit = 6}) {
   }
   return steps.join(' · ');
 }
+
+/// [board]'s moves along [pv] from [position], numbered as that board
+/// counts them — `12. Nf3 Nc6 13. d4`, or `12... Nc6` when Black starts —
+/// the other board's moves played but not written. Stops at [limit] moves
+/// or the first that does not play.
+String boardPv(
+  TablePosition position,
+  List<JointMove> pv,
+  BoardNumber board, {
+  int limit = 8,
+}) {
+  final words = <String>[];
+  var table = position;
+  var written = 0;
+  for (final joint in pv) {
+    for (final on in BoardNumber.values) {
+      final uci = joint.on(on);
+      if (uci == null) continue;
+      final before = table.board(on);
+      final played = table.play(on, uci);
+      if (played == null) return words.join(' ');
+      if (on == board) {
+        if (before.turn == Side.white) {
+          words.add('${before.fullmoves}.');
+        } else if (written == 0) {
+          words.add('${before.fullmoves}...');
+        }
+        words.add(played.move.san);
+        if (++written >= limit) return words.join(' ');
+      }
+      table = played.after;
+    }
+  }
+  return words.join(' ');
+}

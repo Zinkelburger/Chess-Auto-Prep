@@ -1,7 +1,7 @@
 import 'package:chess_auto_prep/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_lab.dart';
-import 'package:dartchess/dartchess.dart' show Role, Side;
+import 'package:dartchess/dartchess.dart' show Role, Setup, Side;
 import 'package:flutter_test/flutter_test.dart';
 
 const start = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -72,23 +72,56 @@ void main() {
     expect(lab.line.moves.length, 2);
   });
 
-  test('a new game or a set position starts a new line', () {
+  test('a new game or a pasted position starts a new line', () {
     capture();
     lab.newGame();
     expect(lab.line.moves, isEmpty);
-    lab.setPosition(
-      (fen: start, white: 'N', black: ''),
-      (fen: start, white: '', black: 'K'),
-    );
-    expect(lab.setupProblems[BoardNumber.two], startsWith('Player B: '));
-    lab.setPosition(
-      (fen: start, white: 'N', black: ''),
-      (fen: start, white: '', black: '2P'),
-    );
-    expect(lab.setupProblems, isEmpty);
-    expect(lab.position.one.pockets!.of(Side.white, Role.knight), 1);
+    lab.loadDualFen('$start|$start');
+    expect(lab.problem, isNull);
     lab.loadDualFen('nonsense|$start|$start');
-    expect(lab.setupProblems[BoardNumber.one], 'That is not a valid dual FEN.');
+    expect(
+      (lab.problem as PositionRefused).reason,
+      'That is not a valid dual FEN.',
+    );
+  });
+
+  test('+ and − change a hand and start a new line from there', () {
+    capture();
+    lab.adjustHand(BoardNumber.one, Side.black, Role.knight, 1);
+    expect(lab.position.one.pockets!.of(Side.black, Role.knight), 1);
+    expect(lab.line.moves, isEmpty);
+    // What the table showed is kept: the capture is still made.
+    expect(lab.position.two.pockets!.of(Side.black, Role.pawn), 1);
+    lab.adjustHand(BoardNumber.one, Side.black, Role.knight, -1);
+    lab.adjustHand(BoardNumber.one, Side.black, Role.knight, -1);
+    expect(lab.position.one.pockets!.of(Side.black, Role.knight), 0);
+    for (var i = 0; i < handLimit + 2; i++) {
+      lab.adjustHand(BoardNumber.two, Side.white, Role.queen, 1);
+    }
+    expect(lab.position.two.pockets!.of(Side.white, Role.queen), handLimit);
+  });
+
+  test('an edited board keeps its hands; one that cannot play is refused', () {
+    lab.adjustHand(BoardNumber.one, Side.white, Role.rook, 1);
+    lab.editBoard(
+      BoardNumber.one,
+      Setup.parseFen('4k3/8/8/8/8/8/8/4K3 b - - 0 1'),
+    );
+    expect(lab.problem, isNull);
+    expect(lab.position.one.turn, Side.black);
+    expect(lab.position.one.pockets!.of(Side.white, Role.rook), 1);
+    lab.editBoard(BoardNumber.one, Setup.parseFen('8/8/8/8/8/8/8/4K3 w - - 0 1'));
+    expect(lab.problem, isA<PositionRefused>());
+    expect(lab.position.one.board.kingOf(Side.black), isNotNull);
+  });
+
+  test('one board shown steps board 1', () {
+    lab.showBoards(LabBoards.two);
+    lab.play(BoardNumber.two, 'e2e4');
+    expect(lab.focus, BoardNumber.two);
+    lab.showBoards(LabBoards.one);
+    expect(lab.single, isTrue);
+    expect(lab.focus, BoardNumber.one);
   });
 
   test('A + B is at the bottom of both boards until they flip', () {

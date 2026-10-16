@@ -12,7 +12,7 @@ import '../storage/atomic_write.dart';
 import 'environment.dart';
 
 /// `--self-test-bughouse=<report.json>`: the bughouse engine installed and
-/// started exactly as the Bughouse lab would, in this user's own support
+/// started exactly as the Bughouse mode would, in this user's own support
 /// folder, then asked for one search. The report says what happened; the
 /// process ends with 0 when the engine answered and 1 otherwise.
 ///

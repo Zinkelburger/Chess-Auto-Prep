@@ -141,7 +141,7 @@ final class WorkspaceRequests extends ChangeNotifier {
   final WindowInput _input;
 
   /// The questions put to the user and the clipboard, for a mode that
-  /// reads it on its own, as the Bughouse lab's paste does.
+  /// reads it on its own, as the Bughouse mode's paste does.
   WindowInput get input => _input;
 
   var _mode = Mode.repertoires;
@@ -530,7 +530,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (_overtaken(ticket)) return const RequestDropped();
     if (_mode == Mode.bughouse) {
       return _refused(
-        'The Bughouse lab pastes from Actions: Paste dual FEN or Paste moves.',
+        'Bughouse pastes from Actions: Paste FEN or dual FEN, or Paste moves.',
       );
     }
     if (repertoire &&

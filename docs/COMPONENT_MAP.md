@@ -41,7 +41,7 @@ and [the tooling map](agents/tooling.md) for detail and remaining scope.
 
 All mode names are defined in `app/mode.dart`: Repertoire builder, Opening books,
 PGN Viewer, Repertoire trainer, Study, Tactics, My games, Player analysis,
-Players & prep, Databases, Engine tournament and Bughouse lab. The optional
+Players & prep, Databases, Engine tournament and Bughouse. The optional
 Bughouse mode is offered when its engine assets are present.
 
 - Library and chapter outline share guarded PGN storage; edits, moves, deletes,
@@ -64,7 +64,7 @@ Bughouse mode is offered when its engine assets are present.
   repertoire; Ctrl+Shift+V takes a FEN only. A FEN faces the side to move. A
   blank board (nothing played or edited) is reused rather than opening another
   tab. Tactics, the trainer and the modes without a board send the board to the
-  Repertoire builder; the Bughouse lab names its own paste. `Set up position…`
+  Repertoire builder; Bughouse names its own paste. `Set up position…`
   (Ctrl+Shift+E) opens the shared `workspace/board_editor.dart` on the board's
   position and returns an analysis board the same way up. While the Analysis
   tab is up, both fill that tab's scratch game instead.
@@ -147,8 +147,8 @@ Bughouse mode is offered when its engine assets are present.
   (`ui/fold_button.dart`); where the databases do not fit side by side they
   become one typeable box (`ChoiceField`).
 - Engine tournaments use the shared supervisor, retryable checkpoints, saved
-  history, ratings/crosstables and viewer handoff. Bughouse keeps its own two-board
-  screen, Hivemind analysis, archive/book reads and saved matches.
+  history, ratings/crosstables and viewer handoff. Bughouse keeps its own one- or
+  two-board screen with + and − on every hand and live Hivemind lines.
 - Text fields leave the typing area blank until the user enters a value.
   `SearchField` keeps its magnifier, clear action, accessible name and hover
   help; `ChoiceField` uses persistent labels. New-name dialogs start empty,
@@ -227,25 +227,6 @@ builds; they are data contracts the current code reads and keeps.
 - Platform runners, `packages/document_file_io`, engine assets/updaters,
   `tools/mcp/`, `tools/bughouse_db/` and the separate `tree_builder/` prototype
   retain their own responsibilities. See [tooling](agents/tooling.md).
-
-### Bughouse practical search
-
-- `chess/bughouse/expectimax.dart` expands Hivemind best + top four human moves
-  above 1%, backing up both prepared colours in the same tree. See
-  [Bughouse expectimax](ALGORITHM.md#bughouse-expectimax) for the score convention,
-  unexpanded probability, calibration and limitations.
-- `engines/crazyara_engine.dart`, `engines/bughouse_backend.dart` and Hivemind's
-  `inspect` protocol provide policy and searched evaluations under the engine
-  supervisor. `tools/setup_crazyara.py` installs the optional pinned Linux runtime.
-- `features/bughouse/expectimax_search.dart` owns cancellation and progress;
-  `expectimax_panel.dart` shows Played, Eval, Exp W and Exp B, with replies for
-  the selected move. `storage/bughouse_expectimax.dart` owns evaluation checkpoints
-  and complete snapshots in `bughouse_expectimax.db`.
-- `tools/bughouse_db/expectimax.py` seeds/supervises a resumable queue;
-  `tools/build_bughouse_expectimax.dart` runs the production Dart implementation.
-  The API reader/importer is `python/twic-position-finder/bughouse_expectimax.py`;
-  `frontend/src/bughouse/expectimax.ts` renders the shared snapshots on both
-  bughouse web pages.
 
 ## Static browser preparation
 

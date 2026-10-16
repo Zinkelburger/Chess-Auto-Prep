@@ -1,7 +1,5 @@
 import 'package:chess_auto_prep/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
-import 'package:chess_auto_prep/features/bughouse/lab_panel.dart';
-import 'package:chess_auto_prep/storage/bughouse_books.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart' show Role, Side, Square;
 import 'package:flutter/gestures.dart';
@@ -12,91 +10,67 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/scripted_input.dart';
 import '../support/window_fixture.dart';
 
-/// The Bughouse lab in the window: two boards, the chips and each board's
-/// scored moves, over a scripted engine, book and archive.
+/// The Bughouse mode in the window: one board or two, hands with + and −,
+/// and the engine's lines, over a scripted engine.
 void main() {
   late WindowFixture w;
   setUp(() => w = WindowFixture());
   tearDown(() => w.dispose());
 
-  /// The start in the book: e4 and d4 on board 1, e4 on board 2, for
-  /// `even`; e4 on board 1 also for `ahead`.
-  void startInBook() =>
-      w.bughouse.book.positions[TablePosition.initial.bookKey] =
-          const HivemindFound({
-            (BoardNumber.one, 'e2e4'): {
-              ClockCase.even: (score: TableScore(score: 0.21), pv: 'A e4'),
-              ClockCase.abMaySit: (score: TableScore(score: 2.47), pv: 'A e4'),
-            },
-            (BoardNumber.one, 'd2d4'): {
-              ClockCase.even: (score: TableScore(score: 0.13), pv: 'A d4'),
-            },
-            (BoardNumber.two, 'e2e4'): {
-              ClockCase.even: (score: TableScore(score: -0.40), pv: 'D e4'),
-            },
-          });
-
-  Future<void> toLab(WidgetTester tester) async {
+  Future<void> toBughouse(WidgetTester tester) async {
     await w.pumpShell(tester);
     await tester.tap(find.text('Repertoire builder'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Bughouse lab'));
+    await tester.tap(find.text('Bughouse'));
     await tester.pumpAndSettle();
   }
 
-  /// The row of [san] in [board]'s table.
-  Finder row(BoardNumber board, String san) => find.descendant(
-    of: find.byKey(ValueKey(('moves', board))),
-    matching: find.text(san),
-  );
+  Future<void> twoBoards(WidgetTester tester) async {
+    await tester.tap(find.text('2 boards'));
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> engineOn(WidgetTester tester) async {
+    await tester.tap(find.byTooltip('Toggle engine (E)'));
+    await tester.pumpAndSettle();
+  }
 
   testWidgets(
-    'the lab is in the mode menu only when the build has the engine',
+    'Bughouse is in the mode menu only when the build has the engine',
     (tester) async {
       w.bughouse.bundled = false;
       await w.pumpShell(tester);
       await tester.tap(find.text('Repertoire builder'));
       await tester.pumpAndSettle();
-      expect(find.text('Bughouse lab'), findsNothing);
+      expect(find.text('Bughouse'), findsNothing);
       expect(find.text('Tactics'), findsOneWidget);
     },
   );
 
-  testWidgets('a position in the book is scored at once; the Time chips '
-      'switch the clock', (tester) async {
-    startInBook();
-    await toLab(tester);
-    expect(find.text('A'), findsOneWidget);
-    expect(find.text('D'), findsOneWidget);
-    expect(find.text('+0.21'), findsOneWidget);
-    // Board 2's mover is D, of C + D: A + B's −0.40 reads +0.40 for D.
-    expect(find.text('+0.40'), findsOneWidget);
-    await tester.tap(find.text('A + B may sit'));
+  testWidgets('it opens on one board; + and − change a hand', (tester) async {
+    await toBughouse(tester);
+    expect(find.byType(Chessboard), findsOneWidget);
+    expect(find.text('Time'), findsNothing);
+    final more = find.byTooltip('One more knight for Black');
+    await tester.tap(more);
+    await tester.tap(more);
     await tester.pumpAndSettle();
-    expect(find.text('+2.47'), findsOneWidget);
-    expect(find.text('+0.21'), findsNothing);
+    expect(w.lab.position.one.pockets!.of(Side.black, Role.knight), 2);
+    await tester.tap(find.byTooltip('One knight fewer for Black'));
+    await tester.pumpAndSettle();
+    expect(w.lab.position.one.pockets!.of(Side.black, Role.knight), 1);
     expect(w.bughouse.starts, 0);
   });
 
-  testWidgets('a position the book lacks is scored by the engine when it is '
-      'on, and added to the book', (tester) async {
-    await toLab(tester);
-    expect(w.bughouse.starts, 0);
-    await tester.tap(find.byTooltip('Toggle engine (E)'));
-    await tester.pumpAndSettle();
-    expect(w.bughouse.engine.asked, isNotEmpty);
-    expect(w.bughouse.book.saved, hasLength(1));
-  });
-
-  testWidgets('a table row plays its move; a reserve piece drops on a square', (
+  testWidgets('two boards show both, the Time chips, and drop across', (
     tester,
   ) async {
-    startInBook();
-    await toLab(tester);
-    await tester.tap(row(BoardNumber.one, 'e4'));
-    await tester.pumpAndSettle();
-    expect(w.lab.line.of(BoardNumber.one).single.san, 'e4');
+    await toBughouse(tester);
+    await twoBoards(tester);
+    expect(find.byType(Chessboard), findsNWidgets(2));
+    expect(find.text('Time'), findsOneWidget);
     w.lab
+      ..play(BoardNumber.one, 'e2e4')
       ..play(BoardNumber.one, 'd7d5')
       ..play(BoardNumber.one, 'e4d5')
       ..play(BoardNumber.two, 'e2e4');
@@ -116,11 +90,8 @@ void main() {
   testWidgets('a drop on a square that will not take it is refused in words', (
     tester,
   ) async {
-    await toLab(tester);
-    w.lab.loadDualFen(
-      'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[N] w KQkq - 0 1|'
-      'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-    );
+    await toBughouse(tester);
+    await tester.tap(find.byTooltip('One more knight for White'));
     await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const ValueKey(('reserve', Seat.a, Role.knight))),
@@ -128,71 +99,67 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tapAt(squareCenter(tester, BoardNumber.one, Square.e2));
     await tester.pumpAndSettle();
-    expect(find.text('That drop is not legal.'), findsOneWidget);
+    expect(w.lab.line.moves, isEmpty);
   });
 
-  testWidgets(
-    'pointing at a row draws it on its board; leaving takes it away',
-    (tester) async {
-      startInBook();
-      await toLab(tester);
-      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await mouse.addPointer(location: Offset.zero);
-      addTearDown(mouse.removePointer);
-      await mouse.moveTo(tester.getCenter(row(BoardNumber.one, 'd4')));
-      await tester.pumpAndSettle();
-      expect(w.lab.preview.value, {BoardNumber.one: 'd2d4'});
-      await mouse.moveTo(Offset.zero);
-      await tester.pumpAndSettle();
-      expect(w.lab.preview.value, isNull);
-    },
-  );
-
-  testWidgets(
-    'reserve selection clears when the turn changes and does not return',
-    (tester) async {
-      await toLab(tester);
-      w.lab.loadDualFen(
-        '4k3/8/8/8/8/8/8/4K3[Nn] w - - 0 1 | 4k3/8/8/8/8/8/8/4K3[] w - - 0 1',
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey(('reserve', Seat.a, Role.knight))),
-      );
-      await tester.pumpAndSettle();
-      w.lab.play(BoardNumber.one, 'e1f1');
-      w.lab.play(BoardNumber.one, 'e8f8');
-      await tester.pumpAndSettle();
-      await tester.tapAt(squareCenter(tester, BoardNumber.one, Square.c3));
-      await tester.pumpAndSettle();
-      expect(w.lab.position.one.board.pieceAt(Square.c3), isNull);
-    },
-  );
-
-  testWidgets('the engine switch shows both teams’ lines; a line plays', (
-    tester,
-  ) async {
-    startInBook();
-    await toLab(tester);
-    await tester.tap(find.byTooltip('Toggle engine (E)'));
-    await tester.pumpAndSettle();
-    final lines = find.byType(EngineLinesBlock);
-    expect(lines, findsOneWidget);
+  testWidgets('one board: the engine searches board 1 with its partner board '
+      'held still, and a line plays', (tester) async {
+    await toBughouse(tester);
+    await engineOn(tester);
+    final asked = w.bughouse.engine.asked;
+    final own = asked.firstWhere((q) => q.team == Team.ab);
+    expect(own.mustMove, MustMove.one);
+    expect(own.maySit, isFalse);
+    // C + D get the partner board's move, so both teams are searched.
+    final other = asked.firstWhere((q) => q.team == Team.cd);
+    expect(other.position.turn(BoardNumber.two), Side.white);
     expect(find.text('0.00'), findsWidgets);
-    await tester.tap(
-      find.descendant(of: lines, matching: find.text('Na3')).first,
-    );
+    expect(find.textContaining('nodes'), findsOneWidget);
+    await tester.tap(find.text('1. Na3'));
     await tester.pumpAndSettle();
-    expect(w.lab.line.moves, hasLength(1));
+    expect(w.lab.line.of(BoardNumber.one).single.san, 'Na3');
+    expect(w.lab.line.of(BoardNumber.two), isEmpty);
+  });
+
+  testWidgets('two boards: both teams’ lines, a line plays and pointing '
+      'draws it', (tester) async {
+    await toBughouse(tester);
+    await twoBoards(tester);
+    await engineOn(tester);
+    expect(find.text('A + B'), findsOneWidget);
+    expect(find.text('C + D'), findsOneWidget);
+    final line = find.text('A Na3').first;
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(line));
+    await tester.pumpAndSettle();
+    expect(w.lab.preview.value, {BoardNumber.one: 'b1a3'});
+    await mouse.moveTo(Offset.zero);
+    await tester.pumpAndSettle();
+    expect(w.lab.preview.value, isNull);
+    await tester.tap(line);
+    await tester.pumpAndSettle();
+    expect(w.lab.line.moves.single.san, 'Na3');
+  });
+
+  testWidgets('the Time chips decide who may sit', (tester) async {
+    await toBughouse(tester);
+    await twoBoards(tester);
+    await tester.tap(find.text('A + B may sit'));
+    await tester.pumpAndSettle();
+    await engineOn(tester);
+    final asked = w.bughouse.engine.asked;
+    expect(asked.firstWhere((q) => q.team == Team.ab).maySit, isTrue);
+    expect(asked.firstWhere((q) => q.team == Team.cd).maySit, isFalse);
   });
 
   testWidgets('an engine that will not start is said beside its switch', (
     tester,
   ) async {
     w.bughouse.startFailure = 'This build has no bughouse engine.';
-    await toLab(tester);
-    await tester.tap(find.byTooltip('Toggle engine (E)'));
-    await tester.pumpAndSettle();
+    await toBughouse(tester);
+    await engineOn(tester);
     final status = tester.widget<Text>(
       find.text('This build has no bughouse engine.'),
     );
@@ -202,92 +169,14 @@ void main() {
     );
   });
 
-  testWidgets('the FICS archive is under each board’s table, results for '
-      'the team that played the move', (tester) async {
-    w.bughouse.archive.present = true;
-    w.bughouse.archive.positions[TablePosition.initial.bookKey] = (
-      games: 1200,
-      moves: [
-        (
-          board: BoardNumber.two,
-          mover: Side.white,
-          san: 'd4',
-          games: 1000,
-          abWins: 300,
-          cdWins: 600,
-          draws: 100,
-          unknown: 0,
-          averageElo: 1900,
-        ),
-      ],
-    );
-    startInBook();
-    await toLab(tester);
-    expect(find.textContaining('FICS games · 1,200'), findsNWidgets(2));
-    expect(find.text('D d4'), findsOneWidget);
-    // D's team, C + D, won 600 of the 1000.
-    expect(find.text('60%'), findsOneWidget);
-    await tester.tap(find.text('D d4'));
-    await tester.pumpAndSettle();
-    expect(w.lab.line.of(BoardNumber.two).single.san, 'd4');
-  });
-
-  testWidgets('a match is asked for, played, and its games opened', (
+  testWidgets('leaving quits the engine and gives Stockfish back', (
     tester,
   ) async {
-    startInBook();
-    await toLab(tester);
-    await tester.tap(find.byTooltip('Actions (Ctrl+K)'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Matches'));
-    await tester.pumpAndSettle();
-    expect(
-      find.text(
-        'No matches yet. Set a position up on the boards, then play it out.',
-      ),
-      findsOneWidget,
-    );
-    await tester.tap(find.text('New match'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextField, '10'), '1');
-    await tester.enterText(find.widgetWithText(TextField, '240'), '20');
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Play 1 game'));
-    await tester.pumpAndSettle();
-    final match = w.bughouse.matches.saved.values.single;
-    expect(match.games, hasLength(1));
-    expect(find.textContaining('White on board 1 scored'), findsOneWidget);
-    await tester.tap(find.text('Hivemind A').last);
-    await tester.pumpAndSettle();
-    expect(w.lab.line.moves, hasLength(20));
-  });
-
-  testWidgets('a match directory that cannot be made is said', (tester) async {
-    w.bughouse.matches.failCreate = 'Permission denied';
-    await toLab(tester);
-    await tester.tap(find.byTooltip('Actions (Ctrl+K)'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Matches'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('New match'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Play 10 games'));
-    await tester.pumpAndSettle();
-    expect(
-      find.text('Could not create the match directory: Permission denied'),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('leaving the lab quits its engine and gives Stockfish back', (
-    tester,
-  ) async {
-    await toLab(tester);
-    await tester.tap(find.byTooltip('Toggle engine (E)'));
-    await tester.pumpAndSettle();
+    await toBughouse(tester);
+    await engineOn(tester);
     expect(w.analysis.pausedFor, isNotNull);
     expect(w.bughouse.engine.gone, isFalse);
-    await tester.tap(find.text('Bughouse lab').first);
+    await tester.tap(find.text('Bughouse').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Repertoire builder').last);
     await tester.pumpAndSettle();
@@ -295,29 +184,9 @@ void main() {
     expect(w.analysis.pausedFor, isNull);
   });
 
-  testWidgets('a setup box keeps the arrow keys while it is typed in', (
-    tester,
-  ) async {
-    startInBook();
-    await toLab(tester);
-    await tester.tap(row(BoardNumber.one, 'e4'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Edit position / FEN'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(
-      find.byKey(const ValueKey(('fen', BoardNumber.one))),
-    );
-    await tester.tap(find.byKey(const ValueKey(('fen', BoardNumber.one))));
-    await tester.pumpAndSettle();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-    await tester.pumpAndSettle();
-    expect(w.lab.line.upto(BoardNumber.one), 1);
-  });
-
-  testWidgets('the arrow keys step the board last played on', (tester) async {
-    startInBook();
-    await toLab(tester);
-    await tester.tap(row(BoardNumber.one, 'e4'));
+  testWidgets('the arrow keys step the board', (tester) async {
+    await toBughouse(tester);
+    w.lab.play(BoardNumber.one, 'e2e4');
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pumpAndSettle();
@@ -327,37 +196,29 @@ void main() {
     expect(w.lab.line.upto(BoardNumber.one), 1);
   });
 
-  testWidgets('the setup boxes set a table and count what is left to place', (
+  testWidgets('Edit board opens the board editor; the hands stay', (
     tester,
   ) async {
-    await toLab(tester);
-    expect(find.text('Pieces outstanding: none'), findsNothing);
-    expect(find.text('Tables'), findsNothing);
-    expect(find.text('Matches'), findsNothing);
-    await tester.tap(find.text('Edit position / FEN'));
+    await toBughouse(tester);
+    await tester.tap(find.byTooltip('One more queen for White'));
+    w.lab.play(BoardNumber.one, 'e2e4');
     await tester.pumpAndSettle();
-    expect(find.text('Pieces outstanding: none'), findsOneWidget);
-    await tester.enterText(
-      find.byKey(const ValueKey(('fen', BoardNumber.one))),
-      '4k3/8/8/8/8/8/8/4K3 w - - 0 1',
-    );
+    await tester.tap(find.text('Edit board'));
     await tester.pumpAndSettle();
-    expect(
-      find.textContaining('Pieces outstanding: White: 8P'),
-      findsOneWidget,
-    );
-    await tester.ensureVisible(find.text('Set position'));
-    await tester.tap(find.text('Set position'));
+    expect(find.text('Edit the board'), findsOneWidget);
+    await tester.tap(find.text('Use this position'));
     await tester.pumpAndSettle();
-    expect(w.lab.position.one.board.pieceAt(Square.e1)?.color, Side.white);
     expect(w.lab.line.moves, isEmpty);
+    expect(w.lab.position.one.board.pieceAt(Square.e4)?.role, Role.pawn);
+    expect(w.lab.position.one.turn, Side.black);
+    expect(w.lab.position.one.pockets!.of(Side.white, Role.queen), 1);
   });
 
   testWidgets('Paste moves reads the window\'s clipboard', (tester) async {
     final input = ScriptedInput()..clipboardText = '1A. e4 1a. d5';
     w.dispose();
     w = WindowFixture(input: input);
-    await toLab(tester);
+    await toBughouse(tester);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Paste moves'));
