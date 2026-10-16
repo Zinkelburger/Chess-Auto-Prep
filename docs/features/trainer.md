@@ -1,10 +1,17 @@
 # Repertoire trainer
 
-Status: implemented in v2 as the **Repertoire trainer** mode and the
-builder's shared **Train** tab. The dedicated trainer keeps the app's three
-panels: one repertoire outline, the shared board, and adjustable tool panes.
-Owners: `lib/features/trainer/`, `lib/chess/training/`,
-`lib/storage/training_store.dart`.
+Someone with a repertoire or a downloaded course opens the **Repertoire
+trainer** (mode menu, Repertoires group) to learn new lines and review due ones
+from memory; they leave with spaced-repetition progress saved per line. The
+same trainer is the **Train** tab in Repertoire builder and Study. The mode has
+the app's three panels: one repertoire outline, the shared board, and
+adjustable tool panes.
+
+Code: `lib/features/trainer/` (`Trainer` scope/loading in `trainer.dart`,
+`TrainingProgress` in `progress.dart`, `Lesson` sitting in `lesson.dart`),
+pure rules in `lib/chess/training/` (`schedule.dart` SM-2, `drill.dart`,
+`sitting.dart`, `line_order.dart`), files in `lib/storage/training_store.dart`
+and `training_rows.dart`, the mode in `lib/app/mode_view.dart` (`TrainerView`).
 
 ## Choose a repertoire and scope
 
@@ -35,15 +42,17 @@ completed progress is saved, and the next Learn skips completed lines. An
 unfinished line starts again after an app restart.
 
 The builder's contextual Train tab retains Chapter, Repertoire and Book
-scopes, line ordering, searchable lines and mistakes. Book includes the active
-book's selected chapters. The dedicated trainer offers scoped mistake records
-under its training actions.
+scopes, line ordering (training order, the file's order, or most likely first
+from a generated chapter's `CumProb`), searchable **Lines** and **Mistakes**.
+Book includes the active book's selected chapters.
 
-Players → **Train group study** selects Chapter scope and trains every chapter
-of the linked study, retaining each chapter's `Orientation`. Reading a line
-opens that study game at the requested move. Studies with a playing side on
-every chapter can also use the shared trainer; other files opened game by game
-are not trainable.
+In Study the Train tab offers **This chapter** / **Whole study** and
+**Training sides…** (see [study.md](study.md)); a chapter's side comes from
+`TrainingSide`, else `Orientation`, and a chapter with neither is left out until
+one is chosen. Players → **Train group study** opens the group's study in Study
+(creating `Prep – {group}` from the members' prep studies when the group has
+none) with **Whole study** selected. Reading a line opens that study game at the
+requested move.
 
 ## Learn and review
 
@@ -96,23 +105,25 @@ the line's schedule unchanged; accepted writes remain owned by the app.
 
 ## Settings and progress
 
-**Training actions → Training settings…** opens the Training settings group.
-The app settings also contain it. New-line and review limits accept
-0 for all lines; reply delay is 200–2000 ms. Replay missed moves and Rate
+**Training actions → Training settings…** opens the **Training** group of
+Settings. **New lines per sitting** (default 10) and **Reviews per sitting**
+(default 0) accept 0–1000, 0 meaning all lines; **Move delay** is 200–2000 ms
+(default 700). Replay missed moves and Rate
 difficulty myself are optional. Preferences persist in the existing settings file and
 are captured for a sitting, so changing them does not alter an active lesson.
 
 The training home shows learned/total and due counts. Its outline offers
-reading and training actions, Learned checkboxes and line pauses. Bulk marking
-acts on the scope. The builder's contextual Train tab also offers opening a
-line in Builder and searchable mistakes. The dedicated trainer's home lists
-mistakes for its current scope without a search field; selecting a mistake
-opens its position.
+reading and training actions, Learned checkboxes and line pauses. **Training
+actions** also holds **Mark scope as learned**, **Mark scope as new** and
+**Reload progress**. **Mistakes · n** lists the current scope's mistakes
+(`Played … · expected …`) without a search field; selecting one opens its
+position. The builder's Train tab also offers opening a line in Builder and
+searchable mistakes.
 
 The four existing Documents files remain the source of truth:
 `repertoire_reviews.csv`, `repertoire_review_history.csv`,
 `repertoire_move_progress.csv`, `repertoire_move_attempts.jsonl`.
-SM-2 scheduling and stable line IDs remain compatible with the older app.
+Scheduling is SM-2 per line, and line IDs are stable across edits.
 The trainer binds progress to the persisted PGN revision and native file
 identity from which its moves were loaded. Externally changed or replaced files
 must be reopened before training; reloading progress alone cannot authorize
@@ -127,12 +138,29 @@ the chapter being trained. Saving, renaming or deleting a chapter never waits
 on training: the trainer follows the workspace's own saves and reads the scope
 again after anything else. A chapter that cannot be read is left out of a
 repertoire or book scope. Chapter/line moves retain progress through the
-shared document mutation workflow. The PGN header schedule mirror
-is not used.
+shared document mutation workflow.
 
-## Remaining scope
+## Owner decisions
 
-Legacy options for partial-line depth, automatic walkthrough advancement,
-per-move streak thresholds and custom chapter grouping are not exposed in v2.
-Studies keep their own editing workflow; the group-study handoff uses the shared
-trainer without converting the study to a repertoire.
+- The trainer is its own mode, **Repertoire trainer** (2026-09-25), as well as
+  the Train tab in Repertoire builder and Study.
+- Reviews are graded automatically from mistakes, as Chessable does: clean is
+  Good, any miss is Again (2026-09-25). **Rate difficulty myself** (off by
+  default) brings back Again/Hard/Good/Easy with the automatic grade filled.
+- The four CSV/JSONL files are the source of truth; the PGN header schedule
+  mirror is not written or read.
+- Studies keep their own editing workflow; training a study never converts it
+  to a repertoire.
+
+## Not built
+
+Checked against `lib/chess/training/` and `lib/features/trainer/`:
+
+- Per-move scheduling — `schedule.dart` schedules whole lines, so one slip in a
+  long line makes the whole line Again (Chessable gap).
+- Partial-line depth / skip to the first comment — `training_line.dart` drills
+  from the line start (or the `[%tstart]` marker).
+- A choice of review order — `sitting.dart` `dueNow` always takes the longest
+  overdue first.
+- Automatic walkthrough advancement, per-move streak thresholds and custom
+  chapter grouping — no options in `TrainingOptions`.

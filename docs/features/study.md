@@ -1,9 +1,14 @@
 # Study
 
-Study keeps annotated chess material in named chapters. It uses the shared
-board, move tree, engine, document session and autosave system. The current
-implementation is under `lib/features/study/`; this document describes the
-shipped controls rather than the retired V1 screen.
+Study keeps annotated chess material in named chapters: someone imports or
+writes lines, annotates them, and drills them as line practice. It uses the
+shared board, move tree, engine, document session and autosave system.
+
+Code: `lib/features/study/` (`Studies` owner in `studies.dart`, `StudyPanel`),
+study training controls in `lib/features/trainer/study_training_controls.dart`,
+PGN rules in `lib/chess/pgn/study.dart`, `study_edits.dart` and
+`study_training.dart`, Lichess download in `lib/net/lichess_studies.dart`, the
+shared picker in `lib/workspace/study_picker.dart`.
 
 ## Navigate and organize
 
@@ -17,17 +22,20 @@ keeps the current chapter selected and is undoable.
 
 **New study** creates a file with one chapter. **New chapter** supports the
 initial position or the shared position editor. The chapter menu provides
-rename, PGN tags, starting position, board orientation, reordering,
-copy PGN, clearing annotations/variations and deletion. Changing a starting
+**Rename…**, **PGN tags…**, **Set starting position…**, **Face White/Black**,
+**Move to position…**, **Move up/down**, **Copy chapter PGN**, **Clear comments,
+glyphs and shapes…**, **Clear variations…** and **Delete chapter…**. Changing a starting
 position or clearing material asks for confirmation. The last chapter cannot
-be deleted. The study menu provides rename, export, copy and deletion, plus
-retained save/rename retries when needed.
+be deleted. The study menu (**Study actions**) provides **New study…**,
+**Import chapters…**, **Rename study…**, **Save study PGN as…**, **Copy study
+PGN** and **Delete study…**, plus **Retry study save** / **Retry rename** when a
+write failed.
 
 ## Import and export
 
-**Import…** has three sources: PGN file, pasted PGN, and a Lichess study/chapter
-URL. Reading a source produces a chapter-count preview before any write. Choose
-a new study or the current study; the destination is captured when the dialog
+**Import…** has three sources: **PGN file**, **Paste PGN** and **Lichess URL**
+(a study or chapter link). Reading a source produces a chapter-count preview before any write. Choose
+**New study** or **Current study**; the destination is captured when the dialog
 opens. Failures retain the typed source and explain how to retry. A replacement
 file read clears the previous actionable preview.
 
@@ -85,36 +93,29 @@ before a linked study can be renamed or deleted. Restoration, rename, deletion
 and imports use the document store, shared recovery gate and pending-write
 tracking; widgets do not write files directly.
 
-## File format and remaining scope
+## Data
 
 A study is one PGN under `Documents/studies/`, with one game per chapter.
 Study metadata uses `Event`, `StudyName`, `ChapterName`, `Orientation`, and
 `FEN`/`SetUp` for custom starts. Explicit practice choices add `TrainingSide`.
 Unchanged chapters keep their original text, while edits refuse incomplete
-content that cannot be safely rewritten. Undo and recovery use the shared V2
-storage system.
+content that cannot be safely rewritten. Undo and recovery use the shared
+storage system ([architecture](../ARCHITECTURE.md)). Training progress for
+study lines goes to the same files as the repertoire trainer
+([trainer.md](trainer.md)); Players links prep and group studies by path.
 
-Lichess collaboration, member permissions, chat, publication/discovery, and
-interactive lesson authoring are outside this local study editor. This work
-improves local authoring and practice usability; it does not claim full parity
-with the Lichess study service.
+## Owner decisions
 
-## Verification evidence
+- Studies use Lichess's export format (2026-09-04): chapter tags as Lichess
+  writes them, root comments kept, orientation per chapter; quiz markers are
+  `[%tstart]` / `[%tend]` comment tokens.
+- Study practice is line practice through the shared trainer, not Lichess
+  interactive-lesson authoring. Lichess collaboration, member permissions,
+  chat and publication/discovery are out of scope for this local editor.
 
-The 2026-10-03 usability pass used a headless Linux production build at
-1280×720 with a disposable profile and a synthetic three-chapter Queen's Gambit
-PGN. The walkthrough covered pasted import, side setup, chapter-only training,
-annotation, narrow-pane layout, drag reordering, and delete/restore. The native
-preview was stopped after inspection. Automated coverage also exercises the
-276px annotation strip, keyboard move menus, partial imports, stale previews,
-unsaved edits, hidden-field validation, restore collisions and retained retries.
+## Not built
 
-Screenshots: [import](../../../.impeccable/review/study-usability/study-import.png),
-[side setup](../../../.impeccable/review/study-usability/study-sides.png),
-[training](../../../.impeccable/review/study-usability/study-training.png),
-[annotation](../../../.impeccable/review/study-usability/study-annotate-final.png),
-[narrow pane](../../../.impeccable/review/study-usability/study-narrow-final.png),
-[recovery](../../../.impeccable/review/study-usability/study-recovery.png).
-All captures are app-rendered evidence using repository assets, not mockups.
-The isolated profile's unconfigured online explorer returned HTTP 401; no live
-Lichess download or online-explorer success is claimed by this walkthrough.
+- Study puzzle review — reviewing a study's chapters as a puzzle/flashcard set
+  with stats in its headers. Nothing in `lib/features/study/` or
+  `lib/features/tactics/` opens a study as a puzzle set; backlog only if
+  requested.
