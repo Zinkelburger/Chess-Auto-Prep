@@ -122,22 +122,7 @@ final class FileTournaments
     final result = await _guard('list tournaments', () async {
       _checkRoot();
       if (!await recoveryDirectory(root)) return <Tournament>[];
-      return withDirectoryLock(root, () async {
-        final found = <Tournament>[];
-        await for (final entry in root.list(followLinks: false)) {
-          if (entry is! Directory || p.basename(entry.path).startsWith('.')) {
-            continue;
-          }
-          final id = p.basename(entry.path);
-          final tournament = await _readTournament(id, warnings);
-          if (tournament != null) found.add(tournament);
-        }
-        found.sort(
-          (a, b) =>
-              '${b.json['createdAt']}'.compareTo('${a.json['createdAt']}'),
-        );
-        return found;
-      });
+      return withDirectoryLock(root, () => _readTournaments(warnings));
     });
     return switch (result) {
       TournamentSaved(:final value) => TournamentSaved(
@@ -146,6 +131,24 @@ final class FileTournaments
       ),
       TournamentFailed(:final message) => TournamentFailed(message),
     };
+  }
+
+  /// Every readable tournament under [root], newest first; the caller holds
+  /// the directory lock.
+  Future<List<Tournament>> _readTournaments(List<String> warnings) async {
+    final found = <Tournament>[];
+    await for (final entry in root.list(followLinks: false)) {
+      if (entry is! Directory || p.basename(entry.path).startsWith('.')) {
+        continue;
+      }
+      final id = p.basename(entry.path);
+      final tournament = await _readTournament(id, warnings);
+      if (tournament != null) found.add(tournament);
+    }
+    found.sort(
+      (a, b) => '${b.json['createdAt']}'.compareTo('${a.json['createdAt']}'),
+    );
+    return found;
   }
 
   Future<Tournament?> _readTournament(String id, List<String> warnings) async {

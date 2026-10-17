@@ -153,21 +153,22 @@ final class PlayerFiles implements PlayerStore {
       warnings.add('Could not read people.json: $e');
     }
     final groups = <PlayerGroup>[];
-    if (await _groups.exists()) {
-      await for (final file in _groups.list()) {
-        if (file is! File || p.extension(file.path) != '.json') continue;
-        try {
-          final data = await _read(file.path, 'chess-auto-prep/tournament@1');
-          data['id'] ??= p.basenameWithoutExtension(file.path);
-          final group = PlayerGroup(data);
-          if (group.id != p.basenameWithoutExtension(file.path) ||
-              group.entries.any((e) => e['person'] is! String)) {
-            throw const FormatException('Invalid group or member ID.');
-          }
-          groups.add(group);
-        } on Object catch (e) {
-          warnings.add('Could not read ${p.basename(file.path)}: $e');
+    if (!await _groups.exists()) {
+      return (players: players, groups: groups, warnings: warnings);
+    }
+    await for (final file in _groups.list()) {
+      if (file is! File || p.extension(file.path) != '.json') continue;
+      try {
+        final data = await _read(file.path, 'chess-auto-prep/tournament@1');
+        data['id'] ??= p.basenameWithoutExtension(file.path);
+        final group = PlayerGroup(data);
+        if (group.id != p.basenameWithoutExtension(file.path) ||
+            group.entries.any((e) => e['person'] is! String)) {
+          throw const FormatException('Invalid group or member ID.');
         }
+        groups.add(group);
+      } on Object catch (e) {
+        warnings.add('Could not read ${p.basename(file.path)}: $e');
       }
     }
     return (players: players, groups: groups, warnings: warnings);
