@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the packaged v2 executable, using only its disposable self-test profile."""
+"""Exercise the packaged executable, using only its disposable self-test profile."""
 import argparse
 import json
 import os

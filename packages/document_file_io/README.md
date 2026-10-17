@@ -52,7 +52,7 @@ its recovery copy rather than deleting the old bytes. Staged files are flushed
 with `FlushFileBuffers` on Windows, `F_FULLFSYNC` on macOS and fsync on Linux.
 
 The native desktop contract workflow tests Windows Server 2022/2025, macOS and
-Linux, including the actual v2 store on long Unicode paths. Windows-only cases
+Linux, including the actual document store on long Unicode paths. Windows-only cases
 exercise denied sharing, external edits during retry, ACLs and named streams.
 The packaged release self-test also exercises documents and native engines.
 These checks do not simulate sudden power loss or every network/cloud provider:
@@ -77,8 +77,8 @@ Checks from repository root:
 ```
 scripts/ci.sh test test/infrastructure/documents/native_pgn_document_store_test.dart test/utils/atomic_file_safety_test.dart
 scripts/ci.sh integration integration_test/repertoire_catalog_test.dart
-scripts/ci.sh test test/v2/storage/platform_documents_test.dart
-scripts/ci.sh integration integration_test/v2_desktop_test.dart
+scripts/ci.sh test test/storage/platform_documents_test.dart
+scripts/ci.sh integration integration_test/desktop_test.dart
 ```
 
 The app-level typed contract is in `lib/features/documents/`; native/platform

@@ -1,6 +1,6 @@
 """Expectimax trees shared with the app's Search tab.
 
-The v2 app keeps each search it runs on a repertoire chapter as a v4
+The app keeps each search it runs on a repertoire chapter as a v4
 `tree.json` beside the chapter:
 
     <repertoire>/.cap-generation/<chapter>.pgn/v2-<run id>/tree.json

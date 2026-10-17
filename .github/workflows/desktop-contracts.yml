@@ -1,4 +1,4 @@
-name: V2 desktop contracts
+name: Desktop contracts
 
 on:
   workflow_call:
@@ -40,7 +40,7 @@ jobs:
           New-Item -Path HKCU:\Software\ChessAutoPrep -Force | Out-Null
           New-ItemProperty -Path HKCU:\Software\ChessAutoPrep -Name FileAssociationChoice -Value no -PropertyType String -Force | Out-Null
       - run: flutter pub get
-      - name: Native v2 document and application contracts
+      - name: Native document and application contracts
         # Process-kill recovery runs separately in release-advisory.yml;
         # the full Linux suite still checks it as a required test.
         run: |
@@ -65,13 +65,13 @@ jobs:
             test/net/lichess_login_test.dart 2>&1 | tee desktop-contracts.log
       - name: Fetch this host's Stockfish
         run: python tools/fetch_assets.py --only stockfish
-      - name: Built v2 app, native engines and login sockets
+      - name: Built app, native engines and login sockets
         run: |
           set -o pipefail
           if [[ '${{ runner.os }}' == Linux ]]; then
-            xvfb-run -a flutter test integration_test/v2_desktop_test.dart -d linux --reporter expanded 2>&1 | tee desktop-integration.log
+            xvfb-run -a flutter test integration_test/desktop_test.dart -d linux --reporter expanded 2>&1 | tee desktop-integration.log
           else
-            flutter test integration_test/v2_desktop_test.dart -d '${{ matrix.target.device }}' --reporter expanded 2>&1 | tee desktop-integration.log
+            flutter test integration_test/desktop_test.dart -d '${{ matrix.target.device }}' --reporter expanded 2>&1 | tee desktop-integration.log
           fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()

@@ -2,7 +2,7 @@
 
 The contracts every change to the app follows. `lib/main.dart` boots the one
 app; production code lives under `lib/`, tests under `test/`.
-`scripts/check_v2.py` enforces the mechanical parts (import table, size caps,
+`scripts/check_architecture.py` enforces the mechanical parts (import table, size caps,
 write ownership, theme literals); `scripts/ci.sh lint` runs it. What each mode
 does is in [the mode specs](features/README.md); where the code is, in
 [the component map](COMPONENT_MAP.md); stores and recovery files, in

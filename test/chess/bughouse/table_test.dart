@@ -8,11 +8,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// Lines the Python tools played (`tools/mcp/bughouse/board.py`), with the
 /// dual FEN, every ply's SAN and UCI, and the book key they reached:
-/// written by `test/fixtures/v2_bughouse/generate_python_positions.py`.
+/// written by `test/fixtures/bughouse/generate_python_positions.py`.
 final _python =
     (jsonDecode(
               File(
-                'test/fixtures/v2_bughouse/python_positions.json',
+                'test/fixtures/bughouse/python_positions.json',
               ).readAsStringSync(),
             )
             as Map<String, Object?>)['cases']!

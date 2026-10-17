@@ -1,4 +1,4 @@
-"""Append-only score history shared with the v2 desktop writer.
+"""Append-only score history for the Hivemind engine-eval book.
 
 Current pick/move tables remain compatible with older readers. Each replacement
 keeps a complete snapshot, including calibration and the seat-letter convention.

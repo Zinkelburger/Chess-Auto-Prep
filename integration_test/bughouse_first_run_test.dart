@@ -1,11 +1,11 @@
-// The v2 app's bughouse engine on first use, inside a built desktop app:
+// The app's bughouse engine on first use, inside a built desktop app:
 // the bundled assets read through rootBundle, installed into an empty
 // profile whose path has spaces and non-ASCII characters, started through
 // the app's own launch path, asked for a real search, then damaged and
 // started again. On Windows this also covers the private ONNX Runtime and
 // the Visual C++ DLLs copied beside the engine.
 //
-// `flutter test integration_test/v2_bughouse_first_run_test.dart -d windows`
+// `flutter test integration_test/bughouse_first_run_test.dart -d windows`
 // (or `-d linux`).
 import 'dart:io';
 
@@ -28,7 +28,7 @@ void main() {
   late EngineSupervisor engines;
 
   setUp(() async {
-    scratch = await Directory.systemTemp.createTemp('v2-bughouse-first-run-');
+    scratch = await Directory.systemTemp.createTemp('bughouse-first-run-');
     profile = Directory(p.join(scratch.path, 'José 棋', 'Chess Auto Prep'));
     engines = EngineSupervisor();
   });

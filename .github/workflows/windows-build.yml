@@ -1,4 +1,4 @@
-# The Windows build: the v2 app, its bughouse engine and Visual C++ runtime
+# The Windows build: the app, its bughouse engine and Visual C++ runtime
 # checked inside the bundle, the portable zip and the setup, which is
 # installed silently on the runner as a check. Called by release.yml with the
 # tag, and by windows-check.yml with a check name; nothing here publishes.
@@ -16,8 +16,8 @@ on:
 jobs:
   build-windows:
     # The supported client floor is Windows 10. Do not silently move the build
-    # to VS 2026/Server 2025 through windows-latest: v1.15.3 did exactly that,
-    # then shipped runtime files that had never been exercised as a bundle.
+    # to VS 2026/Server 2025 through windows-latest: that changes the runtime
+    # files the bundle ships without them ever being exercised as a bundle.
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -90,7 +90,7 @@ jobs:
       # and exits 0, so nothing before this point can tell a build that bundled
       # the engine from one that quietly did not. Looking inside the artifact is
       # the only thing that can, and this is the failure it exists for: a green
-      # release whose Bughouse Lab is simply absent.
+      # release whose Bughouse mode is simply absent.
       - name: Verify the engine is in the built bundle
         shell: pwsh
         run: |
@@ -151,7 +151,7 @@ jobs:
       # The earlier live check runs before Flutter builds and therefore sees
       # the hosted runner's centrally installed runtime. Re-run with the exact
       # DLLs from the final app bundle beside Hivemind: that is what the
-      # portable zip installs and what v1.15.3 accidentally left untested.
+      # portable zip installs.
       - name: Verify Hivemind with the final portable runtime
         timeout-minutes: 10
         run: >-
@@ -233,7 +233,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Move-Item "dist\chess-auto-prep-$version-windows-setup.exe" "chess-auto-prep-${{ inputs.version }}-windows-setup.exe"
 
-      - name: Packaged v2 documents, Stockfish, Maia and login sockets
+      - name: Packaged documents, Stockfish, Maia and login sockets
         run: python tools/test_desktop_bundle.py build/windows/x64/runner/Release/chess_auto_prep.exe --report desktop-release.json
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

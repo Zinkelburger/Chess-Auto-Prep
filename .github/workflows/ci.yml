@@ -1,4 +1,4 @@
-# Runs the local quality gates, the v2 desktop contracts (which boot the built
+# Runs the local quality gates, the desktop contracts (which boot the built
 # app on Linux, Windows and macOS) and native Windows update contracts.
 
 name: CI
@@ -8,7 +8,7 @@ on:
   workflow_call:
 
 jobs:
-  v2-desktop:
+  desktop:
     uses: ./.github/workflows/desktop-contracts.yml
 
   test:
