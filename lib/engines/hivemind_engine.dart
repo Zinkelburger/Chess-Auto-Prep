@@ -134,9 +134,10 @@ abstract interface class Hivemind {
 /// search is followed by a `stop`, or the next one would share the cores
 /// with it.
 ///
-/// A build carrying `tools/bughouse_windows/live-search.patch` offers the
-/// option `ReportIntervalMs` and prints its whole MultiPV block every 250 ms
-/// while it searches; that is what [streams] reads.
+/// A build that offers the option `ReportIntervalMs` can print its whole
+/// MultiPV block while it searches. The handshake sets it to
+/// [reportIntervalMs], since upstream leaves it off by default, and [streams]
+/// reads the blocks.
 final class HivemindProcess implements Hivemind, EngineProcess {
   HivemindProcess._(this._process) {
     _process.lines.listen(_onLine, onDone: _onExit);
@@ -157,6 +158,9 @@ final class HivemindProcess implements Hivemind, EngineProcess {
     try {
       engine._send('uci');
       await engine._expect('uciok').timeout(patience);
+      if (engine._streams) {
+        engine._send('setoption name ReportIntervalMs value $reportIntervalMs');
+      }
       for (final MapEntry(:key, :value) in options.entries) {
         engine._send('setoption name $key value $value');
       }
@@ -170,6 +174,9 @@ final class HivemindProcess implements Hivemind, EngineProcess {
       return null;
     }
   }
+
+  /// How often, in milliseconds, a streaming engine prints its lines.
+  static const reportIntervalMs = 250;
 
   final _provenance = <String, Object?>{};
   @override
