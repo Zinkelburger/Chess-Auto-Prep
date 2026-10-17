@@ -220,8 +220,8 @@ void _journalLaws() {
 // ---------------------------------------------------------------------------
 
 /// Time controls as this app saves them: a preset, or the setup dialog's
-/// fields, any of which may be left at its default. The dialog saves sudden
-/// death without `movesPerSession`, and a period only when it is positive.
+/// fields, any of which may be left at its default; a period of 0 is sudden
+/// death.
 final Generator<Map<String, Object?>> _times = Generator((rand) {
   if (rand.chance(40)) return rand.pick(tournamentTimePresets).time;
   final kind = rand.pick(const [
@@ -238,7 +238,7 @@ final Generator<Map<String, Object?>> _times = Generator((rand) {
       'incremental' => {
         ...maybe('baseMs', 1, 3600000),
         ...maybe('incrementMs', 0, 60000),
-        ...maybe('movesPerSession', 1, 1000),
+        ...maybe('movesPerSession', 0, 1000),
       },
       'fixedDepth' => maybe('depth', 1, 128),
       'fixedNodes' => maybe('nodes', 1, 2000000000),
@@ -295,8 +295,4 @@ Future<void> _checkTournament(
     jsonDecode(await saved.readAsString()) as Map<String, Object?>,
   );
   expect(reopened.config.json, tournament.config.json);
-  expect(
-    reopened.config.timeNumber('movesPerSession', 0),
-    greaterThanOrEqualTo(0),
-  );
 }

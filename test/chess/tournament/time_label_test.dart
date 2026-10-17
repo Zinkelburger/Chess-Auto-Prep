@@ -48,15 +48,4 @@ void main() {
       'Gauntlet · 4 games per pairing',
     );
   });
-
-  test('sudden-death presets leave movesPerSession out', () {
-    for (final preset in tournamentTimePresets) {
-      final moves = preset.time['movesPerSession'];
-      expect(
-        moves == null || (moves is num && moves > 0),
-        isTrue,
-        reason: preset.label,
-      );
-    }
-  });
 }

@@ -356,10 +356,7 @@ class _SetupState extends State<_Setup> {
       'name': _name.text.trim(),
       'startFen': _fen.text.trim(),
       'engines': _seats.map((e) => e.json).toList(),
-      // Sudden death is saved without the key rather than as a 0.
-      'timeControl': {
-        ..._time,
-      }..removeWhere((k, v) => k == 'movesPerSession' && (v is! num || v <= 0)),
+      'timeControl': _time,
       'adjudication': _rules,
     });
     if (value.problem case final message?) {

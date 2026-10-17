@@ -160,6 +160,41 @@ void main() {
     });
     expect(tournament.scores.map((s) => s.points), [0, 0]);
   });
+  test('TimeControl writes whole seconds without a decimal', () async {
+    Future<String> tag(Map<String, Object?> time) async {
+      final result = await game(config(extra: {'timeControl': time}), [
+        ScriptEngine([]),
+        ScriptEngine([]),
+      ], stopping: () => true);
+      return RegExp(r'\[TimeControl "([^"]*)"\]').firstMatch(result.pgn)![1]!;
+    }
+
+    expect(await tag({'kind': 'movetime', 'movetimeMs': 2000}), '*2');
+    expect(await tag({'kind': 'movetime', 'movetimeMs': 1500}), '*1.5');
+    expect(
+      await tag({'kind': 'incremental', 'baseMs': 60000, 'incrementMs': 600}),
+      '60+0.6',
+    );
+    expect(
+      await tag({
+        'kind': 'incremental',
+        'baseMs': 600000,
+        'incrementMs': 10000,
+        'movesPerSession': 40,
+      }),
+      '40/600+10',
+    );
+    expect(
+      await tag({
+        'kind': 'incremental',
+        'baseMs': 60000,
+        'incrementMs': 0,
+        'movesPerSession': 0,
+      }),
+      '60+0',
+    );
+    expect(await tag({'kind': 'fixedDepth', 'depth': 3}), '?');
+  });
   test('round robin and gauntlet alternate seats deterministically', () {
     final cfg = config(
       extra: {
