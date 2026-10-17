@@ -396,6 +396,15 @@ class Stopping(TournamentDirCase):
         result = self.registry.call("tournament_stop", {})
         self.assertFalse(result["stopped"])
 
+    def test_descriptions_match_what_the_runner_does(self):
+        # The runner cuts the games in flight short and saves them unfinished,
+        # and never sets annotateMoves, so its PGNs hold no eval comments.
+        stop = self.registry.tools["tournament_stop"]["description"]
+        self.assertIn("saved unfinished", stop)
+        self.assertNotIn("finishes the game", stop)
+        pgn = self.registry.tools["tournament_game_pgn"]["description"]
+        self.assertIn("no evaluations", pgn)
+
     def test_a_dead_pid_does_not_read_as_running(self):
         directory = self.write("match", status="running")
         # A pid that cannot exist: the file outlived the process.
