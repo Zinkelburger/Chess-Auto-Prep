@@ -18,8 +18,7 @@ const { origin, close } = await serveDist(frontend);
 const chromeTmp = await fs.mkdtemp(path.join(os.homedir(), '.cache', 'bht-'));
 const browser = await puppeteer.launch({
   executablePath: process.env.CHROME_BIN || '/usr/bin/google-chrome', headless: true,
-  // WebGPU in headless Chrome needs these; without a GPU the page falls back to the CPU.
-  args: ['--disable-dev-shm-usage', '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-angle=vulkan', '--ignore-gpu-blocklist'],
+  args: ['--disable-dev-shm-usage'],
   env: { ...process.env, TMPDIR: chromeTmp },
 });
 const fen = (page) => page.$eval('#ch-fen', (el) => el.value);
@@ -41,6 +40,7 @@ const sitDone = (page) => page.waitForFunction(() => {
   return rows.length === 6 && ![...rows].some((r) => r.querySelector('.ch-spinner'));
 }, { timeout: 180_000 });
 const HOLE = 'r2q1rk1/pp3p1p/2n2Bp1/8/8/8/PPP2PPP/R2Q1RK1[] w - - 0 1';
+const depthOf = (info) => Number(/Depth (\d+)/.exec(info)?.[1] ?? 0);
 
 try {
   const page = await browser.newPage();
@@ -51,16 +51,14 @@ try {
   await page.setViewport({ width: 1440, height: 900 });
   // Small sit searches keep the check quick on a two-CPU runner.
   await page.goto(`${origin}/bughouse/`);
-  // BUGHOUSE_BACKEND=cpu checks the CPU path on a machine that has WebGPU.
-  await page.evaluate((backend) => {
+  await page.evaluate(() => {
     localStorage.clear();
-    localStorage.setItem('bughouse-analysis-v3', JSON.stringify({ sitNodes: 100 }));
-    if (backend) localStorage.setItem('bughouse-engine-backend', backend);
-  }, process.env.BUGHOUSE_BACKEND ?? '');
+    localStorage.setItem('bughouse-analysis-v4', JSON.stringify({ sitNodes: 100_000 }));
+  });
   await page.goto(url('r1bqkb1r/pppp1ppp/2n2n2/4p3/4P3/2N2N2/PPPP1PPP/R1BQKB1R[] w KQkq - 4 4'));
   assert.equal(await page.evaluate(() => crossOriginIsolated), true, 'the page is cross-origin isolated');
 
-  // The engine starts and evaluates, with no net to download; the sit panel fills.
+  // The engine downloads its net, starts and evaluates; the sit panel fills.
   await evaluated(page);
   assert.equal(await page.$('#ch-gauge'), null, 'no evaluation bar beside the board');
   assert.equal(await page.$('.ch-moves-empty'), null, 'an empty move list has no hint');
@@ -77,12 +75,11 @@ try {
   await page.waitForFunction((b) => {
     const t = document.querySelector('#ch-pearl').textContent;
     // Searched for a while, or to its end on a slow CPU.
-    const searched = parseInt(document.querySelector('#ch-engine-info').textContent.replace(/,/g, ''), 10) >= 100 || document.querySelector('#ch-bar').style.width === '100%';
+    const searched = Number(/Depth (\d+)/.exec(document.querySelector('#ch-engine-info').textContent)?.[1] ?? 0) >= 12 || document.querySelector('#ch-bar').style.width === '100%';
     return /^[+\-#]?\d/.test(t) && t !== b && searched;
   }, { timeout: 120_000 }, before);
   const after = await page.$eval('#ch-pearl', (el) => el.textContent);
   console.log('eval with a knight in Black’s hand:', after);
-  // Hivemind's winning chance, as centipawns: a knight in hand is worth a few tenths here.
   assert.ok(Number(after) < Number(before) - 0.2, 'a knight for Black is clearly good for Black');
   assert.match(await page.$eval('#ch-moves', (el) => el.textContent), /Hands edited at the start: \+n/);
 
@@ -95,7 +92,7 @@ try {
   await click(page, 'd2'); await click(page, 'd4');
   await until(page, '#ch-fen', / b /); // d4 is on the board before Black answers
   await click(page, 'e5'); await click(page, 'd4');
-  await until(page, '#ch-fen', /\[\] w/); // exd4: the pawn went to Black's partner, not Black's hand
+  await until(page, '#ch-fen', /\[p\] w/); // exd4: the pawn went to Black's hand, as in crazyhouse
   await page.click('#ch-hand-bottom .ch-step[data-role="knight"][data-step="more"]'); // White +N
   await page.click('#ch-hand-bottom .zh-slot[data-role="knight"]');
   await click(page, 'd5');
@@ -105,7 +102,7 @@ try {
   await page.keyboard.press('ArrowLeft');
   assert.match(await fen(page), /\[\] b/, 'back before exd4');
   await page.keyboard.press('ArrowDown');
-  assert.match(await fen(page), /\/3N4\/.*\[\] b/, 'last move: after N@d5');
+  assert.match(await fen(page), /\/3N4\/.*\[p\] b/, 'last move: after N@d5');
 
   // PGN shows the line.
   assert.match(await page.$eval('#ch-pgn', (el) => el.value), /4\. d4 exd4 \{ Hands edited: \+N \} 5\. N@d5/);
@@ -127,7 +124,7 @@ try {
   await page.keyboard.press('x');
   await until(page, '#ch-engine-name', /Show threat/);
   await page.keyboard.press('x');
-  await until(page, '#ch-engine-name', /Hivemind/);
+  await until(page, '#ch-engine-name', /Fairy-Stockfish/);
   // Right-click a move: Lichess's menu, Copy PGN puts the line on the clipboard.
   await page.browserContext().overridePermissions(origin, ['clipboard-read', 'clipboard-write', 'clipboard-sanitized-write']);
   await page.bringToFront();
@@ -179,7 +176,7 @@ try {
   assert.equal(await page.$eval('#ch-practice', (el) => el.hidden), true);
   // Back to N@d5: Bb5 and the reply are a variation now.
   await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowRight');
-  await until(page, '#ch-fen', /\/3N4\/.*\[\] b/);
+  await until(page, '#ch-fen', /\/3N4\/.*\[p\] b/);
 
   // Board editor: a white queen painted on h5 and a black pawn removed, then analysed.
   await page.click('#ch-edit');
@@ -231,7 +228,7 @@ try {
   assert.equal(await page.$$eval('#bs-sit .bs-sit-row', (rows) => rows.filter((r) => r.getBoundingClientRect().height > 20).length), 6);
   await page.screenshot({ path: path.join(output, 'laptop-1366x768.png') });
 
-  // The gear: lila's sliders. ∞ search time is infinite analysis, which carries on from the first search's tree after the sit rows.
+  // The gear: lila's sliders. ∞ search time is infinite analysis, which searches on without a limit after the sit rows.
   await page.setViewport({ width: 1440, height: 900 });
   const slide = (selector, value, event = 'input') => page.$eval(selector, (el, [v, ev]) => {
     el.value = String(v);
@@ -239,10 +236,9 @@ try {
   }, [value, event]);
   await page.click('#ch-gear');
   const rows = () => page.$$eval('#ch-settings .ch-setting', (rs) => rs.filter((r) => !r.hidden).map((r) => r.querySelector('label').textContent));
-  const backend = await text(page, '#ch-engine-name');
-  console.log('gear rows on', backend, '→', (await rows()).join(', '));
-  assert.deepEqual((await rows()).filter((r) => r !== 'Hardware' && r !== 'Threads'), ['Search time', 'Multiple lines', 'Sit search']);
-  assert.equal((await rows()).includes('Threads'), !backend.includes('GPU'), 'threads only for the CPU path');
+  const max = Number(await page.$eval('#ch-set-threads', (el) => el.max));
+  console.log('gear rows →', (await rows()).join(', '));
+  assert.deepEqual(await rows(), max > 1 ? ['Search time', 'Multiple lines', 'Threads', 'Sit search'] : ['Search time', 'Multiple lines', 'Sit search']);
   assert.equal(await text(page, '#ch-settings .ch-setting:first-child .ch-setting-value'), '10s');
   await page.screenshot({ path: path.join(output, 'gear.png') });
   await page.keyboard.press('Escape');
@@ -255,15 +251,14 @@ try {
   await page.goto(url('r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R[] w KQkq - 4 4'));
   await evaluated(page);
   await sitDone(page);
-  const positions = async () => parseInt((await text(page, '#ch-engine-info')).replace(/,/g, ''), 10);
-  const first = await positions();
-  await page.waitForFunction((n) => parseInt(document.querySelector('#ch-engine-info').textContent.replace(/,/g, ''), 10) > n, { timeout: 5_000 }, first);
-  console.log('infinite analysis resumed past', first, 'positions:', await text(page, '#ch-engine-info'));
+  await page.waitForFunction(() => /^Depth \d+\/∞/.test(document.querySelector('#ch-engine-info').textContent), { timeout: 60_000 });
+  const first = depthOf(await text(page, '#ch-engine-info'));
+  await page.waitForFunction((n) => Number(/Depth (\d+)/.exec(document.querySelector('#ch-engine-info').textContent)?.[1] ?? 0) > n, { timeout: 30_000 }, first);
+  console.log('infinite analysis searched on past depth', first, ':', await text(page, '#ch-engine-info'));
   await page.click('#ch-gear');
   await slide('#ch-set-search', 4); // back to 10 s
-  // On the CPU, Threads starts a new engine with that many threads.
-  if (!backend.includes('GPU')) {
-    const max = Number(await page.$eval('#ch-set-threads', (el) => el.max));
+  // Threads restart the search with that many threads.
+  if (max > 1) {
     const want = Math.max(1, Math.min(max, 2));
     await slide('#ch-set-threads', want, 'change');
     await until(page, '.ch-setting:has(#ch-set-threads) .ch-setting-value', new RegExp(`^${want} / `));
@@ -315,7 +310,7 @@ try {
   await desk.setViewport({ width: 1440, height: 900 });
   let block = true;
   await desk.setRequestInterception(true);
-  desk.on('request', (req) => (block && req.url().includes('/bughouse-engine/model-') ? req.abort() : req.continue()));
+  desk.on('request', (req) => (block && req.url().includes('/crazyhouse-engine/net-') ? req.abort() : req.continue()));
   await desk.goto(url(HOLE));
   await desk.waitForSelector('#ch-engine-action:not([hidden])', { timeout: 60_000 });
   assert.equal(await desk.$eval('#ch-engine-action', (b) => b.textContent), 'Try again');

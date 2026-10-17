@@ -7,10 +7,10 @@
  * of a piece no longer in hand) is cut. The tree never checks material counts: any hand chessops accepts
  * is allowed (no kings, at most 64 pieces), capped per piece.
  *
- * Bughouse rules for one board, as the engine plays them with its partner board held still:
- * a capture leaves the board for the partner instead of going to the
- * capturer's hand, and pieces arrive only through a hand edit. Positions are
- * kept in chessops' crazyhouse form, which reads and writes hands in FENs.
+ * Crazyhouse rules, as the engine plays them: a capture goes to the
+ * capturer's hand, and anything else a partner would send arrives through a
+ * hand edit. Positions are kept in chessops' crazyhouse form, which reads and
+ * writes hands in FENs.
  */
 import { makeFen, parseFen, INITIAL_FEN } from 'chessops/fen';
 import { makeSan as chessopsSan, parseSan } from 'chessops/san';
@@ -27,15 +27,6 @@ export const START_FEN = INITIAL_FEN.replace(' w ', '[] w ');
 export const MAX_IN_HAND = 16;
 export const HAND_ROLES: Role[] = ['pawn', 'knight', 'bishop', 'rook', 'queen'];
 const LETTER: Record<Role, string> = { pawn: 'p', knight: 'n', bishop: 'b', rook: 'r', queen: 'q', king: 'k' };
-
-/** Plays a legal move by bughouse rules: chessops banks a capture in the mover's hand, but it goes to the partner. */
-function playMove(pos: Crazyhouse, move: Move) {
-  const turn = pos.turn;
-  const hand = pos.pockets![turn].clone();
-  pos.play(move);
-  if ('role' in move) hand[move.role]--;
-  pos.pockets![turn] = hand;
-}
 
 /** Checkmate or stalemate; null while play goes on. */
 export function outcomeOf(fen: string): 'Checkmate' | 'Stalemate' | null {
@@ -195,7 +186,7 @@ export function playLine(fen: string, ucis: string[], limit = ucis.length): Line
     const move = readMove(pos, uci);
     if (!move) break;
     const san = makeSan(pos, move);
-    playMove(pos, move);
+    pos.play(move);
     out.push({ uci, san, fen: fenOf(pos) });
   }
   return out;
@@ -229,7 +220,7 @@ export class Tree extends VariationTree<TreeNode> {
     const parent = this.parent(id);
     if (!parent) return this.loadedFen;
     const pos = positionOf(parent.fen);
-    playMove(pos, parseUci(node.uci)!);
+    pos.play(parseUci(node.uci)!);
     return fenOf(pos);
   }
 
@@ -242,7 +233,7 @@ export class Tree extends VariationTree<TreeNode> {
     const existing = parent.children.find((c) => c.uci === makeUci(move));
     if (existing) return existing;
     const san = makeSan(pos, move);
-    playMove(pos, move);
+    pos.play(move);
     const child: TreeNode = { id: newId(), ply: parent.ply + 1, uci: makeUci(move), san, fen: fenOf(pos), children: [] };
     this.attach(parent, child);
     return child;
@@ -266,7 +257,7 @@ export class Tree extends VariationTree<TreeNode> {
       const move = parseUci(child.uci);
       if (!move || !readMove(pos, child.uci)) { this.unindex(child); continue; }
       child.san = makeSan(pos, move);
-      playMove(pos, move);
+      pos.play(move);
       child.fen = applyDelta(fenOf(pos), child.hand);
       kept.push(child);
       this.replay(child);
@@ -335,7 +326,7 @@ export class Tree extends VariationTree<TreeNode> {
   }
 
   private headers(): string[] {
-    const headers = ['[Event "Bughouse analysis"]', '[Site "https://chessautoprep.com/bughouse"]', '[Variant "Bughouse"]'];
+    const headers = ['[Event "Bughouse analysis"]', '[Site "https://chessautoprep.com/bughouse"]', '[Variant "Crazyhouse"]'];
     if (this.root.fen !== START_FEN) headers.push(`[FEN "${this.root.fen}"]`, '[SetUp "1"]');
     return headers;
   }

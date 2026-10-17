@@ -1,8 +1,10 @@
 # Hivemind, end to end
 
-The bughouse engine behind the app's Bughouse mode, the `bughouse` MCP server
-and the website's `/bughouse` board (one board, the partner board
-held still, on the GPU through WebGPU). This document
+The bughouse engine behind the app's Bughouse mode and the `bughouse` MCP
+server. `tools/bughouse_web/` also builds it for the browser (one board, the
+partner board held still, on the GPU through WebGPU), but no website page
+loads that build: the site's `/bughouse` board runs Lichess's crazyhouse
+Fairy-Stockfish. This document
 is the one place that explains *how it works* rather than how to call it:
 what the network sees, what the search does with it, and — the question that
 sends everyone here — **why the evaluation sits near 0.00 when one side is
@@ -530,8 +532,10 @@ either book.
 
 ## The web payload
 
-**About 54.7 MB (52.1 MiB) before a visitor gets one evaluation**, from the
-files `prepare_assets.py` writes into `public/bughouse-engine/`:
+No page loads this payload; `prepare_assets.py` still writes it, and its
+plain ONNX Runtime serves the Expectimax tab's Maia. Loading the browser
+build costs **about 54.7 MB (52.1 MiB) before one evaluation**, from the files
+`prepare_assets.py` writes into `public/bughouse-engine/`:
 
 | Artifact | Bytes | Share |
 |---|---:|---:|
