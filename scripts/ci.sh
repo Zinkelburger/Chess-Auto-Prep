@@ -36,10 +36,10 @@ run_step() {
       if ! python3 scripts/test_ci_dispatch.py; then
         bad=1
       fi
-      if ! python3 scripts/test_check_v2.py; then
+      if ! python3 scripts/test_check_architecture.py; then
         bad=1
       fi
-      if ! python3 scripts/check_v2.py; then
+      if ! python3 scripts/check_architecture.py; then
         bad=1
       fi
       if ! python3 scripts/check_file_mutations.py; then
@@ -60,7 +60,7 @@ run_step() {
       "${JOB[@]}" run -- bash scripts/test_tools.sh
       ;;
     profile)
-      local target=${1:-integration_test/v2_desktop_test.dart}
+      local target=${1:-integration_test/desktop_test.dart}
       if [[ $# -gt 1 ]]; then
         echo 'ci.sh profile accepts one integration target' >&2
         return 2
@@ -70,7 +70,7 @@ run_step() {
       ;;
     integration)
       local targets=("$@")
-      [[ ${#targets[@]} -gt 0 ]] || targets=(integration_test/v2_desktop_test.dart)
+      [[ ${#targets[@]} -gt 0 ]] || targets=(integration_test/desktop_test.dart)
       # Each executable gets its own display/bus. Reusing one Flutter device
       # session for multiple native test files can retain its debug connection.
       local target

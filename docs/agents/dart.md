@@ -15,7 +15,7 @@ with matching tests under `test/`.
 - `app/`: composition, cross-mode wiring, navigation, lifecycle and shutdown.
 - `diagnostics/`: logging; `debug/`: opt-in driver and packaged-app checks.
 
-`scripts/check_v2.py` enforces the dependency table, pure layers, write ownership
+`scripts/check_architecture.py` enforces the dependency table, pure layers, write ownership
 and complexity limits. See [the architecture contracts](../ARCHITECTURE.md).
 Do not add parallel layers (`services/`, `models/`, `widgets/`), a dependency
 container, code generation, a localization step or debt ledgers.

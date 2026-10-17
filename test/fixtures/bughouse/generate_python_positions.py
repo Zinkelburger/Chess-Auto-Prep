@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Writes python_positions.json: two-board lines played by the Python tools.
 
-The v2 bughouse lab reads books the Python tools write
-(`tools/bughouse_db/hivemind_book.py`, `tools/bughouse_db/index.py`), keyed
-by `poskey.position_key` of `DualBoard`'s FENs. The Dart tests replay each
-line and check they reach the same dual FEN, the same SAN for every ply and
-the same key, so a position the book holds is a position the lab finds.
+The Python tools key their books (`tools/bughouse_db/hivemind_book.py`,
+`tools/bughouse_db/index.py`) by `poskey.position_key` of `DualBoard`'s FENs.
+The Dart tests replay each line and check they reach the same dual FEN, the
+same SAN for every ply and the same key, so the app's bughouse rules and the
+Python tools agree on every position.
 
-    python3 test/fixtures/v2_bughouse/generate_python_positions.py
+    python3 test/fixtures/bughouse/generate_python_positions.py
 """
 from __future__ import annotations
 

@@ -78,7 +78,7 @@ Checks from repository root:
 ```
 scripts/ci.sh test test/storage/document_file_io_test.dart test/storage/native_call_runner_test.dart
 scripts/ci.sh test test/storage/platform_documents_test.dart
-scripts/ci.sh integration integration_test/v2_desktop_test.dart
+scripts/ci.sh integration integration_test/desktop_test.dart
 ```
 
 The app's typed store and its staging, journals and kept versions live in

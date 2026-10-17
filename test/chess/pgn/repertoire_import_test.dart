@@ -22,7 +22,7 @@ void main() {
       parseChapter(name: chapter.title, text: chapter.text);
 
   String fixture(String name) =>
-      File('test/fixtures/v2_pgn/$name').readAsStringSync();
+      File('test/fixtures/pgn/$name').readAsStringSync();
 
   test(
     'a game with variations becomes one line per leaf, in reading order',

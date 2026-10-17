@@ -263,7 +263,7 @@ void main() {
 /// The Introduction comment of the King's Indian course, laid out from the
 /// position it is written on.
 List<CommentBlock> _kidIntro() => layoutComment(
-  File('test/fixtures/v2_comments/kid_intro_comment.txt').readAsStringSync(),
+  File('test/fixtures/comments/kid_intro_comment.txt').readAsStringSync(),
   at: _kid,
 );
 

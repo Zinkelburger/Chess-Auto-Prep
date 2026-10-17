@@ -14,7 +14,7 @@ const _afterD5 =
     'rnbqkbnr/pp2pp1p/2p3p1/3p4/3PP3/2N5/PPP2PPP/R1BQKBNR w KQkq - 0 4';
 
 String _fixture() => File(
-  'test/fixtures/v2_generation/builder_chapter_tree.json',
+  'test/fixtures/generation/builder_chapter_tree.json',
 ).readAsStringSync();
 
 Future<Object> _seed(int rating, Side side) => readSearchSeed(

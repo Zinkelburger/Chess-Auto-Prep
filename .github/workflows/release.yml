@@ -85,7 +85,7 @@ jobs:
 
       # --check is not belt-and-braces here: a *missing* asset directory is
       # only a warning to `flutter build`, so a failed fetch would otherwise
-      # sail through and ship an installer whose Bughouse Lab is simply absent.
+      # sail through and ship an installer whose Bughouse mode is simply absent.
       - name: Fetch bughouse engine (Linux)
         run: |
           python3 tools/fetch_assets.py --only bughouse-linux
@@ -107,7 +107,7 @@ jobs:
       # and exits 0, so nothing before this point can tell a build that bundled
       # the engine from one that quietly did not. Looking inside the artifact is
       # the only thing that can, and this is the failure it exists for: a green
-      # release whose Bughouse Lab is simply absent.
+      # release whose Bughouse mode is simply absent.
       - name: Verify the engine is in the built bundle
         run: |
           set -euo pipefail
@@ -272,7 +272,7 @@ jobs:
       # and exits 0, so nothing before this point can tell a build that bundled
       # the engine from one that quietly did not. Looking inside the artifact is
       # the only thing that can, and this is the failure it exists for: a green
-      # release whose Bughouse Lab is simply absent.
+      # release whose Bughouse mode is simply absent.
       - name: Verify the engine is in the built app
         run: |
           set -euo pipefail
@@ -291,7 +291,7 @@ jobs:
           zip -ry ../../../../../chess-auto-prep-${{ needs.prepare.outputs.tag }}-macos-${{ matrix.arch }}.zip *.app
           ls -lh ../../../../../chess-auto-prep-${{ needs.prepare.outputs.tag }}-macos-${{ matrix.arch }}.zip
 
-      - name: Packaged v2 documents, Stockfish, Maia and login sockets
+      - name: Packaged documents, Stockfish, Maia and login sockets
         run: |
           APP=$(ls -d build/macos/Build/Products/Release/*.app)
           EXEC=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")
