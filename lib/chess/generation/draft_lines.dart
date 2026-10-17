@@ -406,7 +406,7 @@ final class _Branch {
 /// `+0.42`, `-1.20`. The inverse of [expectedScore], capped short of a mate,
 /// as the old app wrote `[%expectimax]`.
 String expectimaxText(double value) {
-  final cap = mateSaturationCp - 1;
+  const cap = mateSaturationCp - 1;
   final int cp;
   if (value <= 0.01) {
     cp = -cap;

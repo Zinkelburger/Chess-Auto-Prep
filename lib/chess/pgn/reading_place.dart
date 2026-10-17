@@ -45,13 +45,11 @@ final class ReadingPlace {
           {'field': r.field, 'rule': r.rule.name, 'value': r.value},
       ],
     },
-    if (switch (perspective) {
-          FollowPlayer(:final name) => name,
-          FollowNobody() => '',
-          FollowCollectionPlayer() => null,
-        }
-        case final follow?)
-      'v2Follow': follow,
+    'v2Follow': ?switch (perspective) {
+      FollowPlayer(:final name) => name,
+      FollowNobody() => '',
+      FollowCollectionPlayer() => null,
+    },
   };
   static ReadingPlace? decode(String? raw) {
     try {

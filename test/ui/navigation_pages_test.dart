@@ -11,10 +11,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: darkTheme(),
-          home: Scaffold(
+          home: const Scaffold(
             body: MediaQuery(
-              data: const MediaQueryData(textScaler: TextScaler.linear(1.3)),
-              child: const SizedBox(
+              data: MediaQueryData(textScaler: TextScaler.linear(1.3)),
+              child: SizedBox(
                 key: ValueKey('navigation-rail'),
                 width: 260,
                 child: NavigationPages(

@@ -34,7 +34,7 @@ class BughouseScreen extends StatelessWidget {
   /// the height the hands (a square tall, a + and a − row) and, with two
   /// boards, the chrome need.
   static double boardSize(BoxConstraints box, LabBoards boards) {
-    final hands = 2 * (2 * labStepHeight + labSeatPadding);
+    const hands = 2 * (2 * labStepHeight + labSeatPadding);
     final width = box.maxWidth - labPanelMinWidth - labColumnGap;
     return switch (boards) {
       LabBoards.one =>

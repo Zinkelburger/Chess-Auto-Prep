@@ -222,7 +222,7 @@ void main() {
       (chapter, '/Outside/Main.pgn'),
       ('/Outside/Main.pgn', chapter),
       (chapter, '/Documents/repertoires-extra/Main.pgn'),
-      ('$root', '$root/Renamed'),
+      (root, '$root/Renamed'),
       ('Course/Main.pgn', '$root/Moved.pgn'),
       (chapter, '$root/../Moved.pgn'),
       (chapter, '$root/Bad\\Name.pgn'),

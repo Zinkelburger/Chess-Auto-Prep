@@ -6,7 +6,6 @@ import 'dart:async';
 import 'package:flutter/gestures.dart'
     show kBackMouseButton, kForwardMouseButton;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:multi_split_view/multi_split_view.dart';
 
 import '../features/books/books_screen.dart' show newBook;

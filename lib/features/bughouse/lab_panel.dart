@@ -161,7 +161,7 @@ class _EngineBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final lines = engine.lines;
-    final (String status, Color? colour) = switch (lines) {
+    final (String status, Color colour) = switch (lines) {
       LinesStopped(:final reason) => (reason, scheme.error),
       LinesOn(nodes: final nodes?) => (
         'Hivemind · ${_thousands(nodes)} nodes',

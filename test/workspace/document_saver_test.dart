@@ -196,7 +196,7 @@ void main() {
         ..keep(saved('A', 'B'), games({0}))
         ..keep(saved('B', 'C'), games({1}));
       final restored = Receipt(
-        committed: Revision('B-again'),
+        committed: const Revision('B-again'),
         before: 'C',
         beforeRevision: scriptedRevision('C'),
       );
@@ -204,7 +204,7 @@ void main() {
       final next = history.newest!;
       expect(next.receipt.before, 'A');
       expect(next.receipt.beforeRevision, scriptedRevision('A'));
-      expect(next.receipt.committed, Revision('B-again'));
+      expect(next.receipt.committed, const Revision('B-again'));
       expect(rewrittenBy(next.scope), {
         0,
       }, reason: 'what the save changed is what it always was');

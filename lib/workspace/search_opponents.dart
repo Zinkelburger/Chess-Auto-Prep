@@ -2,7 +2,6 @@ import 'package:dartchess/dartchess.dart' show Position;
 
 import '../chess/explorer_choice.dart';
 import '../chess/fen.dart';
-import '../chess/generation/expectimax_options.dart';
 import '../chess/generation/mainline_book.dart' show PlayedMove;
 import '../chess/generation/played_policy.dart';
 import '../chess/generation/sources.dart';

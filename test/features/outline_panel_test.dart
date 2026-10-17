@@ -82,11 +82,11 @@ void main() {
           modified: DateTime.now(),
           chapters: [
             main,
-            ChapterRef(
+            const ChapterRef(
               repertoire: 'KID',
               name: 'Gambit',
               path: '/repertoires/KID/Gambit.pgn',
-              heading: const ChapterHeading(
+              heading: ChapterHeading(
                 rootMoves: ['e4', 'e5', 'f4'],
                 draft: true,
               ),

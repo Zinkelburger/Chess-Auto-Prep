@@ -170,9 +170,11 @@ String _castlingField = '-';
 String _castling(Board board, SquareSet rights) {
   if (rights.isEmpty) return '-';
   final whiteRooks =
-      board.piecesOf(Side.white, Role.rook) & SquareSet.backrankOf(Side.white);
+      board.piecesOf(Side.white, Role.rook) &
+      const SquareSet.backrankOf(Side.white);
   final blackRooks =
-      board.piecesOf(Side.black, Role.rook) & SquareSet.backrankOf(Side.black);
+      board.piecesOf(Side.black, Role.rook) &
+      const SquareSet.backrankOf(Side.black);
   final whiteKing = board.kingOf(Side.white);
   final blackKing = board.kingOf(Side.black);
   final key = (

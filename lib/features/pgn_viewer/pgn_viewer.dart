@@ -151,11 +151,10 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
     if (file == null || _filter.busy || _filter.problem != null) return null;
     final chapter = _session.snapshot();
     if (chapter == null || gameOrder.isEmpty) return null;
-    return chapter.preamble +
-        [
-          for (final index in gameOrder) chapter.lines[index].text,
-        ].join('\n\n') +
-        '\n';
+    final games = [
+      for (final index in gameOrder) chapter.lines[index].text,
+    ].join('\n\n');
+    return '${chapter.preamble}$games\n';
   }
 
   /// The games the list shows, in its order, as chapters for a study: each

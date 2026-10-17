@@ -46,7 +46,7 @@ GameSummary summarizeTags(List<PgnHeader> tags, {required int index}) {
     result: _result(tagValue(tags, 'Result')),
     setting: [
       if (players != null && event != null) event,
-      if (_year(tagValue(tags, 'Date')) case final year?) year,
+      ?_year(tagValue(tags, 'Date')),
     ].join(' · '),
   );
 }

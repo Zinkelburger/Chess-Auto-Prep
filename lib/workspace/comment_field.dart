@@ -178,9 +178,9 @@ class _CommentFieldState extends State<CommentField>
               minLines: 2,
               maxLines: 4,
               style: text.bodyMedium,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 isDense: true,
-                border: const OutlineInputBorder(),
+                border: OutlineInputBorder(),
               ),
             ),
           ),

@@ -114,7 +114,7 @@ void main() {
   });
 
   test('another variant is left to dartchess', () {
-    final Position position = Crazyhouse.initial;
+    const Position position = Crazyhouse.initial;
     expect(fenOf(position).value, position.fen);
   });
 }

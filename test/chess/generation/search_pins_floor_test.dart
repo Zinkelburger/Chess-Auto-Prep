@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'search_harness.dart';
 
 void main() {
-  final rootPosition = Fen(kingAndPawn).position;
+  final rootPosition = const Fen(kingAndPawn).position;
 
   group('pins', () {
     test('at a pinned position only the pinned moves are enumerated', () async {
@@ -52,7 +52,7 @@ void main() {
           side: Side.white,
           horizonPlies: 1,
           pins: {
-            Fen(castling).position: {'e1h1'},
+            const Fen(castling).position: {'e1h1'},
           },
         ),
       );

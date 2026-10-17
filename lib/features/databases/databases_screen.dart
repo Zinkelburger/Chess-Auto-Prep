@@ -336,7 +336,7 @@ String _summary(CorpusSize size) {
     'Master games',
     '${_count(size.games)} games',
     _bytes(size.bytes),
-    if (_span(size) case final span?) span,
+    ?_span(size),
     if (size.firstIssue > 0)
       size.firstIssue == size.lastIssue
           ? 'TWIC issue ${size.firstIssue}'

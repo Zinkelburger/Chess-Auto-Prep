@@ -9,7 +9,12 @@ import 'action_layout.dart';
 /// Pixel minima keep both usable as the window changes; the current mode
 /// supplies their content without replacing the retained layout owner.
 class BoardAndCard extends StatefulWidget {
-  const BoardAndCard({required this.board, required this.card, this.layout});
+  const BoardAndCard({
+    super.key,
+    required this.board,
+    required this.card,
+    this.layout,
+  });
 
   final ActionLayout? layout;
 

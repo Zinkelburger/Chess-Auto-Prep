@@ -97,7 +97,7 @@ Future<String> _landed(Profile profile) async {
       '${read.mistakes.length} mistakes; ${rows.length} history rows';
 }
 
-final _drilled = OwnerSequence<_Trainer>(
+const _drilled = OwnerSequence<_Trainer>(
   name: 'answer and rate a line',
   seed: seedStandardProfile,
   open: _open,

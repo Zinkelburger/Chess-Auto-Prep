@@ -151,12 +151,12 @@ void main() {
       ]) {
         expect(
           pastedFen(text)?.position,
-          Fen(_sicilian).position,
+          const Fen(_sicilian).position,
           reason: text,
         );
       }
-      expect(pastedFen('$placement w'), Fen('$placement w - - 0 1'));
-      expect(pastedFen(placement), Fen('$placement w - - 0 1'));
+      expect(pastedFen('$placement w'), const Fen('$placement w - - 0 1'));
+      expect(pastedFen(placement), const Fen('$placement w - - 0 1'));
       expect(pastedFen('$_sicilian\n1. e4'), isNull);
       expect(pastedFen('1. e4 c5'), isNull);
     });
@@ -164,7 +164,7 @@ void main() {
     test('castling rights the board does not allow are dropped', () {
       expect(
         pastedFen('4k3/8/8/8/8/8/8/4K3 w KQkq - 0 1'),
-        Fen('4k3/8/8/8/8/8/8/4K3 w - - 0 1'),
+        const Fen('4k3/8/8/8/8/8/8/4K3 w - - 0 1'),
       );
     });
 
@@ -200,7 +200,7 @@ void main() {
       final blank = session.analysisPage;
       expect(await paste(_sicilian), isNull);
       expect(session.analysisPage, same(blank));
-      expect(session.cursor.fen, Fen(_sicilian));
+      expect(session.cursor.fen, const Fen(_sicilian));
       session.playMove('g1f3');
       expect(await paste(_afterE4.value), isNull);
       expect(session.analysisPage, isNot(same(blank)));
@@ -291,8 +291,8 @@ void main() {
   });
 
   test('a board from a position with no moves takes its first move', () {
-    final board = analysisBoard(side: Side.white, root: Fen(_sicilian));
-    expect(board.tree.rootFen, Fen(_sicilian));
+    final board = analysisBoard(side: Side.white, root: const Fen(_sicilian));
+    expect(board.tree.rootFen, const Fen(_sicilian));
     expect(board.tree.children, isEmpty);
     expect(board.tree.nodeAt(const NodePath.root()), isNull);
   });

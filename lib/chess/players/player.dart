@@ -70,7 +70,7 @@ final class PlayerGroup {
             if (e['person'] != id)
               e
             else if (!remove)
-              {...e, if (prepared != null) 'prepared': prepared},
+              {...e, 'prepared': ?prepared},
           if (!remove && !contains(id))
             {'person': id, 'prepared': prepared ?? false},
         ],

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/diagnostics/log.dart';
 import 'package:chess_auto_prep/features/library/library_state.dart';

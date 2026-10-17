@@ -596,9 +596,7 @@ final class ActionLayout extends ChangeNotifier {
   /// ones. The main pane keeps the other tabs to be shown by name.
   void startBuilding() {
     if (count > 1) return;
-    if (_book == null) {
-      _book = ValueNotifier(false)..addListener(notifyListeners);
-    }
+    _book ??= ValueNotifier(false)..addListener(notifyListeners);
     _ensure(1, WorkspaceTab.search);
     pane(0)
       ..show(WorkspaceTab.moves)

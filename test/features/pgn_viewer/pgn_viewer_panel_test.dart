@@ -10,7 +10,6 @@ import 'package:chess_auto_prep/storage/recent_pgn_files.dart';
 import 'package:chess_auto_prep/ui/search_field.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show TextInputAction;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/viewer_fixture.dart';
@@ -359,7 +358,7 @@ void main() {
 }
 
 /// A course export: the chapter in `White`, the line's title in `Black`.
-const courseFile = """
+const courseFile = '''
 [Event "Course"]
 [White "Italian"]
 [Black "Main line"]
@@ -387,10 +386,10 @@ const courseFile = """
 [Result "*"]
 
 1. e4 c5 2. Nf3 g6 *
-""";
+''';
 
 /// A Lichess study export: one game a chapter, named in `ChapterName`.
-const studyFile = """
+const studyFile = '''
 [Event "My study: Chapter one"]
 [ChapterName "Chapter one"]
 [Result "*"]
@@ -402,7 +401,7 @@ const studyFile = """
 [Result "*"]
 
 1. c4 e5 *
-""";
+''';
 
 /// Three games of Carlsen's, as White, Black and White.
 const _carlsenGames = '''

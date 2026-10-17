@@ -52,7 +52,7 @@ void main() {
       compoundHook: (step) async {
         if (step == failAt) {
           failAt = null;
-          throw StateError("lost acknowledgement");
+          throw StateError('lost acknowledgement');
         }
       },
     );
@@ -69,7 +69,7 @@ void main() {
           Book(
             id: 'one',
             name: 'Preparation',
-            chapters: {BookChapter('Course/Course.pgn', 'A')},
+            chapters: {const BookChapter('Course/Course.pgn', 'A')},
           ),
         ],
       ).encode(),

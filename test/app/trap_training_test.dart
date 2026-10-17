@@ -145,11 +145,11 @@ void main() {
     const draftText =
         '// Main (draft 2)\n// Draft\n// Color: White\n\n'
         '[Event "Old"]\n[Result "*"]\n\n1. c4 *\n';
-    final draft = ChapterRef(
+    const draft = ChapterRef(
       repertoire: 'KID',
       name: 'Main (draft 2)',
       path: '/repertoires/KID/Main (draft 2).pgn',
-      heading: const ChapterHeading(draft: true),
+      heading: ChapterHeading(draft: true),
     );
     w.store.documents[draft] = Opened(draftText, scriptedRevision(draftText));
     w.store.documents[main] = Opened(

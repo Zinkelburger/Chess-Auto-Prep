@@ -363,7 +363,7 @@ void main() {
     expect(retry, same(first));
     await entered.future;
     expect(f.saver.referencesPending, isTrue);
-    f.session.setComment(NodePath.of([0]), "blocked while publishing");
+    f.session.setComment(NodePath.of([0]), 'blocked while publishing');
     expect(f.session.chapter, isNot(same(command.landing.chapter)));
     release.complete();
     expect(await first, isA<store.Saved>());

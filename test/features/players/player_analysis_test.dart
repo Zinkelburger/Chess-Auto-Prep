@@ -450,7 +450,8 @@ void main() {
     () async {
       final store = ScriptedDocumentStore();
       const first = StoredGame(collection: 'analysis:old', key: 'a', pgn: game);
-      final archive = ScriptedGameStore()..answer = StoredGamesFound([first]);
+      final archive = ScriptedGameStore()
+        ..answer = const StoredGamesFound([first]);
       final owner = PlayerAnalysis(
         documents: store,
         archive: archive,

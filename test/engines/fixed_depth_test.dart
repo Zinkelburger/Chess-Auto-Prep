@@ -10,7 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/scripted_engine.dart';
 
 void main() {
-  final start = Chess.initial;
+  const start = Chess.initial;
   final afterE4 = start.play(NormalMove.fromUci('e2e4'));
 
   test(

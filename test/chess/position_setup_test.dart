@@ -22,7 +22,7 @@ void main() {
   });
 
   test('a castling right goes with its rook and is offered only at home', () {
-    final start = Setup.standard;
+    const start = Setup.standard;
     expect(start.canCastle(Square.h1), isTrue);
     final moved = start.withPiece(Square.h1, null);
     expect(moved.canCastle(Square.h1), isFalse);

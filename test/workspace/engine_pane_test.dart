@@ -175,11 +175,11 @@ void main() {
     await analysis.enable();
     await tester.pump();
     engine.current.emit(
-      EngineLine(
+      const EngineLine(
         multiPv: 1,
         depth: 24,
-        score: const Centipawns(-35),
-        pv: const ['c7c5'],
+        score: Centipawns(-35),
+        pv: ['c7c5'],
         nodes: 345000000,
         nps: 12400000,
       ),
@@ -190,11 +190,11 @@ void main() {
       findsOneWidget,
     );
     engine.current.emit(
-      EngineLine(
+      const EngineLine(
         multiPv: 1,
         depth: 245,
-        score: const MateIn(3),
-        pv: const ['c7c5'],
+        score: MateIn(3),
+        pv: ['c7c5'],
         nodes: 2100000000,
         nps: 850000,
       ),
@@ -211,11 +211,11 @@ void main() {
     await analysis.enable();
     await tester.pump();
     engine.current.emit(
-      EngineLine(
+      const EngineLine(
         multiPv: 1,
         depth: 24,
-        score: const Centipawns(-35),
-        pv: const ['c7c5'],
+        score: Centipawns(-35),
+        pv: ['c7c5'],
         nodes: 345000000,
         nps: 12400000,
       ),
