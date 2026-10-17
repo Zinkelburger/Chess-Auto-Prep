@@ -58,22 +58,22 @@ class _BoardsSwitch extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     children: [
       SegmentedButton<LabBoards>(
-      segments: const [
-        ButtonSegment(
-          value: LabBoards.one,
-          label: Text('1 board'),
-          tooltip: 'Analyse board 1 alone; its partner board stays as it is',
-        ),
-        ButtonSegment(
-          value: LabBoards.two,
-          label: Text('2 boards'),
-          tooltip: 'Analyse both boards of the game',
-        ),
-      ],
-      selected: {lab.boards},
-      showSelectedIcon: false,
-      style: const ButtonStyle(visualDensity: VisualDensity.compact),
-      onSelectionChanged: (picked) => lab.showBoards(picked.single),
+        segments: const [
+          ButtonSegment(
+            value: LabBoards.one,
+            label: Text('1 board'),
+            tooltip: 'Analyse board 1 alone; its partner board stays as it is',
+          ),
+          ButtonSegment(
+            value: LabBoards.two,
+            label: Text('2 boards'),
+            tooltip: 'Analyse both boards of the game',
+          ),
+        ],
+        selected: {lab.boards},
+        showSelectedIcon: false,
+        style: const ButtonStyle(visualDensity: VisualDensity.compact),
+        onSelectionChanged: (picked) => lab.showBoards(picked.single),
       ),
       const Spacer(),
       Tooltip(
@@ -94,7 +94,9 @@ class _BoardsSwitch extends StatelessWidget {
     final fen = await showBoardEditor(
       context,
       initial: Fen(_withoutHands(lab.position.board(board).fen)),
-      title: lab.single ? 'Edit the board' : 'Edit ${board.label.toLowerCase()}',
+      title: lab.single
+          ? 'Edit the board'
+          : 'Edit ${board.label.toLowerCase()}',
       orientation: lab.bottom(board),
     );
     if (fen == null || !context.mounted) return;
@@ -217,10 +219,8 @@ class _EngineBar extends StatelessWidget {
 const _scoreHint =
     '+ is good for White on board 1 (A + B). Hivemind’s scale, not pawns.';
 
-String _thousands(int n) => n.toString().replaceAllMapped(
-  RegExp(r'\B(?=(\d{3})+$)'),
-  (_) => ',',
-);
+String _thousands(int n) =>
+    n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+$)'), (_) => ',');
 
 /// One board: up to three lines, board 1's moves only.
 class _OneBoardRows extends StatelessWidget {
@@ -240,10 +240,9 @@ class _OneBoardRows extends StatelessWidget {
         for (var i = 0; i < labLineCount; i++)
           _LineRow(
             row: i < rows.length ? rows[i] : null,
-            text: (row) => boardPv(on!.position, row.pv, BoardNumber.one),
-            onHover: (row) => lab.preview.value = {
-              BoardNumber.one: ?row?.move.one,
-            },
+            text: (row) => boardPv(row.table, row.pv, BoardNumber.one),
+            onHover: (row) =>
+                lab.preview.value = {BoardNumber.one: ?row?.move.one},
             onTap: (row) {
               if (row.move.one case final uci?) lab.play(BoardNumber.one, uci);
             },
@@ -288,7 +287,7 @@ class _TeamRows extends StatelessWidget {
         for (var i = 0; i < labLineCount; i++)
           _LineRow(
             row: i < rows.length ? rows[i] : null,
-            text: (row) => readablePv(on!.position, row.pv, limit: 4),
+            text: (row) => readablePv(row.table, row.pv, limit: 4),
             onHover: (row) => lab.preview.value = {
               for (final board in BoardNumber.values)
                 board: ?row?.move.on(board),

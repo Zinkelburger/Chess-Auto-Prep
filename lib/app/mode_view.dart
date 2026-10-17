@@ -745,7 +745,11 @@ final class BughouseView extends ModeView {
         group: 'Bughouse',
       ),
       AppAction('New game', lab.newGame, group: 'Bughouse'),
-      AppAction(lab.single ? 'Flip board' : 'Flip boards', lab.flip, group: 'Bughouse'),
+      AppAction(
+        lab.single ? 'Flip board' : 'Flip boards',
+        lab.flip,
+        group: 'Bughouse',
+      ),
       AppAction(
         'Copy dual FEN',
         () => unawaited(

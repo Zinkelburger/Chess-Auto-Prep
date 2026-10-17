@@ -39,12 +39,6 @@ APPROVED: dict[str, tuple[int, str]] = {
         "v2 tournament commit: remove only its own completed PGN/metadata "
         "recovery journal; trash uses native no-replace relocation",
     ),
-    "lib/storage/bughouse_matches.dart": (
-        1,
-        "v2 bughouse matches: a deleted match's folder is renamed into "
-        "bughouse_matches/.trash, the old app's quarantine; writes go "
-        "through atomic_write",
-    ),
     "lib/storage/generation_trees.dart": (2, "v2 derived search tree: under the Documents lock, unlink (never follow) whatever a crash left at the staging name before writing a new tree; after a tree is kept, remove the chapter's v2- run folders (real directories holding a tree, never links, never v1, never an agent's v2-agent- run) beyond the newest 8 earlier runs"),
     "lib/storage/disk_usage.dart": (1, "v2 Databases storage: on an explicit, confirmed request delete a derived database the app downloads or rebuilds (the master games or a leftover copy of a derived database) with its SQLite sidecars; never user data"),
     "lib/storage/master_games_import.dart": (1, "v2 master games database: SQLite reports it damaged or not a database, so it is renamed aside with its sidecars (never deleted) and a new one started"),

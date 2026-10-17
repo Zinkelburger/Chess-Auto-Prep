@@ -21,7 +21,6 @@ import '../engines/analysis_launch.dart';
 import '../storage/settings.dart';
 import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
-import '../engines/engine.dart';
 import '../engines/hivemind_engine.dart';
 import '../engines/hivemind_install.dart';
 import '../engines/maia/maia_model.dart';
@@ -447,7 +446,6 @@ final class AppEnvironment {
   /// Closes what this opened: the network, the databases, the engines.
   final void Function() close;
 
-
   /// A Stockfish with the threads and the table the settings give it now.
   Future<EngineStart> startEngine() => launchEngine(
     cores: settings.value.coresOn(coresAvailable),
@@ -741,4 +739,3 @@ StoragePlaces nativeStoragePlaces({
     ],
   );
 }
-

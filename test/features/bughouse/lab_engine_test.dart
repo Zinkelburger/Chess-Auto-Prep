@@ -43,26 +43,31 @@ void main() {
     }
   }
 
-  int nodes(HivemindQuestion question) =>
-      (question.budget as NodeBudget).nodes;
+  int nodes(HivemindQuestion question) => (question.budget as NodeBudget).nodes;
 
-  test('nothing is searched until the switch is on and the mode open', () async {
-    engine.toggle();
-    await settle();
-    expect(hivemind.asked, isEmpty);
-    engine.toggle();
-    engine.open();
-    await settle();
-    expect(hivemind.asked, isEmpty);
-    expect(engine.lines, isA<LinesOff>());
-  });
+  test(
+    'nothing is searched until the switch is on and the mode open',
+    () async {
+      engine.toggle();
+      await settle();
+      expect(hivemind.asked, isEmpty);
+      engine.toggle();
+      engine.open();
+      await settle();
+      expect(hivemind.asked, isEmpty);
+      expect(engine.lines, isA<LinesOff>());
+    },
+  );
 
   test('one board: each pass asks board 1 of its mover and the zero of the '
       'other team, deeper each time', () async {
     await on();
     expect(hivemind.asked.map(nodes), [800, 800, 4000, 4000]);
     final own = hivemind.asked.first;
-    expect((own.team, own.mustMove, own.maySit), (Team.ab, MustMove.one, false));
+    expect(
+      (own.team, own.mustMove, own.maySit),
+      (Team.ab, MustMove.one, false),
+    );
     final zero = hivemind.asked[1];
     expect(zero.team, Team.cd);
     expect(zero.position.turn(BoardNumber.two), Side.white);
@@ -75,26 +80,34 @@ void main() {
     expect(lines.score.text, '0.00');
   });
 
-  test('one board, Black to move: the partner board is A + B\'s to move',
-      () async {
-    lab.play(BoardNumber.one, 'e2e4');
-    await on();
-    final zero = hivemind.asked.firstWhere((q) => q.team == Team.ab);
-    expect(zero.position.turn(BoardNumber.two), Side.black);
-    expect(zero.mustMove, MustMove.either);
-  });
+  test(
+    'one board, Black to move: the partner board is A + B\'s to move',
+    () async {
+      lab.play(BoardNumber.one, 'e2e4');
+      await on();
+      final zero = hivemind.asked.firstWhere((q) => q.team == Team.ab);
+      expect(zero.position.turn(BoardNumber.two), Side.black);
+      expect(zero.mustMove, MustMove.either);
+      // Its lines are read on the table searched, where B is on move.
+      final row = (engine.lines as LinesOn).teams[Team.cd]!.first;
+      expect(row.table.turn(BoardNumber.two), Side.black);
+    },
+  );
 
-  test('two boards: each team with a move, sitting as the clock says', () async {
-    lab.showBoards(LabBoards.two);
-    lab.setClock(ClockCase.cdMaySit);
-    await on();
-    final first = hivemind.asked.take(2).toList();
-    expect(first.map((q) => (q.team, q.mustMove, q.maySit)), [
-      (Team.ab, MustMove.either, false),
-      (Team.cd, MustMove.either, true),
-    ]);
-    expect((engine.lines as LinesOn).teams.keys, [Team.ab, Team.cd]);
-  });
+  test(
+    'two boards: each team with a move, sitting as the clock says',
+    () async {
+      lab.showBoards(LabBoards.two);
+      lab.setClock(ClockCase.cdMaySit);
+      await on();
+      final first = hivemind.asked.take(2).toList();
+      expect(first.map((q) => (q.team, q.mustMove, q.maySit)), [
+        (Team.ab, MustMove.either, false),
+        (Team.cd, MustMove.either, true),
+      ]);
+      expect((engine.lines as LinesOn).teams.keys, [Team.ab, Team.cd]);
+    },
+  );
 
   test('a new position drops the stale answer and starts over', () async {
     hivemind.hold = true;
@@ -129,13 +142,15 @@ void main() {
     expect((engine.lines as LinesOn).nodes, 4000);
   });
 
-  test('an engine that will not start turns the switch off and says why',
-      () async {
-    startFailure = 'No engine here.';
-    await on();
-    expect(engine.on, isFalse);
-    expect((engine.lines as LinesStopped).reason, 'No engine here.');
-  });
+  test(
+    'an engine that will not start turns the switch off and says why',
+    () async {
+      startFailure = 'No engine here.';
+      await on();
+      expect(engine.on, isFalse);
+      expect((engine.lines as LinesStopped).reason, 'No engine here.');
+    },
+  );
 
   test('a board with no move to make is not searched', () async {
     lab.loadDualFen(

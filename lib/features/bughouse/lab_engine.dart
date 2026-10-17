@@ -54,8 +54,14 @@ final class LinesStopped extends LabLines {
 }
 
 /// One engine line: its first joint action, A + B's score after it, and
-/// the whole line from the table it was searched on.
-typedef EngineRow = ({JointMove move, TableScore score, List<JointMove> pv});
+/// the whole line from [table], the table it was searched on — with one
+/// board, the partner board given the other team's turn.
+typedef EngineRow = ({
+  JointMove move,
+  TableScore score,
+  List<JointMove> pv,
+  TablePosition table,
+});
 
 /// Each pass searches this many nodes, deeper each time; the switch rests
 /// after the last until the table changes. At about 350 nodes a second
@@ -184,7 +190,8 @@ final class LabEngine extends ChangeNotifier {
       final offset = _offset(found, clock);
       final shown = {
         for (final question in questions)
-          if (question.shown) question.team: _rows(found[question.team]!, question, offset),
+          if (question.shown)
+            question.team: _rows(found[question.team]!, question, offset),
       };
       _set(
         LinesOn(
@@ -302,6 +309,7 @@ final class LabEngine extends ChangeNotifier {
             move: move,
             score: TableScore.of(line, question.team, offset),
             pv: line.pv,
+            table: question.table,
           ),
     ].take(labLineCount).toList();
   }
@@ -423,10 +431,7 @@ Crazyhouse _partnerFor(TablePosition position, Team team) {
       ),
     );
   } on PositionSetupException {
-    return Crazyhouse.initial.copyWith(
-          turn: turn,
-          pockets: partner.pockets,
-        )
+    return Crazyhouse.initial.copyWith(turn: turn, pockets: partner.pockets)
         as Crazyhouse;
   }
 }

@@ -37,14 +37,17 @@ class BughouseScreen extends StatelessWidget {
     final hands = 2 * (2 * labStepHeight + labSeatPadding);
     final width = box.maxWidth - labPanelMinWidth - labColumnGap;
     return switch (boards) {
-      LabBoards.one => math.min(
-        width,
-        (box.maxHeight - hands) / (1 + 2 / 8),
-      ).clamp(labBoardMin, labOneBoardMax),
-      LabBoards.two => math.min(
-        (width - labBoardGap) / 2,
-        (box.maxHeight - hands - labBoardChrome) / (1 + 2 / 8),
-      ).clamp(labBoardMin, labBoardMax),
+      LabBoards.one =>
+        math
+            .min(width, (box.maxHeight - hands) / (1 + 2 / 8))
+            .clamp(labBoardMin, labOneBoardMax),
+      LabBoards.two =>
+        math
+            .min(
+              (width - labBoardGap) / 2,
+              (box.maxHeight - hands - labBoardChrome) / (1 + 2 / 8),
+            )
+            .clamp(labBoardMin, labBoardMax),
     };
   }
 

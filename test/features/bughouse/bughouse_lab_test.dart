@@ -110,7 +110,10 @@ void main() {
     expect(lab.problem, isNull);
     expect(lab.position.one.turn, Side.black);
     expect(lab.position.one.pockets!.of(Side.white, Role.rook), 1);
-    lab.editBoard(BoardNumber.one, Setup.parseFen('8/8/8/8/8/8/8/4K3 w - - 0 1'));
+    lab.editBoard(
+      BoardNumber.one,
+      Setup.parseFen('8/8/8/8/8/8/8/4K3 w - - 0 1'),
+    );
     expect(lab.problem, isA<PositionRefused>());
     expect(lab.position.one.board.kingOf(Side.black), isNotNull);
   });

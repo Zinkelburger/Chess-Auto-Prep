@@ -103,8 +103,6 @@ jobs:
           test/engines/hivemind_engine_test.dart
           test/engines/hivemind_install_test.dart
           test/features/bughouse
-          test/storage/bughouse_matches_test.dart
-          test/storage/bughouse_books_test.dart
 
       # Unlike the Python extraction/client checks, this runs inside a built
       # Flutter desktop app. It proves rootBundle discovery, first extraction,
