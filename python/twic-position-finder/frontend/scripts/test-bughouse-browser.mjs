@@ -66,9 +66,31 @@ try {
   assert.equal(await page.$('.ch-moves-empty'), null, 'an empty move list has no hint');
   await sitDone(page);
   console.log('sit panel:', (await page.$$eval('#bs-sit .bs-sit-row', (rows) => rows.map((r) => r.textContent))).join(' | '));
-  const before = await page.$eval('#ch-pearl', (el) => el.textContent);
+  let before = await page.$eval('#ch-pearl', (el) => el.textContent);
   console.log('eval without hands:', before, await page.$eval('#ch-engine-info', (el) => el.textContent));
   await page.screenshot({ path: path.join(output, 'analysis.png') });
+
+  // Who is up on the clock: Black at first, as in the desktop app. The clock is
+  // worth more than any material here, so White's turn moves the score White's way.
+  const clock = () => page.$$eval('#bs-clock button', (bs) => bs.map((b) => `${b.getAttribute('aria-label')}:${b.getAttribute('aria-checked')}`));
+  assert.deepEqual(await clock(), ['White may sit:false', 'Black may sit:true']);
+  assert.equal(await text(page, '#bs-clock .bs-clock-label'), 'May sit');
+  assert.deepEqual(await page.$$eval('#bs-clock button', (bs) => bs.map((b) => b.textContent)), ['White', 'Black']);
+  // Searched for a while (or to its end on a slow CPU), with the score above `min` or below `max`.
+  const scored = (page, { min = -Infinity, max = Infinity }) => page.waitForFunction((lo, hi) => {
+    const t = document.querySelector('#ch-pearl').textContent;
+    const searched = parseInt(document.querySelector('#ch-engine-info').textContent.replace(/,/g, ''), 10) >= 100 || document.querySelector('#ch-bar').style.width === '100%';
+    return /^[+\-]?\d/.test(t) && searched && Number(t) > lo && Number(t) < hi;
+  }, { timeout: 120_000 }, min, max);
+  await page.click('#bs-clock button[data-white="1"]');
+  assert.deepEqual(await clock(), ['White may sit:true', 'Black may sit:false']);
+  await scored(page, { min: Number(before) + 1 });
+  console.log('eval with White up on the clock:', await page.$eval('#ch-pearl', (el) => el.textContent));
+  await page.screenshot({ path: path.join(output, 'white-may-sit.png') });
+  assert.ok(!(await text(page, '#ch-engine-name')).includes('…') && await page.$eval('#ch-engine-name', (el) => el.scrollWidth <= el.clientWidth), 'the engine name keeps its room');
+  await page.click('#bs-clock button[data-white="0"]');
+  await scored(page, { max: 0 });
+  before = await page.$eval('#ch-pearl', (el) => el.textContent);
 
   // + under Black's knight: the hand, the FEN and the eval follow.
   await page.click('#ch-hand-top .ch-step[data-role="knight"][data-step="more"]');

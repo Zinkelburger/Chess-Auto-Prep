@@ -51,6 +51,13 @@ const icon = {
                 <span class="ch-engine-name" id="ch-engine-name">Hivemind</span>
                 <span class="ch-engine-info num" id="ch-engine-info"></span>
               </div>
+              <div class="bs-clock" id="bs-clock" role="radiogroup" aria-label="Who may sit">
+                <span class="bs-clock-label" aria-hidden="true">May sit</span>
+                <div class="ch-choice">
+                  <button type="button" role="radio" data-white="1" aria-checked="false" title="White is up on the clock, so could wait instead of moving. The scores count it; the lines never wait, since nothing arrives on this board." aria-label="White may sit">White</button>
+                  <button type="button" role="radio" data-white="0" aria-checked="true" title="Black is up on the clock, so could wait instead of moving. The scores count it; the lines never wait, since nothing arrives on this board." aria-label="Black may sit">Black</button>
+                </div>
+              </div>
               <button type="button" class="btn btn-outline btn-sm" id="ch-engine-action" hidden></button>
               <p class="visually-hidden" id="ch-eval-live" aria-live="polite"></p>
               <button type="button" class="ch-icon" id="ch-threat" title="Show threat (X)" aria-label="Show threat" aria-pressed="false">
@@ -60,10 +67,6 @@ const icon = {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.gear}/></svg>
               </button>
               <div class="ch-bar" aria-hidden="true"><span id="ch-bar"></span></div>
-            </div>
-            <div class="ch-choice bs-clock" id="bs-clock" role="radiogroup" aria-label="Who is up on the clock">
-              <button type="button" role="radio" data-white="1" aria-checked="false" title="White is up on the clock, so could wait instead of moving. The scores count it; the lines never wait, since nothing arrives on this board.">White may sit</button>
-              <button type="button" role="radio" data-white="0" aria-checked="true" title="Black is up on the clock, so could wait instead of moving. The scores count it; the lines never wait, since nothing arrives on this board.">Black may sit</button>
             </div>
             <div class="ch-settings" id="ch-settings" role="group" aria-label="Engine settings" hidden></div>
             <div class="ch-practice" id="ch-practice" aria-live="polite" hidden></div>

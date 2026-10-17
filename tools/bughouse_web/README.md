@@ -81,8 +81,8 @@ which team is up on the clock as Hivemind's `TimeAdvantage` gives it
   network barely notices a missing queen). Two static inferences first
   measure the two seats' shared offset under one clock (`whiteMaySit`: White
   up on the clock, else Black); the search subtracts it, so q is a winning
-  chance from the side to move with the clock's worth in it, and the start
-  position reads about +2.3 for the side up on the clock. It stops at
+  chance from the side to move with the clock's worth in it (a level opening
+  is clearly winning for the side up on the clock). It stops at
   the node budget (up to 1,000,000), the time cap, a solved root or Stop,
   reports to `Module.onFrozenReport` every `reportMs` and returns up to five
   lines with board A's moves only. `batch` (1 to 64) leaves are evaluated

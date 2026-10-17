@@ -91,12 +91,14 @@ and on reload; a `?fen=` link opens that position unless it is the saved one.
 
 `engine.ts` runs Hivemind, the bughouse engine, on that one board, its
 partner board held still (`tools/bughouse_web/patches/frozen-board.patch`).
-Under the engine header, `White may sit` | `Black may sit` (Black at first,
-as in the desktop app) says who is up on the clock. Hivemind has no case
+In the engine header, `May sit` over `White` | `Black` (Black at first, as
+in the desktop app; hidden while the header offers Download or Try again)
+says who is up on the clock. Hivemind has no case
 where neither is: its one clock input says whether the searched side may
 sit, and its search gives the other side the opposite. Every search counts
-the chosen side's clock, so a level opening reads about +2.3 for it; the
-lines never sit, since nothing arrives on this board, and the sit panel
+the chosen side's clock, and it outweighs most material: the level
+four-knights position `r1bqkb1r/pppp1ppp/2n2n2/4p3/4P3/2N2N2/PPPP1PPP/R1BQKB1R[] w`
+reads −3.4 with Black up on the clock and +4.2 with White. The lines never sit, since nothing arrives on this board, and the sit panel
 prices waiting for a piece. A new choice searches the positions again.
 `hivemind.worker.ts` runs the engine's WebAssembly build and its network with
 ONNX Runtime Web: on the GPU through WebGPU when the browser has it,
