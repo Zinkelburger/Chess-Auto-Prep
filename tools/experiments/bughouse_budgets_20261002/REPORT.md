@@ -10,8 +10,7 @@ precise ranking of close candidates.
 
 This is a small, stratified pilot of the installed CPU engine. It establishes
 a useful cost/consistency tradeoff, not a universal strength threshold or an
-Elo rating. No production settings or databases were changed, and the bulk
-builder and scheduled monitor remain stopped.
+Elo rating.
 
 ## Neural search: 24 FICS positions
 
@@ -29,7 +28,7 @@ CPU allocation. Search order was deterministically shuffled within each case.
 
 The reference is 8,000 requested nodes, **not ground truth**. Q differences
 below are on the bounded internal value scale after the same static seat-offset
-correction used by the table builder. They are not centipawns, Elo, or calibrated
+correction used by bulk evaluation. They are not centipawns, Elo, or calibrated
 win-probability differences.
 
 | Requested MCTS nodes | Median seconds | Mean absolute ΔQ | 90th-percentile ΔQ | Maximum ΔQ | Same selected-board move as 8,000 | Cases with ΔQ > 0.10 |
@@ -78,7 +77,7 @@ had the largest 100/800-node value discrepancies among move disagreements;
 the fifth explicitly checks the opening `...Ne5` versus `...Nb4` choice.
 
 Values below are flipped to the parent mover's team, so **higher is better**.
-They use the table's current static-offset correction. This common child
+They use the same static-offset correction. This common child
 horizon is useful for comparison but is still an imperfect engine assessment;
 it is not an independently measured loss in playing strength.
 
@@ -140,7 +139,7 @@ the mate solver's units and may be distributed among multiple subprobes; they
 are not interchangeable with MCTS nodes. The forced-loss scanner and in-tree
 MCTS proof mechanisms were not independently swept here.
 
-## What this means for the table
+## What this means for bulk evaluation
 
 800 nodes is about **3.6× faster** than 3,000 in the measured median, but it
 does not provide enough evidence to declare the trickiest move when candidate
@@ -154,14 +153,13 @@ Using 3,000 nodes for the root and four candidate positions, and 800 for sixteen
 reply leaves, projects about **2.2×** the throughput of 3,000 everywhere using
 these medians. Using 800 everywhere projects about **3.6×**, before caching,
 policy computation and adaptive refinement. These are arithmetic estimates,
-not measured end-to-end builder speeds. Both colour columns already share the
-same evaluated tree.
+not measured end-to-end builder speeds.
 
 Do not reduce mate-probe work in lockstep with neural nodes. In the inspected
 source, the root mate allowance scales as `clamp(10 × MCTS nodes, 2000, 100000)`.
 The installed UCI interface has no independent mate-budget knob; decoupling it
-requires an engine/interface change before the proposed 800/100,000 combination
-can be deployed. No such change was made by this benchmark.
+requires an engine/interface change before an 800/100,000 combination is
+possible.
 
 ## Reproduction and records
 

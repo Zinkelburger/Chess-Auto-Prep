@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Each v2 rule fires on a small bad input and stays quiet on a good one."""
+"""Each architecture rule fires on a small bad input and stays quiet on a good one."""
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import check_v2
+import check_architecture
 
-from check_v2 import LIB, MAX_FUNCTION_LINES, TEST, check_classes, check_functions, check_imports
+from check_architecture import LIB, MAX_FUNCTION_LINES, TEST, check_classes, check_functions, check_imports
 
 
 def class_findings(source: str) -> list[str]:
@@ -22,11 +22,11 @@ class LayoutTest(unittest.TestCase):
             root = Path(name)
             (root / "lib/app").mkdir(parents=True)
             (root / "test/app").mkdir(parents=True)
-            self.assertEqual(check_v2.check_layout(root), [])
+            self.assertEqual(check_architecture.check_layout(root), [])
             (root / "lib/main_v2.dart").touch()
             (root / "test/v2").mkdir()
             (root / "lib/services").mkdir()
-            self.assertEqual(len(check_v2.check_layout(root)), 3)
+            self.assertEqual(len(check_architecture.check_layout(root)), 3)
 
 
 class ImportsTest(unittest.TestCase):
@@ -117,10 +117,10 @@ class PartsTest(unittest.TestCase):
             folder.mkdir(parents=True)
             (folder / "owner.dart").write_text(owner)
             (folder / "worker.dart").write_text(child)
-            with patch.multiple(check_v2, REPO=root, LIB=root / "lib", TEST=root / "test"):
+            with patch.multiple(check_architecture, REPO=root, LIB=root / "lib", TEST=root / "test"):
                 findings = []
                 for path in folder.glob("*.dart"):
-                    check_v2.check_file(path, findings)
+                    check_architecture.check_file(path, findings)
                 return findings
 
     def test_complete_collaborator_classes_are_allowed(self):

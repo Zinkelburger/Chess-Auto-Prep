@@ -62,8 +62,9 @@ damaged is renamed with its sidecars to `.unreadable-<stamp>` and restarted.
 
 SharedPreferences keys: `lichess_username`, `chesscom_username`,
 `lichess_last_fetch_ms`, `chesscom_last_fetch_ms` (`storage/my_accounts.dart`);
-`lichess_access_token`, `lichess_refresh_token`, `lichess_auth_username`,
-`lichess_token_expiry`, `lichess_is_pat` (`storage/lichess_token.dart`);
+`lichess_access_token`, `lichess_auth_username`, `lichess_token_expiry`,
+`lichess_is_pat` (`storage/lichess_token.dart`, which removes a
+`lichess_refresh_token` left by earlier builds);
 `pgn_viewer_recent_files`; `pgn_viewer.session:<path>` (viewer places).
 
 ## Formats
@@ -102,7 +103,7 @@ groups still read.
 
 ### Read-only stores
 
-The app opens `app_games.db` read-only and reads only `games` (schema
+Earlier builds wrote these; the app only reads them. It opens `app_games.db` read-only and reads only `games` (schema
 version 2); its `tactics` collection holds source games that may have no other
 copy. Saved players are discovered from Documents
 `analysis_games/player-<id>/current.json` (version 1) and the

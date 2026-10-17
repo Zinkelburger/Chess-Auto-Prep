@@ -41,8 +41,8 @@ chunks. Every file fits Cloudflare Pages' 25 MiB asset limit.
 
 ## Layout
 
-- `src/layouts/Base.astro` — tokens (shared with `docs/design/wireframe-style.css`
-  and the clock), nav, footer, and the primitive vocabulary: `.btn*`, inputs,
+- `src/layouts/Base.astro` — the site's tokens (dark only, a muted blue
+  accent; shared with the clock), nav, footer, and the primitive vocabulary: `.btn*`, inputs,
   `.card`, `.alert-*`, `.choice` chips, `.badge`, `.modal*`, `.status-panel`.
   Page-specific CSS lives with the page (`<style>`) or in `src/styles/`.
 - `src/lib/` — the alerts feature and the clock. `api.ts` is the only place

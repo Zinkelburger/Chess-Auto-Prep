@@ -2,10 +2,8 @@
 
 Two tiny C++ programs that link **Scid's own codec** so a Dart Scid writer can
 be checked against ground truth rather than against a reading of the format
-docs. The app currently has no Scid export: the old app's writer and its
-fixtures were removed on 2026-09-30 (`1f7a6036`). A rebuilt export starts from
-[the format findings](../../docs/SCID_FORMAT_FINDINGS.md); the old fixtures can
-be restored with `git show 1f7a6036^:test/services/scid/fixtures/fixture.pgn`.
+docs. The app has no Scid export; one starts from
+[the format findings](../../docs/SCID_FORMAT_FINDINGS.md).
 
 - `refgen.cpp` — PGN → `.si4`/`.sg4`/`.sn4` or `.si5`/`.sg5`/`.sn5`.
   Produces reference databases for a writer's tests.
@@ -41,10 +39,10 @@ cd tools/scid_reference
 # copy ref4.* and ref5.* next to the writer's tests
 ```
 
-`fixture.pgn` is four real TWIC games — chosen to cover castling both sides, a
-queen promotion, an under-promotion and en passant — plus one hand-built game
-that starts from a FEN and carries comments, a NAG and a variation. Every move
-in it was verified legal with `python-chess` before it was used, because an
+`fixture.pgn` should hold real games covering castling both sides, a queen
+promotion, an under-promotion and en passant, plus one game that starts from a
+FEN and carries comments, a NAG and a variation. Verify every move legal with
+`python-chess` before using it, because an
 illegal move makes *both* encoders stop at the same place and the byte
 comparison then passes while proving nothing.
 

@@ -129,11 +129,12 @@ engine-loss limit, Maia rating, book source (`none`), search method and reply
 cut. The horizon can increase, but cannot shrink. Already expanded
 policies/evaluations are retained; new frontier queries use the currently
 available engine and model. For a uniform fresh comparison after changing any
-of these sources, start a new run. Legacy heuristic trees (no `history_aware`
-root) must be rebuilt; they remain readable for review. The app's resume rules
-are under [Interactive Expectimax](#interactive-expectimax-search-tab). The
-app's reader (`tree_wire_v4_reader.dart`) refuses heuristic trees, Fast trees
-and trees from the retired bounded database mode (`bounded_database: true`).
+of these sources, start a new run. Heuristic trees written by earlier builder
+versions (no `history_aware` root) cannot be resumed and must be rebuilt; the
+C builder still reads them for review. The app's resume rules are under
+[Interactive Expectimax](#interactive-expectimax-search-tab). The app's reader
+(`tree_wire_v4_reader.dart`) refuses heuristic trees, Fast trees and trees
+marked `bounded_database: true`.
 
 ## Export and verification
 
@@ -145,16 +146,16 @@ they are not the tree's optimized policy.
 
 There is no separate deep-verification pass for Pure. To strengthen evaluation,
 rebuild at the desired engine depth, so all legal moves are admitted or rejected
-at that depth. The C legacy verifier (`--verify-depth`) works only on legacy
+at that depth. The C builder's verifier (`--verify-depth`) works only on
 heuristic trees: it re-evaluates the entire saved tree, commits only a completed
 pass, and always recomputes values and selection. It can only check saved
-candidates; it cannot recover moves a legacy build omitted.
+candidates; it cannot recover moves a heuristic build omitted.
 
 ## Fast search (C builder and MCP only)
 
 Fast is an approximate receding-horizon variant of Pure, implemented only in
-`rolling_build` (`tree_builder/src/pure_search.c`). The app never had it in
-v2 and its reader refuses Fast trees. The opponent model, engine-loss
+`rolling_build` (`tree_builder/src/pure_search.c`). The app has no Fast and
+its reader refuses Fast trees. The opponent model, engine-loss
 constraint, fixed engine depth, history, draw convention and leaf utility are
 identical to Pure. At each of our decisions:
 
@@ -206,20 +207,6 @@ cases Fast visits 2,388 distinct nodes versus 6,132 for full search (61.1%
 fewer); its mean loss against the full finite-tree optimum is 0.0474
 expected-score units, worst 0.1470. These are synthetic algorithm checks, not a
 chess benchmark or a wall-clock claim.
-
-On 5 September 2026 the retired v1 Dart implementation was timed on the pawn
-ending `8/8/8/8/8/4k3/P7/4K3 w - - 0 1` (White preparing): Stockfish 18 at
-depth 8, one engine thread, 40 cp loss limit, Maia 2200, fresh processes and
-storage, startup excluded, 600-second cap. At **6 plies Fast built 11,029 nodes
-versus Pure's 30,945** (64.4% fewer; 11,314 versus 31,390 engine calls) and
-finished in 89.88 s versus 188.35 s, **2.10× faster**. Fast chose Kf1 (value
-0.7557), Pure Kd1 (0.7644); that gap is not a calibrated loss. At 4 plies both
-built 860 nodes and chose Kf1: there is no saving at or below the window. Two
-master-opening cases (Italian, QGD; 6 plies, 90 s cap) completed in neither
-mode, so there is no measured speedup in openings. The raw data
-(`docs/benchmarks/fast-pure-2026-09-05.json`) and harness
-(`tools/experiments/fast_vs_pure/`) were removed in October 2026 and remain in
-git history.
 
 ## Implementation and checks
 
@@ -301,7 +288,7 @@ lines; the second stops with it unless the first ran its whole depth.
 
 ### Where the replies come from
 
-The bar's `Replies from` choice (2026-10-01): Maia (the default), Lichess
+The bar's `Replies from` choice: Maia (the default), Lichess
 masters, Lichess players at the speeds and
 ratings the Explorer tab is set to, or the TWIC games on this machine
 (`DatabaseOpponent` in `workspace/search_opponents.dart`). A database answers a

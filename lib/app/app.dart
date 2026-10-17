@@ -29,8 +29,8 @@ import '../storage/diagnostic_report.dart';
 
 /// The app on this machine: [AppParts] over the native environment, the
 /// window's dialogs, and the way out.
-class ChessAutoPrepV2 extends StatefulWidget {
-  const ChessAutoPrepV2({
+class ChessAutoPrep extends StatefulWidget {
+  const ChessAutoPrep({
     super.key,
     required this.documents,
     required this.support,
@@ -58,10 +58,10 @@ class ChessAutoPrepV2 extends StatefulWidget {
   final Future<void> Function() closeLog;
 
   @override
-  State<ChessAutoPrepV2> createState() => _ChessAutoPrepV2State();
+  State<ChessAutoPrep> createState() => _ChessAutoPrepState();
 }
 
-class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
+class _ChessAutoPrepState extends State<ChessAutoPrep> {
   /// The dialogs are raised over the app, not over this widget, which sits
   /// above the navigator that shows them.
   final _navigator = GlobalKey<NavigatorState>();

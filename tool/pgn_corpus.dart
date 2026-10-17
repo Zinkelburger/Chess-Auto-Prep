@@ -1,8 +1,8 @@
-// Reads every .pgn file under a folder and reports what the v2 reader makes
+// Reads every .pgn file under a folder and reports what the app's reader makes
 // of it. It opens files and never writes, moves or deletes anything, so it
 // is safe to point at the real Documents folder.
 //
-//   dart run tool/v2_pgn_corpus.dart [folder] [--losses N]
+//   dart run tool/pgn_corpus.dart [folder] [--losses N]
 //
 // For each file: how many games it holds, how many the reader took whole,
 // how many survive being written again, and whether cutting the file into

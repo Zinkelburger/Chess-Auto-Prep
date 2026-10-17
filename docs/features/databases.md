@@ -94,7 +94,7 @@ instead of failing on SQLite's lock.
   row per position and move over the first 30 plies, `bookPlies`, with
   results, ratings, strongest and newest game, and the same counts for
   classical over-the-board games), `twic_issues`, `meta`, and `imports` (PGN
-  fingerprints; the only table v2 adds to an existing file). A file of any
+  fingerprints; the only table the app adds to an existing file). A file of any
   other version is refused, never migrated.
 - **Import rules** — each TWIC issue and each PGN file commits in one
   transaction with its games and book counts, so a killed run leaves whole
@@ -112,7 +112,8 @@ instead of failing on SQLite's lock.
   MCP tools, which is why the schema stays fixed.
 - **Kept game copies** — `Documents/pgn_collections/database games/`.
 - **Storage list** — `nativeStoragePlaces` names every store: master games,
-  engine evaluations (`eval_cache.db`), search finds, chapter audits, your
+  engine evaluations (`eval_cache.db`), search finds, chapter audits,
+  dismissed audit findings, your
   games (`app_games.db`), kept versions, the bughouse engine, and the
   repertoire, study, PGN collection, games library, tactics and engine
   tournament folders. Databases count their `-wal`/`-shm`/`-journal`

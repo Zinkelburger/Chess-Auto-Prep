@@ -35,7 +35,7 @@ Future<void> main(List<String> args) async {
     await runBughouseSelfTest(support: support, reportPath: report);
   }
   runApp(
-    ChessAutoPrepV2(
+    ChessAutoPrep(
       documents: documents,
       support: support,
       logFolder: logFolder,

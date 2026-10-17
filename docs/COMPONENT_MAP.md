@@ -226,14 +226,14 @@ builds; they are data contracts the current code reads and keeps.
 
 - [`test/`](../test/) mirrors the production areas; `test/support/` supplies
   scripted ports, fixtures and property generators.
-- [`integration_test/v2_desktop_test.dart`](../integration_test/v2_desktop_test.dart)
+- [`integration_test/desktop_test.dart`](../integration_test/desktop_test.dart)
   exercises the actual desktop app. Engine/native checks have separate targets.
-- [`scripts/check_v2.py`](../scripts/check_v2.py) enforces the architecture
+- [`scripts/check_architecture.py`](../scripts/check_architecture.py) enforces the architecture
   rules under `lib/` and `test/` (the name is historical).
 - `scripts/ci.sh analyze lint`, `scripts/ci.sh test` and `scripts/ci.sh tools`
   run through bounded jobs. The headless driver defaults to `lib/main.dart`.
 - Platform runners, `packages/document_file_io`, engine assets/updaters,
-  `tools/mcp/`, `tools/bughouse_db/` and the separate `tree_builder/` prototype
+  `tools/mcp/`, `tools/bughouse_db/` and the standalone C builder `tree_builder/`
   retain their own responsibilities. See [tooling](agents/tooling.md).
 
 ## Static browser preparation

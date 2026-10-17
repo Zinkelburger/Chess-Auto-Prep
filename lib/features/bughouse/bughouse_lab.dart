@@ -2,6 +2,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../chess/bughouse/bpgn_moves.dart';
+import '../../chess/bughouse/crazyhouse_pgn.dart';
 import '../../chess/bughouse/hivemind.dart';
 import '../../chess/bughouse/table.dart';
 import '../../chess/bughouse/table_line.dart';
@@ -17,9 +18,6 @@ enum LabBoards {
 
   final String label;
 }
-
-/// Most of one piece a hand may hold, as on the website.
-const handLimit = 16;
 
 /// The Bughouse mode's table: the two boards, the line played on them with
 /// a cursor per board, how many boards are shown, the clock case the engine
@@ -84,12 +82,18 @@ final class BughouseLab extends ChangeNotifier {
 
   /// Both halves of an engine's joint action, board 1 first; a sitting
   /// board keeps its moves.
-  void playJoint(JointMove joint) {
+  void playJoint(JointMove joint) => playMoves([
+    for (final board in BoardNumber.values)
+      if (joint.on(board) case final uci?) (board, uci),
+  ]);
+
+  /// [moves] played in order from the table on screen: an engine line up to
+  /// the move clicked. All or nothing: when one no longer plays, none is
+  /// played and the line is said not to fit.
+  void playMoves(List<(BoardNumber, String)> moves) {
     var line = _line;
     var position = _position;
-    for (final board in BoardNumber.values) {
-      final uci = joint.on(board);
-      if (uci == null) continue;
+    for (final (board, uci) in moves) {
       final played = lineMove(position, board, uci);
       if (played == null) {
         _refuse(const LineMisfits());
@@ -98,6 +102,7 @@ final class BughouseLab extends ChangeNotifier {
       line = line.played(played.move);
       position = played.after;
     }
+    if (moves.isEmpty) return;
     _line = line;
     _show(position, focus: _focus);
   }
@@ -116,6 +121,24 @@ final class BughouseLab extends ChangeNotifier {
     }
   }
 
+  /// [move] and every later move on its board taken out of the line, with
+  /// the hand edits made after them; the other board's moves stay. Refused
+  /// when one of those dropped a piece a move taken out had captured.
+  void deleteFrom(LineMove move) {
+    final board = move.board;
+    final index = _line.of(board).indexOf(move);
+    if (index < 0) return;
+    final next = _line.cut(board, index);
+    switch (next.replay()) {
+      case LineReplayed(:final position):
+        _line = next;
+        _show(position, focus: board);
+      case LineBroken(move: final broken):
+        _focus = board;
+        _refuse(DeleteRefused(broken));
+    }
+  }
+
   /// The focused board a move forward (1) or back (−1).
   void step(int by) => go(_focus, _line.upto(_focus) + by);
 
@@ -127,18 +150,17 @@ final class BughouseLab extends ChangeNotifier {
   void newGame() => _reset(TablePosition.initial);
 
   /// One [role] more (+1) or fewer (−1) in [side]'s hand on [board], within
-  /// 0…[handLimit]. The table on screen becomes the start of a new line,
-  /// as an edited position does on Lichess.
+  /// 0…[handLimit], noted in the line after that board's move on screen, as
+  /// the website notes it. The moves before it stay; that board's later
+  /// moves go, as when a different move is played there.
   void adjustHand(BoardNumber board, Side side, Role role, int delta) {
-    final position = _position.board(board);
-    final pockets = position.pockets!;
-    final count = pockets.of(side, role) + delta;
+    final count = _position.board(board).pockets!.of(side, role) + delta;
     if (count < 0 || count > handLimit) return;
-    final changed = delta > 0
-        ? pockets.increment(side, role)
-        : pockets.decrement(side, role);
-    final edited = position.copyWith(pockets: changed) as Crazyhouse;
-    _reset(_position.withBoard(board, edited), focus: board);
+    final edited = _line.edited(board, side, role, delta);
+    if (edited.replay() case LineReplayed(:final position)) {
+      _line = edited;
+      _show(position, focus: board);
+    }
   }
 
   /// [board]'s pieces, side to move and castling from [setup], its hands
@@ -177,6 +199,40 @@ final class BughouseLab extends ChangeNotifier {
 
   /// Both boards' moves as the mode copies them (see [tableLineText]).
   String get movesText => tableLineText(_line);
+
+  /// The line up to and including [move] as a PGN: with one board, a
+  /// crazyhouse PGN of board 1 that Lichess imports; with two, the BPGN
+  /// [movesText] writes.
+  String linePgnThrough(LineMove move) {
+    final line = _line.through(move);
+    return single
+        ? crazyhouseLinePgn(line, move.board, line.of(move.board).length)
+        : tableLineText(line);
+  }
+
+  /// The table just after [move], as the line up to it leaves it; null when
+  /// that no longer replays.
+  TablePosition? positionAfter(LineMove move) =>
+      switch (_line.through(move).replay()) {
+        LineReplayed(:final position) => position,
+        LineBroken() => null,
+      };
+
+  /// The line on the boards now, followed by [moves] as far as they play,
+  /// as a PGN: what an engine line copies.
+  String linePgnWith(List<(BoardNumber, String)> moves) {
+    var line = _line.onBoards;
+    var position = _position;
+    for (final (board, uci) in moves) {
+      final played = lineMove(position, board, uci);
+      if (played == null) break;
+      line = line.played(played.move);
+      position = played.after;
+    }
+    return single
+        ? crazyhouseLinePgn(line, BoardNumber.one, line.upto(BoardNumber.one))
+        : tableLineText(line);
+  }
 
   /// Pasted movetext as a new line, every move played; refused whole when
   /// one does not play.
@@ -280,6 +336,14 @@ final class LineMisfits extends TableRefusal {
 /// it dropped.
 final class StepRefused extends TableRefusal {
   const StepRefused(this.move);
+
+  final LineMove move;
+}
+
+/// A delete that would leave [move], on the other board, without the piece
+/// it dropped.
+final class DeleteRefused extends TableRefusal {
+  const DeleteRefused(this.move);
 
   final LineMove move;
 }

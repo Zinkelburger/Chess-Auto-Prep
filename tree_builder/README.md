@@ -77,7 +77,8 @@ Running again with the same name continues `output.tree.json`; `--resume`
 additionally restores the earlier run's flags from `output.db`. A continued
 tree keeps its root, side, engine depth, loss limit, Maia rating, search method
 and reply cut, and its horizon may only grow; change any of those by starting a
-new build. Legacy heuristic trees remain readable but cannot be resumed as Pure. An interrupted search is incomplete;
+new build. Heuristic trees from earlier builder versions remain readable but
+cannot be resumed as Pure. An interrupted search is incomplete;
 its current move ordering is provisional and its value bounds are reported.
 
 `make test-pure` checks production backup against the shared independently

@@ -10,7 +10,7 @@ owner following the widget when it changes.
 The length caps are backstops against a god file, not targets: a file or a
 function is split when it holds two jobs, never to get under a number.
 
-    python3 scripts/check_v2.py            # exit 1 on any finding
+    python3 scripts/check_architecture.py            # exit 1 on any finding
 """
 from __future__ import annotations
 
@@ -28,9 +28,9 @@ MAX_FILE_LINES = 1000
 MAX_FUNCTION_LINES = 80
 MAX_NESTING = 3
 
-# What each top-level v2 folder may import from within v2.
+# What each top-level lib/ folder may import from within lib/.
 # `diagnostics/` is the log facade: everything but pure `chess/` reports
-# through it, and it depends on nothing in v2.
+# through it, and it depends on nothing else in lib/.
 ALLOWED = {
     "chess": {"chess"},
     "diagnostics": {"diagnostics"},
@@ -330,8 +330,8 @@ def check_parts(path: Path, source: str, findings: list[str]) -> None:
     if not is_part:
         return
     # Dart does not permit a class declaration to span source files. Requiring
-    # complete declarations also rejects the extension/mixin pattern that hid
-    # the old application's large State classes in many small files.
+    # complete declarations also rejects the extension/mixin pattern that hides
+    # one large State class across many small files.
     remaining = list(clean)
     for directive in directives:
         remaining[directive.start():directive.end()] = " " * (directive.end() - directive.start())

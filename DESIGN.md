@@ -139,7 +139,7 @@ Neutral charcoal with a single desaturated blue; all other colour is semantic.
 - **Charcoal Surface** (charcoal-surface): the window, scaffold and most panes.
 - **Graphite Panel** (graphite-panel): menus, popovers and raised containers.
 - **Selection Grey** (selection-grey): the chosen tab, the selected row.
-- **Reading Black** (reading-black): the reading card behind the moves; the old app's "regal" pane.
+- **Reading Black** (reading-black): the reading card behind the moves.
 - **Outline Grey** (outline-grey): pane borders, dividers, menu edges.
 - **Button Outline** (button-outline): outlined buttons' stroke, a step brighter so it reads as on.
 - **Ink** (ink) and **Muted Ink** (muted-ink): primary text; secondary text, captions and column headers.
@@ -259,7 +259,7 @@ active pane's a brighter grey. Dividers between panes are 1px lines with a
 - **Gear:** swaps the pane's content in place for the remaining settings, one named row each with a one-line explanation on screen, and back. The same rows appear as a Settings group and write the same saved values. While the action runs they are shown but locked, with one line saying why.
 
 ### Engine lines
-- **Style:** the old inline-bar style, not a Lichess headline: a small switch and status, then 28px rows with a 54px score gutter and the moves after it. Hovering a move floats its board.
+- **Style:** an inline bar, not a Lichess headline: a small switch and status, then 28px rows with a 54px score gutter and the moves after it. Hovering a move floats its board.
 - **Status:** depth, speed and nodes, then the engine's own name (`Depth 24 · 12 MN/s · 345M nodes · Stockfish 19`), in tabular figures; the rows carry no depth. The gear's rows are typeable steppers, as in Settings ▸ Engine.
 - **Room:** the switch's row and the rows below keep their height whether the engine is on, off, paused or showing its settings; empty rows are blank space, never a placeholder. The board above never changes size when the engine is switched.
 

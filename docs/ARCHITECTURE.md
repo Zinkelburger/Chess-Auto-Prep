@@ -2,7 +2,7 @@
 
 The contracts every change to the app follows. `lib/main.dart` boots the one
 app; production code lives under `lib/`, tests under `test/`.
-`scripts/check_v2.py` enforces the mechanical parts (import table, size caps,
+`scripts/check_architecture.py` enforces the mechanical parts (import table, size caps,
 write ownership, theme literals); `scripts/ci.sh lint` runs it. What each mode
 does is in [the mode specs](features/README.md); where the code is, in
 [the component map](COMPONENT_MAP.md); stores and recovery files, in
@@ -326,9 +326,9 @@ never a new one that would append twice).
    the next edit or save tries again. Closing asks only when a write the user
    made is still unsaved.
 
-`repertoire-mutations/` is a folder the retired v1 app could leave pending
-moves in. The current app never finishes or deletes them; it keeps their two
-ends guarded and leaves the folder untouched.
+Older profiles may hold Support `unfinished-moves/` notes, which recovery
+finishes or sets aside, and a Support `repertoire-mutations/` folder, which
+the app never reads, finishes or deletes; a folder move may not relocate it.
 
 ### Identity and undo
 

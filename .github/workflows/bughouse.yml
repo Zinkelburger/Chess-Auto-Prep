@@ -126,4 +126,4 @@ jobs:
         if: runner.os == 'Windows'
         timeout-minutes: 20
         run: >-
-          flutter test integration_test/v2_bughouse_first_run_test.dart -d windows
+          flutter test integration_test/bughouse_first_run_test.dart -d windows

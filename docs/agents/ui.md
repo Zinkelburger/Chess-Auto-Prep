@@ -14,7 +14,7 @@ A dialog owning a text controller is a StatefulWidget and disposes it in
 Test user actions and resulting state with semantic/control finders. Use the
 fixtures under `test/support/` and actual production widgets. Script engines and
 network calls for widget tests; native engine startup belongs in explicit
-integration checks. Update `integration_test/v2_desktop_test.dart` when changing
+integration checks. Update `integration_test/desktop_test.dart` when changing
 boot controls. Use the run-chess-auto-prep skill for a headless screenshot with
 disposable data after visible changes.
 
