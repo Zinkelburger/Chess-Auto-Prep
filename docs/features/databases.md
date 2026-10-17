@@ -94,7 +94,7 @@ instead of failing on SQLite's lock.
   row per position and move over the first 30 plies, `bookPlies`, with
   results, ratings, strongest and newest game, and the same counts for
   classical over-the-board games), `twic_issues`, `meta`, and `imports` (PGN
-  fingerprints; the only table v2 adds to an existing file). A file of any
+  fingerprints; the only table the app adds to an existing file). A file of any
   other version is refused, never migrated.
 - **Import rules** — each TWIC issue and each PGN file commits in one
   transaction with its games and book counts, so a killed run leaves whole

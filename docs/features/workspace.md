@@ -270,7 +270,7 @@ focus: arrows, Enter/Space, Esc. A text field with focus keeps its keys.
   cursor is with no notice (owner, 2026-09-22).
 - No eval bar anywhere; the score lives in the engine gutter (owner,
   2026-09-21). One move list for reading and editing.
-- The engine pane keeps the old inline-bar style and sits under the board, not
+- The engine pane is an inline bar under the board, not a headline
   above the tabs (owner, 2026-09-23: "ugly above all the tabs"). The board
   never changes size when the engine switches or opens its settings
   (2026-10-14).
@@ -284,7 +284,6 @@ focus: arrows, Enter/Space, Esc. A text field with focus keeps its keys.
   (owner, 2026-09-23).
 - A mode starts as one pane (the Repertoire builder as Moves beside
   Expectimax); a tool picked from `+` while there is one pane opens under it;
-  `New pane` replaced Split right / Split below in the `+` menu (owner,
-  2026-10-01).
+  the `+` menu offers `New pane` (owner, 2026-10-01).
 - Expectimax and similar search values are never computed while the player
   browses; panes show stored values ([generation](generation.md)).

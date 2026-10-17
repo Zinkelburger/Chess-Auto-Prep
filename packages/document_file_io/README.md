@@ -1,6 +1,7 @@
 # Desktop document file IO
 
-Private AGPL-3.0 package for the architecture-renewal document store. The build
+Private AGPL-3.0 package of native file primitives for the app's document
+store (`lib/storage/`). The build
 hook compiles the narrow C ABI with Dart's resolved `native_toolchain_c` toolchain
 (already used transitively by SQLite). No prebuilt opaque binary is downloaded.
 It is bundled as a code asset in Flutter desktop builds and unit tests.
@@ -35,12 +36,12 @@ targets 10.15) and tests rejection of existing destinations in its
 [public header](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/stdio.h)
 and [native regression tests](https://github.com/apple-oss-distributions/xnu/blob/main/tests/rename_excl.c).
 Unsupported hosts/filesystems return their native error without a replace fallback.
-`FileMutationService.moveFileNoReplace` uses this same primitive, translating
-name collisions into its existing `FileSystemException` contract for storage,
-reference-index publication and verified update downloads. This protects the
-destination only; captured-source validation and reference migration remain
-the responsibility of their owning workflows.
-The repertoire journal verifies the identity before replaying reference updates.
+Storage uses it for file and folder relocations, kept-version moves, claiming
+tournament results and moving removed groups and tournaments aside, turning
+`NativeNameCollision` into its own results. This protects the destination only; captured-source validation and
+reference migration remain the responsibility of their owning workflows.
+Relocation records carry native identity, which recovery checks before
+replaying reference updates.
 
 Windows paths are normalized to extended-length UTF-16 paths, including UNC,
 before native calls; the runner also declares long-path awareness.
@@ -52,7 +53,7 @@ its recovery copy rather than deleting the old bytes. Staged files are flushed
 with `FlushFileBuffers` on Windows, `F_FULLFSYNC` on macOS and fsync on Linux.
 
 The native desktop contract workflow tests Windows Server 2022/2025, macOS and
-Linux, including the actual v2 store on long Unicode paths. Windows-only cases
+Linux, including the app's document store on long Unicode paths. Windows-only cases
 exercise denied sharing, external edits during retry, ACLs and named streams.
 The packaged release self-test also exercises documents and native engines.
 These checks do not simulate sudden power loss or every network/cloud provider:
@@ -75,14 +76,12 @@ unchanged.
 Checks from repository root:
 
 ```
-scripts/ci.sh test test/infrastructure/documents/native_pgn_document_store_test.dart test/utils/atomic_file_safety_test.dart
-scripts/ci.sh integration integration_test/repertoire_catalog_test.dart
-scripts/ci.sh test test/v2/storage/platform_documents_test.dart
+scripts/ci.sh test test/storage/document_file_io_test.dart test/storage/native_call_runner_test.dart
+scripts/ci.sh test test/storage/platform_documents_test.dart
 scripts/ci.sh integration integration_test/v2_desktop_test.dart
 ```
 
-The app-level typed contract is in `lib/features/documents/`; native/platform
-implementation stays under `lib/infrastructure/documents/`. Recovered baseline
-bytes are retained beside documents under `.cap-pgn-history/`, digest-named and
-never silently pruned. User-facing restoration/retention and cross-file
-transactions are remaining renewal work, not provided by this native probe.
+The app's typed store and its staging, journals and kept versions live in
+`lib/storage/` (`pgn_file_store.dart`, `atomic_write.dart`,
+`document_probe.dart`); see [Data safety](../../docs/ARCHITECTURE.md#data-safety).
+This package provides only the native primitives.

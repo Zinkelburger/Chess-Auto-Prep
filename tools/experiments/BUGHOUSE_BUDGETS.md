@@ -1,7 +1,7 @@
 # Bughouse evaluation budget benchmark
 
 This is an isolated research harness, not a database builder. It never updates
-the desktop/web books, changes engine defaults, or starts a scheduled task.
+a book, changes engine defaults, or starts a scheduled task.
 
 ## Search experiment
 
@@ -18,8 +18,8 @@ of positions reached by users.
 is deterministically shuffled per case, `ucinewgame` clears the tree before
 every search, the selected board must move, time advantage is false, and
 pondering is disabled. Each case also gets a no-search two-seat neural reading.
-The searched value subtracts the static two-seat offset, exactly as the current
-table backend does, and is stored from the White-on-board-A team's perspective.
+The searched value subtracts the static two-seat offset, as the app's and MCP
+server's calibration does, and is stored from the White-on-board-A team's perspective.
 This normalization has limitations; this experiment tests convergence of the
 current evaluator, not calibration against real game outcomes.
 

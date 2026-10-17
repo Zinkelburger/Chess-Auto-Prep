@@ -17,7 +17,7 @@ Code: `lib/workspace/fill_gaps.dart` (`FillGaps`, the one run at a time),
 storage in `lib/storage/generation_trees.dart`, `finds_store.dart`,
 `eval_cache.dart`; remote lookups in `lib/net/search_evaluator.dart` and
 `remote_queue.dart`. Search policy and invariants:
-[ALGORITHM.md](../ALGORITHM.md) ("V2 interactive Expectimax").
+[ALGORITHM.md](../ALGORITHM.md#interactive-expectimax-search-tab) ("Interactive Expectimax").
 
 ## Screen
 

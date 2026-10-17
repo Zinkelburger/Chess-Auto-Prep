@@ -6,10 +6,7 @@
 #
 # The THIRD field matters. The cheap pass runs only the second field, because
 # a campaign is dozens of test runs and the Flutter lock is machine-wide. But
-# almost every file below is exercised by more than its same-named test — at
-# the time of writing `line_extractor.dart` was imported by fifteen other test
-# files — so a mutant that file misses may well be caught next door. Survivors
-# are re-run against the third field before being reported, otherwise the score
-# is a lower bound and it sends people to write tests that already exist.
-# The PGN/tree core. Added after the first sweep: these carry the app's central
-# domain logic, all sit above 90% line coverage, and none had been measured.
+# almost every file is exercised by more than its same-named test, so a mutant
+# that file misses may well be caught next door. Survivors are re-run against
+# the third field before being reported, otherwise the score is a lower bound
+# and it sends people to write tests that already exist.

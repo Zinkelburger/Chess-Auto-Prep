@@ -152,11 +152,10 @@ called "<id>" under Documents/engine_tournaments.`
 
 ## Owner decisions
 
-- The mode was authorized by the owner on 2026-09-27. Part of that scope
-  (built 2026-09-28): a native file picker for engines, the name following the
-  file then `id name`, specific test failures with the engine's first 40 output
-  lines, one-click time presets above the custom fields, and the run header's
-  time control and format.
+- The mode exists by owner decision (2026-09-27), with a native file picker
+  for engines, the name following the file then `id name`, specific test
+  failures with the engine's first 40 output lines, one-click time presets
+  above the custom fields, and the run header's time control and format.
 - Games stay plain PGN that the PGN Viewer opens; the app, the headless runner
   and the MCP tools share one implementation and one folder.
 - Unsettled (no ruling yet): whether fields above two engines keep both
