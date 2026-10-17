@@ -336,7 +336,10 @@ void main() {
     fixture.session.setComment(NodePath.of([0]), 'mine');
     await tester.pumpAndSettle();
     expect(
-      find.textContaining('Edit it in the old app.'),
+      find.text(
+        'That line could not be read in full, so it is left as it is. '
+        'The file is unchanged.',
+      ),
       findsOneWidget,
       reason: 'an edit that quietly does nothing reads as a lost one',
     );

@@ -33,7 +33,7 @@ A full page (no board), capped at `playersPageWidth`.
   `Copy prep sheet`, `Export prep sheet…`, `Unlink group study`; always
   `Add saved players`, `Update US Chess ratings`, `Reload players and groups`.
 - **Notices** — a fixed-height progress line, the rating lookup status with
-  `Stop`, unreadable group files, and a failed save with `Retry save` /
+  `Stop`, unreadable player rows and group files, and a failed save with `Retry save` /
   `Discard failed edit and reload` (or `Try again` for a failed load).
 - **Person row** — name and rating; accounts by site and `US Chess <id>` (or
   `No online accounts`); notes (two lines); linked studies as chips (× unlinks);
@@ -192,9 +192,12 @@ No book: `Choose a white repertoire in Books, then check again.`
   `entries` (`person`, `prepared`). Unknown fields — e.g. MCP pairing data —
   survive every edit. Writes go through `PendingWrites` under a folder lock,
   re-reading first; a row changed elsewhere is refused
-  (`This player changed in another window. Reload before editing.`). Bad or
-  duplicate person IDs refuse the whole directory; one unreadable group file is
-  reported and skipped.
+  (`This player changed in another window. Reload before editing.`). A row
+  that cannot be read (no ID, a second row of one ID, a name that is not text)
+  is skipped with one warning (`1 player in people.json could not be read. It
+  is kept in the file as it is.`) and a log line, and every save writes it back
+  where it was; a `people.json` that cannot be read at all shows no players and
+  refuses saves. One unreadable group file is reported and skipped.
 - `lookup` (`status`, `confirmed`, `candidates` with `evidence`, `next_steps`)
   is written by the chess-prep MCP tools; the row shows the candidates and
   `Use account` adds one to the person and marks it `confirmed_by: user`.

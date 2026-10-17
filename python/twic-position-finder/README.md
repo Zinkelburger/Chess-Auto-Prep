@@ -173,42 +173,16 @@ the origin reachable only through Cloudflare, or the header can be forged).
 `python3 bughousedb.py stats` lists contributors;
 `python3 bughousedb.py purge --contributor HASH` removes one.
 
-### Bughouse expectimax and overnight population
+### Bughouse expectimax snapshots
 
-`GET /api/bughousedb/expectimax?fen=<dual FEN>` returns the saved
+`GET /api/bughousedb/expectimax?fen=<dual FEN>` returns any saved
 `Exp White` and `Exp Black` tables for a position, both from White's
 perspective on the selected board (`bughouse_expectimax.py`, reading
 `BUGHOUSE_EXPECTIMAX_PATH`, default `bughouse_expectimax.db` beside the
-server). CrazyAra probabilities are an FICS-calibrated proxy for human moves,
-not a human-trained model. Each tree retains Hivemind's best move plus the
-top four probabilities strictly above 1%. No clocks or sitting enter the
-tree; captures still transfer to the partner. `POST
+server); `/position` includes the same snapshot. `POST
 /api/bughousedb/expectimax/import` takes batches of up to 20
-`{fen,board,data}` records with the admin API key.
-
-The desktop builder is `tools/bughouse_db/expectimax.py`; see
-[the algorithm](../../docs/ALGORITHM.md#bughouse-expectimax). Its
-`run --publish-to SSH_HOST --publish-path /absolute/book.db` publishes
-completed snapshots every five minutes by transactional SQLite merge;
-`publish` runs one sync immediately. An interrupted build preserves each
-engine evaluation locally, and only completed trees are published.
-
-From the repository root, manually start a resumable, eight-core overnight run:
-
-```sh
-python3 tools/bughouse_db/overnight.py start --hours 8 --cores 8
-python3 tools/bughouse_db/overnight.py status
-python3 tools/bughouse_db/overnight.py stop
-```
-
-This creates one bounded systemd user service, not a timer. It queues up to
-10,000 popular FICS positions, puts positions with uploaded evaluations
-first, then runs the clock-free two-ply builder at 800 nodes, saving both
-colour columns and publishing completed tables every five minutes.
-Interrupted work resumes on the next start; failed jobs are retried once per
-new run. Defaults use the owner's `twic-vps` SSH alias and the website's
-database paths; `--local-only` disables remote reads and writes. `--help`
-lists path, worker and budget overrides. Nothing starts a run automatically.
+`{fen,board,data}` records with the admin API key. No page reads these
+tables, and nothing in the repository builds new ones.
 
 ### Weekly Cron Job
 

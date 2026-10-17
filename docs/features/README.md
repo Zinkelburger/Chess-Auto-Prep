@@ -20,7 +20,7 @@ else here.
 | Player analysis, Players & prep | [players.md](players.md) |
 | Databases | [databases.md](databases.md) |
 | Engine tournament | [engine-tournament.md](engine-tournament.md) |
-| Bughouse lab | [bughouse-lab.md](bughouse-lab.md) |
+| Bughouse | [bughouse.md](bughouse.md) |
 | Settings, accounts, updates, diagnostics | [settings.md](settings.md) |
 
 ## The shape of a spec

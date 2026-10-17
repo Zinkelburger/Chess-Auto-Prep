@@ -1,7 +1,7 @@
 # Hivemind, end to end
 
-The bughouse engine behind Bughouse Lab, the `bughouse` MCP server and every
-engine match, and the website's `/bughouse` board (one board, the partner board
+The bughouse engine behind the app's Bughouse mode, the `bughouse` MCP server
+and the website's `/bughouse` board (one board, the partner board
 held still, on the GPU through WebGPU). This document
 is the one place that explains *how it works* rather than how to call it:
 what the network sees, what the search does with it, and — the question that
@@ -11,8 +11,7 @@ numbers are in [Why everything reads 0.00](#why-everything-reads-000).
 
 Calling the thing is documented elsewhere: [`bughouse-mcp`
 skill](../.agents/skills/bughouse-mcp/SKILL.md) for the MCP tools,
-[Bughouse lab](features/bughouse-lab.md) for the desktop lab and its
-engine-vs-engine matches, [Component map](COMPONENT_MAP.md) for the Flutter
+[Bughouse](features/bughouse.md) for the desktop mode, [Component map](COMPONENT_MAP.md) for the Flutter
 surfaces.
 
 ## What it is
@@ -74,10 +73,9 @@ engine's own code, unpack one of those two tarballs; when you need to
   bestmove (d2d4,pass) ponder (d7d5,d2d4)
   info depth 12 score cp -230 nodes 1500 nps 350 … pv (d2d4,pass) …
         │
-        ├── Bughouse Lab            lib/features/bughouse/
+        ├── Bughouse mode           lib/features/bughouse/
         ├── bughouse MCP server     tools/mcp/bughouse/
-        ├── the browser (WASM)      python/twic-position-finder/frontend/
-        └── engine matches          lib/features/bughouse/match_runner.dart
+        └── the browser (WASM)      python/twic-position-finder/frontend/
 ```
 
 ## What the network sees
@@ -334,7 +332,7 @@ Three options, cheapest first. None requires touching the engine.
 1. **Read `win%`, not the score.** It is already linear in `advantage`
    (`50·(1 + advantage)`), so gains and losses read symmetrically, and 58.8%
    is much harder to misread than +0.51. It is exposed today as
-   `win_percent` from the MCP server (the desktop lab does not show it). Caveat:
+   `win_percent` from the MCP server (the desktop mode does not show it). Caveat:
    it is a re-centred engine estimate, **not** a calibrated probability, and
    it is not the network's WDL.
 2. **Anchor the displayed scale on a pawn-in-hand instead of the tangent.**
@@ -409,14 +407,13 @@ possible if you are not reading stderr.
 
 ## Where it runs
 
-Four consumers, one engine, sharing only files.
+Three consumers, one engine, sharing only files.
 
 | | |
 |---|---|
-| **Bughouse Lab** (desktop) | `lib/engines/hivemind_engine.dart` owns the process and parses its output, `lib/engines/hivemind_install.dart` installs and checks the assets before each launch, `lib/chess/bughouse/hivemind.dart` calibrates, `lib/storage/bughouse_books.dart` reads and writes the books; the lab itself is `lib/features/bughouse/` |
+| **Bughouse mode** (desktop) | `lib/engines/hivemind_engine.dart` owns the process and parses its output, `lib/engines/hivemind_install.dart` installs and checks the assets before each launch, `lib/chess/bughouse/hivemind.dart` calibrates; the mode itself is `lib/features/bughouse/` |
 | **`bughouse` MCP server** | `tools/mcp/bughouse/` — `engine.py` the UCI client, `board.py` the cross-board rule, `calibration.py` the offset, `analysis.py` the three question shapes (`analyse` / `compare` / `playout`), `tools.py` the schemas |
 | **The browser** | `tools/bughouse_web/` and `frontend/src/analysis/hivemind.worker.ts` — the same C++ compiled to WASM, ORT-web for inference on WebGPU (batches of 32) or CPU threads |
-| **Engine matches** | [Bughouse lab → Matches](features/bughouse-lab.md) — one process drives both teams |
 
 `tools/mcp/bughouse/paths.py:locate()` finds the engine in this order:
 `HIVEMIND_BIN`/`HIVEMIND_MODEL`/`HIVEMIND_LIB` → the desktop app's support
@@ -459,10 +456,7 @@ independent mate-probe allowance. This is a small consistency study, not an Elo
 calibration. Its two-core quota and machine load produced slower timings than
 the earlier throughput figures above; use its measured settings when comparing.
 
-Bulk and default live analysis now use **800 nodes**. Existing deeper saved
-results remain available. The manual
-[overnight command](../python/twic-position-finder/README.md#bughouse-expectimax-and-overnight-population)
-builds both colour expectimax values and publishes completed tables. This
+Bulk analysis and the desktop mode's first pass use **800 nodes**. This
 changes the neural budget only; the native root mate allowance still follows
 the engine's existing coupling described in the study.
 
@@ -498,7 +492,7 @@ own move generation. Stored values are calibrated Q; served as
 Both pipelines are code-complete; whether a machine has the data is its own
 business. The files live under `$BUGHOUSE_DB_HOME`, else
 `~/.local/share/chess-prep/bughouse-db/` (`corpus/export*.bpgn.bz2`,
-`bughouse_book.db`, `hivemind_book.db`, `bughouse_expectimax.db`); the
+`bughouse_book.db`, `hivemind_book.db`); the
 server's `bughousedb.db` lives on the deployed API. Checksummed snapshots of
 both books are kept in `data/bughouse-books/` (restore with
 `tools/bughouse_db/snapshot.py`). To build from scratch:
@@ -512,8 +506,7 @@ python3 -m bughouse_db.hivemind_book run --expand-fics --width 4 --max-ply 12
 python3 -m bughouse_db.hivemind_book push --url https://api.chessautoprep.com
 ```
 
-The app never downloads the books itself; the lab works without them and
-shows the FICS archive and saved scores only when the files are present.
+The app does not read the books; they serve the MCP tools and the website.
 
 ## The web payload
 
@@ -578,8 +571,8 @@ a strength match** (the big one, ~19 MB).
 That last one must be *measured*, not assumed. Policy/value networks are
 often fine under int8 dynamic quantisation and occasionally fall apart, and
 Hivemind already has the harness to tell you: `engine/scripts/` has
-`run_strength_sweep.py` and the binary has a `tournament` subcommand, plus
-this repo's own [engine matches](features/bughouse-lab.md). Quantise, then run a
+`run_strength_sweep.py` and the binary has a `tournament` subcommand.
+Quantise, then run a
 few hundred games quantised-vs-FP32 at a fixed node count before shipping it.
 If int8 costs real strength, per-channel or int8-weights-only (keeping
 activations FP32) is the usual middle ground.
@@ -602,8 +595,8 @@ has to do the work.
    it. It is the only calibrated probability in the system.
 3. **Web payload**, in the order above.
 4. **Grow the books.** The FICS book gives the eval work its
-   popularity-ordered queue and the lab its archive rows; a wider or deeper
-   Hivemind book means fewer positions the lab must search live.
+   popularity-ordered queue; a wider or deeper Hivemind book means fewer
+   positions the website's API must leave unanswered.
 5. **Note in the tooling**: python-chess is a hard dependency of the
    `bughouse` MCP server; without it in `python3` the server exits at start
    and the client reports `CONNECTION_CLOSED`. `python3 -m pip install --user

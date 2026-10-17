@@ -185,11 +185,12 @@ Future<int> _run(_Args args, EngineSupervisor engines) async {
     ..writeln('');
 
   final match = _Match(store, tournament, TournamentSchedule(config, launch));
-  // Ctrl-C (and the MCP tournament_stop) finish the games in flight, so the
-  // PGN stays whole. The listener is cancelled below: a live signal
-  // subscription keeps the VM alive.
+  // Ctrl-C (and the MCP tournament_stop) stop the games in flight at their
+  // current move; they are saved unfinished and no new game starts. The
+  // listener is cancelled below: a live signal subscription keeps the VM
+  // alive.
   final interrupts = ProcessSignal.sigint.watch().listen((_) {
-    stdout.writeln('\nStopping after the games in flight…');
+    stdout.writeln('\nStopping: games in flight end unfinished…');
     match.stopping = true;
   });
   final problem = await match.play();
