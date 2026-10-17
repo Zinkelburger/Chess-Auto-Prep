@@ -25,9 +25,9 @@ import 'engine_jobs.dart';
 final class GameReview extends ChangeNotifier {
   GameReview({
     required this.session,
-    required EngineJobs jobs,
+    required this._jobs,
     required this.launch,
-  }) : _jobs = jobs {
+  }) {
     session.anyChange.addListener(_follow);
   }
   final DocumentSession session;

@@ -125,20 +125,15 @@ final class MyGames extends ChangeNotifier {
   MyGames({
     required AccountStore accounts,
     PendingWrites? pendingWrites,
-    required List<RecentGames> sites,
-    required GamesCache cache,
+    required this._sites,
+    required this._cache,
     required SetAdditions set,
-    required ReviewEngine engine,
-    required SettingsStore settings,
-    DateTime Function() now = DateTime.now,
+    required this._engine,
+    required this._settings,
+    this._now = DateTime.now,
   }) : pendingWrites = pendingWrites ?? set.pendingWrites,
-       _settings = settings,
        _store = accounts,
-       _sites = sites,
-       _cache = cache,
-       _set = set,
-       _engine = engine,
-       _now = now;
+       _set = set;
 
   final PendingWrites pendingWrites;
 

@@ -52,14 +52,11 @@ final class SourceShown extends SourceView {
 /// does not hold is looked for again only once the file has changed.
 final class SourceGames extends ChangeNotifier {
   SourceGames({
-    required PuzzleTrainer trainer,
-    required TacticsSet set,
-    required GamesCache cache,
-    required AccountStore accounts,
-  }) : _trainer = trainer,
-       _set = set,
-       _cache = cache,
-       _accounts = accounts {
+    required this._trainer,
+    required this._set,
+    required this._cache,
+    required this._accounts,
+  }) {
     _trainer.addListener(_trainerChanged);
     _set.addListener(_setChanged);
   }

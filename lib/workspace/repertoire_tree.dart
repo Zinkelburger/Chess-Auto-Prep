@@ -105,12 +105,10 @@ final class TreeNothing extends TreeState {
 /// moving in the file or leaving the tab gives the board back to the file.
 final class RepertoireTree extends ChangeNotifier {
   RepertoireTree({
-    required DocumentSession session,
-    required RepertoireShelf shelf,
-    required Books books,
-  }) : _session = session,
-       _shelf = shelf,
-       _books = books {
+    required this._session,
+    required this._shelf,
+    required this._books,
+  }) {
     _session.anyChange.addListener(_followTheBoard);
     _books.addListener(_refresh);
   }

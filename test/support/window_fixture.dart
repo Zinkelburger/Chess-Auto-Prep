@@ -71,30 +71,26 @@ final benkoMain = ref('benko', 'Main');
 /// the test sets. The wiring is the app's own, so a window test checks how
 /// the app is put together, not a copy of it.
 final class WindowFixture {
-  /// [input] is the window the requests read from; by default the real
-  /// dialogs over [navigator], for tests that pump [Shell]. [settings] is a
+  /// [_input] is the window the requests read from; by default the real
+  /// dialogs over [navigator], for tests that pump [Shell]. [_settings] is a
   /// store over a real folder, for a test of how they are read; by default
-  /// they are in memory. [launchEngine] starts the Stockfish the workspace
-  /// and the fill ask for; by default none starts. [players] is the player
+  /// they are in memory. [_launchEngine] starts the Stockfish the workspace
+  /// and the fill ask for; by default none starts. [_players] is the player
   /// directory; by default in memory.
   WindowFixture({
-    WindowInput? input,
-    SettingsStore? settings,
-    EngineLauncher? launchEngine,
+    this._input,
+    this._settings,
+    this._launchEngine,
     this.launchRegisteredEngine,
     this.coresAvailable,
     this.tournaments,
     this.viewerPlaces,
     this.viewerDrafts,
     this.launchTournament,
-    PlayerStore? players,
+    this._players,
     this.exitWait = const Duration(milliseconds: 20),
-    MovePolicy maia = const NoOpinion(),
-  }) : _input = input,
-       _settings = settings,
-       _launchEngine = launchEngine,
-       _players = players,
-       _maia = maia;
+    this._maia = const NoOpinion(),
+  });
 
   final TournamentStore? tournaments;
 

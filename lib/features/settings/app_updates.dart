@@ -129,12 +129,11 @@ typedef UpdateOutside = ({
 final class AppUpdates extends ChangeNotifier {
   AppUpdates(
     this._outside, {
-    required SettingsStore settings,
-    DateTime Function() now = DateTime.now,
+    required this._settings,
+    this._now = DateTime.now,
     this.startDelay = const Duration(seconds: 10),
     this.poll = const Duration(hours: 1),
-  }) : _settings = settings,
-       _now = now;
+  });
 
   final UpdateOutside _outside;
   final SettingsStore _settings;

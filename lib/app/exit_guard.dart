@@ -77,14 +77,12 @@ enum _Away {
 /// the outcome that loses nothing.
 final class ExitGuard {
   ExitGuard({
-    required DocumentSaver saver,
-    required DraftQuestion question,
-    Future<String?> Function()? saveCopy,
+    required this._saver,
+    required this._question,
+    this._saveCopy,
     this.wait = const Duration(seconds: 5),
     this.settleFeatures,
-  }) : _saver = saver,
-       _question = question,
-       _saveCopy = saveCopy;
+  });
 
   final DocumentSaver _saver;
   final Future<String?> Function()? settleFeatures;

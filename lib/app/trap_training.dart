@@ -32,8 +32,8 @@ final class TrapTraining {
     required this.library,
     required this.trainer,
     required this.documents,
-    DateTime Function() now = DateTime.now,
-  }) : _now = now;
+    this._now = DateTime.now,
+  });
 
   final WorkspaceRequests requests;
   final DocumentSession session;

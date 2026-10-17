@@ -20,12 +20,10 @@ import 'repertoire_shelf.dart';
 /// again, and a read overtaken by one of them is dropped.
 final class BoardBook extends ChangeNotifier {
   BoardBook({
-    required DocumentSession session,
-    required RepertoireShelf shelf,
-    required Books books,
-  }) : _session = session,
-       _shelf = shelf,
-       _books = books {
+    required this._session,
+    required this._shelf,
+    required this._books,
+  }) {
     _session.addListener(_changed);
     _shelf.addListener(_changed);
     _books.addListener(_changed);

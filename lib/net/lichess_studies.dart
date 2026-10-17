@@ -142,8 +142,7 @@ const _exportParams = {
 };
 
 final class LichessStudyApi implements LichessStudies {
-  LichessStudyApi(this._client, {required Future<String?> Function() token})
-    : _token = token;
+  LichessStudyApi(this._client, {required this._token});
 
   final http.Client _client;
 

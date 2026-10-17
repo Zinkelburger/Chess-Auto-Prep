@@ -41,10 +41,7 @@ final class RecentFilesUnreadable extends RecentFilesRead {
 const recentPgnFilesKey = 'pgn_viewer_recent_files';
 
 final class PreferencesRecentFiles implements RecentFiles {
-  PreferencesRecentFiles({
-    Future<SharedPreferences> Function() preferences =
-        SharedPreferences.getInstance,
-  }) : _preferences = preferences;
+  PreferencesRecentFiles({this._preferences = SharedPreferences.getInstance});
 
   final Future<SharedPreferences> Function() _preferences;
 

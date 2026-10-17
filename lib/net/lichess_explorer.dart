@@ -96,12 +96,10 @@ const _siteHost = 'lichess.org';
 final class LichessExplorerApi implements LichessExplorer {
   LichessExplorerApi(
     this._client, {
-    required Future<String?> Function() token,
-    DateTime Function() now = DateTime.now,
-    Future<void> Function(Duration) wait = _sleep,
-  }) : _token = token,
-       _now = now,
-       _wait = wait;
+    required this._token,
+    this._now = DateTime.now,
+    this._wait = _sleep,
+  });
 
   final http.Client _client;
 

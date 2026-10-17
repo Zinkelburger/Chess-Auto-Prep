@@ -38,12 +38,10 @@ import 'workspace_wiring.dart';
 final class AppParts {
   AppParts(
     this.env, {
-    required DraftQuestion question,
-    required WindowInput input,
-    required Future<CopyResult?> Function(DocumentSession session) copyOnLeave,
-  }) : _question = question,
-       _input = input,
-       _copyOnLeave = copyOnLeave;
+    required this._question,
+    required this._input,
+    required this._copyOnLeave,
+  });
 
   final AppEnvironment env;
   final DraftQuestion _question;

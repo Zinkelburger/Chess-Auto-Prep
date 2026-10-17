@@ -9,8 +9,7 @@ import '../diagnostics/log.dart';
 /// back to what the window last did and is said to the user. A window the
 /// desktop put in full screen some other way is left to the desktop.
 final class FullScreen {
-  FullScreen(this._set, {required void Function(String sentence) say})
-    : _say = say;
+  FullScreen(this._set, {required this._say});
 
   final Future<void> Function(bool on) _set;
   final void Function(String sentence) _say;

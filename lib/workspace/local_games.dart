@@ -108,7 +108,7 @@ abstract interface class SavedGames implements LocalGames {
 /// anything holds that list ([_indexes]), so a file gone back to with its
 /// games unchanged — another tab and back — answers at once.
 final class FileTree extends ChangeNotifier implements LocalGames {
-  FileTree({required FileFilter filter}) : _filter = filter {
+  FileTree({required this._filter}) {
     _filter.addListener(_follow);
     _follow();
   }
@@ -252,12 +252,10 @@ final class FileTree extends ChangeNotifier implements LocalGames {
 /// the downloaded games in the tree and says so beside them.
 final class MyGamesTree extends ChangeNotifier implements SavedGames {
   MyGamesTree({
-    required AccountStore accounts,
-    required GamesCache cache,
-    required GameStore store,
-  }) : _accounts = accounts,
-       _cache = cache,
-       _store = store;
+    required this._accounts,
+    required this._cache,
+    required this._store,
+  });
 
   final AccountStore _accounts;
   final GamesCache _cache;

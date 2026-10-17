@@ -71,10 +71,10 @@ typedef PlayedAt = Future<PlayedLookup> Function(Fen fen);
 final class DatabaseOpponent implements OpponentPolicy {
   DatabaseOpponent({
     required this.name,
-    required PlayedAt played,
+    required this._played,
     this.fallback,
     this.fallbackUnder = 1,
-  }) : _played = played;
+  });
 
   /// What the database is called, for the sentence said when it is empty.
   final String name;

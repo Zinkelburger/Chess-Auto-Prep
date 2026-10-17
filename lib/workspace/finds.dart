@@ -53,11 +53,10 @@ final class FindsKept extends FindsRecorded {
 /// in the store. The store is read the first time the list is shown.
 final class Finds extends ChangeNotifier {
   Finds({
-    required FindsStore Function() store,
+    required this._store,
     DateTime Function()? clock,
     PendingWrites? pendingWrites,
-  }) : _store = store,
-       _pending = pendingWrites ?? PendingWrites(),
+  }) : _pending = pendingWrites ?? PendingWrites(),
        _clock = clock ?? DateTime.now;
 
   /// Opens the store; asked once, when it is first needed.

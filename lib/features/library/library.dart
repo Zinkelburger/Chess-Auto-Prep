@@ -52,25 +52,20 @@ final class Library extends ChangeNotifier {
   Library({
     required ChapterFiles files,
     required store.PgnDocumentStore documents,
-    required DocumentSaver saver,
-    required DocumentSession session,
+    required this._saver,
+    required this._session,
     this.pendingWrites,
     this.backupHistory,
-    required PgnFilePicker picker,
+    required this._picker,
     required String root,
-    Books? books,
+    this._books,
     RepertoireCatalog? catalog,
-    DateTime Function() now = DateTime.now,
+    this._now = DateTime.now,
   }) : catalog = catalog ?? RepertoireCatalog(files: files, root: root),
        _ownsCatalog = catalog == null,
        _files = files,
-       _books = books,
        _store = documents,
-       _saver = saver,
-       _session = session,
-       _picker = picker,
-       _root = root,
-       _now = now {
+       _root = root {
     _session.addListener(_followTheSession);
     this.catalog.addListener(_catalogChanged);
   }

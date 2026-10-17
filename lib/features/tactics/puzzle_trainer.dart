@@ -50,19 +50,14 @@ const advanceDelay = Duration(seconds: 3);
 /// for a puzzle again.
 final class PuzzleTrainer extends ChangeNotifier {
   PuzzleTrainer({
-    required TacticsSet set,
+    required this._set,
     required DocumentSession session,
-    required EngineAnalysis analysis,
-    required SettingsStore settings,
-    required OpenPuzzle open,
+    required this._analysis,
+    required this._settings,
+    required this._open,
     this.alternativeEngine,
-    DateTime Function() now = DateTime.now,
-  }) : _set = set,
-       _session = session,
-       _analysis = analysis,
-       _settings = settings,
-       _open = open,
-       _now = now,
+    this._now = DateTime.now,
+  }) : _session = session,
        _showing = (source: session.source, game: session.game) {
     _session.addListener(_documentChanged);
     _session.anyChange.addListener(_positionChanged);

@@ -29,13 +29,7 @@ typedef SolitaireMiss = ({NodePath at, String played, List<String> tried});
 /// and the cursor keys all stop at the move being guessed. Another game,
 /// another file or anything else that shows the whole game again ends it.
 final class Solitaire extends ChangeNotifier {
-  Solitaire(
-    this._session,
-    this._analysis, {
-    Future<EngineStart> Function()? launch,
-    EngineJobs? jobs,
-  }) : _launch = launch,
-       _jobs = jobs {
+  Solitaire(this._session, this._analysis, {this._launch, this._jobs}) {
     _session.addListener(_documentChanged);
     _session.cursor.addListener(_cursorChanged);
   }

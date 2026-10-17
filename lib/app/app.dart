@@ -281,15 +281,13 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
 /// forgotten, so the next click asks again.
 final class AppExit {
   AppExit({
-    required ExitGuard guard,
+    required this._guard,
     this.navigatorKey,
     this.prepare,
     this.onCancelled,
-    required Future<void> Function() stopEngines,
-    required Future<void> Function() closeLog,
-  }) : _guard = guard,
-       _stopEngines = stopEngines,
-       _closeLog = closeLog;
+    required this._stopEngines,
+    required this._closeLog,
+  });
 
   final void Function()? prepare;
   final void Function()? onCancelled;

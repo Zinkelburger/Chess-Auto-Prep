@@ -78,12 +78,10 @@ final class BackupRelocation {
   BackupRelocation(
     this.root, {
     required this.documents,
-    Future<void> Function(String from, String to) move = movePathNoReplace,
-    Future<void> Function(String) synchronize = syncDirectory,
+    this._move = movePathNoReplace,
+    this._synchronize = syncDirectory,
     bool? windows,
-  }) : _move = move,
-       _synchronize = synchronize,
-       _windows = windows ?? Platform.isWindows;
+  }) : _windows = windows ?? Platform.isWindows;
 
   final Directory root;
 

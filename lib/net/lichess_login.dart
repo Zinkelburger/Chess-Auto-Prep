@@ -126,11 +126,10 @@ const _requestTimeout = Duration(seconds: 20);
 final class LichessLoginApi implements LichessLogin {
   LichessLoginApi(
     this._client, {
-    required Future<bool> Function(Uri) openBrowser,
+    required this._openBrowser,
     this.wait = const Duration(minutes: 5),
     Random? random,
-  }) : _openBrowser = openBrowser,
-       _random = random ?? Random.secure();
+  }) : _random = random ?? Random.secure();
 
   final http.Client _client;
 

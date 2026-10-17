@@ -44,8 +44,7 @@ final class StudiesUnreadable extends StudyListing {
 
 /// One flat folder of `.pgn` files.
 final class StudyDirectory implements StudyFiles {
-  StudyDirectory(this.root, {required RecoveryGate recovery})
-    : _recovery = recovery;
+  StudyDirectory(this.root, {required this._recovery});
 
   final RecoveryGate _recovery;
 

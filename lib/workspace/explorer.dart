@@ -122,16 +122,14 @@ final class ExplorerFailed extends ExplorerState {
 /// empty answers, since asking costs nothing.
 final class Explorer extends ChangeNotifier {
   Explorer({
-    required DocumentSession session,
-    required SettingsStore settings,
-    required ExplorerDatabases databases,
+    required this._session,
+    required this._settings,
+    required this._databases,
     this.debounce = const Duration(milliseconds: 250),
     this.rememberChoice = true,
     this.first,
     ExplorerChoice? initialChoice,
-  }) : _session = session,
-       _settings = settings,
-       _databases = databases {
+  }) {
     _choiceNow = initialChoice ?? _settings.value.explorer;
     _session.anyChange.addListener(_followTheBoard);
     if (rememberChoice) _settings.addListener(_followTheSettings);
@@ -550,12 +548,11 @@ int plyOf(Fen fen) => (fen.fullMove - 1) * 2 + (fen.whiteToMove ? 0 : 1);
 /// asks.
 final class ExplorerDatabases {
   const ExplorerDatabases({
-    required LichessExplorer lichess,
-    required MasterBook book,
+    required this._lichess,
+    required this._book,
     required this.thisFile,
     required this.myGames,
-  }) : _lichess = lichess,
-       _book = book;
+  });
 
   final LichessExplorer _lichess;
   final MasterBook _book;

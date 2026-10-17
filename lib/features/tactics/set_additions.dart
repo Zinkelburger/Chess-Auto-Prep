@@ -51,18 +51,13 @@ final class NotAdded extends Addition {
 /// publication, so a concurrent open waits for the resulting file.
 final class SetAdditions {
   SetAdditions({
-    required PgnDocumentStore documents,
-    required DocumentSession session,
-    required DocumentSaver saver,
-    required TacticsSet set,
-    required Future<Set<String>?> Function() older,
+    required this._documents,
+    required this._session,
+    required this._saver,
+    required this._set,
+    required this._older,
     PendingWrites? pendingWrites,
-  }) : pendingWrites = pendingWrites ?? PendingWrites(),
-       _documents = documents,
-       _session = session,
-       _saver = saver,
-       _set = set,
-       _older = older;
+  }) : pendingWrites = pendingWrites ?? PendingWrites();
 
   final PendingWrites pendingWrites;
   final _commands = <String, _MinedCheckpoint>{};

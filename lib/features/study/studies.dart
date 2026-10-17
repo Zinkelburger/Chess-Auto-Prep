@@ -40,23 +40,18 @@ import '../../workspace/document_session.dart';
 /// of them, so what the panel shows is what the disk holds.
 final class Studies extends ChangeNotifier {
   Studies({
-    required StudyFiles files,
+    required this._files,
     required store.PgnDocumentStore documents,
-    required DocumentSession session,
+    required this._session,
     this.pendingWrites,
     this.picker,
     this.importer,
     this.exporter,
     this.linkedPlayers,
-    required DocumentSaver saver,
-    required LichessStudies lichess,
-    required String root,
-  }) : _files = files,
-       _store = documents,
-       _session = session,
-       _saver = saver,
-       _lichess = lichess,
-       _root = root;
+    required this._saver,
+    required this._lichess,
+    required this._root,
+  }) : _store = documents;
 
   /// What a study's first chapter is called before anyone renames it.
   static const firstChapter = 'Chapter 1';

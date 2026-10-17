@@ -42,18 +42,13 @@ import 'environment.dart';
 final class WorkspaceWiring {
   WorkspaceWiring(
     this._env, {
-    required DocumentSession session,
-    required DocumentSaver saver,
-    required RepertoireCatalog catalog,
-    required FileFilter filter,
+    required this._session,
+    required this._saver,
+    required this._catalog,
+    required this._filter,
     required GamesCache games,
-    required Books books,
-  }) : _session = session,
-       _books = books,
-       _saver = saver,
-       _catalog = catalog,
-       _filter = filter,
-       _gamesCache = games {
+    required this._books,
+  }) : _gamesCache = games {
     _catalog.addListener(_filesChanged);
     _env.store.addListener(_corpusChanged);
   }

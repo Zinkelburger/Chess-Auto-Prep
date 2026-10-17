@@ -94,11 +94,10 @@ final class OutlineLine {
 /// is inside is [isCurrent], which the one row it concerns follows by itself.
 final class ChapterOutline extends ChangeNotifier {
   ChapterOutline({
-    required Library library,
-    required DocumentSession session,
+    required this._library,
+    required this._session,
     Duration debounce = const Duration(milliseconds: 200),
-  }) : _library = library,
-       _session = session {
+  }) {
     _search = _Search(debounce, _narrowed);
     _library.addListener(_reread);
     _session.addListener(_reread);

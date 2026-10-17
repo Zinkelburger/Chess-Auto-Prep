@@ -108,22 +108,15 @@ final class Place {
 final class WorkspaceRequests extends ChangeNotifier {
   WorkspaceRequests({
     required DocumentSession session,
-    required Library library,
-    required PgnViewer viewer,
-    required GameFetcher games,
-    required ExitGuard leaving,
-    required WindowInput input,
-    required Books books,
-    required Studies studies,
+    required this._library,
+    required this._viewer,
+    required this._games,
+    required this._leaving,
+    required this._input,
+    required this._books,
+    required this._studies,
     DraftKeeper? drafts,
-  }) : _books = books,
-       _studies = studies,
-       _session = session,
-       _library = library,
-       _viewer = viewer,
-       _games = games,
-       _leaving = leaving,
-       _input = input {
+  }) : _session = session {
     documents = DocumentTabs(session: session, requests: this, drafts: drafts);
   }
 

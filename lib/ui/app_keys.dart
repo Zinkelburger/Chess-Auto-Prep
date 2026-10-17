@@ -219,8 +219,7 @@ enum AppKey {
     SingleActivator(LogicalKeyboardKey.keyE),
   ]);
 
-  const AppKey(this.action, this.place, this.keys, {String? named})
-    : _named = named;
+  const AppKey(this.action, this.place, this.keys, {this._named});
 
   /// What the key does, as the Shortcuts list says it.
   final String action;

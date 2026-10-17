@@ -41,20 +41,14 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
     this.exporter,
     this.places,
     PendingWrites? pendingWrites,
-    required PgnFilePicker picker,
-    required PgnFileImport import,
-    required SettingsStore settings,
-    required DocumentSession session,
-    required FileFilter filter,
-    required String collections,
+    required this._picker,
+    required this._import,
+    required this._settings,
+    required this._session,
+    required this._filter,
+    required this._collections,
   }) : pendingWrites = pendingWrites ?? PendingWrites(),
-       _recentFiles = recent,
-       _picker = picker,
-       _import = import,
-       _settings = settings,
-       _session = session,
-       _filter = filter,
-       _collections = collections {
+       _recentFiles = recent {
     _session.addListener(_followTheDocument);
     _filter.addListener(_followTheFilter);
     _reading.start();

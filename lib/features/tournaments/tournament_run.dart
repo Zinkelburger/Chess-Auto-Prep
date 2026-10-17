@@ -20,10 +20,10 @@ final class TournamentRun extends ChangeNotifier {
     required this.store,
     required this.launch,
     required this.pending,
-    required EngineJobs jobs,
+    required this._jobs,
     this.onOpenRequest,
     this.pickExecutable = _noFile,
-  }) : _jobs = jobs;
+  });
 
   /// The file dialog that picks an engine binary to register.
   final Future<String?> Function() pickExecutable;

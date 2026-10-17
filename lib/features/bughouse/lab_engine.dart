@@ -87,10 +87,9 @@ const labLineCount = 3;
 final class LabEngine extends ChangeNotifier {
   LabEngine({
     required this.lab,
-    required Future<HivemindStart> Function() startEngine,
-    List<int> passes = labPasses,
-  }) : _startEngine = startEngine,
-       _passes = passes {
+    required this._startEngine,
+    this._passes = labPasses,
+  }) {
     lab.addListener(_labChanged);
   }
 

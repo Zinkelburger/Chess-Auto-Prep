@@ -12,13 +12,11 @@ import '../../storage/lichess_token.dart';
 /// Accounts rows read it and call it.
 final class LichessAccountState extends ChangeNotifier {
   LichessAccountState({
-    required LichessLogin login,
+    required this._login,
     this.pendingWrites,
-    required Future<LichessAccount?> Function() read,
-    required Future<bool> Function(LichessAccount?) write,
-  }) : _login = login,
-       _read = read,
-       _write = write;
+    required this._read,
+    required this._write,
+  });
 
   /// Lets the way out wait for an account write in flight.
   final PendingWrites? pendingWrites;

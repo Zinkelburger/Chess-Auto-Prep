@@ -50,24 +50,18 @@ const learnSitting = 10;
 /// the progress writes against.
 class Trainer extends ChangeNotifier {
   Trainer({
-    required DocumentSession session,
-    required ScopeReader chapters,
-    required ProgressFiles files,
-    required EngineAnalysis analysis,
-    required TrainerTime time,
-    required Books books,
+    required this._session,
+    required this._chapters,
+    required this._files,
+    required this._analysis,
+    required this._time,
+    required this._books,
     RepertoireCatalog? catalog,
     PendingWrites? pendingWrites,
     this.settings,
   }) : selection = TrainingSelection(catalog, settings),
        pendingWrites = pendingWrites ?? PendingWrites(),
-       _catalog = catalog,
-       _books = books,
-       _session = session,
-       _chapters = chapters,
-       _files = files,
-       _analysis = analysis,
-       _time = time {
+       _catalog = catalog {
     selection.addListener(_selectionChanged);
     settings?.addListener(_settingsChanged);
     _session.addListener(_follow);

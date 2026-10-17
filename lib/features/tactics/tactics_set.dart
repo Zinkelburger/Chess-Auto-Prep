@@ -53,17 +53,13 @@ final class SetReady extends SetState {
 /// and one writer at a time, and the writer is the session.
 final class TacticsSet extends ChangeNotifier {
   TacticsSet({
-    required PgnDocumentStore documents,
-    required DocumentSession session,
-    required SettingsStore settings,
+    required this._documents,
+    required this._session,
+    required this._settings,
     required this.ref,
-    DateTime Function() now = DateTime.now,
+    this._now = DateTime.now,
     Random? random,
-  }) : _documents = documents,
-       _session = session,
-       _settings = settings,
-       _now = now,
-       _random = random ?? Random() {
+  }) : _random = random ?? Random() {
     _seed = _random.nextInt(_seeds);
     _session.addListener(_documentChanged);
     _settings.addListener(_settingsChanged);

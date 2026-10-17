@@ -33,13 +33,11 @@ typedef TrainerTime = ({DateTime Function() now, double Function() jitter});
 /// answers on ([documentSaved]); training never holds a save up.
 class TrainingProgress extends ChangeNotifier {
   TrainingProgress({
-    required ProgressFiles files,
+    required this._files,
     required ProgressLoaded loaded,
-    required TrainerTime time,
+    required this._time,
     this.pendingWrites,
-  }) : _files = files,
-       _time = time,
-       _sources = Map.of(loaded.sources),
+  }) : _sources = Map.of(loaded.sources),
        _reviews = {...loaded.reviews},
        _streaks = {...loaded.streaks},
        _saved = {...loaded.streaks},

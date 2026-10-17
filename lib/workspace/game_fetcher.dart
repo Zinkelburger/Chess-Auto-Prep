@@ -35,12 +35,10 @@ final class GameNotKept extends GameKeep {
 /// wait. A file already there is opened as it is.
 final class GameFetcher extends ChangeNotifier {
   GameFetcher({
-    required ExplorerDatabases databases,
-    required store.PgnDocumentStore documents,
-    required String collections,
-  }) : _databases = databases,
-       _documents = documents,
-       _collections = collections;
+    required this._databases,
+    required this._documents,
+    required this._collections,
+  });
 
   final ExplorerDatabases _databases;
   final store.PgnDocumentStore _documents;

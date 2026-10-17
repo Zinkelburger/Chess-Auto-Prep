@@ -43,24 +43,18 @@ import 'search_opponents.dart';
 /// chapter itself is never touched.
 final class FillGaps extends ChangeNotifier {
   FillGaps({
-    required DocumentSession session,
-    required EngineJobs jobs,
+    required this._session,
+    required this._jobs,
     required store.PgnDocumentStore documents,
-    required FillToolsFactory tools,
-    TreeKeeper? keepTree,
-    TreeLoader? loadTree,
+    required this._tools,
+    this._keepTree,
+    this._loadTree,
     PendingWrites? pendingWrites,
     this.finds,
     this.openings,
-    DateTime Function() clock = DateTime.now,
-  }) : _session = session,
-       _jobs = jobs,
-       _store = documents,
-       _tools = tools,
-       _keepTree = keepTree,
-       _loadTree = loadTree,
-       _pending = pendingWrites ?? PendingWrites(),
-       _clock = clock {
+    this._clock = DateTime.now,
+  }) : _store = documents,
+       _pending = pendingWrites ?? PendingWrites() {
     _board = _boardNow;
     _session.anyChange.addListener(_boardChanged);
     _jobs.addListener(_jobsChanged);

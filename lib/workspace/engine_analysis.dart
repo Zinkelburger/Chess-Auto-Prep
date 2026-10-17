@@ -88,16 +88,15 @@ const threatDepth = 12;
 final class EngineAnalysis extends ChangeNotifier {
   /// [launch] is asked for an engine each time the analysis is enabled.
   ///
-  /// [elsewhere] is a position the board shows in place of the document's
+  /// [_elsewhere] is a position the board shows in place of the document's
   /// — the explorer Book's free board — which the engine follows while it is
   /// there.
   EngineAnalysis(
     this._session,
     this._launch, {
-    int multiPv = 3,
-    ValueListenable<BoardClaim?>? elsewhere,
-  }) : _multiPv = multiPv,
-       _elsewhere = elsewhere {
+    this._multiPv = 3,
+    this._elsewhere,
+  }) {
     _session.anyChange.addListener(_follow);
     _elsewhere?.addListener(_follow);
   }
