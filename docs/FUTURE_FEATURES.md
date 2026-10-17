@@ -74,7 +74,6 @@ Shipped behaviour that contradicts a rule; fix when touching the area.
 
 | Defect | Where |
 |---|---|
-| Messages tell users to "open and save it in the old app", which no longer exists | `storage/document_text.dart` (compressed and non-UTF-8 chapters), `workspace/edit_strip.dart` (`LineNotWhole`) |
 | CrazyAra error names a "Bughouse Lab setup guide" that does not exist | `engines/engine_supervisor.dart`; install notes are in [ALGORITHM.md](ALGORITHM.md#bughouse-expectimax) and `tools/setup_crazyara.py` |
 | One bad record in `people.json` refuses the whole players directory, against the fail-open rule | `storage/player_files.dart` `PlayerFiles.read` |
 | MCP tool descriptions overstate the runner: `tournament_stop` says it finishes the game in flight, `tournament_game_pgn` promises eval comments | `tools/mcp/chess_prep/engine_tournament.py` |

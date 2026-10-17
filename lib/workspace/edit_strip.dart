@@ -281,8 +281,8 @@ String _refusalNotice(EditRefused refusal) => switch (refusal) {
   NotEditable(:final detail) =>
     'This file opened to read: $detail. Save a copy to edit it here.',
   LineNotWhole() =>
-    'That line could not be read in full, so it is left as it is. Edit it '
-        'in the old app.',
+    'That line could not be read in full, so it is left as it is. The file '
+        'is unchanged.',
   WordsRefused(:final reason) =>
     'The note was not saved: $reason. Take it out and try again.',
   EditNotWritten(:final reason) =>
