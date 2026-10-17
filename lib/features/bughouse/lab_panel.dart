@@ -6,11 +6,11 @@ import '../../chess/fen.dart';
 import '../../chess/bughouse/table.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/engine_switch.dart';
-import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
 import '../../workspace/board_editor.dart';
 import 'bughouse_lab.dart';
 import 'lab_engine.dart';
+import 'lab_lines.dart';
 import 'table_boards.dart';
 
 /// The column beside the boards: how many boards, the clock case with two,
@@ -33,11 +33,7 @@ class LabPanel extends StatelessWidget {
           if (!lab.single) _TimeChips(lab: lab),
           const SizedBox(height: Space.s),
           _EngineBar(engine: engine),
-          if (lab.single)
-            _OneBoardRows(lab: lab, lines: engine.lines)
-          else
-            for (final team in Team.values)
-              _TeamRows(lab: lab, lines: engine.lines, team: team),
+          LabLineRows(lab: lab, lines: engine.lines),
           _ProblemLine(lab: lab),
           if (lab.single)
             Expanded(
@@ -222,138 +218,6 @@ const _scoreHint =
 String _thousands(int n) =>
     n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+$)'), (_) => ',');
 
-/// One board: up to three lines, board 1's moves only.
-class _OneBoardRows extends StatelessWidget {
-  const _OneBoardRows({required this.lab, required this.lines});
-
-  final BughouseLab lab;
-  final LabLines lines;
-
-  @override
-  Widget build(BuildContext context) {
-    final on = lines is LinesOn ? lines as LinesOn : null;
-    final rows = on == null || on.boards != LabBoards.one
-        ? const <EngineRow>[]
-        : on.teams.values.firstOrNull ?? const <EngineRow>[];
-    return Column(
-      children: [
-        for (var i = 0; i < labLineCount; i++)
-          _LineRow(
-            row: i < rows.length ? rows[i] : null,
-            text: (row) => boardPv(row.table, row.pv, BoardNumber.one),
-            onHover: (row) =>
-                lab.preview.value = {BoardNumber.one: ?row?.move.one},
-            onTap: (row) {
-              if (row.move.one case final uci?) lab.play(BoardNumber.one, uci);
-            },
-            onLeave: () => lab.preview.value = null,
-          ),
-      ],
-    );
-  }
-}
-
-/// Two boards: one team's header, then its lines, seat-lettered.
-class _TeamRows extends StatelessWidget {
-  const _TeamRows({required this.lab, required this.lines, required this.team});
-
-  final BughouseLab lab;
-  final LabLines lines;
-  final Team team;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final on = lines is LinesOn ? lines as LinesOn : null;
-    final rows = on == null || on.boards != LabBoards.two
-        ? const <EngineRow>[]
-        : on.teams[team] ?? const <EngineRow>[];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          height: labTableRowHeight,
-          alignment: Alignment.centerLeft,
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: scheme.outline)),
-          ),
-          child: Text(
-            team.label,
-            style: Theme.of(
-              context,
-            ).textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant),
-          ),
-        ),
-        for (var i = 0; i < labLineCount; i++)
-          _LineRow(
-            row: i < rows.length ? rows[i] : null,
-            text: (row) => readablePv(row.table, row.pv, limit: 4),
-            onHover: (row) => lab.preview.value = {
-              for (final board in BoardNumber.values)
-                board: ?row?.move.on(board),
-            },
-            onTap: (row) => lab.playJoint(row.move),
-            onLeave: () => lab.preview.value = null,
-          ),
-      ],
-    );
-  }
-}
-
-/// One engine line: the score in a mono gutter, then the moves. Pointing
-/// draws its first move on the board; clicking plays it. Without a line the
-/// row is blank space of the same height.
-class _LineRow extends StatelessWidget {
-  const _LineRow({
-    required this.row,
-    required this.text,
-    required this.onHover,
-    required this.onTap,
-    required this.onLeave,
-  });
-
-  final EngineRow? row;
-  final String Function(EngineRow row) text;
-  final ValueChanged<EngineRow?> onHover;
-  final ValueChanged<EngineRow> onTap;
-  final VoidCallback onLeave;
-
-  @override
-  Widget build(BuildContext context) {
-    final row = this.row;
-    if (row == null) return const SizedBox(height: labTableRowHeight);
-    return MouseRegion(
-      onEnter: (_) => onHover(row),
-      onExit: (_) => onLeave(),
-      child: InkWell(
-        onTap: () => onTap(row),
-        child: SizedBox(
-          height: labTableRowHeight,
-          child: Row(
-            children: [
-              SizedBox(
-                width: labScoreWidth,
-                child: Text(
-                  row.score.text,
-                  style: monoText.copyWith(fontWeight: FontWeight.w600),
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  displaySan(context, text(row)),
-                  style: monoText,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// Why the last move, step or paste was refused, in a line that keeps its
 /// height when there is nothing to say.
 class _ProblemLine extends StatelessWidget {
@@ -389,6 +253,9 @@ class _ProblemLine extends StatelessWidget {
     MovesRefused(:final token?) => 'Not pasted: $token does not play.',
     StepRefused(:final move) =>
       'Can’t step there: ${move.san} on ${move.board.label.toLowerCase()} '
+          'would have no piece to drop.',
+    DeleteRefused(:final move) =>
+      'Can’t delete: ${move.san} on ${move.board.label.toLowerCase()} '
           'would have no piece to drop.',
   };
 }

@@ -14,8 +14,8 @@ import 'table_boards.dart';
 /// and (with one board) the moves on the right. The boards take what the
 /// window leaves.
 ///
-/// ← → step the board last moved or stepped on, Home and End go to its
-/// ends, E switches the engine.
+/// ← → step the board last moved or stepped on, Home / PgUp and End / PgDn
+/// go to its ends, F flips the boards, E switches the engine.
 class BughouseScreen extends StatelessWidget {
   const BughouseScreen({
     super.key,
@@ -130,6 +130,7 @@ class _LabKeysState extends State<_LabKeys> {
     ...AppKey.firstMove.bind(lab.toStart),
     ...AppKey.lastMove.bind(lab.toEnd),
     ...AppKey.closePreview.bind(() => lab.preview.value = null),
+    ...AppKey.flipBoards.bind(lab.flip),
     ...widget.windowKeys,
     ...AppKey.bughouseEngine.bind(widget.engine.toggle),
   };

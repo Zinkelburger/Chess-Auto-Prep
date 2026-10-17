@@ -208,9 +208,14 @@ enum AppKey {
   ]),
   firstMove('To the first move', KeyPlace.bughouse, [
     SingleActivator(LogicalKeyboardKey.home),
+    SingleActivator(LogicalKeyboardKey.pageUp),
   ]),
   lastMove('To the last move', KeyPlace.bughouse, [
     SingleActivator(LogicalKeyboardKey.end),
+    SingleActivator(LogicalKeyboardKey.pageDown),
+  ]),
+  flipBoards('Flip the boards', KeyPlace.bughouse, [
+    SingleActivator(LogicalKeyboardKey.keyF),
   ]),
   closePreview('Close the preview', KeyPlace.bughouse, [
     SingleActivator(LogicalKeyboardKey.escape),
