@@ -81,43 +81,6 @@ void main() {
     expect(fixture.session.chapter!.lines.length, 1);
   });
 
-  test('a line whose header block ends early moves as it is', () async {
-    // The bare backslash ends the header block existing ids were worked out
-    // from: no id header can go above it, so the line moves carrying what it
-    // had.
-    const wild = '''
-// Main
-// Color: White
-
-[Event "c:\\games"]
-[Result "*"]
-
-1. d4 Nf6 *
-''';
-    await start([kid]);
-    fixture.store.documents[ref('KID', 'Main')] = Opened(
-      wild,
-      scriptedRevision(wild),
-    );
-    fixture.store.documents[ref('KID', 'Sidelines')] = Opened(
-      sidelines,
-      scriptedRevision(sidelines),
-    );
-    await fixture.session.open(ref('KID', 'Main'));
-    expect(
-      await fixture.library.moveLines(games: {0}, to: ref('KID', 'Sidelines')),
-      isA<LibraryDone>(),
-    );
-    await fixture.saver.flush();
-    final there = fixture.textAt('/repertoires/KID/Sidelines.pgn')!;
-    expect(there, contains('[Event "Catalan"]'));
-    expect(
-      there,
-      endsWith('[Event "c:\\games"]\n[Result "*"]\n\n1. d4 Nf6 *\n'),
-    );
-    expect(fixture.textAt('/repertoires/KID/Main.pgn'), isNot(contains('Nf6')));
-  });
-
   test('dropped on a line of another chapter, a line folds into it', () async {
     await open();
     expect(

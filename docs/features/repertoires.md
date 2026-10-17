@@ -193,8 +193,7 @@ time.
 - A course file holds several chapters, each game naming its chapter in
   `[ChapterName]`; an untagged file is one chapter. A chapter is identified by
   (path, section).
-- `[LineID]` (also read as `LineId`, `Id`, `Line`, `Guid`) is a line's
-  training identity. A game without one is trained under an id derived from
+- `[LineID]` is a line's training identity. A game without one is trained under an id derived from
   its moves and place, so any edit that rewrites, moves or re-places it pins
   `[LineID]` first. Losing it orphans the line's training history.
 - Round trip: untouched games keep their bytes; heading, comments (with

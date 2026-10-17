@@ -112,69 +112,6 @@ Iterable<String> gamesOfLines(Iterable<String> lines) sync* {
   if (started) yield game.toString().trimRight();
 }
 
-/// The place each of [games] — the game texts [splitChapterText] cut from a
-/// file below [preamble] — has in the original game numbering, which a game
-/// with no id header is trained under (see `trainingLineIds`). Existing
-/// training progress is keyed by ids worked out from this numbering.
-///
-/// That numbering cuts a file differently. Text above the first `[Event `
-/// line that is not a `//`, `;`, `{` or `%` line — a plain banner, the
-/// second line of a `{}` banner — is a game of its own there, and every
-/// `[Event ` line starts a game, even one inside a comment. Each game here is
-/// given the number of the original game its first line falls in. The rule
-/// is fixed: changing it would re-key existing training progress.
-List<int> oldAppGameIndexes(String preamble, List<String> games) {
-  var chunks = 0;
-  final indexes = <int>[];
-  for (final (at, text) in [preamble, ...games].indexed) {
-    for (final (n, line) in text.split('\n').indexed) {
-      if (_oldAppStartsGame(line, started: chunks > 0)) chunks++;
-      if (at > 0 && n == 0) indexes.add(chunks - 1);
-    }
-  }
-  return indexes;
-}
-
-/// The texts of the games the original numbering makes of [preamble], the
-/// text above a file's first game, cut as [oldAppGameIndexes] counts them.
-/// The last one runs to the end of [preamble]; whether that numbering ends it
-/// there is the first game's `[Event` line's to say.
-List<String> oldAppPreambleGames(String preamble) {
-  final lines = preamble.split('\n');
-  final starts = <int>[];
-  for (final (n, line) in lines.indexed) {
-    if (_oldAppStartsGame(line, started: starts.isNotEmpty)) starts.add(n);
-  }
-  return [
-    for (final (k, start) in starts.indexed)
-      lines
-          .sublist(start, k + 1 < starts.length ? starts[k + 1] : lines.length)
-          .join('\n'),
-  ];
-}
-
-/// Whether the original numbering starts a game at [line]: at every
-/// `[Event ` line, and, until one has [started], at any line that is not
-/// blank or a `//`, `;`, `{` or `%` line.
-bool _oldAppStartsGame(String line, {required bool started}) {
-  final i = _oldAppFirstNonBlank(line);
-  if (line.startsWith('[Event ', i)) return true;
-  return !started &&
-      i < line.length &&
-      !_oldAppComments.any(line.substring(i).trim().startsWith);
-}
-
-const _oldAppComments = ['//', ';', '{', '%'];
-
-int _oldAppFirstNonBlank(String line) {
-  var i = 0;
-  while (i < line.length &&
-      const [0x20, 0x09, 0x0D, 0xFEFF].contains(line.codeUnitAt(i))) {
-    i++;
-  }
-  return i;
-}
-
 List<int> _gameStarts(String text) {
   final starts = <int>[];
   var lineStart = 0;

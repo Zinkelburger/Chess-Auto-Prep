@@ -80,9 +80,8 @@ void main() {
 ''';
     final line = linesOf(typo).single;
     expect(line.moves.map((m) => m.san), ['e4', 'e5', 'Nf3', 'Nc6']);
-    // It is trained under the id existing progress is keyed by, which hashes
-    // every move token of the main line.
-    expect(line.key.id, 'line_ZTQgZTUgTmYzIE5jNiBCYj');
+    // Its id is worked out from the moves read up to the illegal one.
+    expect(line.key.id, 'line_ZTQgZTUgTmYzIE5jNnww');
   });
 
   test('every line is keyed under the chapter file and named', () {

@@ -139,24 +139,6 @@ void main() {
     expect(texts(onDisk(after.chapter)), texts(after.chapter));
   });
 
-  test('a line whose id header is past its header block arrives as it is', () {
-    // The stricter reading existing ids were worked out with ends the header
-    // block at the bare backslash, so the line is not trained under its
-    // [LineID], and no id header can go where that one is.
-    final source = oneGame(
-      '[Event "Moved"]\n'
-      '[Annotator "c:\\games"]\n'
-      '[LineID "line_MS4gZDQgZDUgMi4gYzYy"]\n'
-      '\n'
-      '1. d4 Nf6 2. c4 *\n',
-    ).lines.single;
-
-    final after = edited(linesAddedTo(white(), lines: [source]));
-
-    expect(after.chapter.lines[3].text, source.text);
-    expect(texts(after.chapter).take(3), texts(white()));
-  });
-
   test('an empty chapter keeps its heading and takes the lines under it', () {
     final source = white();
 

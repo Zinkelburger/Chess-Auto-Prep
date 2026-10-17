@@ -248,10 +248,6 @@ _Grouping _grouping(List<_Game> games) {
 /// naming a move they do not recommend.
 const branchPliesHeader = 'BranchPlies';
 
-/// The headers a line's id may be spelled in, none of which a sideline may
-/// share with the game it came from.
-const _idHeaders = {'LineID', 'LineId', 'Id', 'Line', 'Guid'};
-
 /// [game]'s root-to-leaf paths as games of their own, in reading order: the
 /// main line first, then each sideline where it branches, the way the
 /// brackets nest. A game with no variations is kept as its own bytes.
@@ -367,7 +363,8 @@ List<PgnHeader> _sidelineTags(
       tags.add(header);
       continue;
     }
-    if (_idHeaders.contains(header.key)) continue;
+    // A sideline may not share the game's id.
+    if (header.key == 'LineID') continue;
     final value = header.value.trim();
     if (suffixed.contains(header.key) && !isPlaceholderTitle(value)) {
       tags.add(PgnTag(header.key, '$value — $label', trailer: header.trailer));

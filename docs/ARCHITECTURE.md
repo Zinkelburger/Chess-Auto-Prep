@@ -386,10 +386,9 @@ hidden recovery or staging folders.
 - **Chapters are tags.** Moving lines between chapters of one file
   (`linesNamed`), renaming (`sectionRenamed`) and deleting (`sectionRemoved`)
   each change one file; deleting is an undoable edit.
-- **Line ids are written down.** A game without an id header trains under an
-  id derived from its main line and its place in the file (`trainedIdsOf`,
-  counting games as `oldAppGameIndexes` does, so files written by earlier
-  builds keep their progress). Any edit that would change that id first writes
+- **Line ids are written down.** A game without a `[LineID]` trains under an
+  id derived from its main line and its index among the file's games
+  (`trainedIdsOf`). Any edit that would change that id first writes
   `[LineID]` with the current id (`withIdsPinned`). Progress therefore stays
   keyed by path and id, and chapter changes inside a file never touch the
   training files.

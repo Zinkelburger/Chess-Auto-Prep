@@ -172,7 +172,6 @@ final class GameTruth {
     required this.section,
     required this.lineId,
     required this.illegal,
-    required this.oldAppCuts,
   });
 
   /// Read with no issue at all.
@@ -194,11 +193,6 @@ final class GameTruth {
 
   /// Whether one branch stops at a move that is not legal.
   final bool illegal;
-
-  /// How many lines of its comments start with `[Event `: the reading
-  /// existing line ids were worked out with starts a game at each of them,
-  /// the one place it is known to cut a file differently from this app.
-  final int oldAppCuts;
 }
 
 /// A chapter's text and what each of its games means.
@@ -247,7 +241,6 @@ final class _Game {
   final _Out out;
   final StringBuffer _header = StringBuffer();
   bool _escaped = false;
-  int _oldAppCuts = 0;
 
   String render() {
     for (final line in spec.headers) {
@@ -363,7 +356,6 @@ final class _Game {
         : [written];
     for (final part in parts) {
       out.word('{$part}');
-      _oldAppCuts += _eventLines(part);
     }
   }
 
@@ -380,15 +372,11 @@ final class _Game {
       terminator: _terminator,
       separator: spec.separator.replaceAll('\n', body),
       section: _nonEmpty(_value('ChapterName')),
-      // The last tag under a key, as existing line ids read headers into a map.
-      lineId: [
-        for (final key in const ['LineID', 'LineId', 'Id', 'Line', 'Guid'])
-          _nonEmpty(
-            spec.headers.where((line) => line.key == key).lastOrNull?.value,
-          ),
-      ].nonNulls.firstOrNull,
+      // The last `[LineID]`, as reading headers into a map takes it.
+      lineId: _nonEmpty(
+        spec.headers.where((line) => line.key == 'LineID').lastOrNull?.value,
+      ),
       illegal: cut != null,
-      oldAppCuts: _oldAppCuts,
     );
   }
 
@@ -400,17 +388,6 @@ String? _nonEmpty(String? value) {
   final trimmed = value?.trim();
   return trimmed == null || trimmed.isEmpty ? null : trimmed;
 }
-
-/// How many lines of a comment's [text] after its first begin, past spaces,
-/// tabs, carriage returns and byte-order marks, with `[Event `: the lines the
-/// reading behind existing line ids starts a game at, comment or not.
-int _eventLines(String text) => text
-    .split('\n')
-    .skip(1)
-    .where((line) => line.replaceFirst(_oldAppBlanks, '').startsWith('[Event '))
-    .length;
-
-final _oldAppBlanks = RegExp('^[ \t\r\uFEFF]*');
 
 /// Whether a line ending with [unit] loses it when the game's text is
 /// trimmed: a `;` comment last in a game runs to the end of it.

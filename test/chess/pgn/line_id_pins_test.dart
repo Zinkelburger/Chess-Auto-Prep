@@ -60,8 +60,7 @@ void main() {
   });
 
   test('a game moved up under a banner keeps its trained id', () {
-    // Existing ids count the banner as a game of its own, so A is game 1
-    // and B game 2; the id B is pinned with must be that one.
+    // The banner is no game: B was game 1, and keeps that id at 0.
     final banner = parseChapter(
       name: 'Banner',
       text:
@@ -70,7 +69,7 @@ void main() {
     );
     final edited = lineDeleted(banner, game: 0) as ChapterEdited;
     final after = withIdsPinned(banner, edited.chapter, edited.games);
-    expect(after.chapter.lines.single.lineId, 'line_ZDQgZDV8Mg');
+    expect(after.chapter.lines.single.lineId, 'line_ZDQgZDV8MQ');
   });
 
   test('a renamed line keeps its bytes: its id does not change', () {
@@ -151,8 +150,8 @@ void main() {
     expect(after.chapter, same(edited.chapter));
   });
   test('a game with an illegal move moved down is pinned its trained id', () {
-    // Its id hashes every move token, as its trained id does, and is short
-    // enough to hold its place.
+    // Its id is worked out from the moves read up to the illegal one, and
+    // is short enough to hold its place.
     const typo = '[Event "Typo"]\n\n1. e4 e5 2. Bb4 *';
     const other = '[Event "Other"]\n\n1. d4 *';
     final before = parseChapter(name: 'Typo', text: '$typo\n\n$other\n');
@@ -162,7 +161,7 @@ void main() {
       moved,
       GamesArranged(order: [1, 0], before: 2),
     );
-    const id = 'line_ZTQgZTUgQmI0fDA';
+    const id = 'line_ZTQgZTV8MA';
     expect(after.chapter.lines.last.lineId, id);
     expect(writeChapter(after.chapter), contains('[LineID "$id"]'));
     final written = parseChapter(

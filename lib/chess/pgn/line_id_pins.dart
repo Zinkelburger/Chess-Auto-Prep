@@ -13,12 +13,6 @@
 ///
 /// Only games an edit already touches are pinned; a game the edit leaves
 /// where it was keeps its bytes and the id they give it.
-///
-/// Existing training progress is keyed by ids worked out under the original
-/// rules: the original numbering of a file's games ([oldAppGameIndexes]) and,
-/// for the games it reads differently, the original reader below
-/// ([_oldAppClaim]). Those rules are fixed; changing them would re-key the
-/// progress already on disk.
 library;
 
 import 'dart:convert';
@@ -37,140 +31,47 @@ import 'tree_edit.dart';
 
 /// The id each game of [lines] is trained under, in file order; null for a
 /// game with no moves or one nothing could read, which is no line but keeps
-/// its place, so the ids of the games after it do not move. Such a game
-/// still takes the id the original reader trains it under, if any, from the
-/// games after it ([_claimOf]).
+/// its place, so the ids of the games after it do not move.
 ///
-/// A game's place is its index in [lines] unless [indexes] gives it one;
-/// a whole chapter's games are placed in the original numbering
-/// ([trainedIdsOf]).
-List<String?> trainedIds(List<ChapterLine> lines, {List<int>? indexes}) =>
-    _trainedIds(lines, indexes: indexes);
-
-/// [trainedIds], after [above]: the games the original numbering makes of
-/// the text above the first of [lines], placed from 0, each claiming its id
-/// first.
-List<String?> _trainedIds(
-  List<ChapterLine> lines, {
-  List<int>? indexes,
-  List<String> above = const [],
-}) {
-  final claimed = _idsClaimed(
-    [
-      for (final text in above) _oldAppClaim(text),
-      for (final line in lines) _claimOf(line),
-    ],
-    [
-      for (var index = 0; index < above.length; index++) index,
-      for (var index = 0; index < lines.length; index++)
-        indexes?[index] ?? index,
-    ],
-  );
-  return [
+/// A game's place is its index in [lines] unless [indexes] gives it one.
+List<String?> trainedIds(List<ChapterLine> lines, {List<int>? indexes}) {
+  final claims = [
     for (final (index, line) in lines.indexed)
       if (line.tree case final tree? when tree.children.isNotEmpty)
-        claimed[above.length + index]
+        (
+          index: indexes?[index] ?? index,
+          header: line.lineId,
+          sans: mainLineSpellings(tree),
+        )
       else
         null,
   ];
-}
-
-typedef _Claim = ({String? header, List<String> sans});
-
-/// The id each of [claims] takes at its place in [places], the first to
-/// claim an id keeping it ([trainingLineIds]); null for no claim.
-List<String?> _idsClaimed(List<_Claim?> claims, List<int> places) {
-  final ids = trainingLineIds([
-    for (final (index, claim) in claims.indexed)
-      if (claim != null)
-        (index: places[index], header: claim.header, sans: claim.sans),
-  ]);
+  final ids = trainingLineIds(claims.nonNulls.toList());
   var i = 0;
   return [for (final claim in claims) claim == null ? null : ids[i++]];
 }
 
-/// The id each game of [chapter] is trained under, each game placed in the
-/// original numbering ([oldAppGameIndexes]): a banner above the games moves
-/// them all one on there, and existing progress is keyed that way.
-/// Movetext above the first game is a game there, and claims its id first.
-List<String?> trainedIdsOf(Chapter chapter) => _trainedIds(
-  chapter.lines,
-  indexes: oldAppGameIndexes(chapter.preamble, [
-    for (final line in chapter.lines) line.text,
-  ]),
-  above: _aboveGames(chapter),
-);
+/// The id each game of [chapter] is trained under, each game placed by its
+/// index among the chapter's games.
+List<String?> trainedIdsOf(Chapter chapter) => trainedIds(chapter.lines);
 
 /// Every id a game of [chapter] is known by: the id header it carries, and
 /// the id it is trained under, which for a game with no header is worked
-/// out from its moves and its place (see [trainingLineIds]). The ids the
-/// original numbering gives the games it makes of the text above the first
-/// game are taken too.
+/// out from its moves and its place (see [trainingLineIds]).
 ///
 /// A line added to the chapter must be given none of them. Two games under
 /// one id share one review history, and when the game that claimed the id
 /// first goes, the other one takes its schedule over.
-Set<String> idsInUse(Chapter chapter) {
-  final above = _aboveGames(chapter);
-  return {
-    for (final line in chapter.lines) ?line.lineId,
-    ...(chapter.lineIds ?? trainedIdsOf(chapter)).nonNulls,
-    ..._idsClaimed(
-      [for (final text in above) _oldAppClaim(text)],
-      [for (var index = 0; index < above.length; index++) index],
-    ).nonNulls,
-  };
-}
-
-/// The texts of the games the original numbering makes of the text above
-/// [chapter]'s first game ([oldAppPreambleGames]). The last is left out when
-/// the first game's `[Event` line is one that numbering does not start a game
-/// at, which makes it part of that game there.
-List<String> _aboveGames(Chapter chapter) {
-  final texts = oldAppPreambleGames(chapter.preamble);
-  if (texts.isEmpty || chapter.lines.isEmpty) return texts;
-  final first = oldAppGameIndexes(chapter.preamble, [
-    chapter.lines.first.text,
-  ]).single;
-  return texts.take(first).toList();
-}
-
-/// What [line] claims at its place before any collision: its id header and
-/// its main line in the spelling ids are worked out from, or null for a
-/// game no line is trained of.
-///
-/// A game this app reads no moves in, or whose header block the original
-/// reader ends early, is read by the original reader ([_oldAppClaim]): its
-/// id may already be keyed in the progress files, so no game after it may
-/// then take it. So is a game reading could not take whole whose main line
-/// the original reader lexes other moves in, such as one this app stops at
-/// an illegal move: that reader works its id out from every move token,
-/// legal or not.
-_Claim? _claimOf(ChapterLine line) {
-  final tree = line.tree;
-  if (tree != null &&
-      tree.children.isNotEmpty &&
-      _oldAppBreakAt(line.tags) < 0) {
-    final sans = mainLineSpellings(tree);
-    if (!line.isWhole) {
-      final old = _oldAppClaim(line.text);
-      if (old != null && !const ListEquality<String>().equals(old.sans, sans)) {
-        return old;
-      }
-    }
-    return (header: line.lineId, sans: sans);
-  }
-  return _oldAppClaim(line.text);
-}
+Set<String> idsInUse(Chapter chapter) => {
+  for (final line in chapter.lines) ?line.lineId,
+  ...(chapter.lineIds ?? trainedIdsOf(chapter)).nonNulls,
+};
 
 /// [line], arriving at [place] among a file's games, carrying an id none of
 /// [taken] is: its own when that one is free, else a new one from
 /// [newLineId]. The id it keeps or gets joins [taken], so no later line can
 /// be given it too. A line with no id header is left as it is: arriving
-/// after every game already there, it takes no id from any of them. Nor is
-/// a line whose id header cannot be rewritten ([withIdHeader]): it sits
-/// below where the original reader ends the header block, and the line is
-/// not trained under it.
+/// after every game already there, it takes no id from any of them.
 ChapterLine withFreeId(ChapterLine line, int place, Set<String> taken) {
   final id = line.lineId;
   final tree = line.tree;
@@ -183,14 +84,14 @@ ChapterLine withFreeId(ChapterLine line, int place, Set<String> taken) {
 }
 
 /// The main line's moves as the file spells them, which is what an id is
-/// worked out from, in the original spelling of castling with digits
-/// (`O-O`) and of a null move (`--`) ([_oldAppSpelling]).
+/// worked out from, castling and null moves in one spelling each
+/// ([_idSpelling]).
 List<String> mainLineSpellings(GameTree tree) {
   final sans = <String>[];
   var children = tree.children;
   while (children.isNotEmpty) {
     final move = children.first;
-    sans.add(_oldAppSpelling(move.spelling ?? move.san));
+    sans.add(_idSpelling(move.spelling ?? move.san));
     children = move.children;
   }
   return sans;
@@ -198,8 +99,9 @@ List<String> mainLineSpellings(GameTree tree) {
 
 /// [spelling] as ids are worked out from it: `Z0`,
 /// `0000` and `@@@@` are `--`, and castling written with zeros is written
-/// with letter O.
-String _oldAppSpelling(String spelling) {
+/// with letter O. Chessable exports spell null moves `Z0`, and the ids of
+/// their games on disk were worked out in this spelling.
+String _idSpelling(String spelling) {
   if (spelling == 'Z0' || spelling == '0000' || spelling == '@@@@') {
     return '--';
   }
@@ -285,14 +187,8 @@ String _oldAppSpelling(String spelling) {
 }
 
 /// [line] with its id header holding [id], or with `[LineID]` added after
-/// its last tag when it has none, its moves' text untouched. Null when
-/// nothing here can make that change.
-///
-/// The header rewritten is the one [ChapterLine.lineId] reads its id from
-/// ([idHeaderAt]). A game whose header block the original reader ends early
-/// gets its `[LineID]` above the line it ends at instead, where both readers
-/// see it ([_oldAppBreakAt]). The result is asked again, by both readers: a
-/// line whose id does not come back as [id] is refused rather than written.
+/// its last tag when it has none, its moves' text untouched. Null when the
+/// id does not read back as [id], which is refused rather than written.
 ///
 /// The movetext is taken from the line's own bytes rather than written
 /// again from its tree, so a line that reading could not take whole still
@@ -301,21 +197,17 @@ ChapterLine? withIdHeader(ChapterLine line, String id) {
   final at = idHeaderAt(line.tags);
   final List<PgnHeader> tags;
   if (at < 0) {
-    final breakAt = _oldAppBreakAt(line.tags);
-    final end = breakAt < 0 ? line.tags.length : breakAt;
-    // Above the `[Event` line, the game would no longer start there.
-    if (end == 0 && line.tags.isNotEmpty) return null;
-    final above = end == 0 ? null : line.tags[end - 1];
-    tags = [...line.tags]
-      ..insert(end, PgnTag('LineID', id, trailer: above?.trailer ?? '\n'));
+    final above = line.tags.lastOrNull;
+    tags = [
+      ...line.tags,
+      PgnTag('LineID', id, trailer: above?.trailer ?? '\n'),
+    ];
   } else {
     final was = line.tags[at] as PgnTag;
     tags = [...line.tags]..[at] = PgnTag(was.key, id, trailer: was.trailer);
   }
   final written = withHeaders(line, tags);
-  final claim = _claimOf(written);
-  final read = written.lineId == id && (claim == null || claim.header == id);
-  return read ? written : null;
+  return written.lineId == id ? written : null;
 }
 
 /// [line] carrying [tags] in place of its own, its moves' text untouched.
@@ -430,146 +322,3 @@ String _shortId(List<String> sans, int index) {
 
 String _fullId(List<String> sans, int index) =>
     _hashed('${sans.join(' ')}|$index');
-
-// ---------------------------------------------------------------------------
-// The original reader: a header block it ends early
-// ---------------------------------------------------------------------------
-//
-// The original reader takes a game's headers line by line with [_oldAppTag]
-// and ends the block at the first line with anything else on it — a tag value
-// with a bare backslash, a bracket that is no tag, a `%` line — and lexes the
-// rest as movetext, tag lines included. Only the ids of such a game, of a
-// game this app reads no moves in and of the text above the first game,
-// which is a game there, are worked out this way; everything else is read as
-// ever. Existing training progress is keyed by these ids, so the rules here
-// are fixed.
-
-/// One `[Key "value"]` at the start of a line, as the original reader
-/// matches it.
-final _oldAppTag = RegExp(
-  r'^\s*\[([A-Za-z0-9][A-Za-z0-9_+#=:-]*)\s+"((?:[^"\\]|\\"|\\\\)*)"\]',
-);
-
-/// The original reader's movetext tokens; anything else on a line is
-/// skipped.
-final _oldAppToken = RegExp(
-  r'(?:[NBKRQ]?[a-h]?[1-8]?[-x]?[a-h][1-8](?:=?[nbrqkNBRQK])?|[pnbrqkPNBRQK]?@[a-h][1-8]|O-O-O|0-0-0|O-O|0-0)[+#]?|--|Z0|0000|@@@@|{|;|\$\d{1,4}|[?!]{1,2}|\(|\)|\*|1-0|0-1|1\/2-1\/2',
-);
-
-/// The index of the header in [tags] the original reader ends the header
-/// block at, though this app reads on: a tag it cannot match, or a line that
-/// is not a tag after the first one. -1 when it reads the block as this app
-/// does; `%` lines above the first tag it skips, as this app does.
-int _oldAppBreakAt(List<PgnHeader> tags) {
-  var started = false;
-  for (final (index, header) in tags.indexed) {
-    switch (header) {
-      case PgnTag(:final text):
-        if (_oldAppTag.firstMatch(text)?.end != text.length) return index;
-        started = true;
-      case UnparsedHeader(:final text):
-        if (started || !text.startsWith('%')) return index;
-    }
-  }
-  return -1;
-}
-
-/// What the original reader claims for the game [game] before any
-/// collision: the id among the tags above the line its header block ends at,
-/// the last of each key winning, and every move token from there on outside
-/// a comment or a variation, legal or not and past a result. Null when it
-/// finds no move, or when a `%` line ends the block, which leaves it none.
-_Claim? _oldAppClaim(String game) {
-  final text = game.startsWith('\uFEFF') ? game.substring(1) : game;
-  final headers = <String, String>{};
-  int? moves;
-  var inHeaders = false;
-  for (var lineStart = 0; lineStart < text.length;) {
-    var lineEnd = text.indexOf('\n', lineStart);
-    if (lineEnd < 0) lineEnd = text.length;
-    var line = text.substring(lineStart, lineEnd);
-    if (!inHeaders) {
-      if (line.trim().isEmpty || line.startsWith('%')) {
-        lineStart = lineEnd + 1;
-        continue;
-      }
-      inHeaders = true;
-    } else if (line.startsWith('%')) {
-      break;
-    }
-    var consumed = 0;
-    for (var m = _oldAppTag.firstMatch(line); m != null;) {
-      headers[m[1]!] = m[2]!.replaceAll(r'\"', '"').replaceAll(r'\\', r'\');
-      consumed += m.end;
-      line = line.substring(m.end);
-      m = _oldAppTag.firstMatch(line);
-    }
-    if (line.trim().isNotEmpty) {
-      moves = lineStart + consumed;
-      break;
-    }
-    lineStart = lineEnd + 1;
-  }
-  String? header;
-  for (final key in const ['LineID', 'LineId', 'Id', 'Line', 'Guid']) {
-    final value = headers[key]?.trim();
-    if (value != null && value.isNotEmpty) {
-      header = value;
-      break;
-    }
-  }
-  final sans = moves == null ? const <String>[] : _oldAppMainLine(text, moves);
-  return sans.isEmpty ? null : (header: header, sans: sans);
-}
-
-/// The main-line move tokens of [text] from [from] on, as the original
-/// reader lexes them.
-List<String> _oldAppMainLine(String text, int from) {
-  final sans = <String>[];
-  var depth = 0;
-  var lineStart = from;
-  // Set when a comment ran past its line: the scan resumes at its `}`.
-  var resume = false;
-  while (lineStart <= text.length) {
-    var lineEnd = text.indexOf('\n', lineStart);
-    if (lineEnd < 0) lineEnd = text.length;
-    if (!resume && text.startsWith('%', lineStart)) {
-      lineStart = lineEnd + 1;
-      continue;
-    }
-    resume = false;
-    final line = text.substring(lineStart, lineEnd);
-    var offset = 0;
-    var next = lineEnd + 1;
-    tokens:
-    for (final match in _oldAppToken.allMatches(line)) {
-      if (match.start < offset) continue;
-      switch (match[0]!) {
-        case ';':
-          break tokens;
-        case '(':
-          depth++;
-        case ')':
-          if (depth > 0) depth--;
-        case '{':
-          final close = text.indexOf('}', lineStart + match.end);
-          if (close < 0) return sans;
-          if (close < lineEnd) {
-            offset = close - lineStart + 1;
-            continue tokens;
-          }
-          next = close;
-          resume = true;
-          break tokens;
-        case '*' || '1-0' || '0-1' || '1/2-1/2':
-          break;
-        case final token when '\$!?'.contains(token[0]):
-          break;
-        case final token:
-          if (depth == 0) sans.add(_oldAppSpelling(token));
-      }
-    }
-    lineStart = next;
-  }
-  return sans;
-}
