@@ -32,6 +32,15 @@ Top to bottom, left to right:
 - **Document tabs** — one per open file or analysis board, with close buttons
   and a `+` that opens an empty analysis board. Closing the last one leaves an
   empty analysis board. Each tab keeps its place, held edits and undo.
+  Each tab belongs to a mode, named first (`Viewer · Classic games`): the mode
+  its document came up in, or the one a handoff (`Open in Builder`, a pasted
+  board, `Open study`) sent it to. Going to a mode never renames a tab and never
+  brings another mode's document along: the mode's own latest tab comes back at
+  its game, move and held edits, and a mode with none gets the empty analysis
+  board, which travels with the user rather than multiplying. Picking another
+  mode's tab goes to that mode; closing a tab brings up the next one of the same
+  mode. The builder and the trainer share their documents (one repertoire
+  list); modes with a screen of their own leave the board as it is.
 - **List column** (Ctrl+B hides it; `«` in its corner) — the mode's own list,
   or `Positions`, the searches' finds (Ctrl+P, Actions ▸ Panels ▸ `Positions`,
   or the list button on the Expectimax bar).

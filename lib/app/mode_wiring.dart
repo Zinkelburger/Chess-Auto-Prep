@@ -1,9 +1,6 @@
 import '../chess/tactics/game_ids.dart' show GameSite;
-import '../features/bughouse/archive_moves.dart';
 import '../features/bughouse/bughouse_lab.dart';
-import '../features/bughouse/expectimax_search.dart';
-import '../features/bughouse/matches.dart';
-import '../features/bughouse/table_search.dart';
+import '../features/bughouse/lab_engine.dart';
 import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
 import '../features/my_games/game_book.dart';
@@ -217,35 +214,11 @@ final class TrainingWiring {
   }
 }
 
-/// The Bughouse lab over the environment's engine and books.
+/// The Bughouse mode over the environment's engine.
 LabModes wireLabModes(AppEnvironment env) {
   final lab = BughouseLab();
-  final search = TableSearch(
-    pendingWrites: env.pendingWrites,
-    lab: lab,
-    book: env.bughouse.hivemindBook,
-    startEngine: env.startHivemind,
-  );
   return LabModes(
     lab: lab,
-    expectimax: BughouseExpectimaxSearch(
-      lab: lab,
-      book: env.bughouseExpectimaxBook,
-      startBackend: (nodes) {
-        if (search.engineOn) search.toggleEngine();
-        return env.launchBughouseSearch(nodes);
-      },
-    ),
-    search: search,
-    archive: ArchiveMoves(lab: lab, book: env.bughouse.ficsBook),
-    // A Hivemind of its own for each run, so the tables keep theirs.
-    matches: Matches(
-      pendingWrites: env.pendingWrites,
-      store: env.bughouse.matches,
-      startEngine: env.startHivemind,
-      lab: lab,
-      tables: search,
-      now: env.now,
-    ),
+    engine: LabEngine(lab: lab, startEngine: env.startHivemind),
   );
 }

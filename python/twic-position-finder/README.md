@@ -104,10 +104,11 @@ Deploy `dist/` to Cloudflare Pages. Set `PUBLIC_API_URL` to `https://api.chessau
 
 Routes: `/twic-notifications` is the one alerts page (anonymous: create an
 alert / request a login link; signed in: manage alerts — login emails link
-here with `?token=`), `/tactics` the in-browser tactics trainer, and
-`/charles-clock` the clock. `/dashboard` only forwards to `/twic-notifications`.
-Architecture and the trainer's engine pipeline are documented in
-`frontend/README.md`.
+here with `?token=`); `/pgn` and `/expectimax` the analysis board;
+`/tactics` the in-browser tactics trainer; `/bughouse` and
+`/bughouse-puzzles` the bughouse tools; `/charles-clock` the clock.
+`/dashboard` only forwards to `/twic-notifications`. Every page is
+documented in [frontend/README.md](frontend/README.md).
 
 ### Lesson booking (`/book`)
 
@@ -130,56 +131,58 @@ Endpoints: `GET /health`, `GET /api/slots` (returns window, `blocked_dates`, `av
 
 ### BughouseDB API
 
-Its `/bughousedb` web page was retired in October 2026; the API below remains.
-
 A shared, precomputed Hivemind book for bughouse, like chessdb.cn: every
 legal move on both boards, scored for the priority cases Hivemind can tell
 apart, with a principal variation. Seats are lettered A and C on board 1, D
 and B on board 2, so the teams read **A + B** and **C + D**. *Priority* is the
 right to choose whether to move at all, which the team up on the diagonal
-clock has; the tables show one column for the case picked above them —
-`AB may sit`, `Equal` (the default) or `CD may sit`. A fourth stored case,
-`both`, is never offered: no clock gives both teams the choice, and it lands
-within about a tenth of a pawn of `equal`. `bughousedb.py` owns it, in its
-own SQLite file (`BUGHOUSEDB_PATH`, default `bughousedb.db` beside the app).
-The server runs no engine. Lab evaluations also live in this database, in
-`lab_evaluation`, with one-time `lab_ticket` uploads. See the
-[shared analysis and overnight controls](frontend/README.md#shared-analysis-and-manual-overnight-population).
-The browser defaults to 800 nodes and renders saved results without a reload:
+clock has: `AB may sit`, `equal` or `CD may sit`, plus a stored `both` case
+that lands within about a tenth of a pawn of `equal`. `bughousedb.py` owns it,
+in its own SQLite file (`BUGHOUSEDB_PATH`, default `bughousedb.db` beside the
+app). The server runs no engine; no page of the current site calls this API.
 
 - `GET /api/bughousedb/position?fen=&moves=` — the position after `moves`
   (optional, board-tagged UCI such as `A:e2e4 B:P@e6`), its legal moves (SAN,
   seat, resulting FEN, which team answers) and, when stored, their scores:
-  Hivemind's calibrated Q plus a Lichess-style `cp = 543.17·atanh(Q)`.
+  Hivemind's calibrated Q plus a Lichess-style `cp = 543.17·atanh(Q)`, and the
+  position's expectimax snapshot.
 - `POST /api/bughousedb/ticket` — a one-time ticket for one position,
   20/minute per IP, no CAPTCHA. Refused (409) when this computer (a hash of
   its IP) has already analysed the position.
-- `POST /api/bughousedb/position` — the browser's raw searches for that
-  position (the page runs the static WASM Hivemind). The server requires
-  exactly the legal move set, derives every score itself, rejects reused or
-  expired tickets and uploads faster than the searches could run. The first
-  computer's searches become the book's scores; a later upload from another
-  computer confirms the position without changing them. Each submission is
-  kept (`submission` table), and the position's `meta.computers` counts
-  them; the page offers *Confirm locally* on browser-analysed positions.
+- `POST /api/bughousedb/position` — a browser's raw searches for that
+  position. The server requires exactly the legal move set, derives every
+  score itself, rejects reused or expired tickets and uploads faster than the
+  searches could run. The first computer's searches become the book's scores;
+  a later upload from another computer confirms the position without
+  changing them. Each submission is kept (`submission` table), and the
+  position's `meta.computers` counts them.
 - `POST /api/bughousedb/import` — positions computed on the owner's machine
   (`python3 tools/bughouse_db/hivemind_book.py push`), `X-API-Key:
   $BUGHOUSEDB_ADMIN_KEY`.
-
-The page keeps the line it is showing in its own address
-(`?fen=&moves=A:e2e4 B:d2d4&at=1,1`: the start, the whole line in played
-order, and how far each board has stepped along it, `at` only when a board
-is not at the end). A reload or a shared link replays it, so the move lists
-and every earlier move survive a refresh. Replaying asks for each move's
-position at once, falling back to one at a time if a server refuses
-overlapping requests.
+- `GET /api/bughousedb/evaluation`, `POST /api/bughousedb/evaluation/ticket`
+  and `POST /api/bughousedb/evaluation` — node-budgeted two-seat evaluations
+  (`bughouse_evaluation.py`, tables `lab_evaluation` and `lab_ticket`): the
+  server derives the calibrated value, validates legal moves and budget
+  completion, and keeps a deeper result over a shallower one. Exact
+  position/team/required-board/clock profiles stay separate.
 
 Uploads carry numbers and moves only: move text is rebuilt on the server
-from legal moves, and the page renders everything as text. A browser cannot
-prove it computed honestly, so each upload records its ticket and a hash of
-the uploader's IP (`CF-Connecting-IP`; keep the origin reachable only through
-Cloudflare, or the header can be forged). `python3 bughousedb.py stats` lists
-contributors; `python3 bughousedb.py purge --contributor HASH` removes one.
+from legal moves. A browser cannot prove it computed honestly, so each upload
+records its ticket and a hash of the uploader's IP (`CF-Connecting-IP`; keep
+the origin reachable only through Cloudflare, or the header can be forged).
+`python3 bughousedb.py stats` lists contributors;
+`python3 bughousedb.py purge --contributor HASH` removes one.
+
+### Bughouse expectimax snapshots
+
+`GET /api/bughousedb/expectimax?fen=<dual FEN>` returns any saved
+`Exp White` and `Exp Black` tables for a position, both from White's
+perspective on the selected board (`bughouse_expectimax.py`, reading
+`BUGHOUSE_EXPECTIMAX_PATH`, default `bughouse_expectimax.db` beside the
+server); `/position` includes the same snapshot. `POST
+/api/bughousedb/expectimax/import` takes batches of up to 20
+`{fen,board,data}` records with the admin API key. No page reads these
+tables, and nothing in the repository builds new ones.
 
 ### Weekly Cron Job
 
@@ -216,7 +219,8 @@ Add to crontab for automatic weekly runs:
 | `TWIC_DB_PATH` | Optional | Custom database path |
 | `TWIC_FRONTEND_ORIGIN` | Optional | CORS origin for the frontend |
 | `BUGHOUSEDB_PATH` | Optional | BughouseDB SQLite path |
-| `BUGHOUSEDB_ADMIN_KEY` | For imports | Admin key for `POST /api/bughousedb/import` |
+| `BUGHOUSEDB_ADMIN_KEY` | For imports | Admin key for `POST /api/bughousedb/import` and the expectimax import |
+| `BUGHOUSE_EXPECTIMAX_PATH` | Optional | Bughouse expectimax SQLite path |
 
 ## How It Works
 

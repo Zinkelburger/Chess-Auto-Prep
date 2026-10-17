@@ -115,7 +115,7 @@ desktop app's support directory, the server's own directory, then unpacks
 `~/.local/share/chess-prep/bughouse/`. It never writes into the app's
 directory. `python3 tools/fetch_assets.py --only bughouse` downloads the
 bundle; `--hivemind <checkout>` packages a local Hivemind build instead.
-The same engine drives Bughouse Lab in the app; they share only files.
+The same engine drives the Bughouse mode in the app; they share only files.
 
 ## Editing the server
 

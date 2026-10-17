@@ -37,7 +37,6 @@ and is quarantined if unreadable; *derived* may be discarded and rebuilt.
 | Tactics | Documents `tactics_sets/Default.pgn` | Puzzle PGN with an analysed-games line | Kept |
 | Training | Documents root | Three CSVs and one JSONL ([below](#training-files)) | Kept |
 | Player directory | Documents `opponents/` | JSON ([below](#player-directory)) | Kept |
-| Bughouse matches | Documents `bughouse_matches/<id>/` | `match.json` + `games.bpgn` | Kept (`games.bpgn` derived) |
 | Engine tournaments | Documents `engine_tournaments/` | Per run `tournament.json` + `games.pgn`; root `engines.json` | Kept |
 | Downloaded games | Documents `games_library/<site>_<user>.pgn` | PGN + `.fetched` note (ms since epoch) | Derived |
 | Player archive copies | Documents `games_library/player_archives/player-archive-<hash>.pgn` | PGN, append-only | Kept |
@@ -54,7 +53,6 @@ and is quarantined if unreadable; *derived* may be discarded and rebuilt.
 | Your games | Support `app_games.db` | SQLite; read only ([below](#read-only-stores)) | Kept |
 | Kept versions | Support `backups/` | [Recovery files](#recovery-files) | Kept |
 | Engines | Support: Stockfish binary, `bughouse/` (Hivemind) | Installed from the bundle | Derived |
-| Bughouse books | [Below](#bughouse-books) | SQLite | Derived; lab analysis kept |
 | Logs | Support `logs/app.log` | Text, one line per entry | Derived |
 
 The databases the app writes use WAL. A `master_games.db` SQLite reports as
@@ -96,14 +94,11 @@ than mining every game again.
 is read as its people) and `opponents/tournaments/<id>.json`
 (`chess-auto-prep/tournament@1`), written by `storage/player_files.dart` under
 the folder lock. A row changed since it was read is refused; unknown fields
-survive.
-
-### Bughouse books
-
-`bughouseBookPlaces` looks for `hivemind_book.db`, `bughouse_book.db` and
-`bughouse_expectimax.db` in `$BUGHOUSE_DB_HOME` alone when it is set, else in
-`~/.local/share/chess-prep/bughouse-db/` (built by `tools/bughouse_db/`), then
-Support. The lab's engine adds the positions it scores to `hivemind_book.db`.
+survive. A row that cannot be read (not an object, no ID, a name that is not
+text, or a second row under one ID) is left out with one warning and a log line,
+and every save writes it back where it was. A `people.json` that cannot be read
+at all shows no players and refuses saves, so nothing writes over it; the
+groups still read.
 
 ### Read-only stores
 
@@ -131,7 +126,7 @@ and [Backups](ARCHITECTURE.md#backups).
 | `.cap-reference-history/<operation>/` | Documents | Training files as they were before a relocation rewrote them |
 | `.<name>.v2-tmp` | Beside the target | A staged write; replaced or removed by the next write there |
 | `.import-*` | `repertoires/` | Import staging; removed by the next listing |
-| `.trash/` | `bughouse_matches/`, `engine_tournaments/` | Deleted matches and tournaments |
+| `.trash/` | `engine_tournaments/` | Deleted tournaments |
 | `.v2-pending.json` | A tournament's folder | A results save in flight |
 
 Recovery drains, but never adds to, Support `unfinished-moves/` (each note

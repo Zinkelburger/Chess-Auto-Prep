@@ -325,6 +325,12 @@ void main() {
     w.requests.switchTo(Mode.study);
     await tester.pump(const Duration(seconds: 3));
     expect(w.parts.documents.autoplay.playing, isFalse);
+    // Study has a board of its own; the game waits in the viewer where
+    // autoplay left it.
+    expect(w.session.source, isNot(games));
+    w.requests.switchTo(Mode.pgnViewer);
+    await tester.pumpAndSettle();
+    expect(w.session.source, games);
     expect(w.session.currentMove?.san, 'e4');
   });
 }

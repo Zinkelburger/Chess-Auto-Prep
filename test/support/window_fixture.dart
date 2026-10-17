@@ -12,9 +12,8 @@ import 'package:chess_auto_prep/app/window_input.dart';
 import 'package:chess_auto_prep/app/workspace_requests.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/engines/maia/move_policy.dart';
-import 'package:chess_auto_prep/features/bughouse/archive_moves.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_lab.dart';
-import 'package:chess_auto_prep/features/bughouse/table_search.dart';
+import 'package:chess_auto_prep/features/bughouse/lab_engine.dart';
 import 'package:chess_auto_prep/features/library/chapter_outline.dart';
 import 'package:chess_auto_prep/features/my_games/game_book.dart';
 import 'package:chess_auto_prep/features/library/library.dart';
@@ -126,7 +125,7 @@ final class WindowFixture {
   /// in [ScriptedDraftQuestion.answer].
   final question = ScriptedDraftQuestion();
 
-  /// The Bughouse lab's engine, book and archive.
+  /// The Bughouse mode's engine.
   final bughouse = ScriptedBughouse();
 
   late final parts = AppParts(
@@ -266,8 +265,7 @@ final class WindowFixture {
   GamesCache get gamesCache => parts.gamesCache;
 
   BughouseLab get lab => parts.labs.lab;
-  TableSearch get tableSearch => parts.labs.search;
-  ArchiveMoves get archive => parts.labs.archive;
+  LabEngine get labEngine => parts.labs.engine;
 
   /// The window over these parts, the library listed and both
   /// repertoires' rows opened, since the chapters are what tests click.
