@@ -359,7 +359,7 @@ setoption name TimeAdvantage value true|false
 setoption name RequireMoveOn value none|A|B
 setoption name MultiPV value N            ← not a `go` argument
 position fen <fenA>|<fenB> [moves 1e2e4 2d7d5 …]
-setoption name ReportIntervalMs value N   ← lines while searching every N ms (default 250, 0 = only at the end)
+setoption name ReportIntervalMs value N   ← every ranked line while searching, every N ms (0 = rank 1 per new depth)
 go [ponder] [movetime <ms>] [nodes <N>]   ← nodes wins if both; default 1000 ms
 go infinite                                ← until stop (or a solved root), then bestmove
 stop                                       ← always, to kill the permanent brain
@@ -379,12 +379,13 @@ bestmove (d2d4,pass) ponder (d7d5,d2d4)
 parsers exclude by requiring `info ` *and* ` depth `.
 
 While it searches, the engine prints the whole MultiPV block — the same
-lines as the block before `bestmove`, ranks 1 to N — every `ReportIntervalMs`
-and whenever the search reaches a new depth, for node, time and infinite
-searches alike. A periodic block leaves out root moves no visit has reached
-yet, so early blocks can be shorter than `MultiPV`. Each block is one write;
-a reader that keeps the latest line per rank sees the block before
-`bestmove` last. The `uci` reply's `option name ReportIntervalMs` line is
+lines as the block before `bestmove`, ranks 1 to N — every `ReportIntervalMs`,
+for node, time and infinite searches alike. Upstream leaves the option at 0,
+so the handshake sets it to 250 whenever the `uci` reply offers it. A
+periodic block leaves out root moves no visit has reached yet, except rank 1,
+the move `bestmove` would play at that moment, so early blocks can be shorter
+than `MultiPV`. Each block is one write; a reader that keeps the latest line
+per rank sees the block before `bestmove` last. The `uci` reply's `option name ReportIntervalMs` line is
 how a reader tells this engine from an older build, which prints only that
 final block in a node search and the rank-1 line on each new depth in a
 timed one. `go infinite` starts no permanent brain after its `bestmove`.
