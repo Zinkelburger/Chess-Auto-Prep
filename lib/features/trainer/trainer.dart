@@ -16,6 +16,7 @@ import '../../storage/chapter_files.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/document_repository.dart';
 import '../../storage/training_store.dart';
+import '../../storage/training_progress.dart';
 import '../../storage/pending_writes.dart';
 import '../../workspace/board_claim.dart';
 import '../../workspace/books.dart';

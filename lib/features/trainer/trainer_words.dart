@@ -3,7 +3,7 @@ import '../../chess/training/drill.dart';
 import '../../chess/training/line_order.dart';
 import '../../chess/training/schedule.dart';
 import '../../chess/training/sitting.dart';
-import '../../storage/training_store.dart';
+import '../../storage/training_progress.dart';
 import 'lesson.dart';
 import 'trainer_state.dart';
 

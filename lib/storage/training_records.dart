@@ -30,7 +30,7 @@ import 'atomic_write.dart';
 import 'csv_records.dart';
 import 'document_ref.dart';
 import 'operation_id.dart';
-import 'operation_journal.dart';
+import 'operation_participants.dart';
 import 'training_rows.dart';
 import 'recovery_files.dart';
 

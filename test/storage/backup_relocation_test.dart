@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/storage/backups.dart';
 import 'package:chess_auto_prep/storage/backup_relocation.dart';
-import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/deleted_chapters.dart';
 import 'package:chess_auto_prep/storage/recovery_files.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';

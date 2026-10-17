@@ -11,6 +11,7 @@ import '../../diagnostics/log.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/backup_history.dart';
 import '../../storage/chapter_files.dart';
+import '../../storage/deleted_chapters.dart';
 import '../../storage/training_records.dart' as records;
 import '../../storage/document_ref.dart';
 import '../../storage/reference_change.dart';

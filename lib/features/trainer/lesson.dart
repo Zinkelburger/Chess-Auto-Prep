@@ -7,7 +7,7 @@ import '../../chess/training/schedule.dart';
 import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
 import '../../chess/training/training_options.dart';
-import '../../storage/training_store.dart';
+import '../../storage/training_progress.dart';
 import '../../workspace/board_claim.dart';
 import 'progress.dart';
 

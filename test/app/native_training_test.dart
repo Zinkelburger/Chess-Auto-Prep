@@ -8,7 +8,7 @@ import 'package:chess_auto_prep/features/study/study_commands.dart';
 import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/training_rows.dart';
-import 'package:chess_auto_prep/storage/training_store.dart';
+import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;

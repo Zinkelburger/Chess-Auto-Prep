@@ -7,6 +7,7 @@ import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/engines/maia/move_policy.dart';
 import 'package:chess_auto_prep/net/lichess_studies.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/chapter_directory.dart';
 import 'package:chess_auto_prep/storage/pgn_file_store.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/storage/training_store.dart';

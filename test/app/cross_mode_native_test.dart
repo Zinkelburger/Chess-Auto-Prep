@@ -16,6 +16,7 @@ import 'package:chess_auto_prep/storage/file_relocation.dart';
 import 'package:chess_auto_prep/workspace/document_saver.dart';
 import 'package:chess_auto_prep/storage/training_rows.dart';
 import 'package:chess_auto_prep/storage/training_store.dart';
+import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:chess_auto_prep/workspace/gap_walk.dart';
 import 'package:chess_auto_prep/workspace/replies.dart';
 import 'package:flutter/foundation.dart';

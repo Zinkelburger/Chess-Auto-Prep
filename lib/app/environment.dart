@@ -47,6 +47,7 @@ import '../storage/bughouse_books.dart';
 import '../storage/bughouse_expectimax.dart';
 import '../storage/bughouse_matches.dart';
 import '../storage/chapter_files.dart';
+import '../storage/chapter_directory.dart';
 import '../storage/eval_cache.dart';
 import '../storage/audit_store.dart';
 import '../storage/finds_store.dart';
