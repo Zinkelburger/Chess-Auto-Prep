@@ -2,8 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:path/path.dart' as p;
 
 import '../features/bughouse/bughouse_screen.dart';
+import '../storage/pgn_file_import.dart';
+import '../storage/pgn_file_picker.dart';
 import '../ui/app_action.dart';
 import '../ui/app_keys.dart';
 import '../workspace/workspace.dart';
@@ -95,7 +98,23 @@ final class BughouseView extends ModeView {
         () => unawaited(_paste(lab.pasteMoves)),
         group: 'Position',
       ),
+      AppAction('Open BPGN…', () => unawaited(_open()), group: 'Position'),
     ];
+  }
+
+  /// The desktop's file dialog, then the chosen file's moves on the boards,
+  /// as Paste moves would put them. The file is read where it is and not
+  /// kept.
+  Future<void> _open() async {
+    final path = await _labs.picker.pickPgn(extensions: bpgnExtensions);
+    if (path == null) return;
+    final name = p.basename(path);
+    switch (await _labs.files.read(path)) {
+      case PickedText(:final text):
+        _labs.lab.pasteMoves(text, file: name);
+      case PickedUnread():
+        _labs.lab.fileUnread(name);
+    }
   }
 
   Future<void> _paste(void Function(String text) into) async {

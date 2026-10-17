@@ -1,5 +1,7 @@
 import 'package:chess_auto_prep/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
+import 'package:chess_auto_prep/storage/pgn_file_import.dart';
+import 'package:chess_auto_prep/storage/pgn_file_picker.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart' show Role, Side, Square;
 import 'package:flutter/gestures.dart';
@@ -8,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_input.dart';
+import '../support/viewer_fixture.dart';
 import '../support/window_fixture.dart';
 
 /// The Bughouse mode in the window: one board or two, hands with + and −,
@@ -226,6 +229,42 @@ void main() {
     await tester.tap(find.text('Paste moves'));
     await tester.pumpAndSettle();
     expect(w.lab.movesText, '1A. e4 1a. d5');
+  });
+
+  group('Open BPGN', () {
+    ScriptedPicker picker() => w.parts.env.viewerPicker as ScriptedPicker;
+    ScriptedImport files() => w.parts.env.fileImport as ScriptedImport;
+
+    Future<void> open(WidgetTester tester, String path) async {
+      picker().answer = path;
+      await tester.tap(find.text('Actions'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open BPGN…'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('puts a file\'s moves on the boards', (tester) async {
+      await toBughouse(tester);
+      files().picked['/games/playout.bpgn'] = const PickedText(
+        '[Event "Hivemind playout"]\n\n1A. e4 1B. d4 1a. e5 *\n',
+      );
+      await open(tester, '/games/playout.bpgn');
+      expect(picker().offered.single, bpgnExtensions);
+      expect(w.lab.movesText, '1A. e4 1B. d4 1a. e5');
+    });
+
+    testWidgets('says which file could not be used', (tester) async {
+      await toBughouse(tester);
+      await open(tester, '/games/gone.bpgn');
+      expect(find.text('gone.bpgn could not be read.'), findsOneWidget);
+      files().picked['/games/bad.bpgn'] = const PickedText('1A. e4 1a. Ke7');
+      await open(tester, '/games/bad.bpgn');
+      expect(
+        find.text('Not opened: 1a. Ke7 in bad.bpgn does not play.'),
+        findsOneWidget,
+      );
+      expect(w.lab.line.moves, isEmpty);
+    });
   });
 }
 

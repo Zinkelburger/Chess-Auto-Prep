@@ -235,15 +235,19 @@ final class BughouseLab extends ChangeNotifier {
   }
 
   /// Pasted movetext as a new line, every move played; refused whole when
-  /// one does not play.
-  void pasteMoves(String text) {
+  /// one does not play. [file] names the file it was read from, when it was
+  /// opened rather than pasted.
+  void pasteMoves(String text, {String? file}) {
     switch (readTableLineText(text)) {
       case PastedLine(:final line):
         showLine(line);
       case PastedMovesRefused(:final token):
-        _refuse(MovesRefused(token));
+        _refuse(MovesRefused(token, file: file));
     }
   }
+
+  /// The file called [file] could not be read; the boards stay as they are.
+  void fileUnread(String file) => _refuse(FileUnread(file));
 
   void flip() => _change(() => _flipped = !_flipped);
 
@@ -357,11 +361,20 @@ final class PositionRefused extends TableRefusal {
 }
 
 /// Pasted moves that were not taken: [token] is the first that does not
-/// play, or null when there were no bughouse moves in the text.
+/// play, or null when there were no bughouse moves in the text. [file] is
+/// the file they were opened from, or null when they were pasted.
 final class MovesRefused extends TableRefusal {
-  const MovesRefused(this.token);
+  const MovesRefused(this.token, {this.file});
 
   final String? token;
+  final String? file;
+}
+
+/// A file opened for its moves that could not be read.
+final class FileUnread extends TableRefusal {
+  const FileUnread(this.file);
+
+  final String file;
 }
 
 /// A move being pointed at: on one board, or a joint action over both.

@@ -149,7 +149,10 @@ are BPGN movetext in played order (`1A. e4 1B. d4 1a. e5`), after
 `[SetUpDualFEN "…"]` for a set-up start; a hand edit is a comment where it
 was made, `{ Hands edited on board 1: +2n }`, and pastes back. A paste takes that or a FICS game,
 and is refused whole (`Not pasted: <token> does not play.`, `No bughouse
-moves to paste.`). The window's paste commands are refused here with
+moves to paste.`). `Open BPGN…` asks for a `.bpgn`, `.pgn` or `.txt` file
+and reads it as a paste, where it is, without keeping it (`Not opened:
+<token> in <file> does not play.`, `<file> could not be read.`). The window's
+paste commands are refused here with
 `Bughouse pastes from Actions: Paste FEN or dual FEN, or Paste moves.`
 
 ## Data
