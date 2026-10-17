@@ -7,8 +7,10 @@ comment or annotation written into the document.
 
 Code: `lib/workspace/` — `Workspace` (`workspace.dart`, the owners as one
 value), `DocumentSession` (`document_session.dart`: the document, cursor, edits,
-held edits, scratch analysis board), `WorkspaceView` (`workspace_view.dart`),
-`BoardView` (`board_view.dart`), `MoveTreeView` (`move_tree_view.dart`),
+held edits, scratch analysis board), `WorkspaceView` (`workspace_view.dart`:
+the board column and the reading card; `WorkspaceHooks` in
+`workspace_hooks.dart`, the board column in `board_column.dart`, the
+navigation row in `nav_row.dart`), `BoardView` (`board_view.dart`), `MoveTreeView` (`move_tree_view.dart`),
 `MoveNote` (`move_note.dart`), `EngineAnalysis` / engine pane
 (`engine_analysis.dart`, `engine_pane.dart`, `engine_settings.dart`),
 `Explorer` (`explorer.dart`, `explorer_pane.dart`, `explorer_filters.dart`),

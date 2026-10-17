@@ -81,7 +81,8 @@ A widget file outside `app/` never imports `dart:io` or `net/`. From
   subclass in its own file (`document_views.dart` holds the builder,
   trainer, viewer and Study, which share a base) and one arm of
   `modeViews`. `WorkspaceView` takes one
-  `WorkspaceHooks` value for what the window adds.
+  `WorkspaceHooks` value (`workspace/workspace_hooks.dart`) for what the
+  window adds.
 - `WorkspaceRequests` (`app/workspace_requests.dart`) owns the mode, the
   status line and every cross-mode request that puts a document on the board
   or takes it off (a list click, Open/Import/Paste, an explorer game, Close

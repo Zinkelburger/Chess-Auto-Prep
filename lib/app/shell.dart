@@ -41,6 +41,7 @@ import '../workspace/workspace.dart';
 import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_tabs.dart';
 import '../workspace/workspace_view.dart';
+import '../workspace/workspace_hooks.dart';
 import 'board_doors.dart';
 import 'document_views.dart';
 import 'full_screen.dart';
