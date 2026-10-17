@@ -7,7 +7,7 @@ any hand with + and −, and switch the engine on to see its score and lines.
 Code: `lib/features/bughouse/` (`BughouseLab` table owner, `LabEngine`, screen,
 boards and panel), plus `lib/chess/bughouse/` (table, line, FEN reading, BPGN,
 Hivemind score scale), `lib/engines/hivemind_engine.dart`,
-`lib/engines/hivemind_install.dart`, `lib/app/mode_view.dart` (`BughouseView`),
+`lib/engines/hivemind_install.dart`, `lib/app/bughouse_view.dart` (`BughouseView`),
 the shared board editor `lib/workspace/board_editor.dart` and
 `lib/app/self_test.dart`. Engine internals: [Hivemind](../HIVEMIND.md).
 

@@ -69,7 +69,9 @@ A widget file outside `app/` never imports `dart:io` or `net/`. From
 
 - `app/environment.dart` (`AppEnvironment`) is every way out of the app —
   files, dialogs, sites, engines, Maia, the clock, timings; `.native()` builds
-  the real ones. A new way out of the app is a field here.
+  the real ones, from `native_engines.dart` (engine and Maia launches) and
+  `native_desktop.dart` (browser, file manager, window, updates). A new way
+  out of the app is a field here.
 - `app/app_parts.dart` (`AppParts`) builds the app over any environment in
   order and disposes it in reverse, calling `app/mode_wiring.dart` and
   `app/workspace_wiring.dart`. Window tests build a scripted environment and
@@ -78,8 +80,11 @@ A widget file outside `app/` never imports `dart:io` or `net/`. From
 - A mode is a `ModeView` (`app/mode_view.dart`): it owns its card tabs and
   answers for its list, Actions menu, tab bodies and flags. `Shell` asks the
   mode on screen instead of switching on which mode it is; a new mode is a
-  subclass and one arm of `modeViews`. `WorkspaceView` takes one
-  `WorkspaceHooks` value for what the window adds.
+  subclass in its own file (`document_views.dart` holds the builder,
+  trainer, viewer and Study, which share a base) and one arm of
+  `modeViews`. `WorkspaceView` takes one
+  `WorkspaceHooks` value (`workspace/workspace_hooks.dart`) for what the
+  window adds.
 - `WorkspaceRequests` (`app/workspace_requests.dart`) owns the mode, the
   status line and every cross-mode request that puts a document on the board
   or takes it off (a list click, Open/Import/Paste, an explorer game, Close
@@ -582,8 +587,11 @@ Regression contracts and open risks, not a feature list
   publication stay tied to their captured input.
 - **Platforms.** Linux process-kill tests do not prove Windows/macOS engine
   cleanup after the app is killed, or power-loss durability anywhere.
-- **Size pressure.** `workspace/document_session.dart` and
-  `workspace/document_saver.dart` sit at the 1,000-line cap. Extract a collaborator only when it owns a complete
+- **Size pressure.** `workspace/document_session.dart` sits at the 1,000-line
+  cap. The session is one
+  owner whose collaborators (projection, history, access, parsed files,
+  results, external edits) are already out; what is left shares its state,
+  so a further split needs a new collaborator and its callers moved to it. Extract a collaborator only when it owns a complete
   responsibility; do not loosen caps or fragment files to pass them. Retained
   memory across repeated large-file navigation and searches is unmeasured.
 

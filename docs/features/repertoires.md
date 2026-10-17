@@ -9,7 +9,7 @@ play.
 
 Code: `lib/features/library/` (the `Library` owner, `LibraryPanel`,
 `OutlinePanel`, `ChapterOutline`, line transfers, deleted chapters, version
-history, PGN drop), wired by `RepertoiresView` in `lib/app/mode_view.dart` and
+history, PGN drop), wired by `RepertoiresView` in `lib/app/document_views.dart` and
 the outline column in `lib/app/shell.dart`. Shared owners: `DocumentSession`
 and `DocumentSaver` (`lib/workspace/`), the Replies tab
 (`replies.dart`, `replies_pane.dart`, `gap_hunt.dart`, `gap_walk.dart`), the

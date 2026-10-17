@@ -6,7 +6,7 @@ use. Everything that reads "the book" then reads that one set of lines, and
 switching events is switching the book.
 
 Code: `lib/features/books/books_screen.dart` (the mode's screen), wired by
-`BooksView` in `lib/app/mode_view.dart`; the owner `Books` in
+`BooksView` in `lib/app/books_view.dart`; the owner `Books` in
 `lib/workspace/books.dart`, the chip in `lib/workspace/book_chip.dart`;
 storage in `lib/storage/book_list.dart` (format), `book_file.dart` (the file)
 and `book_references.dart` (selectors rewritten by chapter moves). Back and

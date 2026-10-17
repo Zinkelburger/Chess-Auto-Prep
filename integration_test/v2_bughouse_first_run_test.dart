@@ -9,7 +9,7 @@
 // (or `-d linux`).
 import 'dart:io';
 
-import 'package:chess_auto_prep/app/environment.dart';
+import 'package:chess_auto_prep/app/native_engines.dart';
 import 'package:chess_auto_prep/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';

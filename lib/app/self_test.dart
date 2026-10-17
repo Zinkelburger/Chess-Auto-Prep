@@ -9,7 +9,7 @@ import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
 import '../engines/hivemind_engine.dart';
 import '../storage/atomic_write.dart';
-import 'environment.dart';
+import 'native_engines.dart';
 
 /// `--self-test-bughouse=<report.json>`: the bughouse engine installed and
 /// started exactly as the Bughouse mode would, in this user's own support

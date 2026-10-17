@@ -30,6 +30,7 @@ import 'package:chess_auto_prep/workspace/repertoire_shelf.dart';
 import 'package:chess_auto_prep/workspace/repertoire_tree.dart';
 import 'package:chess_auto_prep/workspace/workspace.dart';
 import 'package:chess_auto_prep/workspace/workspace_view.dart';
+import 'package:chess_auto_prep/workspace/workspace_hooks.dart';
 import 'package:chess_auto_prep/workspace/board_view.dart';
 import 'package:chessground/chessground.dart' show Chessboard;
 import 'package:dartchess/dartchess.dart' show Square;

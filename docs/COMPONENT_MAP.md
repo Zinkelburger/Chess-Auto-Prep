@@ -12,7 +12,11 @@ and [the tooling map](agents/tooling.md) for detail and remaining scope.
   bundled licenses, the optional agent driver and packaged-app self-tests.
 - [`app/app.dart`](../lib/app/app.dart) owns the Flutter app lifetime.
   [`app/environment.dart`](../lib/app/environment.dart) wires filesystem,
-  engine and network boundaries. App composition passes concrete owners.
+  engine and network boundaries; the native engine launches (Stockfish,
+  Hivemind, Maia) are in [`app/native_engines.dart`](../lib/app/native_engines.dart)
+  and the desktop's browser, file manager, full screen and updates in
+  [`app/native_desktop.dart`](../lib/app/native_desktop.dart). App
+  composition passes concrete owners.
 - [`app/workspace_requests.dart`](../lib/app/workspace_requests.dart) coordinates
   opens, mode changes and dirty-draft decisions. [`app/mode.dart`](../lib/app/mode.dart)
   defines every top-level mode.

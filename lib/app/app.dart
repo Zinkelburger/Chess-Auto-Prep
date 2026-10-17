@@ -18,6 +18,7 @@ import '../workspace/document_session.dart';
 import '../workspace/session_results.dart';
 import 'app_parts.dart';
 import 'environment.dart';
+import 'native_desktop.dart';
 import 'exit_guard.dart';
 import 'shell.dart';
 import 'window_close.dart';

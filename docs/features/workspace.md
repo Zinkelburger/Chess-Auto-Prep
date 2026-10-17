@@ -7,8 +7,10 @@ comment or annotation written into the document.
 
 Code: `lib/workspace/` — `Workspace` (`workspace.dart`, the owners as one
 value), `DocumentSession` (`document_session.dart`: the document, cursor, edits,
-held edits, scratch analysis board), `WorkspaceView` (`workspace_view.dart`),
-`BoardView` (`board_view.dart`), `MoveTreeView` (`move_tree_view.dart`),
+held edits, scratch analysis board), `WorkspaceView` (`workspace_view.dart`:
+the board column and the reading card; `WorkspaceHooks` in
+`workspace_hooks.dart`, the board column in `board_column.dart`, the
+navigation row in `nav_row.dart`), `BoardView` (`board_view.dart`), `MoveTreeView` (`move_tree_view.dart`),
 `MoveNote` (`move_note.dart`), `EngineAnalysis` / engine pane
 (`engine_analysis.dart`, `engine_pane.dart`, `engine_settings.dart`),
 `Explorer` (`explorer.dart`, `explorer_pane.dart`, `explorer_filters.dart`),
@@ -16,8 +18,10 @@ the explorer's Book source (`repertoire_tree.dart`, `tree_pane.dart`), pane
 tabs and layout (`workspace_tabs.dart`, `action_layout.dart`,
 `action_panes.dart`), `BoardEditor` (`board_editor.dart`), the move field
 (`move_field.dart`, resolver `lib/chess/typed_move.dart`). Window wiring:
-`lib/app/shell.dart`, `lib/app/top_bar.dart`, `lib/app/mode_view.dart`,
-`lib/app/board_doors.dart`, `lib/app/document_tabs.dart`,
+`lib/app/shell.dart`, `lib/app/top_bar.dart`, `lib/app/mode_view.dart`
+(`ModeView`; each mode's view in its own file), `lib/app/save_held.dart`,
+`lib/app/board_doors.dart`, `lib/app/train_doors.dart`, `lib/app/job_door.dart`,
+`lib/app/document_tabs.dart`,
 `lib/app/workspace_requests.dart`, `lib/app/layout_memory.dart`. Keys:
 `lib/ui/app_keys.dart`. Architecture: [ARCHITECTURE](../ARCHITECTURE.md).
 
