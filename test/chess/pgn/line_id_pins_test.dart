@@ -59,9 +59,9 @@ void main() {
     expect(after.games.rewritten, {0});
   });
 
-  test('a game moved up under a banner keeps the old app\'s id', () {
-    // The old app reads the banner as a game of its own, so A is its game 1
-    // and B its game 2; the id B is pinned with must be that one.
+  test('a game moved up under a banner keeps its trained id', () {
+    // Existing ids count the banner as a game of its own, so A is game 1
+    // and B game 2; the id B is pinned with must be that one.
     final banner = parseChapter(
       name: 'Banner',
       text:
@@ -150,28 +150,25 @@ void main() {
     final after = withIdsPinned(long, edited.chapter, edited.games);
     expect(after.chapter, same(edited.chapter));
   });
-  test(
-    'a game with an illegal move moved down is pinned the old app\'s id',
-    () {
-      // Its id hashes every move token, as the old app's does, and is short
-      // enough to hold its place.
-      const typo = '[Event "Typo"]\n\n1. e4 e5 2. Bb4 *';
-      const other = '[Event "Other"]\n\n1. d4 *';
-      final before = parseChapter(name: 'Typo', text: '$typo\n\n$other\n');
-      final moved = parseChapter(name: 'Typo', text: '$other\n\n$typo\n');
-      final after = withIdsPinned(
-        before,
-        moved,
-        GamesArranged(order: [1, 0], before: 2),
-      );
-      const id = 'line_ZTQgZTUgQmI0fDA';
-      expect(after.chapter.lines.last.lineId, id);
-      expect(writeChapter(after.chapter), contains('[LineID "$id"]'));
-      final written = parseChapter(
-        name: 'Typo',
-        text: writeChapter(after.chapter),
-      );
-      expect(trainedIds(written.lines).last, id);
-    },
-  );
+  test('a game with an illegal move moved down is pinned its trained id', () {
+    // Its id hashes every move token, as its trained id does, and is short
+    // enough to hold its place.
+    const typo = '[Event "Typo"]\n\n1. e4 e5 2. Bb4 *';
+    const other = '[Event "Other"]\n\n1. d4 *';
+    final before = parseChapter(name: 'Typo', text: '$typo\n\n$other\n');
+    final moved = parseChapter(name: 'Typo', text: '$other\n\n$typo\n');
+    final after = withIdsPinned(
+      before,
+      moved,
+      GamesArranged(order: [1, 0], before: 2),
+    );
+    const id = 'line_ZTQgZTUgQmI0fDA';
+    expect(after.chapter.lines.last.lineId, id);
+    expect(writeChapter(after.chapter), contains('[LineID "$id"]'));
+    final written = parseChapter(
+      name: 'Typo',
+      text: writeChapter(after.chapter),
+    );
+    expect(trainedIds(written.lines).last, id);
+  });
 }

@@ -1,10 +1,9 @@
 // A chapter renamed or deleted while a training session is writing.
 //
-// The old app's trainer writes its CSVs under the lock on the folder they
-// sit in (`atomic_file.dart` locks the file's parent), which is the
-// Documents root — the same lock a v2 move or delete takes. So the two
-// serialise: the move waits for the trainer's write, and the row the
-// trainer wrote under the old path is repointed with the rest.
+// A trainer in another process writes its CSVs under the lock on the folder
+// they sit in, which is the Documents root — the same lock a move or delete
+// takes. So the two serialise: the move waits for the trainer's write, and
+// the row the trainer wrote under the old path is repointed with the rest.
 import 'dart:io';
 
 import 'package:chess_auto_prep/storage/document_ref.dart';
@@ -41,8 +40,8 @@ void main() {
   });
   tearDown(() => fixture.dispose());
 
-  /// The trainer, holding the Documents folder the way the old app holds it
-  /// while it writes a CSV there.
+  /// The trainer, holding the Documents folder while it writes a CSV
+  /// there.
   Future<Database> trainerWriting() async {
     final trainer = sqlite3.open(await lockPathOf(fixture.documents));
     trainer.execute('PRAGMA busy_timeout = 0');

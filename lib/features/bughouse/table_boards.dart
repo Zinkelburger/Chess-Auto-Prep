@@ -1,13 +1,19 @@
+import 'dart:async';
+
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../chess/bughouse/table.dart';
 import '../../chess/bughouse/table_line.dart';
+import '../../ui/action_context_menu.dart';
+import '../../ui/app_action.dart';
 import '../../ui/app_keys.dart';
+import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
 import 'bughouse_lab.dart';
-import '../../ui/move_notation.dart';
+import 'pocket.dart';
 
 /// The boards on screen, each with its two players' hands: board 1 alone,
 /// or both side by side, each with its own move list and step buttons.
@@ -272,7 +278,7 @@ class _SeatRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: labSeatPadding / 2),
       child: Row(
         children: [
-          _TurnDot(side: side, shown: toMove),
+          TurnDot(side: side, shown: toMove),
           const SizedBox(width: Space.s),
           if (!lab.single)
             SizedBox(
@@ -289,31 +295,17 @@ class _SeatRow extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               steps(1),
-              Container(
-                width: square * reserveRoles.length,
-                height: square,
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                  gradient: labPocketWell,
-                  borderRadius: BorderRadius.circular(Space.xs),
-                ),
-                child: Row(
-                  children: [
-                    for (final role in reserveRoles)
-                      _ReservePiece(
-                        key: ValueKey(('reserve', seat, role)),
-                        piece: Piece(color: side, role: role),
-                        count: pockets.of(side, role),
-                        owner: lab.single
-                            ? (side == Side.white ? 'White' : 'Black')
-                            : 'Player ${seat.letter}',
-                        size: square,
-                        live: toMove && pockets.of(side, role) > 0,
-                        picked: toMove && picked == role,
-                        onPick: () => onPick(role),
-                      ),
-                  ],
-                ),
+              PocketWell(
+                pockets: pockets,
+                side: side,
+                seat: seat,
+                owner: lab.single
+                    ? (side == Side.white ? 'White' : 'Black')
+                    : 'Player ${seat.letter}',
+                square: square,
+                live: toMove,
+                picked: picked,
+                onPick: onPick,
               ),
               steps(-1),
             ],
@@ -363,143 +355,6 @@ class _HandStep extends StatelessWidget {
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(Space.xs),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TurnDot extends StatelessWidget {
-  const _TurnDot({required this.side, required this.shown});
-
-  final Side side;
-  final bool shown;
-
-  @override
-  Widget build(BuildContext context) => Visibility.maintain(
-    visible: shown,
-    child: Tooltip(
-      message: side == Side.white ? 'White to move' : 'Black to move',
-      child: Container(
-        width: labTurnDot,
-        height: labTurnDot,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: side == Side.white ? labWhiteDot : labBlackDot,
-          border: side == Side.black
-              ? Border.all(color: labBlackDotRing)
-              : null,
-        ),
-      ),
-    ),
-  );
-}
-
-class _ReservePiece extends StatefulWidget {
-  const _ReservePiece({
-    super.key,
-    required this.piece,
-    required this.count,
-    required this.owner,
-    required this.size,
-    required this.live,
-    required this.picked,
-    required this.onPick,
-  });
-
-  final Piece piece;
-  final int count;
-
-  /// Whose hand: `White`, or `Player A` with both boards shown.
-  final String owner;
-  final double size;
-
-  /// Whether its player is on move, so it may be dropped now.
-  final bool live;
-  final bool picked;
-  final VoidCallback onPick;
-
-  @override
-  State<_ReservePiece> createState() => _ReservePieceState();
-}
-
-class _ReservePieceState extends State<_ReservePiece> {
-  bool _hovered = false;
-
-  void _hover(bool on) {
-    if (mounted && _hovered != on) setState(() => _hovered = on);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final size = widget.size;
-    final count = widget.count;
-    final role = widget.piece.role.name;
-    Widget image() => PieceWidget(
-      piece: widget.piece,
-      size: size,
-      pieceAssets: PieceSet.cburnettAssets,
-    );
-    final face = Container(
-      width: size,
-      height: size,
-      color: widget.picked
-          ? BoardTheme.of(context).selected
-          : widget.live && _hovered
-          ? labPocketHover
-          : null,
-      child: Stack(
-        children: [
-          Opacity(
-            opacity: count == 0 ? labPocketEmptyOpacity : 1,
-            child: image(),
-          ),
-          if (count > 0)
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: Space.xs,
-                  vertical: 3,
-                ),
-                decoration: BoxDecoration(
-                  color: labPocketCount,
-                  borderRadius: BorderRadius.circular(Space.xs),
-                ),
-                child: Text('$count', style: labPocketCountStyle(size)),
-              ),
-            ),
-        ],
-      ),
-    );
-    final label = '${widget.owner}: $count $role in hand';
-    if (!widget.live) {
-      return Tooltip(
-        message: count == 0 ? 'No $role in hand' : '$label · waiting for turn',
-        child: Semantics(label: label, child: face),
-      );
-    }
-    return Tooltip(
-      message:
-          '$label · click, then click a highlighted square, or drag onto the board',
-      child: Semantics(
-        label: label,
-        selected: widget.picked,
-        button: true,
-        child: Draggable<Piece>(
-          data: widget.piece,
-          // Held under the pointer by its middle, as a piece on the board is.
-          dragAnchorStrategy: (draggable, context, position) =>
-              Offset(size / 2, size / 2),
-          feedback: image(),
-          childWhenDragging: Opacity(opacity: 0.3, child: face),
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            onEnter: (_) => _hover(true),
-            onExit: (_) => _hover(false),
-            child: GestureDetector(onTap: widget.onPick, child: face),
           ),
         ),
       ),
@@ -761,6 +616,7 @@ class _MoveRowsState extends State<_MoveRows> {
                         current: half.index == upto - 1,
                         future: half.index >= upto,
                         onTap: () => lab.go(board, half.index + 1),
+                        menu: () => moveMenu(lab, half.move),
                       ),
               ),
           ],
@@ -791,6 +647,30 @@ class _MoveRowsState extends State<_MoveRows> {
 }
 
 typedef _Half = ({LineMove move, int index});
+
+/// What a move in a board's list offers on the right button, as the
+/// workspace's move list does: the line up to it as PGN (crazyhouse with
+/// one board, BPGN with two), the board's FEN after it, with two boards the
+/// dual FEN, and taking it out with the board's later moves.
+List<AppAction> moveMenu(BughouseLab lab, LineMove move) {
+  final after = lab.positionAfter(move);
+  return [
+    AppAction('Copy line PGN', () => _copy(lab.linePgnThrough(move))),
+    AppAction(
+      'Copy FEN',
+      after == null ? null : () => _copy(after.board(move.board).fen),
+    ),
+    if (!lab.single)
+      AppAction(
+        'Copy dual FEN',
+        after == null ? null : () => _copy(after.dualFen),
+      ),
+    AppAction('Delete from here', () => lab.deleteFrom(move)),
+  ];
+}
+
+void _copy(String text) =>
+    unawaited(Clipboard.setData(ClipboardData(text: text)));
 typedef _MovePair = ({int number, _Half? white, _Half? black});
 
 /// A move, or the start, with the hand edit made after it in muted ink.
@@ -802,6 +682,7 @@ class _MoveToken extends StatelessWidget {
     required this.current,
     required this.future,
     required this.onTap,
+    this.menu,
   });
 
   final String text;
@@ -813,14 +694,23 @@ class _MoveToken extends StatelessWidget {
   final bool future;
   final VoidCallback onTap;
 
+  /// What the right button offers for this move; null for the start.
+  final List<AppAction> Function()? menu;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final menu = this.menu;
     return Tooltip(
       message: edit.isEmpty ? tip : '$tip\nHands edited after: $edit',
       waitDuration: previewDelay,
       child: InkWell(
         onTap: onTap,
+        onSecondaryTapUp: menu == null
+            ? null
+            : (details) => unawaited(
+                showActionContextMenu(context, details.globalPosition, menu()),
+              ),
         child: Container(
           padding: moveTokenPadding,
           color: current ? scheme.surfaceContainerHighest : null,

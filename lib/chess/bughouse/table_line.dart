@@ -178,6 +178,34 @@ final class TableLine {
     return TableLine._(root, kept, _upto);
   }
 
+  /// The line as it stood when [entry] was made: the moves and hand edits
+  /// before it in the order made, and [entry] itself, each board at its
+  /// last move. What "the line up to this move" copies.
+  TableLine through(LineEntry entry) {
+    final at = entries.indexOf(entry);
+    final kept = at < 0 ? entries : entries.sublist(0, at + 1);
+    final cut = TableLine._(root, kept, (0, 0));
+    return TableLine._(root, kept, (
+      cut.of(BoardNumber.one).length,
+      cut.of(BoardNumber.two).length,
+    ));
+  }
+
+  /// Only what is on the boards now, each board at its last move: the
+  /// line an engine's search from here continues.
+  TableLine get onBoards => TableLine._(root, _applied, _upto);
+
+  /// [board]'s moves from its [from]th on taken out, with the hand edits
+  /// made after them; its cursor stays where it was when that is earlier.
+  /// The other board's moves stay, as with [played]: one that dropped a
+  /// piece taken by a move gone no longer replays, and [replay] says so.
+  TableLine cut(BoardNumber board, int from) {
+    final at = upto(board) < from ? upto(board) : from;
+    final (kept, _) = go(board, from)._cutAt(board);
+    final cursor = board == BoardNumber.one ? (at, _upto.$2) : (_upto.$1, at);
+    return TableLine._(root, kept, cursor);
+  }
+
   static HandEdit _edit(
     BoardNumber board,
     int after,

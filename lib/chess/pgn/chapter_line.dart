@@ -110,7 +110,7 @@ final class ChapterLine {
   }
 
   /// What a list calls the line at [index] of its file: its `Event`, where
-  /// both apps write a line's name, else its place in the file.
+  /// a line's name is written, else its place in the file.
   String nameAt(int index) {
     final event = tagValue(tags, 'Event')?.trim();
     return event == null || event.isEmpty ? 'Line ${index + 1}' : event;
@@ -136,9 +136,9 @@ _Moves _movesOf(GameRead read) => (
 /// Where in [tags] the header a game's id comes from is, or -1 for none.
 ///
 /// The keys are tried in the order files in the wild are known to use them,
-/// and under each the last tag wins, as it does in the old app, which reads
-/// a game's headers into a map: both apps key one set of progress files by
-/// this id. A key whose last tag is blank gives way to the next key.
+/// and under each the last tag wins, as it does when a game's headers are
+/// read into a map, which is how the ids existing training progress is keyed
+/// by were taken. A key whose last tag is blank gives way to the next key.
 int idHeaderAt(List<PgnHeader> tags) {
   for (final key in const ['LineID', 'LineId', 'Id', 'Line', 'Guid']) {
     final at = tags.lastIndexWhere((tag) => tag is PgnTag && tag.key == key);

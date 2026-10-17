@@ -195,8 +195,8 @@ Keys: ←/→, Home/End, ↑/↓ (game), Enter/Esc (variation), F, E, Space, Ctr
   identity, cursor, variation path/FEN, sort, filter rules, followed player);
   written only by reading changes, never touching the PGN. A reordered file
   finds the game by identity; a missing game does not redirect to another.
-- **Recent files** — up to 10 paths in SharedPreferences, shared with the old
-  app's key.
+- **Recent files** — up to 10 paths in SharedPreferences
+  (`pgn_viewer_recent_files`).
 - **Held-edit checkpoints** — one JSON per document under
   `<support>/viewer-drafts/`, naming the revision the edits were made on;
   removed when saved or discarded.
@@ -222,8 +222,8 @@ Keys: ←/→, Home/End, ↑/↓ (game), Enter/Esc (variation), F, E, Space, Ctr
 - Solitaire is an action of the viewer, not a mode (owner, 2026-09-21).
 - A file outside Documents is copied into `pgn_collections` on open, default
   on, with a setting (owner, 2026-09-21).
-- The old `Tree` and `Database explorer` tabs are one `Explorer` tab; the
-  file's own tree is its `This file` source (owner, 2026-09-22).
+- One `Explorer` tab; the file's own tree is its `This file` source (owner,
+  2026-09-22).
 - A file with chapters lists its games under them; the chapter holding the
   board's game opens and stays open so rows never move under the pointer
   (owner, 2026-09-22).

@@ -1,9 +1,9 @@
 import '../fen.dart';
 import 'schedule.dart';
 
-/// How many right answers in a row make a move learned, as the old app
-/// counts them. A streak stops there, so a move known for a year reads the
-/// same as one known for a week.
+/// How many right answers in a row make a move learned. A streak stops
+/// there, so a move known for a year reads the same as one known for a
+/// week.
 const learnedStreak = 3;
 
 /// One row of `repertoire_move_progress.csv`: how well one move of a line

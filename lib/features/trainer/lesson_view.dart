@@ -381,9 +381,9 @@ class _MovesSoFar extends StatelessWidget {
   }
 }
 
-/// The whole line with its notes, read-only: the old app's PGN peek. It
-/// gives the answers away, so it is only there when asked for, and the
-/// move on the board is marked so the reader can find the place again.
+/// The whole line with its notes, read-only: the PGN peek. It gives the answers
+/// away, so it is only there when asked for, and the move on the board is
+/// marked so the reader can find the place again.
 class _LinePeek extends StatelessWidget {
   const _LinePeek({required this.drill, required this.onClose});
 

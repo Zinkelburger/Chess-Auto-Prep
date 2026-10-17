@@ -57,9 +57,9 @@ const _journals = [
   TrainingQueueMigration.journal,
 ];
 
-/// The profile-wide lock every document access and change takes, the one the
-/// old app takes too, and the place where operations a stopped process left
-/// half done are finished.
+/// The profile-wide lock every document access and change takes, in this
+/// process and any other copy of the app, and the place where operations a
+/// stopped process left half done are finished.
 ///
 /// Each access looks at the names in the journal folders, never their
 /// contents, and runs a pass over every journal when one is due
@@ -67,7 +67,7 @@ const _journals = [
 /// here has seen appears, and when an operation left unfinished is due
 /// again — at each of the next three accesses, then less often, so a
 /// lasting problem stops costing every access. A pass that could not run —
-/// a lock another app kept, a step that failed — is tried again after
+/// a lock another process kept, a step that failed — is tried again after
 /// [retryDelay], waiting longer after each lock it could not take. Each
 /// unfinished operation is finished on its own: one that cannot be is set
 /// aside and logged by its owner, and never stops the access that found it.
@@ -212,7 +212,7 @@ final class RecoveryGate {
         },
         (detail) {
           log.w('take the locks to finish unfinished operations', detail);
-          // Another app holding a lock may keep it for long: wait longer
+          // Another process holding a lock may keep it for long: wait longer
           // each time rather than stalling every access on it.
           ledger.passCouldNotRun(_clock(), retryDelay, locked: true);
         },

@@ -199,7 +199,7 @@ void main() {
 
   test('an 11-column review under an older header moves whole', () async {
     // Rows of each width under the 10-column header of an older version:
-    // the row says its own width, as the old app reads it.
+    // the row says its own width.
     const olderHeader =
         'repertoire_id,line_id,line_name,difficulty,interval_days,due_utc,'
         'last_rating,last_reviewed_utc,pass_count,fail_count';
@@ -351,7 +351,7 @@ void main() {
     expect(read(_reviews), contains(_review(kid.path)));
   });
 
-  test('what a repoint replaces is kept where the old app keeps it', () async {
+  test('what a repoint replaces is kept in the backup folder', () async {
     writeAll();
     final before = [read(_reviews), read(_progress), read(_attempts)];
     final renamed = fixture.ref('repertoires/KID/Classical.pgn');

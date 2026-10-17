@@ -1,8 +1,8 @@
 // Laws of the records a restart reads back: a relocation
 // journal record decodes to exactly what was encoded, and one of a version
 // this build does not know, or with a field it does not know, is refused
-// rather than obeyed. A tournament this app saves is read by the old app's
-// TimeControl with the same time-control fields.
+// rather than obeyed. A tournament this app saves keeps the time-control
+// fields existing tournament files carry.
 import 'dart:convert';
 import 'dart:io';
 

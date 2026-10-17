@@ -18,7 +18,7 @@
 /// the tangent is steeper at the offset than at zero, so subtracting from the
 /// printed number would inflate every advantage. The result is Hivemind's
 /// scale re-centred — 0.00 level, + good for the team named — which is what
-/// the precomputed book stores and what the lab prints.
+/// the precomputed book stores and what the Bughouse mode prints.
 ///
 /// Example: a level opening, neither team may sit: A + B's search prints
 /// cp −228 (Q −0.573), C + D's cp −231 (Q −0.577); the offset is −0.575,

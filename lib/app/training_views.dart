@@ -54,7 +54,7 @@ final class TacticsView extends ModeView {
     if (workspace.analysis.enabled) unawaited(workspace.analysis.disable());
   }
 
-  /// Esc ends the sitting, as the old app's Esc left the puzzle.
+  /// Esc ends the sitting and leaves the puzzle.
   @override
   bool leave() {
     final puzzles = _training.puzzles;

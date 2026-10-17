@@ -464,7 +464,8 @@ void main() {
     await tester.enterText(find.byType(TextField).first, 'flip');
     await tester.pumpAndSettle();
     expect(find.text('Flip board'), findsOneWidget);
-    expect(find.text('F'), findsOneWidget);
+    expect(find.text('Flip the boards'), findsOneWidget);
+    expect(find.text('F'), findsNWidgets(2));
     expect(find.text(KeyPlace.board.label), findsOneWidget);
     final shortcuts = rows().singleWhere((g) => g.name == 'Shortcuts').rows;
     expect(shortcuts.map((r) => r.label), [

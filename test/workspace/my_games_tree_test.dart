@@ -23,7 +23,7 @@ final newer = lichessGame('Bbbb2222', '2026.09.01', '1. d4 d5', '0-1');
 /// The tactics archive's copy of [older], which is the same game.
 final olderAgain = lichessGame('Aaaa1111', '2026.01.01', '1. e4 e5', '1-0');
 
-/// A game only the old app's database has.
+/// A game only the games database (`app_games.db`) has.
 const archived =
     '[Event "Club"]\n[Date "2025.06.01"]\n[Result "1/2-1/2"]\n\n'
     '1. c4 c5 1/2-1/2';
@@ -87,7 +87,7 @@ void main() {
   });
 
   test('the database is asked for the accounts\' library and Player '
-      'analysis collections as the old app names them', () async {
+      'analysis collections as the database names them', () async {
     accounts.accounts[GameSite.chesscom] = const Account('Me');
     await built();
     expect(database.asked.single, {

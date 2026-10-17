@@ -98,7 +98,7 @@ final class HivemindStartFailed extends HivemindStart {
 /// them; their `nodes` is the size of the search when they were printed.
 typedef HivemindLines = void Function(List<JointLine> lines);
 
-/// Hivemind as the lab and the matches use it; a scripted engine in tests.
+/// Hivemind as the Bughouse mode uses it; a scripted engine in tests.
 abstract interface class Hivemind {
   /// Identity of the actual binary/network and effective startup options.
   Map<String, Object?> get provenance;

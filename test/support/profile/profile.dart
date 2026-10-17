@@ -1,5 +1,5 @@
 // A disposable profile by its paths alone, so a test can hand it to another
-// isolate: the Documents and Support pair every v2 store is built on.
+// isolate: the Documents and Support pair every store is built on.
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -26,7 +26,7 @@ final class Profile {
   String supportFile(String relative) =>
       p.joinAll([support, ...p.posix.split(relative)]);
 
-  /// A training file, which both apps keep at the top of Documents.
+  /// A training file, kept at the top of Documents.
   String training(String name) => p.join(documents, name);
 
   /// An empty profile in the system temporary folder, never the user's.

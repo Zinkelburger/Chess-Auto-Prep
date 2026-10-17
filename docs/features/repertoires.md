@@ -213,7 +213,7 @@ time.
   until you audit again.`
 - Search trees and drafts: `.cap-generation/` beside the chapter
   ([generation.md](generation.md)).
-- Course import rules, measured on 2026-09-05 against four Chessable exports
+- Course import rules, measured against four Chessable exports
   (`chess/pgn/repertoire_import.dart`, `chess/pgn/chapter_grouping.dart`):
   a bracket at the *opponent's* move is coverage, at *our* move it is the
   author mentioning what they do not recommend (it made `3.e5` "book" for 132

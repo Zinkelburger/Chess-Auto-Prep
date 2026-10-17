@@ -6,7 +6,7 @@ final tacticsRef = ChapterRef.at('/Documents/tactics_sets/Default.pgn');
 /// The day the tests run on: the set's dates are a few days before it.
 final tacticsToday = DateTime(2026, 9, 22, 10);
 
-/// A set in the old app's shape: the analyzed-games line, then one game per
+/// A set in the stored shape: the analyzed-games line, then one game per
 /// puzzle.
 ///
 /// 0. A blunder, White to mate in one: `4. Qxf7#`.

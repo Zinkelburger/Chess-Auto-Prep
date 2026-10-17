@@ -62,7 +62,7 @@ void main() {
   });
 
   test('castling written with zeros is named as with letters', () {
-    // The old app's parser reads `0-0` as `O-O` before naming the line.
+    // `0-0` is read as `O-O` before the line is named, as existing ids are.
     const zeros = '''
 [Event "Castles"]
 
@@ -80,8 +80,8 @@ void main() {
 ''';
     final line = linesOf(typo).single;
     expect(line.moves.map((m) => m.san), ['e4', 'e5', 'Nf3', 'Nc6']);
-    // It is trained under the id the old app gives it, which hashes every
-    // move token of the main line.
+    // It is trained under the id existing progress is keyed by, which hashes
+    // every move token of the main line.
     expect(line.key.id, 'line_ZTQgZTUgTmYzIE5jNiBCYj');
   });
 

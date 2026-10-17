@@ -658,7 +658,7 @@ const _importsTable =
     'CREATE TABLE IF NOT EXISTS imports '
     '(fingerprint TEXT PRIMARY KEY, games INTEGER NOT NULL)';
 
-/// Version 4, as the older app created it.
+/// Version 4, the schema existing databases have.
 const _schema = '''
 CREATE TABLE games (
  id INTEGER PRIMARY KEY, twic INTEGER,

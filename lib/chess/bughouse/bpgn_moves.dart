@@ -49,8 +49,8 @@ String _letter(BoardNumber board, Side side) {
   return side == Side.white ? letter : letter.toLowerCase();
 }
 
-/// What the lab copies: the line's movetext, after a `SetUpDualFEN` tag when
-/// it does not start from the usual table.
+/// What the Bughouse mode copies: the line's movetext, after a
+/// `SetUpDualFEN` tag when it does not start from the usual table.
 String tableLineText(TableLine line) {
   final moves = bpgnMovetext(line);
   return line.root.dualFen == TablePosition.initial.dualFen

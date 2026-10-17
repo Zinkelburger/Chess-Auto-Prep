@@ -137,8 +137,9 @@ so move order does not matter:
 
 After `1. d4 c5 2. e3` (a position the PGN may never have reached), `pgn_position`
 still lists **Nf6** under `transposing_moves` because playing it lands on a
-known FEN. The Flutter opening tree (`OpeningTree.continuations`) does the
-same; transposing rows are marked `≈`.
+known FEN. The app's explorer `Book` source (`RepertoireTree`) also matches
+positions without the move counters, so a transposition finds the lines the
+other move order wrote.
 
 Typical agent flow against a White repertoire PGN:
 
@@ -237,8 +238,7 @@ pages the website leaderboard callback (50 per page, far past the API's top
 downloads their archives for the clue months, and then verifies every
 opponent sighted at a clue rating from that opponent's own archive. That
 verification step is what finds an account that has since dropped off the
-leaderboard: the September 2026 search found its target only as somebody's
-opponent. Requests are serial with ~0.15 s spacing and a `max_requests`
+leaderboard: a target can turn up only as somebody's opponent. Requests are serial with ~0.15 s spacing and a `max_requests`
 budget (default 1500); everything downloaded stays cached, so rerunning the
 same clues resumes for free. Dates are the player's local day: `tz: "US"`
 (default) spans every US zone, `UTC` is exact, or give an IANA zone. Friend
@@ -246,8 +246,8 @@ counts are never visible logged out; followers are not friends.
 
 ### Master games (TWIC)
 
-The app downloads The Week in Chess into `master_games.db` (Settings → Master
-games database). The `master_*` tools read that file directly — no app
+The app downloads The Week in Chess into `master_games.db` (Databases ▸
+`Download TWIC…`). The `master_*` tools read that file directly — no app
 running, no PGN parsing — from the app's support directory
 (`~/.local/share/com.example.chess_auto_prep/`; override with
 `CHESS_PREP_MASTER_DB`). Positions are keyed the same way as the PGN tree

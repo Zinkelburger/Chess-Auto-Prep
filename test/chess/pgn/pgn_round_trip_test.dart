@@ -166,7 +166,7 @@ void main() {
 
   test('a comment holding a closing brace cannot be written and says so', () {
     // No PGN reader gives `}` a meaning other than "the comment ends here",
-    // and neither the old app nor Lichess escapes it — both strip braces
+    // and Lichess does not escape it — it strips braces
     // instead. So a `}` the user types is text the writer cannot say, and
     // the gate refuses rather than quietly dropping it.
     const game = '1. e4 *';

@@ -307,7 +307,7 @@ void main() {
   });
 
   test('a flush writes a failed draft again, once each time', () async {
-    // The other app held the file past its timeout, twice.
+    // Another writer held the file past its timeout, twice.
     fixture.store.saves.addAll(const [
       IoFailure('the file is held by another writer'),
       IoFailure('the file is held by another writer'),

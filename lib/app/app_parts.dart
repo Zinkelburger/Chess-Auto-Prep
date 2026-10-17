@@ -65,8 +65,8 @@ final class AppParts {
     write: env.writeAccount,
   );
 
-  /// The user's downloaded games, one file per account, shared with the
-  /// old app: the review, the book and the explorer read them.
+  /// The user's downloaded games, one file per account: the review, the
+  /// book and the explorer read them.
   late final gamesCache = GamesCache(
     env.store,
     folder: env.folders.gamesLibrary,
@@ -251,8 +251,7 @@ final class AppParts {
   }
 
   /// The window lost focus or was hidden: whatever the user switches to
-  /// might be the old app, opening the same file, so what waits for its
-  /// clock is written now.
+  /// might open the same file, so what waits for its clock is written now.
   void windowLeft() {
     unawaited(saver.flush());
     if (_started) unawaited(_drafts?.settle());

@@ -10,9 +10,10 @@ import 'game_order.dart';
 import 'game_text.dart';
 import 'game_tree.dart';
 
-/// Compatible with the old per-file session. v2 additionally remembers a
+/// Where a file is being read. `gameIndex`, `gameKey`, `ply` and `sort` are
+/// the keys reading places already saved carry; the `v2…` keys add a
 /// variation's path/FEN, the filter and whose side the games are shown
-/// from; none of them is a source-PGN edit.
+/// from. None of them is a source-PGN edit.
 final class ReadingPlace {
   const ReadingPlace({
     required this.game,
@@ -150,9 +151,9 @@ String readingGameKey(ChapterLine line) {
       return 'https://www.chess.com${url.path.replaceFirst(RegExp(r'/$'), '')}';
     }
   }
-  // The old app hashes each move as the file spelled it, reading only `0-0`
-  // as `O-O` and every null move as `--`, so a reading place saved by one
-  // app is found by the other.
+  // Each move is hashed as the file spelled it, reading only `0-0` as `O-O`
+  // and every null move as `--`, so reading places already saved under this
+  // key are still found.
   final moves = <String>[];
   var children = line.tree?.children ?? const <MoveNode>[];
   while (children.isNotEmpty) {

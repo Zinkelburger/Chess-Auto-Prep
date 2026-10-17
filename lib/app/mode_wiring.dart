@@ -180,8 +180,8 @@ final class TrainingWiring {
   late final TrainingModes modes;
   late final RepertoireCatalog _catalog;
 
-  /// The user's downloaded games, one file per account, shared with the
-  /// old app: what the review, the book and the explorer read.
+  /// The user's downloaded games, one file per account: what the review,
+  /// the book and the explorer read.
   final GamesCache games;
 
   /// The accounts as the book last heard of them.

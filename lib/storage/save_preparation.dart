@@ -102,7 +102,7 @@ PreparedSave _prepare(
 ) {
   final read = readDocumentText(current);
   // A document this app cannot read is not one it may replace: a save over
-  // a compressed chapter would leave bytes neither app can open.
+  // a compressed chapter would leave bytes no reader can open.
   if (read case NotText(:final detail)) {
     return NotReplaceable(IoFailure(detail), detail);
   }

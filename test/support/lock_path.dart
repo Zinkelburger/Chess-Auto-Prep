@@ -3,11 +3,9 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-/// Where the lock for [directory] lives, worked out the way the old app
-/// works it out (`lib/utils/file_operation_lock.dart`): FNV-1a of the
-/// resolved path under the system temporary folder. Written out again here
-/// so a change to either side of the protocol fails a test rather than a
-/// user's save.
+/// Where the lock for [directory] lives: FNV-1a of the resolved path under
+/// the system temporary folder. Written out again here so a change to the
+/// protocol fails a test rather than a user's save.
 Future<String> lockPathOf(Directory directory) async {
   final key = p.normalize(await directory.resolveSymbolicLinks());
   var hash = 0xcbf29ce484222325;

@@ -56,28 +56,25 @@ void main() {
   List<String> gamesOf(String text) =>
       text.split('[Event ').map((game) => game.trimRight()).toList();
 
-  test(
-    'a move played in the workspace is in the file the old app reads',
-    () async {
-      session.cursor.toEnd(); // 1. d4 d5 2. c4 e6 3. cxd5 exd5 4. Nc3
-      expect(session.cursor.currentMove?.san, 'Nc3');
-      session.playMove('g8f6'); // 4... Nf6
-      final played = session.cursor.value;
-      session.setComment(played, 'Their main answer');
-      await settled();
-      expect(saver.state, isA<Saved>());
+  test('a move played in the workspace is in the file on disk', () async {
+    session.cursor.toEnd(); // 1. d4 d5 2. c4 e6 3. cxd5 exd5 4. Nc3
+    expect(session.cursor.currentMove?.san, 'Nc3');
+    session.playMove('g8f6'); // 4... Nf6
+    final played = session.cursor.value;
+    session.setComment(played, 'Their main answer');
+    await settled();
+    expect(saver.state, isA<Saved>());
 
-      final written = parseChapter(name: 'Main', text: onDisk());
-      expect(written.tree.nodeAt(played)?.san, 'Nf6');
-      expect(written.tree.nodeAt(played)?.comment, 'Their main answer');
-      expect(written.gameCount, 3, reason: 'the line was extended, not added');
-      expect(
-        gamesOf(onDisk()).last,
-        gamesOf(whiteChapter).last,
-        reason: 'a game nobody edited keeps its bytes',
-      );
-    },
-  );
+    final written = parseChapter(name: 'Main', text: onDisk());
+    expect(written.tree.nodeAt(played)?.san, 'Nf6');
+    expect(written.tree.nodeAt(played)?.comment, 'Their main answer');
+    expect(written.gameCount, 3, reason: 'the line was extended, not added');
+    expect(
+      gamesOf(onDisk()).last,
+      gamesOf(whiteChapter).last,
+      reason: 'a game nobody edited keeps its bytes',
+    );
+  });
 
   test('the version it replaced is kept, and undo puts it back', () async {
     session.setComment(const NodePath.root(), 'Read this first');

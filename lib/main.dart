@@ -1,4 +1,4 @@
-// The v2 entry point: `flutter run -t lib/main.dart`.
+// The app's entry point: `flutter run -t lib/main.dart`.
 //
 // `debug/` supplies the optional headless driver and packaged-app checks.
 import 'dart:io';

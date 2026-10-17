@@ -346,7 +346,6 @@ final class ChapterDirectory implements ChapterFiles {
   // A staging folder older than this run belongs to an import that never
   // completed and was never shown, so it is treated as disposable; a pasted
   // import has no other copy, and is lost as the unfinished import would be.
-  // Left in place, the old app would list it as a repertoire.
   Future<void> _sweepStaging() async {
     if (_stagingSwept) return;
     _stagingSwept = true;
@@ -593,7 +592,7 @@ Stream<File> _chapterFiles(Directory folder) async* {
 }
 
 /// A chapter is a `.pgn` that is not one of the raw-game sidecars generation
-/// writes beside a chapter; the old app hides those from its list too.
+/// writes beside a chapter.
 bool _isChapter(String path) =>
     p.extension(path).toLowerCase() == '.pgn' &&
     !p.basenameWithoutExtension(path).endsWith('_raw_games');

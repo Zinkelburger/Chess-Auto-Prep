@@ -4,8 +4,8 @@ import 'game_tree.dart';
 /// PGN movetext for [tree], ending with [terminator] as the game-termination
 /// marker, or with no marker when the game had none.
 ///
-/// One line, however long, because that is what the old app writes and what
-/// every reader of a chapter file already handles; it also keeps a one-move
+/// One line, however long, because that is what existing chapter files hold
+/// and what every reader of a chapter file handles; it also keeps a one-move
 /// edit a one-line diff.
 ///
 /// **The canonical form.** A chapter only writes the games an edit touched;

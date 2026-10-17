@@ -111,7 +111,7 @@ studies, Chessbook) do not offer in one place:
   `docs/features/`.
 - Algorithm detail for the generator: `docs/ALGORITHM.md`.
 - Theme tokens and shared controls: `lib/ui/theme.dart`, `lib/ui/`.
-- Wireframe pages the owner liked: `docs/design/`.
+- The wireframe style the owner likes for design pages: `docs/design/wireframe-style.css`.
 - Absent, and not to be fabricated: user counts, testimonials, benchmarks
   against other products, pricing, and any claim about playing-strength gains.
 

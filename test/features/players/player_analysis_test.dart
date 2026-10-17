@@ -260,24 +260,19 @@ void main() {
       expect(owner.groups.single.entries, isEmpty);
     },
   );
-  test(
-    'legacy manifest wins over flat backup, tombstones stay removed',
-    () async {
-      final dir = await Directory.systemTemp.createTemp('old-players-test-');
-      addTearDown(() => dir.delete(recursive: true));
-      final info = {'platform': 'lichess', 'username': 'Alex'};
-      await File(
-        '${dir.path}/lichess_alex.json',
-      ).writeAsString(jsonEncode(info));
-      await File('${dir.path}/lichess_alex.pgn').writeAsString(game);
-      final current = Directory('${dir.path}/player-test');
-      await current.create();
-      await File('${current.path}/current.json').writeAsString(
-        jsonEncode({'version': 1, 'deleted': true, 'player': info}),
-      );
-      expect(await savedPlayers(dir), isEmpty);
-    },
-  );
+  test('the manifest wins over a flat copy, tombstones stay removed', () async {
+    final dir = await Directory.systemTemp.createTemp('old-players-test-');
+    addTearDown(() => dir.delete(recursive: true));
+    final info = {'platform': 'lichess', 'username': 'Alex'};
+    await File('${dir.path}/lichess_alex.json').writeAsString(jsonEncode(info));
+    await File('${dir.path}/lichess_alex.pgn').writeAsString(game);
+    final current = Directory('${dir.path}/player-test');
+    await current.create();
+    await File('${current.path}/current.json').writeAsString(
+      jsonEncode({'version': 1, 'deleted': true, 'player': info}),
+    );
+    expect(await savedPlayers(dir), isEmpty);
+  });
   test('one unreadable flat json does not hide other saved players', () async {
     final dir = await Directory.systemTemp.createTemp('old-players-test-');
     addTearDown(() => dir.delete(recursive: true));

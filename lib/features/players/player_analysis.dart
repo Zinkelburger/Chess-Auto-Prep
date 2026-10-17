@@ -44,7 +44,7 @@ final class PlayerAnalysis extends ChangeNotifier {
   final List<RecentGames> sites;
   final PendingWrites pending;
 
-  /// Where a player's games from the old app's database are copied to be
+  /// Where a player's games from the `app_games.db` database are copied to be
   /// read and opened like any other file: one derived file per player,
   /// beside the downloads, never among the user's collections.
   final String archiveCopies;
@@ -375,7 +375,7 @@ final class PlayerAnalysis extends ChangeNotifier {
     return (games, revisions);
   }
 
-  /// [player]'s one copy of their games in the old app's database. Games
+  /// [player]'s one copy of their games from the games database. Games
   /// are only ever added to it, so what the user keeps there survives.
   DocumentRef _archiveCopyOf(Player player) {
     final id = sha256.convert(utf8.encode(player.id)).toString();

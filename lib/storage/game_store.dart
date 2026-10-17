@@ -10,17 +10,15 @@ import 'recovery_files.dart';
 
 import '../chess/tactics/game_ids.dart';
 
-/// The old app's games database, `app_games.db` in the support folder:
-/// every game it downloads or imports, in named collections, each game's
-/// verbatim PGN beside its parsed headers. Read only — the old app is its
-/// one writer, and reading takes no lock a writer would wait on: the old
-/// app keeps the file in WAL mode, where readers and a writer do not block
-/// each other. (In the rollback journal a long read would hold off a
-/// commit.) A read never changes the database's bytes; after the old app
-/// closed it cleanly, SQLite may leave empty `-wal` and `-shm` files beside
+/// The games database existing profiles hold, `app_games.db` in the support
+/// folder: games downloaded or imported earlier, in named collections, each
+/// game's verbatim PGN beside its parsed headers. Read only — nothing in the
+/// app writes it, and reading takes no lock: the file is in WAL mode, where
+/// readers and a writer do not block each other. A read never changes the
+/// database's bytes; SQLite may leave empty `-wal` and `-shm` files beside
 /// it, which is how WAL works.
 ///
-/// Schema (the old app's `game_store_schema.dart`, version 2):
+/// Schema (version 2):
 /// `games(id, collection, game_key, white, black, result, date, played_at,
 /// speed, white_elo, black_elo, eco, headers_json, pgn, imported_at)`,
 /// `positions(pos, game_id, ply)` for the first 30 plies, `collections`
@@ -32,9 +30,9 @@ import '../chess/tactics/game_ids.dart';
 /// is not read: its columns may mean something else.
 const gameStoreSchemaVersion = 2;
 
-/// The names the old app files its collections under.
+/// The names the database files its collections under.
 abstract final class GameCollections {
-  /// The tactics archive: the user's games the old app mined for puzzles,
+  /// The tactics archive: the user's games already mined for puzzles,
   /// some of which have no other copy.
   static const tactics = 'tactics';
 
@@ -69,7 +67,7 @@ final class StoredGame {
   final String collection;
 
   /// Its id within the collection: a `[GameId]`, a game address, or the
-  /// players and date — whatever the old app keyed it by.
+  /// players and date — whatever the row was keyed by when it was written.
   final String key;
 
   final String pgn;
@@ -91,7 +89,7 @@ final class StoredGamesFound extends StoredGamesRead {
   final int skipped;
 }
 
-/// There is no database: the old app has not downloaded anything here.
+/// There is no database: this profile has no stored games.
 final class StoredGamesAbsent extends StoredGamesRead {
   const StoredGamesAbsent({super.source});
 }

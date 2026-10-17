@@ -7,16 +7,15 @@ import '../ui/theme.dart';
 import 'mode.dart';
 import '../ui/app_keys.dart';
 
-/// The row over the window: the mode menu and, beside it, the Actions menu
-/// — one menu of everything that can be done now, the same shape in every
-/// mode. Both sit at the left, where the pointer already is; the settings
-/// gear sits alone at the right end, where the old app kept it (owner,
-/// 2026-09-22), and the rest of the row is empty. While the list pane is
-/// hidden, the `»` that brings it back sits before the menus, where the
-/// pane would be; shown, the pane carries its own `«` in its top right
-/// corner, so the toggle is always at the pane's edge. The window's
-/// [status] sentence takes the empty middle, so it never pushes the page
-/// down.
+/// The row over the window: the mode menu and, beside it, the Actions menu —
+/// one menu of everything that can be done now, the same shape in every mode.
+/// Both sit at the left, where the pointer already is; the settings gear sits
+/// alone at the right end (owner, 2026-09-22), and the rest of the row is
+/// empty. While the list pane is hidden, the `»` that brings it back sits
+/// before the menus, where the pane would be; shown, the pane carries its own
+/// `«` in its top right corner, so the toggle is always at the pane's edge. The
+/// window's [status] sentence takes the empty middle, so it never pushes the
+/// page down.
 class TopBar extends StatelessWidget {
   const TopBar({
     super.key,

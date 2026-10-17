@@ -248,7 +248,7 @@ _Edited _appended(Chapter chapter, List<String> prefix, MoveNode node) {
   );
 }
 
-/// The tags the old app gives a new line: whose it is, that it is study
+/// The tags a new line gets: whose it is, that it is study
 /// material rather than a finished game, the root when it is not the
 /// initial position, and the id every later lookup needs.
 List<PgnTag> _newTags(

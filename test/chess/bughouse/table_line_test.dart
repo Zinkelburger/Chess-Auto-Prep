@@ -69,4 +69,38 @@ void main() {
   test('an illegal move is not a line move', () {
     expect(lineMove(TablePosition.initial, BoardNumber.one, 'e2e5'), isNull);
   });
+
+  test('the line through a move is what was played up to it', () {
+    final line = playedLine('1e2e4 2d2d4 1e7e5 2d7d5');
+    final through = line.through(line.of(BoardNumber.one).last);
+    expect(through.moves.map((m) => m.san), ['e4', 'd4', 'e5']);
+    expect(through.upto(BoardNumber.one), 2);
+    expect(through.upto(BoardNumber.two), 1);
+  });
+
+  test('on the boards leaves out the moves stepped past', () {
+    final line = playedLine(
+      '1e2e4 2d2d4 1e7e5',
+    ).go(BoardNumber.two, 0).go(BoardNumber.one, 1);
+    final now = line.onBoards;
+    expect(now.moves.map((m) => m.san), ['e4']);
+    expect(positionOf(now).dualFen, positionOf(line).dualFen);
+  });
+
+  test('cutting a board takes its later moves and keeps the other board', () {
+    final line = playedLine('1e2e4 2d2d4 1e7e5 1g1f3');
+    final cut = line.cut(BoardNumber.one, 1);
+    expect(cut.of(BoardNumber.one).map((m) => m.san), ['e4']);
+    expect(cut.of(BoardNumber.two).single.san, 'd4');
+    expect(cut.upto(BoardNumber.one), 1);
+    // A cursor before the cut stays where it was.
+    final back = line.go(BoardNumber.one, 0).cut(BoardNumber.one, 2);
+    expect(back.upto(BoardNumber.one), 0);
+    expect(back.of(BoardNumber.one).length, 2);
+  });
+
+  test('cutting the capture a drop needed breaks the replay', () {
+    final line = playedLine('1e2e4 1d7d5 1e4d5 2e2e4 2P@d5');
+    expect(line.cut(BoardNumber.one, 2).replay(), isA<LineBroken>());
+  });
 }

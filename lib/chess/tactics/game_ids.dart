@@ -15,13 +15,13 @@ enum GameSite {
   final String label;
 }
 
-/// The id both apps file a downloaded game under — `lichess_AbCd1234`,
+/// The id a downloaded game is filed under — `lichess_AbCd1234`,
 /// `chesscom_173321420294` — read off its header lines, or an empty string
 /// when it has none, in which case nothing can say it was reviewed.
 ///
-/// In the old app's order: a `GameId` that already has a site's prefix,
-/// then the game's address in `Link` or `Site`, then a bare `GameId`, which
-/// only Lichess writes.
+/// In this order, which existing records' ids follow: a `GameId` that already
+/// has a site's prefix, then the game's address in `Link` or `Site`, then a
+/// bare `GameId`, which only Lichess writes.
 String gameIdIn(String gameText) {
   final tags = _headerValues(gameText);
   final own = tags['GameId'];
@@ -65,7 +65,7 @@ enum TimeClass {
 
 /// The class of a `TimeControl` header value, by base seconds plus forty
 /// times the increment, sorted the way the game's site sorts it:
-/// - a [lichess] game as Lichess (and the old app) does: under 3 minutes
+/// - a [lichess] game as Lichess does: under 3 minutes
 ///   bullet, UltraBullet included, under 8 blitz, under 25 rapid, else
 ///   classical — `300+5` is 500 seconds, rapid;
 /// - any other game under 3 minutes bullet, under 10 blitz, under 30
@@ -108,9 +108,9 @@ TimeClass timeClassOfTags(Map<String, String> tags) => timeClassOf(
 TimeClass timeClassIn(String gameText) =>
     timeClassOfTags(_headerValues(gameText));
 
-/// The time controls the user's games are sorted by, as the old app's
-/// review offers them. Nothing slower is its own choice: a daily or
-/// correspondence game counts as classical.
+/// The time controls the user's games are sorted by, as the review offers them.
+/// Nothing slower is its own choice: a daily or correspondence game counts as
+/// classical.
 enum GameSpeed {
   bullet('Bullet'),
   blitz('Blitz'),

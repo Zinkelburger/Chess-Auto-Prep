@@ -7,9 +7,9 @@ import 'tree_edit.dart';
 /// What the `//` lines above a chapter's first game say about the chapter as
 /// a whole, apart from its side: where it starts and whether it is finished.
 ///
-/// The old app writes `// Root: 1. d4 d5 2. c4` when a chapter is made from
-/// a position rather than from the start, and nothing ever showed it. Here
-/// it is what the outline prints under the chapter's name, so a user can
+/// A chapter made from a position rather than from the start carries
+/// `// Root: 1. d4 d5 2. c4`, existing chapter files included. It is what
+/// the outline prints under the chapter's name, so a user can
 /// set a chapter up for the King's Gambit and see that it is one. It is also
 /// where an empty chapter's board starts, since with no game there is no
 /// `[FEN]` tag to start it from.

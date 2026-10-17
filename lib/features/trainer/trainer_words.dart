@@ -52,7 +52,7 @@ String orderName(LineOrder order) => switch (order) {
   LineOrder.likely => 'Most likely first',
 };
 
-/// Why a sitting ended, in the old app's words.
+/// Why a sitting ended.
 String sittingOver(SittingKind kind) => switch (kind) {
   SittingKind.learn => "That is this sitting's new lines — nicely done.",
   SittingKind.review => 'Review session done.',

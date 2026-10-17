@@ -433,19 +433,16 @@ void main() {
     expect(await File(ref.path).exists(), isTrue);
   });
 
-  test(
-    'a deleted document moves into the recovery folder the old app uses',
-    () async {
-      final ref = fixture.ref('KID/Main.pgn');
-      final revision = await fixture.put(ref, 'moves *\n');
-      final deleted = await fixture.store.delete(ref, expected: revision);
-      final recovered = File((deleted as Deleted).recoveredTo);
-      expect(p.basename(recovered.parent.path), '.cap-pgn-history');
-      expect(p.basename(recovered.path), endsWith('-Main.pgn'));
-      expect(await recovered.readAsString(), 'moves *\n');
-      expect(await fixture.store.open(ref), isA<Absent>());
-    },
-  );
+  test('a deleted document moves into the existing recovery folder', () async {
+    final ref = fixture.ref('KID/Main.pgn');
+    final revision = await fixture.put(ref, 'moves *\n');
+    final deleted = await fixture.store.delete(ref, expected: revision);
+    final recovered = File((deleted as Deleted).recoveredTo);
+    expect(p.basename(recovered.parent.path), '.cap-pgn-history');
+    expect(p.basename(recovered.path), endsWith('-Main.pgn'));
+    expect(await recovered.readAsString(), 'moves *\n');
+    expect(await fixture.store.open(ref), isA<Absent>());
+  });
 
   test('a delete against a stale revision keeps the document', () async {
     final ref = fixture.ref('KID/Main.pgn');

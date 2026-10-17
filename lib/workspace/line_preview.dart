@@ -26,12 +26,11 @@ final class LinePreview {
   final Offset anchor;
 }
 
-/// Floats a small board over everything while [preview] has one to show,
-/// the way the old app previewed engine lines: centred under the hovered
-/// move, or above it when there is no room below. It takes no pointer, so
-/// the move under it keeps the hover. [child] is laid out as if the board
-/// were not there.
-class LinePreviewOverlay extends StatefulWidget {
+/// Floats a small board over everything while [preview] has one to show:
+/// centred under the hovered move, or above it when there is no room below. It
+/// takes no pointer, so the move under it keeps the hover. [child] is laid out
+/// as if the board were not there.
+class LinePreviewOverlay extends StatelessWidget {
   const LinePreviewOverlay({
     super.key,
     required this.preview,
@@ -44,15 +43,54 @@ class LinePreviewOverlay extends StatefulWidget {
   final Widget child;
 
   @override
-  State<LinePreviewOverlay> createState() => _LinePreviewOverlayState();
+  Widget build(BuildContext context) => FloatingPreview<LinePreview>(
+    preview: preview,
+    anchor: (preview) => preview.anchor,
+    size: const Size.square(previewBoardSize),
+    builder: (context, preview) => StaticChessboard(
+      size: previewBoardSize,
+      orientation: orientation,
+      fen: preview.fen.value,
+      lastMove: Move.parse(preview.lastMove),
+      settings: BoardTheme.of(context).previewSettings,
+    ),
+    child: child,
+  );
 }
 
-class _LinePreviewOverlayState extends State<LinePreviewOverlay>
-    with ListeningState<LinePreviewOverlay> {
+/// Floats what [builder] makes of [preview]'s value, [size] big, over
+/// everything while there is one: centred under the point [anchor] gives,
+/// or above it when there is no room below, inside a 1px outline. It takes
+/// no pointer, so the move under it keeps the hover. [child] is laid out
+/// as if it were not there.
+class FloatingPreview<T extends Object> extends StatefulWidget {
+  const FloatingPreview({
+    super.key,
+    required this.preview,
+    required this.anchor,
+    required this.size,
+    required this.builder,
+    required this.child,
+  });
+
+  final ValueListenable<T?> preview;
+
+  /// The bottom centre of the hovered move, in screen coordinates.
+  final Offset Function(T value) anchor;
+  final Size size;
+  final Widget Function(BuildContext context, T value) builder;
+  final Widget child;
+
+  @override
+  State<FloatingPreview<T>> createState() => _FloatingPreviewState<T>();
+}
+
+class _FloatingPreviewState<T extends Object> extends State<FloatingPreview<T>>
+    with ListeningState<FloatingPreview<T>> {
   final _portal = OverlayPortalController();
 
   @override
-  Listenable listenableOf(LinePreviewOverlay widget) => widget.preview;
+  Listenable listenableOf(FloatingPreview<T> widget) => widget.preview;
 
   @override
   void changed() {
@@ -69,20 +107,21 @@ class _LinePreviewOverlayState extends State<LinePreviewOverlay>
   Widget build(BuildContext context) {
     return OverlayPortal(
       controller: _portal,
-      overlayChildBuilder: _board,
+      overlayChildBuilder: _floating,
       child: widget.child,
     );
   }
 
-  Widget _board(BuildContext context) {
+  Widget _floating(BuildContext context) {
     final preview = widget.preview.value;
     if (preview == null) return const SizedBox.shrink();
-    final at = _place(preview.anchor, MediaQuery.sizeOf(context));
+    final size = widget.size;
+    final at = _place(widget.anchor(preview), size, MediaQuery.sizeOf(context));
     return Positioned(
       left: at.dx,
       top: at.dy,
-      width: previewBoardSize,
-      height: previewBoardSize,
+      width: size.width,
+      height: size.height,
       child: IgnorePointer(
         // Flat, as every surface is: an outline sets it off, not a shadow.
         child: Material(
@@ -91,31 +130,24 @@ class _LinePreviewOverlayState extends State<LinePreviewOverlay>
             side: BorderSide(color: Theme.of(context).colorScheme.outline),
           ),
           clipBehavior: Clip.antiAlias,
-          child: StaticChessboard(
-            size: previewBoardSize,
-            orientation: widget.orientation,
-            fen: preview.fen.value,
-            lastMove: Move.parse(preview.lastMove),
-            settings: BoardTheme.of(context).previewSettings,
-          ),
+          child: widget.builder(context, preview),
         ),
       ),
     );
   }
 }
 
-/// Where the board's top left corner goes: centred under [anchor], kept
-/// inside the window, and flipped above the anchor when it would run off
-/// the bottom.
-Offset _place(Offset anchor, Size window) {
-  const size = previewBoardSize;
-  final left = (anchor.dx - size / 2).clamp(
+/// Where the top left corner of something [size] big goes: centred under
+/// [anchor], kept inside the window, and flipped above the anchor when it
+/// would run off the bottom.
+Offset _place(Offset anchor, Size size, Size window) {
+  final left = (anchor.dx - size.width / 2).clamp(
     0.0,
-    (window.width - size).clamp(0.0, double.infinity),
+    (window.width - size.width).clamp(0.0, double.infinity),
   );
   var top = anchor.dy + previewBoardGap;
-  if (top + size > window.height - Space.s) {
-    top = anchor.dy - size - previewBoardGap;
+  if (top + size.height > window.height - Space.s) {
+    top = anchor.dy - size.height - previewBoardGap;
   }
   return Offset(left, top < 0 ? 0 : top);
 }

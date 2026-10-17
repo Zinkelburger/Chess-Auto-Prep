@@ -1,6 +1,5 @@
 /// JSON for the codec laws: random values, the unknown fields a newer build
-/// or the other app may add to a file this build reads, and damage to a
-/// decoded document.
+/// may add to a file this build reads, and damage to a decoded document.
 ///
 /// Every value is plain decoded JSON — maps with string keys, lists,
 /// strings, numbers, booleans and null — so it survives `jsonEncode` and

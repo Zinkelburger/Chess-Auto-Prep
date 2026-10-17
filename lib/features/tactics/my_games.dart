@@ -116,11 +116,11 @@ typedef _Queued = ({GameSite site, String username, String id, String text});
 /// them, and add their mistakes to the tactics set as puzzles.
 ///
 /// One pausable job. Pause stops after the game being reviewed; start again
-/// carries on with the games still queued, without downloading them again.
-/// A game is marked done in the same write that adds its puzzles, so one
-/// cut off half way is reviewed again next time, and one either app has
-/// done is never reviewed twice. A site that cannot be reached is answered
-/// from the games saved on this computer.
+/// carries on with the games still queued, without downloading them again. A
+/// game is marked done in the same write that adds its puzzles, so one cut off
+/// half way is reviewed again next time, and one already done is never reviewed
+/// twice. A site that cannot be reached is answered from the games saved on
+/// this computer.
 final class MyGames extends ChangeNotifier {
   MyGames({
     required AccountStore accounts,
@@ -483,9 +483,9 @@ final class MyGames extends ChangeNotifier {
     return count < bookCheckWindow ? bookCheckWindow : reviewWindow;
   }
 
-  /// Takes the games either app has reviewed since they were queued off the
-  /// queue, and any game with no id, which nothing could mark as done.
-  /// False when the set could not be read, which ends the job.
+  /// Takes the games reviewed since they were queued off the queue, and any
+  /// game with no id, which nothing could mark as done. False when the set
+  /// could not be read, which ends the job.
   Future<bool> _dropDone() async {
     final done = await _set.analyzed();
     if (_disposed) return false;
@@ -636,8 +636,8 @@ final class MyGames extends ChangeNotifier {
   }
 }
 
-/// The depth every move is judged at: the old app's default, so the same
-/// game gives the same puzzles in both apps.
+/// The depth every move is judged at, fixed so the same game always gives
+/// the same puzzles.
 const reviewDepth = 15;
 
 /// What the engine's pass over one game found: the puzzles its mistakes

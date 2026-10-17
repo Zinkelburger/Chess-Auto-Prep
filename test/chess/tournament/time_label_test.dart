@@ -49,8 +49,7 @@ void main() {
     );
   });
 
-  test('sudden-death presets leave movesPerSession out, as v1 writes them', () {
-    // v1 reads a stored 0 as a 0-move period and divides by it.
+  test('sudden-death presets leave movesPerSession out', () {
     for (final preset in tournamentTimePresets) {
       final moves = preset.time['movesPerSession'];
       expect(

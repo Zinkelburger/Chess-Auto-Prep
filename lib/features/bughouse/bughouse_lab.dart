@@ -2,6 +2,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../chess/bughouse/bpgn_moves.dart';
+import '../../chess/bughouse/crazyhouse_pgn.dart';
 import '../../chess/bughouse/hivemind.dart';
 import '../../chess/bughouse/table.dart';
 import '../../chess/bughouse/table_line.dart';
@@ -81,12 +82,18 @@ final class BughouseLab extends ChangeNotifier {
 
   /// Both halves of an engine's joint action, board 1 first; a sitting
   /// board keeps its moves.
-  void playJoint(JointMove joint) {
+  void playJoint(JointMove joint) => playMoves([
+    for (final board in BoardNumber.values)
+      if (joint.on(board) case final uci?) (board, uci),
+  ]);
+
+  /// [moves] played in order from the table on screen: an engine line up to
+  /// the move clicked. All or nothing: when one no longer plays, none is
+  /// played and the line is said not to fit.
+  void playMoves(List<(BoardNumber, String)> moves) {
     var line = _line;
     var position = _position;
-    for (final board in BoardNumber.values) {
-      final uci = joint.on(board);
-      if (uci == null) continue;
+    for (final (board, uci) in moves) {
       final played = lineMove(position, board, uci);
       if (played == null) {
         _refuse(const LineMisfits());
@@ -95,6 +102,7 @@ final class BughouseLab extends ChangeNotifier {
       line = line.played(played.move);
       position = played.after;
     }
+    if (moves.isEmpty) return;
     _line = line;
     _show(position, focus: _focus);
   }
@@ -110,6 +118,24 @@ final class BughouseLab extends ChangeNotifier {
       case LineBroken(:final move):
         _focus = board;
         _refuse(StepRefused(move));
+    }
+  }
+
+  /// [move] and every later move on its board taken out of the line, with
+  /// the hand edits made after them; the other board's moves stay. Refused
+  /// when one of those dropped a piece a move taken out had captured.
+  void deleteFrom(LineMove move) {
+    final board = move.board;
+    final index = _line.of(board).indexOf(move);
+    if (index < 0) return;
+    final next = _line.cut(board, index);
+    switch (next.replay()) {
+      case LineReplayed(:final position):
+        _line = next;
+        _show(position, focus: board);
+      case LineBroken(move: final broken):
+        _focus = board;
+        _refuse(DeleteRefused(broken));
     }
   }
 
@@ -171,8 +197,42 @@ final class BughouseLab extends ChangeNotifier {
     }
   }
 
-  /// Both boards' moves as the lab copies them (see [tableLineText]).
+  /// Both boards' moves as the mode copies them (see [tableLineText]).
   String get movesText => tableLineText(_line);
+
+  /// The line up to and including [move] as a PGN: with one board, a
+  /// crazyhouse PGN of board 1 that Lichess imports; with two, the BPGN
+  /// [movesText] writes.
+  String linePgnThrough(LineMove move) {
+    final line = _line.through(move);
+    return single
+        ? crazyhouseLinePgn(line, move.board, line.of(move.board).length)
+        : tableLineText(line);
+  }
+
+  /// The table just after [move], as the line up to it leaves it; null when
+  /// that no longer replays.
+  TablePosition? positionAfter(LineMove move) =>
+      switch (_line.through(move).replay()) {
+        LineReplayed(:final position) => position,
+        LineBroken() => null,
+      };
+
+  /// The line on the boards now, followed by [moves] as far as they play,
+  /// as a PGN: what an engine line copies.
+  String linePgnWith(List<(BoardNumber, String)> moves) {
+    var line = _line.onBoards;
+    var position = _position;
+    for (final (board, uci) in moves) {
+      final played = lineMove(position, board, uci);
+      if (played == null) break;
+      line = line.played(played.move);
+      position = played.after;
+    }
+    return single
+        ? crazyhouseLinePgn(line, BoardNumber.one, line.upto(BoardNumber.one))
+        : tableLineText(line);
+  }
 
   /// Pasted movetext as a new line, every move played; refused whole when
   /// one does not play.
@@ -276,6 +336,14 @@ final class LineMisfits extends TableRefusal {
 /// it dropped.
 final class StepRefused extends TableRefusal {
   const StepRefused(this.move);
+
+  final LineMove move;
+}
+
+/// A delete that would leave [move], on the other board, without the piece
+/// it dropped.
+final class DeleteRefused extends TableRefusal {
+  const DeleteRefused(this.move);
 
   final LineMove move;
 }

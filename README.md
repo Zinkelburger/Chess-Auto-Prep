@@ -70,32 +70,19 @@ Windows 2022, Windows 2025 and macOS. Failures produce warnings and retained log
 publication neither waits for these jobs nor requires them to pass. Local lint
 and preflight remain strict. Analysis, the full Linux test suite (including crash
 recovery), other desktop storage/integration tests, updater checks, offline tools,
-engines and packaged-app checks remain required. Windows/macOS crash recovery
-is advisory while the corrected process-kill harness is validated on those hosts;
-reconsider that exception once repeated native runs establish reliability.
+engines and packaged-app checks remain required.
 
 Only a `v*` **tag push** can enter the publication job, and only after every required gate
 and artifact check passes. Diagnostic artifacts stay in Actions. Only the
 publication job has write access; actions are pinned to commits and Dependabot
 proposes weekly updates. Each Mac release bundle is checked in its packaging
-job. The duplicate Apple Silicon release build and standalone Mac engine job
-have been removed.
+job.
 
-The failures that prompted this setup:
-
-| Candidate | GitHub evidence | Cause and prevention |
-|---|---|---|
-| 2.0.0 | [Failed run](https://github.com/Zinkelburger/Chess-Auto-Prep/actions/runs/36754478934) | Linux fault tests found inconsistent book references after delete/restore and an interleaving timeout. Windows tests exposed directory-sync assumptions, a missing-warning assertion and a database handle left open during cleanup. These gates passed on 2.0.1; retain them and run them before tagging. |
-| 2.0.1 | [Failed run](https://github.com/Zinkelburger/Chess-Auto-Prep/actions/runs/36931974043) | Intel Mac packaging rejected Stockfish's gzip checksum. The existing fix pins the uncompressed engine and uses a native Intel runner. The tag workflow exercises both native Mac release builds, including their packaged engines. |
-| 2.0.2 | [Failed Windows job](https://github.com/Zinkelburger/Chess-Auto-Prep/actions/runs/37037062634/job/110937844261) | The crash test killed the `dart run` launcher, potentially leaving the Windows importer writing during the recovery check. The harness now reports the importer's PID so the test kills the writer itself. Windows/macOS process-kill checks run separately as advisory diagnostics. |
-
-Verification of the packaging fixes also [caught an Intel startup crash](https://github.com/Zinkelburger/Chess-Auto-Prep/actions/runs/36969225369)
-after the checksum fix. Stockfish 19 stores the Intel network data in the
-arm64 slice of its universal executable ([upstream implementation](https://github.com/official-stockfish/Stockfish/blob/sf_19/src/universal/patch_x86_slice.sh)).
+Stockfish 19 stores the Intel network data in the arm64 slice of its universal
+executable ([upstream implementation](https://github.com/official-stockfish/Stockfish/blob/sf_19/src/universal/patch_x86_slice.sh)).
 The app and frameworks may be thinned; the signed Stockfish helper must retain
-both slices. Signing also repacks those slices: the inspected artifact moved
-the network by 64 KiB without updating the Intel pointer. Packaging now
-preserves the complete helper, rebases that pointer against the signed layout,
-verifies every network byte against the pinned input, then signs again and
-checks that the layout is stable. Both architectures are asserted before
-running the packaged app on its native runner.
+both slices. Signing repacks those slices, so packaging preserves the complete
+helper, rebases the Intel network pointer against the signed layout, verifies
+every network byte against the pinned input, then signs again and checks that
+the layout is stable. Both architectures are asserted before running the
+packaged app on its native runner.

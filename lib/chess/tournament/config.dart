@@ -171,9 +171,9 @@ bool legalOpeningMove(String? uci) {
       Chess.fromSetup(Setup.parseFen(Fen.initial.value)).isLegal(move);
 }
 
-/// One-click time controls for a new run, the old app's list. Clocks are
-/// scaled for engines: an engine's blitz is a minute, not three. Sudden
-/// death leaves `movesPerSession` out: v1 reads a 0 as a 0-move period.
+/// One-click time controls for a new run. Clocks are scaled for engines: an
+/// engine's blitz is a minute, not three. Sudden death leaves
+/// `movesPerSession` out rather than storing a 0-move period.
 const tournamentTimePresets = <({String label, Map<String, Object?> time})>[
   (label: '1 s / move', time: {'kind': 'movetime', 'movetimeMs': 1000}),
   (label: '2 s / move', time: {'kind': 'movetime', 'movetimeMs': 2000}),

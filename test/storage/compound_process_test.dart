@@ -61,7 +61,7 @@ void main() {
 
   for (final checkpoint in ['prepared', 'document']) {
     test(
-      'SIGKILL after $checkpoint: a plain reader sees a whole file, v2 finishes the edit once',
+      'SIGKILL after $checkpoint: a plain reader sees a whole file, the app finishes the edit once',
       () async {
         final child = await _start(harness, documents, support, checkpoint);
         addTearDown(child.close);

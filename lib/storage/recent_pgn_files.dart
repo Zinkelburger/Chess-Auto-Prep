@@ -35,8 +35,8 @@ final class RecentFilesUnreadable extends RecentFilesRead {
   final String detail;
 }
 
-/// The same SharedPreferences key the old app keeps its recent files under,
-/// so a file opened in either app is offered by both (one app at a time:
+/// The SharedPreferences key existing profiles keep their recent files
+/// under, so files opened before are still offered (one process at a time:
 /// see `my_accounts.dart`).
 const recentPgnFilesKey = 'pgn_viewer_recent_files';
 

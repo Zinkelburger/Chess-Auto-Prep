@@ -66,6 +66,7 @@ final class BughouseView extends ModeView {
       AppAction(
         lab.single ? 'Flip board' : 'Flip boards',
         lab.flip,
+        shortcut: AppKey.flipBoards.label,
         group: 'Bughouse',
       ),
       AppAction(

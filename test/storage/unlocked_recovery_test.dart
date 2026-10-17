@@ -235,7 +235,7 @@ void main() {
   });
 
   test(
-    'another reader sees the whole PGN while a v2 edit is unfinished',
+    'another reader sees the whole PGN while an edit is unfinished',
     () async {
       await leave(
         'compound-writes',

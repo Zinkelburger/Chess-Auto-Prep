@@ -1,5 +1,5 @@
 // Training progress read and written against real files in a disposable
-// Documents folder, in the old app's formats, beside rows the old app wrote.
+// Documents folder, in the existing formats, beside rows already there.
 import 'dart:convert';
 import 'dart:io';
 
@@ -18,7 +18,7 @@ import 'package:sqlite3/sqlite3.dart';
 
 import '../support/lock_path.dart';
 
-/// A review row as the old app writes it, 11 columns.
+/// A review row as existing files hold it, 11 columns.
 String _review(String source, String id, {String name = 'Mainline'}) =>
     '$source,$id,$name,2.50,6.00,2026-09-20T00:00:00.000Z,good,'
     '2026-09-14T00:00:00.000Z,3,1,false';
@@ -148,7 +148,7 @@ void main() {
     },
   );
 
-  test('the log read again once it has grown, by either app', () async {
+  test('the log read again once it has grown, by any writer', () async {
     await file(
       attemptsFile,
     ).writeAsString('${encodeAttempt(_attempt(mainline, correct: false))}\n');
@@ -158,7 +158,7 @@ void main() {
       operation: operation(),
     );
     expect((await read({kid})).mistakes, hasLength(2));
-    // The old app's own answer, written behind this store's back.
+    // Another writer's answer, written behind this store's back.
     await file(attemptsFile).writeAsString(
       '${encodeAttempt(_attempt(mainline, correct: false))}\n',
       mode: FileMode.append,
@@ -233,7 +233,7 @@ void main() {
     expect(await file(reviewsFile).readAsLines(), lines);
   });
 
-  test('into no files: each with the header the old app writes', () async {
+  test('into no files: each with the existing header', () async {
     final written = await store.write(
       operation: operation(),
       reviews: [(before: null, after: rated(null))],
@@ -367,7 +367,7 @@ void main() {
       reviewsFile,
     ).writeAsString('$reviewsHeader\n${_review(kid, 'line_1')}\n');
     final before = (await read({kid})).reviews[mainline];
-    // The old app rates the same line meanwhile.
+    // Another writer rates the same line meanwhile.
     final theirs = _review(kid, 'line_1').replaceFirst(',good,', ',easy,');
     await file(reviewsFile).writeAsString('$reviewsHeader\n$theirs\n');
     final written = await store.write(
@@ -513,7 +513,7 @@ void main() {
     expect((await read({kid})).mistakes, hasLength(2));
   });
 
-  test('waits for the old app holding the Documents folder', () async {
+  test('waits for another process holding the Documents folder', () async {
     final old = sqlite3.open(await lockPathOf(documents));
     old.execute('PRAGMA busy_timeout = 0');
     old.execute('BEGIN IMMEDIATE');

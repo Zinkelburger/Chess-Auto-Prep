@@ -185,7 +185,7 @@ Future<void> main(List<String> args) async {
   if (scenario == 'putBack') {
     await File(target).writeAsString('[Event "Edited elsewhere"]\n\n1. a3 *\n');
   } else {
-    // The old app answers the moved line where it still is.
+    // Another writer answers the moved line where it still is.
     await File('${documents.path}/$historyFile').writeAsString(
       '$source,line,2026-09-29T07:00:00Z,good,false,trainer\n',
       mode: FileMode.append);

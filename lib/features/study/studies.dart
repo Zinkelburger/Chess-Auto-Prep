@@ -150,7 +150,7 @@ final class Studies extends ChangeNotifier {
     });
   }
 
-  /// A study with one empty chapter in it, which is what the old app makes.
+  /// A study with one empty chapter in it.
   Future<StudyResult> create(String name) => _run('create the study $name', () {
     final wrong = nameProblem(name);
     if (wrong != null) return Future.value(StudyProblem(wrong));

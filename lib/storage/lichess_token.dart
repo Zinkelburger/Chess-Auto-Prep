@@ -4,19 +4,18 @@ import '../diagnostics/log.dart';
 
 /// Where the Lichess account is kept.
 ///
-/// The same SharedPreferences keys the old app writes when the user signs
-/// in, so both apps see one account and `v2` never asks the user to sign in
-/// again — one app at a time, since the preferences are written whole from
-/// each process's cache (see `my_accounts.dart`). The token is only ever handed to the client that puts it in an
-/// `Authorization` header; it is never logged, and a failure here says only
-/// that the keys could not be read.
+/// The SharedPreferences keys existing profiles keep the account under, so a
+/// user who signed in before is never asked to sign in again. The token is
+/// only ever handed to the client that puts it in an `Authorization` header;
+/// it is never logged, and a failure here says only that the keys could not
+/// be read.
 const lichessTokenKey = 'lichess_access_token';
 const lichessUsernameKey = 'lichess_auth_username';
 const lichessExpiryKey = 'lichess_token_expiry';
 const lichessPersonalKey = 'lichess_is_pat';
 
-/// The old app also kept a refresh token; Lichess never issues one, and the
-/// key is removed on every write so a stale one cannot linger.
+/// Existing profiles may also hold a refresh token; Lichess never issues one,
+/// and the key is removed on every write so a stale one cannot linger.
 const _lichessRefreshKey = 'lichess_refresh_token';
 
 /// A signed-in Lichess account as the preferences hold it.
@@ -49,7 +48,7 @@ final class LichessAccount {
 /// keys of the wrong type, are treated as signed out: public downloads work
 /// without an account, and the user can sign in again. Keys of the wrong
 /// type are removed so they cannot fail every later read. An OAuth token
-/// past its expiry is also cleared, as the old app does on start.
+/// past its expiry is also cleared.
 Future<LichessAccount?> readLichessAccount({DateTime? now}) async {
   try {
     final prefs = await SharedPreferences.getInstance();

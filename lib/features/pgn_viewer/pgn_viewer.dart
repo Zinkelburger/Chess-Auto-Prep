@@ -54,7 +54,7 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
     _reading.start();
   }
 
-  /// How many files the list remembers, which is the old app's number.
+  /// How many files the list remembers.
   static const maxRecent = 10;
 
   /// How many players the follow box suggests.
@@ -93,9 +93,9 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
   String? _recentProblem;
   final _unsavedRecent = <Object, String>{};
 
-  /// Reads and writes of the recent list take turns: the list is shared
-  /// with the old app and kept by read, change, write, and two of those
-  /// overlapping would each write over what the other added.
+  /// Reads and writes of the recent list take turns: the list is kept by
+  /// read, change, write, and two of those overlapping would each write
+  /// over what the other added.
   Future<void> _recentTurn = Future.value();
   ChapterRef? _file;
   Chapter? _rowsOf;

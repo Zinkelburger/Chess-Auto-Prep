@@ -156,8 +156,9 @@ String courseText(ImportedChapters read, {required DateTime created}) {
 ChapterLine _pinned(ChapterLine line, String? id) =>
     id == null || line.lineId == id ? line : withIdHeader(line, id) ?? line;
 
-/// The `//` heading the old app writes, then the games. `// Chapter:` names
-/// the course chapter a file is, which the old app's readers group by.
+/// The `//` heading every chapter file carries, then the games.
+/// `// Chapter:` names the course chapter a file is, as existing course
+/// files mark it.
 String _chapterText({
   required String title,
   required Side? side,

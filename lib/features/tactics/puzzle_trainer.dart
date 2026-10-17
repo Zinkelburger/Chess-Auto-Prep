@@ -40,7 +40,7 @@ const advanceDelay = Duration(seconds: 3);
 /// instead of into the document; a right one moves the cursor along the
 /// answer and the opponent's reply follows, a wrong one is said and left
 /// off the board. The first attempt at each puzzle is written back into
-/// its game's headers, as the old app writes it.
+/// its game's headers, in the set format's order.
 ///
 /// Whatever game of the set comes onto the board while a run is going —
 /// from the list, the next button, the arrow keys — is the puzzle; another
@@ -393,8 +393,7 @@ final class PuzzleTrainer extends ChangeNotifier {
 
   /// Shows the rest of the answer and steps to its next move. Nothing is
   /// written, then or when the puzzle is played again after a reset or a
-  /// step back: a revealed puzzle counts as skipped, as the old app counts
-  /// it.
+  /// step back: a revealed puzzle counts as skipped.
   void showSolution() {
     if (_disposed || _suspended) return;
     final up = _up;

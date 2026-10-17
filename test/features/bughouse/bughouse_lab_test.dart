@@ -2,7 +2,7 @@ import 'package:chess_auto_prep/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/chess/bughouse/table_line.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_lab.dart';
-import 'package:dartchess/dartchess.dart' show Role, Setup, Side;
+import 'package:dartchess/dartchess.dart' show Role, Setup, Side, Square;
 import 'package:flutter_test/flutter_test.dart';
 
 const start = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -220,5 +220,86 @@ void main() {
     lab.newGame();
     lab.pasteMoves(copied);
     expect(lab.movesText, copied);
+  });
+
+  test('an underpromotion plays, copies and pastes back as itself', () {
+    const promoting = 'k7/4P3/8/8/8/8/8/K7[] w - - 0 1';
+    lab.loadDualFen(promoting);
+    lab.play(BoardNumber.one, 'e7e8n');
+    expect(lab.line.moves.single.san, 'e8=N');
+    expect(lab.position.one.board.pieceAt(Square.e8)?.role, Role.knight);
+    final copied = lab.movesText;
+    lab.newGame();
+    lab.pasteMoves(copied);
+    expect(lab.problem, isNull);
+    expect(lab.line.moves.single.san, 'e8=N');
+    // An engine's move names its piece too; a bare one is a queen.
+    lab.loadDualFen(promoting);
+    lab.playJoint(const JointMove('e7e8r', null));
+    expect(lab.line.moves.single.san, 'e8=R+');
+    lab.loadDualFen(promoting);
+    lab.playJoint(const JointMove('e7e8', null));
+    expect(lab.line.moves.single.san, 'e8=Q+');
+  });
+
+  test('an engine line plays up to a move, all or nothing', () {
+    lab.playMoves(const [
+      (BoardNumber.one, 'e2e4'),
+      (BoardNumber.two, 'd2d4'),
+      (BoardNumber.one, 'e7e5'),
+    ]);
+    expect(lab.line.moves.map((m) => m.san), ['e4', 'd4', 'e5']);
+    lab.playMoves(const [(BoardNumber.one, 'g1f3'), (BoardNumber.one, 'a1a8')]);
+    expect(lab.problem, isA<LineMisfits>());
+    expect(lab.line.moves.length, 3);
+  });
+
+  test('delete from here takes the move and its board’s later moves', () {
+    capture();
+    lab.play(BoardNumber.two, 'e2e4');
+    lab.deleteFrom(lab.line.of(BoardNumber.one)[1]);
+    expect(lab.line.of(BoardNumber.one).map((m) => m.san), ['e4']);
+    expect(lab.line.of(BoardNumber.two).single.san, 'e4');
+    // The capture board 2 dropped cannot go.
+    lab.newGame();
+    capture();
+    lab.play(BoardNumber.two, 'e2e4');
+    lab.play(BoardNumber.two, 'P@d5');
+    final before = lab.line;
+    lab.deleteFrom(lab.line.of(BoardNumber.one)[2]);
+    expect((lab.problem as DeleteRefused).move.san, 'P@d5');
+    expect(lab.line, same(before));
+  });
+
+  test('a move copies its line, its FEN and the table after it', () {
+    lab.showBoards(LabBoards.two);
+    lab.play(BoardNumber.one, 'e2e4');
+    lab.play(BoardNumber.two, 'd2d4');
+    lab.play(BoardNumber.one, 'e7e5');
+    final e4 = lab.line.of(BoardNumber.one).first;
+    expect(lab.linePgnThrough(e4), '1A. e4');
+    final d4 = lab.line.of(BoardNumber.two).single;
+    expect(lab.linePgnThrough(d4), '1A. e4 1B. d4');
+    expect(lab.positionAfter(e4)!.one.fen, startsWith('rnbqkbnr/pppppppp/8'));
+    expect(lab.positionAfter(d4)!.two.turn, Side.black);
+    lab.showBoards(LabBoards.one);
+    expect(
+      lab.linePgnThrough(lab.line.of(BoardNumber.one).last),
+      '[Variant "Crazyhouse"]\n\n1. e4 e5 *',
+    );
+  });
+
+  test('an engine line copies after the moves on the boards', () {
+    lab.play(BoardNumber.one, 'e2e4');
+    lab.play(BoardNumber.one, 'e7e5');
+    lab.go(BoardNumber.one, 1);
+    expect(
+      lab.linePgnWith(const [
+        (BoardNumber.one, 'c7c5'),
+        (BoardNumber.one, 'g1f3'),
+        (BoardNumber.one, 'a1a8'),
+      ]),
+      '[Variant "Crazyhouse"]\n\n1. e4 c5 2. Nf3 *',
+    );
   });
 }

@@ -71,9 +71,9 @@ final class MistakeCounts {
 /// ```
 ///
 /// The second line is a JSON object from game id to `[blunders, mistakes,
-/// inaccuracies]`, keys sorted, UTF-8, base64url. It is never the first
-/// line, which the old app reads as its own and nothing else. The counts
-/// are derived: a line that cannot be read is no counts, never a refusal.
+/// inaccuracies]`, keys sorted, UTF-8, base64url. It is never the first line,
+/// which belongs to the analysed-games record. The counts are derived: a line
+/// that cannot be read is no counts, never a refusal.
 const mistakeCountsPrefix = '; ChessAutoPrep-Mistakes-v1: ';
 
 /// The counts the set's [preamble] holds, by game id; empty when it holds

@@ -143,8 +143,8 @@ final class GenerationTrees {
     }
   }
 
-  /// The v2 runs in [folder], newest first: real directories holding a
-  /// tree, never followed through a link.
+  /// The app's own runs in [folder], its `v2-` folders, newest first: real
+  /// directories holding a tree, never followed through a link.
   Future<List<({String path, DateTime modified})>> _runs(String folder) async {
     final runs = <({String path, DateTime modified})>[];
     await for (final entry in Directory(folder).list(followLinks: false)) {
@@ -162,11 +162,12 @@ final class GenerationTrees {
     return runs;
   }
 
-  /// Removes all but the newest [keptRuns] v2 runs in [folder] besides
-  /// [keep]. Derived data: a run that cannot be removed is logged and left.
-  /// Anything that is not the app's own v2 run, such as a v1 tree or an
-  /// agent's `v2-agent-` run, is never touched. Runs are counted per chapter,
-  /// not per root: following the board starts a new root at every step.
+  /// Removes all but the newest [keptRuns] of the app's own `v2-` runs in
+  /// [folder] besides [keep]. Derived data: a run that cannot be removed is
+  /// logged and left. Anything else, such as a tree in an older folder
+  /// layout or an agent's `v2-agent-` run, is never touched. Runs are counted
+  /// per chapter, not per root: following the board starts a new root at
+  /// every step.
   Future<void> _prune(String folder, {required String keep}) async {
     try {
       final others = [

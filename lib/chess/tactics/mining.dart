@@ -11,8 +11,8 @@ import 'puzzle.dart';
 
 /// Turning the engine's opinion of the user's moves into puzzles: which move
 /// lost enough to be a mistake, and the puzzle that asks for the better one.
-/// The old app's review, number for number, so a game mined by either app
-/// gives the same puzzles.
+/// The thresholds and texts are fixed, number for number, so a game already
+/// mined keeps giving the same puzzles.
 
 /// What the engine said about one position, from the side to move: a score
 /// in centipawns, or the mate distance UCI gives (`mate -3` is being mated
@@ -55,7 +55,7 @@ MistakeKind? judge(Verdict before, Verdict after) =>
     mistakeFor(winningChance(before.packed) - winningChance(-after.packed));
 
 /// A score as the note writes it, from the side [before]'s mover: `+0.6`,
-/// `-2.1`, `#3`, `#-4`. The note is a stored format both apps read back, so
+/// `-2.1`, `#3`, `#-4`. The note is a stored format existing sets carry, so
 /// this is not the display text and must not follow it.
 String evalText(Verdict verdict, {bool negate = false}) {
   final mate = verdict.mate;
