@@ -515,8 +515,9 @@ final class LabEngine extends ChangeNotifier {
     _ => const [],
   };
 
-  /// The engine's choice on [board] played there, as Space does on lila's
-  /// analysis board; nothing when it would sit or has not reported.
+  /// The top row's move on [board], the best-scoring, played there, as
+  /// Space does on lila's analysis board; nothing when it would sit or has
+  /// not reported.
   void playBest(BoardNumber board) {
     if (rowsOn(board).firstOrNull?.move case final uci?) lab.play(board, uci);
   }

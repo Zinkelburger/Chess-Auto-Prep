@@ -57,8 +57,9 @@ panel (440–480 px) on the right.
   The engine ranks joint actions over both boards, so a team on move on
   both repeats one board's move across its lines; the rows are the three
   moves it visited most on that board (from 16 lines asked), each with its
-  most-visited line, the engine's choice first and the rest best-scoring
-  first. Each move is its own token, as in the workspace's engine lines.
+  most-visited line, best-scoring first. The engine's own choice is not
+  pinned on top, so rows swap as the scores move during a live search.
+  Each move is its own token, as in the workspace's engine lines.
   Rows are 28 px, clip what does not fit, and keep their place and size
   whether the engine is on or off or a move is hovered; an empty row is
   blank. Scores are A + B's, on Hivemind's scale (`+ is good for A + B:
