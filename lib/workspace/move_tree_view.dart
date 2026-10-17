@@ -378,10 +378,15 @@ final class _LineBuilder {
           : [
               MenuItemButton(
                 onPressed: () => promoteVariation(session, path),
+                leadingIcon: const Icon(
+                  Icons.arrow_upward,
+                  size: IconSize.menu,
+                ),
                 child: const Text('Promote variation'),
               ),
               MenuItemButton(
                 onPressed: () => makeMainLine(session, path),
+                leadingIcon: const Icon(Icons.check, size: IconSize.menu),
                 child: const Text('Make main line'),
               ),
               MenuItemButton(

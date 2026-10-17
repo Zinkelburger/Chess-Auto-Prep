@@ -808,17 +808,27 @@ typedef _Half = ({LineMove move, int index});
 List<AppAction> moveMenu(BughouseLab lab, LineMove move) {
   final after = lab.positionAfter(move);
   return [
-    AppAction('Copy line PGN', () => _copy(lab.linePgnThrough(move))),
+    AppAction(
+      'Copy line PGN',
+      () => _copy(lab.linePgnThrough(move)),
+      icon: Icons.content_copy,
+    ),
     AppAction(
       'Copy FEN',
       after == null ? null : () => _copy(after.board(move.board).fen),
+      icon: Icons.content_copy,
     ),
     if (!lab.single)
       AppAction(
         'Copy dual FEN',
         after == null ? null : () => _copy(after.dualFen),
+        icon: Icons.content_copy,
       ),
-    AppAction('Delete from here', () => lab.deleteFrom(move)),
+    AppAction(
+      'Delete from here',
+      () => lab.deleteFrom(move),
+      icon: Icons.delete_outline,
+    ),
   ];
 }
 

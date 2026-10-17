@@ -242,6 +242,11 @@ active pane's a brighter grey. Dividers between panes are 1px lines with a
 ### Pane tabs
 - **Style:** 34px tall, up to 220px wide and never wider than the strip (a long title ends in an ellipsis), 6px radius; the chosen tab filled in Selection Grey; a 2px line shows where a dragged tab will land. Tabs close from the right-click menu. The list column's Repertoires / Chapters / Positions tabs use the same height and inset.
 
+### Menus
+- **Style:** Graphite Panel, 1px outline, 8px radius, 32px rows with the body-small label. The top bar's menus and every right-click menu look the same.
+- **Opening:** at once, with no fade, grow or slide; a right-click menu appears under the pointer on the release.
+- **Symbols:** a move's right-click menu gives each action its symbol in muted ink in a 16px slot before the label, as on the website's analysis board: copy for Copy line PGN / Copy FEN / Copy dual FEN, a bin for Delete from here, an up arrow for Promote variation, a tick for Make main line, the move list's own play and stop marks for the quiz markers. When one row of a menu has a symbol, rows without one keep the slot empty so the labels line up.
+
 ### Inputs / Fields
 - Empty fields contain no example text or typing prompts. Keep names on labels, search purposes in accessible names and hover help, and required formats in labels. New names start blank; saved values and functional settings remain visible.
 - **Style:** shared `search_field`, `choice_field`, `number_field` controls with a label above and an underline; search always shows its magnifier and clear action.

@@ -49,6 +49,9 @@ const nameDialogWidth = 360.0;
 /// Room for action labels with shortcuts in a separate right-hand gutter.
 const actionMenuWidth = 260.0;
 
+/// A menu row, in the top bar's menus and the right-click menus alike.
+const menuRowHeight = 32.0;
+
 /// How tall a dialog that asks the user to pick from a list is. Fixed, so the
 /// list does not grow and shrink under the pointer as the search narrows it.
 const choiceDialogHeight = 280.0;
@@ -501,9 +504,26 @@ ThemeData darkTheme() {
         ),
       ),
     ),
+    // The right-click menus, drawn like the menus above.
+    popupMenuTheme: PopupMenuThemeData(
+      color: _panel,
+      surfaceTintColor: Colors.transparent,
+      menuPadding: const EdgeInsets.symmetric(vertical: Space.xs),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(readingCardRadius),
+        side: const BorderSide(color: _outline),
+      ),
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (states) => _sized(base.textTheme).bodySmall?.copyWith(
+          color: states.contains(WidgetState.disabled) ? _disabledText : _text,
+        ),
+      ),
+    ),
     menuButtonTheme: MenuButtonThemeData(
       style: ButtonStyle(
-        minimumSize: const WidgetStatePropertyAll(Size(actionMenuWidth, 32)),
+        minimumSize: const WidgetStatePropertyAll(
+          Size(actionMenuWidth, menuRowHeight),
+        ),
         padding: const WidgetStatePropertyAll(
           EdgeInsets.symmetric(horizontal: Space.l),
         ),

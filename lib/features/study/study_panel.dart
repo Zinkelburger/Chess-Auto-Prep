@@ -700,14 +700,21 @@ List<Widget> quizMenuItems(DocumentSession session, NodePath path) {
   return [
     _item(
       starts ? 'Do not start a quiz here' : 'Start quiz from this move',
+      Icons.play_arrow,
       () => session.setMarker(path, quizStartMarker, on: !starts),
     ),
     _item(
       ends ? 'Do not end a quiz here' : 'End quiz after this move',
+      Icons.stop,
       () => session.setMarker(path, quizEndMarker, on: !ends),
     ),
   ];
 }
 
-MenuItemButton _item(String label, VoidCallback run) =>
-    MenuItemButton(onPressed: run, child: Text(label));
+/// The icons are the marks the move list shows for each marker.
+MenuItemButton _item(String label, IconData icon, VoidCallback run) =>
+    MenuItemButton(
+      onPressed: run,
+      leadingIcon: Icon(icon, size: IconSize.menu),
+      child: Text(label),
+    );
