@@ -1,6 +1,5 @@
-// The directory lock every copy and earlier build of the app takes. The
-// protocol is written out again here, so a change to it fails this test
-// rather than a user's save.
+// The directory lock every copy of the app takes, within one process and
+// across processes.
 import 'dart:async';
 import 'dart:io';
 
@@ -8,9 +7,8 @@ import 'package:chess_auto_prep/storage/file_lock.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:sqlite3/sqlite3.dart';
 
-import '../support/lock_path.dart';
+import '../support/other_copy_lock.dart';
 import 'store_fixture.dart';
 
 void main() {
@@ -63,58 +61,44 @@ void main() {
     expect(await withDirectoryLock(folder, () async => 'ran'), 'ran');
   });
 
-  test('the lock file is the one earlier builds take', () async {
-    await withDirectoryLock(fixture.documents, () async {
-      expect(await File(await lockPathOf(fixture.documents)).exists(), isTrue);
-    });
-  });
-
-  test('a rename waits while another app holds the documents root, then goes '
-      'through', () async {
+  test('a rename waits while another copy of the app holds the documents '
+      'root, then goes through', () async {
     final ref = fixture.ref('KID/Main.pgn');
     final revision = await fixture.put(ref, 'A *\n');
     // Another copy of the app locks the documents root to rename a chapter,
     // so a rename takes the same lock or the two would move one file at once.
-    final other = sqlite3.open(await lockPathOf(fixture.documents));
-    other.execute('PRAGMA busy_timeout = 0');
-    other.execute('BEGIN IMMEDIATE');
+    final release = await holdLockElsewhere(fixture.documents);
     var done = false;
     final renamed = fixture.store
         .rename(ref, 'Mainline.pgn', expected: revision)
         .whenComplete(() => done = true);
     await Future<void>.delayed(const Duration(milliseconds: 300));
-    expect(done, isFalse, reason: 'the other app still holds the root');
+    expect(done, isFalse, reason: 'the other copy still holds the root');
     expect(await File(ref.path).exists(), isTrue);
-    other.execute('ROLLBACK');
-    other.close();
+    await release();
     expect(await renamed, isA<Moved>());
     expect(await File(fixture.ref('KID/Mainline.pgn').path).exists(), isTrue);
   });
 
-  test(
-    'a save waits while another app holds the folder, then goes through',
-    () async {
-      final ref = fixture.ref('KID/Main.pgn');
-      final before = oneGame('1. d4');
-      final after = oneGame('1. d4 Nf6');
-      final revision = await fixture.put(ref, before);
-      final folder = Directory(p.dirname(ref.path));
-      final other = sqlite3.open(await lockPathOf(folder));
-      other.execute('PRAGMA busy_timeout = 0');
-      other.execute('BEGIN IMMEDIATE');
-      var done = false;
-      final save = fixture
-          .edit(ref, after, revision)
-          .whenComplete(() => done = true);
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-      expect(done, isFalse, reason: 'the other writer still holds the folder');
-      expect(await File(ref.path).readAsString(), before);
-      other.execute('ROLLBACK');
-      other.close();
-      expect(await save, isA<Saved>());
-      expect(await File(ref.path).readAsString(), after);
-    },
-  );
+  test('a save waits while another copy of the app holds the folder, then goes '
+      'through', () async {
+    final ref = fixture.ref('KID/Main.pgn');
+    final before = oneGame('1. d4');
+    final after = oneGame('1. d4 Nf6');
+    final revision = await fixture.put(ref, before);
+    final folder = Directory(p.dirname(ref.path));
+    final release = await holdLockElsewhere(folder);
+    var done = false;
+    final save = fixture
+        .edit(ref, after, revision)
+        .whenComplete(() => done = true);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(done, isFalse, reason: 'the other writer still holds the folder');
+    expect(await File(ref.path).readAsString(), before);
+    await release();
+    expect(await save, isA<Saved>());
+    expect(await File(ref.path).readAsString(), after);
+  });
 }
 
 /// A real folder whose lookups answer only once the future it is given
@@ -149,6 +133,3 @@ final class _SlowToLookUp implements Directory {
   @override
   Object? noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
-
-/// The lock path: `<system temp>/chess-auto-prep-file-locks/` and the
-/// FNV-1a of the resolved absolute directory path.

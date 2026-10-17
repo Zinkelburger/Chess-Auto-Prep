@@ -115,7 +115,7 @@ final class SqliteGameStore implements GameStore {
   /// `<support>/app_games.db`.
   final String path;
 
-  /// How long a read waits for a writer that holds the whole file.
+  /// How long a read waits for another connection that holds the whole file.
   final Duration wait;
 
   /// Reads on another isolate, with a connection of its own: thousands of

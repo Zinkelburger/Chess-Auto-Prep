@@ -225,7 +225,8 @@ void main() {
         await move(engine(interrupt: FileRelocationStep.intent)),
         isA<IoFailure>(),
       );
-      // Another app records a review of the chapter before this one restarts.
+      // Another copy of the app records a review of the chapter before this
+      // one restarts.
       await participant(historyFile).writeAsString(
         '${before[historyFile]}'
         '${from.path},line,2026-09-01T00:00:00Z,good,false,trainer\n',

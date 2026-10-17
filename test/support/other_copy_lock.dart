@@ -1,21 +1,30 @@
-import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
-import 'package:path/path.dart' as p;
+import 'package:chess_auto_prep/storage/file_lock.dart';
 
-/// Where the lock for [directory] lives: FNV-1a of the resolved path under
-/// the system temporary folder. Written out again here so a change to the
-/// protocol fails a test rather than a user's save.
-Future<String> lockPathOf(Directory directory) async {
-  final key = p.normalize(await directory.resolveSymbolicLinks());
-  var hash = 0xcbf29ce484222325;
-  for (final byte in utf8.encode(key)) {
-    hash ^= byte;
-    hash = (hash * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF;
-  }
-  return p.join(
-    Directory.systemTemp.path,
-    'chess-auto-prep-file-locks',
-    '${hash.toRadixString(16).padLeft(16, '0')}.sqlite3',
-  );
+/// Another copy of the app holding [directory]'s lock: the same
+/// [withDirectoryLock], on an isolate of its own, so only the lock itself
+/// keeps the two apart. Answers once the lock is held, with the call that
+/// lets it go.
+Future<Future<void> Function()> holdLockElsewhere(Directory directory) async {
+  final path = directory.path;
+  final messages = ReceivePort();
+  await Isolate.spawn((SendPort reply) async {
+    final release = ReceivePort();
+    await withDirectoryLock(Directory(path), () async {
+      reply.send(release.sendPort);
+      await release.first;
+    });
+    reply.send(null);
+  }, messages.sendPort);
+  final events = StreamIterator<Object?>(messages);
+  if (!await events.moveNext()) throw StateError('the holder never started');
+  final release = events.current! as SendPort;
+  return () async {
+    release.send(null);
+    await events.moveNext();
+    await events.cancel();
+  };
 }

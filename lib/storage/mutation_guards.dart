@@ -39,16 +39,15 @@ Future<T> lockedForDocument<T>(
   }
 }
 
-/// Runs [action] under every lock a relocation needs: the documents root,
-/// which is the scope a move takes, and then [folders], the
-/// folders at either end of it.
+/// Runs [action] under every lock a document write needs: the documents
+/// root, and then [folders], the folders it writes in — both ends of a move.
 ///
 /// Both are needed. The root is the only scope that covers both ends of a
-/// move, and it is what another process renaming the same chapter takes. The
-/// folders are where a create, a save and a delete take theirs: without them
-/// a save could pass its revision check, stage its copy, and publish it onto
-/// the name this move has meanwhile renamed away — leaving the chapter on
-/// disk twice, with the training rows naming only one of them.
+/// move, and it is the folder of the training files a move rewrites, which
+/// the trainer locks too. The folders are what a writer that takes only its
+/// own folder's lock shares with these: a PGN copied into Documents sweeps
+/// the folder's staged files first, and would otherwise delete one a save is
+/// about to put in place.
 ///
 /// The root first, then the folders in path order, so two relocations can
 /// never wait on each other in opposite orders. A folder that is the root, or

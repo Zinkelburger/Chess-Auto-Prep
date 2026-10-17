@@ -495,7 +495,7 @@ final class FileRelocations {
 
   /// [finish] under the locks of the folders [record] changes, as its
   /// command took them, so a writer that takes only a folder's lock, as a
-  /// save does, never runs beside it. The Documents root and
+  /// PGN copied in does, never runs beside it. The Documents root and
   /// Support are the caller's.
   Future<T> _locked<T>(RelocationRecord record, Future<T> Function() action) =>
       lockedForFolders(

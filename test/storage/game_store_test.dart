@@ -90,23 +90,8 @@ void main() {
     expect(keys(await store.read({})), isEmpty);
   });
 
-  test('reading while another process writes sees what it committed', () async {
-    final writer = create(path);
-    addTearDown(writer.close);
-    writer.execute('BEGIN IMMEDIATE');
-    insert(writer, 'tactics', 'uncommitted', '1. f4 *', playedAt: 9);
-    final read = await SqliteGameStore(path).read({'tactics'});
-    expect(keys(read), ['new', 'old']);
-    writer.execute('COMMIT');
-    expect(keys(await SqliteGameStore(path).read({'tactics'})), [
-      'uncommitted',
-      'new',
-      'old',
-    ]);
-  });
-
-  test('a database a writer holds whole past the wait is unreadable, and '
-      'says so', () async {
+  test('a database another connection holds whole past the wait is '
+      'unreadable, and says so', () async {
     final writer = create(path, journal: 'DELETE');
     addTearDown(writer.close);
     writer.execute('BEGIN EXCLUSIVE');

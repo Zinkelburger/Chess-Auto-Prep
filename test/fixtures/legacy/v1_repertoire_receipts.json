@@ -426,28 +426,5 @@
     "Support/trash": {
       "directory": true
     }
-  },
-  "move-landed-at-kill": {
-    "Documents": {
-      "directory": true
-    },
-    "Documents/repertoires": {
-      "directory": true
-    },
-    "Documents/repertoires/New": {
-      "directory": true
-    },
-    "Documents/repertoires/New/Main.pgn": {
-      "text": "1. e4 *"
-    },
-    "Support": {
-      "directory": true
-    },
-    "Support/repertoire-mutations": {
-      "directory": true
-    },
-    "Support/repertoire-mutations/1790627079440568-cd6e010e.json": {
-      "text": "{\"version\":1,\"id\":\"1790627079440568-cd6e010e\",\"from\":\"{profile}/Documents/repertoires/Old\",\"to\":\"{profile}/Documents/repertoires/New\",\"identity\":\"54:0:3796135\",\"state\":\"pending\",\"kind\":\"move\"}"
-    }
   }
 }

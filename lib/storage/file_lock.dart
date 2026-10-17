@@ -15,12 +15,12 @@ import 'package:sqlite3/sqlite3.dart';
 /// and no lease expiry can ever let two writers overlap. The database stays
 /// empty; only the transaction matters.
 ///
-/// Every process that writes these documents must agree on the protocol: the
-/// lock file is
+/// The lock for a directory is
 /// `chess-auto-prep-file-locks/<FNV-1a of the resolved absolute directory
-/// path>.sqlite3` under the system temporary directory, the busy timeout is zero, acquisition is
-/// `BEGIN IMMEDIATE` retried every 10 ms for two minutes, and the transaction
-/// is rolled back however the action ends.
+/// path>.sqlite3` under the system temporary directory, so every process
+/// derives the same file for it. Acquisition is `BEGIN IMMEDIATE` with no
+/// busy timeout, retried every 10 ms for two minutes, and the transaction is
+/// rolled back however the action ends.
 ///
 /// Never call this while already holding the lock for the same directory: the
 /// inner call waits for the outer one and fails after the deadline.

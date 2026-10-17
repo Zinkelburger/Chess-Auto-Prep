@@ -1,29 +1,24 @@
 // A chapter renamed or deleted while a training session is writing.
 //
-// A trainer in another process writes its CSVs under the lock on the folder
-// they sit in, which is the Documents root — the same lock a move or delete
-// takes. So the two serialise: the move waits for the trainer's write, and
+// The trainer of another copy of the app writes its CSVs under the lock on
+// the folder they sit in, which is the Documents root — the same lock a move
+// or delete takes. So the two serialise: the move waits for the trainer's write, and
 // the row the trainer wrote under the old path is repointed with the rest.
 import 'dart:io';
 
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/training_records.dart';
+import 'package:chess_auto_prep/storage/training_rows.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:sqlite3/sqlite3.dart';
 
-import '../support/lock_path.dart';
+import '../support/other_copy_lock.dart';
 import 'store_fixture.dart';
 
-const _reviews = 'repertoire_reviews.csv';
-const _header =
-    'repertoire_id,line_id,line_name,difficulty,interval_days,due_utc,'
-    'last_result,last_reviewed_utc,repetitions,lapses,suspended';
-
 String _review(String id, String line) =>
-    '$id,$line,Mainline,2.5,6,2026-09-20T00:00:00Z,good,'
-    '2026-09-14T00:00:00Z,3,1,false';
+    '$id,$line,Mainline,2.50,6.00,2026-09-20T00:00:00.000Z,good,'
+    '2026-09-14T00:00:00.000Z,3,1,false';
 
 void main() {
   late StoreFixture fixture;
@@ -35,29 +30,26 @@ void main() {
     fixture = await StoreFixture.create();
     ref = fixture.ref('repertoires/KID/Main.pgn');
     revision = await fixture.put(ref, '[Event "Main"]\n\n1. d4 *\n');
-    reviews = File(p.join(fixture.documents.path, _reviews));
-    await reviews.writeAsString('$_header\n${_review(ref.path, 'line_1')}\n');
+    reviews = File(p.join(fixture.documents.path, reviewsFile));
+    await reviews.writeAsString(
+      '$reviewsHeader\n${_review(ref.path, 'line_1')}\n',
+    );
   });
   tearDown(() => fixture.dispose());
 
   /// The trainer, holding the Documents folder while it writes a CSV
   /// there.
-  Future<Database> trainerWriting() async {
-    final trainer = sqlite3.open(await lockPathOf(fixture.documents));
-    trainer.execute('PRAGMA busy_timeout = 0');
-    trainer.execute('BEGIN IMMEDIATE');
-    return trainer;
-  }
+  Future<Future<void> Function()> trainerWriting() =>
+      holdLockElsewhere(fixture.documents);
 
   /// The trainer's write: one more review row naming the chapter's path as
   /// the trainer still knows it.
-  Future<void> trainerWrote(Database trainer) async {
+  Future<void> trainerWrote(Future<void> Function() release) async {
     await reviews.writeAsString(
       '${_review(ref.path, 'line_2')}\n',
       mode: FileMode.append,
     );
-    trainer.execute('ROLLBACK');
-    trainer.close();
+    await release();
   }
 
   test(

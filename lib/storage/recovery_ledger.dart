@@ -172,7 +172,8 @@ final class RecoveryLedger {
   }
 
   /// A pass could not run, or stopped part way: the next waits [base], or
-  /// longer each time when a lock another app keeps was in the way.
+  /// longer each time when a lock another copy of the app keeps was in the
+  /// way.
   void passCouldNotRun(DateTime now, Duration base, {required bool locked}) {
     _passed = false;
     if (!locked) _lockFailures = 0;

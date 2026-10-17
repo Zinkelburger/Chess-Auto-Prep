@@ -14,9 +14,8 @@ import 'package:chess_auto_prep/storage/training_store.dart';
 import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:sqlite3/sqlite3.dart';
 
-import '../support/lock_path.dart';
+import '../support/other_copy_lock.dart';
 
 /// A review row as existing files hold it, 11 columns.
 String _review(String source, String id, {String name = 'Mainline'}) =>
@@ -513,21 +512,20 @@ void main() {
     expect((await read({kid})).mistakes, hasLength(2));
   });
 
-  test('waits for another process holding the Documents folder', () async {
-    final old = sqlite3.open(await lockPathOf(documents));
-    old.execute('PRAGMA busy_timeout = 0');
-    old.execute('BEGIN IMMEDIATE');
-    var done = false;
-    final logged = store
-        .logAttempt(_attempt(mainline, correct: true), operation: operation())
-        .whenComplete(() => done = true);
-    await Future<void>.delayed(const Duration(milliseconds: 200));
-    expect(done, isFalse);
-    old
-      ..execute('ROLLBACK')
-      ..close();
-    expect(await logged, isA<ProgressWritten>());
-  });
+  test(
+    'waits for another copy of the app holding the Documents folder',
+    () async {
+      final release = await holdLockElsewhere(documents);
+      var done = false;
+      final logged = store
+          .logAttempt(_attempt(mainline, correct: true), operation: operation())
+          .whenComplete(() => done = true);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(done, isFalse);
+      await release();
+      expect(await logged, isA<ProgressWritten>());
+    },
+  );
 }
 
 Attempt _attempt(LineKey key, {required bool correct}) => Attempt(
