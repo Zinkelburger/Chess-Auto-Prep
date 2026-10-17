@@ -79,7 +79,9 @@ def run(gate, flutter, extra=()):
         if candidate or gate == 'analyze':
             targets = ['lib', 'test', 'integration_test']
             targets.extend(p for p in ('test_driver',) if Path(p).is_dir())
-            command('analyze', [executable, 'analyze', *targets, '--no-fatal-infos'])
+            # Infos are fatal too: the tree is held at zero analyzer issues,
+            # so every enabled lint is a gate, not advice.
+            command('analyze', [executable, 'analyze', *targets, '--fatal-infos'])
         if candidate or gate == 'test':
             command('test', [executable, 'test', '--concurrency=2',
                              '--reporter', 'expanded', *extra])

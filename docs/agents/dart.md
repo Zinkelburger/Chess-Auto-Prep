@@ -47,5 +47,7 @@ and the existing workspace/storage owners before adding helpers.
 
 Stub HTTP and engine ports in focused tests; native engines belong in explicit
 engine/desktop checks. Format only changed Dart files. Run analyze/lint and
-relevant tests through `scripts/ci.sh`. Update affected documentation following
-[Documentation](documentation.md) when behavior, API or layout changes.
+relevant tests through `scripts/ci.sh`. Analyze stays at zero issues: infos are
+fatal, so fix a new lint (or disable the rule with a reason), never leave it.
+Update affected documentation following [Documentation](documentation.md) when
+behavior, API or layout changes.
