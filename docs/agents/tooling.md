@@ -45,7 +45,7 @@ profile path. Existing driver sessions retain their old profile until restarted.
 
 Manual overnight population: `python3 tools/bughouse_db/overnight.py start`
 (default 800 nodes, eight cores, eight hours), with `status` and `stop` controls.
-See [the web guide](../../python/twic-position-finder/frontend/README.md#shared-analysis-and-manual-overnight-population).
+See [the API guide](../../python/twic-position-finder/README.md#bughouse-expectimax-and-overnight-population).
 
 The app hides Bughouse Lab without the optional bughouse assets. Archive/book
 data lives under `~/.local/share/chess-prep/bughouse-db/`, not repo/assets;

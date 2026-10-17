@@ -243,21 +243,24 @@ builds; they are data contracts the current code reads and keeps.
   and complete snapshots in `bughouse_expectimax.db`.
 - `tools/bughouse_db/expectimax.py` seeds/supervises a resumable queue;
   `tools/build_bughouse_expectimax.dart` runs the production Dart implementation.
-  The API reader/importer is `python/twic-position-finder/bughouse_expectimax.py`;
-  `frontend/src/bughouse/expectimax.ts` renders the shared snapshots on both
-  bughouse web pages.
+  The API reader/importer is `python/twic-position-finder/bughouse_expectimax.py`
+  ([API guide](../python/twic-position-finder/README.md#bughouse-expectimax-and-overnight-population));
+  no web page displays the snapshots.
 
 ## Static browser preparation
 
-The separately deployed Astro frontend now exposes `/pgn`, `/expectimax`,
-`/tactics` and `/bughouse` from one site navigation. `/pgn` and `/expectimax`
-are one lila-style analysis board with PGN and Expectimax tabs
-(`python/twic-position-finder/frontend/src/prep/`): Stockfish 18 lines over the
-board, PGN games with comments and variations, and the desktop's practical
-expectimax (both sides, Played / White / Black / Engine) run on a Stockfish
-worker pool and Maia in the browser. It shares the board, judge, shapes and
-menu with `/bughouse` (`src/analysis/`). Local PGNs can move from the viewer
-into tactics; both accept custom FEN starts. These browser owners do not
-import Flutter/native storage. See the
-[frontend guide](../python/twic-position-finder/frontend/README.md#pgn-workspace-and-browser-expectimax)
+The separately deployed Astro frontend exposes `/pgn`, `/expectimax`,
+`/tactics`, `/bughouse` and `/bughouse-puzzles` from one site navigation.
+`/pgn` and `/expectimax` are one lila-style analysis board with PGN and
+Expectimax tabs (`python/twic-position-finder/frontend/src/prep/`):
+Stockfish 18 lines over the board, PGN games with comments and variations,
+and the desktop's practical expectimax (both sides, Played / White / Black /
+Engine) run on a Stockfish worker pool and Maia in the browser. Its board and
+editor strips, move list and rules-free variation tree, engine panel and
+gear, judge, shapes and menu are shared with `/bughouse` (`src/analysis/`);
+the Tactics Trainer reuses the PGN reader and browser storage from `src/prep/`
+and the winning-chances formula from `src/analysis/judge.ts`. The viewer can
+send its games to Tactics; both accept custom FEN starts. These browser
+owners do not import Flutter/native storage. See the
+[frontend guide](../python/twic-position-finder/frontend/README.md#pgn-and-expectimax)
 for persistence, search semantics, asset preparation and browser verification.
