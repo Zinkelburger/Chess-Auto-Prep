@@ -67,11 +67,3 @@ list. When a spec gains a *Not built* item, add a row here.
 | Immutable release publication | **Not started** | `softprops/action-gh-release` publishes directly; no draft-then-verify step or release immutability |
 | Engine cleanup proof off Linux | **Partial** | Engines exit when the app is killed because their pipes close (`engines/uci_process.dart`); `test/engines/stockfish_exit_test.dart` proves it on Linux only |
 | Performance budgets | **Not started** | `scripts/ci.sh profile` and `test_driver/renewal_profile_driver.dart` remain, but no integration target measures the current app; no corpus sizes or latency/memory budgets are defined |
-
-## Known defects
-
-Shipped behaviour that contradicts a rule; fix when touching the area.
-
-| Defect | Where |
-|---|---|
-| One bad record in `people.json` refuses the whole players directory, against the fail-open rule | `storage/player_files.dart` `PlayerFiles.read` |

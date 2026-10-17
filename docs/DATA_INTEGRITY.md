@@ -96,7 +96,11 @@ than mining every game again.
 is read as its people) and `opponents/tournaments/<id>.json`
 (`chess-auto-prep/tournament@1`), written by `storage/player_files.dart` under
 the folder lock. A row changed since it was read is refused; unknown fields
-survive.
+survive. A row that cannot be read (not an object, no ID, a name that is not
+text, or a second row under one ID) is left out with one warning and a log line,
+and every save writes it back where it was. A `people.json` that cannot be read
+at all shows no players and refuses saves, so nothing writes over it; the
+groups still read.
 
 ### Bughouse books
 
