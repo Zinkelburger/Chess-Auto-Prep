@@ -24,7 +24,7 @@ final class DiagnosticReport {
         '${Platform.operatingSystem} ${Platform.operatingSystemVersion}\n'
             'Dart: ${Platform.version}';
     final tail = await _tail();
-    return 'Chess Auto Prep v2\n$version\n$system\n\n'
+    return 'Chess Auto Prep\n$version\n$system\n\n'
         'Recent app.log (up to $maxLines lines / $maxBytes bytes):\n$tail';
   }
 
