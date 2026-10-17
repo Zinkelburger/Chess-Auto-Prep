@@ -26,16 +26,17 @@ import 'document_history.dart';
 import 'parsed_files.dart';
 import 'session_results.dart';
 
+part 'document_cursor.dart';
 part 'external_document_edits.dart';
 
-/// The active immutable chapter, file, cursor and edits. DocumentSaver owns
-/// persistence. The board, move list and panels derive their state from here.
-/// This notifies for document changes; cursorListenable notifies for navigation,
-/// and anyChange combines both. A new chapter is installed before its cursor.
+/// The active immutable chapter, file and edits. DocumentSaver owns
+/// persistence and [DocumentCursor] where the reader is in the document. The
+/// board, move list and panels derive their state from here. This notifies
+/// for document changes, the cursor for navigation, and anyChange for both.
+/// A new chapter is installed before its cursor.
 final class DocumentSession extends ChangeNotifier {
   DocumentSession(this._store, this._saver) {
     _shown = (chapter: _board.chapter, view: null);
-    _cursor.addListener(closeCommentLine);
   }
 
   final store.PgnDocumentStore _store;
@@ -87,8 +88,8 @@ final class DocumentSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  final _cursor = ValueNotifier<NodePath>(const NodePath.root());
-  final _commentLine = ValueNotifier<CommentLine?>(null);
+  /// Where the reader is in the document, and a comment's line on the board.
+  late final cursor = DocumentCursor._(() => tree, () => _shownTo);
   EditRefused? _refused;
   NodePath? _shownTo;
   bool _flipped = false;
@@ -155,11 +156,6 @@ final class DocumentSession extends ChangeNotifier {
   int? get game => _chapter?.game;
   GameTree? get tree => _chapter?.tree;
 
-  NodePath get cursor => _cursor.value;
-
-  /// Notifies when the cursor moves, and only then.
-  ValueListenable<NodePath> get cursorListenable => _cursor;
-
   /// Asks editors to commit their text before saving or leaving the document,
   /// while their paths still name the moves the text was typed for.
   /// Captures the document after inline editors submit their current text.
@@ -178,50 +174,15 @@ final class DocumentSession extends ChangeNotifier {
   /// its subscription.
   late final Listenable anyChange = Listenable.merge([
     this,
-    _cursor,
-    _commentLine,
+    cursor,
+    cursor.commentLine,
   ]);
-
-  Fen get fen => tree?.fenAt(cursor) ?? Fen.initial;
-
-  /// A line written in a comment, shown on the board in place of the
-  /// cursor's position; null otherwise. None of it is in the file: the cursor
-  /// stays on the comment's move, the board takes no moves, and moving in or
-  /// changing the file puts the board back on it.
-  ValueListenable<CommentLine?> get commentLine => _commentLine;
-
-  /// The position on the board: the comment line's while one is shown.
-  Fen get boardFen => _commentLine.value?.fen ?? fen;
-
-  /// The move that reached [boardFen], as UCI, for the highlight.
-  String? get boardLastMove => _commentLine.value?.move.uci ?? currentMove?.uci;
-
-  /// Reads the line written in a comment on the move at [from], as far as
-  /// its move at [at]. When the file already plays those moves from there,
-  /// the cursor follows them instead; otherwise the board shows the line
-  /// and the file is left as it is.
-  void showCommentLine(NodePath from, List<PvMove> moves, int at) {
-    final tree = this.tree;
-    if (tree == null || _shownTo != null) return;
-    if (!from.isRoot && tree.nodeAt(from) == null) return;
-    final inFile = pathPlaying(tree, from, moves.take(at + 1));
-    if (inFile != null) {
-      closeCommentLine();
-      _cursor.value = inFile;
-      return;
-    }
-    _cursor.value = from;
-    _commentLine.value = CommentLine(from: from, moves: moves, at: at);
-  }
-
-  /// Puts the board back on the file's position.
-  void closeCommentLine() => _commentLine.value = null;
 
   /// Whatever changes the document, or how it is shown, puts the board back
   /// on the file: the line was read from a position that may be gone.
   @override
   void notifyListeners() {
-    closeCommentLine();
+    cursor.closeCommentLine();
     super.notifyListeners();
   }
 
@@ -248,7 +209,7 @@ final class DocumentSession extends ChangeNotifier {
     if (path == _shownTo) return;
     _shownTo = path;
     notifyListeners();
-    if (path != null && !path.startsWith(cursor)) _cursor.value = path;
+    if (path != null && !path.startsWith(cursor.value)) cursor._place(path);
   }
 
   /// Turns the board over. On the analysis board, which no file says the
@@ -274,9 +235,6 @@ final class DocumentSession extends ChangeNotifier {
   void previousGame() {
     if (game case final at?) showGame(at - 1);
   }
-
-  /// The move the cursor is on; null at the root.
-  MoveNode? get currentMove => tree?.nodeAt(cursor);
 
   /// The comment on the move at [at], or the chapter's introduction at the
   /// root; machine tokens included.
@@ -433,7 +391,7 @@ final class DocumentSession extends ChangeNotifier {
     if (isScratch) {
       _board
         ..chapter = _chapter!
-        ..cursor = cursor;
+        ..cursor = cursor.value;
     }
     _board = page;
     if (fresh != null) page.restart(fresh);
@@ -450,7 +408,7 @@ final class DocumentSession extends ChangeNotifier {
     _refused = null;
     _shownTo = null;
     _flipped = false;
-    _cursor.value = _board.cursor;
+    cursor._place(_board.cursor);
     notifyListeners();
   }
 
@@ -467,7 +425,7 @@ final class DocumentSession extends ChangeNotifier {
     _shown = (chapter: withGame(chapter, index), view: null);
     _shownTo = null;
     _clearRefusal();
-    _cursor.value = const NodePath.root();
+    cursor._place(const NodePath.root());
     notifyListeners();
   }
 
@@ -478,64 +436,6 @@ final class DocumentSession extends ChangeNotifier {
     return index >= 0 && index < chapter.lines.length && index != chapter.game;
   }
 
-  /// Moves the cursor; a path not in the tree is ignored. Going to the move
-  /// the cursor is already on still puts the board back on the file.
-  void goTo(NodePath path) {
-    final tree = this.tree;
-    if (path == cursor) closeCommentLine();
-    if (tree == null || path == cursor) return;
-    if (!path.isRoot && tree.nodeAt(path) == null) return;
-    if (_shownTo case final limit? when !limit.startsWith(path)) return;
-    _cursor.value = path;
-  }
-
-  /// The next move of the file, or of the comment line on the board.
-  void forward() {
-    if (_commentLine.value case final line?) {
-      if (line.at + 1 < line.moves.length) {
-        _commentLine.value = line.atMove(line.at + 1);
-      }
-      return;
-    }
-    goTo(cursor.mainChild);
-  }
-
-  /// The move before in the file; while a comment line is on the board, its
-  /// move before, and from its first move back to the file.
-  void back() {
-    if (_commentLine.value case final line?) {
-      _commentLine.value = line.at == 0 ? null : line.atMove(line.at - 1);
-      return;
-    }
-    goTo(cursor.parent);
-  }
-
-  void toStart() => goTo(const NodePath.root());
-
-  /// Steps into the first variation that branches off where the cursor is:
-  /// the move played instead of the main continuation. Whether there was
-  /// one to step into.
-  bool enterVariation() {
-    final variation = cursor.child(1);
-    if (tree?.nodeAt(variation) == null) return false;
-    goTo(variation);
-    return cursor == variation;
-  }
-
-  /// Back out of the variation the cursor is in, to the move of the line
-  /// it branches from. Whether the cursor was in one.
-  bool leaveVariation() {
-    final branch = cursor.branchPoint;
-    if (branch == null) return false;
-    goTo(branch);
-    return cursor == branch;
-  }
-
-  void toEnd() {
-    final tree = this.tree;
-    if (tree != null) goTo(tree.endOfLineFrom(cursor));
-  }
-
   /// Plays [uci] from the cursor and follows it. A move already in the tree
   /// only moves the cursor; a new one is written into the chapter and saved.
   /// An illegal move is ignored — the board offers legal moves only — and one
@@ -544,16 +444,16 @@ final class DocumentSession extends ChangeNotifier {
     final chapter = _chapter;
     if (chapter == null || _shownTo != null) return;
     // The board shows a comment's line, not the cursor's position.
-    if (_commentLine.value != null) return;
+    if (cursor.commentLine.value != null) return;
     // A move the chapter already holds writes nothing, so following it is
     // reading: a file this app may not write still shows its own lines.
-    final here = edits.playedAlready(chapter, at: cursor, uci: uci);
+    final here = edits.playedAlready(chapter, at: cursor.value, uci: uci);
     if (here != null) {
-      _cursor.value = here;
+      cursor._place(here);
       return;
     }
     if (_editBlocked() != null) return;
-    switch (edits.addMove(chapter, at: cursor, uci: uci)) {
+    switch (edits.addMove(chapter, at: cursor.value, uci: uci)) {
       case edits.MoveIllegal():
         return;
       case edits.MoveRefused(:final reason):
@@ -569,7 +469,7 @@ final class DocumentSession extends ChangeNotifier {
       case edits.MoveAdded(chapter: final edited, :final path, :final written):
         _clearRefusal();
         if (!identical(edited, chapter)) _replace(edited, written);
-        _cursor.value = path;
+        cursor._place(path);
         notifyListeners();
     }
   }
@@ -718,9 +618,11 @@ final class DocumentSession extends ChangeNotifier {
     _follow(shown.view);
     // A refusal was about the version the undo replaced.
     _clearRefusal();
-    _cursor.value = before == null
-        ? const NodePath.root()
-        : samePathIn(before, shown.chapter.tree, cursor);
+    cursor._place(
+      before == null
+          ? const NodePath.root()
+          : samePathIn(before, shown.chapter.tree, cursor.value),
+    );
     notifyListeners();
   }
 
@@ -774,7 +676,7 @@ final class DocumentSession extends ChangeNotifier {
       );
     }
     _clearRefusal();
-    _cursor.value = samePathIn(before.tree, shown.chapter.tree, cursor);
+    cursor._place(samePathIn(before.tree, shown.chapter.tree, cursor.value));
     notifyListeners();
   }
 
@@ -784,7 +686,7 @@ final class DocumentSession extends ChangeNotifier {
     final restored = _board.takeBack();
     if (restored == null || before == null) return const UndoRefused();
     _shown = (chapter: restored, view: null);
-    _cursor.value = samePathIn(before.tree, restored.tree, cursor);
+    cursor._place(samePathIn(before.tree, restored.tree, cursor.value));
     notifyListeners();
     return Restored(writeChapter(restored));
   }
@@ -800,7 +702,7 @@ final class DocumentSession extends ChangeNotifier {
     if (_chapter case final board? when isScratch) {
       _board
         ..chapter = board
-        ..cursor = cursor;
+        ..cursor = cursor.value;
     }
     _ended = _held == null ? null : HeldEditsEnded.dropped;
     _held = null;
@@ -811,7 +713,7 @@ final class DocumentSession extends ChangeNotifier {
     _shownTo = null;
     _refused = readOnly == null ? null : NotEditable(readOnly);
     _saver.opened(ref, revision, readOnly: readOnly);
-    _cursor.value = const NodePath.root();
+    cursor._place(const NodePath.root());
     notifyListeners();
   }
 
@@ -863,7 +765,7 @@ final class DocumentSession extends ChangeNotifier {
           if (reason != null) return reason;
         }
         _clearRefusal();
-        _cursor.value = samePathIn(chapter.tree, _chapter!.tree, cursor);
+        cursor._place(samePathIn(chapter.tree, _chapter!.tree, cursor.value));
     }
     notifyListeners();
     return null;
@@ -900,7 +802,7 @@ final class DocumentSession extends ChangeNotifier {
           section ?? view.section,
         );
         _land(withReferenceChanges(landed, references));
-        _cursor.value = samePathIn(before, _chapter!.tree, cursor);
+        cursor._place(samePathIn(before, _chapter!.tree, cursor.value));
     }
     notifyListeners();
     return null;
@@ -992,8 +894,7 @@ final class DocumentSession extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _cursor.dispose();
-    _commentLine.dispose();
+    cursor._dispose();
     _editors.dispose();
     super.dispose();
   }

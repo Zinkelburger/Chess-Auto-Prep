@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/training/schedule.dart';
 import 'package:chess_auto_prep/features/library/library_state.dart';
 import 'package:chess_auto_prep/features/trainer/trainer.dart';
+import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/storage/atomic_write.dart';
 import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
@@ -110,7 +111,7 @@ void main() {
         expect(await parts.env.pendingWrites.settle(), isNull);
         final attempts = File(p.join(disk.documents.path, attemptsFile));
         expect(await attempts.readAsLines(), hasLength(1));
-        parts.session.goTo(NodePath.of([0]));
+        parts.session.cursor.goTo(NodePath.of([0]));
         await _until(
           parts.workspace.gaps,
           () => parts.workspace.gaps.currentWalk != null,

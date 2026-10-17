@@ -231,7 +231,7 @@ void main() {
     await settled(filter);
     expect(kept(filter), [0]);
     fixture.viewer.showGame(0);
-    expect(fixture.session.cursor, NodePath.of(const [0, 0, 0, 0]));
+    expect(fixture.session.cursor.value, NodePath.of(const [0, 0, 0, 0]));
     filter.apply(
       const GameFilter(
         rules: [

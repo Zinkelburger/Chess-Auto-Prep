@@ -242,7 +242,7 @@ class _Tabbed extends StatelessWidget {
         if (hooks.onAnnotate != null)
           MenuItemButton(
             onPressed: () {
-              workspace.session.goTo(path);
+              workspace.session.cursor.goTo(path);
               hooks.onAnnotate!();
             },
             child: const Text('Comment this move'),

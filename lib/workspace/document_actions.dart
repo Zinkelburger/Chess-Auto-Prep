@@ -80,7 +80,7 @@ List<AppAction> documentActions({
     ),
     AppAction(
       'Copy FEN',
-      when(open, () => _copy(session.fen.value)),
+      when(open, () => _copy(session.cursor.fen.value)),
       group: 'Copy',
       icon: Icons.content_copy,
     ),

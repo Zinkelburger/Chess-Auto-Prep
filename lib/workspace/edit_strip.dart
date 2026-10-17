@@ -131,7 +131,7 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
     return ListenableBuilder(
       listenable: Listenable.merge([
         widget.session,
-        widget.session.cursorListenable,
+        widget.session.cursor,
         widget.saver,
         widget.editing,
       ]),
@@ -191,7 +191,7 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
                     _Glyphs(session: widget.session, position: true),
                   ],
                 ),
-                if (widget.studyTools && !widget.session.cursor.isRoot)
+                if (widget.studyTools && !widget.session.cursor.value.isRoot)
                   _QuizControls(session: widget.session),
                 const SizedBox(height: Space.s),
                 if (!widget.commentInNote)
@@ -394,12 +394,12 @@ class _Glyphs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder(
-    valueListenable: session.cursorListenable,
+    valueListenable: session.cursor,
     builder: (context, at, _) => _buttons(at),
   );
 
   Widget _buttons(NodePath at) {
-    final move = session.currentMove;
+    final move = session.cursor.currentMove;
     final current = move?.nags
         .where(position ? isPositionGlyph : isGlyph)
         .firstOrNull;
@@ -473,7 +473,7 @@ class _QuizControls extends StatelessWidget {
   final DocumentSession session;
   @override
   Widget build(BuildContext context) {
-    final at = session.cursor;
+    final at = session.cursor.value;
     final comment = session.commentAt(at);
     return Wrap(
       spacing: Space.s,

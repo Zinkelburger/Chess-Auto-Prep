@@ -7,7 +7,7 @@ import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/storage/my_accounts.dart';
 import 'package:chess_auto_prep/features/players/player_analysis.dart';
 import 'package:chess_auto_prep/features/players/player_hunt.dart';
-import 'package:chess_auto_prep/features/trainer/trainer.dart';
+import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/engines/engine_line.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';

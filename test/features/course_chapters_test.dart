@@ -78,7 +78,7 @@ void main() {
 
   test('a move played in a chapter is written into the one file', () async {
     await start(opened: sicilian);
-    fixture.session.toEnd();
+    fixture.session.cursor.toEnd();
     fixture.session.playMove('d7d5');
     await pumpEventQueue();
     final text = onDisk();

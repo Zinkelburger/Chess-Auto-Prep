@@ -25,7 +25,7 @@ void main() {
       expect(analysis.multiPv, 5);
       expect(engine.searches.length, 2);
       expect(engine.current.multiPv, 5);
-      expect(engine.current.fen, fixture.session.fen);
+      expect(engine.current.fen, fixture.session.cursor.fen);
       analysis.setLines(5);
       expect(
         engine.searches.length,

@@ -162,7 +162,7 @@ void main() {
     expect(find.text('Depth 35 · Scripted 1'), findsOneWidget);
     expect(find.text('#2'), findsOneWidget);
     expect(tester.getSize(find.byType(EnginePane)).height, height);
-    session.forward();
+    session.cursor.forward();
     await tester.pump();
     expect(find.text('Scripted 1'), findsOneWidget);
     expect(find.text('#2'), findsNothing);
@@ -279,7 +279,7 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.byType(StaticChessboard), findsOneWidget, reason: 'deeper');
-    session.forward();
+    session.cursor.forward();
     await tester.pump();
     expect(find.byType(StaticChessboard), findsNothing);
   });
@@ -288,8 +288,8 @@ void main() {
     await analyse(tester);
     await tester.tap(find.text('2. Nf3'));
     await tester.pump();
-    expect(session.currentMove?.uci, 'g1f3');
-    expect(session.cursor.parent, isNot(session.cursor));
+    expect(session.cursor.currentMove?.uci, 'g1f3');
+    expect(session.cursor.value.parent, isNot(session.cursor.value));
     // 1... c5 2. Nf3 is the chapter's own line, so following it wrote
     // nothing.
     expect(fixture.onDisk, blackChapter);

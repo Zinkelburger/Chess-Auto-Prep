@@ -103,7 +103,8 @@ Actions menu; a panel takes the one or two owners it reads.
 
 | Owner | Holds | Never holds |
 |---|---|---|
-| `DocumentSession` | The parsed move tree as an immutable value, the cursor, `shownTo` while a puzzle hides the rest, the store revision, dirty state, undo receipts | Engine output, explorer data, panel state |
+| `DocumentSession` | The parsed move tree as an immutable value, `shownTo` while a puzzle hides the rest, the store revision, dirty state, undo receipts | Engine output, explorer data, panel state |
+| `DocumentCursor` (`session.cursor`) | The move the cursor is on, the position there, and a comment's line on the board in its place | The document; it reads the session's tree and `shownTo` |
 | `DocumentSaver` | The debounced save of the session's draft and its outcome | The tree or cursor |
 | `EngineAnalysis` | The engine job for the cursor position and its latest snapshot | Anything about the document |
 | `Explorer` | The explorer query for the cursor position and the session's answers (`ExplorerAnswers` via `ExplorerDatabases`) | The document; a listed game kept as a file (`GameFetcher`) |
@@ -115,8 +116,8 @@ Actions menu; a panel takes the one or two owners it reads.
 | A panel's owner (`FillGaps`, `Lesson`, `PuzzleTrainer`, `ChapterAudit`, …) | That tool's state, keyed to a document revision | A second copy of the tree or cursor |
 
 An owner notifies only for what its listeners show. `DocumentSession`
-notifies its own listeners when the document changes and `cursorListenable`
-when the cursor moves; `anyChange` is both, for views of the position. A
+notifies its own listeners when the document changes and `session.cursor`
+(a `ValueListenable<NodePath>`) when the cursor moves; `anyChange` is both, for views of the position. A
 derived owner such as `ChapterOutline` notifies when its output changes, not
 whenever its inputs do. Lists highlight the current row through
 `ui/selection.dart` (a cursor move redraws two rows) and build rows lazily.
@@ -205,7 +206,7 @@ hand-written because no package keeps untouched games byte for byte.
 | `lib/chess/pgn/game_tree.dart` | Immutable values with doc comments that say why |
 | `lib/chess/pgn/pgn_reader.dart` | A pure function over a package; typed issues instead of exceptions |
 | `lib/chess/pgn/tree_merge.dart` | One algorithm, one paragraph explaining it |
-| `lib/workspace/document_session.dart` | An owner; document and cursor notified apart |
+| `lib/workspace/document_session.dart`, `document_cursor.dart` | An owner; document and cursor notified apart, each by its own type |
 | `lib/features/library/library.dart` | Sealed states and results; a stale check after `await` |
 | `lib/workspace/move_tree_view.dart` | A widget built from an owner; a cursor move redraws two moves |
 | `lib/app/workspace_requests.dart` | Cross-mode requests: sealed results, questions behind an interface |
@@ -579,7 +580,7 @@ Regression contracts and open risks, not a feature list
   file is refused; moved as its own line it keeps its progress. Raw `LineID`
   tags do not identify progress; transfers use the source training id.
 - **Linked studies.** Players & prep links studies by path; a linked study's
-  rename and delete are refused (`features/study/studies.dart`). Any new
+  rename and delete are refused (`features/study/study_file_changes.dart`). Any new
   command over linked studies must complete the reference change recoverably or
   refuse before mutating.
 - **Stale results.** Replacement opens, paste, close and cancellation must
@@ -587,13 +588,14 @@ Regression contracts and open risks, not a feature list
   publication stay tied to their captured input.
 - **Platforms.** Linux process-kill tests do not prove Windows/macOS engine
   cleanup after the app is killed, or power-loss durability anywhere.
-- **Size pressure.** `workspace/document_session.dart` and
-  `workspace/fill_gaps.dart` sit at the 1,000-line cap. The session is one
-  owner whose collaborators (projection, history, access, parsed files,
-  results, external edits) are already out; what is left shares its state,
-  so a further split needs a new collaborator and its callers moved to it. Extract a collaborator only when it owns a complete
-  responsibility; do not loosen caps or fragment files to pass them. Retained
-  memory across repeated large-file navigation and searches is unmeasured.
+- **Size pressure.** No file sits at the 1,000-line cap.
+  `workspace/document_session.dart` has room since navigation moved to
+  `DocumentCursor`; what is left (opening, edits, held edits, the analysis
+  board, undo) writes the same shown document and file, so a further split
+  would scatter one owner's state. Extract a collaborator only when it owns
+  a complete responsibility; do not loosen caps or fragment files to pass
+  them. Retained memory across repeated large-file navigation and searches
+  is unmeasured.
 
 ## References
 

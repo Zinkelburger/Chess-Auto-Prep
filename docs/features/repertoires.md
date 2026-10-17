@@ -272,6 +272,6 @@ time.
 ## Not built
 
 - Replies, Expectimax and non-Book Explorer panes read
-  `DocumentSession.fen`, not `RepertoireTree.fen`, so they do not follow the
+  `DocumentCursor.fen`, not `RepertoireTree.fen`, so they do not follow the
   explorer Book's free board past the end of the file
   (`lib/workspace/replies.dart`, `explorer.dart`, `repertoire_tree.dart`).

@@ -18,7 +18,7 @@ list. When a spec gains a *Not built* item, add a row here.
 
 | Item | Status | Notes |
 |---|---|---|
-| Panes follow the free board | **Partial** | The explorer's `Book` source follows the board past the end of the file (`RepertoireTree.fen`); Replies, Expectimax and the other explorer sources read `DocumentSession.fen` and stay on the file's last position (`workspace/replies.dart`, `workspace/explorer.dart`) |
+| Panes follow the free board | **Partial** | The explorer's `Book` source follows the board past the end of the file (`RepertoireTree.fen`); Replies, Expectimax and the other explorer sources read `DocumentCursor.fen` and stay on the file's last position (`workspace/replies.dart`, `workspace/explorer.dart`) |
 | Right-click ▸ Comment on a move | **Not started** | The move menu in `workspace/move_tree_view.dart` has no Comment entry; comments are edited through the edit strip |
 | Autoplay speed and rolling into the next game | **Not started** | `AutoPlay` (`features/pgn_viewer/auto_play.dart`) steps every 1 s and stops at the end of the line |
 | Solitaire timer and sidelines | **Not started** | `workspace/solitaire.dart` follows the main line only, with no reveal timer |

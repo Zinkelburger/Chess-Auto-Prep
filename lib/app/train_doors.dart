@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../features/trainer/trainer.dart';
+import '../features/trainer/trainer_state.dart';
 import '../workspace/workspace.dart';
 import '../workspace/workspace_tabs.dart';
 import 'mode.dart';

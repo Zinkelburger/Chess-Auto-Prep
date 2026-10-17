@@ -21,7 +21,9 @@ and [the tooling map](agents/tooling.md) for detail and remaining scope.
   opens, mode changes and dirty-draft decisions. [`app/mode.dart`](../lib/app/mode.dart)
   defines every top-level mode.
 - [`workspace/document_session.dart`](../lib/workspace/document_session.dart)
-  owns the active parsed document, cursor, edits and save state. The shared
+  owns the active parsed document, edits and save state; its
+  `DocumentCursor` (`session.cursor`, `document_cursor.dart`) owns where the
+  reader is and a comment's line on the board. The shared
   board, move tree, engine and explorer are reused across mode panels.
 - [`storage/`](../lib/storage/) owns file/SQLite I/O, settings, revisions,
   backups, recovery and accepted durable writes. UI and pure algorithms do
@@ -120,6 +122,8 @@ Bughouse mode is offered when its engine assets are present.
   or any stop command invalidates earlier pending starts, including an away-and-back
   navigation. Exact-root results take precedence while preserving newest-first
   order. Engine depths and continuation lines share the same source/depth scope.
+  Turning a finished run into a draft chapter, and retrying that draft's save,
+  is `workspace/fill_lines.dart`'s.
 - `workspace/index_build.dart` owns each opening-index build. Incremental work
   and isolate messages use the same guarded completion: success, failure and
   cancellation close the timer, receive port and worker. Progress-consumer failures

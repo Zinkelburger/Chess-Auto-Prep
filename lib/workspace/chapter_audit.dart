@@ -202,7 +202,7 @@ final class ChapterAudit extends ChangeNotifier {
   void goTo(AuditFinding finding) {
     final tree = _session.tree;
     final path = tree == null ? null : pathOfSans(tree, finding.sans);
-    if (path != null) _session.goTo(path);
+    if (path != null) _session.cursor.goTo(path);
   }
 
   void dismiss(AuditFinding finding) {

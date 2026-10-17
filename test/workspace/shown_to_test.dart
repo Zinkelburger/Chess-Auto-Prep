@@ -23,16 +23,16 @@ void main() {
     final fixture = await openSession(game);
     addTearDown(fixture.dispose);
     final session = fixture.session;
-    session.goTo(NodePath.of([0, 0]));
+    session.cursor.goTo(NodePath.of([0, 0]));
     session.showOnlyTo(NodePath.of([0]));
-    expect(session.cursor, NodePath.of([0]));
-    session.forward();
-    session.toEnd();
-    expect(session.cursor, NodePath.of([0]));
-    session.back();
-    expect(session.cursor, const NodePath.root());
-    session.forward();
-    expect(session.cursor, NodePath.of([0]));
+    expect(session.cursor.value, NodePath.of([0]));
+    session.cursor.forward();
+    session.cursor.toEnd();
+    expect(session.cursor.value, NodePath.of([0]));
+    session.cursor.back();
+    expect(session.cursor.value, const NodePath.root());
+    session.cursor.forward();
+    expect(session.cursor.value, NodePath.of([0]));
   });
 
   test('nothing is played into a document while its line is hidden', () async {

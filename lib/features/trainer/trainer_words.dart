@@ -5,7 +5,7 @@ import '../../chess/training/schedule.dart';
 import '../../chess/training/sitting.dart';
 import '../../storage/training_progress.dart';
 import 'lesson.dart';
-import 'trainer.dart';
+import 'trainer_state.dart';
 
 /// The trainer's typed states in the words the tab shows.
 

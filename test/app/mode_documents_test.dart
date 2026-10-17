@@ -53,16 +53,16 @@ void main() {
     () async {
       keepClassics();
       await w.requests.openFile(classics, game: 1);
-      w.session.forward();
-      w.session.forward();
-      final cursor = w.session.cursor;
+      w.session.cursor.forward();
+      w.session.cursor.forward();
+      final cursor = w.session.cursor.value;
 
       await go(Mode.myGames);
       await go(Mode.pgnViewer);
 
       expect(w.session.source, classics);
       expect(w.session.game, 1);
-      expect(w.session.cursor, cursor);
+      expect(w.session.cursor.value, cursor);
       expect(shownTitle(), 'Viewer · Classic games');
     },
   );
@@ -181,7 +181,7 @@ void main() {
       expect(w.requests.mode, Mode.repertoires);
       expect(titleOf(kidMain), 'Builder · Main');
       expect(titleOf(classics), 'Viewer · Classic games');
-      expect(w.session.cursor, const NodePath.root());
+      expect(w.session.cursor.value, const NodePath.root());
     },
   );
 }

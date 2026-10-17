@@ -355,7 +355,7 @@ void main() {
       while (saved.isEmpty) {
         await Future<void>.delayed(Duration.zero);
       }
-      expect(fixture.session.currentMove?.san, 'e4');
+      expect(fixture.session.cursor.currentMove?.san, 'e4');
       expect(releases, 1);
       expect(
         fill.found!.target.sans,
@@ -386,7 +386,7 @@ void main() {
     final original = fill.found!.tree;
     fixture.session.playMove('e2e4');
     await fill.start(shallow);
-    fixture.session.back();
+    fixture.session.cursor.back();
     expect(fill.nodeAtBoard(), same(original));
     evaluator.asked.clear();
     await fill.start(shallow);
@@ -437,7 +437,7 @@ void main() {
       while (saves == 0) {
         await Future<void>.delayed(Duration.zero);
       }
-      fixture.session.back();
+      fixture.session.cursor.back();
       expect(fill.nodeAtBoard(), isA<OurNode>());
       gate.complete();
       await run;
@@ -779,12 +779,12 @@ void main() {
   });
 
   test('the search starts from the board, not the chapter root', () async {
-    fixture.session.forward();
-    fixture.session.forward();
+    fixture.session.cursor.forward();
+    fixture.session.cursor.forward();
     final evaluator = ScriptedEvaluator();
     final fill = fillWith(evaluator);
     await fill.start(const FillRequest(elo: 2200, depthPlies: 1));
-    final board = positionOf(fixture.session.fen.value);
+    final board = positionOf(fixture.session.cursor.fen.value);
     expect(evaluator.asked.first, board.fen);
     expect(
       fill.found!.at(const Fen(kingAndPawn), const ['e4', 'Kd8']),

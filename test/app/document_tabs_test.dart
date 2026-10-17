@@ -17,24 +17,24 @@ void main() {
     () async {
       await w.requests.open(kidMain);
       final original = w.session.chapter!;
-      w.session.forward();
-      final cursor = w.session.cursor;
+      w.session.cursor.forward();
+      final cursor = w.session.cursor.value;
       await w.requests.newAnalysisBoard();
       final analysis = w.requests.documents.tabs.selected;
-      expect(w.session.cursor, cursor);
+      expect(w.session.cursor.value, cursor);
       expect(
         w.session.tree!.children.single.children.length,
         original.tree.children.single.children.length,
       );
-      w.session.toEnd();
-      final end = w.session.cursor;
+      w.session.cursor.toEnd();
+      final end = w.session.cursor.value;
       w.session.setComment(end, 'Only in analysis');
       await w.requests.documents.select(kidMain);
       expect(w.session.source, kidMain);
-      expect(w.session.cursor, cursor);
+      expect(w.session.cursor.value, cursor);
       expect(w.session.commentAt(end), isNot('Only in analysis'));
       await w.requests.documents.select(analysis);
-      expect(w.session.cursor, end);
+      expect(w.session.cursor.value, end);
       expect(w.session.commentAt(end), 'Only in analysis');
       expect(w.session.canUndo, isTrue);
       await w.session.undo();
@@ -52,15 +52,15 @@ void main() {
       final second = w.requests.documents.tabs.selected;
       w.session.playMove('c7c5');
       await w.requests.documents.select(first);
-      expect(w.session.currentMove?.san, 'e4');
+      expect(w.session.cursor.currentMove?.san, 'e4');
       w.session.playMove('e7e5');
       await w.requests.documents.select(second);
-      expect(w.session.currentMove?.san, 'c5');
+      expect(w.session.cursor.currentMove?.san, 'c5');
       await w.requests.documents.close(second);
-      expect(w.session.currentMove?.san, 'e5');
+      expect(w.session.cursor.currentMove?.san, 'e5');
       expect(w.requests.documents.tabs.open, [first]);
       await w.requests.documents.close(first);
-      expect(w.session.cursor, const NodePath.root());
+      expect(w.session.cursor.value, const NodePath.root());
       expect(w.session.tree!.children, isEmpty);
       expect(w.requests.documents.tabs.open.length, 1);
     },
@@ -108,8 +108,8 @@ void main() {
     w.requests.switchTo(Mode.pgnViewer);
     await w.requests.open(kidMain);
     w.session.holdsEdits = true;
-    w.session.forward();
-    final cursor = w.session.cursor;
+    w.session.cursor.forward();
+    final cursor = w.session.cursor.value;
     w.session.setComment(cursor, 'Unsaved viewer note');
     expect(w.session.hasHeldEdits, isTrue);
     await w.requests.newAnalysisBoard();
@@ -146,13 +146,13 @@ void main() {
         scriptedRevision(threeGameFile),
       );
       await w.requests.openFile(first, game: 1);
-      w.session.forward();
-      final cursor = w.session.cursor;
+      w.session.cursor.forward();
+      final cursor = w.session.cursor.value;
       await w.requests.openFile(second, game: 2);
       await w.requests.documents.select(first);
       expect(w.viewer.file, first);
       expect(w.viewer.current, 1);
-      expect(w.session.cursor, cursor);
+      expect(w.session.cursor.value, cursor);
       await w.requests.documents.select(second);
       expect(w.viewer.file, second);
       expect(w.viewer.current, 2);

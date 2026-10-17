@@ -82,7 +82,7 @@ void main() {
       fixture.dispose();
     });
     await pumpEventQueue();
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     await pumpEventQueue();
     expect(
       owners.gaps.currentWalk!.gaps.whereType<MissingReply>().map((g) => g.uci),

@@ -287,7 +287,7 @@ void main() {
       await tester.tap(find.text('Analyze game'));
       await tester.pumpAndSettle();
       expect(w.session.isScratch, isTrue);
-      expect(w.session.fen.position, puzzle.fen.position);
+      expect(w.session.cursor.fen.position, puzzle.fen.position);
       expect(find.text('Moves'), findsOneWidget);
     });
 

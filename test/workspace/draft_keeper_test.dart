@@ -78,7 +78,7 @@ void main() {
     final first = _Run(store, drafts);
     await first.session.open(ref, game: 1);
     first.session
-      ..goTo(NodePath.of(const [0, 0, 0, 0]))
+      ..cursor.goTo(NodePath.of(const [0, 0, 0, 0]))
       ..playMove('b1c3');
     expect(first.session.hasHeldEdits, isTrue);
     // The checkpoint is on disk before the process dies. Its folder appears

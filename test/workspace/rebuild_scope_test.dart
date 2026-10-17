@@ -95,20 +95,20 @@ void main() {
     var cursor = 0;
     var either = 0;
     session.addListener(() => document++);
-    session.cursorListenable.addListener(() => cursor++);
+    session.cursor.addListener(() => cursor++);
     session.anyChange.addListener(() => either++);
 
-    session.forward();
-    session.forward();
-    session.back();
+    session.cursor.forward();
+    session.cursor.forward();
+    session.cursor.back();
     expect((document, cursor, either), (0, 3, 3));
-    expect(session.cursorListenable.value, NodePath.of([0]));
+    expect(session.cursor.value, NodePath.of([0]));
 
-    session.setComment(session.cursor, 'The Queen\'s pawn');
+    session.setComment(session.cursor.value, 'The Queen\'s pawn');
     expect((document, cursor), (1, 3), reason: 'an edit moves no cursor');
 
     session.playMove('c7c5');
-    expect(session.currentMove?.san, 'c5');
+    expect(session.cursor.currentMove?.san, 'c5');
     expect(document, 2, reason: 'a new move is an edit');
     expect(cursor, 4, reason: 'and the cursor follows it');
   });
@@ -118,10 +118,8 @@ void main() {
     addTearDown(fixture.dispose);
     final session = fixture.session;
     final seen = <String?>[];
-    session.cursorListenable.addListener(
-      () => seen.add(session.currentMove?.san),
-    );
-    session.goTo(NodePath.of([0, 1, 0]));
+    session.cursor.addListener(() => seen.add(session.cursor.currentMove?.san));
+    session.cursor.goTo(NodePath.of([0, 1, 0]));
     session.playMove('e7e6');
     expect(seen, ['c4', 'e6'], reason: 'the chapter holds e6 when told');
   });
@@ -142,19 +140,19 @@ void main() {
     final session = fixture.session;
 
     var before = shown<Text>(tester, MoveTreeView);
-    session.forward();
+    session.cursor.forward();
     await tester.pump();
     expect(rebuilt(before, shown<Text>(tester, MoveTreeView)), 1);
 
     for (var step = 0; step < 3; step++) {
       before = shown<Text>(tester, MoveTreeView);
-      session.forward();
+      session.cursor.forward();
       await tester.pump();
       expect(rebuilt(before, shown<Text>(tester, MoveTreeView)), 2);
     }
-    expect(session.currentMove?.san, 'e6');
+    expect(session.cursor.currentMove?.san, 'e6');
 
-    session.setComment(session.cursor, 'Solid');
+    session.setComment(session.cursor.value, 'Solid');
     await tester.pump();
     expect(
       find.descendant(
@@ -183,18 +181,18 @@ void main() {
     var told = 0;
     outline.addListener(() => told++);
 
-    session.goTo(NodePath.of([0, 0]));
+    session.cursor.goTo(NodePath.of([0, 0]));
     await tester.pump();
     var before = shown<LineRow>(tester, OutlinePanel);
-    session.forward();
-    session.forward();
+    session.cursor.forward();
+    session.cursor.forward();
     await tester.pump();
     expect(outline.isCurrent(0).value, isTrue);
     expect(rebuilt(before, shown<LineRow>(tester, OutlinePanel)), 0);
     expect(told, 0, reason: 'nothing the outline lists changed');
 
     before = shown<LineRow>(tester, OutlinePanel);
-    session.goTo(NodePath.of([0, 1]));
+    session.cursor.goTo(NodePath.of([0, 1]));
     await tester.pump();
     expect(outline.isCurrent(1).value, isTrue);
     final after = shown<LineRow>(tester, OutlinePanel);
@@ -232,12 +230,12 @@ void main() {
       reason: 'only the rows in view are built',
     );
 
-    session.goTo(NodePath.of([0, 0]));
+    session.cursor.goTo(NodePath.of([0, 0]));
     await tester.pump();
-    while (session.currentMove?.children.isNotEmpty ?? false) {
+    while (session.cursor.currentMove?.children.isNotEmpty ?? false) {
       final moves = shown<Text>(tester, MoveTreeView);
       final rows = shown<LineRow>(tester, OutlinePanel);
-      session.forward();
+      session.cursor.forward();
       await tester.pump();
       expect(rebuilt(moves, shown<Text>(tester, MoveTreeView)), 2);
       expect(
@@ -247,7 +245,7 @@ void main() {
       );
     }
     expect(outline.isCurrent(0).value, isTrue);
-    session.toStart();
+    session.cursor.toStart();
     await tester.pump();
     expect([
       for (final line in outline.lines) outline.isCurrent(line.game).value,

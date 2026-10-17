@@ -1,7 +1,7 @@
 import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_heading.dart';
-import 'package:chess_auto_prep/features/trainer/trainer.dart';
+import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/chess/generation/eval.dart';
 import 'package:chess_auto_prep/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';

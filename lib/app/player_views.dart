@@ -91,7 +91,7 @@ final class PlayerAnalysisView extends ModeView {
     }
     if (fen != null) {
       final path = workspace.session.tree?.mainLineTo(fen);
-      if (path != null) workspace.session.goTo(path);
+      if (path != null) workspace.session.cursor.goTo(path);
     }
     return true;
   }
@@ -114,7 +114,8 @@ final class PlayerAnalysisView extends ModeView {
       analysis: players.analysis,
       session: workspace.session,
       onSave: () => unawaited(players.saveLine()),
-      onOpen: (i) => unawaited(_open(i, null, fen: workspace.session.fen)),
+      onOpen: (i) =>
+          unawaited(_open(i, null, fen: workspace.session.cursor.fen)),
       onStart: () {
         final first = players.analysis.gameIndexes.firstOrNull;
         if (first != null) unawaited(_open(first, null));
@@ -128,7 +129,7 @@ final class PlayerAnalysisView extends ModeView {
         final game = players.analysis.corpus?.games[gap.game];
         if (game != null &&
             workspace.session.source?.path == game.source.file.path)
-          workspace.session.goTo(
+          workspace.session.cursor.goTo(
             NodePath.of(List.filled(leftBookMoment(gap.gap), 0)),
           );
       },

@@ -102,7 +102,7 @@ final class ChapterOutline extends ChangeNotifier {
     _search = _Search(debounce, _narrowed);
     _library.addListener(_reread);
     _session.addListener(_reread);
-    _session.cursorListenable.addListener(_followTheCursor);
+    _session.cursor.addListener(_followTheCursor);
     _currentRows.follow(_current);
     _reread();
   }
@@ -139,7 +139,7 @@ final class ChapterOutline extends ChangeNotifier {
   void showAtPosition(bool on) {
     if (on == _atPosition) return;
     _atPosition = on;
-    _filteredAt = on ? _session.fen.position : null;
+    _filteredAt = on ? _session.cursor.fen.position : null;
     notifyListeners();
   }
 
@@ -213,7 +213,7 @@ final class ChapterOutline extends ChangeNotifier {
   /// The lines of the open chapter that match the search, in file order,
   /// and, while [atPosition] is on, pass through the board's position.
   List<OutlineLine> get lines {
-    final at = _atPosition ? _session.fen.position : null;
+    final at = _atPosition ? _session.cursor.fen.position : null;
     return [
       for (final line in _lines)
         if (_matches(line.text) && (at == null || line.positions.contains(at)))
@@ -271,7 +271,7 @@ final class ChapterOutline extends ChangeNotifier {
     if (!identical(chapter, _chapter)) {
       _chapter = chapter;
       _lines = chapter == null ? const [] : _linesOf(chapter);
-      _cursor = _session.cursor;
+      _cursor = _session.cursor.value;
       _current.value = _lineHolding(_cursor);
     }
     if (!identical(repertoires, _repertoires)) _index.clear();
@@ -295,7 +295,7 @@ final class ChapterOutline extends ChangeNotifier {
     if (_disposed || !identical(_session.chapter, _chapter)) return;
     _refilter();
     final from = _cursor;
-    final to = _session.cursor;
+    final to = _session.cursor.value;
     _cursor = to;
     final current = _current.value;
     final deeper = _extends(to, from) && !from.isRoot;
@@ -307,7 +307,7 @@ final class ChapterOutline extends ChangeNotifier {
   /// changes which lines are listed; one that stays on it changes nothing.
   void _refilter() {
     if (!_atPosition) return;
-    final at = _session.fen.position;
+    final at = _session.cursor.fen.position;
     if (at == _filteredAt) return;
     _filteredAt = at;
     notifyListeners();
@@ -345,7 +345,7 @@ final class ChapterOutline extends ChangeNotifier {
     _search.cancel();
     _library.removeListener(_reread);
     _session.removeListener(_reread);
-    _session.cursorListenable.removeListener(_followTheCursor);
+    _session.cursor.removeListener(_followTheCursor);
     _currentRows.dispose();
     _current.dispose();
     super.dispose();

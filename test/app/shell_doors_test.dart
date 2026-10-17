@@ -128,7 +128,7 @@ void main() {
     clipboardHolds(tester, pasted);
     await pressCtrl(tester, LogicalKeyboardKey.keyV);
     expect(w.session.isScratch, isTrue);
-    expect(w.session.currentMove?.san, 'e5');
+    expect(w.session.cursor.currentMove?.san, 'e5');
     expect(w.store.creates, isEmpty);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
@@ -141,11 +141,11 @@ void main() {
     tester,
   ) async {
     await pumpWithChapter(tester);
-    w.session.forward();
+    w.session.cursor.forward();
     await pressCtrl(tester, LogicalKeyboardKey.keyN);
     expect(w.session.source, kidMain);
     expect(w.parts.workspace.inspection!.active, isTrue);
-    expect(w.parts.workspace.inspection!.session.currentMove?.san, 'c5');
+    expect(w.parts.workspace.inspection!.session.cursor.currentMove?.san, 'c5');
     expect(find.text('Analysis'), findsWidgets);
     expect(find.text('Temporary analysis'), findsNothing);
   });
@@ -233,7 +233,7 @@ void main() {
     await pump(tester);
     await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
-    w.session.forward();
+    w.session.cursor.forward();
     final ply = w.explorer.ply;
     expect(ply, greaterThan(0));
     // The builder's book starts shut: its button shows the explorer under
@@ -251,7 +251,7 @@ void main() {
     expect(opened.path, contains('abcd1234'));
     expect(w.session.game, 0);
     expect(
-      w.session.cursor,
+      w.session.cursor.value,
       NodePath.of(List.filled(ply, 0)),
       reason: 'at the ply the explorer was showing',
     );

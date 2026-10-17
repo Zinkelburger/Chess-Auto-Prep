@@ -155,11 +155,11 @@ class _BoardAndCounterState extends State<BoardAndCounter>
                       editing: widget.editing?.value ?? false,
                     );
                     return BoardView(
-                      fen: session.boardFen,
+                      fen: session.cursor.boardFen,
                       orientation: session.orientation,
-                      lastMove: session.boardLastMove,
+                      lastMove: session.cursor.boardLastMove,
                       onMove: onMove,
-                      movable: session.commentLine.value == null,
+                      movable: session.cursor.commentLine.value == null,
                       coordinates: settings.value.boardCoordinates,
                       shapes: shapesOnBoard(session),
                       threat: threatOnBoard(
@@ -209,8 +209,8 @@ class _BoardAndCounterState extends State<BoardAndCounter>
           listenable: widget.session.anyChange,
           builder: (context, _) => _Typed(
             moves: widget.moves,
-            fen: widget.session.boardFen,
-            onMove: widget.session.commentLine.value == null
+            fen: widget.session.cursor.boardFen,
+            onMove: widget.session.cursor.commentLine.value == null
                 ? widget.onMove
                 : null,
             whenUsed: widget.quiet,

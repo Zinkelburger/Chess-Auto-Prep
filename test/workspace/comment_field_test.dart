@@ -44,7 +44,7 @@ void main() {
   testWidgets('shows the words of the move under the cursor, not its tokens', (
     tester,
   ) async {
-    fixture.session.goTo(sicilian);
+    fixture.session.cursor.goTo(sicilian);
     await pump(tester);
     expect(find.text('The Sicilian'), findsOneWidget);
     expect(find.textContaining('[%eval'), findsNothing);
@@ -53,7 +53,7 @@ void main() {
   testWidgets('what is typed is written when the field loses the focus', (
     tester,
   ) async {
-    fixture.session.goTo(sicilian);
+    fixture.session.cursor.goTo(sicilian);
     await pump(tester);
     await tester.enterText(find.byType(TextField).first, 'Our Sicilian');
     await blur(tester);
@@ -64,7 +64,7 @@ void main() {
   testWidgets('words typed are written when the panel goes away', (
     tester,
   ) async {
-    fixture.session.goTo(sicilian);
+    fixture.session.cursor.goTo(sicilian);
     await pump(tester);
     await tester.enterText(find.byType(TextField).first, 'Our Sicilian');
     await tester.pumpWidget(
@@ -76,7 +76,7 @@ void main() {
   });
 
   testWidgets('the lines the user broke stay broken', (tester) async {
-    fixture.session.goTo(sicilian);
+    fixture.session.cursor.goTo(sicilian);
     await pump(tester);
     await tester.enterText(find.byType(TextField).first, 'One\nTwo');
     await blur(tester);
@@ -89,10 +89,10 @@ void main() {
   testWidgets('the words follow the cursor', (tester) async {
     await pump(tester);
     expect(find.text('The Sicilian'), findsNothing);
-    fixture.session.goTo(sicilian);
+    fixture.session.cursor.goTo(sicilian);
     await tester.pump();
     expect(find.text('The Sicilian'), findsOneWidget);
-    fixture.session.goTo(NodePath.of([0, 1])); // 2. Nc3 {Closed}
+    fixture.session.cursor.goTo(NodePath.of([0, 1])); // 2. Nc3 {Closed}
     await tester.pump();
     expect(find.text('Closed'), findsOneWidget);
   });
@@ -100,10 +100,10 @@ void main() {
   testWidgets('words typed under one move do not land on another', (
     tester,
   ) async {
-    fixture.session.goTo(sicilian);
+    fixture.session.cursor.goTo(sicilian);
     await pump(tester);
     await tester.enterText(find.byType(TextField).first, 'Mine');
-    fixture.session.goTo(NodePath.of([0, 1]));
+    fixture.session.cursor.goTo(NodePath.of([0, 1]));
     await tester.pump();
     await blur(tester);
     await tester.pumpAndSettle();
@@ -112,7 +112,7 @@ void main() {
   });
 
   testWidgets('a note the session refuses stays in the field', (tester) async {
-    fixture.session.goTo(sicilian);
+    fixture.session.cursor.goTo(sicilian);
     await pump(tester);
     await tester.enterText(find.byType(TextField).first, 'a } b');
     await blur(tester);
@@ -129,10 +129,10 @@ void main() {
 
   testWidgets('a note refused as the cursor moves on is asked for once, and '
       'the field follows the cursor', (tester) async {
-    fixture.session.goTo(sicilian);
+    fixture.session.cursor.goTo(sicilian);
     await pump(tester);
     await tester.enterText(find.byType(TextField).first, 'a } b');
-    fixture.session.goTo(NodePath.of([0, 1])); // 2. Nc3 {Closed}
+    fixture.session.cursor.goTo(NodePath.of([0, 1])); // 2. Nc3 {Closed}
     await tester.pump();
     expect(fixture.session.refusedEdit, isA<WordsRefused>());
     expect(find.text('Closed'), findsOneWidget);
@@ -144,7 +144,7 @@ void main() {
       final games = await openSession(text, name: 'Games');
       addTearDown(games.dispose);
       await games.session.open(games.ref, game: 0);
-      games.session.goTo(NodePath.of([0]));
+      games.session.cursor.goTo(NodePath.of([0]));
       await tester.pumpWidget(
         MaterialApp(
           theme: darkTheme(),
@@ -176,7 +176,7 @@ void main() {
         whiteChapter,
         scriptedRevision(whiteChapter),
       );
-      fixture.session.goTo(sicilian);
+      fixture.session.cursor.goTo(sicilian);
       await pump(tester);
       await tester.enterText(find.byType(TextField).first, 'Mine');
       await fixture.session.open(other);
@@ -217,7 +217,7 @@ void main() {
     fixture.dispose();
     fixture = await openSession(introducedChapter);
     // 1. d4, then its variation 1. c4, which the note introduces.
-    fixture.session.goTo(NodePath.of([1]));
+    fixture.session.cursor.goTo(NodePath.of([1]));
     await pump(tester);
     expect(find.text('Before this move'), findsOneWidget);
     expect(find.text('A sideline.'), findsOneWidget);
@@ -232,7 +232,7 @@ void main() {
   testWidgets('has no such label for a move nothing introduces', (
     tester,
   ) async {
-    fixture.session.goTo(sicilian);
+    fixture.session.cursor.goTo(sicilian);
     await pump(tester);
     expect(find.text('Before this move'), findsNothing);
   });

@@ -96,7 +96,7 @@ class _CommentFieldState extends State<CommentField>
   void changed() {
     if (_committing) return;
     final session = widget.session;
-    final at = session.chapter == null ? null : session.cursor;
+    final at = session.chapter == null ? null : session.cursor.value;
     final text = _textFor(at);
     final here = _documentOf(session);
     if (at == _at && here == _in && _shows(text)) return;

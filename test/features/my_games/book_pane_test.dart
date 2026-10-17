@@ -67,9 +67,9 @@ void main() {
     tester,
   ) async {
     await pumpPane(tester, 3);
-    session.toEnd();
+    session.cursor.toEnd();
     await tester.tap(find.text('Show the move'));
-    expect(session.cursor.indexes, [0, 0, 0]);
+    expect(session.cursor.value.indexes, [0, 0, 0]);
     await tester.tap(find.text('Open in builder'));
     expect(read.single.file.path, sicilianRef.path);
     expect(read.single.sans, ['e4', 'c5']);

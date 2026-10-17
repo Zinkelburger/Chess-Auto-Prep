@@ -103,7 +103,7 @@ void main() {
 
     await tester.tap(find.textContaining('Mistake'));
     await tester.pump();
-    expect(fixture.session.fen, after('e2e4 c7c5'));
+    expect(fixture.session.cursor.fen, after('e2e4 c7c5'));
 
     await tester.tap(find.byTooltip('Dismiss').last);
     await tester.pump();

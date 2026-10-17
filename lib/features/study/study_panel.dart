@@ -21,6 +21,7 @@ import '../../workspace/board_editor.dart';
 import '../../workspace/document_session.dart';
 import 'new_chapter_dialog.dart';
 import 'studies.dart';
+import 'studies_state.dart';
 import 'study_commands.dart';
 import 'study_chapter_list.dart';
 import 'chapter_position_dialog.dart';

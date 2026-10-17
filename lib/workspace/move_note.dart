@@ -54,8 +54,8 @@ class _MoveNoteState extends State<MoveNote> with CommentPreviews<MoveNote> {
       builder: (context, _) {
         final tree = session.tree;
         if (tree == null) return const SizedBox.shrink();
-        final path = session.cursor;
-        final move = session.currentMove;
+        final path = session.cursor.value;
+        final move = session.cursor.currentMove;
         // A line still being found shows no notes and no move ahead: a
         // note, or the next move, is often the answer.
         final finding = session.shownTo != null;
@@ -109,7 +109,7 @@ class _MoveNoteState extends State<MoveNote> with CommentPreviews<MoveNote> {
                       _MoveRow(
                         move: upcoming,
                         upcoming: true,
-                        onTap: session.forward,
+                        onTap: session.cursor.forward,
                       ),
                       for (final (comment, at, from) in _notesAt(
                         tree,
@@ -156,7 +156,7 @@ class _MoveNoteState extends State<MoveNote> with CommentPreviews<MoveNote> {
     onHover: hoverMove,
     onLeave: leaveMove,
     from: from,
-    shown: session.commentLine,
+    shown: session.cursor.commentLine,
     onRead: (moves, at) => readFrom(from, moves, at),
   );
 }

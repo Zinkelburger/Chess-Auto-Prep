@@ -77,7 +77,7 @@ class _OutlinePanelState extends State<OutlinePanel> {
       context,
       fromBoard: chapter == null
           ? null
-          : rootMovesFromBoard(chapter, widget.session.cursor),
+          : rootMovesFromBoard(chapter, widget.session.cursor.value),
     );
     if (wanted == null || !mounted) return;
     await announce(
@@ -133,7 +133,7 @@ class _OutlinePanelState extends State<OutlinePanel> {
       } else {
         _selected = {};
         _anchor = line.game;
-        widget.session.goTo(line.at);
+        widget.session.cursor.goTo(line.at);
       }
     });
   }

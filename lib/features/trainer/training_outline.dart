@@ -9,6 +9,7 @@ import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'trainer.dart';
+import 'trainer_state.dart';
 import 'training_scope.dart';
 
 /// One repertoire's outline. The general library stays in the builder.

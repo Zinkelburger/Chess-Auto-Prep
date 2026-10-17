@@ -103,7 +103,7 @@ void main() {
     await tester.ensureVisible(find.text('1. g4'));
     await tester.tap(find.text('1. g4'));
     await tester.pumpAndSettle();
-    expect(fixture.session.boardFen, solitaire.record!.children[1].fen);
+    expect(fixture.session.cursor.boardFen, solitaire.record!.children[1].fen);
     await tester.longPress(find.text('1. g4'));
     await tester.pumpAndSettle();
     expect(find.text('Delete from here'), findsNothing);

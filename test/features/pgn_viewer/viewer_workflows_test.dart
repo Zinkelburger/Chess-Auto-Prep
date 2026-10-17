@@ -88,7 +88,7 @@ void main() {
       addTearDown(f.dispose);
       await f.open();
       f.viewer.showGame(1);
-      f.session.goTo(NodePath.of([0, 0]));
+      f.session.cursor.goTo(NodePath.of([0, 0]));
       f.viewer.sortBy(GameOrder.dateDesc);
       f.filter.apply(
         const GameFilter(
@@ -110,7 +110,7 @@ void main() {
       await f.session.open(f.ref, game: 0);
       await f.viewer.opened(f.ref, place: place);
       expect(f.session.game, 0);
-      expect(f.session.cursor, NodePath.of([0, 0]));
+      expect(f.session.cursor.value, NodePath.of([0, 0]));
       expect(f.viewer.sort, GameOrder.dateDesc);
       expect(f.filter.kept, 2);
       expect(f.onDisk, reordered);
@@ -123,7 +123,7 @@ void main() {
       final f = await viewerOver(threeGameFile, places: places);
       await f.open();
       f.viewer.showGame(1);
-      f.session.goTo(NodePath.of([0]));
+      f.session.cursor.goTo(NodePath.of([0]));
       expect(
         await f.viewer.pendingWrites.settle(),
         contains('Reading position'),
@@ -153,7 +153,7 @@ void main() {
         ),
       );
       expect(f.session.game, 0);
-      expect(f.session.cursor.isRoot, isTrue);
+      expect(f.session.cursor.value.isRoot, isTrue);
       expect(f.filter.kept, 3);
     },
   );

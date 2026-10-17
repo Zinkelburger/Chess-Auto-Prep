@@ -54,9 +54,9 @@ final class CollectionAnalysis extends ChangeNotifier {
     source.snapshot();
     final key = _sourceKey;
     final ticket = ++_generation;
-    final cursor = source.cursor;
+    final cursor = source.cursor.value;
     final side = source.orientation;
-    final preview = source.commentLine.value;
+    final preview = source.cursor.commentLine.value;
     var page = _pages[key];
     final created = page == null;
     if (page == null) {
@@ -120,7 +120,7 @@ final class CollectionAnalysis extends ChangeNotifier {
     session.snapshot();
     session.analysisPage
       ..chapter = session.chapter!
-      ..cursor = session.cursor;
+      ..cursor = session.cursor.value;
     active = false;
     engine.pause(this, 'Analysis tab is hidden');
     sourceEngine.resume(this);

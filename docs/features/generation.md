@@ -8,7 +8,8 @@ feeds the Positions list (traps, only moves, practical choices).
 
 Code: `lib/workspace/fill_gaps.dart` (`FillGaps`, the one run at a time),
 `search_pane.dart`, `search_settings.dart`, `search_table.dart`,
-`fill_states.dart`, `search_opponents.dart`, `generated_draft.dart`,
+`fill_states.dart`, `fill_lines.dart` (a run's draft lines),
+`search_opponents.dart`, `generated_draft.dart`,
 `finds.dart`, `finds_panel.dart`, `engine_jobs.dart`; `lib/app/search_door.dart`
 (Ctrl+G) and `lib/app/trap_training.dart`; the pure core in
 `lib/chess/generation/` (`search.dart`, `mainline_book.dart`, `finds.dart`,

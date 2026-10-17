@@ -12,6 +12,7 @@ import '../../ui/relative_time.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
 import 'trainer.dart';
+import 'trainer_state.dart';
 
 /// The selected scope's training desk, inside the shared Train pane.
 class TrainingHome extends StatefulWidget {

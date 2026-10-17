@@ -135,7 +135,7 @@ void main() {
     final name = find.byKey(const ValueKey('explorer-opening'));
     expect(tester.widget<Text>(name).data, '');
     final tableAt = tester.getTopLeft(find.text('Move')).dy;
-    fixture.session.toEnd();
+    fixture.session.cursor.toEnd();
     await tester.pumpAndSettle();
     expect(tester.widget<Text>(name).data, "C20 King's Pawn Game");
     expect(tester.getTopLeft(find.text('Move')).dy, tableAt);
@@ -172,7 +172,7 @@ void main() {
     await mouse.moveTo(tester.getCenter(find.textContaining('d4')));
     await tester.pump(previewDelay);
     expect(find.byType(StaticChessboard), findsOneWidget);
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     await tester.pumpAndSettle();
     expect(find.textContaining('d4'), findsNothing, reason: 'its row is gone');
     expect(find.byType(StaticChessboard), findsNothing);
@@ -182,7 +182,7 @@ void main() {
     await show(tester);
     await tester.tap(find.textContaining('d4'));
     await tester.pumpAndSettle();
-    expect(fixture.session.currentMove?.san, 'd4');
+    expect(fixture.session.cursor.currentMove?.san, 'd4');
     expect(fixture.onDisk, contains('d4'), reason: 'written');
   });
 

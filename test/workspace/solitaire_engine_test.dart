@@ -101,7 +101,7 @@ void main() {
       async.flushMicrotasks();
       expect(solitaire.guessed, 1);
       expect(solitaire.firstTry, 0);
-      expect(f.session.currentMove?.san, 'e4');
+      expect(f.session.cursor.currentMove?.san, 'e4');
       expect(solitaire.attempts.last.outcome, SolitaireOutcome.goodMove);
       final progress = writeMoveText(solitaire.record!, terminator: '*');
       expect(progress, contains('Nf3'));
@@ -137,7 +137,7 @@ void main() {
       expect(solitaire.reviewPgn, contains('Secret'));
       expect(solitaire.reviewDraft?.moves.children.length, 2);
       solitaire.inspect(const NodePath.root().child(1));
-      expect(f.session.boardFen, solitaire.record!.children[1].fen);
+      expect(f.session.cursor.boardFen, solitaire.record!.children[1].fen);
       expect(f.onDisk, _pgn);
       expect(f.session.hasHeldEdits, isFalse);
       async.flushMicrotasks();
@@ -157,7 +157,7 @@ void main() {
       initialScores(async, engine);
       expect(solitaire.crowns, 0);
       expect(solitaire.attempts.single.outcome, SolitaireOutcome.revealed);
-      expect(f.session.currentMove?.san, 'e4');
+      expect(f.session.cursor.currentMove?.san, 'e4');
     });
   });
 
@@ -187,7 +187,7 @@ void main() {
       expect(solitaire.hinted, 0);
       async.elapse(Solitaire.replyDelay);
       expect(solitaire.canHint, isTrue);
-      f.session.goTo(const NodePath.root());
+      f.session.cursor.goTo(const NodePath.root());
       expect(solitaire.canGuess, isFalse);
       solitaire.play('d2d4');
       expect(solitaire.attempts, isEmpty);
@@ -216,7 +216,7 @@ void main() {
         engine.current.end();
         async.flushMicrotasks();
         expect(solitaire.guessed, 1);
-        expect(f.session.currentMove?.san, 'e4');
+        expect(f.session.cursor.currentMove?.san, 'e4');
       });
     },
   );

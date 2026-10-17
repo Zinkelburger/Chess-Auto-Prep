@@ -185,7 +185,7 @@ final class DocumentTabs {
       if (_selecting == id) _selecting = null;
     }
     requests.switchTo(mode);
-    session.goTo(cursor);
+    session.cursor.goTo(cursor);
     if (session.orientation != side) session.flip();
   }
 
@@ -285,7 +285,7 @@ final class _DocumentPage {
   }
 
   void remember(DocumentSession session) {
-    cursor = session.cursor;
+    cursor = session.cursor.value;
     side = session.orientation;
     game = session.game;
     // Edits another reading of the file put away stay parked here; only

@@ -79,13 +79,13 @@ void main() {
   });
 
   test('the cursor comes back to a move the file still has', () async {
-    session.goTo(sicilian);
+    session.cursor.goTo(sicilian);
     session.playMove('c2c3'); // a new line, so a new branch under c5
     await pumpEventQueue();
-    final added = session.cursor;
+    final added = session.cursor.value;
     expect(added, isNot(sicilian));
     await session.undo();
-    expect(session.cursor, sicilian);
+    expect(session.cursor.value, sicilian);
     expect(session.chapter?.gameCount, 2);
   });
 
@@ -96,7 +96,7 @@ void main() {
     Future<DocumentSession> undoneAt(NodePath at) async {
       final local = await openSession(_listedEarlyThenLate);
       addTearDown(local.dispose);
-      local.session.goTo(at);
+      local.session.cursor.goTo(at);
       local.store.hold = true;
       local.session.setComment(const NodePath.root(), 'a note');
       await pumpEventQueue(); // the write goes out and is held
@@ -115,14 +115,14 @@ void main() {
 
     test('stays on the move it was on, wherever the file lists it', () async {
       final restored = await undoneAt(NodePath.of([1]));
-      expect(restored.currentMove?.san, 'd4');
-      expect(restored.cursor, NodePath.of([0]));
+      expect(restored.cursor.currentMove?.san, 'd4');
+      expect(restored.cursor.value, NodePath.of([0]));
     });
 
     test('falls back to the deepest move the file still has', () async {
       final restored = await undoneAt(NodePath.of([0, 0]));
-      expect(restored.currentMove?.san, 'e4');
-      expect(restored.cursor, NodePath.of([1]));
+      expect(restored.cursor.currentMove?.san, 'e4');
+      expect(restored.cursor.value, NodePath.of([1]));
     });
   });
 
@@ -295,7 +295,7 @@ void main() {
       expect(local.chapter!.lines, hasLength(1));
       // What is played now goes into the chapter's own game, and no game is
       // written under the name the undo took away.
-      local.toEnd();
+      local.cursor.toEnd();
       local.playMove('d7d5');
       await pumpEventQueue();
       final text = (store.documents[ChapterRef.at(path)]! as Opened).text;
@@ -327,7 +327,7 @@ void main() {
       expect(local.session.gameCount, 3);
       expect(local.session.game, 2);
       expect(local.session.tree!.children.single.san, 'c4');
-      local.session.toEnd();
+      local.session.cursor.toEnd();
       local.session.playMove('e7e5');
       await pumpEventQueue();
       expect(local.onDisk, contains('1. c4 e5 *'));

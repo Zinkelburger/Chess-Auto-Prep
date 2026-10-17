@@ -10,6 +10,7 @@ import '../features/pgn_viewer/pgn_viewer_panel.dart';
 import '../features/pgn_viewer/player_side_choice.dart';
 import '../features/study/study_panel.dart';
 import '../features/trainer/trainer.dart';
+import '../features/trainer/trainer_state.dart';
 import '../ui/app_action.dart';
 import '../ui/app_keys.dart';
 import '../workspace/board_book.dart';
@@ -415,8 +416,8 @@ final class ViewerView extends _DocumentModeView {
   /// analysis board's while that is the one shown.
   void _filterByPosition() => _modes.filter.reaching(
     workspace.inspection?.active == true
-        ? workspace.inspection!.session.boardFen
-        : workspace.session.boardFen,
+        ? workspace.inspection!.session.cursor.boardFen
+        : workspace.session.cursor.boardFen,
   );
 
   @override

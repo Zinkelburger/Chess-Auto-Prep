@@ -61,7 +61,7 @@ mixin CommentPreviews<T extends StatefulWidget> on State<T> {
   /// as the one at [at].
   void readFrom(NodePath from, List<PvMove> moves, int at) {
     leaveMove();
-    session.showCommentLine(from, moves, at);
+    session.cursor.showCommentLine(from, moves, at);
   }
 }
 
