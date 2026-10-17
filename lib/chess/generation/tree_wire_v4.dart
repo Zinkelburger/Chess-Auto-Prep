@@ -210,10 +210,6 @@ final class _Writer {
       if (node is OpponentNode) 'v2_replies_from': ?node.repliesFrom?.name,
       'value_lower': valuation.lower,
       'value_upper': valuation.upper,
-      // Readers of this format take a node's value from these two as a
-      // pair. This search measures no centipawn loss, so the display-only
-      // half of the pair is written as the zero it is.
-      'local_cpl': 0.0,
       'expectimax_value': valuation.value,
     };
     final children = _children(node, depth, cumulative);
