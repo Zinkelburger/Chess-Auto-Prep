@@ -504,21 +504,7 @@ ThemeData darkTheme() {
         ),
       ),
     ),
-    // The right-click menus, drawn like the menus above.
-    popupMenuTheme: PopupMenuThemeData(
-      color: _panel,
-      surfaceTintColor: Colors.transparent,
-      menuPadding: const EdgeInsets.symmetric(vertical: Space.xs),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(readingCardRadius),
-        side: const BorderSide(color: _outline),
-      ),
-      labelTextStyle: WidgetStateProperty.resolveWith(
-        (states) => _sized(base.textTheme).bodySmall?.copyWith(
-          color: states.contains(WidgetState.disabled) ? _disabledText : _text,
-        ),
-      ),
-    ),
+    popupMenuTheme: _popupMenu(_sized(base.textTheme)),
     menuButtonTheme: MenuButtonThemeData(
       style: ButtonStyle(
         minimumSize: const WidgetStatePropertyAll(
@@ -820,3 +806,19 @@ const readingNumberColor = _muted;
 const boardFocusWidth = 3.0;
 
 const double moveFeedbackHeight = 36;
+
+/// The right-click menus, drawn like the top bar's menus.
+PopupMenuThemeData _popupMenu(TextTheme text) => PopupMenuThemeData(
+  color: _panel,
+  surfaceTintColor: Colors.transparent,
+  menuPadding: const EdgeInsets.symmetric(vertical: Space.xs),
+  shape: RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(readingCardRadius),
+    side: const BorderSide(color: _outline),
+  ),
+  labelTextStyle: WidgetStateProperty.resolveWith(
+    (states) => text.bodySmall?.copyWith(
+      color: states.contains(WidgetState.disabled) ? _disabledText : _text,
+    ),
+  ),
+);
