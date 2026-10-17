@@ -42,6 +42,7 @@ import '../storage/player_reports.dart';
 import '../storage/saved_players.dart';
 import '../chess/players/player.dart';
 import '../storage/chapter_files.dart';
+import '../storage/chapter_directory.dart';
 import '../storage/eval_cache.dart';
 import '../storage/audit_store.dart';
 import '../storage/finds_store.dart';

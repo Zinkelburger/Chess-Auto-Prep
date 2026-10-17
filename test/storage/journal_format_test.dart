@@ -17,7 +17,7 @@ import 'package:chess_auto_prep/storage/compound_write.dart';
 import 'package:chess_auto_prep/storage/document_probe.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/file_relocation.dart';
-import 'package:chess_auto_prep/storage/operation_journal.dart';
+import 'package:chess_auto_prep/storage/operation_participants.dart';
 import 'package:chess_auto_prep/storage/recovery_files.dart';
 import 'package:chess_auto_prep/storage/recovery_ledger.dart';
 import 'package:chess_auto_prep/storage/relocation_notes.dart';

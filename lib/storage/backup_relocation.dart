@@ -9,7 +9,7 @@ import 'atomic_write.dart';
 import 'backups.dart';
 import 'journal_records.dart';
 import 'operation_id.dart';
-import 'operation_journal.dart';
+import 'operation_participants.dart';
 import 'recovery_files.dart';
 
 /// Which kept-version folder follows a document when it moves, recorded in

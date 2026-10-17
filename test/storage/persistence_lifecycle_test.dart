@@ -10,6 +10,7 @@ import 'package:chess_auto_prep/chess/training/records.dart';
 import 'package:chess_auto_prep/chess/training/schedule.dart';
 import 'package:chess_auto_prep/features/trainer/progress.dart';
 import 'package:chess_auto_prep/storage/training_store.dart';
+import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:chess_auto_prep/storage/book_file.dart';
 import 'package:chess_auto_prep/storage/book_snapshot.dart';
 import 'package:chess_auto_prep/storage/recovery_gate.dart';

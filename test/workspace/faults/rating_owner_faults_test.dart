@@ -18,6 +18,7 @@ import 'package:chess_auto_prep/features/trainer/progress.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:chess_auto_prep/storage/training_rows.dart';
 import 'package:chess_auto_prep/storage/training_store.dart';
+import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/faulty_disk/owner_faults.dart';

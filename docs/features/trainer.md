@@ -10,8 +10,8 @@ adjustable tool panes.
 Code: `lib/features/trainer/` (`Trainer` scope/loading in `trainer.dart`,
 `TrainingProgress` in `progress.dart`, `Lesson` sitting in `lesson.dart`),
 pure rules in `lib/chess/training/` (`schedule.dart` SM-2, `drill.dart`,
-`sitting.dart`, `line_order.dart`), files in `lib/storage/training_store.dart`
-and `training_rows.dart`, the mode in `lib/app/mode_view.dart` (`TrainerView`).
+`sitting.dart`, `line_order.dart`), files in `lib/storage/training_store.dart`,
+`training_progress.dart` and `training_rows.dart`, the mode in `lib/app/mode_view.dart` (`TrainerView`).
 
 ## Choose a repertoire and scope
 

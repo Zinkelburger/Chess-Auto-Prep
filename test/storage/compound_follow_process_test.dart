@@ -149,7 +149,7 @@ import 'dart:io';
 import 'package:chess_auto_prep/storage/compound_commit.dart';
 import 'package:chess_auto_prep/storage/compound_write.dart';
 import 'package:chess_auto_prep/storage/line_progress.dart';
-import 'package:chess_auto_prep/storage/operation_journal.dart';
+import 'package:chess_auto_prep/storage/operation_participants.dart';
 import 'package:chess_auto_prep/storage/training_rows.dart';
 
 Future<void> main(List<String> args) async {

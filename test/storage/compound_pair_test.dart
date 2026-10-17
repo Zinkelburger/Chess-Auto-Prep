@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:chess_auto_prep/storage/atomic_write.dart';
 import 'package:chess_auto_prep/storage/compound_commit.dart';
 import 'package:chess_auto_prep/storage/compound_write.dart';
-import 'package:chess_auto_prep/storage/operation_journal.dart';
+import 'package:chess_auto_prep/storage/operation_participants.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
