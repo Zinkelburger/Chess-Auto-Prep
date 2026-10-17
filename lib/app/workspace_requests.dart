@@ -166,10 +166,19 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// outcome the user asked for went.
   bool get statusIsProblem => _statusIsProblem;
 
-  /// Switching mode swaps the left column and nothing else: the same board,
-  /// the same document and the same draft stay where they are. Back comes
-  /// here again.
+  /// The user goes to [mode]: its left column, and on the board the
+  /// document it had up last, or an empty analysis board when it had none
+  /// ([DocumentTabs.entered]). Another mode's document never comes along;
+  /// a draft stays in its tab. Back comes here again.
   void switchTo(Mode mode) {
+    if (_disposed || mode == _mode) return;
+    _showMode(mode);
+    documents.entered(mode);
+  }
+
+  /// [mode] on screen for a document a request is about to put up in it,
+  /// so the mode's own is not brought back first.
+  void _showMode(Mode mode) {
     if (_disposed || mode == _mode) return;
     _remember(_here);
     _mode = mode;
@@ -227,12 +236,17 @@ final class WorkspaceRequests extends ChangeNotifier {
     _mode = place.mode;
     notifyListeners();
     if (place.scratch) {
-      return _session.isScratch ? const RequestDone() : analysisBoard();
+      final result = _session.isScratch
+          ? const RequestDone()
+          : await analysisBoard();
+      if (!_disposed && result is RequestDone) documents.carry(place.mode);
+      return result;
     }
     final source = place.source;
     if (source == null) return const RequestDone();
     final result = await _open(_nextRequest(), source, game: place.game);
     if (_disposed || result is! RequestDone) return result;
+    documents.carry(place.mode);
     _session.goTo(place.cursor);
     return result;
   }
@@ -315,6 +329,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     // Commit navigation only after the document was accepted, but keep the
     // departure captured before the read so Back returns to the original file.
     _remember(from);
+    documents.carry(Mode.repertoires);
     _mode = Mode.repertoires;
     notifyListeners();
     return result;
@@ -574,6 +589,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     }
     if (!_keepBoard.contains(_mode)) {
       _remember(from);
+      documents.carry(Mode.repertoires);
       _mode = Mode.repertoires;
       notifyListeners();
     }
@@ -593,7 +609,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     final result = await _library.saveBoard(into, name, board);
     if (_overtaken(ticket)) return const RequestDropped();
     if (result is LibraryAdded) {
-      switchTo(Mode.repertoires);
+      _showMode(Mode.repertoires);
       return _open(ticket, result.first);
     }
     final sentence = libraryMessage(
@@ -648,7 +664,7 @@ final class WorkspaceRequests extends ChangeNotifier {
 
   /// [study] in Study, on [chapter].
   Future<RequestResult> openStudy(ChapterRef study, {int chapter = 0}) {
-    switchTo(Mode.study);
+    _showMode(Mode.study);
     return open(study, game: chapter);
   }
 
@@ -684,7 +700,7 @@ final class WorkspaceRequests extends ChangeNotifier {
   }) async {
     final place = game == null ? await _viewer.savedPlace(ref) : null;
     if (_overtaken(ticket)) return const RequestDropped();
-    switchTo(Mode.pgnViewer);
+    _showMode(Mode.pgnViewer);
     final result = await _open(ticket, ref, game: game ?? 0);
     if (!_overtaken(ticket) && result is RequestDone)
       await _viewer.opened(
@@ -701,7 +717,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     required String name,
   }) {
     if (result is LibraryAdded) {
-      if (!_inLibrary) switchTo(Mode.repertoires);
+      if (!_inLibrary) _showMode(Mode.repertoires);
       return _open(ticket, result.first);
     }
     final sentence = libraryMessage(

@@ -127,7 +127,9 @@ listing that books, training and repertoire indexes consume. A change during
 a read invalidates that read. Explicit refresh handles changes made outside
 this process. `DocumentTabs` (`app/document_tabs.dart`) keeps file tabs,
 cursors, viewer drafts with their save revisions, and temporary analysis
-boards; an analysis board never writes its source.
+boards; an analysis board never writes its source. Each tab belongs to one
+mode: `WorkspaceRequests.switchTo` brings up that mode's own latest tab, while
+a handoff that opens a document for a mode changes mode without that restore.
 
 `PendingWrites` (`storage/pending_writes.dart`) belongs to the application.
 Accepted writes of user data (documents, ratings, books, settings, usernames)

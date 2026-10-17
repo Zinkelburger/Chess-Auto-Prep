@@ -56,6 +56,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(app.parts.settings.value.tournamentFinalPositions, isFalse);
       app.requests.switchTo(Mode.study);
+      await tester.pumpAndSettle();
+      // Study has its own board; the request must not replace it either.
+      final studyBoard = app.parts.session.chapter;
+      expect(studyBoard, isNot(same(chapter)));
       store.records['new'] = match('new');
       store.request = 'new';
       store.updates.add(null);
@@ -64,7 +68,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(app.requests.mode, Mode.engineTournament);
       expect(app.parts.tournaments!.selected!.id, 'new');
-      expect(app.parts.session.chapter, same(chapter));
+      expect(app.parts.session.chapter, same(studyBoard));
       store.request = 'missing';
       await app.parts.tournaments!.refresh();
       await tester.pumpAndSettle();

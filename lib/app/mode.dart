@@ -17,8 +17,9 @@ import '../features/trainer/trainer.dart';
 import '../workspace/file_filter.dart';
 import 'trap_training.dart';
 
-/// The modes `v2` has. Each one fills the left column; the workspace, the
-/// document and the draft in it are the same whichever is showing.
+/// The modes `v2` has. Each one fills the left column beside the one
+/// workspace; the documents each has open are its own, so going to a mode
+/// brings back what it had on the board (`DocumentTabs`).
 enum Mode {
   repertoires('Repertoire builder'),
   trainer('Repertoire trainer'),
@@ -36,6 +37,23 @@ enum Mode {
   const Mode(this.label);
 
   final String label;
+
+  /// Whether the mode shows the board and the document tabs; the rest are
+  /// a screen of their own, which leave the document where it is.
+  bool get showsBoard => !const {
+    Mode.books,
+    Mode.players,
+    Mode.databases,
+    Mode.engineTournament,
+    Mode.bughouse,
+  }.contains(this);
+
+  /// Whether this mode and [other] share their documents: the trainer
+  /// drills the builder's repertoires from the same list, so a chapter up in
+  /// one is up in the other.
+  bool sharesDocumentsWith(Mode other) => _shelf == other._shelf;
+
+  Mode get _shelf => this == Mode.trainer ? Mode.repertoires : this;
 }
 
 /// Task groups share their names and membership across navigation surfaces.

@@ -117,9 +117,20 @@ void main() {
     expect(w.trainer.up, isNull);
     expect(w.trainer.run, isNotNull, reason: 'the run is kept for Tactics');
     expect(w.session.shownTo, isNull);
+    expect(w.session.source, isNot(tacticsRef), reason: 'the builder\'s board');
     await tester.pump(const Duration(seconds: 4));
     await tester.pumpAndSettle();
-    expect(w.session.game, 0, reason: 'the next puzzle was not opened');
+    expect(
+      w.session.source,
+      isNot(tacticsRef),
+      reason: 'the next puzzle was not opened',
+    );
+    expect(w.trainer.up, isNull);
+    // Back in Tactics the set is where it was, with the puzzle still down.
+    w.requests.switchTo(Mode.tactics);
+    await tester.pumpAndSettle();
+    expect(w.session.source, tacticsRef);
+    expect(w.session.game, 0);
     expect(w.trainer.up, isNull);
   });
 
