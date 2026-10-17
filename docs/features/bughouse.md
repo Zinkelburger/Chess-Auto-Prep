@@ -39,11 +39,11 @@ panel (440–480 px) on the right.
   Shift, blue with Alt, yellow with Ctrl; a left click or a new position
   takes them away.
 - **Panel** — `1 board` | `2 boards`, and `Edit board` at the right of that
-  row. Then `Time`: `A + B may sit` / `Even` / `C + D may sit`, or with one
-  board `White may sit` / `Even` / `Black may sit`. Each chip carries A + B's
-  score under that case (`–` until known, blank with the engine off): the
-  chosen one follows the search, the others come from short searches once a
-  search rests. The tooltips explain each.
+  row. Under it, in the same compact segments, who may sit: `A + B may sit`
+  | `C + D may sit`, or with one board `White may sit` | `Black may sit`
+  (the default is C + D, Black). Hivemind has no case where neither may:
+  its one clock input says whether the searched team may sit, and its
+  search gives the other team the opposite. The tooltips explain each.
 - **Engine bar** — a switch (`Toggle engine (E)`), the score in 18 px mono,
   then `Hivemind · 12,400 nodes` (the size of the search the rows come from,
   both teams' together with two boards), or why the engine stopped, in the
@@ -131,17 +131,14 @@ on its own engine process; the two processes share the mode's cores. The
 score, rows and node count follow the search about four times a second, the
 first within about a second of a position, and the search rests at 100,000
 nodes until the table changes. One board: the team on move on board 1 must
-move there unless `Time` lets it sit, and the partner board stands as it is (the
+move there unless the clock choice lets it sit, and the partner board stands as it is (the
 desktop Hivemind lacks the website's
 `tools/bughouse_web/patches/frozen-board.patch`, so its search may still weigh
 partner-board moves). The partner board is given the other team's turn, so
 that team can be searched, to 20,000 nodes, for the score's zero; until its
-first report the level table's zero stands in. Two boards: each team with a
-move is searched, and may sit as `Time` says. The two `Time` cases not
-chosen are scored with 4,000-node searches of each team (one that matches a
-search already made is reused), one after another on the first engine
-free: with one board the zero's once it rests, with two the first to rest. A new position, board count or
-clock cuts the searches short. Finished searches are remembered for the
+first report the score is the shown team's own. Two boards: each team with a
+move is searched, and may sit as the clock choice says. A new position,
+board count or clock cuts the searches short. Finished searches are remembered for the
 session. Leaving the mode quits the engines. An engine build that cannot
 report while it searches is asked in passes of 800, 4,000 and 20,000 nodes on
 one process, the rows changing as each pass ends.
@@ -174,10 +171,10 @@ paste commands are refused here with
   `.github/workflows/windows-check.yml` (pushes to `windows-check`, Server
   2022 and 2025) run it.
 - **Score** — Hivemind prints `180·tan(1.56·Q)`. The mode re-centres in Q with
-  offset `(q_A+B + q_C+D) / 2` from both teams' latest reports, or the
-  level-table offset (±0.5814 per team's sit bit) when one team was not
-  searched or has not reported yet. 0.00 is
-  level. It is not pawns.
+  offset `(q_A+B + q_C+D) / 2` from both teams' latest reports, or none when
+  one team was not searched or has not reported yet. The right to sit stays
+  in the score: a level opening reads about +2.3 when A + B may sit and
+  −2.3 when C + D may. It is not pawns.
 - Nothing is saved. Leaving the mode keeps the table for the session; quitting
   the app loses it. No database is read or written.
 
@@ -186,9 +183,10 @@ paste commands are refused here with
 - One board and two boards, both with + and − on every hand; no precomputed
   book, FICS archive, expectimax or matches in the app (owner, 2026-10-16).
 - One engine, behind a switch (2026-09-23).
-- The three `Time` chips are the only clock question, with one board too, so
-  lines can be found with the opponent allowed to sit; each shows its score
-  so the cases compare at a glance (2026-10-17).
+- Who may sit is the only clock question, with one board too, so lines can
+  be found with the opponent allowed to sit. Two choices, as Hivemind has
+  them, styled like the board count; only the chosen case is searched and
+  scored (2026-10-17).
 - Two-board lines are per board, under their board, not per team; engine
   arrows and drawn shapes as on lila's analysis board (2026-10-17).
 - With two boards the move lists are in the panel, side by side, so the
