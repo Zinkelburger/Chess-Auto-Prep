@@ -118,13 +118,13 @@ crazyhouse FEN just after it), with two boards `Copy dual FEN`, and `Delete
 from here` (that move and the board's later moves and hand edits; the other
 board keeps its moves). A delete that would take a capture the other board
 dropped is refused: `Can't delete: P@d5 on board 2 would have no piece to
-drop.` With one board the line PGN is crazyhouse, which Lichess imports:
+drop.` With one board the line PGN is crazyhouse, from the line's start:
 `[Variant "Crazyhouse"]`, `[SetUp "1"]` and `[FEN …]` with the hands when the
-start is not the usual one, then SAN with drops as `N@f3` and `P@e5`. It plays
-by crazyhouse rules, so a piece taken stays in the taker's hand there; a drop
-those rules would not allow (a piece from a hand edit) starts the PGN again
-from the board just before it. With two boards it is the BPGN `Copy moves`
-writes.
+start is not the usual one, then SAN with drops as `N@f3` and `P@e5`, and each
+hand edit a comment where it was made, `{ +P +B }`. Lichess imports it by
+crazyhouse rules, where a piece taken stays in the taker's hand and an edit is
+only a comment, so its import stops at a drop of a piece from a hand edit.
+With two boards it is the BPGN `Copy moves` writes.
 **Engine switch** (E, or `Toggle engine`) — Hivemind runs only while the switch
 is on and the mode is on screen. Each team searched gets one continuous search
 on its own engine process; the two processes share the mode's cores. The
