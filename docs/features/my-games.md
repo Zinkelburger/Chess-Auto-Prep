@@ -100,8 +100,7 @@ Repertoire builder at that position. Clicking a book move's file name (`Open
 - How a game is compared (`chess/book/book_check.dart`): the book is a set
   of positions, so a game is in book while it reaches a position any book line
   reaches by any move order, and is judged from the last fork it never
-  returned to. Measured on 2026-09-05 (7,537 games against four course
-  exports): a move-prefix walk reported "left book at move 1–2" for 12% of
+  returned to. Measured on 7,537 games against four course exports: a move-prefix walk reported "left book at move 1–2" for 12% of
   White games, 15% against 1.d4 and 45% against 1.c4 that in fact left and
   re-entered the book 6–10 plies deeper. The first move pair must match
   (`bookEntryPlies`) before a game counts as in the book. Two hundred games

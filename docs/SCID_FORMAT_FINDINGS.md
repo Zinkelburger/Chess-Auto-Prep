@@ -5,17 +5,16 @@ Exploration of [github.com/benini/scid](https://github.com/benini/scid) at
 which is a fork with a different, older codebase. Everything below is read from
 that source, not from documentation.
 
-**Sections 1-6 are the exploration; section 8 records the Scid v5 writer that
-was built from it** (verified byte-for-byte against Scid's own output) and was
-removed with the old app on 2026-09-30. The current app has no Scid export;
-it is deferred in [Databases](features/databases.md). The reference harness
-in `tools/scid_reference/` remains for when it is rebuilt.
+**Sections 1-7 are the format and what is worth taking; section 8 is the
+specification a Scid v5 writer must meet.** The app has no Scid export; it is
+deferred in [Databases](features/databases.md). The reference harness in
+`tools/scid_reference/` is the oracle for a writer.
 
 ---
 
 ## 1. The headline: si4 is legacy, SCID5 is the current format
 
-Every public write-up (and my own earlier research) is about `.si4`, whose only
+Every public write-up is about `.si4`, whose only
 published spec covers the index *header* and tells you to read C++ for the rest.
 That is the Scid vs. PC lineage. Upstream has moved on:
 
@@ -241,17 +240,16 @@ earlier measurement stands — Scid has no persistent position index, and our
 
 ---
 
-## 8. What was built (Sept 4 2026, removed 2026-09-30)
+## 8. Specification for a Scid v5 writer
 
-The old app's Dart writer produced SCID v5 databases. It is gone; this section
-is the specification a rebuild must meet. Verified, not merely believed:
+A writer is correct when, checked against Scid itself:
 
-| check | result |
+| check | required result |
 |---|---|
 | game data (`.sg5`) vs Scid's own | **byte-identical** |
 | index (`.si5`) vs Scid's own | byte-identical except the stored-line byte |
 | namebase (`.sn5`) names + ids | identical set, identical ids |
-| Scid reading the Dart-written database | **PGN output identical to reading its own** |
+| Scid reading the written database | **PGN output identical to reading its own** |
 
 The one deliberate difference is the stored-line code (word 10's high byte).
 Scid classifies each game against its table of 255 opening lines; we write 0,
@@ -260,43 +258,43 @@ stay correct, they just skip that shortcut. Carrying the table would mean
 porting `stored.cpp`'s data; the accelerator is worth having on *our* side
 (section 3) but not for files we hand to Scid.
 
-### The pieces (as the removed writer split them)
+### The pieces
 
-- `scid_piece_list.dart` — the per-side piece list the move encoding indexes
+- Piece list — the per-side piece list the move encoding indexes
   into. This is the part that silently corrupts a stream if it drifts: fixed
   order from the standard start, FEN read order (king forced to slot 0) from a
   FEN, swap-with-last on capture, promotion keeps the pawn's slot.
-- `scid_move_codec.dart` — the one-byte move encoding and its special tokens.
-- `scid_game_encoder.dart` — the game blob (tags, start board, moves,
+- Move codec — the one-byte move encoding and its special tokens.
+- Game encoder — the game blob (tags, start board, moves,
   comments) plus the fields the index derives from a game: ply count,
   promotion flags, home-pawn departures, material signature.
-- `scid_index_entry.dart` — the 56-byte record, and Scid's date / ECO / result
+- Index entry — the 56-byte record, and Scid's date / ECO / result
   / annotation-count encodings.
-- `scid_namebase.dart` — the append-only `varint(len*8+type)` name file.
-- `scid_writer.dart` — the three files, written to temporaries and renamed
-  together so an interrupted export leaves no half-database.
+- Namebase — the append-only `varint(len*8+type)` name file.
+- Writer — the three files, written to temporaries and renamed together so
+  an interrupted export leaves no half-database.
 
 ### How it is verified
 
 `tools/scid_reference/` holds two small C++ programs that link Scid's own
 codec: one converts PGN to a Scid database (producing the test fixtures), the
-other opens a database and prints PGN (proving Scid can read what Dart wrote).
+other opens a database and prints PGN (proving Scid can read what a writer
+produced).
 See its README for the build line and the regeneration steps.
 
-The fixture is four real TWIC games covering castling both sides, a queen
-promotion, an under-promotion and en passant, plus a hand-built FEN-start game
-with comments, a NAG and a variation. Every move was checked legal with
-`python-chess` first — an illegal move makes both encoders stop at the same
-place, so the byte comparison would pass while proving nothing. That actually
-happened on the first attempt.
+The fixture should cover castling both sides, a queen promotion, an
+under-promotion and en passant, plus a FEN-start game with comments, a NAG and
+a variation. Check every move legal with `python-chess` first — an illegal
+move makes both encoders stop at the same place, so the byte comparison would
+pass while proving nothing.
 
-### Not done
+### Beyond a v5 writer
 
 - **SCID4 output.** The game data is identical between v4 and v5, so only the
   index record and the namebase differ — but `.sn4` adds sorting and prefix
   compression, which is where the bugs would be. v5 is upstream's default; v4
   matters only for Scid vs. PC, which cannot read v5.
-- **Reading** Scid databases. The encoder is the hard half and it is done; a
-  reader is mostly the same tables run backwards.
+- **Reading** Scid databases. The encoder is the hard half; a reader is
+  mostly the same tables run backwards.
 - The three search accelerators and the Filter model from sections 3 and 4,
   which are about making *our* store faster and are independent of this.

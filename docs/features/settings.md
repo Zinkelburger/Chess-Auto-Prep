@@ -154,8 +154,8 @@ be read is logged and left out.
   the defaults. A symlinked `settings.json` is followed. Files written before
   the engine defaults changed read an old one core / 128 MB as "not chosen".
 - **Lichess account** — SharedPreferences keys `lichess_access_token`,
-  `lichess_auth_username`, `lichess_token_expiry`, `lichess_is_pat`; the old
-  `lichess_refresh_token` key is removed on every write. Plain preferences, not
+  `lichess_auth_username`, `lichess_token_expiry`, `lichess_is_pat`; a
+  `lichess_refresh_token` key left by earlier builds is removed on every write. Plain preferences, not
   an OS keychain. An expired OAuth token or unreadable keys read as signed out.
   The token is never logged.
 - **Log** — `<support>/logs/app.log`, one line per entry (`2026-09-19T20:31:04.123
@@ -174,7 +174,7 @@ be read is logged and left out.
   only when something reads it.
 - The gear at the right end of the top bar and Ctrl+, are the ways in; the
   mode menu lists modes only (owner, 2026-09-22).
-- v2 is dark only: no Light/System theme and no Appearance row (owner,
+- The app is dark only: no Light/System theme and no Appearance row (owner,
   2026-09-22).
 - No dropdowns: choices are side-by-side buttons or typeable choice fields,
   numbers are typeable steppers; one CPU-cores knob, not cores plus threads

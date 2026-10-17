@@ -133,7 +133,7 @@ study, which then opens.
 `Prep – <group>.pgn` from members' non-empty prep chapters
 (`Jane Doe · As White`, keeping orientation; a `Preparation` chapter when none),
 linked as the group's `study`. Members whose prep study is missing or unreadable
-are left out and named. Train opens it in Study's Train pane with Chapter scope,
+are left out and named. Train opens it in Study's Train pane on Whole study,
 each chapter from its own side.
 
 **Prep sheet** — `Copy prep sheet` / `Export prep sheet…` (native Save dialog,
