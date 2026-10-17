@@ -45,7 +45,7 @@ panel (440–480 px) on the right.
   good for White on board 1 (A + B). Hivemind's scale, not pawns.`).
 - **Problem line** — one fixed line saying why a move, step or paste was
   refused.
-- **Moves** — with one board, board 1's moves fill the rest of the panel, with
+- **Moves** — with one board, board 1's moves and hand edits fill the rest of the panel, with
   `First move`, `Back`, `Forward` and `Last move` under them.
 
 ## Actions
@@ -56,8 +56,13 @@ hand. With one board the partner board is not shown, so a captured piece
 leaves board 1. Refusals: `That drop is not legal.`, `It is not black's turn
 on board 2.`, `That line no longer fits the position.`
 **Add or take a hand's piece** — + or − → one more or one fewer of that piece,
-0 to 16. The position on screen becomes the start of a new line; earlier moves
-are dropped, as when a position is edited on Lichess.
+0 to 16. The edit is noted after that board's current move, as on the
+website: the moves before it stay, and its list shows the net change after
+the move in muted ink (`e4 +2n −P`, White's pieces in upper case), or on a
+`Start` row before the first move. Stepping back past the move takes the
+edit off; stepping forward puts it back. Repeated presses at one place are
+one edit. Like a different move, an edit made after stepping back replaces
+that board's later moves.
 **Edit board** — opens the shared board editor on board 1 (one board) or the
 board last clicked (two boards), without the hands → `Use this position` sets
 that board's pieces, side to move and castling, keeps both hands and starts a
@@ -80,7 +85,8 @@ Searches are remembered for the session. Leaving the mode quits the engine.
 `Flip board(s)`, `Copy dual FEN`, `Paste FEN or dual FEN` (one board's FEN
 sets board 1 and starts board 2 afresh), `Copy moves`, `Paste moves`. Moves
 are BPGN movetext in played order (`1A. e4 1B. d4 1a. e5`), after
-`[SetUpDualFEN "…"]` for a set-up start. A paste takes that or a FICS game,
+`[SetUpDualFEN "…"]` for a set-up start; a hand edit is a comment where it
+was made, `{ Hands edited on board 1: +2n }`, and pastes back. A paste takes that or a FICS game,
 and is refused whole (`Not pasted: <token> does not play.`, `No bughouse
 moves to paste.`). The window's paste commands are refused here with
 `Bughouse pastes from Actions: Paste FEN or dual FEN, or Paste moves.`
