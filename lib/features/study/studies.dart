@@ -19,6 +19,7 @@ import '../../diagnostics/log.dart';
 import '../../net/lichess_studies.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/chapter_files.dart';
+import '../../storage/deleted_chapters.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/pgn_document_store.dart' as store;
 import '../../storage/study_files.dart';

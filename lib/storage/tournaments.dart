@@ -14,7 +14,7 @@ import 'atomic_write.dart';
 import 'document_ref.dart';
 import 'edit_scope.dart';
 import 'file_lock.dart';
-import 'operation_journal.dart';
+import 'operation_participants.dart';
 import 'pgn_document_store.dart';
 import 'recovery_files.dart';
 import 'recovery_quarantine.dart';

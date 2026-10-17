@@ -5,7 +5,7 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/features/library/library.dart';
 import 'package:chess_auto_prep/features/library/library_state.dart';
-import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/chapter_directory.dart';
 import 'package:chess_auto_prep/storage/file_relocation.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:chess_auto_prep/storage/pgn_file_store.dart';

@@ -15,6 +15,7 @@ import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/pgn_file_store.dart';
 import 'package:chess_auto_prep/storage/training_rows.dart';
 import 'package:chess_auto_prep/storage/training_store.dart';
+import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

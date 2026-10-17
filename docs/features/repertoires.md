@@ -14,7 +14,8 @@ the outline column in `lib/app/shell.dart`. Shared owners: `DocumentSession`
 and `DocumentSaver` (`lib/workspace/`), the Replies tab
 (`replies.dart`, `replies_pane.dart`, `gap_hunt.dart`, `gap_walk.dart`), the
 Audit tab (`chapter_audit.dart`, `audit_pane.dart`, `lib/chess/audit/`),
-`lib/storage/chapter_files.dart`, `pgn_document_store.dart`,
+`lib/storage/chapter_files.dart` (with `chapter_directory.dart` and
+`deleted_chapters.dart`), `pgn_document_store.dart`,
 `training_records.dart`, and `lib/chess/pgn/` (chapter, sections, import,
 LineID pins). The Expectimax tab is [generation.md](generation.md); the
 shared board, tabs and engine are [workspace.md](workspace.md).

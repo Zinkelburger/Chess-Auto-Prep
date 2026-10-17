@@ -10,6 +10,7 @@ import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
 import '../../storage/training_rows.dart' show asWritten;
 import '../../storage/training_store.dart';
+import '../../storage/training_progress.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/pending_writes.dart';
 
