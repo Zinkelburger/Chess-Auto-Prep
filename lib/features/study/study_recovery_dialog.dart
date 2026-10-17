@@ -4,6 +4,7 @@ import '../../storage/deleted_chapters.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/theme.dart';
 import 'studies.dart';
+import 'studies_state.dart';
 
 Future<void> showStudyRecovery(BuildContext context, Studies studies) =>
     showDialog<void>(

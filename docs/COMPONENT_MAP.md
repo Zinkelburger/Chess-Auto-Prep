@@ -122,6 +122,8 @@ Bughouse mode is offered when its engine assets are present.
   or any stop command invalidates earlier pending starts, including an away-and-back
   navigation. Exact-root results take precedence while preserving newest-first
   order. Engine depths and continuation lines share the same source/depth scope.
+  Turning a finished run into a draft chapter, and retrying that draft's save,
+  is `workspace/fill_lines.dart`'s.
 - `workspace/index_build.dart` owns each opening-index build. Incremental work
   and isolate messages use the same guarded completion: success, failure and
   cancellation close the timer, receive port and worker. Progress-consumer failures

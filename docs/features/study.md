@@ -4,7 +4,8 @@ Study keeps annotated chess material in named chapters: someone imports or
 writes lines, annotates them, and drills them as line practice. It uses the
 shared board, move tree, engine, document session and autosave system.
 
-Code: `lib/features/study/` (`Studies` owner in `studies.dart`, `StudyPanel`),
+Code: `lib/features/study/` (`Studies` owner in `studies.dart`, renames,
+restores and deletes in `study_file_changes.dart`, `StudyPanel`),
 study training controls in `lib/features/trainer/study_training_controls.dart`,
 PGN rules in `lib/chess/pgn/study.dart`, `study_edits.dart` and
 `study_training.dart`, Lichess download in `lib/net/lichess_studies.dart`, the

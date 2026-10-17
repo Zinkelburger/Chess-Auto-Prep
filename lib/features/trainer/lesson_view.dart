@@ -15,6 +15,7 @@ import '../../ui/theme.dart';
 import '../../workspace/move_field.dart';
 import 'lesson.dart';
 import 'trainer.dart';
+import 'trainer_state.dart';
 import 'trainer_words.dart';
 import '../../ui/move_notation.dart';
 

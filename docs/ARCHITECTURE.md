@@ -580,7 +580,7 @@ Regression contracts and open risks, not a feature list
   file is refused; moved as its own line it keeps its progress. Raw `LineID`
   tags do not identify progress; transfers use the source training id.
 - **Linked studies.** Players & prep links studies by path; a linked study's
-  rename and delete are refused (`features/study/studies.dart`). Any new
+  rename and delete are refused (`features/study/study_file_changes.dart`). Any new
   command over linked studies must complete the reference change recoverably or
   refuse before mutating.
 - **Stale results.** Replacement opens, paste, close and cancellation must
@@ -588,8 +588,8 @@ Regression contracts and open risks, not a feature list
   publication stay tied to their captured input.
 - **Platforms.** Linux process-kill tests do not prove Windows/macOS engine
   cleanup after the app is killed, or power-loss durability anywhere.
-- **Size pressure.** `workspace/fill_gaps.dart` sits at the 1,000-line cap.
-  `workspace/document_session.dart` has room again since navigation moved to
+- **Size pressure.** No file sits at the 1,000-line cap.
+  `workspace/document_session.dart` has room since navigation moved to
   `DocumentCursor`; what is left (opening, edits, held edits, the analysis
   board, undo) writes the same shown document and file, so a further split
   would scatter one owner's state. Extract a collaborator only when it owns
