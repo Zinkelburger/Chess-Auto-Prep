@@ -8,7 +8,7 @@ import '../../chess/training/records.dart';
 import '../../chess/training/schedule.dart';
 import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
-import '../../storage/training_store.dart';
+import '../../storage/training_progress.dart';
 import '../../ui/relative_time.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';

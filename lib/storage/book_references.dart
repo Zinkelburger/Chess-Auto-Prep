@@ -7,7 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../diagnostics/log.dart';
 import 'book_list.dart';
-import 'operation_journal.dart';
+import 'operation_participants.dart';
 import 'recovery_files.dart';
 import 'reference_change.dart';
 

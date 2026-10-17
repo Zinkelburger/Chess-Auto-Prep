@@ -9,7 +9,7 @@ import '../chess/training/schedule.dart';
 import '../diagnostics/log.dart';
 import 'compound_commit.dart';
 import 'csv_records.dart';
-import 'operation_journal.dart';
+import 'operation_participants.dart';
 import 'recovery_files.dart';
 import 'training_rows.dart';
 

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/chapter_directory.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/workspace/gap_hunt.dart';
 import 'package:dartchess/dartchess.dart' show Side;

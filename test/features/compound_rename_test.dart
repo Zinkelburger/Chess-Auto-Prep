@@ -12,6 +12,7 @@ import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/reference_change.dart';
 import 'package:chess_auto_prep/chess/pgn/games_written.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/chapter_directory.dart';
 import 'package:chess_auto_prep/workspace/books.dart';
 import 'package:chess_auto_prep/workspace/document_saver.dart';
 import 'package:chess_auto_prep/workspace/document_session.dart';
