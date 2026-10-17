@@ -434,17 +434,3 @@ JointLine? parseHivemindInfo(String line) {
     ],
   );
 }
-
-/// Rank 1 first — the line `bestmove` follows, the engine's own choice —
-/// then the rest by score for the searched team. The engine ranks MultiPV
-/// by visits, and a measured block scored ranks 1–5 +0.08, −0.61, −0.38,
-/// −0.46, −0.53, so its own order beside the numbers reads as a mistake.
-List<JointLine> rankedLines(Iterable<JointLine> lines) {
-  final byRank = lines.toList()..sort((a, b) => a.rank.compareTo(b.rank));
-  if (byRank.length < 2) return byRank;
-  double strength(JointLine line) =>
-      TableScore(score: line.q, mate: line.mate).strength;
-  final rest = byRank.sublist(1)
-    ..sort((a, b) => strength(b).compareTo(strength(a)));
-  return [byRank.first, ...rest];
-}

@@ -226,6 +226,57 @@ String _signed(double score) {
   return hundredths > 0 ? '+$text' : '-$text';
 }
 
+/// Rank 1 first — the line `bestmove` follows, the engine's own choice —
+/// then the rest by score for the searched team. The engine ranks MultiPV
+/// by visits, and a measured block scored ranks 1–5 +0.08, −0.61, −0.38,
+/// −0.46, −0.53, so its own order beside the numbers reads as a mistake.
+List<JointLine> rankedLines(Iterable<JointLine> lines) {
+  final byRank = lines.toList()..sort((a, b) => a.rank.compareTo(b.rank));
+  if (byRank.length < 2) return byRank;
+  double strength(JointLine line) =>
+      TableScore(score: line.q, mate: line.mate).strength;
+  final rest = byRank.sublist(1)
+    ..sort((a, b) => strength(b).compareTo(strength(a)));
+  return [byRank.first, ...rest];
+}
+
+/// The searched team's [count] choices on [board], one line each: the
+/// moves there the engine visited most — a null move is a sit on that
+/// board — each with its most-visited line, the engine's own choice first
+/// and the rest best-scoring first, as [rankedLines] orders them.
+///
+/// The engine ranks joint actions, both boards' moves at once, so a team on
+/// move on both boards shows the same move on one board across several of
+/// its lines (`(Nc6,d5)`, `(Nc6,e6)`, `(Nc6,pass)`); this reads one board's
+/// moves out of the same search.
+List<JointLine> boardChoices(
+  Iterable<JointLine> lines,
+  BoardNumber board, {
+  int count = 3,
+}) {
+  final byRank = lines.where((line) => line.pv.isNotEmpty).toList()
+    ..sort((a, b) => a.rank.compareTo(b.rank));
+  final seen = <String?>{};
+  final picked = <JointLine>[];
+  for (final line in byRank) {
+    if (picked.length == count) break;
+    if (seen.add(line.pv.first.on(board))) picked.add(line);
+  }
+  return rankedLines(picked);
+}
+
+/// How far [line] falls behind [best] for the team searched, 0 to 1: half
+/// the difference in value, as lila measures how much thinner to draw an
+/// engine move's arrow than its best one. A mate counts as the whole value.
+double shiftFrom(JointLine best, JointLine line) {
+  double value(JointLine of) => switch ((of.mate, of.q)) {
+    (final int mate, _) => mate > 0 ? 1 : -1,
+    (_, final double q) => q,
+    _ => -1,
+  };
+  return ((value(best) - value(line)) / 2).clamp(0.0, 1.0);
+}
+
 /// Which team answers a move on [board] of [position]: the other seat of
 /// that board.
 Team answering(TablePosition position, BoardNumber board) =>

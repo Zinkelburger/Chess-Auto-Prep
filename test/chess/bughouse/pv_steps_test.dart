@@ -22,6 +22,22 @@ void main() {
     ]);
   });
 
+  test('one board through both: a step plays the other board before it', () {
+    final steps = pvSteps(
+      TablePosition.initial,
+      pv,
+      board: BoardNumber.one,
+      throughBoth: true,
+    );
+    expect(steps.map((s) => s.san), ['e4', 'e5', 'Nf3']);
+    expect(pvMovesTo(steps, 2), [
+      (BoardNumber.one, 'e2e4'),
+      (BoardNumber.two, 'd2d4'),
+      (BoardNumber.one, 'e7e5'),
+      (BoardNumber.one, 'g1f3'),
+    ]);
+  });
+
   test('one board starting with Black numbers its first move with ...', () {
     final after = TablePosition.initial.play(BoardNumber.one, 'e2e4')!.after;
     final steps = pvSteps(after, [

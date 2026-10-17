@@ -249,6 +249,18 @@ const shapeRed = Color(0xCCCC2222);
 const shapeBlue = Color(0xCC003088);
 const shapeYellow = Color(0xCCE6A800);
 
+/// An engine's moves drawn on its board as lila draws them: its choice in
+/// lila's pale blue, the moves close behind it in pale grey, each arrow as
+/// wide as [engineArrowWidth] or thinner the further behind it is.
+const engineBestArrow = Color(0x66003088);
+const engineOtherArrow = Color(0x594A4A4A);
+
+/// lila's engine arrow widths in sixty-fourths of a square: its choice
+/// 15, another move 12 when level with it down to 2, and none drawn once
+/// a move is [engineArrowCutoff] behind (half the difference in value).
+const engineArrowWidth = 15.0;
+const engineArrowCutoff = 0.2;
+
 /// The board editor: its board, the column of controls beside it, the
 /// width of a side's name before its castling boxes, and the line held
 /// under the FEN for why the position cannot be played.
@@ -658,9 +670,9 @@ const labBoardMax = 480.0;
 const labOneBoardMax = 720.0;
 
 /// What the board column needs with both boards besides the boards and
-/// their hands: the board's name above, the move list and step buttons
-/// under it.
-const labBoardChrome = 120.0;
+/// their hands: the board's name above, the engine's rows, the move list
+/// and step buttons under it.
+const labBoardChrome = 120.0 + 3 * labTableRowHeight + 1;
 const labBoardLabelHeight = 22.0;
 
 /// The narrowest the right-hand panel may become before the boards shrink.

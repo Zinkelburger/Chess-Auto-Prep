@@ -13,9 +13,10 @@ import 'lab_engine.dart';
 import 'lab_lines.dart';
 import 'table_boards.dart';
 
-/// The column beside the boards: how many boards, the clock case with two,
-/// the engine switch with its score and lines, and with one board its move
-/// list. Every row keeps its height whether the engine is on or off.
+/// The column beside the boards: how many boards, who may sit,
+/// the engine switch with its score, and with one board its best moves and
+/// move list; with two, each board's best moves are under that board. Every
+/// row keeps its height whether the engine is on or off.
 class LabPanel extends StatelessWidget {
   const LabPanel({super.key, required this.lab, required this.engine});
 
@@ -30,10 +31,15 @@ class LabPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _BoardsSwitch(lab: lab),
-          if (!lab.single) _TimeChips(lab: lab),
+          _TimeChips(lab: lab, lines: engine.lines),
           const SizedBox(height: Space.s),
-          _EngineBar(engine: engine),
-          LabLineRows(lab: lab, lines: engine.lines),
+          _EngineBar(engine: engine, single: lab.single),
+          if (lab.single)
+            BoardLineRows(
+              lab: lab,
+              lines: engine.lines,
+              board: BoardNumber.one,
+            ),
           _ProblemLine(lab: lab),
           if (lab.single)
             Expanded(
@@ -104,15 +110,29 @@ class _BoardsSwitch extends StatelessWidget {
 String _withoutHands(String fen) =>
     fen.replaceFirst(RegExp(r'\[[^\]]*\]'), '').replaceAll('~', '');
 
-/// The clock case the engine answers for, with both boards.
+/// The clock case the engine answers for: who may sit rather than move.
+/// While the engine is on, each case shows A + B's score under it, the
+/// chosen one live and the others once a short search has scored them, so
+/// sitting and not sitting can be compared at a glance.
 class _TimeChips extends StatelessWidget {
-  const _TimeChips({required this.lab});
+  const _TimeChips({required this.lab, required this.lines});
 
   final BughouseLab lab;
+  final LabLines lines;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final lines = this.lines;
+    final on = lines is LinesOn && lines.boards == lab.boards ? lines : null;
+    String scoreOf(ClockCase clock) {
+      if (on == null) return '';
+      final score = clock == lab.clock
+          ? (on.nodes == null ? null : on.score)
+          : on.byClock[clock];
+      return score?.text ?? '–';
+    }
+
     return Padding(
       padding: const EdgeInsets.only(top: Space.s),
       child: Row(
@@ -130,13 +150,29 @@ class _TimeChips extends StatelessWidget {
                 for (final clock in ClockCase.values)
                   ButtonSegment(
                     value: clock,
-                    label: Text(clock.label),
-                    tooltip: clock.hint,
+                    label: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_label(clock)),
+                        Text(
+                          scoreOf(clock),
+                          style: monoText.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                    tooltip: _hint(clock),
                   ),
               ],
               selected: {lab.clock},
               showSelectedIcon: false,
-              style: const ButtonStyle(visualDensity: VisualDensity.compact),
+              style: const ButtonStyle(
+                visualDensity: VisualDensity.compact,
+                padding: WidgetStatePropertyAll(
+                  EdgeInsets.symmetric(horizontal: Space.s, vertical: Space.xs),
+                ),
+              ),
               onSelectionChanged: (picked) => lab.setClock(picked.single),
             ),
           ),
@@ -144,15 +180,40 @@ class _TimeChips extends StatelessWidget {
       ),
     );
   }
+
+  /// With one board the seats are not shown: the cases name the colours.
+  String _label(ClockCase clock) => !lab.single
+      ? clock.label
+      : switch (clock) {
+          ClockCase.abMaySit => 'White may sit',
+          ClockCase.even => 'Even',
+          ClockCase.cdMaySit => 'Black may sit',
+        };
+
+  /// What the case means, then what its number is.
+  String _hint(ClockCase clock) {
+    if (!lab.single) {
+      return '${clock.hint}. The number under it is A + B’s score then.';
+    }
+    final means = switch (clock) {
+      ClockCase.abMaySit =>
+        'White is up on the clock, so can wait rather than move',
+      ClockCase.even => 'Neither side is up on the clock: both have to move',
+      ClockCase.cdMaySit =>
+        'Black is up on the clock, so can wait rather than move',
+    };
+    return '$means. The number under it is White’s score then.';
+  }
 }
 
 /// The switch, the score, the engine's name with the size of the search
 /// shown, and a thin bar while it runs: how far towards the size it rests
 /// at, or moving without a measure while an engine searches in passes.
 class _EngineBar extends StatelessWidget {
-  const _EngineBar({required this.engine});
+  const _EngineBar({required this.engine, required this.single});
 
   final LabEngine engine;
+  final bool single;
 
   @override
   Widget build(BuildContext context) {
@@ -185,7 +246,7 @@ class _EngineBar extends StatelessWidget {
               ),
               const SizedBox(width: Space.s),
               Tooltip(
-                message: _scoreHint,
+                message: scoreHint(single: single),
                 child: SizedBox(
                   width: labPearlWidth,
                   child: Text(score, style: labPearlText),
@@ -215,9 +276,6 @@ class _EngineBar extends StatelessWidget {
     );
   }
 }
-
-const _scoreHint =
-    '+ is good for White on board 1 (A + B). Hivemind’s scale, not pawns.';
 
 String _thousands(int n) =>
     n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+$)'), (_) => ',');

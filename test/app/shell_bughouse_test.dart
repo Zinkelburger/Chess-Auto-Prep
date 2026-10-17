@@ -50,7 +50,8 @@ void main() {
   testWidgets('it opens on one board; + and − change a hand', (tester) async {
     await toBughouse(tester);
     expect(find.byType(Chessboard), findsOneWidget);
-    expect(find.text('Time'), findsNothing);
+    // With one board the clock cases name the colours.
+    expect(find.text('White may sit'), findsOneWidget);
     final more = find.byTooltip('One more knight for Black');
     await tester.tap(more);
     await tester.tap(more);
@@ -121,14 +122,15 @@ void main() {
     expect(w.lab.line.of(BoardNumber.two), isEmpty);
   });
 
-  testWidgets('two boards: both teams’ lines, a line plays and pointing '
+  testWidgets('two boards: each board’s moves, a line plays and pointing '
       'draws it', (tester) async {
     await toBughouse(tester);
     await twoBoards(tester);
     await engineOn(tester);
-    expect(find.text('A + B'), findsOneWidget);
-    expect(find.text('C + D'), findsOneWidget);
-    final line = find.text('A Na3').first;
+    expect(find.text('A + B'), findsNothing);
+    // Board 1's A and board 2's D each have their best moves.
+    expect(find.text('1. Na3'), findsNWidgets(2));
+    final line = find.text('1. Na3').first;
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: Offset.zero);
     addTearDown(mouse.removePointer);

@@ -69,7 +69,7 @@ void main() {
   test('one board: each pass asks board 1 of its mover and the zero of the '
       'other team, deeper each time', () async {
     await on();
-    expect(hivemind.asked.map(nodes), [800, 800, 4000, 4000]);
+    expect(hivemind.asked.take(4).map(nodes), [800, 800, 4000, 4000]);
     final own = hivemind.asked.first;
     expect(
       (own.team, own.mustMove, own.maySit),
@@ -81,10 +81,28 @@ void main() {
     final lines = engine.lines as LinesOn;
     expect(lines.thinking, isFalse);
     expect(lines.nodes, 4000);
-    expect(lines.teams.keys, [Team.ab]);
-    expect(lines.teams[Team.ab], hasLength(3));
+    expect(lines.rows.keys, [BoardNumber.one]);
+    expect(lines.rows[BoardNumber.one], hasLength(3));
     // Both teams read cp −200: the zero is measured and the table level.
     expect(lines.score.text, '0.00');
+    // Then each side that may sit is scored briefly, the searches that
+    // match Even's reused.
+    expect(hivemind.asked.skip(4).map((q) => (q.team, q.maySit, nodes(q))), [
+      (Team.ab, true, labClockNodes),
+      (Team.cd, true, labClockNodes),
+    ]);
+    expect(lines.byClock.keys, [ClockCase.abMaySit, ClockCase.cdMaySit]);
+  });
+
+  test('one board: the side on move may sit when the clock says so', () async {
+    lab.setClock(ClockCase.abMaySit);
+    await on();
+    final own = hivemind.asked.first;
+    expect(
+      (own.team, own.mustMove, own.maySit),
+      (Team.ab, MustMove.either, true),
+    );
+    expect(hivemind.asked[1].maySit, isFalse);
   });
 
   test(
@@ -96,7 +114,7 @@ void main() {
       expect(zero.position.turn(BoardNumber.two), Side.black);
       expect(zero.mustMove, MustMove.either);
       // Its lines are read on the table searched, where B is on move.
-      final row = (engine.lines as LinesOn).teams[Team.cd]!.first;
+      final row = (engine.lines as LinesOn).rows[BoardNumber.one]!.first;
       expect(row.table.turn(BoardNumber.two), Side.black);
     },
   );
@@ -112,9 +130,57 @@ void main() {
         (Team.ab, MustMove.either, false),
         (Team.cd, MustMove.either, true),
       ]);
-      expect((engine.lines as LinesOn).teams.keys, [Team.ab, Team.cd]);
+      expect((engine.lines as LinesOn).rows.keys, BoardNumber.values);
     },
   );
+
+  test('two boards: a team on move on both shows each board\'s own best '
+      'moves, not the same move in every joint line', () async {
+    lab
+      ..showBoards(LabBoards.two)
+      ..play(BoardNumber.two, 'd2d4');
+    hivemind.answer = (question) => question.team == Team.ab
+        ? const HivemindSearched(
+            best: JointMove('g1f3', 'd7d5'),
+            lines: [
+              JointLine(
+                rank: 1,
+                cp: 50,
+                nodes: 800,
+                pv: [JointMove('g1f3', 'd7d5')],
+              ),
+              JointLine(
+                rank: 2,
+                cp: 40,
+                nodes: 800,
+                pv: [JointMove('g1f3', 'e7e6')],
+              ),
+              JointLine(
+                rank: 3,
+                cp: 30,
+                nodes: 800,
+                pv: [JointMove('g1f3', null)],
+              ),
+              JointLine(
+                rank: 4,
+                cp: -400,
+                nodes: 800,
+                pv: [JointMove('e2e4', 'd7d5')],
+              ),
+            ],
+          )
+        : const HivemindSearched(best: null, lines: []);
+    await on();
+    final rows = (engine.lines as LinesOn).rows;
+    expect(rows[BoardNumber.one]!.map((r) => r.move), ['g1f3', 'e2e4']);
+    expect(rows[BoardNumber.two]!.map((r) => r.move), ['d7d5', 'e7e6', null]);
+    expect(rows[BoardNumber.one]!.first.shift, 0);
+    // e4 is far behind: its arrow is not drawn.
+    expect(rows[BoardNumber.one]!.last.shift, greaterThan(0.2));
+    expect(engine.rowsOn(BoardNumber.two), rows[BoardNumber.two]);
+    engine.playBest(BoardNumber.two);
+    expect(lab.line.of(BoardNumber.two).last.san, 'd5');
+  });
 
   test('a new position drops the stale answer and starts over', () async {
     hivemind.hold = true;
@@ -131,7 +197,7 @@ void main() {
     }
     final lines = engine.lines as LinesOn;
     expect(lines.position, lab.position);
-    expect(lines.teams[Team.cd], isNotEmpty);
+    expect(lines.rows[BoardNumber.one], isNotEmpty);
   });
 
   test('a table seen before is answered from memory', () async {
@@ -181,7 +247,7 @@ void main() {
         (Team.cd, 400),
       ]);
       var lines = engine.lines as LinesOn;
-      expect(lines.teams[Team.ab], hasLength(3));
+      expect(lines.rows[BoardNumber.one], hasLength(3));
       expect(lines.nodes, 50);
       expect(lines.progress, 50 / 800);
       expect(lines.thinking, isTrue);
@@ -199,7 +265,10 @@ void main() {
       expect(lines.nodes, 200);
       expect(lines.thinking, isFalse);
       // Never restarted on the same table.
-      expect(hivemind.asked, hasLength(2));
+      expect(
+        hivemind.asked.where((q) => nodes(q) != labClockNodes),
+        hasLength(2),
+      );
     });
 
     test('two boards: both teams stream, their nodes added', () async {
@@ -211,7 +280,7 @@ void main() {
         (Team.cd, 800),
       ]);
       final lines = engine.lines as LinesOn;
-      expect(lines.teams.keys, [Team.ab, Team.cd]);
+      expect(lines.rows.keys, BoardNumber.values);
       expect(lines.nodes, 100);
       expect(lines.progress, 100 / 1600);
     });
@@ -231,7 +300,7 @@ void main() {
       await settle();
       final lines = engine.lines as LinesOn;
       expect(lines.position, lab.position);
-      expect(lines.teams.keys, [Team.cd]);
+      expect(lines.rows.keys, [BoardNumber.one]);
       expect(lines.thinking, isTrue);
     });
 

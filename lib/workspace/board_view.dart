@@ -172,7 +172,7 @@ class _BoardViewState extends State<BoardView> {
                   settings: settings,
                   shapes: {
                     for (final shape in _shown())
-                      if (shape.isCircle) _circleOf(shape),
+                      if (shape.isCircle) circleShape(shape),
                   },
                   onMove: (move, {viaDragAndDrop}) {
                     if (!mounted) return;
@@ -226,7 +226,7 @@ class _BoardViewState extends State<BoardView> {
     if (event.buttons == kSecondaryButton) {
       final square = squareAt(event.localPosition, size, widget.orientation);
       if (square == null) return;
-      setState(() => _drawing = BoardShape.circle(square, _heldColour()));
+      setState(() => _drawing = BoardShape.circle(square, heldShapeColour()));
     } else if (event.buttons == kPrimaryButton) {
       if (_drawn.isNotEmpty) setState(() => _drawn = const []);
       if (_hidden || widget.shapes.isEmpty) return;
@@ -273,7 +273,7 @@ Square? squareAt(Offset at, double size, Side orientation) {
 }
 
 /// The colour the keys held now draw in; Shift wins over Alt over Ctrl.
-ShapeColour _heldColour() {
+ShapeColour heldShapeColour() {
   final keys = HardwareKeyboard.instance;
   if (keys.isShiftPressed) return ShapeColour.red;
   if (keys.isAltPressed) return ShapeColour.blue;
@@ -288,8 +288,13 @@ Color _colourOf(ShapeColour colour) => switch (colour) {
   ShapeColour.yellow => shapeYellow,
 };
 
-Shape _circleOf(BoardShape shape) =>
+/// A drawn circle as chessground draws it, under the pieces.
+Shape circleShape(BoardShape shape) =>
     Circle(color: _colourOf(shape.colour), orig: shape.from);
+
+/// An engine's move as an arrow under the drawn ones: its ends, colour and
+/// width in sixty-fourths of a square.
+typedef EngineArrow = ({Square from, Square to, Color colour, double width});
 
 /// The arrows on a board, drawn as Lichess draws them: a shaft a sixth of a
 /// square wide from the middle of one square, its head's point just short of
@@ -301,10 +306,14 @@ class BoardArrows extends StatelessWidget {
     required this.arrows,
     required this.orientation,
     this.drawing,
+    this.engine = const [],
   });
 
   /// Every arrow shown, [drawing] among them.
   final List<BoardShape> arrows;
+
+  /// An engine's moves, drawn first so drawn arrows lie over them.
+  final List<EngineArrow> engine;
 
   /// The arrow under a right-drag, a little thinner while it is drawn.
   final BoardShape? drawing;
@@ -314,16 +323,17 @@ class BoardArrows extends StatelessWidget {
   @override
   Widget build(BuildContext context) => CustomPaint(
     size: Size.infinite,
-    painter: _ArrowPainter(arrows, drawing, orientation),
+    painter: _ArrowPainter(arrows, drawing, orientation, engine),
   );
 }
 
 class _ArrowPainter extends CustomPainter {
-  _ArrowPainter(this.arrows, this.drawing, this.orientation);
+  _ArrowPainter(this.arrows, this.drawing, this.orientation, this.engine);
 
   final List<BoardShape> arrows;
   final BoardShape? drawing;
   final Side orientation;
+  final List<EngineArrow> engine;
 
   // Lichess's sizes, in sixty-fourths of a square: chessground's brush
   // width 10, an arrow ending 10 short of the middle (20 when another ends
@@ -337,8 +347,19 @@ class _ArrowPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final square = size.width / 8;
     final ending = <Square, int>{};
-    for (final arrow in arrows) {
-      ending[arrow.to] = (ending[arrow.to] ?? 0) + 1;
+    for (final to in [...engine.map((a) => a.to), ...arrows.map((a) => a.to)]) {
+      ending[to] = (ending[to] ?? 0) + 1;
+    }
+    for (final arrow in engine) {
+      _arrow(
+        canvas,
+        square,
+        arrow.from,
+        arrow.to,
+        arrow.colour,
+        width: square * arrow.width / 64,
+        margin: square * (ending[arrow.to]! > 1 ? _sharedMargin : _margin),
+      );
     }
     for (final arrow in arrows) {
       final current = arrow == drawing;
@@ -346,7 +367,9 @@ class _ArrowPainter extends CustomPainter {
       _arrow(
         canvas,
         square,
-        arrow,
+        arrow.from,
+        arrow.to,
+        _colourOf(arrow.colour),
         width: square * _width * (current ? 0.85 : 1),
         margin: square * (shared ? _sharedMargin : _margin),
       );
@@ -356,12 +379,14 @@ class _ArrowPainter extends CustomPainter {
   void _arrow(
     Canvas canvas,
     double square,
-    BoardShape arrow, {
+    Square fromSquare,
+    Square toSquare,
+    Color colour, {
     required double width,
     required double margin,
   }) {
-    final from = _centre(arrow.from, square);
-    final to = _centre(arrow.to, square);
+    final from = _centre(fromSquare, square);
+    final to = _centre(toSquare, square);
     final direction = (to - from) / (to - from).distance;
     final across = Offset(-direction.dy, direction.dx);
     final end = to - direction * margin;
@@ -374,7 +399,6 @@ class _ArrowPainter extends CustomPainter {
       ..lineTo((base + across * 2 * width).dx, (base + across * 2 * width).dy)
       ..lineTo((base - across * 2 * width).dx, (base - across * 2 * width).dy)
       ..close();
-    final colour = _colourOf(arrow.colour);
     // One layer per arrow, so where shaft and head overlap is no darker.
     canvas.saveLayer(null, Paint()..color = Color.fromRGBO(0, 0, 0, colour.a));
     final solid = colour.withValues(alpha: 1);
@@ -400,6 +424,7 @@ class _ArrowPainter extends CustomPainter {
   @override
   bool shouldRepaint(_ArrowPainter old) =>
       !listEquals(old.arrows, arrows) ||
+      !listEquals(old.engine, engine) ||
       old.drawing != drawing ||
       old.orientation != orientation;
 }

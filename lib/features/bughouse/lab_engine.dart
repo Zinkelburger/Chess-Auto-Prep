@@ -18,24 +18,25 @@ final class LinesOff extends LabLines {
   const LinesOff();
 }
 
-/// On, over [position] as [boards] shows it: each searched team's best
-/// first actions as the engine has them now — none before its first
-/// report — the score they agree on, and whether the engine is still
-/// searching.
+/// On, over [position] as [boards] shows it: each board's best moves for
+/// the player on move there as the engine has them now — none before its
+/// team's first report — the score both teams' searches agree on, and
+/// whether the engine is still searching.
 final class LinesOn extends LabLines {
   const LinesOn({
     required this.position,
     required this.boards,
-    this.teams = const {},
+    this.rows = const {},
     this.score = const TableScore(),
     this.nodes,
     this.thinking = true,
     this.progress,
+    this.byClock = const {},
   });
 
   final TablePosition position;
   final LabBoards boards;
-  final Map<Team, List<EngineRow>> teams;
+  final Map<BoardNumber, List<EngineRow>> rows;
 
   /// A + B's advantage — White's on board 1 — on Hivemind's scale.
   final TableScore score;
@@ -48,6 +49,22 @@ final class LinesOn extends LabLines {
   /// How far the rows' searches are towards the size they rest at, 0 to 1;
   /// null when that is not known (an engine searching in passes).
   final double? progress;
+
+  /// A + B's score under each clock case, so who may sit can be compared
+  /// at a glance: the chosen case's is [score]; the others are filled in
+  /// by shorter searches once the rows' searches rest.
+  final Map<ClockCase, TableScore> byClock;
+
+  LinesOn withClock(ClockCase clock, TableScore score) => LinesOn(
+    position: position,
+    boards: boards,
+    rows: rows,
+    score: this.score,
+    nodes: nodes,
+    thinking: thinking,
+    progress: progress,
+    byClock: {...byClock, clock: score},
+  );
 }
 
 /// The engine is on but could not answer; it stays off until switched on
@@ -59,14 +76,17 @@ final class LinesStopped extends LabLines {
   final String reason;
 }
 
-/// One engine line: its first joint action, A + B's score after it, and
-/// the whole line from [table], the table it was searched on — with one
-/// board, the partner board given the other team's turn.
+/// One of a board's best moves: the move as UCI — null when the player
+/// would rather sit there — A + B's score after it, the whole line from
+/// [table], the table it was searched on (with one board, the partner
+/// board given the other team's turn), and how far it falls behind the
+/// board's first row, 0 to 1, for the width of its arrow.
 typedef EngineRow = ({
-  JointMove move,
+  String? move,
   TableScore score,
   List<JointMove> pv,
   TablePosition table,
+  double shift,
 });
 
 /// The size a search of the team shown rests at, at which the engine
@@ -84,17 +104,28 @@ const labZeroNodes = 20000;
 /// minute.
 const labPasses = [800, 4000, 20000];
 
-/// Rows shown per searched team.
+/// The size of the searches that score the clock cases not chosen: enough
+/// for the clock bit's large effect to show, short enough to fill in soon.
+const labClockNodes = 4000;
+
+/// Rows shown per board.
 const labLineCount = 3;
+
+/// Lines asked of a search whose rows are shown. The engine ranks joint
+/// actions over both boards, so it takes several to find [labLineCount]
+/// different moves on each board.
+const labSearchLines = 16;
 
 /// Hivemind over the table on screen while its switch is on.
 ///
 /// One board: board 1 is searched with its partner board held as it
-/// stands, the team on move there required to move on board 1 and nobody
-/// allowed to sit. The partner board is given the other team's turn so
-/// both teams can be searched, which measures the score's zero (see
-/// `hivemind.dart`). Two boards: each team with a move is searched, and may
-/// sit when the chosen clock case says so.
+/// stands, the team on move there required to move on board 1 unless the
+/// chosen clock case lets it sit. The partner board is given the other
+/// team's turn so both teams can be searched, which measures the score's
+/// zero (see `hivemind.dart`). Two boards: each team with a move is
+/// searched, and may sit when the chosen clock case says so. Once those
+/// searches rest, the other two clock cases are searched briefly for their
+/// scores alone.
 ///
 /// Each team's search is one continuous search on its own engine process
 /// (two processes share the engine's cores), shown as it reports and
@@ -143,6 +174,9 @@ final class LabEngine extends ChangeNotifier {
   final _busy = <Future<void>>[Future.value(), Future.value()];
 
   final _searches = <_SearchKey, HivemindSearched>{};
+
+  /// The clock cases not chosen scored so far for the table asked about.
+  var _clockScores = <ClockCase, TableScore>{};
 
   LabLines get lines => _lines;
 
@@ -194,12 +228,11 @@ final class LabEngine extends ChangeNotifier {
 
   void _labChanged() {
     if (!_on || !_open) return;
-    // One board is searched with nobody sitting, whatever the clock says.
-    final clock = lab.single ? ClockCase.even : lab.clock;
-    final asked = (lab.position, lab.boards, clock);
+    final asked = (lab.position, lab.boards, lab.clock);
     if (asked == _asked) return;
     _asked = asked;
     final run = ++_run;
+    _clockScores = {};
     _stopAll();
     _set(LinesOn(position: lab.position, boards: lab.boards));
     unawaited(_analyse(run, asked));
@@ -211,9 +244,7 @@ final class LabEngine extends ChangeNotifier {
   ) async {
     final (position, boards, clock) = asked;
     bool wanted() => _on && _open && run == _run && !_disposed;
-    final questions = boards == LabBoards.one
-        ? _oneBoard(position)
-        : _twoBoards(position, clock);
+    final questions = _questions(position, boards, clock);
     if (questions.isEmpty) {
       _set(LinesOn(position: position, boards: boards, thinking: false));
       return;
@@ -228,7 +259,72 @@ final class LabEngine extends ChangeNotifier {
       await _live(questions, asked, wanted);
     } else {
       await _passesOver(questions, asked, wanted);
+      await _otherClocks(asked, wanted, seat: 0);
     }
+  }
+
+  List<_Question> _questions(
+    TablePosition position,
+    LabBoards boards,
+    ClockCase clock,
+  ) => boards == LabBoards.one
+      ? _oneBoard(position, clock)
+      : _twoBoards(position, clock);
+
+  /// The score under each clock case not chosen, from a short search of
+  /// each team on engine [seat] (or one already made), added to the lines
+  /// as each is known.
+  Future<void> _otherClocks(
+    (TablePosition, LabBoards, ClockCase) asked,
+    bool Function() wanted, {
+    required int seat,
+  }) async {
+    final (position, boards, chosen) = asked;
+    for (final clock in ClockCase.values) {
+      if (clock == chosen || !wanted()) continue;
+      final questions = [
+        for (final question in _questions(position, boards, clock))
+          (
+            table: question.table,
+            team: question.team,
+            mustMove: question.mustMove,
+            maySit: question.maySit,
+            lines: 1,
+            shown: question.shown,
+          ),
+      ];
+      final found = <Team, HivemindSearched>{};
+      for (final question in questions) {
+        final answer =
+            _known(question) ??
+            await _ask(question, labClockNodes, wanted, seat: seat);
+        if (answer == null || !wanted()) return;
+        found[question.team] = answer;
+      }
+      final score = _score(found, _offset(found, clock));
+      _clockScores[clock] = score;
+      if (_lines case final LinesOn lines) {
+        _set(lines.withClock(clock, score));
+      }
+    }
+  }
+
+  /// [question] searched before at any size, with the same lines or more.
+  HivemindSearched? _known(_Question question) {
+    for (final nodes in [_liveNodes, _zeroNodes, ..._passes.reversed]) {
+      for (final lines in {question.lines, labSearchLines}) {
+        final key = _key((
+          table: question.table,
+          team: question.team,
+          mustMove: question.mustMove,
+          maySit: question.maySit,
+          lines: lines,
+          shown: question.shown,
+        ), nodes);
+        if (_searches[key] case final found?) return found;
+      }
+    }
+    return _searches[_key(question, labClockNodes)];
   }
 
   /// One continuous search per team, each on its own engine, the rows
@@ -262,14 +358,12 @@ final class LabEngine extends ChangeNotifier {
         LinesOn(
           position: position,
           boards: boards,
-          teams: {
-            for (final question in shown)
-              question.team: _rows(found[question.team]!, question, offset),
-          },
+          rows: _boardRows(position, boards, questions, found, offset),
           score: _score(found, offset),
           nodes: shown.isEmpty ? null : nodes,
           thinking: done.length < questions.length,
           progress: size == 0 ? null : (nodes / size).clamp(0.0, 1.0),
+          byClock: Map.unmodifiable(_clockScores),
         ),
       );
     }
@@ -284,13 +378,30 @@ final class LabEngine extends ChangeNotifier {
       }
     }
     show();
-    await Future.wait([
+    // The other clock cases are scored on the first engine free: the one
+    // not searching, the zero's once it rests, or else the first to rest.
+    final zero = searching.indexWhere((question) => !question.shown);
+    final free = searching.length < 2 ? searching.length : zero;
+    final streams = [
       for (final (seat, question) in searching.indexed)
         _stream(seat, question, cap(question), wanted, (answer, finished) {
           latest[question.team] = answer;
           if (finished) done.add(question.team);
           show();
         }),
+    ];
+    await Future.wait([
+      ...streams,
+      switch (free) {
+        < 0 => Future.any([
+          for (final (seat, stream) in streams.indexed)
+            stream.then((_) => seat),
+        ]).then((seat) => _otherClocks(asked, wanted, seat: seat)),
+        _ when free == zero => streams[zero].then(
+          (_) => _otherClocks(asked, wanted, seat: zero),
+        ),
+        _ => _otherClocks(asked, wanted, seat: free),
+      },
     ]);
   }
 
@@ -343,28 +454,24 @@ final class LabEngine extends ChangeNotifier {
         found[question.team] = answer;
       }
       final offset = _offset(found, clock);
-      final shown = {
-        for (final question in questions)
-          if (question.shown)
-            question.team: _rows(found[question.team]!, question, offset),
-      };
       _set(
         LinesOn(
           position: position,
           boards: boards,
-          teams: shown,
+          rows: _boardRows(position, boards, questions, found, offset),
           score: _score(found, offset),
           nodes: nodes,
           thinking: i + 1 < _passes.length,
+          byClock: Map.unmodifiable(_clockScores),
         ),
       );
     }
   }
 
   /// Board 1 with its partner board held still: the team on move there
-  /// must move on it, and the other team is searched on the partner board
-  /// only to measure the zero.
-  List<_Question> _oneBoard(TablePosition position) {
+  /// moves on it, or may sit there when [clock] says so, and the other team
+  /// is searched on the partner board only to measure the zero.
+  List<_Question> _oneBoard(TablePosition position, ClockCase clock) {
     if (position.legalMoves(BoardNumber.one).isEmpty) return const [];
     final mover = position.mover(BoardNumber.one).team;
     final table = TablePosition(
@@ -375,16 +482,16 @@ final class LabEngine extends ChangeNotifier {
       (
         table: table,
         team: mover,
-        mustMove: MustMove.one,
-        maySit: false,
-        lines: labLineCount,
+        mustMove: clock.maySit(mover) ? MustMove.either : MustMove.one,
+        maySit: clock.maySit(mover),
+        lines: labSearchLines,
         shown: true,
       ),
       (
         table: table,
         team: mover.other,
         mustMove: MustMove.either,
-        maySit: false,
+        maySit: clock.maySit(mover.other),
         lines: 1,
         shown: false,
       ),
@@ -399,31 +506,32 @@ final class LabEngine extends ChangeNotifier {
           team: team,
           mustMove: MustMove.either,
           maySit: clock.maySit(team),
-          lines: labLineCount,
+          lines: labSearchLines,
           shown: true,
         ),
   ];
 
-  /// The search of [question] at [nodes], from memory when it was made
-  /// before; null when it is no longer [wanted] or could not be made, the
-  /// trouble shown.
+  /// The search of [question] at [nodes] on engine [seat], from memory when
+  /// it was made before; null when it is no longer [wanted] or could not be
+  /// made, the trouble shown.
   Future<HivemindSearched?> _ask(
     _Question question,
     int nodes,
-    bool Function() wanted,
-  ) async {
+    bool Function() wanted, {
+    int seat = 0,
+  }) async {
     final key = _key(question, nodes);
     if (_searches[key] case final known?) return known;
-    final engine = await _acquire(0);
+    final engine = await _acquire(seat);
     if (!wanted()) return null;
     if (engine == null) {
       _stopped(_startFailure ?? 'The bughouse engine did not start.');
       return null;
     }
-    await _busy[0];
+    await _busy[seat];
     if (!wanted()) return null;
     final searching = engine.search(_toAsk(question, nodes));
-    _busy[0] = searching.then((_) {}, onError: (Object _) {});
+    _busy[seat] = searching.then((_) {}, onError: (Object _) {});
     final answer = await searching;
     if (!wanted()) return null;
     switch (answer) {
@@ -458,23 +566,62 @@ final class LabEngine extends ChangeNotifier {
     budget: NodeBudget(nodes),
   );
 
-  /// [answer]'s best first actions, one row each, A + B's side.
+  /// Each board's rows, from the search of the team on move there.
+  Map<BoardNumber, List<EngineRow>> _boardRows(
+    TablePosition position,
+    LabBoards boards,
+    List<_Question> questions,
+    Map<Team, HivemindSearched> found,
+    double offset,
+  ) {
+    final rows = <BoardNumber, List<EngineRow>>{};
+    final shown = boards == LabBoards.one
+        ? const [BoardNumber.one]
+        : BoardNumber.values;
+    for (final board in shown) {
+      final team = position.mover(board).team;
+      for (final question in questions) {
+        if (!question.shown || question.team != team) continue;
+        if (found[team] case final answer?) {
+          rows[board] = _rows(answer, question, offset, board);
+        }
+      }
+    }
+    return rows;
+  }
+
+  /// [answer]'s best moves on [board], one row each, A + B's side.
   List<EngineRow> _rows(
     HivemindSearched answer,
     _Question question,
     double offset,
+    BoardNumber board,
   ) {
-    final seen = <JointMove>{};
+    final choices = boardChoices(answer.lines, board, count: labLineCount);
     return [
-      for (final line in answer.lines)
-        if (line.pv.firstOrNull case final move? when seen.add(move))
-          (
-            move: move,
-            score: TableScore.of(line, question.team, offset),
-            pv: line.pv,
-            table: question.table,
-          ),
-    ].take(labLineCount).toList();
+      for (final line in choices)
+        (
+          move: line.pv.first.on(board),
+          score: TableScore.of(line, question.team, offset),
+          pv: line.pv,
+          table: question.table,
+          shift: shiftFrom(choices.first, line),
+        ),
+    ];
+  }
+
+  /// The rows on screen for [board], when they are for the table shown.
+  List<EngineRow> rowsOn(BoardNumber board) => switch (_lines) {
+    LinesOn(:final position, :final boards, :final rows)
+        when position == lab.position && boards == lab.boards =>
+      rows[board] ?? const [],
+    _ => const [],
+  };
+
+  /// The engine's choice on [board] played there, as Space does on lila's
+  /// analysis board; nothing when it would sit or has not reported.
+  void playBest(BoardNumber board) {
+    if (rowsOn(board).firstOrNull?.move case final uci?) lab.play(board, uci);
   }
 
   /// A + B's advantage. With the zero measured both teams' best lines give

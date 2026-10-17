@@ -5,8 +5,9 @@ import 'table.dart';
 
 /// One move of an engine line as a token: the board it is on, the move both
 /// ways, what goes before it (`12.`, `12...`, or the seat's letter), the
-/// table after it, and which of the line's joint actions it belongs to.
-/// [uci] is null for `sit`, a joint action in which nothing moves.
+/// table after it, which of the line's joint actions it belongs to, and
+/// the moves that play the line up to and including it. [uci] is null for
+/// `sit`, a joint action in which nothing moves.
 typedef PvStep = ({
   BoardNumber board,
   String? uci,
@@ -14,20 +15,25 @@ typedef PvStep = ({
   String label,
   TablePosition after,
   int joint,
+  List<(BoardNumber, String)> through,
 });
 
 /// [pv] from [position] as tokens. With [board], that board's moves alone,
 /// numbered as it counts them — the other board's moves are played but not
-/// shown — up to [limit] moves. Without it, every move of both boards,
-/// seat-lettered, up to [limit] joint actions. Stops at the first move that
-/// does not play, which is what a line from another table looks like.
+/// shown — up to [limit] moves; a step plays that board's moves only,
+/// unless [throughBoth], when it plays the other board's before it too.
+/// Without [board], every move of both boards, seat-lettered, up to [limit]
+/// joint actions. Stops at the first move that does not play, which is what
+/// a line from another table looks like.
 List<PvStep> pvSteps(
   TablePosition position,
   List<JointMove> pv, {
   BoardNumber? board,
+  bool throughBoth = false,
   int limit = 8,
 }) {
   final steps = <PvStep>[];
+  final through = <(BoardNumber, String)>[];
   var table = position;
   for (final (joint, action) in pv.indexed) {
     if (board == null && joint >= limit) break;
@@ -40,6 +46,9 @@ List<PvStep> pvSteps(
       if (played == null) return steps;
       table = played.after;
       moved = true;
+      if (board == null || on == board || throughBoth) {
+        through.add((on, played.move.uci));
+      }
       if (board != null && on != board) continue;
       final shown = steps.length;
       steps.add((
@@ -55,6 +64,7 @@ List<PvStep> pvSteps(
             : '',
         after: table,
         joint: joint,
+        through: List.unmodifiable(through),
       ));
       if (board != null && steps.length >= limit) return steps;
     }
@@ -66,6 +76,7 @@ List<PvStep> pvSteps(
         label: '',
         after: table,
         joint: joint,
+        through: List.unmodifiable(through),
       ));
     }
   }
@@ -73,8 +84,6 @@ List<PvStep> pvSteps(
 }
 
 /// The moves to play for [steps] up to and including the one at [index],
-/// in order; a `sit` plays nothing.
-List<(BoardNumber, String)> pvMovesTo(List<PvStep> steps, int index) => [
-  for (final step in steps.take(index + 1))
-    if (step.uci case final uci?) (step.board, uci),
-];
+/// in order; a `sit` plays nothing more.
+List<(BoardNumber, String)> pvMovesTo(List<PvStep> steps, int index) =>
+    index < 0 ? const [] : steps[index].through;
