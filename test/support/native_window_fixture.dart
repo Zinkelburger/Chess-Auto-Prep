@@ -63,13 +63,11 @@ final class NativeWindowFixture {
       ),
       lichessExplorer: ScriptedExplorerApi(),
       masterBook: ScriptedBook(),
-      gameStore: ScriptedGameStore(),
       gameSites: const [],
       accounts: MemoryAccounts(),
       books: store.books,
       progressFiles:
           progress ?? TrainingStore(disk.documents, support: disk.support),
-      olderAnalyzed: () async => {},
       maia: policy,
       launchEngine: ({required cores, required memoryMb}) async =>
           const StartFailed('offline test'),

@@ -31,7 +31,7 @@ A full page (no board), capped at `playersPageWidth`.
   groups), `Paste players`, and in a group `Open group study` and
   `Train group study`. The `⋯` (`More actions`) holds, in a group, `Edit group…`,
   `Copy prep sheet`, `Export prep sheet…`, `Unlink group study`; always
-  `Add saved players`, `Update US Chess ratings`, `Reload players and groups`.
+  `Update US Chess ratings`, `Reload players and groups`.
 - **Notices** — a fixed-height progress line, the rating lookup status with
   `Stop`, unreadable player rows and group files, and a failed save with `Retry save` /
   `Discard failed edit and reload` (or `Try again` for a failed load).
@@ -103,10 +103,6 @@ alias, and fill only empty fields; aliases, PGN files and game sets are unioned.
 Refusals: `Include column headings, such as Name, Rating, Chess.com and
 Lichess.`, `Include a Name column.`, `Every player needs a name.`
 
-**Add saved players** — imports, the same way, every game set found in the
-read-only `Documents/analysis_games/` corpus and the user's own accounts;
-`No older player game sets were found.` when there are none.
-
 **Groups** — `New group` / `Edit group…` → `Group name`, `Event date (YYYY-MM-DD,
 optional)`, `Rounds` (default 5) → `Save group`. `Add players` picks from the
 directory. `Remove group…` moves the group file to `opponents/.removed/`;
@@ -149,9 +145,7 @@ each one kept. `Remove player…` offers `Remove and delete games` /
 `Remove, keep games`, and removes them from every group.
 
 **Analyze games** — row button or picker → Player analysis reads the person's
-corpus: each account's download, linked PGN files, and their games in the
-older archive (`app_games.db` analysis collections, copied append-only to
-`games_library/player_archives/`). Games are deduplicated; the player's colour
+corpus: each account's download and linked PGN files. Games are deduplicated; the player's colour
 comes from exact name, alias or handle, and unmatched games are excluded and
 counted.
 

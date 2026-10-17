@@ -345,7 +345,7 @@ proposals are listed under `skipped` in the tool result.
 ## Shared files
 
 The app and the MCP tools share `Documents/opponents/people.json`
-(`chess-auto-prep/people@1`; a bare JSON array is also read) and
+(`chess-auto-prep/people@1`, a JSON object with a `people` list) and
 `Documents/opponents/tournaments/<id>.json` (`chess-auto-prep/tournament@1`,
 one per group). The app updates them under a folder lock, rereading before
 every edit (`lib/storage/player_files.dart`): a stale row is refused, and
@@ -377,7 +377,6 @@ tools/mcp/requirements.txt   python-chess (opening-tree tools only)
 
 lib/chess/players/                   player, group and download-range values
 lib/storage/player_files.dart        people.json and tournaments/<id>.json
-lib/storage/saved_players.dart       saved game sets
 lib/features/players/                Players & prep and Player analysis
 ```
 

@@ -1,16 +1,12 @@
 import 'dart:convert';
 
-import 'game_ids.dart' show GameSite;
-
 /// The games a tactics set's puzzles were mined from, kept in the set file
 /// itself so the puzzles and the record of which games are done are always
 /// written together.
 ///
-/// The format existing set files carry: the first line of the file is a
-/// `;` comment, `; ChessAutoPrep-Analyzed-v1: ` and then the game ids as a
-/// sorted JSON list, UTF-8, base64url. A file written before the line
-/// existed has none; its ids are in a separate `analyzed_games.txt`, which
-/// is still read beside the line.
+/// The first line of the file is a `;` comment,
+/// `; ChessAutoPrep-Analyzed-v1: ` and then the game ids as a sorted JSON
+/// list, UTF-8, base64url.
 const analyzedGamesPrefix = '; ChessAutoPrep-Analyzed-v1: ';
 
 /// The ids the line at the top of [preamble] names, or an empty set when there
@@ -34,15 +30,9 @@ Set<String> analyzedIn(String preamble) {
   return ids.cast<String>().toSet();
 }
 
-/// Whether [done] names the game [id]. Existing records may file a Lichess
-/// game under the bare id of its `GameId` header, without `lichess_`; those
-/// still count as done, and the ids stay as they were written.
-bool isAnalyzed(Set<String> done, String id) {
-  if (id.isEmpty) return false;
-  if (done.contains(id)) return true;
-  final lichess = '${GameSite.lichess.name}_';
-  return id.startsWith(lichess) && done.contains(id.substring(lichess.length));
-}
+/// Whether [done] names the game [id].
+bool isAnalyzed(Set<String> done, String id) =>
+    id.isNotEmpty && done.contains(id);
 
 /// [preamble] with its analysed-games line naming [ids]: the line replaced
 /// where it is, or put first when there was none, since it is read only at

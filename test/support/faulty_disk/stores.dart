@@ -51,7 +51,6 @@ final class Stores {
       ),
       ChapterDirectory(
         Directory(profile.repertoires),
-        documents: documents,
         recovery: documents.recovery,
       ),
     );

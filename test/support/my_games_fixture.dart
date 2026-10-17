@@ -7,7 +7,6 @@ import 'package:chess_auto_prep/chess/tactics/mining.dart';
 import 'package:chess_auto_prep/engines/engine.dart';
 import 'package:chess_auto_prep/engines/engine_line.dart';
 import 'package:chess_auto_prep/net/recent_games.dart';
-import 'package:chess_auto_prep/storage/game_store.dart';
 import 'package:chess_auto_prep/storage/my_accounts.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 
@@ -211,25 +210,5 @@ final class MemoryAccounts implements AccountStore {
       accounts[site] = Account(name);
     }
     return true;
-  }
-}
-
-/// The games database (`app_games.db`) as the test sets it: absent until given
-/// games, or answering what [answer] says. Remembers the collections each
-/// read asked for.
-final class ScriptedGameStore implements GameStore {
-  StoredGamesRead answer = const StoredGamesAbsent();
-  final asked = <Set<String>>[];
-
-  @override
-  Future<StoredGamesRead> read(Set<String> collections) async {
-    asked.add(collections);
-    return switch (answer) {
-      StoredGamesFound(:final games, :final skipped) => StoredGamesFound([
-        for (final game in games)
-          if (collections.contains(game.collection)) game,
-      ], skipped: skipped),
-      final other => other,
-    };
   }
 }

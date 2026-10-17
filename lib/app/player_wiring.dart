@@ -21,7 +21,6 @@ import '../features/trainer/trainer.dart';
 import '../features/trainer/trainer_state.dart';
 import '../storage/chapter_files.dart';
 import '../storage/my_games_files.dart';
-import '../storage/my_accounts.dart';
 import '../storage/pgn_file_import.dart';
 import '../workspace/study_drafts.dart';
 import '../workspace/study_choice.dart';
@@ -47,11 +46,9 @@ final class PlayerModes {
     );
     analysis = PlayerAnalysis(
       documents: env.store,
-      archive: env.gameStore,
       cache: cache,
       sites: env.gameSites,
       pending: env.pendingWrites,
-      archiveCopies: p.join(env.folders.gamesLibrary, 'player_archives'),
     );
     hunt = PlayerHunt(
       analysis,
@@ -84,29 +81,6 @@ final class PlayerModes {
     hunt.stop();
     requests.switchTo(Mode.playerAnalysis);
     unawaited(analysis.select(player));
-  }
-
-  Future<void> addSavedPlayers() async {
-    try {
-      final saved = [...await env.savedPlayerList()];
-      final accounts = await env.accounts.snapshot();
-      if (accounts is AccountsSnapshot) {
-        saved.addAll([
-          for (final a in accounts.accounts.entries)
-            Player.create(
-              a.value.username,
-            ).edited({a.key.name: a.value.username}),
-        ]);
-      }
-      if (_disposed) return;
-      if (saved.isEmpty) {
-        requests.say('No older player game sets were found.');
-        return;
-      }
-      await directory.import(saved);
-    } on Object catch (e) {
-      if (!_disposed) requests.say('Could not read saved players: $e');
-    }
   }
 
   void showDirectory() => requests.switchTo(Mode.players);

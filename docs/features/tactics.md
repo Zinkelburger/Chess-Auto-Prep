@@ -168,8 +168,7 @@ and the card's tabs.
   (base64url JSON list of reviewed game ids; always the first line; an
   unreadable one blocks mining) and `; ChessAutoPrep-Mistakes-v1: ` (base64url
   JSON, game id → `[blunders, mistakes, inaccuracies]`; unreadable means no
-  counts). Written in the same save as the game's puzzles. Ids in
-  `Documents/analyzed_games.txt` also count as done (read only).
+  counts). Written in the same save as the game's puzzles.
 - **One writer**: while the set is the workspace document the session saves
   it; otherwise `TacticsSet`/`SetAdditions` write against the revision read
   and retry a lost race up to 3 times.

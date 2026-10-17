@@ -14,10 +14,6 @@ const lichessUsernameKey = 'lichess_auth_username';
 const lichessExpiryKey = 'lichess_token_expiry';
 const lichessPersonalKey = 'lichess_is_pat';
 
-/// Existing profiles may also hold a refresh token; Lichess never issues one,
-/// and the key is removed on every write so a stale one cannot linger.
-const _lichessRefreshKey = 'lichess_refresh_token';
-
 /// A signed-in Lichess account as the preferences hold it.
 final class LichessAccount {
   const LichessAccount({
@@ -103,13 +99,11 @@ Future<bool> writeLichessAccount(LichessAccount? account) async {
               lichessUsernameKey,
               lichessExpiryKey,
               lichessPersonalKey,
-              _lichessRefreshKey,
             ])
               prefs.remove(key),
           ]
         : [
             prefs.setString(lichessTokenKey, account.token),
-            prefs.remove(_lichessRefreshKey),
             prefs.setBool(lichessPersonalKey, account.personal),
             name == null
                 ? prefs.remove(lichessUsernameKey)

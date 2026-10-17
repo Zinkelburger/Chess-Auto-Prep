@@ -45,9 +45,6 @@ final class PlayerFiles implements PlayerStore {
     final file = File(path);
     if (!await file.exists()) return {'format': format};
     final raw = jsonDecode(await file.readAsString());
-    if (raw is List && format == 'chess-auto-prep/people@1') {
-      return {'format': format, 'people': raw};
-    }
     if (raw is! Map || (raw['format'] != null && raw['format'] != format)) {
       throw const FormatException(
         'This player file uses an unsupported format.',

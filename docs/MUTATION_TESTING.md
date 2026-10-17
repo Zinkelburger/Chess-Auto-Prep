@@ -82,8 +82,8 @@ those against the wider suite. Survivors are few, so the second pass is cheap:
 
 ```
 scripts/ci.sh with -- python3 scripts/mutation_test.py \
-    --target lib/storage/game_store.dart \
-    --tests   test/storage/game_store_test.dart \
+    --target lib/storage/player_files.dart \
+    --tests   test/storage/player_files_test.dart \
     --confirm-tests test/storage
 ```
 

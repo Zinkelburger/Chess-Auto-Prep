@@ -39,7 +39,6 @@ and is quarantined if unreadable; *derived* may be discarded and rebuilt.
 | Player directory | Documents `opponents/` | JSON ([below](#player-directory)) | Kept |
 | Engine tournaments | Documents `engine_tournaments/` | Per run `tournament.json` + `games.pgn`; root `engines.json` | Kept |
 | Downloaded games | Documents `games_library/<site>_<user>.pgn` | PGN + `.fetched` note (ms since epoch) | Derived |
-| Player archive copies | Documents `games_library/player_archives/player-archive-<hash>.pgn` | PGN, append-only | Kept |
 | Search trees | `.cap-generation/<chapter file>/v2-<run id>/tree.json` beside the chapter | JSON; newest 16 runs kept | Derived |
 | Books | Support `books.json` | JSON, written whole | Kept |
 | Settings | Support `settings.json` | JSON; unknown keys kept ([settings](ARCHITECTURE.md#settings-and-credentials)) | Defaults always valid |
@@ -50,7 +49,6 @@ and is quarantined if unreadable; *derived* may be discarded and rebuilt.
 | Chapter audits | Support `audit.db` | SQLite | Derived |
 | Dismissed findings | Support `audit_dismissed.db` | SQLite, keyed by kind, position and move | Kept |
 | Player reports | Support `player-reports/<key>.json` | Fingerprint-keyed JSON | Derived |
-| Your games | Support `app_games.db` | SQLite; read only ([below](#read-only-stores)) | Kept |
 | Kept versions | Support `backups/` | [Recovery files](#recovery-files) | Kept |
 | Engines | Support: Stockfish binary, `bughouse/` (Hivemind) | Installed from the bundle | Derived |
 | Logs | Support `logs/app.log` | Text, one line per entry | Derived |
@@ -63,8 +61,7 @@ damaged is renamed with its sidecars to `.unreadable-<stamp>` and restarted.
 SharedPreferences keys: `lichess_username`, `chesscom_username`,
 `lichess_last_fetch_ms`, `chesscom_last_fetch_ms` (`storage/my_accounts.dart`);
 `lichess_access_token`, `lichess_auth_username`, `lichess_token_expiry`,
-`lichess_is_pat` (`storage/lichess_token.dart`, which removes a
-`lichess_refresh_token` left by earlier builds);
+`lichess_is_pat` (`storage/lichess_token.dart`);
 `pgn_viewer_recent_files`; `pgn_viewer.session:<path>` (viewer places).
 
 ## Formats
@@ -72,14 +69,13 @@ SharedPreferences keys: `lichess_username`, `chesscom_username`,
 ### Training files
 
 In the Documents root (`storage/training_rows.dart`): `repertoire_reviews.csv`
-(schedule; 11 columns written, 8 and 10 read), `repertoire_move_progress.csv`
+(schedule, 11 columns), `repertoire_move_progress.csv`
 (streaks), `repertoire_review_history.csv` (ratings) and
 `repertoire_move_attempts.jsonl` (one answer per line). Every row is keyed by
 `repertoire_id` (the chapter's path) and `line_id`. CSVs need their header
 row and quote commas, quotes and newlines. Each file is replaced atomically,
 touching only the rows a write names; a row changed since it was read refuses
-the write. The first write to a CSV keeps its prior bytes as
-`<name>.pre-csv-v2.bak`, a name kept for compatibility with existing profiles.
+the write.
 
 ### Tactics set
 
@@ -91,8 +87,8 @@ than mining every game again.
 
 ### Player directory
 
-`opponents/people.json` (format `chess-auto-prep/people@1`; a bare JSON list
-is read as its people) and `opponents/tournaments/<id>.json`
+`opponents/people.json` (format `chess-auto-prep/people@1`, an object with a
+`people` list) and `opponents/tournaments/<id>.json`
 (`chess-auto-prep/tournament@1`), written by `storage/player_files.dart` under
 the folder lock. A row changed since it was read is refused; unknown fields
 survive. A row that cannot be read (not an object, no ID, a name that is not
@@ -101,15 +97,6 @@ and every save writes it back where it was. A `people.json` that cannot be read
 at all shows no players and refuses saves, so nothing writes over it; the
 groups still read.
 
-### Read-only stores
-
-Earlier builds wrote these; the app only reads them. It opens `app_games.db` read-only and reads only `games` (schema
-version 2); its `tactics` collection holds source games that may have no other
-copy. Saved players are discovered from Documents
-`analysis_games/player-<id>/current.json` (version 1) and the
-`versions/<revision>/games.pgn` it names. Ids in Documents
-`analyzed_games.txt` count as analysed beside the tactics line.
-
 ## Recovery files
 
 How they are written and finished is [Save and recovery](ARCHITECTURE.md#save-and-recovery)
@@ -117,7 +104,7 @@ and [Backups](ARCHITECTURE.md#backups).
 
 | Name | Where | Holds |
 |---|---|---|
-| `backups/<document id>/` | Support | Kept versions (`<time>-<hash8>.pgn`, older `.pgn.gz`) and `index.json` |
+| `backups/<document id>/` | Support | Kept versions (`<time>-<hash8>.pgn`) and `index.json` |
 | `compound-writes/<id>.json` | Support | Multi-file edits in flight (`CompoundWrites`) |
 | `relocation-writes/<id>.json` | Support | Renames, moves and deletes in flight (`FileRelocations`) |
 | `<id>.following`, `<id>.aside` | Beside a record | It landed and lets plain saves pass; it is set aside, to be moved |
@@ -126,15 +113,9 @@ and [Backups](ARCHITECTURE.md#backups).
 | `.cap-pgn-history/` | Inside the repertoire | Deleted chapters (`<operation>-<name>`), restored from Deleted chapters |
 | `.cap-reference-history/<operation>/` | Documents | Training files as they were before a relocation rewrote them |
 | `.<name>.v2-tmp` | Beside the target | A staged write; replaced or removed by the next write there |
-| `.import-*` | `repertoires/` | Import staging; removed by the next listing |
+| `.import-*` | `repertoires/` | Import staging; removed by the first listing once nothing is owed |
 | `.trash/` | `engine_tournaments/` | Deleted tournaments |
 | `.v2-pending.json` | A tournament's folder | A results save in flight |
-
-Recovery drains, but never adds to, Support `unfinished-moves/` (each note
-finished or set aside) and `training-writes/` (finished receipts removed,
-unfinished ones set aside). Support `repertoire-mutations/` and
-`repertoires/.cap-repertoire-publications` are left untouched; a folder move
-may not relocate them.
 
 ## Writes and locks
 
@@ -163,7 +144,6 @@ are caught by revision checks.
 ## Backing up
 
 Back up both Documents and Support: Support holds `books.json`, kept
-versions, recovery records and `app_games.db`, whose tactics source games may
-have no other copy. Stop the app before copying `.db` files, or use SQLite's
+versions and recovery records. Stop the app before copying `.db` files, or use SQLite's
 backup API (`sqlite3 <file> ".backup <copy>"`) so committed WAL data is
 included; never copy a database without its `-wal` file while the app runs.

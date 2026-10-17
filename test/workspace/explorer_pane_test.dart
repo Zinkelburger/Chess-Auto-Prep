@@ -265,7 +265,6 @@ void main() {
     final myGames = MyGamesTree(
       accounts: MemoryAccounts({GameSite.lichess: const Account('Me')}),
       cache: cache,
-      store: ScriptedGameStore(),
     );
     addTearDown(myGames.dispose);
     await show(tester, thisFile: thisFile, myGames: myGames);

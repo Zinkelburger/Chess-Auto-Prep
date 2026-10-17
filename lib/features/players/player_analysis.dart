@@ -8,12 +8,9 @@ import 'package:path/path.dart' as p;
 
 import '../../diagnostics/log.dart';
 import '../../chess/pgn/game_text.dart';
-import '../../chess/pgn/games_written.dart';
 import '../../chess/tactics/game_ids.dart';
 import '../../net/recent_games.dart';
 import '../../storage/document_ref.dart';
-import '../../storage/edit_scope.dart';
-import '../../storage/game_store.dart';
 import '../../storage/my_games_files.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/pgn_document_store.dart';
@@ -32,22 +29,14 @@ enum PlayerList { openings, games, weaknesses }
 final class PlayerAnalysis extends ChangeNotifier {
   PlayerAnalysis({
     required this.documents,
-    required this.archive,
     required this.cache,
     required this.sites,
     required this.pending,
-    required this.archiveCopies,
   });
   final PgnDocumentStore documents;
-  final GameStore archive;
   final GamesCache cache;
   final List<RecentGames> sites;
   final PendingWrites pending;
-
-  /// Where a player's games from the `app_games.db` database are copied to be
-  /// read and opened like any other file: one derived file per player,
-  /// beside the downloads, never among the user's collections.
-  final String archiveCopies;
   Player? player;
   PlayerCorpus? corpus;
   Side side = Side.white;
@@ -326,30 +315,6 @@ final class PlayerAnalysis extends ChangeNotifier {
     for (final account in next.accounts) {
       paths.add(cache.refFor(account.site, account.username).path);
     }
-    final names = <String>{
-      for (final account in next.accounts)
-        ...GameCollections.analysis(account.site, account.username),
-      for (final key in next.strings('game_sets')) 'analysis:$key',
-    };
-    if (names.isNotEmpty) {
-      final archived = await archive.read(names);
-      if (!_current(ticket)) return (<PlayerGame>[], <DocumentRef, Revision>{});
-      if (archived is StoredGamesUnreadable) {
-        notes.add('Older saved games could not be read. ${archived.detail}');
-      }
-      if (archived is StoredGamesFound && archived.games.isNotEmpty) {
-        final ref = _archiveCopyOf(next);
-        // The downloads and linked files are still read without it.
-        final problem = await _copy(ref, [
-          for (final g in archived.games) g.pgn,
-        ]);
-        if (problem == null) {
-          paths.add(ref.path);
-        } else {
-          notes.add('Older saved games could not be shown. $problem');
-        }
-      }
-    }
     final games = <PlayerGame>[];
     final revisions = <DocumentRef, Revision>{};
     for (final path in paths) {
@@ -373,55 +338,6 @@ final class PlayerAnalysis extends ChangeNotifier {
       throw StateError(notes.join('\n'));
     }
     return (games, revisions);
-  }
-
-  /// [player]'s one copy of their games from the games database. Games
-  /// are only ever added to it, so what the user keeps there survives.
-  DocumentRef _archiveCopyOf(Player player) {
-    final id = sha256.convert(utf8.encode(player.id)).toString();
-    return DocumentRef(
-      p.join(archiveCopies, 'player-archive-${id.substring(0, 16)}.pgn'),
-    );
-  }
-
-  /// Appends the [games] that [ref] does not have yet; why not, or null.
-  /// A game is matched by its site id, or else by its exact text.
-  Future<String?> _copy(DocumentRef ref, List<String> games) async {
-    try {
-      switch (await documents.open(ref)) {
-        case Opened(readOnly: null, :final text, :final revision):
-          final fresh = await freshGamesOf(text, games);
-          if (fresh.isEmpty) return null;
-          final base = text.trimRight();
-          final joined = fresh.join('\n\n');
-          return switch (await documents.save(
-            ref,
-            base.isEmpty ? '$joined\n' : '$base\n\n$joined\n',
-            expected: revision,
-            scope: GamesEdited(GamesWritten(appended: fresh.length)),
-          )) {
-            Saved() => null,
-            Conflict() => 'the copy changed while it was written',
-            SaveDidNotLand(:final detail) => detail,
-          };
-        case Opened(:final readOnly?):
-          return readOnly;
-        case Absent():
-          final fresh = await freshGamesOf('', games);
-          return switch (await documents.create(
-            ref,
-            '${fresh.join('\n\n')}\n',
-          )) {
-            Created() => null,
-            Collision() => 'the copy appeared while it was written',
-            IoFailure(:final detail) => detail,
-          };
-        case Unreadable(:final detail):
-          return detail;
-      }
-    } on Object catch (error) {
-      return '$error';
-    }
   }
 
   Future<bool> _validate(

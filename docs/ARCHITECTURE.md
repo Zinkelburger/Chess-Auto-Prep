@@ -326,10 +326,6 @@ never a new one that would append twice).
    the next edit or save tries again. Closing asks only when a write the user
    made is still unsaved.
 
-Older profiles may hold Support `unfinished-moves/` notes, which recovery
-finishes or sets aside, and a Support `repertoire-mutations/` folder, which
-the app never reads, finishes or deletes; a folder move may not relocate it.
-
 ### Identity and undo
 
 Paths, course sections and `[LineID]` are document identity. A content hash
@@ -365,7 +361,6 @@ recovery files.
 |---|---|---|
 | Repertoires and chapters | Documents `repertoires/`: chapter PGNs, or one course PGN whose games name their chapter | Comments, variations, NAGs, unknown headers, `[%eval]`, `[%pv]`, `[%clk]`, `[%cal]`/`[%csl]` |
 | Studies | Multi-chapter PGNs in Documents `studies/` | Lichess export tags, root comments, per-chapter orientation, quiz markers |
-| Games | Support `app_games.db`, collection-scoped, read only | Its rows; the app never writes it |
 | Training | Review, progress and history CSVs and attempt JSONL, keyed by file path and line id | Schedules across chapter rename, move, split and delete, and edits that would change a derived line id |
 | Settings and accounts | Support `settings.json`; SharedPreferences account and token keys | Unknown keys and values |
 | Recovery | Journals, `recovery-quarantine/`, backups, `.cap-reference-history/` in Documents | Each keeps its own purpose; none is the version history |
@@ -395,9 +390,9 @@ hidden recovery or staging folders.
 - **Import writes one file.** A multi-chapter course or study becomes
   `<repertoire>.pgn` with `[ChapterName]` and a distinct `[LineID]` on every
   line (`courseText`). Imports are staged in a `.import-` folder and renamed
-  into place; stale staging folders are removed by the next listing.
-- Root-level PGNs move to `<name>/Main.pgn` through the store, carrying
-  training references and backups.
+  into place; stale staging folders are removed by the first listing after
+  recovery has finished every recorded operation.
+- A PGN directly in `repertoires/` lists as a repertoire of its own.
 
 ### Backups
 
@@ -409,7 +404,7 @@ The user never asks for a backup and never names one.
   games cache replace nothing and keep no version.
 - **In Support**, under `backups/<document id>/`: plain copies named by commit
   time and content hash, with an index. Never written into Documents (it may be
-  synced). Older gzipped copies are still read by magic bytes.
+  synced).
 - **Identity, not path.** Versions follow the document through rename and
   move; a history that cannot move at once is noted under `backup-moves/` and
   moved by the next recovery pass.

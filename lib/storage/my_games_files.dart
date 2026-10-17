@@ -451,22 +451,3 @@ List<String> _freshIn(String text, List<String> downloaded) {
   final id = gameIdIn(game);
   return id.isEmpty ? ('text', game.trim()) : ('id', id);
 }
-
-/// The ids of games reviewed before tactics sets carried their own
-/// analysed-games line: `Documents/analyzed_games.txt`, one per line. It is
-/// read beside the line, so those games still count as done.
-/// A missing file is none; null when the file is there and cannot be read,
-/// which is no answer: every game it names would be mined again.
-Future<Set<String>?> readOlderAnalyzed(Directory documents) async {
-  final file = File(p.join(documents.path, 'analyzed_games.txt'));
-  try {
-    if (!await file.exists()) return {};
-    return {
-      for (final id in const LineSplitter().convert(await file.readAsString()))
-        if (id.trim().isNotEmpty) id.trim(),
-    };
-  } on Object catch (error) {
-    log.w('read ${file.path}', error);
-    return null;
-  }
-}

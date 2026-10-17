@@ -186,9 +186,7 @@ Bughouse mode is offered when its engine assets are present.
   through `EngineSettingCopy`); both write the same settings, which the
   workspace wiring applies to the running engine. CPU cores is automatic
   until chosen (`Settings.autoCores`, resolved by `Settings.coresOn` to half
-  the machine) and the table defaults to 256 MB; a file written before
-  `engineDefaults` holds the old 1 core / 128 MB defaults, which read as the
-  new ones. Settings ▸ Engine ▸ Analysis engine picks the bundled Stockfish
+  the machine) and the table defaults to 256 MB. Settings ▸ Engine ▸ Analysis engine picks the bundled Stockfish
   or an engine registered in Engine tournament (`Settings.analysisEngine`,
   the registry's id). `AppEnvironment.startAnalysisEngine` starts it for the
   board's lines and the Analysis tab through `engines/analysis_launch.dart`,
@@ -219,8 +217,8 @@ before engine shutdown. Unreadable authoritative recovery data is kept or
 quarantined; derived views can be rebuilt. See
 [DATA_INTEGRITY.md](DATA_INTEGRITY.md) for every store and recovery file.
 
-Line IDs, serialized records and fixtures may carry formats written by earlier
-builds; they are data contracts the current code reads and keeps.
+Line IDs, serialized records and fixtures are data contracts: the current
+code reads exactly the formats it writes.
 
 ## Checks and tools
 

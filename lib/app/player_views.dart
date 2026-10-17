@@ -232,7 +232,6 @@ final class PlayersView extends ModeView {
             onAnalyze: players.choose,
             onDeleteGames: players.deleteGames,
             onStudy: (p) => unawaited(players.openStudy(p)),
-            onSaved: () => unawaited(players.addSavedPlayers()),
             onLink: (p) => unawaited(players.linkStudy(p)),
             onLinkedStudy: (path, chapter) =>
                 unawaited(players.openLinkedStudy(path, chapter)),

@@ -3,8 +3,8 @@ import 'package:dartchess/dartchess.dart' show Side;
 import '../pgn/game_text.dart';
 import '../pgn/pgn_chars.dart' show unescapedTagValue;
 
-/// Where a game of the user's was downloaded from. The names are the old
-/// app's: they are in its cache file names and its game ids.
+/// Where a game of the user's was downloaded from. The names are in the
+/// cache file names and the game ids.
 enum GameSite {
   lichess('Lichess'),
   chesscom('Chess.com');

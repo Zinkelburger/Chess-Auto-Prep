@@ -154,7 +154,6 @@ final class TrainingWiring {
           session: session,
           saver: workspace.saver,
           set: tactics,
-          older: env.olderAnalyzed,
         ),
         // A Stockfish of its own, with the pane's threads and table.
         engine: env.startEngine,

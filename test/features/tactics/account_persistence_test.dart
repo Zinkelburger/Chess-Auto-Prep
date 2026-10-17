@@ -104,7 +104,6 @@ final class _Fixture {
       session: session,
       saver: saver,
       set: set,
-      older: () async => {},
     ),
     engine: () async => const StartFailed('unused'),
     settings: settings,

@@ -27,7 +27,6 @@ class PlayersScreen extends StatefulWidget {
     required this.onAnalyze,
     required this.onDeleteGames,
     required this.onStudy,
-    required this.onSaved,
     required this.onLink,
     required this.onLinkedStudy,
     required this.onGroupStudy,
@@ -44,7 +43,6 @@ class PlayersScreen extends StatefulWidget {
   final Future<bool> Function(Player person, GamesSummary confirmed)
   onDeleteGames;
   final ValueChanged<Player> onStudy;
-  final VoidCallback onSaved;
   final ValueChanged<Player> onLink;
   final void Function(String path, String? chapter) onLinkedStudy;
   final ValueChanged<PlayerGroup> onGroupStudy, onTrainGroup, onExport, onCopy;
@@ -294,10 +292,6 @@ class _PlayersScreenState extends State<PlayersScreen> {
             child: const Text('Unlink group study'),
           ),
       ],
-      MenuItemButton(
-        onPressed: owner.busy ? null : widget.onSaved,
-        child: const Text('Add saved players'),
-      ),
       // Only where there is a rating service to ask.
       if (owner.lookupRating != null)
         MenuItemButton(

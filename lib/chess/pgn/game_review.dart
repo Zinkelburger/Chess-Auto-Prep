@@ -44,9 +44,9 @@ int? reviewGlyph(int loss) => reviewMark(loss)?.nag;
 /// What the review writes is marked, so it can be taken out again without
 /// touching anything the file had: an eval it added, a glyph and its
 /// "Mistake. Nf3 was best." note, and a variation it added. A variation's
-/// marker counts its moves; files written before that carry the bare form.
+/// marker counts its moves.
 const _evalMarker = '[%cap_review_eval]';
-final _lineMarker = RegExp(r'\[%cap_review_line(?: (\d+))?\]');
+final _lineMarker = RegExp(r'\[%cap_review_line (\d+)\]');
 final _nagMarker = RegExp(r'\s*\[%cap_review_nag (\d+)\]');
 final _eval = RegExp(r'\s*\[%eval\s+[^\]]*\]');
 final _prose = RegExp(r'^(?:Inaccuracy|Mistake|Blunder)\. \S+ was best\.\s*');
@@ -85,13 +85,11 @@ List<MoveNode> _unmarkedChildren(
 ]);
 
 /// Whether the variation from [head] is still exactly as the review wrote it:
-/// one move after another, as many as its marker counts (at most the eight
-/// the review writes for the bare marker), with no glyph or note on any.
-/// The bare marker of older files carries no count, so a short line the user
-/// extended to eight moves or fewer there still reads as the review's.
+/// one move after another, as many as its marker counts, with no glyph or
+/// note on any.
 bool _pristineReviewLine(MoveNode head) {
   final marker = _lineMarker.firstMatch(head.comment!)!;
-  final count = int.tryParse(marker.group(1) ?? '');
+  final count = int.parse(marker.group(1)!);
   if (head.comment!.replaceAll(_lineMarker, '').trim().isNotEmpty) {
     return false;
   }
@@ -107,7 +105,7 @@ bool _pristineReviewLine(MoveNode head) {
     length++;
     node = node.children.firstOrNull;
   }
-  return count == null ? length <= 8 : length == count;
+  return length == count;
 }
 
 MoveNode _unmarkedNode(MoveNode node, {required bool main}) {

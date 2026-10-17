@@ -10,7 +10,6 @@ import 'chapter_files.dart';
 import 'deleted_chapters.dart';
 import 'training_rows.dart';
 import 'training_snapshot.dart';
-import 'game_store.dart';
 import 'recovery_files.dart';
 import '../chess/pgn/chapter_heading.dart';
 import '../chess/pgn/chapter.dart' show readOffThreadFrom;
@@ -19,16 +18,13 @@ import '../chess/pgn/chapter_sections.dart';
 import '../diagnostics/log.dart';
 import 'document_ref.dart';
 import 'recovery_gate.dart';
-import 'pgn_document_store.dart' as store;
 
 /// One folder per repertoire, one `.pgn` per chapter, plus index files and
 /// sidecars the app ignores.
 final class ChapterDirectory implements ChapterFiles {
-  ChapterDirectory(this.root, {required this._recovery, this._documents});
+  ChapterDirectory(this.root, {required this._recovery});
 
   final RecoveryGate _recovery;
-
-  final store.PgnDocumentStore? _documents;
 
   /// The `repertoires` directory itself.
   final Directory root;
@@ -43,8 +39,6 @@ final class ChapterDirectory implements ChapterFiles {
   @override
   Future<RepertoireListing> list() async {
     try {
-      // Migration uses the public store outside the non-reentrant domain.
-      await _migrateFlat();
       // One read of each chapter, under the profile lock, is the snapshot.
       return _listingOf(
         await _recovery.run(() async {
@@ -68,7 +62,6 @@ final class ChapterDirectory implements ChapterFiles {
     Map<String, Revision?> additional = const {},
     BookSource? book,
     TrainingReadSet? training,
-    StoredGamesSource? archive,
   }) async {
     if (snapshot != null && snapshot.unreadable.isNotEmpty) {
       return RepertoireValidationFailed(snapshot.unreadable.first.detail);
@@ -130,7 +123,7 @@ final class ChapterDirectory implements ChapterFiles {
         }
         final other = await _validateAdditional(related);
         if (other is! RepertoireCurrent) return other;
-        return _validateProfile(book, training, archive);
+        return _validateProfile(book, training);
       });
     } on RecoveryRequired catch (error) {
       return RepertoireValidationFailed(error.detail);
@@ -144,7 +137,6 @@ final class ChapterDirectory implements ChapterFiles {
   Future<RepertoireValidation> _validateProfile(
     BookSource? book,
     TrainingReadSet? training,
-    StoredGamesSource? archive,
   ) async {
     if (!_profileBound(book, training)) return const RepertoireChanged();
     final reads = <String, Revision?>{
@@ -167,9 +159,6 @@ final class ChapterDirectory implements ChapterFiles {
           return RepertoireValidationFailed('${entry.key}: $detail');
       }
     }
-    if (archive != null && !await archive.isCurrent()) {
-      return const RepertoireChanged();
-    }
     // A configured alias may change while an off-thread probe is running.
     // Certify the same profile binding after the last asynchronous observation.
     return _profileBound(book, training)
@@ -180,7 +169,7 @@ final class ChapterDirectory implements ChapterFiles {
   bool _profileBound(BookSource? book, TrainingReadSet? training) {
     // PGN-only consumers also depend on the configured Documents binding.
     if (canonicalRecoveryRoot(_recovery.documents).path !=
-        _recovery.training.documents.path) {
+        _recovery.canonicalDocuments.path) {
       return false;
     }
     if (book != null &&
@@ -193,7 +182,7 @@ final class ChapterDirectory implements ChapterFiles {
     if (training != null &&
         (training.documentsPath !=
                 p.normalize(_recovery.documents.absolute.path) ||
-            training.canonicalDocuments != _recovery.training.documents.path ||
+            training.canonicalDocuments != _recovery.canonicalDocuments.path ||
             canonicalRecoveryRoot(_recovery.documents).path !=
                 training.canonicalDocuments ||
             training.files.length != trainingParticipants.length ||
@@ -346,8 +335,10 @@ final class ChapterDirectory implements ChapterFiles {
   // A staging folder older than this run belongs to an import that never
   // completed and was never shown, so it is treated as disposable; a pasted
   // import has no other copy, and is lost as the unfinished import would be.
+  // Only once recovery has settled: a recorded import still to be finished
+  // moves its staging folder into place, so it is not left over.
   Future<void> _sweepStaging() async {
-    if (_stagingSwept) return;
+    if (_stagingSwept || !_recovery.ledger.nothingOwed) return;
     _stagingSwept = true;
     try {
       if (!await root.exists()) return;
@@ -364,37 +355,6 @@ final class ChapterDirectory implements ChapterFiles {
       }
     } on FileSystemException catch (error) {
       log.w('sweep the import staging folders in ${root.path}', error);
-    }
-  }
-
-  Future<void> _migrateFlat() async {
-    final documents = _documents;
-    if (documents == null) return;
-    final entries = await _recovery.run(
-      () async => await root.exists()
-          ? await directoryEntries(root, followLinks: false).toList()
-          : <FileSystemEntity>[],
-    );
-    for (final entry in entries) {
-      if (entry is! File ||
-          p.basename(entry.path).startsWith('.') ||
-          !_isChapter(entry.path)) {
-        continue;
-      }
-      final ref = DocumentRef(entry.path);
-      final read = await documents.open(ref);
-      if (read is! store.Opened) continue;
-      final destination = p.join(
-        root.path,
-        p.basenameWithoutExtension(entry.path),
-        'Main.pgn',
-      );
-      final result = await documents.move(
-        ref,
-        DocumentRef(destination),
-        expected: read.revision,
-      );
-      if (result is! store.Moved) log.w('migrate ${entry.path}', '$result');
     }
   }
 

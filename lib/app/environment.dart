@@ -31,8 +31,6 @@ import '../storage/book_file.dart';
 import '../storage/player_files.dart';
 import '../storage/text_export.dart';
 import '../storage/player_reports.dart';
-import '../storage/saved_players.dart';
-import '../chess/players/player.dart';
 import '../storage/chapter_files.dart';
 import '../storage/chapter_directory.dart';
 import '../storage/eval_cache.dart';
@@ -40,12 +38,10 @@ import '../storage/audit_store.dart';
 import '../storage/finds_store.dart';
 import '../storage/generation_trees.dart';
 import '../storage/backup_history.dart';
-import '../storage/game_store.dart';
 import '../storage/lichess_token.dart';
 import '../storage/master_book.dart';
 import '../storage/master_corpus.dart';
 import '../storage/my_accounts.dart';
-import '../storage/my_games_files.dart';
 import '../storage/pgn_document_store.dart';
 import '../storage/pgn_file_import.dart';
 import '../storage/pgn_file_picker.dart';
@@ -118,11 +114,9 @@ final class AppEnvironment {
     this.tournaments,
     this.launchTournament,
     this.pickExecutable = _noFile,
-    required this.gameStore,
     required this.gameSites,
     required this.accounts,
     required this.progressFiles,
-    required this.olderAnalyzed,
     required this.maia,
     required this.launchEngine,
     this.launchRegisteredEngine = _noRegisteredEngine,
@@ -138,7 +132,6 @@ final class AppEnvironment {
     BookStore? books,
     PlayerStore? players,
     PlayerReports? playerReports,
-    this.savedPlayerList = _noSavedPlayers,
     this.openingBook = _noOpeningBook,
     this.playerRating,
     this.exportText,
@@ -198,7 +191,6 @@ final class AppEnvironment {
       settings: SettingsStore(support: support),
       chapterFiles: ChapterDirectory(
         Directory(repertoires),
-        documents: documentsStore,
         recovery: documentsStore.recovery,
       ),
       studyFiles: StudyDirectory(
@@ -221,7 +213,6 @@ final class AppEnvironment {
       masterBook: SqliteMasterBook(masterGames),
       masterGames: masterGames,
       storage: nativeStoragePlaces(documents: documents, support: support),
-      gameStore: SqliteGameStore(p.join(support.path, 'app_games.db')),
       gameSites: [
         LichessGamesApi(client, token: readLichessToken),
         ChesscomGamesApi(client),
@@ -232,7 +223,6 @@ final class AppEnvironment {
         support: support,
         recovery: documentsStore.recovery,
       ),
-      olderAnalyzed: () => readOlderAnalyzed(documents),
       maia: maia,
       launchEngine: ({required cores, required memoryMb}) => launchStockfish(
         support: support,
@@ -281,8 +271,6 @@ final class AppEnvironment {
       viewerPlaces: PreferencesViewerPlaces(),
       viewerDrafts: ViewerDraftFiles(support),
       openingBook: _bundledOpeningBook,
-      savedPlayerList: () =>
-          savedPlayers(Directory(p.join(documents.path, 'analysis_games'))),
       setFullScreen: setWindowFullScreen,
       bughouse: (
         bundled: bughouseBundled,
@@ -346,19 +334,12 @@ final class AppEnvironment {
   /// leftovers it may delete; null in tests that do not measure.
   final StoragePlaces? storage;
 
-  /// The existing database of the user's games, `app_games.db`.
-  final GameStore gameStore;
-
   /// Where the user's own games are downloaded from.
   final List<RecentGames> gameSites;
 
   /// The user's usernames on those sites.
   final AccountStore accounts;
   final ProgressFiles progressFiles;
-
-  /// The games already mined for puzzles before the sets recorded them
-  /// themselves; null when the file is there and could not be read.
-  final Future<Set<String>?> Function() olderAnalyzed;
 
   /// The human-move model: the Replies tab, the gaps and the fill.
   final MovePolicy maia;
@@ -399,7 +380,6 @@ final class AppEnvironment {
   final BookStore books;
   final PlayerStore players;
   final PlayerReports playerReports;
-  final Future<List<Player>> Function() savedPlayerList;
 
   /// The text of each volume of the bundled opening book; none in a test.
   final Future<List<String>> Function() openingBook;
@@ -507,8 +487,6 @@ Future<List<String>> _bundledOpeningBook() => Future.wait([
 
 void _nothingToClose() {}
 
-Future<List<Player>> _noSavedPlayers() async => const [];
-
 Future<EngineStart> _noRegisteredEngine(
   TournamentEngine engine, {
   required int cores,
@@ -544,7 +522,6 @@ StoragePlaces nativeStoragePlaces({
         path: sup('audit_dismissed.db'),
         removable: false,
       ),
-      (name: 'Your games', path: sup('app_games.db'), removable: false),
       (name: 'Kept versions', path: sup('backups'), removable: false),
       (name: 'Bughouse engine', path: sup('bughouse'), removable: false),
       (name: 'Repertoires', path: doc('repertoires'), removable: false),

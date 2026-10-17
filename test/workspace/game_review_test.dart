@@ -213,16 +213,6 @@ void main() {
     expect(tree.nodeAt(NodePath.of([1, 0]))?.children.single.san, 'c4');
   });
 
-  test('a review line with the old bare marker is still taken out', () async {
-    final legacy = await openSession(
-      '[Event "E"]\n[Result "*"]\n\n'
-      '1. e4 e5 (1... d5 {[%cap_review_line]} 2. exd5) *',
-    );
-    addTearDown(legacy.dispose);
-    final removed = removeReview(legacy.session.chapter!) as ChapterEdited;
-    expect(writeMoveText(removed.chapter.tree, terminator: '*'), '1. e4 e5 *');
-  });
-
   test('an evaluation the file had is kept and survives removal', () async {
     final withEval = await openSession(
       '[Event "E"]\n[Result "*"]\n\n1. e4 {[%eval 0.25]} *',

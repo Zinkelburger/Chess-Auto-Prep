@@ -127,7 +127,6 @@ final class WorkspaceWiring {
   late final _myGamesTree = MyGamesTree(
     accounts: _env.accounts,
     cache: _gamesCache,
-    store: _env.gameStore,
   );
   late final _databases = ExplorerDatabases(
     lichess: _env.lichessExplorer,

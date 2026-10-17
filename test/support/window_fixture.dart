@@ -183,7 +183,6 @@ final class WindowFixture {
       ),
       lichessExplorer: lichess,
       masterBook: ScriptedBook(),
-      gameStore: ScriptedGameStore(),
       gameSites: const [],
       // The usernames, in memory: none until a test sets them.
       accounts: MemoryAccounts(),
@@ -198,7 +197,6 @@ final class WindowFixture {
       ),
       progressFiles: ScriptedProgress(),
       players: _players,
-      olderAnalyzed: () async => {},
       maia: _maia,
       launchEngine:
           _launchEngine ??

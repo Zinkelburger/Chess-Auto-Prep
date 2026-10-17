@@ -15,7 +15,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/scripted_engine.dart';
 import '../../support/scripted_store.dart';
-import '../../support/my_games_fixture.dart';
 
 const _game =
     '[Event "Club"]\n[White "Alex"]\n[Black "Bob"]\n[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nc6 1-0';
@@ -32,11 +31,9 @@ void main() {
     store.documents[ref] = Opened(_game, scriptedRevision(_game));
     analysis = PlayerAnalysis(
       documents: store,
-      archive: ScriptedGameStore(),
       cache: GamesCache(store, folder: '/cache'),
       sites: const [],
       pending: PendingWrites(),
-      archiveCopies: '/archive',
     );
     engine = ScriptedEngine();
     reports = PlayerReports();
@@ -139,11 +136,9 @@ void main() {
       store.documents[ref] = Opened(_game, scriptedRevision(_game));
       owner = PlayerAnalysis(
         documents: store,
-        archive: ScriptedGameStore(),
         cache: GamesCache(store, folder: '/cache'),
         sites: const [],
         pending: PendingWrites(),
-        archiveCopies: '/archive',
       );
       diskHunt = PlayerHunt(
         owner,

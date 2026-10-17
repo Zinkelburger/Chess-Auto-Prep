@@ -2,7 +2,6 @@ import 'package:path/path.dart' as p;
 
 import 'book_snapshot.dart';
 import 'training_snapshot.dart';
-import 'game_store.dart';
 import '../chess/pgn/chapter_heading.dart';
 import 'deleted_chapters.dart';
 import 'document_ref.dart';
@@ -205,15 +204,12 @@ abstract interface class ChapterFiles {
   /// PGNs without whole-repertoire membership (a single-chapter scope). Book
   /// and training proofs address only their fixed configured profile files.
   /// Never nest guarded store calls.
-  /// [archive] adds the optional SQLite selected-corpus transaction to this
-  /// same final guard; it is a logical row proof, not a database-file hash.
   Future<RepertoireValidation> validate(
     Repertoires? snapshot, {
     required Map<String, Revision> observed,
     Map<String, Revision?> additional = const {},
     BookSource? book,
     TrainingReadSet? training,
-    StoredGamesSource? archive,
   });
 
   /// The chapters deleted from every repertoire and still in recovery,

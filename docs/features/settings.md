@@ -151,11 +151,9 @@ be read is logged and left out.
   source and filters, puzzle filters, threat arrow, pane layouts).
 - **Fail open** — settings never block startup. A file that cannot be read is
   moved into `<support>/recovery-quarantine/`, logged, and the app starts on
-  the defaults. A symlinked `settings.json` is followed. Files written before
-  the engine defaults changed read an old one core / 128 MB as "not chosen".
+  the defaults. A symlinked `settings.json` is followed.
 - **Lichess account** — SharedPreferences keys `lichess_access_token`,
-  `lichess_auth_username`, `lichess_token_expiry`, `lichess_is_pat`; a
-  `lichess_refresh_token` key left by earlier builds is removed on every write. Plain preferences, not
+  `lichess_auth_username`, `lichess_token_expiry`, `lichess_is_pat`. Plain preferences, not
   an OS keychain. An expired OAuth token or unreadable keys read as signed out.
   The token is never logged.
 - **Log** — `<support>/logs/app.log`, one line per entry (`2026-09-19T20:31:04.123
