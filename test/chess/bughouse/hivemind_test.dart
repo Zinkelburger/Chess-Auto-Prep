@@ -17,20 +17,16 @@ void main() {
       expect(scoreOf(qOf(-230)), closeTo(-2.30, 0.001));
     });
 
-    test('a level opening re-centres to zero from both teams', () {
-      // Measured: A + B cp −228, C + D cp −231, neither may sit.
-      final offset = (qOf(-228) + qOf(-231)) / 2;
-      expect(TableScore.of(line(-228), Team.ab, offset).text, '+0.01');
+    test('a level opening keeps the clock\'s worth: C + D may sit', () {
+      // A + B cp −228 without the right to sit, C + D cp +231 with it.
+      final offset = (qOf(-228) + qOf(231)) / 2;
+      expect(TableScore.of(line(-228), Team.ab, offset).text, '-2.29');
       // C + D's line reads for A + B with the sign turned: the same number.
-      expect(TableScore.of(line(-231), Team.cd, offset).text, '+0.01');
+      expect(TableScore.of(line(231), Team.cd, offset).text, '-2.29');
     });
 
     test('a searched team up a piece reads + for it, − for the other', () {
-      final score = TableScore.of(
-        line(100),
-        Team.cd,
-        assumedOffset(ClockCase.even),
-      );
+      final score = TableScore.of(line(100), Team.cd, 0);
       expect(score.score, lessThan(0));
       expect(score.forTeam(Team.cd).score, greaterThan(0));
     });
@@ -48,24 +44,13 @@ void main() {
       expect(nothing.text, '—');
       expect(nothing.strength, double.negativeInfinity);
     });
-
-    test('the assumed offset: −0.58 when nobody may sit, 0 when one may', () {
-      expect(assumedOffset(ClockCase.even), closeTo(-sitBitQ, 1e-9));
-      expect(assumedOffset(ClockCase.abMaySit), 0);
-      expect(assumedOffset(ClockCase.cdMaySit), 0);
-    });
   });
 
   test('the clock cases give each team its bit', () {
     expect(ClockCase.abMaySit.maySit(Team.ab), isTrue);
     expect(ClockCase.abMaySit.maySit(Team.cd), isFalse);
-    expect(ClockCase.even.maySit(Team.ab), isFalse);
+    expect(ClockCase.cdMaySit.maySit(Team.ab), isFalse);
     expect(ClockCase.cdMaySit.maySit(Team.cd), isTrue);
-    expect(ClockCase.values.map((c) => c.bookName), [
-      'ahead',
-      'even',
-      'behind',
-    ]);
   });
 
   group('one board\'s choices', () {

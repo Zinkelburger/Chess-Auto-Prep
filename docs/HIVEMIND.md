@@ -219,10 +219,17 @@ the true advantage is 0 by construction), our team white on A.
 
 The number in `info … score cp` is `180·tan(1.56·Q)` of an MCTS Q that
 carries a large offset, and the offset is mostly the network reading plane 31.
-With neither team allowed to sit, a dead-equal position reads **cp −230 from
-both seats**. That is not a bug, and it is not a bias you can subtract once:
-it is the network saying *"a team that can never sit is losing"*, and how
-much it is losing by depends on the position.
+With `TimeAdvantage false`, a dead-equal position reads **cp −230 from
+both seats**. That is not a bug, and it is not a bias you can subtract once.
+`false` does not mean "neither team may sit": the search gives the team to
+play at every node the root team's flag or its opposite
+(`searchthread.cc`, `teamToPlayHasTimeAdvantage`), so exactly one team may
+sit, and `false` means the opponent may. Each seat's −230 is that seat
+losing to an opponent who can wait, and how much depends on the position.
+Two `false` searches therefore describe two different clocks; the
+calibration below cancels the clock between them rather than modelling an
+even one. The app's Bughouse mode searches one consistent case instead
+(A + B may sit, or C + D may), so its score keeps the clock's worth.
 
 The `policy` UCI command prints the network's opinion with no search at all,
 which separates the network from the MCTS. Raw value, our seat, no sitting
