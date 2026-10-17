@@ -1,27 +1,29 @@
 diff --git a/engine/src/common/globals.cc b/engine/src/common/globals.cc
-index f69e3c5..3b4794d 100644
+index f69e3c5..abb54b6 100644
 --- a/engine/src/common/globals.cc
 +++ b/engine/src/common/globals.cc
-@@ -8,6 +8,8 @@ LogLevel g_logLevel = LOG_NONE;
+@@ -8,6 +8,9 @@ LogLevel g_logLevel = LOG_NONE;
  
  // Board the team must move on (default: neither, so passing stays legal)
  RequiredMoveBoard g_requiredMoveBoard = REQUIRE_MOVE_NONE;
 +bool g_frozenBoardB = false;
++bool g_frozenRootMaySit = false;
 +float g_frozenValueOffset = 0.0f;
  
  std::unordered_map<std::string, int> POLICY_INDEX;
  int POLICY_TABLE_NORMAL[2][64][64][2];
 diff --git a/engine/src/common/globals.h b/engine/src/common/globals.h
-index e4d5bfb..dfd4c60 100644
+index e4d5bfb..d260d3d 100644
 --- a/engine/src/common/globals.h
 +++ b/engine/src/common/globals.h
-@@ -36,6 +36,21 @@ enum RequiredMoveBoard {
+@@ -36,6 +36,28 @@ enum RequiredMoveBoard {
   */
  extern RequiredMoveBoard g_requiredMoveBoard;
  
 +/**
 + * One-board analysis: board B is a fixed backdrop. Nothing moves there, captures
-+ * on A still feed B's hands, and nobody's sit plane is set (nothing ever arrives).
++ * on A still feed B's hands, and nobody sits (nothing would ever arrive). The
++ * sit plane still says which team is up on the clock (g_frozenRootMaySit).
 + * A check on A that a drop could block is not mate (chess.com rule): when the
 + * side in check has no other move, it may drop the cheapest blocker it does not
 + * have yet (a pawn, or a knight where a pawn cannot stand), as if the partner
@@ -29,9 +31,15 @@ index e4d5bfb..dfd4c60 100644
 + */
 +extern bool g_frozenBoardB;
 +
-+/// Frozen mode: subtracted from every network value. With no sit plane the
-+/// network rates both seats about equally badly; the caller measures that
-+/// shared offset at the root, so values at odd and even depths agree.
++/// Frozen mode: whether the root team's sit plane is set; the other team gets
++/// the opposite, as Hivemind gives it with TimeAdvantage, so exactly one team
++/// is up on the clock at every node. Only the network reads it: sitting stays
++/// illegal on the frozen board, where no piece could arrive.
++extern bool g_frozenRootMaySit;
++
++/// Frozen mode: subtracted from every network value. The caller measures the
++/// two seats' shared offset at the root under the same clock, so values at
++/// odd and even depths agree and the clock's worth stays in them.
 +extern float g_frozenValueOffset;
 +
  /**
@@ -196,7 +204,7 @@ index 64f9b2c..8708e22 100644
          g_requiredMoveBoard = parseRequiredMoveBoard(value);
          std::cout << "info string RequireMoveOn set to "
 diff --git a/engine/src/search/searchthread.cc b/engine/src/search/searchthread.cc
-index 6d2d127..b35a203 100644
+index 6d2d127..90cab1b 100644
 --- a/engine/src/search/searchthread.cc
 +++ b/engine/src/search/searchthread.cc
 @@ -431,7 +431,8 @@ void SearchThread::collect_batch(SearchBatch& batch, Board& board,
@@ -204,8 +212,8 @@ index 6d2d127..b35a203 100644
          ctx.hasEvaluationReservation = selection.hasEvaluationReservation;
          ctx.teamToPlay = leaf->get_team_to_play();
 -        ctx.sitPlaneActive = (ctx.teamToPlay == root->get_team_to_play()) == teamHasTimeAdvantage;
-+        ctx.sitPlaneActive = !g_frozenBoardB
-+            && (ctx.teamToPlay == root->get_team_to_play()) == teamHasTimeAdvantage;
++        ctx.sitPlaneActive = (ctx.teamToPlay == root->get_team_to_play())
++            == (g_frozenBoardB ? g_frozenRootMaySit : teamHasTimeAdvantage);
          
          // Check for terminal states
          // Track search moves independently per board. A combined tree depth is

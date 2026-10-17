@@ -3,7 +3,8 @@
  * moves now, and if it waits for one more pawn, knight, bishop, rook or queen
  * from its partner, with the best move once that piece arrives. Each row is
  * its own Hivemind search of the same size, run after the analysis of the
- * position, so the rows compare like with like. A row that mates is marked.
+ * position, so the rows compare like with like, all with the side up on the
+ * clock that the page shows. A row that mates is marked.
  * While the engine has failed or waits for the player, rows show a dash; they
  * are searched once it runs again.
  */
@@ -26,10 +27,10 @@ interface Row {
   failed?: string;
 }
 
-/** `nodes` is the search size of each row, in positions (the setting). */
-interface Ladder { fen: string; nodes: number; turn: Color; rows: Row[] }
+/** `nodes` is the search size of each row, in positions (the setting); `whiteMaySit` the clock it was searched under. */
+interface Ladder { fen: string; nodes: number; whiteMaySit: boolean; turn: Color; rows: Row[] }
 
-const keyOf = (fen: string, nodes: number) => `${nodes} ${fen}`;
+const keyOf = (fen: string, nodes: number, whiteMaySit: boolean) => `${nodes} ${whiteMaySit ? 'w' : 'b'} ${fen}`;
 
 export class SitPanel implements Extra {
   private ladders = new Map<string, Ladder>();
@@ -52,13 +53,13 @@ export class SitPanel implements Extra {
 
   update() {
     clearTimeout(this.timer);
-    const { fen, sitNodes } = this.host;
+    const { fen, sitNodes, whiteMaySit } = this.host;
     if (!this.host.active || outcomeOf(fen) === 'Checkmate' || outcomeOf(fen) === 'Stalemate') {
       this.stop();
       this.render(null);
       return;
     }
-    const key = keyOf(fen, sitNodes);
+    const key = keyOf(fen, sitNodes, whiteMaySit);
     const known = this.ladders.get(key);
     if (known) {
       this.stop();
@@ -68,7 +69,7 @@ export class SitPanel implements Extra {
     }
     const turn = positionOf(fen).turn;
     const ladder: Ladder = {
-      fen, nodes: sitNodes, turn,
+      fen, nodes: sitNodes, whiteMaySit, turn,
       rows: ROLES.map((role) => ({ role, fen: role ? adjustHand(fen, turn, role, 1) : fen })),
     };
     this.render(ladder);
@@ -93,7 +94,7 @@ export class SitPanel implements Extra {
     // One search at a time: let the stopped ladder finish first.
     await this.running.catch(() => undefined);
     if (generation !== this.generation) return;
-    this.ladders.set(keyOf(ladder.fen, ladder.nodes), ladder);
+    this.ladders.set(keyOf(ladder.fen, ladder.nodes, ladder.whiteMaySit), ladder);
     for (const row of ladder.rows.filter((r) => r.fen && !r.result)) {
       const found = await this.host.evaluate(row.fen!, ladder.nodes);
       if (generation !== this.generation) return;

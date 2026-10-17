@@ -41,6 +41,8 @@ export interface ExtraHost {
   readonly settings: Settings;
   /** Each row's search, in positions: the setting, or the default for the engine's backend. */
   readonly sitNodes: number;
+  /** White is up on the clock, else Black: every search counts it. */
+  readonly whiteMaySit: boolean;
   /** The engine is on and the board is in analysis (not the editor or practice). */
   readonly active: boolean;
   /** The engine has loaded (its files are in this browser's cache). */
@@ -94,6 +96,8 @@ export class BughouseApp {
   private mode: 'analysis' | 'editor' = 'analysis';
   private dropping: Role | null = null;
   private settings: Settings;
+  /** Who is up on the clock, as the desktop app's Bughouse mode asks; Black, as there, until changed. */
+  private whiteMaySit = false;
   private evals = new Map<string, EngineResult>();
   private engineStatus: EngineStatus = { kind: 'off' };
   private readonly engine: Engine;
@@ -186,6 +190,7 @@ export class BughouseApp {
       get fen() { return app.current.fen; },
       get settings() { return app.settings; },
       get sitNodes() { return sitNodesFor(app.settings, app.engine.gpu); },
+      get whiteMaySit() { return app.whiteMaySit; },
       get active() { return app.mode === 'analysis' && !app.practice && app.settings.engineOn; },
       get engineReady() { return app.engineStatus.kind === 'ready'; },
       get engineStopped() { return app.engineStatus.kind === 'failed' || app.engineStatus.kind === 'ask'; },
@@ -509,6 +514,24 @@ export class BughouseApp {
   private startEngine() {
     if (this.engineStatus.kind === 'ask') this.engine.allow();
     else this.analyse();
+  }
+
+  /** A new clock changes every score: the positions are searched again under it. */
+  private setClock(whiteMaySit: boolean) {
+    if (whiteMaySit === this.whiteMaySit) return;
+    this.whiteMaySit = whiteMaySit;
+    this.engine.setClock(whiteMaySit);
+    this.evals.clear();
+    this.lastDepth.clear();
+    this.renderClock();
+    this.renderCeval();
+    this.renderMoves();
+    this.analyse();
+  }
+
+  private renderClock() {
+    for (const b of document.querySelectorAll<HTMLButtonElement>('#bs-clock button'))
+      b.setAttribute('aria-checked', String((b.dataset.white === '1') === this.whiteMaySit));
   }
 
   private toggleEngine(on = !this.settings.engineOn) {
@@ -845,6 +868,8 @@ export class BughouseApp {
     $('ch-menu-toggle').onclick = () => this.toggleActionMenu();
     $('ch-engine-on').onchange = (e) => this.toggleEngine((e.target as HTMLInputElement).checked);
     $('ch-threat').onclick = () => this.toggleThreat();
+    for (const b of document.querySelectorAll<HTMLButtonElement>('#bs-clock button'))
+      b.onclick = () => this.setClock(b.dataset.white === '1');
 
     // The gear: lila's engine settings, dropped over the engine lines; a click elsewhere or Esc closes it.
     const settings = $('ch-settings');

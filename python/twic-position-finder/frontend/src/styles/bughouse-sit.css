@@ -1,6 +1,11 @@
 /* The bughouse board: the analysis layout (analysis.css) plus the sit panel
    under the engine lines. */
 
+/* ── Who is up on the clock: under the engine header ──────────── */
+.bs-clock { flex: none; margin: 6px 8px; }
+.bs-clock button { padding: 3px 8px; font-size: 0.82rem; }
+.ch-analysis.practising .bs-clock { display: none; }
+
 /* ── Sit panel: move now, or wait for one more piece ──────────── */
 /* Its own section of the tools column: a strip of page background parts it
    from the engine lines, and the ladder is a ruled table so each score lines

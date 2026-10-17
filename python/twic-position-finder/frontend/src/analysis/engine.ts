@@ -2,7 +2,9 @@
  * Hivemind, the bughouse engine, searching one board: the partner board is
  * held still behind it (tools/bughouse_web/patches/frozen-board.patch), so
  * every capture leaves for the partner and nothing arrives unless a hand is
- * edited. The search runs in one browser worker (hivemind.worker.ts), on the
+ * edited. One side is up on the clock and may sit (setClock): Hivemind's
+ * network counts that, as its TimeAdvantage does, though nobody sits in the
+ * lines since nothing would arrive. The search runs in one browser worker (hivemind.worker.ts), on the
  * GPU when the browser offers WebGPU and on the CPU otherwise.
  *
  * One worker serves two kinds of search. The analysis of the shown position
@@ -158,6 +160,7 @@ export class Engine {
   /** The player agreed to the first download (or it is not asked for). */
   private allowed = false;
   private hardware: Hardware = { gpu: true, threads: 1 };
+  private whiteMaySit = false;
   /** The hardware the current worker was started with. */
   private started: Hardware | null = null;
   /** Whether the browser offers WebGPU; null until a worker has loaded. */
@@ -330,6 +333,9 @@ export class Engine {
     }
   }
 
+  /** Who is up on the clock in the searches from now on; the caller searches its positions again. */
+  setClock(whiteMaySit: boolean) { this.whiteMaySit = whiteMaySit; }
+
   private post(message: WorkerRequest) { this.worker?.postMessage(message); }
 
   /** Stops the running search; its answer is then dropped and the next job starts. */
@@ -347,7 +353,7 @@ export class Engine {
     if (job === this.continuation) this.continuation = null;
     const id = ++this.serial;
     this.running = { job, id, superseded: false, dropped: false };
-    this.post({ type: 'search', id, fen: job.fen, nodes: job.nodes, millis: job.millis, lines: job.lines, reportMs: job.main ? REPORT_MS : 0, keep: job.main });
+    this.post({ type: 'search', id, fen: job.fen, whiteMaySit: this.whiteMaySit, nodes: job.nodes, millis: job.millis, lines: job.lines, reportMs: job.main ? REPORT_MS : 0, keep: job.main });
     // The analysis reports a few times a second; a background search answers once, at its end.
     this.guard(job.main ? REPORT_MS : job.millis);
   }

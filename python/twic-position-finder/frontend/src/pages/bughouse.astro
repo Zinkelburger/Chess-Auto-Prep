@@ -61,6 +61,10 @@ const icon = {
               </button>
               <div class="ch-bar" aria-hidden="true"><span id="ch-bar"></span></div>
             </div>
+            <div class="ch-choice bs-clock" id="bs-clock" role="radiogroup" aria-label="Who is up on the clock">
+              <button type="button" role="radio" data-white="1" aria-checked="false" title="White is up on the clock, so could wait instead of moving. The scores count it; the lines never wait, since nothing arrives on this board.">White may sit</button>
+              <button type="button" role="radio" data-white="0" aria-checked="true" title="Black is up on the clock, so could wait instead of moving. The scores count it; the lines never wait, since nothing arrives on this board.">Black may sit</button>
+            </div>
             <div class="ch-settings" id="ch-settings" role="group" aria-label="Engine settings" hidden></div>
             <div class="ch-practice" id="ch-practice" aria-live="polite" hidden></div>
             <div class="ch-pvs" id="ch-pvs"></div>

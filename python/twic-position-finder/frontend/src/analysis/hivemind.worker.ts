@@ -30,8 +30,11 @@ interface Manifest { model_sha256: string; chunks: Chunk[]; runtime?: Chunk; inp
 export interface Backend { kind: 'gpu' | 'cpu'; threads: number; batch: number; gpuAvailable: boolean }
 export type WorkerRequest =
   | { type: 'load'; prefer: 'auto' | 'cpu'; threads: number }
-  /** `keep`: keep the search tree, and carry on from the kept one for the same position. */
-  | { type: 'search'; id: number; fen: string; nodes: number; millis: number; lines: number; reportMs: number; keep: boolean }
+  /**
+   * `whiteMaySit`: White is up on the clock, else Black; the network reads it and nobody sits.
+   * `keep`: keep the search tree, and carry on from the kept one for the same position and clock.
+   */
+  | { type: 'search'; id: number; fen: string; whiteMaySit: boolean; nodes: number; millis: number; lines: number; reportMs: number; keep: boolean }
   | { type: 'cancel' };
 export type WorkerReply =
   /** `done` of `total` bytes while downloading. */
@@ -238,8 +241,8 @@ async function search(request: Extract<WorkerRequest, { type: 'search' }>) {
 }
 
 async function frozenSearch(wasm: Wasm, request: Extract<WorkerRequest, { type: 'search' }>): Promise<unknown> {
-  const text = await wasm.ccall('bh_frozen_search', 'string', ['string', 'number', 'number', 'number', 'number', 'number', 'number'],
-    [request.fen, request.nodes, request.millis, request.lines, request.reportMs, backend!.batch, request.keep ? 1 : 0], { async: true });
+  const text = await wasm.ccall('bh_frozen_search', 'string', ['string', 'number', 'number', 'number', 'number', 'number', 'number', 'number'],
+    [request.fen, request.whiteMaySit ? 1 : 0, request.nodes, request.millis, request.lines, request.reportMs, backend!.batch, request.keep ? 1 : 0], { async: true });
   if (wasm.inferenceError !== undefined) throw new Error(wasm.inferenceError);
   const answer = JSON.parse(text as string);
   if (answer.error) throw new Error(answer.error);
