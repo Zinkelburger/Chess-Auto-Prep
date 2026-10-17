@@ -2,7 +2,7 @@
 /// records a reader must find in it, where each starts, and whether a
 /// quoted field is left open.
 ///
-/// Rows come in the spellings the two apps have written over the years:
+/// Rows come in the spellings existing files hold:
 /// canonical, quoted more than they need to be, and the unquoted rows from
 /// before the quoting migration, whose chapter path may hold a comma. Review
 /// rows come 8, 10 and 11 columns wide. Around them sit blank lines, lines
@@ -278,7 +278,7 @@ final Generator<GeneratedCsv> reviewCsvs = Generator(
 /// is not one this app can show.
 typedef AttemptLine = ({String line, Attempt? truth});
 
-/// Any line of the answer log: an answer as either app writes it, one with
+/// Any line of the answer log: an answer as the files hold it, one with
 /// fields a newer build added, or one that is not an answer at all.
 final Generator<AttemptLine> attemptLines = Generator((rand) {
   final attempt = _attempt(rand);

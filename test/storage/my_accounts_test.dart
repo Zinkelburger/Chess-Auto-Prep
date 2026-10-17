@@ -70,7 +70,7 @@ void main() {
     },
   );
 
-  test('reads the usernames and dates the old app saved', () async {
+  test('reads the usernames and dates already saved', () async {
     SharedPreferences.setMockInitialValues({
       'lichess_username': 'Me',
       'lichess_last_fetch_ms': DateTime(2026, 9, 1).millisecondsSinceEpoch,

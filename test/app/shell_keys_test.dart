@@ -14,7 +14,7 @@ import '../support/scripted_store.dart';
 import '../support/viewer_fixture.dart';
 import '../support/window_fixture.dart';
 
-/// The keys the old app had that the window binds: Enter and Esc through
+/// The keys the window binds: Enter and Esc through
 /// the variations, Esc out of whatever the user is in, F11, Ctrl+Shift+V
 /// and the viewer's Space.
 void main() {

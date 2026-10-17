@@ -17,7 +17,7 @@ import '../features/trainer/trainer.dart';
 import '../workspace/file_filter.dart';
 import 'trap_training.dart';
 
-/// The modes `v2` has. Each one fills the left column beside the one
+/// The app's modes. Each one fills the left column beside the one
 /// workspace; the documents each has open are its own, so going to a mode
 /// brings back what it had on the board (`DocumentTabs`).
 enum Mode {
@@ -154,7 +154,8 @@ final class LabModes {
   final offered = ValueNotifier(false);
   bool _disposed = false;
 
-  /// Asks whether the build carries the engine, and offers the lab if so.
+  /// Asks whether the build carries the engine, and offers the Bughouse
+  /// mode if so.
   Future<void> offer(Future<bool> Function() bundled) async {
     try {
       final yes = await bundled();

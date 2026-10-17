@@ -484,8 +484,8 @@ class _Toolbar extends StatelessWidget {
   }
 }
 
-/// One chapter of the outline. The one on the board is bold and accented, as
-/// the old app's is, because it is where every other panel is pointing.
+/// One chapter of the outline. The one on the board is bold and accented,
+/// because it is where every other panel is pointing.
 ///
 /// A chapter that starts after some moves prints them under its name, so a
 /// chapter set up for one opening says which. A draft — proposed lines

@@ -43,9 +43,9 @@ final class SetReady extends SetState {
   final List<Puzzle> puzzles;
 }
 
-/// The tactics set — `Documents/tactics_sets/Default.pgn`, one game per
-/// puzzle, shared with the old app — and which of its puzzles the filter
-/// lets through, in the order a session plays them.
+/// The tactics set — `Documents/tactics_sets/Default.pgn`, one game per puzzle
+/// — and which of its puzzles the filter lets through, in the order a session
+/// plays them.
 ///
 /// While the set is the document in the workspace, its puzzles are read from
 /// the session, so a result written a moment ago is already in the list;

@@ -195,9 +195,9 @@ final class GameTruth {
   /// Whether one branch stops at a move that is not legal.
   final bool illegal;
 
-  /// How many lines of its comments start with `[Event `: the old app starts
-  /// a game at each of them, which is the one place the two apps are known
-  /// to cut a file differently.
+  /// How many lines of its comments start with `[Event `: the reading
+  /// existing line ids were worked out with starts a game at each of them,
+  /// the one place it is known to cut a file differently from this app.
   final int oldAppCuts;
 }
 
@@ -380,7 +380,7 @@ final class _Game {
       terminator: _terminator,
       separator: spec.separator.replaceAll('\n', body),
       section: _nonEmpty(_value('ChapterName')),
-      // The last tag under a key, as the old app reads headers into a map.
+      // The last tag under a key, as existing line ids read headers into a map.
       lineId: [
         for (final key in const ['LineID', 'LineId', 'Id', 'Line', 'Guid'])
           _nonEmpty(
@@ -403,7 +403,7 @@ String? _nonEmpty(String? value) {
 
 /// How many lines of a comment's [text] after its first begin, past spaces,
 /// tabs, carriage returns and byte-order marks, with `[Event `: the lines the
-/// old app's splitter starts a game at, comment or not.
+/// reading behind existing line ids starts a game at, comment or not.
 int _eventLines(String text) => text
     .split('\n')
     .skip(1)

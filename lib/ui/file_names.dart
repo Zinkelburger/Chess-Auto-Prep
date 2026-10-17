@@ -10,8 +10,8 @@ library;
 import 'dart:convert';
 
 /// The longest name a file may be given. Every desktop filesystem this app
-/// runs on allows more; 120 is what the old app settled on, and a name a
-/// column cannot show is not a name anyone wants.
+/// runs on allows more; a name a column cannot show is not a name anyone
+/// wants.
 const maxNameLength = 120;
 
 /// Leave room below common 255-byte component limits for `.pgn`, staging,

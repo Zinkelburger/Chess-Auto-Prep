@@ -24,13 +24,12 @@ const navigationSideBySideMinWidth = 1480.0;
 /// A reading pane needs room for a sentence, not only a legal move token.
 const movesPaneComfortWidth = 280.0;
 
-/// How wide the chapter outline between the list and the board starts out.
-/// The old app's column is 18% of the window's body clamped to 220–280;
-/// the low end leaves the builder's two tool panes their room at 1280px.
+/// How wide the chapter outline between the list and the board starts out:
+/// 220 leaves the builder's two tool panes their room at 1280px.
 const outlineColumnWidth = 220.0;
 
 /// How tall one row of the outline is, and how far a line sits in under the
-/// chapter it belongs to. Both are the old app's values.
+/// chapter it belongs to.
 const outlineRowHeight = 30.0;
 const outlineIndent = 14.0;
 
@@ -107,10 +106,9 @@ const monoText = TextStyle(
   fontSize: 13,
 );
 
-/// The reading column's own two sizes, the old app's reading pane: moves in
-/// mono at 16 with its line height, prose upright in the text face. A
-/// comment is read, so it gets a book's measure rather than the column's
-/// width.
+/// The reading column's own two sizes: moves in mono at 16 with its line
+/// height, prose upright in the text face. A comment is read, so it gets a
+/// book's measure rather than the column's width.
 const readingMoveText = TextStyle(
   fontFamily: 'SourceCodePro',
   fontFamilyFallback: figurineFont,
@@ -128,8 +126,8 @@ const proseMaxWidth = 640.0;
 /// tokens, little enough that a line still reads as a line.
 const moveTokenPadding = EdgeInsets.symmetric(horizontal: 4, vertical: 1);
 
-/// The reading column is a card, the old app's: its corners, and the room
-/// between its edge and the words.
+/// The reading column is a card: its corners, and the room between its
+/// edge and the words.
 const readingCardRadius = 8.0;
 const readingCardInset = Space.xl;
 
@@ -243,9 +241,9 @@ const previewBoardGap = 6.0;
 /// sweeping across a line does not flash every position in it.
 const previewDelay = Duration(milliseconds: 80);
 
-/// The colours arrows and circles are drawn in: Lichess's four, at the
-/// strength the old app drew them. Green with no key held, red with Shift,
-/// blue with Alt, yellow with Ctrl; the engine's threat is red too.
+/// The colours arrows and circles are drawn in: Lichess's four, a little
+/// translucent. Green with no key held, red with Shift, blue with Alt, yellow
+/// with Ctrl; the engine's threat is red too.
 const shapeGreen = Color(0xCC15781B);
 const shapeRed = Color(0xCCCC2222);
 const shapeBlue = Color(0xCC003088);
@@ -413,8 +411,8 @@ const _surface = Color(0xFF1B1B1D);
 const _panel = Color(0xFF242427);
 const _selection = Color(0xFF38383D);
 
-/// The reading card, near black under the moves: the old app's, and what
-/// made its reading pane look the way it did.
+/// The reading card, near black under the moves: what gives the reading
+/// pane its look.
 const _reading = Color(0xFF0C0C0E);
 const _outline = Color(0xFF3A3A3E);
 const _text = Color(0xFFE6E6E8);

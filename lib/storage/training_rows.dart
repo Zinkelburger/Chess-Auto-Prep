@@ -20,7 +20,7 @@ const streaksFile = 'repertoire_move_progress.csv';
 const historyFile = 'repertoire_review_history.csv';
 const attemptsFile = 'repertoire_move_attempts.jsonl';
 
-/// The four files, in the order every record and plan lists them. A legacy
+/// The four files, in the order every record and plan lists them. A
 /// `<name>.pre-csv-v2.bak` beside one holds the bytes from before the quoting
 /// migration and is never one of them.
 const trainingParticipants = [
@@ -207,7 +207,7 @@ String encodeAttempt(Attempt attempt) => jsonEncode({
 });
 
 /// One line of the attempt log, or null when it is not an answer this app
-/// can show. The old app writes the same keys.
+/// can show. Existing logs carry these same keys.
 Attempt? decodeAttempt(String line) {
   final Object? json;
   try {

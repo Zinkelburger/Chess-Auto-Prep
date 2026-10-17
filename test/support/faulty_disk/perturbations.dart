@@ -134,7 +134,7 @@ Future<void> _appendGame(Profile profile, List<String> chapters) async {
   );
 }
 
-/// The old app rating the line [lineId] of the chapter at [chapters]: a
+/// Another process rating the line [lineId] of the chapter at [chapters]: a
 /// history row appended, keyed at wherever the chapter is now. Recovery
 /// that finishes keeps the row, pointing at where the chapter ends up, or
 /// at [movedTo] when the operation moves the line there.
@@ -159,7 +159,7 @@ Perturbation trainingAnswer(
   },
 );
 
-/// The old app rating a Benko line no relocation scenario moves.
+/// Another process rating a Benko line no relocation scenario moves.
 Perturbation unrelatedAnswer({required Expected expect}) => trainingAnswer(
   'answer for an unrelated line',
   chapters: [benkoAccepted],
@@ -188,7 +188,7 @@ Future<void> _answer(
   await _append(File(profile.training(historyFile)), '$row\n');
 }
 
-/// An answer the old app was killed while appending: half a JSON line, no
+/// An answer a process was killed while appending: half a JSON line, no
 /// newline after it. It names no chapter any scenario moves.
 Perturbation tornAttemptsLine({required Expected expect}) => Perturbation(
   'torn attempts line',
@@ -204,7 +204,7 @@ String _torn(Profile profile) =>
     '{"repertoireId":${jsonEncode(profile.document(benkoDeclined))},'
     '"lineId":"torn","moveIn';
 
-/// An answer the old app was killed while appending for the moved chapter
+/// An answer a process was killed while appending for the moved chapter
 /// at [chapters]' first place: half a JSON line naming it. No plan can read
 /// it, so the log does not follow the move; the rest of it does.
 Perturbation tornAttemptsLineNamingMoved(List<String> chapters) => Perturbation(

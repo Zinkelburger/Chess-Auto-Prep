@@ -26,11 +26,10 @@ final class LinePreview {
   final Offset anchor;
 }
 
-/// Floats a small board over everything while [preview] has one to show,
-/// the way the old app previewed engine lines: centred under the hovered
-/// move, or above it when there is no room below. It takes no pointer, so
-/// the move under it keeps the hover. [child] is laid out as if the board
-/// were not there.
+/// Floats a small board over everything while [preview] has one to show:
+/// centred under the hovered move, or above it when there is no room below. It
+/// takes no pointer, so the move under it keeps the hover. [child] is laid out
+/// as if the board were not there.
 class LinePreviewOverlay extends StatefulWidget {
   const LinePreviewOverlay({
     super.key,

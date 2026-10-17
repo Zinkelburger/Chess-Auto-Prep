@@ -1,7 +1,7 @@
 // Laws of the training files over generated text: the records a reader
 // finds are the text cut into pieces, nothing added and nothing lost; a row
 // as written reads back as itself, with the same values, and the
-// old app's rows of every width read as what they hold; an answer line is
+// existing rows of every width read as what they hold; an answer line is
 // read or passed over, never thrown on; and a write through the store
 // changes only the rows it names, down to the byte.
 import 'dart:convert';
@@ -73,7 +73,7 @@ String _joined(List<CsvRecord> records) =>
 
 const Generator<Review> _reviews = Generator(csvReview);
 
-/// A review as the old app writes it, [width] columns wide, spelled one of
+/// A review as existing files hold it, [width] columns wide, spelled one of
 /// the ways a file holds it.
 typedef _OldRow = ({Review review, int width, RowSpelling spelling});
 
@@ -107,7 +107,7 @@ void _rowLaws() {
   );
 
   forAll(
-    'the old app\'s rows of 8, 10 and 11 columns read as what they hold',
+    'existing rows of 8, 10 and 11 columns read as what they hold',
     _oldRows,
     (old) {
       final cells = reviewCells(old.review, old.width);

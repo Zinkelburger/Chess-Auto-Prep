@@ -6,8 +6,8 @@ import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
 
 /// Serialises document mutations in one directory against every other writer:
-/// other isolates, other processes, and the old app, which runs on the same
-/// profile and takes this same lock.
+/// other isolates and other processes, such as a second copy of the app on
+/// the same profile, which takes this same lock.
 ///
 /// A SQLite write transaction is the mutex. SQLite excludes separate
 /// connections whether or not they are in one process, and the operating
@@ -15,8 +15,8 @@ import 'package:sqlite3/sqlite3.dart';
 /// and no lease expiry can ever let two writers overlap. The database stays
 /// empty; only the transaction matters.
 ///
-/// The protocol is fixed by the old app's `lib/utils/file_operation_lock.dart`
-/// and may not change while both apps share a profile: the lock file is
+/// Every process that writes these documents must agree on the protocol: the
+/// lock file is
 /// `chess-auto-prep-file-locks/<FNV-1a of the resolved absolute directory
 /// path>.sqlite3` under the system temporary directory, the busy timeout is zero, acquisition is
 /// `BEGIN IMMEDIATE` retried every 10 ms for two minutes, and the transaction

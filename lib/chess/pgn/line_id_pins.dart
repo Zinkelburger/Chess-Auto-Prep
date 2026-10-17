@@ -6,13 +6,19 @@
 /// streaks and history are left naming a line that is no longer there. The
 /// cure is to write the id down: an edit that rewrites, moves or re-places a
 /// game with no id header first gives it `[LineID]` with the id it is trained
-/// under now. Both apps read a game's own id header before working one out,
-/// so the progress goes on pointing at it in either of them. Of two games
+/// under now. A game's own id header is read before one is worked out, so
+/// the progress goes on pointing at it. Of two games
 /// carrying one id header only the first with moves is trained under it,
 /// so an edit that moves the other one rewrites its header the same way.
 ///
 /// Only games an edit already touches are pinned; a game the edit leaves
 /// where it was keeps its bytes and the id they give it.
+///
+/// Existing training progress is keyed by ids worked out under the original
+/// rules: the original numbering of a file's games ([oldAppGameIndexes]) and,
+/// for the games it reads differently, the original reader below
+/// ([_oldAppClaim]). Those rules are fixed; changing them would re-key the
+/// progress already on disk.
 library;
 
 import 'dart:convert';
@@ -32,17 +38,18 @@ import 'tree_edit.dart';
 /// The id each game of [lines] is trained under, in file order; null for a
 /// game with no moves or one nothing could read, which is no line but keeps
 /// its place, so the ids of the games after it do not move. Such a game
-/// still takes the id the old app trains it under, if any, from the games
-/// after it ([_claimOf]).
+/// still takes the id the original reader trains it under, if any, from the
+/// games after it ([_claimOf]).
 ///
 /// A game's place is its index in [lines] unless [indexes] gives it one;
-/// a whole chapter's games are placed as the old app places them
+/// a whole chapter's games are placed in the original numbering
 /// ([trainedIdsOf]).
 List<String?> trainedIds(List<ChapterLine> lines, {List<int>? indexes}) =>
     _trainedIds(lines, indexes: indexes);
 
-/// [trainedIds], after [above]: the games the old app makes of the text
-/// above the first of [lines], placed from 0, each claiming its id first.
+/// [trainedIds], after [above]: the games the original numbering makes of
+/// the text above the first of [lines], placed from 0, each claiming its id
+/// first.
 List<String?> _trainedIds(
   List<ChapterLine> lines, {
   List<int>? indexes,
@@ -82,9 +89,9 @@ List<String?> _idsClaimed(List<_Claim?> claims, List<int> places) {
   return [for (final claim in claims) claim == null ? null : ids[i++]];
 }
 
-/// The id each game of [chapter] is trained under, each game placed where
-/// the old app's parser places it ([oldAppGameIndexes]): a banner above the
-/// games moves them all one on there, and both apps must name them alike.
+/// The id each game of [chapter] is trained under, each game placed in the
+/// original numbering ([oldAppGameIndexes]): a banner above the games moves
+/// them all one on there, and existing progress is keyed that way.
 /// Movetext above the first game is a game there, and claims its id first.
 List<String?> trainedIdsOf(Chapter chapter) => _trainedIds(
   chapter.lines,
@@ -97,8 +104,8 @@ List<String?> trainedIdsOf(Chapter chapter) => _trainedIds(
 /// Every id a game of [chapter] is known by: the id header it carries, and
 /// the id it is trained under, which for a game with no header is worked
 /// out from its moves and its place (see [trainingLineIds]). The ids the
-/// old app gives the games it makes of the text above the first game are
-/// taken too.
+/// original numbering gives the games it makes of the text above the first
+/// game are taken too.
 ///
 /// A line added to the chapter must be given none of them. Two games under
 /// one id share one review history, and when the game that claimed the id
@@ -115,10 +122,10 @@ Set<String> idsInUse(Chapter chapter) {
   };
 }
 
-/// The texts of the games the old app makes of the text above [chapter]'s
-/// first game ([oldAppPreambleGames]). The last is left out when the first
-/// game's `[Event` line is one the old app does not start a game at, which
-/// makes it part of that game there.
+/// The texts of the games the original numbering makes of the text above
+/// [chapter]'s first game ([oldAppPreambleGames]). The last is left out when
+/// the first game's `[Event` line is one that numbering does not start a game
+/// at, which makes it part of that game there.
 List<String> _aboveGames(Chapter chapter) {
   final texts = oldAppPreambleGames(chapter.preamble);
   if (texts.isEmpty || chapter.lines.isEmpty) return texts;
@@ -129,15 +136,16 @@ List<String> _aboveGames(Chapter chapter) {
 }
 
 /// What [line] claims at its place before any collision: its id header and
-/// its main line as the old app spells it, or null for a game the old app
-/// trains no line of.
+/// its main line in the spelling ids are worked out from, or null for a
+/// game no line is trained of.
 ///
-/// A game this app reads no moves in, or whose header block the old app
-/// ends early, is read as the old app reads it ([_oldAppClaim]): the old
-/// app may train it under an id, which no game after it may then take. So
-/// is a game reading could not take whole whose main line the old app
-/// lexes other moves in, such as one this app stops at an illegal move:
-/// the old app works its id out from every move token, legal or not.
+/// A game this app reads no moves in, or whose header block the original
+/// reader ends early, is read by the original reader ([_oldAppClaim]): its
+/// id may already be keyed in the progress files, so no game after it may
+/// then take it. So is a game reading could not take whole whose main line
+/// the original reader lexes other moves in, such as one this app stops at
+/// an illegal move: that reader works its id out from every move token,
+/// legal or not.
 _Claim? _claimOf(ChapterLine line) {
   final tree = line.tree;
   if (tree != null &&
@@ -161,8 +169,8 @@ _Claim? _claimOf(ChapterLine line) {
 /// be given it too. A line with no id header is left as it is: arriving
 /// after every game already there, it takes no id from any of them. Nor is
 /// a line whose id header cannot be rewritten ([withIdHeader]): it sits
-/// below where the old app ends the header block, and neither app trains
-/// the line under it.
+/// below where the original reader ends the header block, and the line is
+/// not trained under it.
 ChapterLine withFreeId(ChapterLine line, int place, Set<String> taken) {
   final id = line.lineId;
   final tree = line.tree;
@@ -175,7 +183,7 @@ ChapterLine withFreeId(ChapterLine line, int place, Set<String> taken) {
 }
 
 /// The main line's moves as the file spells them, which is what an id is
-/// worked out from, in the old app's spelling of castling with digits
+/// worked out from, in the original spelling of castling with digits
 /// (`O-O`) and of a null move (`--`) ([_oldAppSpelling]).
 List<String> mainLineSpellings(GameTree tree) {
   final sans = <String>[];
@@ -188,7 +196,7 @@ List<String> mainLineSpellings(GameTree tree) {
   return sans;
 }
 
-/// [spelling] as the old app spells it when it works an id out: `Z0`,
+/// [spelling] as ids are worked out from it: `Z0`,
 /// `0000` and `@@@@` are `--`, and castling written with zeros is written
 /// with letter O.
 String _oldAppSpelling(String spelling) {
@@ -281,9 +289,9 @@ String _oldAppSpelling(String spelling) {
 /// nothing here can make that change.
 ///
 /// The header rewritten is the one [ChapterLine.lineId] reads its id from
-/// ([idHeaderAt]). A game whose header block the old app ends early gets
-/// its `[LineID]` above the line it ends at instead, where both apps read
-/// it ([_oldAppBreakAt]). The result is asked again, in both apps' ways: a
+/// ([idHeaderAt]). A game whose header block the original reader ends early
+/// gets its `[LineID]` above the line it ends at instead, where both readers
+/// see it ([_oldAppBreakAt]). The result is asked again, by both readers: a
 /// line whose id does not come back as [id] is refused rather than written.
 ///
 /// The movetext is taken from the line's own bytes rather than written
@@ -349,10 +357,10 @@ String headerText(List<PgnHeader> tags) {
 
 /// The `[LineID]` a game written for [sans] at file position [index] gets.
 ///
-/// It is the id the old app derives for a game that carries no id header —
+/// It is the id a game that carries no id header is trained under —
 /// base64url of `"<moves>|<index>"`, truncated to 22 characters after
-/// `line_` — so both apps name the same line the same way and the training
-/// progress keyed by that name keeps pointing at it.
+/// `line_` — so the line keeps its name and the training progress keyed by
+/// that name keeps pointing at it.
 ///
 /// Truncation is not collision-free, and two lines sharing one id mix their
 /// review histories and let a delete land on the wrong game. An id already
@@ -373,8 +381,7 @@ String _hashed(String key) =>
     'line_${sha256.convert(utf8.encode(key)).toString().substring(0, 22)}';
 
 /// The id each game of a chapter is trained under, in file order, exactly as
-/// the old app assigns them, because both apps key the same progress files by
-/// these ids.
+/// the ids existing progress files are keyed by were assigned.
 ///
 /// A game's own id header wins; a game without one gets the short id of its
 /// moves and its place in the file (see [newLineId]). The first game to claim
@@ -384,8 +391,8 @@ String _hashed(String key) =>
 /// header and the short id may already be saved against another game.
 ///
 /// [games] are the games that have moves, each with its place among all the
-/// games of the file: a game nothing could read keeps its place, as it does
-/// in the old app, so the games after it keep their ids.
+/// games of the file: a game nothing could read keeps its place, so the
+/// games after it keep their ids.
 ///
 /// For example two header-less games of one move each, `e4` at 0 and `e4` at
 /// 1, get two different short ids; two games both tagged `[LineID "x"]` get
@@ -425,33 +432,34 @@ String _fullId(List<String> sans, int index) =>
     _hashed('${sans.join(' ')}|$index');
 
 // ---------------------------------------------------------------------------
-// The old app's reading of a header block it ends early
+// The original reader: a header block it ends early
 // ---------------------------------------------------------------------------
 //
-// The old app reads a game's headers line by line with [_oldAppTag] and ends
-// the block at the first line with anything else on it — a tag value with a
-// bare backslash, a bracket that is no tag, a `%` line — and lexes the rest
-// as movetext, tag lines included. Only the ids of such a game, of a game
-// this app reads no moves in and of the text above the first game, which is
-// a game there, are worked out this way; everything else is read as ever.
-// This copies `extractHeaderBlock`, `movetextStart` and `mainlineSansOf` in
-// lib/chess_core/pgn/mainline_lexer.dart rather than importing them; the two
-// must change together.
+// The original reader takes a game's headers line by line with [_oldAppTag]
+// and ends the block at the first line with anything else on it — a tag value
+// with a bare backslash, a bracket that is no tag, a `%` line — and lexes the
+// rest as movetext, tag lines included. Only the ids of such a game, of a
+// game this app reads no moves in and of the text above the first game,
+// which is a game there, are worked out this way; everything else is read as
+// ever. Existing training progress is keyed by these ids, so the rules here
+// are fixed.
 
-/// One `[Key "value"]` at the start of a line, as the old app matches it.
+/// One `[Key "value"]` at the start of a line, as the original reader
+/// matches it.
 final _oldAppTag = RegExp(
   r'^\s*\[([A-Za-z0-9][A-Za-z0-9_+#=:-]*)\s+"((?:[^"\\]|\\"|\\\\)*)"\]',
 );
 
-/// The old app's movetext tokens; anything else on a line is skipped.
+/// The original reader's movetext tokens; anything else on a line is
+/// skipped.
 final _oldAppToken = RegExp(
   r'(?:[NBKRQ]?[a-h]?[1-8]?[-x]?[a-h][1-8](?:=?[nbrqkNBRQK])?|[pnbrqkPNBRQK]?@[a-h][1-8]|O-O-O|0-0-0|O-O|0-0)[+#]?|--|Z0|0000|@@@@|{|;|\$\d{1,4}|[?!]{1,2}|\(|\)|\*|1-0|0-1|1\/2-1\/2',
 );
 
-/// The index of the header in [tags] the old app ends the header block at,
-/// though this app reads on: a tag it cannot match, or a line that is not a
-/// tag after the first one. -1 when it reads the block as this app does;
-/// `%` lines above the first tag it skips, as this app does.
+/// The index of the header in [tags] the original reader ends the header
+/// block at, though this app reads on: a tag it cannot match, or a line that
+/// is not a tag after the first one. -1 when it reads the block as this app
+/// does; `%` lines above the first tag it skips, as this app does.
 int _oldAppBreakAt(List<PgnHeader> tags) {
   var started = false;
   for (final (index, header) in tags.indexed) {
@@ -466,11 +474,11 @@ int _oldAppBreakAt(List<PgnHeader> tags) {
   return -1;
 }
 
-/// What the old app claims for the game [game] before any collision: the
-/// id among the tags above the line its header block ends at, the last of
-/// each key winning, and every move token from there on outside a comment
-/// or a variation, legal or not and past a result. Null when it finds no
-/// move, or when a `%` line ends the block, which leaves it none.
+/// What the original reader claims for the game [game] before any
+/// collision: the id among the tags above the line its header block ends at,
+/// the last of each key winning, and every move token from there on outside
+/// a comment or a variation, legal or not and past a result. Null when it
+/// finds no move, or when a `%` line ends the block, which leaves it none.
 _Claim? _oldAppClaim(String game) {
   final text = game.startsWith('\uFEFF') ? game.substring(1) : game;
   final headers = <String, String>{};
@@ -514,8 +522,8 @@ _Claim? _oldAppClaim(String game) {
   return sans.isEmpty ? null : (header: header, sans: sans);
 }
 
-/// The main-line move tokens of [text] from [from] on, as the old app lexes
-/// them.
+/// The main-line move tokens of [text] from [from] on, as the original
+/// reader lexes them.
 List<String> _oldAppMainLine(String text, int from) {
   final sans = <String>[];
   var depth = 0;

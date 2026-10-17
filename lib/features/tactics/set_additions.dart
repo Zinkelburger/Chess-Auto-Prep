@@ -66,16 +66,16 @@ final class SetAdditions {
   final DocumentSaver _saver;
   final TacticsSet _set;
 
-  /// The ids the old app kept apart from the set, still counted as done;
-  /// null when its file is there and could not be read.
+  /// The ids kept apart from the set in `analyzed_games.txt`, still counted
+  /// as done; null when that file is there and could not be read.
   final Future<Set<String>?> Function() _older;
 
   /// How many times a write that lost a race with another writer is tried.
   static const _attempts = 3;
 
-  /// The games already reviewed, by either app; null when the set or the
-  /// old app's list cannot be read, which is no answer: mining then would
-  /// mine again what was mined before.
+  /// The games already reviewed; null when the set or the separate
+  /// `analyzed_games.txt` cannot be read, which is no answer: mining then
+  /// would mine again what was mined before.
   Future<Set<String>?> analyzed() async {
     final older = await _older();
     if (older == null) return null;

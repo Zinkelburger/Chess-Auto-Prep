@@ -1,16 +1,16 @@
 /// Reading and writing training progress: the review schedule, the move
 /// streaks, the rating history and the log of answers, in the Documents
-/// folder the old app keeps them in.
+/// folder.
 ///
-/// Both apps write these files, so a write is optimistic. It says what each
-/// row it changes held when it was read (`before`) and what it holds now
-/// (`after`); under the Documents lock — the one the old app takes for the
-/// same files — a row that holds neither was changed by somebody else, and
-/// the whole write is refused rather than put over their answer. Only the
-/// rows a write names are touched; every other record keeps its bytes.
+/// Another process may write these files too, so a write is optimistic. It
+/// says what each row it changes held when it was read (`before`) and what it
+/// holds now (`after`); under the Documents lock a row that holds neither was
+/// changed by somebody else, and the whole write is refused rather than put
+/// over their answer. Only the rows a write names are touched; every other
+/// record keeps its bytes.
 ///
 /// Every file is read and checked before any is written. The first write to
-/// a file keeps a `<file>.pre-csv-v2.bak` copy of it, as the old app does.
+/// a file keeps a `<file>.pre-csv-v2.bak` copy of it.
 library;
 
 import 'dart:convert';
@@ -733,7 +733,7 @@ final class TrainingStore implements ProgressFiles {
     return rows;
   }
 
-  /// Preserve the legacy log's tolerance of individual torn/malformed lines.
+  /// Keep the log's tolerance of individual torn/malformed lines.
   /// Only bytes as observed, named by their [hash], are cached.
   List<Attempt> _wrongAnswers(Uint8List? bytes, String? hash) {
     if (bytes == null) return const [];

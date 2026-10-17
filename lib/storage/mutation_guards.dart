@@ -1,6 +1,6 @@
 /// What every mutation of a document takes before it touches the disk: the
-/// directory locks that keep this app, another copy of it and the old app off
-/// one folder at a time, the id a document's kept versions live under, and
+/// directory locks that keep this app and another copy of it off one folder
+/// at a time, the id a document's kept versions live under, and
 /// the record of the version about to be replaced.
 ///
 /// They live here rather than beside one of their callers because the store
@@ -40,11 +40,11 @@ Future<T> lockedForDocument<T>(
 }
 
 /// Runs [action] under every lock a relocation needs: the documents root,
-/// which is the scope the old app takes for a move, and then [folders], the
+/// which is the scope a move takes, and then [folders], the
 /// folders at either end of it.
 ///
 /// Both are needed. The root is the only scope that covers both ends of a
-/// move, and it is what another app renaming the same chapter takes. The
+/// move, and it is what another process renaming the same chapter takes. The
 /// folders are where a create, a save and a delete take theirs: without them
 /// a save could pass its revision check, stage its copy, and publish it onto
 /// the name this move has meanwhile renamed away — leaving the chapter on

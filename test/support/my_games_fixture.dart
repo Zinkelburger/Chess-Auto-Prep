@@ -42,7 +42,7 @@ const quietChesscomGame = '''
 const beforeNf6 =
     'r1bqkbnr/pppp1ppp/2n5/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 3 3';
 
-/// The puzzle the old app writes for `3... Nf6??`, as game 6 of the set.
+/// The stored puzzle text for `3... Nf6??`, as game 6 of the set.
 const scholarsMatePuzzle =
     '''
 [Event "Default #6"]
@@ -214,7 +214,7 @@ final class MemoryAccounts implements AccountStore {
   }
 }
 
-/// The old app's games database as the test sets it: absent until given
+/// The games database (`app_games.db`) as the test sets it: absent until given
 /// games, or answering what [answer] says. Remembers the collections each
 /// read asked for.
 final class ScriptedGameStore implements GameStore {

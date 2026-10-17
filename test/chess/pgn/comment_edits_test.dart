@@ -13,8 +13,8 @@ import '../../support/fixtures.dart';
 
 String movesOf(Chapter chapter) => writeMoveText(chapter.tree, terminator: '*');
 
-/// The chapter written out and read back, which is what the old app and the
-/// next session see.
+/// The chapter written out and read back, which is what the file holds and
+/// the next session sees.
 Chapter reread(Chapter chapter) =>
     parseChapter(name: chapter.name, text: writeChapter(chapter));
 

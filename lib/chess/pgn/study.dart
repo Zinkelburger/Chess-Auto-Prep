@@ -95,7 +95,7 @@ Side? studyTrainingSide(ChapterLine line) =>
 
 /// What the chapter at [index] is called: `ChapterName`, else `Event` with
 /// the study's own name peeled off the front, else the players, else
-/// `Chapter N`. The old app reads it in that order and so does Lichess.
+/// `Chapter N`, the order Lichess reads it in.
 String studyChapterName(ChapterLine line, {required int index, String? study}) {
   final named = tagValue(line.tags, 'ChapterName')?.trim();
   if (named != null && named.isNotEmpty) return named;

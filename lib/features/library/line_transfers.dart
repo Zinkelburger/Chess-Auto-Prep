@@ -76,8 +76,8 @@ final class LineTransfers {
       final line = chapter.lines[game];
       final id = ids[game];
       sourceIds.add(id);
-      // A line no header both apps read can carry moves as it is, and its
-      // id changes in both, as a move above it would ([withIdsPinned]).
+      // A line with no id header that is read can carry moves as it is, and
+      // its id changes, as a move above it would ([withIdsPinned]).
       pinned.add(id == null ? line : withIdHeader(line, id) ?? line);
     }
     final prepared = await _session.externalEdits.prepare(
@@ -184,7 +184,7 @@ final class LineTransfers {
       return const _TargetRefused('The destination could not be updated.');
     }
     final pinned = withIdsPinned(file, back.file, back.games);
-    // Headers may not name the ids either app trains. Follow the arriving
+    // Headers may not name the ids training is keyed by. Follow the arriving
     // games through the complete file arrangement, after collision handling
     // and pinning, rather than mapping their raw LineID tags.
     final mapping = <String, String>{};

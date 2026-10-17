@@ -14,8 +14,8 @@ import '../pgn/tree_edit.dart';
 import 'draft_lines.dart';
 
 /// The text of a draft chapter: the heading with `// Draft` in it, then one
-/// game per kept line, in the old app's shape, so the file opens in either
-/// app and its lines can be dragged into the chapter it was made for.
+/// game per kept line, in the shape of every other chapter file, so its
+/// lines can be dragged into the chapter it was made for.
 ///
 /// [rootFen] and [rootMoves] are the source chapter's own root, so every
 /// game here starts where that chapter's games do; [prefix] is the way from
@@ -73,8 +73,8 @@ String draftChapterText({
 
 /// The `//` heading of a draft chapter [name] for [side], starting after
 /// [rootMoves]: a chapter heading with `// Draft` in it, which is what
-/// marks a draft for either app. Every draft starts with it, whatever goes
-/// under it.
+/// marks a chapter file as a draft. Every draft starts with it, whatever
+/// goes under it.
 String draftHeading({
   required String name,
   required Side side,

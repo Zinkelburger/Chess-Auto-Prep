@@ -6,8 +6,8 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'search_config.dart';
 import 'search_node.dart';
 
-/// Writes the v4 saved-tree format: the one file the old app and the
-/// standalone C builder both read, so a tree built here can be opened there.
+/// Writes the v4 saved-tree format, which the standalone C builder reads
+/// too, so a tree built here can be opened there.
 /// [decodeTreeV4] in `tree_wire_v4_reader.dart` reads it back.
 ///
 /// A document is one JSON object: `format`, `version`, `total_nodes`,
@@ -58,18 +58,17 @@ const int unboundedLossWire = 100000;
 /// search reached the horizon everywhere.
 ///
 /// [startMoves] is the line in SAN from the initial position down to [root],
-/// and is left out when the root is the initial position. The old app plays
-/// it back to place its board before it continues a saved build, and without
-/// it a build can only be resumed from a board that already stands on the
-/// root.
+/// and is left out when the root is the initial position. A reader that
+/// continues a saved build plays it back to place its board, and without it
+/// a build can only be resumed from a board that already stands on the root.
 ///
 /// [evalDepth] and [opponentRating] are the engine depth and the Maia rating
 /// this tree was built with. The search itself is handed an evaluator and a
 /// policy rather than the numbers behind them, so whoever owns those numbers
 /// passes them here. A tree written without them stays readable everywhere —
-/// they are settings, not values — but the old app cannot resume it: its
-/// resume check requires the saved settings to equal the current ones, and an
-/// absent setting never does.
+/// they are settings, not values — but it cannot be resumed: resuming
+/// requires the saved settings to equal the current ones, and an absent
+/// setting never does.
 String encodeTreeV4(
   SearchNode root,
   SearchConfig config, {
@@ -133,13 +132,14 @@ Future<String> encodeSearchTree(
 /// alone, as every tree was before a database could be the opponent.
 const maiaReplySource = 'maia';
 
-/// The flat snapshot the old app restores a build's settings from.
+/// The flat snapshot a build's settings are restored from.
 ///
 /// The constants are what this search is: pure expectimax against a Maia
 /// policy alone unless [maiaOnly] says a database of games answered for the
-/// opponent, which `v2_reply_source` then names. The old app's own snapshot has some seventy further
-/// keys, for modes this search does not have; every one of them defaults when
-/// it is absent, so they are left out rather than invented. The two the
+/// opponent, which `v2_reply_source` then names. Snapshots in existing tree
+/// files carry some seventy further keys, for modes this search does not
+/// have; every one of them defaults when it is absent, so they are left out
+/// rather than invented. The two the
 /// caller may know, [evalDepth] and [opponentRating], are written when it
 /// does and left out when it does not.
 Map<String, Object?> _configJson(
@@ -210,7 +210,7 @@ final class _Writer {
       if (node is OpponentNode) 'v2_replies_from': ?node.repliesFrom?.name,
       'value_lower': valuation.lower,
       'value_upper': valuation.upper,
-      // The old app shows a node's value from these two and reads them as a
+      // Readers of this format take a node's value from these two as a
       // pair. This search measures no centipawn loss, so the display-only
       // half of the pair is written as the zero it is.
       'local_cpl': 0.0,
@@ -220,8 +220,8 @@ final class _Writer {
     // A horizon leaf was looked at and valued where it stands, which is what
     // tells it from an unexpanded one where no horizon depth can: a mainline
     // book ends a line wherever ChessDB knows no more, and a reply below the
-    // search's floor stops short of the horizon too. The C builder and the
-    // old app flag theirs the same way.
+    // search's floor stops short of the horizon too. The C builder flags its
+    // own the same way.
     if (children.isNotEmpty || node is HorizonNode) json['explored'] = true;
     if (children.isNotEmpty) json['children'] = children;
     return json;

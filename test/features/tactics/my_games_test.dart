@@ -634,7 +634,7 @@ void main() {
     });
   });
 
-  test('a game either app has reviewed is never reviewed again', () async {
+  test('a game the set marks reviewed is never reviewed again', () async {
     r = _Review();
     await r.start();
     final asked = r.engine.asked.length;
@@ -647,7 +647,7 @@ void main() {
     expect((r.games.status as MyGamesDone).reviewed, 0);
   });
 
-  test('a Lichess game the old app filed under its bare id is not reviewed '
+  test('a Lichess game filed under its bare id is not reviewed '
       'again', () async {
     r = _Review(accounts: {GameSite.lichess: const Account('Me')});
     final withBare = withAnalyzed(tacticsSet, {
@@ -664,8 +664,8 @@ void main() {
     expect(r.setText, withBare);
   });
 
-  test('a bare Lichess id in the old app\'s own list keeps its game from '
-      'being reviewed', () async {
+  test('a bare Lichess id in the separate list of reviewed games keeps its '
+      'game from being reviewed', () async {
     final documents = Directory.systemTemp.createTempSync('v2-older-ids-');
     addTearDown(() => documents.deleteSync(recursive: true));
     File(
@@ -797,7 +797,7 @@ void main() {
     );
   });
 
-  test('an old app\'s list of reviewed games that cannot be read stops the '
+  test('a separate list of reviewed games that cannot be read stops the '
       'review before anything is mined', () async {
     r = _Review(older: () async => null);
     await r.start();

@@ -42,7 +42,7 @@ void main() {
     expect(file.existsSync(), isTrue);
   });
 
-  test('on disk it is the old app\'s file: its tables and its version', () {
+  test('on disk it keeps the existing file\'s tables and version', () {
     final dir = Directory.systemTemp.createTempSync('eval_cache');
     addTearDown(() => dir.deleteSync(recursive: true));
     final cache = EvalCache.open(dir);

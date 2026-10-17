@@ -63,16 +63,15 @@ const _controlLimit = 0.01;
 const _sampled = 8192;
 
 /// Valid non-ASCII characters per stray byte for a file to keep its UTF-8
-/// reading. The old app's number, and both apps must read one file the same
-/// way.
+/// reading. Fixed, so a file that opened before opens the same way now.
 const _validToStrayRatio = 8;
 
-/// The text in [bytes], read as the old app reads the same files, so every
-/// PGN it opens opens here too. Whatever came in, a save writes UTF-8 back.
+/// The text in [bytes], read so every existing PGN the user has opens, in
+/// whatever encoding it was saved. Whatever came in, a save writes UTF-8 back.
 ///
 /// Bytes that are not text at all are refused rather than decoded: a
 /// gzipped chapter read as Latin-1 would open as mojibake and the first save
-/// would replace it with bytes neither app could read.
+/// would replace it with bytes nothing could read.
 ///
 /// Strict UTF-8 opens for editing, with its byte-order mark if it had one.
 /// Anything else opens to read, because writing it back would re-encode it.

@@ -214,7 +214,7 @@ final class Settings {
   );
 
   /// The file's text. One flat object with plain names, so a person can
-  /// read it and the old app's keys never collide with it.
+  /// read it.
   String toJson() => const JsonEncoder.withIndent('  ').convert({
     ..._extra,
     'boardCoordinates': boardCoordinates,

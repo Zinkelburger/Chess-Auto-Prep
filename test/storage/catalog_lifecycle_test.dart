@@ -164,7 +164,7 @@ void main() {
   );
 
   test(
-    'legacy files migrate guardedly, nested files follow rename and recovery',
+    'flat files migrate guardedly, nested files follow rename and recovery',
     () async {
       final disk = await StoreFixture.create();
       addTearDown(disk.dispose);

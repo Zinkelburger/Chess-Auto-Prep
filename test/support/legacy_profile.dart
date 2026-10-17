@@ -3,12 +3,12 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-/// Profiles the old app left behind: for each named scenario, every entry it
-/// wrote under a disposable profile (Documents/ and Support/), recorded once
-/// from that app. `{profile}` in a file stands for the profile's path.
+/// Profiles in the existing on-disk format: for each named scenario, every
+/// entry written under a disposable profile (Documents/ and Support/),
+/// recorded once. `{profile}` in a file stands for the profile's path.
 const _receipts = 'test/fixtures/legacy/v1_repertoire_receipts.json';
 
-/// Writes the entries the old app left in [scenario] into [profile].
+/// Writes the entries recorded for [scenario] into [profile].
 Future<void> restoreLegacyProfile(Directory profile, String scenario) async {
   final all =
       jsonDecode(await File(_receipts).readAsString()) as Map<String, Object?>;

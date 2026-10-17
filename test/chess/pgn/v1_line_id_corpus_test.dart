@@ -1,11 +1,11 @@
-/// The old app's game places and line ids for generated chapters, recorded
-/// once before source retirement (the fixture generator remains in Git history)
-/// and checked here without importing it, so P7 and P9 still hold after the
-/// old app is gone. Each entry is a chapter's text, the place of the old
-/// app's game each game starts, the old app's id for each of its own games,
-/// and the games whose ids are excused: those it cuts at an `[Event ` line
+/// Game places and line ids for generated chapters as existing training
+/// progress keys them, recorded once from the reader that first wrote that
+/// progress (the fixture generator remains in Git history), so P7 and P9
+/// keep holding. Each entry is a chapter's text, the place in that reading
+/// each game starts at, the recorded id for each game of that reading, and
+/// the games whose ids are excused: those it cuts at an `[Event ` line
 /// inside a comment, the one documented difference, and later games that
-/// claim an id the cut left taken in only one app.
+/// claim an id the cut left taken in only one reading.
 library;
 
 import 'dart:convert';
@@ -35,12 +35,12 @@ void main() {
     expect(
       entries.any((e) => (e['places']! as List).first != 0),
       isTrue,
-      reason: 'a chapter with a game only the old app has above the first',
+      reason: 'a chapter with a recorded game above its first',
     );
   });
 
   for (final (index, entry) in entries.indexed) {
-    test('chapter $index: games and ids as the old app has them', () {
+    test('chapter $index: games and ids as they were recorded', () {
       final text = entry['text']! as String;
       final places = (entry['places']! as List).cast<int>();
       final oldIds = (entry['ids']! as List).cast<String?>();

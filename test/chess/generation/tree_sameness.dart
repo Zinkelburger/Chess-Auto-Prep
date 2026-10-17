@@ -15,7 +15,7 @@ typedef TreeBranch = ({
 ///
 /// Moves are matched by UCI rather than by position in the list, because a
 /// file says which moves a node has but not the order a reader must return
-/// them in — the old app sorts what it reads. Where the order is part of the
+/// them in. Where the order is part of the
 /// answer, at one of our nodes, [OurNode.chosen] is checked directly.
 void expectSameTree(
   SearchNode actual,

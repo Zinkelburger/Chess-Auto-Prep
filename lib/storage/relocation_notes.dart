@@ -12,8 +12,7 @@
 /// two paths, because a machine can also stop *before* the rename: then the
 /// chapter is still at the old path and rewriting the rows to the new one
 /// would point them at a file that never existed. [observeMove] is what tells
-/// the two apart, the way the old app tells them apart in
-/// `repertoire_directory_mutations.dart`.
+/// the two apart.
 library;
 
 import 'dart:io';
@@ -293,7 +292,7 @@ final class MoveUnclear extends MoveVerdict {
   final String detail;
 }
 
-/// A path could not be looked at just now (another app holds it, or it
+/// A path could not be looked at just now (another process holds it, or it
 /// changed while being read). The note stays for the next start.
 final class MoveNotObserved extends MoveVerdict {
   const MoveNotObserved(this.detail);

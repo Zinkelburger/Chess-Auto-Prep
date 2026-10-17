@@ -3,8 +3,8 @@ import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  // Old app builds filed a Lichess game under its bare id, as Lichess's own
-  // GameId header writes it; both apps still count those games as done.
+  // Older sets file a Lichess game under its bare id, as Lichess's own
+  // GameId header writes it; those games still count as done.
   final bare = analyzedIn(withAnalyzed('', {'AbCd1234'}));
 
   test('a bare Lichess id names the game at its address', () {

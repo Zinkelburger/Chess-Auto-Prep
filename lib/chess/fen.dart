@@ -40,7 +40,7 @@ extension type const Fen(String value) {
 const _fnvOffset = -3750763034362895579; // 0xcbf29ce484222325 as signed
 const _fnvPrime = 1099511628211;
 
-/// The key the old app's databases file a position under: 64-bit FNV-1a
+/// The key existing databases file a position under: 64-bit FNV-1a
 /// over [Fen.position], the same sum its importers and the Python tools
 /// take, so a row they wrote is found. Two roads to one position share it.
 ///

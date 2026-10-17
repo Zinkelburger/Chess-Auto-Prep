@@ -29,14 +29,14 @@ import 'save_preparation.dart';
 
 /// The documents root as files on disk.
 ///
-/// Every mutation runs under the directory lock the old app also takes, so the
-/// two apps cannot write one folder at once, and publishes through the atomic
+/// Every mutation runs under the directory lock, so two processes cannot
+/// write one folder at once, and publishes through the atomic
 /// writer, so a reader never sees half a document. Every access first holds
 /// the shared recovery domain and settles known relocation notes or refuses.
 /// The native probe takes bytes and hash from one open handle.
 ///
-/// What that does and does not promise. Against the old app and against
-/// another copy of this one, which take the same lock, a mutation is
+/// What that does and does not promise. Against another copy of this app,
+/// which takes the same lock, a mutation is
 /// exclusive and neither side can lose the other's write. Against a program
 /// that does not take the lock — a text editor, a sync client — the file is
 /// read under the lock and the mutation refuses on any change since the

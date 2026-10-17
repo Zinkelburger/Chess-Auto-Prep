@@ -179,9 +179,9 @@ final class Library extends ChangeNotifier {
     });
   }
 
-  /// A folder with one empty chapter in it, which is what the old app makes
-  /// and what every other mode can already open. With no [side] the chapter
-  /// does not say whose it is, and the workspace asks once when it opens.
+  /// A folder with one empty chapter in it, which is what every other mode can
+  /// already open. With no [side] the chapter does not say whose it is, and the
+  /// workspace asks once when it opens.
   Future<LibraryResult> createRepertoire(String name, [Side? side]) =>
       _run('create the repertoire $name', () async {
         if (_named(name) != null) return const LibraryNameTaken();

@@ -8,10 +8,10 @@ import 'analyzed_games.dart';
 import 'mining.dart';
 import 'mistake_counts.dart';
 
-/// Adding mined puzzles to a tactics set, in exactly the text the old app
-/// writes, so each app reads what the other mined.
+/// Adding mined puzzles to a tactics set, in exactly the text existing set
+/// files carry, so new puzzles and old ones read alike.
 
-/// One puzzle as its game in the set: the old app's headers in its order,
+/// One puzzle as its game in the set: the set format's headers in order,
 /// each written only when it says something, a blank line, then the note as
 /// a comment before the answer.
 ///
@@ -120,7 +120,7 @@ ChapterLine? _lineOf(String text) {
   );
 }
 
-/// The old app's spacing for what was added: a blank line after every game
+/// The set format's spacing for what was added: a blank line after every game
 /// but the last, which ends the file with one newline. The games before
 /// [kept] keep the space they had.
 List<ChapterLine> _spaced(List<ChapterLine> lines, int kept) => [

@@ -31,8 +31,8 @@ final class TreeDecoded extends TreeReadResult {
   final bool complete;
 }
 
-/// A tree this search cannot value: an older format, or one of the other
-/// algorithms the old app has. [reason] is plain English for the user.
+/// A tree this search cannot value: an older format, or one built by
+/// another search algorithm. [reason] is plain English for the user.
 final class TreeUnsupported extends TreeReadResult {
   const TreeUnsupported(this.reason);
 
@@ -131,9 +131,8 @@ final class _Reader {
   /// position's whole set of replies before any of them is evaluated, so
   /// every tree a pause, a cancellation or a node budget left behind ends in
   /// nodes that were reached but never scored. That is unfinished work rather
-  /// than a broken file: such a node is read as the frontier it is, at the
-  /// neutral score the old app's own backup gives it, with the whole [0, 1]
-  /// interval still open below it.
+  /// than a broken file: such a node is read as the frontier it is, at a
+  /// neutral score, with the whole [0, 1] interval still open below it.
   SearchNode? read(Map<String, Object?> json, int depth) {
     if (depth > _plyLimit) {
       _fail(
@@ -448,8 +447,8 @@ String? unsupportedTreeReason(
         'and only version $treeWireVersion can be read';
   }
   // The flag on the root is what tells the two searches apart, and it is what
-  // the old app itself checks before resuming a build; the version number
-  // beside it is a label that some writers leave off.
+  // decides whether a build can be resumed; the version number beside it is a
+  // label that some writers leave off.
   final algorithm = config['algorithm_version'];
   if (tree['history_aware'] != true ||
       (algorithm != null &&
@@ -488,8 +487,8 @@ String? unsupportedTreeReason(
 }
 
 /// The search the document says it was built by. The side and the horizon are
-/// already known to be there; the rest default, because the C builder and the
-/// old app each leave out what their mode does not use.
+/// already known to be there; the rest default, because each writer of this
+/// format leaves out what its mode does not use.
 SearchConfig configFromSnapshot(Map<String, Object?> config) {
   final side = config['play_as_white'] == true ? Side.white : Side.black;
   final defaults = SearchConfig(side: side);

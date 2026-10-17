@@ -494,8 +494,8 @@ final class FileRelocations {
   }
 
   /// [finish] under the locks of the folders [record] changes, as its
-  /// command took them, so a writer that takes only a folder's lock, as the
-  /// old app's save does, never runs beside it. The Documents root and
+  /// command took them, so a writer that takes only a folder's lock, as a
+  /// save does, never runs beside it. The Documents root and
   /// Support are the caller's.
   Future<T> _locked<T>(RelocationRecord record, Future<T> Function() action) =>
       lockedForFolders(
@@ -606,7 +606,7 @@ final class FileRelocations {
   }
 
   /// Keeps what the training files held before the move replaces them, in
-  /// `.cap-reference-history/<id>/`, where the old app keeps them too.
+  /// `.cap-reference-history/<id>/`, beside what earlier moves kept.
   Future<void> _keepTraining(RelocationRecord record) async {
     final folder = Directory(
       p.join(documents.path, '.cap-reference-history', record.id),

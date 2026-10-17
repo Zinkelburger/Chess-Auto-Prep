@@ -143,7 +143,7 @@ TrainingLine _lineOf(
 /// The plies of [moves] a quiz asks: from the first move marked
 /// `[%tstart]` up to and including the first marked `[%tend]`, the whole
 /// line where a marker is missing. An end marked before the start would
-/// leave nothing to ask, so it is not taken, as the old app did not take it.
+/// leave nothing to ask, so it is not taken.
 ({int start, int end}) quizWindow(List<MoveNode> moves) {
   int? first(String marker) {
     final at = moves.indexWhere((move) => hasToken(move.comment, marker));

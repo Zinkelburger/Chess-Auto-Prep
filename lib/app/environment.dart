@@ -346,7 +346,7 @@ final class AppEnvironment {
   /// leftovers it may delete; null in tests that do not measure.
   final StoragePlaces? storage;
 
-  /// The old app's database of the user's games, `app_games.db`.
+  /// The existing database of the user's games, `app_games.db`.
   final GameStore gameStore;
 
   /// Where the user's own games are downloaded from.
@@ -356,8 +356,8 @@ final class AppEnvironment {
   final AccountStore accounts;
   final ProgressFiles progressFiles;
 
-  /// The games the old app already mined for puzzles; null when the file is
-  /// there and could not be read.
+  /// The games already mined for puzzles before the sets recorded them
+  /// themselves; null when the file is there and could not be read.
   final Future<Set<String>?> Function() olderAnalyzed;
 
   /// The human-move model: the Replies tab, the gaps and the fill.
@@ -378,8 +378,7 @@ final class AppEnvironment {
   /// Quits every engine; the way out waits for it.
   final Future<void> Function() stopEngines;
 
-  /// The engine's verdicts, shared with the old app, opened the first time
-  /// a fill asks.
+  /// The engine's stored verdicts, opened the first time a fill asks.
   final EvalCache Function() evalCache;
 
   /// What the searches point out, kept between runs, opened the first time

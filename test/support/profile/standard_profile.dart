@@ -1,5 +1,5 @@
 // The standard synthetic profile the storage contracts run on: a little of
-// everything a real one holds, in the shapes both apps write, so an operation
+// everything a real one holds, in the shapes on disk, so an operation
 // on one part can be checked for what it does to all the others.
 //
 // - repertoires: KID with chapter files and a course file whose chapters are

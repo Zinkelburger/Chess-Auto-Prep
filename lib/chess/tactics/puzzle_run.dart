@@ -7,8 +7,8 @@ enum Outcome { solved, failed }
 /// One sitting of puzzles: the order they come in, which have been on the
 /// board, and how each went. A value; each step returns the next run.
 ///
-/// Puzzles are named by their position, as the old app names them, so a run
-/// survives the set's file being written by the other app in between.
+/// Puzzles are named by their position, so a run survives the set's file
+/// being rewritten in between.
 final class PuzzleRun {
   const PuzzleRun({
     required this.queue,

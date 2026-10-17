@@ -98,9 +98,9 @@ void main() {
     },
   );
 
-  test('a line moves past the blank line the old app leaves behind', () async {
-    // The old app writes the header and a blank line once the last review
-    // it rewrites is gone.
+  test('a line moves past a blank line left behind', () async {
+    // Existing files can hold the header and a blank line once the last
+    // review in them is gone.
     String reviews(String path, String id) =>
         '$reviewsHeader\n\n$path,$id,Mainline,2.50,6.00,'
         '2026-09-20T00:00:00.000Z,good,2026-09-14T00:00:00.000Z,3,1,false\n';

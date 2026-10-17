@@ -32,7 +32,7 @@ final class PlayedGame {
   /// Where the game is in the file it was read from, counting from zero.
   final int index;
 
-  /// The id both apps file it under, or empty when it has none.
+  /// The id the game is filed under, or empty when it has none.
   final String id;
 
   /// The side the user played.

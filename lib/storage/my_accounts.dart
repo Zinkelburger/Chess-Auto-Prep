@@ -8,12 +8,12 @@ import '../diagnostics/log.dart';
 /// The user's Lichess and Chess.com usernames and when each account's games
 /// last came down.
 ///
-/// The same SharedPreferences keys the old app keeps them under, so a
-/// username typed in either app is the one both download for. The two apps
+/// The SharedPreferences keys existing profiles keep them under, so a
+/// username typed before is still the one downloaded for. Two processes
 /// must not run at once on one profile: the preferences plugin reads the
 /// whole file once per process and writes its whole cached map on every
-/// save, so each app's next save would put back the values it started
-/// with, the other app's changes lost. The desktop runner keeps one
+/// save, so each one's next save would put back the values it started
+/// with, the other's changes lost. The desktop runner keeps one
 /// instance per session, which is what prevents that; forcing a second
 /// one (`CHESS_AUTO_PREP_NEW_INSTANCE=1`) on the real profile is not safe.
 const _usernameKeys = {

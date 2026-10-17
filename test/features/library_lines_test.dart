@@ -81,9 +81,10 @@ void main() {
     expect(fixture.session.chapter!.lines.length, 1);
   });
 
-  test('a line whose headers the old app ends early moves as it is', () async {
-    // The bare backslash ends the old app's header block: no id header both
-    // apps read can go above it, so the line moves carrying what it had.
+  test('a line whose header block ends early moves as it is', () async {
+    // The bare backslash ends the header block existing ids were worked out
+    // from: no id header can go above it, so the line moves carrying what it
+    // had.
     const wild = '''
 // Main
 // Color: White

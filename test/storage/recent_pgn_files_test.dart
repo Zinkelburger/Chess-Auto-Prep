@@ -15,7 +15,7 @@ void main() {
   tearDown(() => folder.delete(recursive: true));
 
   test(
-    'the list is read under the old app\'s key, without files that are gone',
+    'the list is read under its existing key, without files that are gone',
     () async {
       final here = p.join(folder.path, 'here.pgn');
       await File(here).writeAsString('*\n');

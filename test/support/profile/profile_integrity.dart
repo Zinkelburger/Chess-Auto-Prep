@@ -1,4 +1,4 @@
-// What a profile's references resolve to, read with v2's own readers
+// What a profile's references resolve to, read with the app's own readers
 // (parseChapter, trainedIdsOf, chapterSections): training keys and book
 // selectors that name nothing, and every game the profile holds anywhere, so
 // a contract can say whether an operation orphaned a reference or lost a

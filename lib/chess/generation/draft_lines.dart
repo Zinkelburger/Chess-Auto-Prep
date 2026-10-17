@@ -404,7 +404,7 @@ final class _Branch {
 
 /// An expected score as the centipawns it stands for, in pawns with a sign:
 /// `+0.42`, `-1.20`. The inverse of [expectedScore], capped short of a mate,
-/// as the old app wrote `[%expectimax]`.
+/// as existing chapters carry `[%expectimax]`.
 String expectimaxText(double value) {
   const cap = mateSaturationCp - 1;
   final int cp;

@@ -42,12 +42,14 @@ void main() {
     await harnessFolder.delete(recursive: true);
   });
 
-  // The old app took the same domain lock around every repertoire operation;
-  // its holder here takes that lock directly, as it did.
+  // The 'old app' holder stands for an outside process that takes the
+  // domain's directory lock directly around a repertoire operation and
+  // leaves `repertoire-mutations` receipts; the 'v2' holder goes through the
+  // app's own gate.
   for (final holder in ['old app', 'v2']) {
     final folder = holder == 'v2' ? 'unfinished-moves' : 'repertoire-mutations';
     test(
-      '$holder child domain excludes v2 through a canonical alias',
+      '$holder child domain excludes the app through a canonical alias',
       () async {
         final child = await _hold(harness, holder, alias, support, false);
         addTearDown(child.close);
@@ -75,7 +77,7 @@ void main() {
     );
 
     test(
-      'killing $holder releases the domain and v2 keeps working',
+      'killing $holder releases the domain and the app keeps working',
       () async {
         final child = await _hold(harness, holder, documents, support, true);
         addTearDown(child.close);
@@ -84,7 +86,7 @@ void main() {
         expect(child.process.kill(ProcessSignal.sigkill), isTrue);
         await child.process.exitCode.timeout(const Duration(seconds: 10));
         // A damaged leftover is logged or set aside, never a reason to
-        // refuse access; the old app's leftover is its owner's to finish.
+        // refuse access; a `repertoire-mutations` leftover is not finished.
         final reading = RecoveryGate(
           documents: alias,
           support: support,
@@ -106,7 +108,7 @@ void main() {
       timeout: const Timeout(Duration(seconds: 60)),
     );
     test(
-      'killed $holder landed move leaves v2 working; v2 finishes only its own',
+      'killed $holder landed move leaves the app working; it finishes only its own',
       () async {
         final from = p.join(documents.path, 'repertoires', 'Old', 'Main.pgn');
         final to = p.join(documents.path, 'repertoires', 'New', 'Main.pgn');
@@ -150,8 +152,9 @@ void main() {
           );
         }
         if (holder != 'v2') {
-          // The old app's move is its owner's to finish: v2 reads on and
-          // leaves the receipt and the progress it names untouched.
+          // A `repertoire-mutations` move is not the app's to finish: it
+          // reads on and leaves the receipt and the progress it names
+          // untouched.
           final foreignRead = await TrainingStore(
             documents,
             support: support,
@@ -284,8 +287,8 @@ final class _Child {
   }
 }
 
-// Real separate Dart VM process holding the domain: v2 through its gate, the
-// old app through the same directory lock it took. The malformed retained
+// Real separate Dart VM process holding the domain: the app through its gate,
+// the other holder through the directory lock alone. The malformed retained
 // note models a crash during metadata publication: neither may interpret it
 // as no pending operation. No new recovery format is created.
 const _harness = r'''

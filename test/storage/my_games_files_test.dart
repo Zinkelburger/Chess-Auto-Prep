@@ -1,6 +1,6 @@
 // What the review of the user's games writes, through the real store: the
 // puzzles and the analysed-games line into the tactics set, and the games
-// into the old app's cache.
+// into the existing cache files.
 import 'dart:io';
 
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
@@ -85,7 +85,7 @@ void main() {
       ),
     );
 
-    test('is the old app\'s file, named by site and username', () {
+    test('is the existing file, named by site and username', () {
       expect(
         p.basename(cache.refFor(GameSite.chesscom, 'Big.Man').path),
         'chesscom_big_man.pgn',
@@ -454,7 +454,7 @@ void main() {
     });
   });
 
-  test('the old app\'s separate list of analysed games is read', () async {
+  test('an older separate list of analysed games is read', () async {
     expect(await readOlderAnalyzed(fixture.documents), isEmpty);
     await File(
       p.join(fixture.documents.path, 'analyzed_games.txt'),

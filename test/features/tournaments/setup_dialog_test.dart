@@ -52,8 +52,7 @@ void main() {
     expect(find.text('Use a legal starting FEN.'), findsNothing);
   });
 
-  testWidgets('sudden death is saved without movesPerSession, as v1 writes '
-      'it', (tester) async {
+  testWidgets('sudden death is saved without movesPerSession', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1100, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
@@ -89,7 +88,7 @@ void main() {
       return (await config)!.json['timeControl']! as Map<String, Object?>;
     }
 
-    // A run an older v2 wrote with 0, configured again.
+    // A run an older build wrote with 0, configured again.
     final older = await started(
       previous: TournamentConfig({
         'name': 'Older run',

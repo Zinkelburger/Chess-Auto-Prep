@@ -129,8 +129,8 @@ final class TrainingWriter {
     return observed.bytes;
   }
 
-  /// The first write to a file keeps a `<file>.pre-csv-v2.bak` copy of it, as
-  /// the old app does before it rewrites a file in the newer format.
+  /// The first write to a file keeps a `<file>.pre-csv-v2.bak` copy of it,
+  /// the bytes from before it is rewritten in the quoted format.
   Future<void> _keepFirstVersion(String name, Uint8List? before) async {
     if (before == null || name == attemptsFile) return;
     final path = p.join(documents.path, '$name.pre-csv-v2.bak');

@@ -239,13 +239,12 @@ final class FileTree extends ChangeNotifier implements LocalGames {
   }
 }
 
-/// `My games`: every game of the user's that is on this machine, as one
-/// tree. The files the downloads keep, `games_library/<site>_<user>.pgn`
-/// (what My games and Tactics read, and what the old app treats as the
-/// truth), and in the old app's games database the same accounts' library
-/// and Player analysis collections and its tactics archive. A game in more
-/// than one of them counts once. Newest first, so the games list under the
-/// table starts with the latest.
+/// `My games`: every game of the user's that is on this machine, as one tree.
+/// The files the downloads keep, `games_library/<site>_<user>.pgn` (what My
+/// games and Tactics read), and in the `app_games.db` games database the same
+/// accounts' library and Player analysis collections and its tactics archive. A
+/// game in more than one of them counts once. Newest first, so the games list
+/// under the table starts with the latest.
 ///
 /// Read the first time the explorer asks, and again after [forget] — a
 /// download or a changed username. A database that cannot be read leaves

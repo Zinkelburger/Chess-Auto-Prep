@@ -3,7 +3,7 @@ import 'compound_commit.dart';
 import 'edit_scope.dart';
 import 'training_records.dart';
 
-/// The one way `v2` writes a PGN file. The filesystem is a real boundary, so
+/// The one way the app writes a PGN file. The filesystem is a real boundary, so
 /// this is an interface: [PgnFileStore] in the app, a scripted one in tests.
 ///
 /// Every mutation names the [Revision] the caller last read. If the bytes on
@@ -84,8 +84,8 @@ abstract interface class PgnDocumentStore {
     String? operationId,
   });
 
-  /// Moves [ref] into the recovery folder the old app also deletes into, so
-  /// the user has one place to look and nothing is unlinked.
+  /// Moves [ref] into the recovery folder beside it, where earlier deletes
+  /// already are, so the user has one place to look and nothing is unlinked.
   Future<DeleteResult> delete(
     DocumentRef ref, {
     required Revision expected,

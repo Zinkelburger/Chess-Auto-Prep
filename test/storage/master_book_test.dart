@@ -147,7 +147,7 @@ void main() {
     expect(found.answer.games.map((g) => g.id), ['2']);
   });
 
-  test('classical only on a book whose classical index the old app has '
+  test('classical only on a book whose classical index is '
       'not built says so; every game still answers, and a book with no '
       'marker counts as built', () async {
     final db = sqlite3.open(p.join(folder.path, 'master_games.db'));
@@ -237,7 +237,7 @@ void main() {
     );
   });
 
-  test('the key is the old app\'s FNV-1a over the four position fields', () {
+  test('the key is the FNV-1a over the four position fields', () {
     // The counters are not part of the position.
     expect(
       positionKey(const Fen('8/8/8/8/8/8/8/K6k w - - 5 40')),

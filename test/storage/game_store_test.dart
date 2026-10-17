@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
 
-/// The old app's `games` table, as its schema version 2 creates it.
+/// The `games` table of an existing `app_games.db`, schema version 2.
 const _gamesTable = '''
   CREATE TABLE games(
     id INTEGER PRIMARY KEY,
@@ -41,7 +41,7 @@ void insert(
   [collection, key, '{}', pgn, playedAt],
 );
 
-/// A database at [path] in the old app's shape, in [journal] mode, with
+/// A database at [path] in the existing file's shape, in [journal] mode, with
 /// three games: two in `tactics`, one in a library collection.
 Database create(String path, {String journal = 'WAL'}) {
   final db = sqlite3.open(path)
@@ -90,7 +90,7 @@ void main() {
     expect(keys(await store.read({})), isEmpty);
   });
 
-  test('reading while the old app is writing sees what it committed', () async {
+  test('reading while another process writes sees what it committed', () async {
     final writer = create(path);
     addTearDown(writer.close);
     writer.execute('BEGIN IMMEDIATE');
@@ -126,7 +126,7 @@ void main() {
     expect(read, isA<StoredGamesUnreadable>());
   });
 
-  test('a frozen schema-1 file from the old app reads with its PGN whole '
+  test('a frozen schema-1 file reads with its PGN whole '
       'and stays unchanged', () async {
     sqlite3.open(path)
       ..execute(
@@ -166,7 +166,7 @@ void main() {
     expect((read as StoredGamesFound).skipped, 2);
   });
 
-  test('collections are named as the old app names them', () {
+  test('collections keep the names existing databases file them under', () {
     expect(
       GameCollections.library(GameSite.lichess, 'Bob'),
       'library:lichess_bob',

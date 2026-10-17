@@ -175,7 +175,7 @@ final class BughouseLab extends ChangeNotifier {
     }
   }
 
-  /// Both boards' moves as the lab copies them (see [tableLineText]).
+  /// Both boards' moves as the mode copies them (see [tableLineText]).
   String get movesText => tableLineText(_line);
 
   /// Pasted movetext as a new line, every move played; refused whole when

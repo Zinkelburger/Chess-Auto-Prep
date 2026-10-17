@@ -1,5 +1,6 @@
-// The lock the old app and v2 share. The protocol is written out again here,
-// so a change to either side of it fails this test rather than a user's save.
+// The directory lock every copy and earlier build of the app takes. The
+// protocol is written out again here, so a change to it fails this test
+// rather than a user's save.
 import 'dart:async';
 import 'dart:io';
 
@@ -62,7 +63,7 @@ void main() {
     expect(await withDirectoryLock(folder, () async => 'ran'), 'ran');
   });
 
-  test('the lock file is the one the old app takes', () async {
+  test('the lock file is the one earlier builds take', () async {
     await withDirectoryLock(fixture.documents, () async {
       expect(await File(await lockPathOf(fixture.documents)).exists(), isTrue);
     });
@@ -72,8 +73,8 @@ void main() {
       'through', () async {
     final ref = fixture.ref('KID/Main.pgn');
     final revision = await fixture.put(ref, 'A *\n');
-    // The old app locks the documents root to rename a chapter, so v2 has
-    // to take the same lock or the two would move one file at once.
+    // Another copy of the app locks the documents root to rename a chapter,
+    // so a rename takes the same lock or the two would move one file at once.
     final other = sqlite3.open(await lockPathOf(fixture.documents));
     other.execute('PRAGMA busy_timeout = 0');
     other.execute('BEGIN IMMEDIATE');
@@ -149,5 +150,5 @@ final class _SlowToLookUp implements Directory {
   Object? noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-/// The old app's formula: `<system temp>/chess-auto-prep-file-locks/` and the
+/// The lock path: `<system temp>/chess-auto-prep-file-locks/` and the
 /// FNV-1a of the resolved absolute directory path.

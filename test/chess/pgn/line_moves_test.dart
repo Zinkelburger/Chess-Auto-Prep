@@ -139,10 +139,10 @@ void main() {
     expect(texts(onDisk(after.chapter)), texts(after.chapter));
   });
 
-  test('a line whose id header the old app does not read arrives as it is', () {
-    // The old app ends the header block at the bare backslash, so neither
-    // app trains the line under its [LineID], and no header both apps read
-    // can go where that one is.
+  test('a line whose id header is past its header block arrives as it is', () {
+    // The stricter reading existing ids were worked out with ends the header
+    // block at the bare backslash, so the line is not trained under its
+    // [LineID], and no id header can go where that one is.
     final source = oneGame(
       '[Event "Moved"]\n'
       '[Annotator "c:\\games"]\n'

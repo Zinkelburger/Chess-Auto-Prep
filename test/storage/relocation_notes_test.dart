@@ -229,7 +229,7 @@ void main() {
       final third = await chapter(slav);
       writeRows([kid, benko, slav]);
 
-      // An older supported v2 build left its original four-field note after
+      // An older build left its original four-field note after
       // moving the PGN. The new owner must finish that protocol before starting.
       final moved = fixture.ref('repertoires/KID/A.pgn');
       final identity = await identityOf(kid);
