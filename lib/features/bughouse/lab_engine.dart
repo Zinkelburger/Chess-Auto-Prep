@@ -246,8 +246,7 @@ final class LabEngine extends ChangeNotifier {
       if (!wanted()) return;
       // Question order, so the team shown comes first for the score.
       final found = {
-        for (final question in questions)
-          if (latest[question.team] case final answer?) question.team: answer,
+        for (final question in questions) question.team: ?latest[question.team],
       };
       final offset = _offset(found, clock);
       final shown = [
