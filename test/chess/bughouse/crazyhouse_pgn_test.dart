@@ -67,15 +67,30 @@ void main() {
     expect(replayed(pgn), ['e8=N', 'P@b6']);
   });
 
-  test('a drop crazyhouse would not allow starts the PGN again before it', () {
-    // The knight Black drops came from a hand edit, which no PGN can say.
+  test('hand edits are comments in a line copied whole from the start', () {
+    // The knight Black drops came from a hand edit: Lichess stops there, but
+    // the copy keeps every move from the start.
     var line = playedLine('1e2e4');
     line = line.edited(BoardNumber.one, Side.black, Role.knight, 1);
-    line = playedLine('1N@f6 1g1f3', line);
-    final pgn = crazyhouseLinePgn(line, BoardNumber.one, 3);
-    expect(pgn, contains('[FEN "'));
-    expect(pgn, contains('[n]'));
-    expect(pgn, endsWith('1... N@f6 2. Nf3 *'));
-    expect(replayed(pgn), ['N@f6', 'Nf3']);
+    line = line.edited(BoardNumber.one, Side.white, Role.pawn, 1);
+    line = line.edited(BoardNumber.one, Side.white, Role.bishop, 1);
+    line = playedLine('1N@f6 1g1f3 1b7b6', line);
+    expect(
+      crazyhouseLinePgn(line, BoardNumber.one, 4),
+      '[Variant "Crazyhouse"]\n\n'
+      '1. e4 { +P +B +n } 1... N@f6 2. Nf3 b6 *',
+    );
+  });
+
+  test('an edit before the first move comes first', () {
+    const start = TableLine(TablePosition.initial);
+    final line = playedLine(
+      '1P@e4',
+      start.edited(BoardNumber.one, Side.white, Role.pawn, 2),
+    );
+    expect(
+      crazyhouseLinePgn(line, BoardNumber.one, 1),
+      '[Variant "Crazyhouse"]\n\n{ +2P } 1. P@e4 *',
+    );
   });
 }
