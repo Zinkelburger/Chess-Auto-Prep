@@ -113,7 +113,6 @@ ImportRead readImport(String text, {required DateTime created}) {
         text: _chapterText(
           title: group.title,
           side: side,
-          course: group.course,
           created: created,
           games: written.text,
         ),
@@ -157,12 +156,9 @@ ChapterLine _pinned(ChapterLine line, String? id) =>
     id == null || line.lineId == id ? line : withIdHeader(line, id) ?? line;
 
 /// The `//` heading every chapter file carries, then the games.
-/// `// Chapter:` names the course chapter a file is, as existing course
-/// files mark it.
 String _chapterText({
   required String title,
   required Side? side,
-  required bool course,
   required DateTime created,
   required String games,
 }) {
@@ -170,7 +166,6 @@ String _chapterText({
   if (side != null) {
     heading.write('// Color: ${side == Side.white ? 'White' : 'Black'}\n');
   }
-  if (course) heading.write('// Chapter: $title\n');
   heading.write('// Created on ${created.toString().split('.').first}\n\n');
   return '$heading$games';
 }
@@ -198,12 +193,9 @@ final class _Game {
 // ---------------------------------------------------------------------------
 
 final class _Group {
-  _Group(this.title, {required this.course}) : games = [];
+  _Group(this.title) : games = [];
 
   final String title;
-
-  /// Whether the title is a course chapter's, which the heading records.
-  final bool course;
 
   final List<_Game> games;
 
@@ -236,10 +228,7 @@ _Grouping _grouping(List<_Game> games) {
   final grouping = groupChapters([for (final game in games) game.read.tags]);
   final groups = <String, _Group>{};
   for (final (index, title) in grouping.titles.indexed) {
-    groups
-        .putIfAbsent(title, () => _Group(title, course: grouping.hasChapters))
-        .games
-        .add(games[index]);
+    groups.putIfAbsent(title, () => _Group(title)).games.add(games[index]);
   }
   return _Grouping(
     groups.values.toList(),

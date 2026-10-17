@@ -187,9 +187,9 @@ time.
   folders and `*_raw_games.pgn` are skipped. A `.pgn` directly under
   `repertoires/` is moved to `<name>/Main.pgn` when the list is read.
 - A chapter file starts with a `//` heading: `// <name>`,
-  `// Color: White|Black`, `// Chapter: <title>` (import), `// Created on
-  <date time>`, `// Root: 1. e4 e5 2. f4` when it starts after moves, and
-  `// Draft` for a proposed chapter. Then one game per line.
+  `// Color: White|Black`, `// Created on <date time>`, `// Root: 1. e4 e5
+  2. f4` when it starts after moves, and `// Draft` for a proposed chapter.
+  Then one game per line.
 - A course file holds several chapters, each game naming its chapter in
   `[ChapterName]`; an untagged file is one chapter. A chapter is identified by
   (path, section).
