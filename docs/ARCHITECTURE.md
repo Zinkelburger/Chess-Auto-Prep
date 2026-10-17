@@ -26,7 +26,7 @@ never has its own board or move tree.
 | Tactics, My games | A puzzle session or your games against your book, on the shared board |
 | Player analysis, Players & prep | Opponents, prep studies, tournaments; games open in the workspace |
 | Databases | Master games (TWIC, imports) and storage use |
-| Engine tournament, Bughouse lab | Their own screens on the same engine supervisor |
+| Engine tournament, Bughouse | Their own screens on the same engine supervisor |
 
 ## Layout and imports
 
@@ -267,7 +267,7 @@ guarded file replacement for formats that must stay files.
 | Tactics | Puzzle PGN, review fields, analyzed-game markers | Puzzle queue, mining |
 | My games | Account usernames | Downloaded games cache, opening index, book comparison |
 | Generation and checks | Draft chapters written | Search trees, finds, gaps, coverage, evaluations |
-| Bughouse | Saved matches and saved analysis with provenance | Live search, archive queries |
+| Bughouse | Nothing: the table is a session scratchpad | The table, live search |
 | Settings and accounts | Nothing irreplaceable: defaults are always a valid start | Form state, connection status |
 
 ### What the user can rely on

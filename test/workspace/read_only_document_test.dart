@@ -8,9 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/fixtures.dart';
 import '../support/session_fixture.dart';
 
-const _notUtf8 =
-    'this file is not UTF-8; open and save it in the old app to convert it, '
-    'then edit it here';
+const _notUtf8 = 'the file is not UTF-8, so it is left untouched';
 
 void main() {
   late SessionFixture fixture;

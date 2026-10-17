@@ -52,7 +52,8 @@ list. When a spec gains a *Not built* item, add a row here.
 | Scid export | **Deferred** | No writer in `lib/`; the specification and C++ oracle are in [SCID_FORMAT_FINDINGS.md](SCID_FORMAT_FINDINGS.md) and `tools/scid_reference/` |
 | Resume a stopped tournament | **Not started** | `TournamentRun` has no resume; `Run again` starts a new folder |
 | Tournament setup gaps | **Not started** | No opening-label field (`setup_dialog.dart`; only the headless `--opening`), no pondering (always `ponder: false`), history rows lack time control, start time and duration (`history_list.dart`) |
-| Bughouse match extras | **Not started** | No crosstable (`match_panel.dart` shows the opening score); no start from a typed line (`new_match_dialog.dart`) |
+| Frozen partner board for one-board bughouse | **Not started** | The desktop Hivemind is unpatched, so a one-board search may still move on the partner board; the website's build has `tools/bughouse_web/patches/frozen-board.patch` ([spec](features/bughouse.md)) |
+| Bughouse sit panel | **Not started** | The website's "wait for a piece" rows; not in `lib/features/bughouse/` |
 
 ## Settings, accounts and release
 
@@ -67,15 +68,3 @@ list. When a spec gains a *Not built* item, add a row here.
 | Immutable release publication | **Not started** | `softprops/action-gh-release` publishes directly; no draft-then-verify step or release immutability |
 | Engine cleanup proof off Linux | **Partial** | Engines exit when the app is killed because their pipes close (`engines/uci_process.dart`); `test/engines/stockfish_exit_test.dart` proves it on Linux only |
 | Performance budgets | **Not started** | `scripts/ci.sh profile` and `test_driver/renewal_profile_driver.dart` remain, but no integration target measures the current app; no corpus sizes or latency/memory budgets are defined |
-
-## Known defects
-
-Shipped behaviour that contradicts a rule; fix when touching the area.
-
-| Defect | Where |
-|---|---|
-| Messages tell users to "open and save it in the old app", which no longer exists | `storage/document_text.dart` (compressed and non-UTF-8 chapters), `workspace/edit_strip.dart` (`LineNotWhole`) |
-| CrazyAra error names a "Bughouse Lab setup guide" that does not exist | `engines/engine_supervisor.dart`; install notes are in [ALGORITHM.md](ALGORITHM.md#bughouse-expectimax) and `tools/setup_crazyara.py` |
-| One bad record in `people.json` refuses the whole players directory, against the fail-open rule | `storage/player_files.dart` `PlayerFiles.read` |
-| `Copy session PGN` shows a SnackBar despite the no-snackbar rule | `workspace/solitaire_pane.dart` |
-| MCP tool descriptions overstate the runner: `tournament_stop` says it finishes the game in flight, `tournament_game_pgn` promises eval comments | `tools/mcp/chess_prep/engine_tournament.py` |

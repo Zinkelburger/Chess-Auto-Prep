@@ -43,14 +43,9 @@ profile path. Existing driver sessions retain their old profile until restarted.
 | (external) [Chessable-PGN-Download](https://github.com/Zinkelburger/Chessable-PGN-Download) | Browser extension that saves a Chessable course as the course-shaped PGN this app reads (chapter in `[White]`, line in `[Black]`); lives in its own repository |
 | `packaging/`, `install_linux_desktop.sh` | Release-bundle installers, built by release CI |
 
-Manual overnight population: `python3 tools/bughouse_db/overnight.py start`
-(default 800 nodes, eight cores, eight hours), with `status` and `stop` controls.
-See [the web guide](../../python/twic-position-finder/frontend/README.md#shared-analysis-and-manual-overnight-population).
-
-The app hides Bughouse Lab without the optional bughouse assets. Archive/book
-data lives under `~/.local/share/chess-prep/bughouse-db/`, not repo/assets;
-the lab reads `hivemind_book.db` and `bughouse_book.db` there read only
-(`$BUGHOUSE_DB_HOME` overrides; the headless driver points it into its profile).
+The app hides the Bughouse mode without the optional bughouse assets; it
+reads no bughouse database. Archive/book data for the tools and the website
+lives under `~/.local/share/chess-prep/bughouse-db/`, not repo/assets.
 
 The MCP server and app share files only. The server reads `master_games.db`
 and `app_games.db` read-only and writes its own runs under `~/Documents` and

@@ -104,5 +104,28 @@ void main() {
         'A d4 · C d5 D d4 · sit',
       );
     });
+
+    test('one board\'s part of a line is numbered as that board counts', () {
+      const pv = [
+        JointMove('e2e4', null),
+        JointMove('e7e5', 'd2d4'),
+        JointMove('g1f3', null),
+        JointMove('e5e4', null),
+      ];
+      expect(
+        boardPv(TablePosition.initial, pv, BoardNumber.one),
+        '1. e4 e5 2. Nf3',
+      );
+      expect(boardPv(TablePosition.initial, pv, BoardNumber.two), '1. d4');
+      expect(
+        boardPv(TablePosition.initial, pv.skip(1).toList(), BoardNumber.one),
+        '',
+      );
+      final afterE4 = TablePosition.initial.play(BoardNumber.one, 'e2e4')!;
+      expect(
+        boardPv(afterE4.after, pv.skip(1).toList(), BoardNumber.one, limit: 2),
+        '1... e5 2. Nf3',
+      );
+    });
   });
 }

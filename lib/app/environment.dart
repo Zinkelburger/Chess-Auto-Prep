@@ -16,8 +16,6 @@ import '../engines/analysis_launch.dart';
 import '../storage/settings.dart';
 import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
-import '../engines/bughouse_backend.dart';
-import '../engines/engine.dart';
 import '../engines/hivemind_engine.dart';
 import '../engines/maia/move_policy.dart';
 import '../engines/stockfish_install.dart';
@@ -35,9 +33,6 @@ import '../storage/text_export.dart';
 import '../storage/player_reports.dart';
 import '../storage/saved_players.dart';
 import '../chess/players/player.dart';
-import '../storage/bughouse_books.dart';
-import '../storage/bughouse_expectimax.dart';
-import '../storage/bughouse_matches.dart';
 import '../storage/chapter_files.dart';
 import '../storage/chapter_directory.dart';
 import '../storage/eval_cache.dart';
@@ -74,15 +69,11 @@ typedef AppFolders = ({
   ChapterRef tacticsSet,
 });
 
-/// What the Bughouse lab reaches outside the app: whether this build has
-/// the engine at all, how to start it on so many cores, the two books the
-/// Python tools build, and the matches under `Documents/bughouse_matches`.
+/// What the Bughouse mode reaches outside the app: whether this build has
+/// the engine at all, and how to start it on so many cores.
 typedef BughouseOutside = ({
   Future<bool> Function() bundled,
   Future<HivemindStart> Function({required int cores}) launch,
-  HivemindBook hivemindBook,
-  FicsBook ficsBook,
-  MatchStore matches,
 });
 
 /// Starts a Stockfish with these threads and this table.
@@ -156,8 +147,6 @@ final class AppEnvironment {
     this.viewerDrafts,
     required this.setFullScreen,
     required this.bughouse,
-    this.launchBughouseSearch = _noBughouseSearch,
-    this.bughouseExpectimaxBook,
     this.updates,
     this.now = DateTime.now,
     this.jitter = _noJitter,
@@ -186,13 +175,6 @@ final class AppEnvironment {
     final client = http.Client();
     final engines = EngineSupervisor();
     final maia = MaiaLaunch();
-    final expectimaxBook = BughouseExpectimaxBook(
-      bughouseBookPlaces(
-        'bughouse_expectimax.db',
-        environment: Platform.environment,
-        support: support.path,
-      ).first,
-    );
     final masterGames = p.join(support.path, 'master_games.db');
     final evalCache = EvalCacheOnDemand(support);
     final finds = FindsStoreOnDemand(support);
@@ -201,20 +183,6 @@ final class AppEnvironment {
     final studies = p.join(documents.path, 'studies');
     final collections = p.join(documents.path, 'pgn_collections');
     final dice = Random();
-    final hivemindBook = SqliteHivemindBook(
-      bughouseBookPlaces(
-        'hivemind_book.db',
-        environment: Platform.environment,
-        support: support.path,
-      ),
-    );
-    final ficsBook = SqliteFicsBook(
-      bughouseBookPlaces(
-        'bughouse_book.db',
-        environment: Platform.environment,
-        support: support.path,
-      ),
-    );
     final documentsStore = PgnFileStore(documents: documents, support: support);
     return AppEnvironment(
       folders: (
@@ -316,44 +284,17 @@ final class AppEnvironment {
       savedPlayerList: () =>
           savedPlayers(Directory(p.join(documents.path, 'analysis_games'))),
       setFullScreen: setWindowFullScreen,
-      bughouseExpectimaxBook: expectimaxBook,
-      launchBughouseSearch: (nodes) async {
-        final native = await BughouseBackend.start(
-          crazyara: () => engines.startCrazyara(support.path),
-          hivemind: () =>
-              launchHivemind(support: support, engines: engines, cores: 2),
-          nodes: nodes,
-        );
-        return BughouseBackend(
-          policy: native.policy,
-          identity: native.identity,
-          evaluate: (position, board) => expectimaxBook.evaluate(
-            position,
-            board,
-            nodes,
-            native.identity,
-            native.evaluate,
-          ),
-          close: native.close,
-        );
-      },
       bughouse: (
         bundled: bughouseBundled,
         launch: ({required cores}) =>
             launchHivemind(support: support, engines: engines, cores: cores),
-        hivemindBook: hivemindBook,
-        ficsBook: ficsBook,
-        matches: MatchFolder(p.join(documents.path, 'bughouse_matches')),
       ),
       updates: cache == null ? null : nativeUpdates(client, cache),
       jitter: () => dice.nextDouble() * 2 - 1,
       close: () {
-        expectimaxBook.close();
         evalCache.close();
         finds.close();
         audits.close();
-        hivemindBook.close();
-        ficsBook.close();
         maia.dispose();
         client.close();
         unawaited(engines.dispose());
@@ -473,7 +414,7 @@ final class AppEnvironment {
   /// Puts the window in or out of full screen.
   final Future<void> Function(bool on) setFullScreen;
 
-  /// The Bughouse lab's engine and books.
+  /// The Bughouse mode's engine.
   final BughouseOutside bughouse;
 
   /// GitHub releases, the downloads and the install helper; null where the
@@ -497,9 +438,6 @@ final class AppEnvironment {
 
   /// Closes what this opened: the network, the databases, the engines.
   final void Function() close;
-
-  final Future<BughouseBackend> Function(int nodes) launchBughouseSearch;
-  final BughouseExpectimaxBook? bughouseExpectimaxBook;
 
   /// A Stockfish with the threads and the table the settings give it now.
   Future<EngineStart> startEngine() => launchEngine(
@@ -551,10 +489,9 @@ final class AppEnvironment {
         StartFailed(:final reason) => StartFailed('$notice. $reason'),
       };
 
-  /// Hivemind on half of this machine's cores, as BughouseDB runs it. Not
-  /// the Stockfish setting, which the user may have turned down: a network
-  /// engine on one core takes a minute over what the lab asks in ten
-  /// seconds.
+  /// Hivemind on half of this machine's cores, not the Stockfish setting,
+  /// which the user may have turned down: a network engine on one core
+  /// takes a minute over what it otherwise answers in ten seconds.
   Future<HivemindStart> startHivemind() =>
       bughouse.launch(cores: max(1, coresAvailable ~/ 2));
 }
@@ -624,6 +561,3 @@ StoragePlaces nativeStoragePlaces({
     ],
   );
 }
-
-Future<BughouseBackend> _noBughouseSearch(int nodes) async =>
-    throw const EngineFailure('Bughouse expectimax is unavailable.');

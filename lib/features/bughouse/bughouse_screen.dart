@@ -5,87 +5,72 @@ import 'package:flutter/services.dart';
 
 import '../../ui/app_keys.dart';
 import '../../ui/theme.dart';
-import 'archive_moves.dart';
-import 'board_setup.dart';
 import 'bughouse_lab.dart';
-import 'analysis_panel.dart';
-import 'expectimax_search.dart';
-import 'matches.dart';
-import 'match_panel.dart';
+import 'lab_engine.dart';
+import 'lab_panel.dart';
 import 'table_boards.dart';
-import 'table_search.dart';
 
-/// The Bughouse lab: boards and FICS continuations on the left, compact engine
-/// tables on the right. Position editing is collapsed; Matches is in Actions.
-/// The boards take what the
-/// window leaves, between [labBoardMin] and [labBoardMax].
+/// The Bughouse mode: board 1 alone or both boards on the left, the engine
+/// and (with one board) the moves on the right. The boards take what the
+/// window leaves.
 ///
 /// ← → step the board last moved or stepped on, Home and End go to its
-/// ends, E switches the engine; a text box keeps those keys while it has
-/// the focus.
+/// ends, E switches the engine.
 class BughouseScreen extends StatelessWidget {
   const BughouseScreen({
     super.key,
     required this.lab,
-    required this.search,
-    required this.archive,
-    required this.matches,
-    this.expectimax,
+    required this.engine,
     this.windowKeys = const {},
   });
 
   final BughouseLab lab;
-  final TableSearch search;
-  final ArchiveMoves archive;
-  final Matches matches;
-  final BughouseExpectimaxSearch? expectimax;
+  final LabEngine engine;
 
   /// The window's own keys, which the shell binds in every mode.
   final Map<ShortcutActivator, VoidCallback> windowKeys;
 
-  /// As large as both boards can be side by side beside the panel, and
-  /// under the height the rest of the left column needs: the two seat rows,
-  /// each a square tall and padded, and the chrome under them.
-  static double boardSize(BoxConstraints box) {
-    final byWidth =
-        (box.maxWidth - labPanelMinWidth - labColumnGap - labBoardGap) / 2;
-    final byHeight =
-        (box.maxHeight - labBoardChrome - 2 * labSeatPadding) / (1 + 2 / 8);
-    return math.min(byWidth, byHeight).clamp(labBoardMin, labBoardMax);
+  /// As large as the boards on screen can be beside the panel, and under
+  /// the height the hands (a square tall, a + and a − row) and, with two
+  /// boards, the chrome need.
+  static double boardSize(BoxConstraints box, LabBoards boards) {
+    final hands = 2 * (2 * labStepHeight + labSeatPadding);
+    final width = box.maxWidth - labPanelMinWidth - labColumnGap;
+    return switch (boards) {
+      LabBoards.one =>
+        math
+            .min(width, (box.maxHeight - hands) / (1 + 2 / 8))
+            .clamp(labBoardMin, labOneBoardMax),
+      LabBoards.two =>
+        math
+            .min(
+              (width - labBoardGap) / 2,
+              (box.maxHeight - hands - labBoardChrome) / (1 + 2 / 8),
+            )
+            .clamp(labBoardMin, labBoardMax),
+    };
   }
 
   @override
   Widget build(BuildContext context) {
     return _LabKeys(
       lab: lab,
-      search: search,
+      engine: engine,
       windowKeys: windowKeys,
       child: Padding(
         padding: const EdgeInsets.all(Space.l),
         child: LayoutBuilder(
-          builder: (context, box) {
-            final size = boardSize(box);
-            return Row(
+          builder: (context, box) => ListenableBuilder(
+            listenable: lab,
+            builder: (context, _) => Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Scrolls only when the window is shorter than the least
                 // the column needs; at any ordinary size it fits.
                 SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      TableBoards(lab: lab, boardSize: size, archive: archive),
-                      const SizedBox(height: Space.s),
-                      SizedBox(
-                        width: size * 2 + labBoardGap,
-                        child: ExpansionTile(
-                          key: const ValueKey('bughouse-position-editor'),
-                          title: const Text('Edit position / FEN'),
-                          tilePadding: EdgeInsets.zero,
-                          children: [BoardSetup(lab: lab, boardSize: size)],
-                        ),
-                      ),
-                    ],
+                  child: TableBoards(
+                    lab: lab,
+                    boardSize: boardSize(box, lab.boards),
                   ),
                 ),
                 const SizedBox(width: labColumnGap),
@@ -96,43 +81,31 @@ class BughouseScreen extends StatelessWidget {
                       constraints: const BoxConstraints(
                         maxWidth: labPanelMaxWidth,
                       ),
-                      child: ListenableBuilder(
-                        listenable: lab,
-                        builder: (context, _) => lab.showMatches
-                            ? MatchPanel(matches: matches, lab: lab)
-                            : BughouseAnalysisPanel(
-                                lab: lab,
-                                search: search,
-                                archive: archive,
-                                expectimax: expectimax,
-                              ),
-                      ),
+                      child: LabPanel(lab: lab, engine: engine),
                     ),
                   ),
                 ),
               ],
-            );
-          },
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
-/// The lab's keys, and the window's, wherever the focus is inside it —
-/// unless the user is typing, when the keys are the text box's. A setup box
-/// clicked away from hands the focus back here (see `board_setup.dart`), so
-/// the arrows step the boards again.
+/// The mode's keys, and the window's, wherever the focus is inside it —
+/// unless the user is typing, when the keys are the text box's.
 class _LabKeys extends StatefulWidget {
   const _LabKeys({
     required this.lab,
-    required this.search,
+    required this.engine,
     required this.windowKeys,
     required this.child,
   });
 
   final BughouseLab lab;
-  final TableSearch search;
+  final LabEngine engine;
   final Map<ShortcutActivator, VoidCallback> windowKeys;
   final Widget child;
 
@@ -141,7 +114,7 @@ class _LabKeys extends StatefulWidget {
 }
 
 class _LabKeysState extends State<_LabKeys> {
-  final _focus = FocusNode(debugLabel: 'Bughouse lab');
+  final _focus = FocusNode(debugLabel: 'Bughouse');
 
   BughouseLab get lab => widget.lab;
 
@@ -158,7 +131,7 @@ class _LabKeysState extends State<_LabKeys> {
     ...AppKey.lastMove.bind(lab.toEnd),
     ...AppKey.closePreview.bind(() => lab.preview.value = null),
     ...widget.windowKeys,
-    ...AppKey.bughouseEngine.bind(widget.search.toggleEngine),
+    ...AppKey.bughouseEngine.bind(widget.engine.toggle),
   };
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {

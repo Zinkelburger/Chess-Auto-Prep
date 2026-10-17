@@ -12,7 +12,7 @@ enum KeyPlace {
   comment('Comment box'),
   moveBox('Move box'),
   trainer('Repertoire trainer'),
-  bughouse('Bughouse lab');
+  bughouse('Bughouse');
 
   const KeyPlace(this.label);
 
