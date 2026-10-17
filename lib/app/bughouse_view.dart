@@ -82,7 +82,7 @@ final class BughouseView extends ModeView {
       ),
       AppAction(
         'Copy moves',
-        lab.line.moves.isEmpty
+        lab.line.entries.isEmpty
             ? null
             : () => unawaited(
                 Clipboard.setData(ClipboardData(text: lab.movesText)),

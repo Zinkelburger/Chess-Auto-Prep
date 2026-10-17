@@ -702,44 +702,70 @@ class _MoveRowsState extends State<_MoveRows> {
 
   @override
   Widget build(BuildContext context) {
-    final moves = lab.line.of(board);
+    final line = lab.line;
+    final moves = line.of(board);
     final scheme = Theme.of(context).colorScheme;
-    if (moves.isEmpty) return const SizedBox.expand();
+    final start = handChangeText(line.handChanges(board, 0));
+    if (moves.isEmpty && start.isEmpty) return const SizedBox.expand();
+    final lead = start.isEmpty ? 0 : 1;
     final rows = _pairs(moves);
-    final upto = lab.line.upto(board);
-    _reveal(
-      rows
-          .indexWhere(
-            (row) => [row.white, row.black].any((h) => h?.index == upto - 1),
-          )
-          .clamp(0, rows.length - 1),
+    final upto = line.upto(board);
+    final at = rows.indexWhere(
+      (row) => [row.white, row.black].any((h) => h?.index == upto - 1),
     );
+    _reveal(at < 0 ? 0 : at + lead);
     return ListView.builder(
       controller: _scroll,
       itemExtent: labMoveRowHeight,
-      itemCount: rows.length,
-      itemBuilder: (context, i) => Row(
-        children: [
-          SizedBox(
-            width: labMoveNumberWidth,
-            child: Text(
-              '${rows[i].number}.',
-              style: monoText.copyWith(color: scheme.onSurfaceVariant),
+      itemCount: rows.length + lead,
+      itemBuilder: (context, i) {
+        if (i < lead) {
+          return Row(
+            children: [
+              const SizedBox(width: labMoveNumberWidth),
+              Expanded(
+                child: _MoveToken(
+                  text: 'Start',
+                  edit: start,
+                  tip: 'Hands edited at the start',
+                  current: upto == 0,
+                  future: false,
+                  onTap: () => lab.go(board, 0),
+                ),
+              ),
+            ],
+          );
+        }
+        final row = rows[i - lead];
+        return Row(
+          children: [
+            SizedBox(
+              width: labMoveNumberWidth,
+              child: Text(
+                '${row.number}.',
+                style: monoText.copyWith(color: scheme.onSurfaceVariant),
+              ),
             ),
-          ),
-          for (final half in [rows[i].white, rows[i].black])
-            Expanded(
-              child: half == null
-                  ? const SizedBox.shrink()
-                  : _MoveToken(
-                      move: half.move,
-                      current: half.index == upto - 1,
-                      future: half.index >= upto,
-                      onTap: () => lab.go(board, half.index + 1),
-                    ),
-            ),
-        ],
-      ),
+            for (final half in [row.white, row.black])
+              Expanded(
+                child: half == null
+                    ? const SizedBox.shrink()
+                    : _MoveToken(
+                        text: displaySan(context, half.move.san),
+                        edit: handChangeText(
+                          line.handChanges(board, half.index + 1),
+                        ),
+                        tip:
+                            'Player '
+                            '${Seat.of(board, half.move.side).letter}',
+                        current: half.index == upto - 1,
+                        future: half.index >= upto,
+                        onTap: () => lab.go(board, half.index + 1),
+                      ),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -767,15 +793,22 @@ class _MoveRowsState extends State<_MoveRows> {
 typedef _Half = ({LineMove move, int index});
 typedef _MovePair = ({int number, _Half? white, _Half? black});
 
+/// A move, or the start, with the hand edit made after it in muted ink.
 class _MoveToken extends StatelessWidget {
   const _MoveToken({
-    required this.move,
+    required this.text,
+    required this.edit,
+    required this.tip,
     required this.current,
     required this.future,
     required this.onTap,
   });
 
-  final LineMove move;
+  final String text;
+
+  /// The hands' change noted after the move, `+N −p`, or empty.
+  final String edit;
+  final String tip;
   final bool current;
   final bool future;
   final VoidCallback onTap;
@@ -783,17 +816,30 @@ class _MoveToken extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final seat = Seat.of(move.board, move.side);
     return Tooltip(
-      message: 'Player ${seat.letter}',
+      message: edit.isEmpty ? tip : '$tip\nHands edited after: $edit',
       waitDuration: previewDelay,
       child: InkWell(
         onTap: onTap,
         child: Container(
           padding: moveTokenPadding,
           color: current ? scheme.surfaceContainerHighest : null,
-          child: Text(
-            displaySan(context, move.san),
+          child: Text.rich(
+            TextSpan(
+              text: text,
+              children: [
+                if (edit.isNotEmpty)
+                  TextSpan(
+                    text: ' $edit',
+                    style: TextStyle(
+                      color: scheme.onSurfaceVariant,
+                      fontWeight: FontWeight.normal,
+                    ),
+                  ),
+              ],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: monoText.copyWith(
               color: current
                   ? scheme.primary

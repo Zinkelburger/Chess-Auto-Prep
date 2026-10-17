@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
+import 'package:chess_auto_prep/chess/bughouse/table_line.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_lab.dart';
 import 'package:dartchess/dartchess.dart' show Role, Setup, Side;
 import 'package:flutter_test/flutter_test.dart';
@@ -85,20 +86,64 @@ void main() {
     );
   });
 
-  test('+ and − change a hand and start a new line from there', () {
+  test('+ and − change a hand and keep the moves before it', () {
     capture();
     lab.adjustHand(BoardNumber.one, Side.black, Role.knight, 1);
     expect(lab.position.one.pockets!.of(Side.black, Role.knight), 1);
-    expect(lab.line.moves, isEmpty);
-    // What the table showed is kept: the capture is still made.
+    expect(lab.line.moves.map((m) => m.san), ['e4', 'd5', 'exd5']);
+    expect(lab.line.upto(BoardNumber.one), 3);
     expect(lab.position.two.pockets!.of(Side.black, Role.pawn), 1);
+    expect(handChangeText(lab.line.handChanges(BoardNumber.one, 3)), '+n');
     lab.adjustHand(BoardNumber.one, Side.black, Role.knight, -1);
+    expect(lab.line.entries.whereType<HandEdit>(), isEmpty);
     lab.adjustHand(BoardNumber.one, Side.black, Role.knight, -1);
     expect(lab.position.one.pockets!.of(Side.black, Role.knight), 0);
     for (var i = 0; i < handLimit + 2; i++) {
       lab.adjustHand(BoardNumber.two, Side.white, Role.queen, 1);
     }
     expect(lab.position.two.pockets!.of(Side.white, Role.queen), handLimit);
+    expect(handChangeText(lab.line.handChanges(BoardNumber.two, 0)), '+16Q');
+  });
+
+  test('a hand edit holds from its move on and goes when stepped back', () {
+    lab.play(BoardNumber.one, 'e2e4');
+    lab.adjustHand(BoardNumber.one, Side.black, Role.knight, 2);
+    lab.adjustHand(BoardNumber.one, Side.white, Role.pawn, 1);
+    lab.play(BoardNumber.one, 'N@f6');
+    expect(lab.position.one.pockets!.of(Side.black, Role.knight), 1);
+    lab.go(BoardNumber.one, 0);
+    expect(lab.position.one.pockets!.of(Side.black, Role.knight), 0);
+    lab.go(BoardNumber.one, 1);
+    expect(lab.position.one.pockets!.of(Side.black, Role.knight), 2);
+    expect(handChangeText(lab.line.handChanges(BoardNumber.one, 1)), '+P +2n');
+    // An edit made there replaces that board's later moves, as a move does.
+    lab.adjustHand(BoardNumber.one, Side.black, Role.queen, 1);
+    expect(lab.line.moves.map((m) => m.san), ['e4']);
+    expect(lab.position.one.pockets!.of(Side.black, Role.queen), 1);
+  });
+
+  test('hand edits copy as comments and paste back', () {
+    lab.adjustHand(BoardNumber.one, Side.white, Role.rook, 1);
+    capture();
+    lab.adjustHand(BoardNumber.one, Side.black, Role.knight, 1);
+    lab.adjustHand(BoardNumber.one, Side.black, Role.knight, 1);
+    // Board 2's Black has the pawn board 1 took, and gives it up.
+    lab.adjustHand(BoardNumber.two, Side.black, Role.pawn, -1);
+    lab.play(BoardNumber.one, 'N@f6');
+    final copied = lab.movesText;
+    expect(
+      copied,
+      '{ Hands edited on board 1: +R } 1A. e4 1a. d5 2A. exd5\n'
+      '{ Hands edited on board 1: +2n } { Hands edited on board 2: −p } '
+      '2a. N@f6',
+    );
+    lab.newGame();
+    lab.pasteMoves(copied);
+    expect(lab.problem, isNull);
+    expect(lab.movesText, copied);
+    expect(lab.position.one.pockets!.of(Side.black, Role.knight), 1);
+    expect(lab.position.one.pockets!.of(Side.white, Role.rook), 1);
+    expect(lab.position.two.pockets!.of(Side.black, Role.pawn), 0);
   });
 
   test('an edited board keeps its hands; one that cannot play is refused', () {

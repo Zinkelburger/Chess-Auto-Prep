@@ -18,9 +18,6 @@ enum LabBoards {
   final String label;
 }
 
-/// Most of one piece a hand may hold, as on the website.
-const handLimit = 16;
-
 /// The Bughouse mode's table: the two boards, the line played on them with
 /// a cursor per board, how many boards are shown, the clock case the engine
 /// answers for, and what the user is pointing at.
@@ -127,18 +124,17 @@ final class BughouseLab extends ChangeNotifier {
   void newGame() => _reset(TablePosition.initial);
 
   /// One [role] more (+1) or fewer (−1) in [side]'s hand on [board], within
-  /// 0…[handLimit]. The table on screen becomes the start of a new line,
-  /// as an edited position does on Lichess.
+  /// 0…[handLimit], noted in the line after that board's move on screen, as
+  /// the website notes it. The moves before it stay; that board's later
+  /// moves go, as when a different move is played there.
   void adjustHand(BoardNumber board, Side side, Role role, int delta) {
-    final position = _position.board(board);
-    final pockets = position.pockets!;
-    final count = pockets.of(side, role) + delta;
+    final count = _position.board(board).pockets!.of(side, role) + delta;
     if (count < 0 || count > handLimit) return;
-    final changed = delta > 0
-        ? pockets.increment(side, role)
-        : pockets.decrement(side, role);
-    final edited = position.copyWith(pockets: changed) as Crazyhouse;
-    _reset(_position.withBoard(board, edited), focus: board);
+    final edited = _line.edited(board, side, role, delta);
+    if (edited.replay() case LineReplayed(:final position)) {
+      _line = edited;
+      _show(position, focus: board);
+    }
   }
 
   /// [board]'s pieces, side to move and castling from [setup], its hands
