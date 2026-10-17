@@ -30,7 +30,7 @@ final class BughouseLab extends ChangeNotifier {
   TablePosition _position = TablePosition.initial;
   BoardNumber _focus = BoardNumber.one;
   LabBoards _boards = LabBoards.one;
-  ClockCase _clock = ClockCase.even;
+  ClockCase _clock = ClockCase.cdMaySit;
   bool _flipped = false;
   TableRefusal? _problem;
 

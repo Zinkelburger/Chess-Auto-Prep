@@ -32,7 +32,7 @@ class LabPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _BoardsSwitch(lab: lab),
-          _TimeChips(lab: lab, lines: engine.lines),
+          _TimeChips(lab: lab),
           const SizedBox(height: Space.s),
           _EngineBar(engine: engine, single: lab.single),
           if (lab.single)
@@ -150,100 +150,51 @@ class _BothMoves extends StatelessWidget {
 String _withoutHands(String fen) =>
     fen.replaceFirst(RegExp(r'\[[^\]]*\]'), '').replaceAll('~', '');
 
-/// The clock case the engine answers for: who may sit rather than move.
-/// While the engine is on, each case shows A + B's score under it, the
-/// chosen one live and the others once a short search has scored them, so
-/// sitting and not sitting can be compared at a glance.
+/// Who may sit rather than move, in the same compact segments as the board
+/// count: Hivemind always lets one team or the other.
 class _TimeChips extends StatelessWidget {
-  const _TimeChips({required this.lab, required this.lines});
+  const _TimeChips({required this.lab});
 
   final BughouseLab lab;
-  final LabLines lines;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final lines = this.lines;
-    final on = lines is LinesOn && lines.boards == lab.boards ? lines : null;
-    String scoreOf(ClockCase clock) {
-      if (on == null) return '';
-      final score = clock == lab.clock
-          ? (on.nodes == null ? null : on.score)
-          : on.byClock[clock];
-      return score?.text ?? '–';
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(top: Space.s),
-      child: Row(
-        children: [
-          SizedBox(
-            width: labLabelWidth,
-            child: Text(
-              'Time',
-              style: TextStyle(color: scheme.onSurfaceVariant),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: Space.s),
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: SegmentedButton<ClockCase>(
+        segments: [
+          for (final clock in ClockCase.values)
+            ButtonSegment(
+              value: clock,
+              label: Text(_label(clock)),
+              tooltip: _hint(clock),
             ),
-          ),
-          Flexible(
-            child: SegmentedButton<ClockCase>(
-              segments: [
-                for (final clock in ClockCase.values)
-                  ButtonSegment(
-                    value: clock,
-                    label: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(_label(clock)),
-                        Text(
-                          scoreOf(clock),
-                          style: monoText.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                    tooltip: _hint(clock),
-                  ),
-              ],
-              selected: {lab.clock},
-              showSelectedIcon: false,
-              style: const ButtonStyle(
-                visualDensity: VisualDensity.compact,
-                padding: WidgetStatePropertyAll(
-                  EdgeInsets.symmetric(horizontal: Space.m, vertical: Space.s),
-                ),
-              ),
-              onSelectionChanged: (picked) => lab.setClock(picked.single),
-            ),
-          ),
         ],
+        selected: {lab.clock},
+        showSelectedIcon: false,
+        style: const ButtonStyle(visualDensity: VisualDensity.compact),
+        onSelectionChanged: (picked) => lab.setClock(picked.single),
       ),
-    );
-  }
+    ),
+  );
 
   /// With one board the seats are not shown: the cases name the colours.
   String _label(ClockCase clock) => !lab.single
       ? clock.label
       : switch (clock) {
           ClockCase.abMaySit => 'White may sit',
-          ClockCase.even => 'Even',
           ClockCase.cdMaySit => 'Black may sit',
         };
 
-  /// What the case means, then what its number is.
-  String _hint(ClockCase clock) {
-    if (!lab.single) {
-      return '${clock.hint}. The number under it is A + B’s score then.';
-    }
-    final means = switch (clock) {
-      ClockCase.abMaySit =>
-        'White is up on the clock, so can wait rather than move',
-      ClockCase.even => 'Neither side is up on the clock: both have to move',
-      ClockCase.cdMaySit =>
-        'Black is up on the clock, so can wait rather than move',
-    };
-    return '$means. The number under it is White’s score then.';
-  }
+  String _hint(ClockCase clock) => !lab.single
+      ? clock.hint
+      : switch (clock) {
+          ClockCase.abMaySit =>
+            'White is up on the clock, so can wait rather than move',
+          ClockCase.cdMaySit =>
+            'Black is up on the clock, so can wait rather than move',
+        };
 }
 
 /// The switch, the score, the engine's name with the size of the search

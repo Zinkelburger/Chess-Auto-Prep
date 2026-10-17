@@ -714,9 +714,6 @@ const labStepHeight = 26.0;
 const labMoveRowHeight = 22.0;
 const labMoveNumberWidth = 34.0;
 
-/// The label column of the right panel's rows (`Time`).
-const labLabelWidth = 64.0;
-
 /// An engine line, and its score gutter.
 const labTableRowHeight = 28.0;
 const labScoreWidth = 60.0;
