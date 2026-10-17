@@ -23,8 +23,12 @@ void main() {
       final run = queue.run();
       String? first = 'pending';
       String? second = 'pending';
-      run.get(Uri.https('example.com', '/slow')).then((b) => first = b);
-      run.get(Uri.https('example.com', '/next')).then((b) => second = b);
+      unawaited(
+        run.get(Uri.https('example.com', '/slow')).then((b) => first = b),
+      );
+      unawaited(
+        run.get(Uri.https('example.com', '/next')).then((b) => second = b),
+      );
 
       async.elapse(RemoteQueue.wait + const Duration(seconds: 1));
       expect(first, isNull, reason: 'the caller is not kept waiting');
@@ -50,7 +54,11 @@ void main() {
       final runA = queue.run();
       final results = List<String?>.filled(10, 'pending');
       for (var i = 0; i < 10; i++) {
-        runA.get(Uri.https('example.com', '/a$i')).then((b) => results[i] = b);
+        unawaited(
+          runA
+              .get(Uri.https('example.com', '/a$i'))
+              .then((b) => results[i] = b),
+        );
       }
 
       for (var i = 0; i < RemoteRun.missesToDrop; i++) {
@@ -61,7 +69,9 @@ void main() {
       expect(results, everyElement(isNull));
 
       String? fromB = 'pending';
-      queue.run().get(Uri.https('example.com', '/b')).then((b) => fromB = b);
+      unawaited(
+        queue.run().get(Uri.https('example.com', '/b')).then((b) => fromB = b),
+      );
       async.flushMicrotasks();
       expect(client.sent.last, '/b');
       expect(fromB, 'ok');
@@ -74,7 +84,9 @@ void main() {
       final run = RemoteQueue(client).run();
       final results = List<String?>.filled(5, 'pending');
       for (var i = 0; i < 5; i++) {
-        run.get(Uri.https('example.com', '/a$i')).then((b) => results[i] = b);
+        unawaited(
+          run.get(Uri.https('example.com', '/a$i')).then((b) => results[i] = b),
+        );
       }
       async.flushMicrotasks();
       expect(client.sent, ['/a0']);
@@ -101,8 +113,10 @@ final class _HangingClient extends http.BaseClient {
       );
     }
     final aborted = Completer<http.StreamedResponse>();
-    (request as http.Abortable).abortTrigger?.whenComplete(
-      () => aborted.completeError(http.RequestAbortedException(request.url)),
+    unawaited(
+      (request as http.Abortable).abortTrigger?.whenComplete(
+        () => aborted.completeError(http.RequestAbortedException(request.url)),
+      ),
     );
     return aborted.future;
   }

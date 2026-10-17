@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/features/pgn_viewer/auto_play.dart';
 import 'package:fake_async/fake_async.dart';
@@ -21,7 +23,7 @@ void main() {
   ) {
     fakeAsync((async) {
       late SessionFixture fixture;
-      openSession(_game).then((opened) => fixture = opened);
+      unawaited(openSession(_game).then((opened) => fixture = opened));
       async.flushMicrotasks();
       final play = AutoPlay(fixture.session);
       body(async, fixture, play);

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/chess/game_filter.dart';
 import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
@@ -126,9 +128,9 @@ void main() {
 
   test('rules typed apply once typing rests; added or removed, at once', () {
     fakeAsync((time) {
-      viewerOver(threeGameFile).then((made) => fixture = made);
+      unawaited(viewerOver(threeGameFile).then((made) => fixture = made));
       time.flushMicrotasks();
-      fixture.open();
+      unawaited(fixture.open());
       time.flushMicrotasks();
       final filter = FileFilter(fixture.session);
       addTearDown(filter.dispose);
@@ -148,9 +150,9 @@ void main() {
 
   test('another file clears the rules and drops a change still waiting', () {
     fakeAsync((time) {
-      viewerOver(threeGameFile).then((made) => fixture = made);
+      unawaited(viewerOver(threeGameFile).then((made) => fixture = made));
       time.flushMicrotasks();
-      fixture.open();
+      unawaited(fixture.open());
       time.flushMicrotasks();
       final other = collectionRef('other');
       fixture.store.documents[other] = Opened(
@@ -161,7 +163,7 @@ void main() {
       addTearDown(filter.dispose);
       filter.apply(byCarlsen);
       filter.edit(const GameFilter(rules: [HeaderRule(value: 'Ding')]));
-      fixture.session.open(other, game: 0);
+      unawaited(fixture.session.open(other, game: 0));
       time.flushMicrotasks();
       expect(filter.filter, GameFilter.none);
       time.elapse(const Duration(seconds: 1));

@@ -70,7 +70,7 @@ void main() {
           return landing.future;
         });
         var flushed = false;
-        clock.flush().then((_) => flushed = true);
+        unawaited(clock.flush().then((_) => flushed = true));
         async.flushMicrotasks();
         expect(started, isTrue, reason: 'the wait was cut short');
         expect(flushed, isFalse, reason: 'the write is still going');
@@ -86,7 +86,7 @@ void main() {
         final undo = Completer<void>();
         clock.waitsFor(undo.future);
         var flushed = false;
-        clock.flush().then((_) => flushed = true);
+        unawaited(clock.flush().then((_) => flushed = true));
         async.flushMicrotasks();
         expect(flushed, isFalse);
         undo.complete();
@@ -101,7 +101,7 @@ void main() {
         clock.edited(() async => throw StateError('disk'));
         async.flushMicrotasks();
         var flushed = false;
-        clock.flush().then((_) => flushed = true);
+        unawaited(clock.flush().then((_) => flushed = true));
         async.flushMicrotasks();
         expect(flushed, isTrue);
       });

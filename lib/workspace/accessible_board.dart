@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -80,7 +82,7 @@ class _AccessibleBoardState extends State<AccessibleBoard> {
       return KeyEventResult.handled;
     }
     if (AppKey.squareChoose.accepts(event)) {
-      _activate(_cursor);
+      unawaited(_activate(_cursor));
       return KeyEventResult.handled;
     }
     if (AppKey.squareClear.accepts(event) && _from != null) {

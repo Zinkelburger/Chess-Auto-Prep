@@ -164,7 +164,8 @@ final class ExitGuard {
     final decided = _afterTheOthers(kind, cancellation);
     _deciding[kind] = decided;
     return decided.whenComplete(() {
-      _deciding.remove(kind);
+      // The entry removed is [decided] itself, which has just completed.
+      unawaited(_deciding.remove(kind));
       if (identical(_navigationCancellation, cancellation)) {
         _navigationCancellation = null;
       }

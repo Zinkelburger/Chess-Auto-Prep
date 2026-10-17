@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../chess/players/player.dart';
@@ -136,23 +138,26 @@ class _PlayerLookupState extends State<PlayerLookup> {
             .map((a) => a.username)
             .toSet()
           ..add(candidate['username'] as String);
-    widget.owner.save(
-      player.edited({
-        site: names.join(', '),
-        'lookup': {
-          ...lookup,
-          'status': 'account',
-          'confirmed': [
-            ...?lookup['confirmed'] as List?,
-            {...candidate, 'confirmed_by': 'user'},
-          ],
-          'candidates': [
-            for (final c in lookup['candidates'] as List)
-              if (!identical(c, candidate)) c,
-          ],
-        },
-      }),
-      expected: player,
+    // The owner shows its own busy state and any save error.
+    unawaited(
+      widget.owner.save(
+        player.edited({
+          site: names.join(', '),
+          'lookup': {
+            ...lookup,
+            'status': 'account',
+            'confirmed': [
+              ...?lookup['confirmed'] as List?,
+              {...candidate, 'confirmed_by': 'user'},
+            ],
+            'candidates': [
+              for (final c in lookup['candidates'] as List)
+                if (!identical(c, candidate)) c,
+            ],
+          },
+        }),
+        expected: player,
+      ),
     );
   }
 }

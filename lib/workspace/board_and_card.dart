@@ -36,10 +36,10 @@ class BoardAndCardState extends State<BoardAndCard> {
   }
 
   @override
-  void didUpdateWidget(BoardAndCard old) {
-    super.didUpdateWidget(old);
-    if (old.layout == widget.layout) return;
-    old.layout?.removeListener(_changed);
+  void didUpdateWidget(BoardAndCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.layout == widget.layout) return;
+    oldWidget.layout?.removeListener(_changed);
     widget.layout?.addListener(_changed);
     _share = widget.layout?.boardFraction ?? 0.4;
   }

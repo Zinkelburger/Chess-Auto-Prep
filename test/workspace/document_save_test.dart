@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart'
@@ -99,7 +101,12 @@ void main() {
     fakeAsync((async) {
       const second = Duration(seconds: 1);
       late final SessionFixture slow;
-      openSession(blackChapter, delay: second).then((opened) => slow = opened);
+      unawaited(
+        openSession(
+          blackChapter,
+          delay: second,
+        ).then((opened) => slow = opened),
+      );
       async.flushMicrotasks();
       void editSlow(String words) => slow.session.setComment(sicilian, words);
       editSlow('one');
@@ -116,7 +123,7 @@ void main() {
       expect(slow.onDisk, contains('{two [%eval 0.30]}'));
       editSlow('three');
       var flushed = false;
-      slow.saver.flush().then((_) => flushed = true);
+      unawaited(slow.saver.flush().then((_) => flushed = true));
       async.flushMicrotasks();
       expect(flushed, isTrue);
       expect(

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../chess/fen.dart';
 import '../chess/generation/mainline_book.dart'
     show BookAnswer, BookLost, BookMissed, BookMoves, BookSpent;
@@ -39,7 +41,8 @@ final class ChessDbMoves {
           'learn': '0',
         }),
       );
-      if (body == null) _answers.remove(key);
+      // The entry removed is this lookup, which is finishing now.
+      if (body == null) unawaited(_answers.remove(key));
       return body == null ? null : chessDbMoves(body);
     }();
   }

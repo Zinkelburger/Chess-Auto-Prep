@@ -464,13 +464,20 @@ class TrainingProgress extends ChangeNotifier {
     _commands.remove(command.operation);
     _took(result, reviews: unlanded.reviews);
     if (result is ProgressWritten && _asked[command.key] == command.operation) {
-      pendingWrites?.track(
-        this,
-        Future.value(result),
-        label: 'Training progress',
-        obligation: command.key,
-        problem: (_) => null,
-      );
+      // Tracking clears the command's recorded failure; it returns the
+      // settled value it was given, so there is nothing to wait for.
+      final pending = pendingWrites;
+      if (pending != null) {
+        unawaited(
+          pending.track<ProgressWrite>(
+            this,
+            Future.value(result),
+            label: 'Training progress',
+            obligation: command.key,
+            problem: (_) => null,
+          ),
+        );
+      }
     }
     _answered(command);
     if (!_disposed) notifyListeners();
@@ -536,15 +543,18 @@ class TrainingProgress extends ChangeNotifier {
     }, onError: (Object _) {});
     final pending = pendingWrites;
     if (pending == null) return done;
-    pending.track(
-      this,
-      done,
-      label: 'Training progress',
-      obligation: this,
-      problem: (result) =>
-          _unsaved.isEmpty && (command != null || result is ProgressWritten)
-          ? null
-          : 'Some progress could not be saved.',
+    // The tracker records [done]'s failure itself; the caller awaits [done].
+    unawaited(
+      pending.track<ProgressWrite>(
+        this,
+        done,
+        label: 'Training progress',
+        obligation: this,
+        problem: (result) =>
+            _unsaved.isEmpty && (command != null || result is ProgressWritten)
+            ? null
+            : 'Some progress could not be saved.',
+      ),
     );
     if (command == null) return done;
     return pending.track(
