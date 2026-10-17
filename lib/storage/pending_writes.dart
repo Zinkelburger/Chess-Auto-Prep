@@ -169,8 +169,9 @@ final class PendingObligation<T> {
   /// Explicitly abandon a failed, idle save. This never undoes disk writes,
   /// claims a commit, or releases ownership of an in-flight operation.
   bool discard() {
-    if (_running != null || _detail == null || committed || discarded)
+    if (_running != null || _detail == null || committed || discarded) {
       return false;
+    }
     _discarded = true;
     _registry._obligations.remove(this);
     return true;

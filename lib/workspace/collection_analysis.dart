@@ -71,8 +71,9 @@ final class CollectionAnalysis extends ChangeNotifier {
     if (!await session.restoreAnalysisPage(page) ||
         _disposed ||
         ticket != _generation ||
-        key != _sourceKey)
+        key != _sourceKey) {
       return false;
+    }
     if (preview != null && created) {
       for (final move in preview.moves.take(preview.at + 1)) {
         session.playMove(move.uci);
@@ -108,8 +109,9 @@ final class CollectionAnalysis extends ChangeNotifier {
     if (!await session.showAnalysisBoard(board) ||
         _disposed ||
         ticket != _generation ||
-        key != _sourceKey)
+        key != _sourceKey) {
       return;
+    }
     _pages[key] = session.analysisPage;
   }
 

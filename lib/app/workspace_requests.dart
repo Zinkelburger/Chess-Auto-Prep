@@ -309,8 +309,9 @@ final class WorkspaceRequests extends ChangeNotifier {
   }) async {
     final result = await open(ref, game: game);
     if (_disposed || result is! RequestDone) return result;
-    if (_session.tree case final tree?)
+    if (_session.tree case final tree?) {
       _session.cursor.goTo(pathAlong(tree, sans));
+    }
     return result;
   }
 
@@ -411,8 +412,9 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (index == null || _session.game == null) return const RequestDropped();
     final at = _session.cursor.fen;
     _session.showGame(index);
-    if (_session.tree?.mainLineTo(at) case final path?)
+    if (_session.tree?.mainLineTo(at) case final path?) {
       _session.cursor.goTo(path);
+    }
     return const RequestDone();
   }
 
@@ -465,8 +467,9 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (!await _session.showAnalysisBoard(
           boards.analysisBoard(side: Side.white),
         ) ||
-        _overtaken(ticket))
+        _overtaken(ticket)) {
       return const RequestDropped();
+    }
     _saidCopy(leave);
     return const RequestDone();
   }
@@ -705,12 +708,13 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (_overtaken(ticket)) return const RequestDropped();
     _showMode(Mode.pgnViewer);
     final result = await _open(ticket, ref, game: game ?? 0);
-    if (!_overtaken(ticket) && result is RequestDone)
+    if (!_overtaken(ticket) && result is RequestDone) {
       await _viewer.opened(
         ref,
         place: place,
         currentRequest: () => !_overtaken(ticket),
       );
+    }
     return _overtaken(ticket) ? const RequestDropped() : result;
   }
 

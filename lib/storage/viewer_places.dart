@@ -33,7 +33,8 @@ final class PreferencesViewerPlaces implements ViewerPlaces {
     if (!await prefs.setString(
       'pgn_viewer.session:$path',
       jsonEncode(place.json),
-    ))
+    )) {
       throw StateError('The reading position was not saved.');
+    }
   });
 }

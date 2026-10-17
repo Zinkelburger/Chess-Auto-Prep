@@ -147,8 +147,9 @@ Future<_Child> _start(
       .transform(utf8.decoder)
       .transform(const LineSplitter())
       .listen((line) {
-        if (line == 'checkpoint durable' && !ready.isCompleted)
+        if (line == 'checkpoint durable' && !ready.isCompleted) {
           ready.complete();
+        }
         diagnostics.writeln(line);
       });
   final errors = process.stderr
@@ -156,8 +157,9 @@ Future<_Child> _start(
       .listen(diagnostics.write);
   unawaited(
     process.exitCode.then((code) {
-      if (!ready.isCompleted)
+      if (!ready.isCompleted) {
         ready.completeError(StateError('Child exited $code: $diagnostics'));
+      }
     }),
   );
   final child = _Child(process, output, errors);

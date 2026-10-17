@@ -67,8 +67,9 @@ final class StudyFileChanges {
           final id = newOperationId();
           final token = Object();
           if (_session.source == study &&
-              !_saver.beginExternal(token, revision))
+              !_saver.beginExternal(token, revision)) {
             return studyChangedOnDisk;
+          }
           final pending = pendingWrites ?? PendingWrites();
           Future<store.MoveResult> work() =>
               _store.move(study, to, expected: revision, operationId: id);
@@ -104,8 +105,9 @@ final class StudyFileChanges {
     if (source == null) return null;
     try {
       final data = await source.read();
-      if (data.warnings.isNotEmpty)
+      if (data.warnings.isNotEmpty) {
         return 'The player directory needs attention before $doing a linked study.';
+      }
       final names = [
         for (final player in data.players)
           if (p.equals(player.text('prep_file'), study.path)) player.name,
@@ -190,18 +192,20 @@ final class StudyFileChanges {
     final from = ChapterRef.at(deleted.path);
     final to = ChapterRef.at(p.join(_root, '$wanted.pgn'));
     if (_restore case final existing?) {
-      if (existing.from != from || existing.to != to)
+      if (existing.from != from || existing.to != to) {
         return const StudyProblem('Retry the pending study restore first.');
+      }
       return retryRestore();
     }
     return changing(
       from.path,
       () => changing(to.path, () async {
         final read = await _store.open(from);
-        if (read is! store.Opened)
+        if (read is! store.Opened) {
           return const StudyProblem(
             'That deleted study could not be read. Refresh and try again.',
           );
+        }
         if (read.readOnly case final reason?) return StudyProblem(reason);
         final id = newOperationId();
         final pending = pendingWrites ?? PendingWrites();

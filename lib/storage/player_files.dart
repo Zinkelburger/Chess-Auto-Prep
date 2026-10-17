@@ -45,12 +45,14 @@ final class PlayerFiles implements PlayerStore {
     final file = File(path);
     if (!await file.exists()) return {'format': format};
     final raw = jsonDecode(await file.readAsString());
-    if (raw is List && format == 'chess-auto-prep/people@1')
+    if (raw is List && format == 'chess-auto-prep/people@1') {
       return {'format': format, 'people': raw};
-    if (raw is! Map || (raw['format'] != null && raw['format'] != format))
+    }
+    if (raw is! Map || (raw['format'] != null && raw['format'] != format)) {
       throw const FormatException(
         'This player file uses an unsupported format.',
       );
+    }
     return Map<String, Object?>.from(raw);
   }
 
@@ -61,8 +63,9 @@ final class PlayerFiles implements PlayerStore {
   static List<Object?> _list(Map<String, Object?> json) {
     final rows = json['people'];
     if (rows == null) return [];
-    if (rows is! List)
+    if (rows is! List) {
       throw const FormatException('The people in this file are not a list.');
+    }
     return rows;
   }
 
@@ -73,8 +76,9 @@ final class PlayerFiles implements PlayerStore {
     if (row is! Map) return 'a row is not an object';
     final id = row['id'];
     if (id is! String || id.isEmpty) return 'a row has no ID';
-    if (row['name'] is! String?)
+    if (row['name'] is! String?) {
       return 'player $id has a name that is not text';
+    }
     return null;
   }
 
@@ -110,8 +114,9 @@ final class PlayerFiles implements PlayerStore {
   }
 
   String _group(String id) {
-    if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(id))
+    if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(id)) {
       throw const FormatException('Invalid group ID.');
+    }
     return p.join(_groups.path, '$id.json');
   }
 
@@ -156,8 +161,9 @@ final class PlayerFiles implements PlayerStore {
           data['id'] ??= p.basenameWithoutExtension(file.path);
           final group = PlayerGroup(data);
           if (group.id != p.basenameWithoutExtension(file.path) ||
-              group.entries.any((e) => e['person'] is! String))
+              group.entries.any((e) => e['person'] is! String)) {
             throw const FormatException('Invalid group or member ID.');
+          }
           groups.add(group);
         } on Object catch (e) {
           warnings.add('Could not read ${p.basename(file.path)}: $e');
@@ -185,10 +191,11 @@ final class PlayerFiles implements PlayerStore {
           ? null
           : Map<String, Object?>.from(rows[at] as Map);
       if (_equal.equals(current, next?.fields)) return; // Lost acknowledgement.
-      if (!_equal.equals(current, expected?.fields))
+      if (!_equal.equals(current, expected?.fields)) {
         throw const PlayerConflict(
           'This player changed in another window. Reload before editing.',
         );
+      }
       // An edit stays where its row was, so the first row of its ID is still
       // this one and a later duplicate never takes its place.
       data['people'] = [
@@ -210,10 +217,11 @@ final class PlayerFiles implements PlayerStore {
           : null;
       if (current != null) current['id'] ??= group.id;
       if (_equal.equals(current, group.fields)) return;
-      if (!_equal.equals(current, expected?.fields))
+      if (!_equal.equals(current, expected?.fields)) {
         throw const PlayerConflict(
           'This group changed in another window. Reload before editing.',
         );
+      }
       await _write(path, group.fields);
     });
   }
@@ -225,10 +233,11 @@ final class PlayerFiles implements PlayerStore {
       if (!await File(path).exists()) return;
       final current = await _read(path, 'chess-auto-prep/tournament@1');
       current['id'] ??= group.id;
-      if (!_equal.equals(current, group.fields))
+      if (!_equal.equals(current, group.fields)) {
         throw const PlayerConflict(
           'This group changed in another window. Reload before removing it.',
         );
+      }
       final trash = Directory(p.join(root.path, '.removed'));
       await trash.create(recursive: true);
       await movePathNoReplace(

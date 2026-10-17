@@ -256,8 +256,9 @@ class _CorpusFiltersState extends State<_CorpusFilters> {
   @override
   void dispose() {
     _timer?.cancel();
-    for (final controller in [_player, _event, _eco, _since])
+    for (final controller in [_player, _event, _eco, _since]) {
       controller.dispose();
+    }
     super.dispose();
   }
 
@@ -297,7 +298,9 @@ class _CorpusFiltersState extends State<_CorpusFilters> {
       ),
       TextButton(
         onPressed: () {
-          for (final c in [_player, _event, _eco, _since]) c.clear();
+          for (final c in [_player, _event, _eco, _since]) {
+            c.clear();
+          }
           if (!mounted) return;
           setState(() {
             _elo = 0;

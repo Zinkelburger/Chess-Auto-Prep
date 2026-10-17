@@ -45,11 +45,12 @@ class _SetupState extends State<_Setup> {
   @override
   void initState() {
     super.initState();
-    if (_seats.isEmpty)
+    if (_seats.isEmpty) {
       _seats.addAll([
         TournamentEngine.bundled('Stockfish A'),
         TournamentEngine.bundled('Stockfish B'),
       ]);
+    }
   }
 
   @override

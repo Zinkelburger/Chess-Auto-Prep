@@ -222,8 +222,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     final tabs = _tabs;
     final shown = await _ws.inspection?.show() ?? false;
     if (!mounted) return;
-    if (!shown && tabs.selected == WorkspaceTab.analysis)
+    if (!shown && tabs.selected == WorkspaceTab.analysis) {
       tabs.show(WorkspaceTab.moves);
+    }
     setState(() {});
   }
 

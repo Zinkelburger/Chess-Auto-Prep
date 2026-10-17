@@ -154,8 +154,9 @@ final class TournamentGameRunner {
     }
     _clocks[side] += config.timeNumber('incrementMs', 600);
     final period = config.timeNumber('movesPerSession', 0);
-    if (period > 0 && (_playedBySide[side] + 1) % period == 0)
+    if (period > 0 && (_playedBySide[side] + 1) % period == 0) {
       _clocks[side] += config.timeNumber('baseMs', 60000);
+    }
     return true;
   }
 
@@ -300,8 +301,9 @@ final class TournamentGameRunner {
       },
     };
     var children = <MoveNode>[];
-    for (final node in _nodes.reversed)
+    for (final node in _nodes.reversed) {
       children = [node.copyWith(children: children)];
+    }
     final tree = GameTree(
       rootFen: config.root,
       children: children,

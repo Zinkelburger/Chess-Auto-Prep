@@ -55,10 +55,11 @@ final class PlayerBook extends ChangeNotifier {
     status = null;
     notifyListeners();
     try {
-      if (!books.current || shelf.problem != null)
+      if (!books.current || shelf.problem != null) {
         throw StateError(
           books.problem ?? shelf.problem ?? 'The book is not ready.',
         );
+      }
       final side = analysis.side.opposite;
       final files = <BookFile>[
         for (final ref in shelf.refs)
@@ -119,8 +120,9 @@ List<PlayerBookGap> _check(
     );
     if (played == null) continue;
     final result = checkGame(played, files);
-    if (result is LeftBook && result.kind != Deviation.mine)
+    if (result is LeftBook && result.kind != Deviation.mine) {
       gaps.add((game: index, gap: result));
+    }
   }
   return gaps;
 }

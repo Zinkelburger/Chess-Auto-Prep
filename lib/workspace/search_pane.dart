@@ -610,13 +610,14 @@ class _SearchPaneState extends State<SearchPane>
 
   Widget _table(BuildContext context) {
     final found = widget.fill.found;
-    if (found == null)
+    if (found == null) {
       return _sentence(
         context,
         widget.fill.running
             ? 'Evaluating the first moves…'
             : 'Press ▶ ${_book ? 'Build' : 'Expectimax'} to evaluate moves from this position.',
       );
+    }
     final side = widget.session.orientation;
     final mine = widget.fill.nodeAtBoard(request: found.request);
     final other = widget.fill.nodeAtBoard(

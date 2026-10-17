@@ -71,8 +71,9 @@ final class DatabasesView extends ModeView {
     if (kept == null ||
         request != _request ||
         requests.mode != Mode.databases ||
-        library.revision != revision)
+        library.revision != revision) {
       return;
+    }
     await requests.openFile(kept);
   }
 

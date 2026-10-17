@@ -209,8 +209,9 @@ Future<List<NativeFileObservation>> observeFileBatch(
   List<String> paths, {
   int maxBytes = 16 * 1024 * 1024,
 }) async {
-  if (maxBytes <= 0)
+  if (maxBytes <= 0) {
     throw ArgumentError.value(maxBytes, 'maxBytes', 'Must be positive');
+  }
   final requested = List<String>.of(paths);
   return _native(
     NativeCall.observeFileBatch,

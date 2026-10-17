@@ -264,10 +264,11 @@ class _ActionsMenuState extends State<_ActionsMenu> {
     for (final group in groups.entries.where(
       (group) => !_secondary.containsKey(group.key),
     )) {
-      if (children.isNotEmpty)
+      if (children.isNotEmpty) {
         children.add(
           const Divider(height: 1, indent: Space.l, endIndent: Space.l),
         );
+      }
       children.add(
         Padding(
           padding: const EdgeInsets.fromLTRB(

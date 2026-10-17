@@ -293,8 +293,9 @@ final class Studies extends ChangeNotifier {
   }
 
   Future<StudyResult> importPgn() async {
-    if (picker == null || importer == null)
+    if (picker == null || importer == null) {
       return const StudyProblem('File import is unavailable.');
+    }
     if (_busy || _disposed) return const StudyDone();
     final path = await picker!.pickPgn();
     if (path == null || _disposed) return const StudyDone();
@@ -312,8 +313,10 @@ final class Studies extends ChangeNotifier {
       }
       final name = p.basenameWithoutExtension(path);
       final chapter = await readChapter(name: name, text: text);
-      if (chapter.lines.isEmpty || chapter.lines.every((line) => !line.isWhole))
+      if (chapter.lines.isEmpty ||
+          chapter.lines.every((line) => !line.isWhole)) {
         return const StudyProblem('That PGN contains no readable games.');
+      }
       return _createdUnderAFreeName(name, text);
     });
   }
@@ -326,12 +329,14 @@ final class Studies extends ChangeNotifier {
     if (name != null) {
       if (nameProblem(name) case final wrong?) return StudyProblem(wrong);
     }
-    if (into == null)
+    if (into == null) {
       return _createdUnderAFreeName(name ?? data.name, data.text);
-    if (!data.complete)
+    }
+    if (!data.complete) {
       return const StudyProblem(
         'Some games could not be read completely. Import them as a new study to preserve their original text.',
       );
+    }
     return _addChapters(IntoStudy(into), [
       for (final (index, line) in data.chapter.lines.indexed)
         ChapterDraft(
@@ -351,8 +356,9 @@ final class Studies extends ChangeNotifier {
   Future<StudyResult> exportPgn(String name) async {
     if (nameProblem(name) case final wrong?) return StudyProblem(wrong);
     final chapter = open == null ? null : _session.snapshot();
-    if (chapter == null || exporter == null)
+    if (chapter == null || exporter == null) {
       return const StudyProblem('Open a study first.');
+    }
     final text = writeChapter(chapter);
     return _run('export study PGN', () async {
       await _saver.flush();
@@ -371,12 +377,14 @@ final class Studies extends ChangeNotifier {
   /// The original revision and operation id survive an uncertain result.
   bool get canRetryRename => _changes.canRetryRename;
   Future<StudyResult> rename(ChapterRef study, String name) {
-    if (nameProblem(name) case final wrong?)
+    if (nameProblem(name) case final wrong?) {
       return Future.value(StudyProblem(wrong));
-    if (!p.equals(p.dirname(study.path), _root))
+    }
+    if (!p.equals(p.dirname(study.path), _root)) {
       return Future.value(
         const StudyProblem('Only saved studies can be renamed.'),
       );
+    }
     final to = ChapterRef.at(p.join(_root, '$name.pgn'));
     if (_changes.canRetryRename) {
       return _changes.renames(study, to)
@@ -456,16 +464,20 @@ final class Studies extends ChangeNotifier {
 
   Future<StudyResult> _created(String name, String text) async {
     if (nameProblem(name) case final wrong?) return StudyProblem(wrong);
-    if (_creation != null)
+    if (_creation != null) {
       return const StudyProblem('Retry the pending study save first.');
+    }
     final ref = ChapterRef.at(p.join(_root, '$name.pgn'));
     final pending = pendingWrites ?? PendingWrites();
     var uncertain = false;
     Future<store.CreateResult> write() async {
       if (uncertain) {
         final read = await _store.open(ref);
-        if (read is store.Opened && read.readOnly == null && read.text == text)
+        if (read is store.Opened &&
+            read.readOnly == null &&
+            read.text == text) {
           return store.Created(read.revision);
+        }
       }
       final result = await _store.create(ref, text);
       uncertain = result is store.IoFailure;

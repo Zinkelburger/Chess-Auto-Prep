@@ -48,8 +48,9 @@ void main() {
             await FileSystemEntity.type(destination),
             FileSystemEntityType.notFound,
           );
-          if (nested)
+          if (nested) {
             expect(await Directory(p.dirname(destination)).exists(), isFalse);
+          }
         },
       );
     }

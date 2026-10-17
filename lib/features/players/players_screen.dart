@@ -64,8 +64,9 @@ class _PlayersScreenState extends State<PlayersScreen> {
   Future<void> _group({PlayerGroup? old}) async {
     final group = await editGroup(context, group: old);
     if (!mounted || group == null) return;
-    if (await owner.saveGroup(group, expected: old) && mounted)
+    if (await owner.saveGroup(group, expected: old) && mounted) {
       owner.showGroup(group.id);
+    }
   }
 
   Future<void> _addMember(PlayerGroup group) async {
@@ -78,8 +79,9 @@ class _PlayersScreenState extends State<PlayersScreen> {
       empty:
           'Everyone is already in this group. Add a new player from All players.',
     );
-    if (player != null && mounted)
+    if (player != null && mounted) {
       await owner.saveGroup(group.member(player.id), expected: group);
+    }
   }
 
   Future<void> _remove(Player player) async {
@@ -91,8 +93,9 @@ class _PlayersScreenState extends State<PlayersScreen> {
             message: 'Saved games and studies stay on disk.',
             confirm: 'Remove',
           ) ||
-          !mounted)
+          !mounted) {
         return;
+      }
       await owner.saveGroup(
         group.member(player.id, remove: true),
         expected: group,
@@ -128,8 +131,9 @@ class _PlayersScreenState extends State<PlayersScreen> {
           ].join(' '),
           confirm: 'Delete games',
         ) &&
-        mounted)
+        mounted) {
       await widget.onDeleteGames(player, saved);
+    }
   }
 
   @override

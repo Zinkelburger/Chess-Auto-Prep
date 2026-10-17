@@ -231,8 +231,9 @@ final class FillGaps extends ChangeNotifier {
     SearchNode? subtree;
     for (final found in searches) {
       if (found.side != side ||
-          (request != null && !found.request.compatibleWith(request)))
+          (request != null && !found.request.compatibleWith(request))) {
         continue;
+      }
       final node = found.at(tree.rootFen, sans);
       if (node == null) continue;
       if (found.tree.fen == _session.cursor.fen) return node;
@@ -248,15 +249,19 @@ final class FillGaps extends ChangeNotifier {
     final sameDocument = next.$1 == _board?.$1 && next.$3 == _board?.$3;
     _board = next;
     final request = _activeRequest;
-    if (!_followEnabled || request == null || (!_active && !_retargeting))
+    if (!_followEnabled || request == null || (!_active && !_retargeting)) {
       return;
+    }
     if (!sameDocument || _session.shownTo != null) {
       finish();
       _releaseSoon();
       return;
     }
-    if (_state case FillRunning(:final stopping) when stopping && !_retargeting)
+    if (_state case FillRunning(
+      :final stopping,
+    ) when stopping && !_retargeting) {
       return;
+    }
     _following = _followBoard(request);
     unawaited(_following);
   }

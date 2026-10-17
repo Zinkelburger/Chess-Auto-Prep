@@ -192,8 +192,9 @@ final class SetAdditions {
     // an unknown save acknowledgement must not discard unrelated editor words.
     if (!_saver.settled) return const NotAdded('the set could not be saved');
     final read = await _documents.open(_set.ref);
-    if (read is! Opened)
+    if (read is! Opened) {
       return const NotAdded('the mined game could not be read');
+    }
     final persisted = await readChapter(name: _set.ref.name, text: read.text);
     if (!(_idsIn(persisted.preamble, const {})?.contains(command.id) ??
             false) ||
@@ -232,8 +233,9 @@ final class SetAdditions {
         final set = await readChapter(name: ref.name, text: text);
         if (_set.isOpen) return _addInSession(command, older);
         final done = _idsIn(set.preamble, const {});
-        if (done == null)
+        if (done == null) {
           return const NotAdded('the analyzed-games line is unreadable');
+        }
         if (isAnalyzed(done, command.id)) {
           // The file moved on since this checkpoint landed unconfirmed; its
           // own puzzles still in the set confirm it, as in the session.

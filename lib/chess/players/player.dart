@@ -95,8 +95,9 @@ List<Player> _jsonPlayers(String text) {
   final rows = json is List
       ? json
       : (json['people'] ?? json['opponents'] ?? json['players']);
-  if (rows is! List)
+  if (rows is! List) {
     throw const FormatException('Use a player list or an opponents export.');
+  }
   return [
     for (final row in rows)
       if (row is Map) _imported(Map<String, Object?>.from(row)),
@@ -105,10 +106,11 @@ List<Player> _jsonPlayers(String text) {
 
 List<Player> _tablePlayers(String text) {
   final lines = text.split('\n').where((s) => s.trim().isNotEmpty).toList();
-  if (lines.length < 2)
+  if (lines.length < 2) {
     throw const FormatException(
       'Include column headings, such as Name, Rating, Chess.com and Lichess.',
     );
+  }
   final delimiter = lines.first.contains('\t')
       ? '\t'
       : lines.first.contains('|')
@@ -130,8 +132,9 @@ List<Player> _tablePlayers(String text) {
         },
       )
       .toList();
-  if (!headers.contains('name'))
+  if (!headers.contains('name')) {
     throw const FormatException('Include a Name column.');
+  }
   return lines
       .skip(1)
       .where((line) => !RegExp(r'^[\s|:\-]+$').hasMatch(line))
@@ -188,8 +191,9 @@ bool samePlayer(Player a, Player b) {
           x.site == y.site &&
           x.username.toLowerCase() == y.username.toLowerCase(),
     ),
-  ))
+  )) {
     return true;
+  }
   return a.id == b.id ||
       a.names.any(
         (x) => b.names.any((y) => x.toLowerCase() == y.toLowerCase()),

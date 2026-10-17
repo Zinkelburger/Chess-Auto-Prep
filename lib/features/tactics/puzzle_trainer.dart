@@ -274,8 +274,9 @@ final class PuzzleTrainer extends ChangeNotifier {
     if (_disposed ||
         _suspended ||
         !identical(_alternative, check) ||
-        !identical(_up, checking))
+        !identical(_up, checking)) {
       return;
+    }
     _alternative = null;
     _checkingChapter = null;
     board.value = null;

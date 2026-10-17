@@ -65,8 +65,9 @@ final class DocumentRepository extends ChangeNotifier
   @override
   Future<CreateResult> create(DocumentRef ref, String text) async {
     final result = await _write(ref.path, _store.create(ref, text));
-    if (result is Created)
+    if (result is Created) {
       _committed(DocumentChange(ref.path, kind: DocumentChangeKind.created));
+    }
     return result;
   }
 
@@ -157,7 +158,7 @@ final class DocumentRepository extends ChangeNotifier
         operationId: operationId,
       ),
     );
-    if (result is Moved)
+    if (result is Moved) {
       _committed(
         DocumentChange(
           ref.path,
@@ -165,6 +166,7 @@ final class DocumentRepository extends ChangeNotifier
           movedTo: destination.path,
         ),
       );
+    }
     return result;
   }
 
@@ -178,7 +180,7 @@ final class DocumentRepository extends ChangeNotifier
       from,
       _store.moveFolder(from, to, operationId: operationId),
     );
-    if (result is FolderMoved)
+    if (result is FolderMoved) {
       _committed(
         DocumentChange(
           from,
@@ -187,6 +189,7 @@ final class DocumentRepository extends ChangeNotifier
           folder: true,
         ),
       );
+    }
     return result;
   }
 
@@ -200,8 +203,9 @@ final class DocumentRepository extends ChangeNotifier
       ref.path,
       _store.delete(ref, expected: expected, operationId: operationId),
     );
-    if (result is Deleted)
+    if (result is Deleted) {
       _committed(DocumentChange(ref.path, kind: DocumentChangeKind.deleted));
+    }
     return result;
   }
 

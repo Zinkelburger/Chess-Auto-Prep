@@ -161,8 +161,9 @@ final class Drill {
       correct: correct,
       phase: _phase,
     );
-    if (correct)
+    if (correct) {
       return (_with(shown: shown + 1, stage: const Answered()), record);
+    }
     final missed = pass == Pass.quiz && !this.missed.contains(shown)
         ? [...this.missed, shown]
         : this.missed;

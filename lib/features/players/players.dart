@@ -252,11 +252,12 @@ final class Players extends ChangeNotifier {
         people.add(linked);
         if (target != null) target = target.member(next.id);
       }
-      if (target != null)
+      if (target != null) {
         await store.saveGroup(
           target,
           expected: current.groups.firstWhere((g) => g.id == target!.id),
         );
+      }
     });
   }
 

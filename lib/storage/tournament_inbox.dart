@@ -27,8 +27,9 @@ final class TournamentInbox implements TournamentNotifications {
   Future<String?> takeRequest() async {
     final source = p.join(root.path, 'open_request.json');
     if (await FileSystemEntity.type(source, followLinks: false) ==
-        FileSystemEntityType.notFound)
+        FileSystemEntityType.notFound) {
       return null;
+    }
     // Atomic namespace claim: a writer may replace the public name at any
     // instant. Only this private, claimed request is read and removed.
     final claimed = File(
@@ -42,8 +43,9 @@ final class TournamentInbox implements TournamentNotifications {
     } on FileSystemException catch (error) {
       if (error is PathNotFoundException ||
           error.osError?.errorCode == 2 ||
-          (Platform.isWindows && error.osError?.errorCode == 3))
+          (Platform.isWindows && error.osError?.errorCode == 3)) {
         return null;
+      }
       rethrow;
     }
     try {
@@ -58,10 +60,12 @@ final class TournamentInbox implements TournamentNotifications {
           id.isEmpty ||
           id.startsWith('.') ||
           id.contains(RegExp(r'[\\/\x00-\x1f]')) ||
-          date == null)
+          date == null) {
         return null;
-      if (DateTime.now().difference(date) > const Duration(hours: 24))
+      }
+      if (DateTime.now().difference(date) > const Duration(hours: 24)) {
         return null;
+      }
       return id;
     } on FormatException {
       log.w('open tournament request', 'Unreadable request ignored.');
@@ -93,8 +97,9 @@ final class _DirectoryWatch {
     _attach(root.path);
     final folders = <String>{root.path};
     await for (final entry in root.list(followLinks: false)) {
-      if (entry is Directory && !p.basename(entry.path).startsWith('.'))
+      if (entry is Directory && !p.basename(entry.path).startsWith('.')) {
         folders.add(entry.path);
+      }
     }
     for (final path in _watches.keys.toList()) {
       if (!folders.contains(path)) await _watches.remove(path)!.cancel();

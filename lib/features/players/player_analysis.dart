@@ -66,8 +66,9 @@ final class PlayerAnalysis extends ChangeNotifier {
 
   Future<void> retry() async {
     final current = player;
-    if (current != null && !busy)
+    if (current != null && !busy) {
       await select(current, download: _retryDownload);
+    }
   }
 
   List<String> warnings = const [];
@@ -104,13 +105,15 @@ final class PlayerAnalysis extends ChangeNotifier {
   }
 
   bool includes(AnalyzedGame game) {
-    if (game.side != side || !game.search.contains(query.toLowerCase()))
+    if (game.side != side || !game.search.contains(query.toLowerCase())) {
       return false;
+    }
     if (recentDays != null) {
       final date = DateTime.tryParse(game.date.replaceAll('.', '-'));
       if (date == null ||
-          date.isBefore(DateTime.now().subtract(Duration(days: recentDays!))))
+          date.isBefore(DateTime.now().subtract(Duration(days: recentDays!)))) {
         return false;
+      }
     }
     if (speeds.isNotEmpty &&
         !speeds.contains(
@@ -118,8 +121,9 @@ final class PlayerAnalysis extends ChangeNotifier {
             for (final key in const ['TimeControl', 'Site', 'Link'])
               key: game.tag(key),
           }),
-        ))
+        )) {
       return false;
+    }
     return true;
   }
 
@@ -207,8 +211,9 @@ final class PlayerAnalysis extends ChangeNotifier {
       final result = await analyzePlayerGames(next, games);
       final fetched = await _stalestDownload(next);
       if (!_current(ticket)) return;
-      if (!await _validate(revisions, ticket))
+      if (!await _validate(revisions, ticket)) {
         throw StateError('Games changed while being read. Reload this player.');
+      }
       corpus = result;
       evals.clear();
       _revisions
@@ -217,8 +222,9 @@ final class PlayerAnalysis extends ChangeNotifier {
       warnings = notes;
       if (!same &&
           !result.games.any((g) => g.side == side) &&
-          result.games.isNotEmpty)
+          result.games.isNotEmpty) {
         side = result.games.first.side;
+      }
       status = result.games.isEmpty
           ? 'No matching games. Add an account or PGN file, and check the player’s name and aliases.'
           : [
@@ -295,10 +301,11 @@ final class PlayerAnalysis extends ChangeNotifier {
         final keeping = cache.keep(site, username, games, DateTime.now());
         pending.watch(this, keeping);
         final kept = await keeping;
-        if (kept is GamesNotKept)
+        if (kept is GamesNotKept) {
           notes.add(
             '${site.label}: could not save downloaded games. ${kept.detail}',
           );
+        }
       case GamesNotFetched(:final problem):
         notes.add(
           '${site.label}: ${switch (problem) {
@@ -327,8 +334,9 @@ final class PlayerAnalysis extends ChangeNotifier {
     if (names.isNotEmpty) {
       final archived = await archive.read(names);
       if (!_current(ticket)) return (<PlayerGame>[], <DocumentRef, Revision>{});
-      if (archived is StoredGamesUnreadable)
+      if (archived is StoredGamesUnreadable) {
         notes.add('Older saved games could not be read. ${archived.detail}');
+      }
       if (archived is StoredGamesFound && archived.games.isNotEmpty) {
         final ref = _archiveCopyOf(next);
         // The downloads and linked files are still read without it.
@@ -356,12 +364,14 @@ final class PlayerAnalysis extends ChangeNotifier {
         case Unreadable(:final detail):
           notes.add('${p.basename(path)}: $detail');
         case Absent():
-          if (next.files.contains(path))
+          if (next.files.contains(path)) {
             notes.add('${p.basename(path)} is missing. Link the file again.');
+          }
       }
     }
-    if (paths.isNotEmpty && revisions.isEmpty && notes.isNotEmpty)
+    if (paths.isNotEmpty && revisions.isEmpty && notes.isNotEmpty) {
       throw StateError(notes.join('\n'));
+    }
     return (games, revisions);
   }
 
@@ -420,8 +430,9 @@ final class PlayerAnalysis extends ChangeNotifier {
   ) async {
     for (final e in revisions.entries) {
       final read = await documents.open(e.key);
-      if (!_current(ticket) || read is! Opened || read.revision != e.value)
+      if (!_current(ticket) || read is! Opened || read.revision != e.value) {
         return false;
+      }
     }
     return _current(ticket);
   }
@@ -446,8 +457,9 @@ final class PlayerAnalysis extends ChangeNotifier {
     final revisions = Map.of(_revisions);
     for (final e in revisions.entries) {
       final read = await documents.open(e.key);
-      if (!_current(ticket) || read is! Opened || read.revision != e.value)
+      if (!_current(ticket) || read is! Opened || read.revision != e.value) {
         return false;
+      }
     }
     return _current(ticket);
   }

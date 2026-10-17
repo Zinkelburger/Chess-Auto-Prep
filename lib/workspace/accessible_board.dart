@@ -59,8 +59,9 @@ class _AccessibleBoardState extends State<AccessibleBoard> {
   }
 
   KeyEventResult _key(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent)
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
+    }
     final direction = switch (event) {
       _ when AppKey.squareLeft.accepts(event) => (-1, 0),
       _ when AppKey.squareRight.accepts(event) => (1, 0),
@@ -110,8 +111,9 @@ class _AccessibleBoardState extends State<AccessibleBoard> {
     if (moves.isNotEmpty) {
       final fen = widget.fen;
       final move = moves.length == 1 ? moves.single : await _promotion(moves);
-      if (!mounted || move == null || widget.fen != fen || !widget.movable)
+      if (!mounted || move == null || widget.fen != fen || !widget.movable) {
         return;
+      }
       setState(() {
         _from = null;
         _notice = null;

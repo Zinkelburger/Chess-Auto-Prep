@@ -57,8 +57,9 @@ final class DirectorySnapshot {
     if (entries is! List) _refuse('Directory inventory must be a list.');
     final decoded = <DirectorySnapshotEntry>[];
     for (final entry in entries) {
-      if (entry is! Map<String, Object?>)
+      if (entry is! Map<String, Object?>) {
         _refuse('Invalid directory inventory entry.');
+      }
       final kind = switch (entry['kind']) {
         'directory' => DirectoryEntryKind.directory,
         'file' => DirectoryEntryKind.file,
@@ -221,8 +222,9 @@ void _validate(String identity, List<DirectorySnapshotEntry> entries) {
       _refuse('Directory inventory omits a parent directory: $path.');
     }
     _identity(entry.identity);
-    if (!identities.add(entry.identity))
+    if (!identities.add(entry.identity)) {
       _refuse('Directory inventory repeats a native identity.');
+    }
     if (entry.kind == DirectoryEntryKind.directory) {
       directories.add(path);
     } else if (entry.sha256 == null ||
@@ -240,8 +242,9 @@ bool _equal<T>(List<T> a, List<T> b) =>
 String _string(Object? value) =>
     value is String ? value : _refuse('Invalid directory entry string.');
 void _identity(String value) {
-  if (value.isEmpty || value.contains('\u0000'))
+  if (value.isEmpty || value.contains('\u0000')) {
     _refuse('Invalid directory native identity.');
+  }
 }
 
 final _hash = RegExp(r'^[0-9a-f]{64}$');

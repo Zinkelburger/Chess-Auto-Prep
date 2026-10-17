@@ -28,8 +28,9 @@ String? sectionReferenceProblem({
     GamesRearranged(:final arranged) => arranged,
     _ => null,
   };
-  if (arranged == null)
+  if (arranged == null) {
     return 'Section reference changes require declared game lineage.';
+  }
   if (arranged.before != previous.length ||
       arranged.order.length != next.length) {
     return 'Section reference changes do not match the declared game counts.';
@@ -37,12 +38,15 @@ String? sectionReferenceProblem({
   final expected = [...previous];
   final sources = <String>{};
   for (final change in references.changes) {
-    if (!p.equals(documentPath, change.path))
+    if (!p.equals(documentPath, change.path)) {
       return 'Section references name another document.';
-    if (change.to.isEmpty || change.to.trim() != change.to)
+    }
+    if (change.to.isEmpty || change.to.trim() != change.to) {
       return 'The renamed section needs a valid name.';
-    if (!expected.contains(change.from))
+    }
+    if (!expected.contains(change.from)) {
       return 'The section to rename does not exist: ${change.from}.';
+    }
     if (change.from != change.to && expected.contains(change.to)) {
       return 'The renamed section already exists: ${change.to}.';
     }
@@ -54,8 +58,9 @@ String? sectionReferenceProblem({
   // A new game may introduce a section, but may not leave behind a name the
   // accepted rename chain eliminated. Roundtrips deliberately keep their name.
   final eliminated = sources.difference(expected.nonNulls.toSet());
-  if (next.any(eliminated.contains))
+  if (next.any(eliminated.contains)) {
     return 'The PGN still contains a section that was renamed.';
+  }
   return _retainedProblem(previous, expected, next, arranged);
 }
 

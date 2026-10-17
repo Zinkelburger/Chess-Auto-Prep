@@ -353,8 +353,9 @@ final class Solitaire extends ChangeNotifier {
         ticket != _ticket ||
         !active ||
         _expected != expected ||
-        evaluator != _evaluator)
+        evaluator != _evaluator) {
       return;
+    }
     checking = false;
     switch (verdict) {
       case SolitaireScored(

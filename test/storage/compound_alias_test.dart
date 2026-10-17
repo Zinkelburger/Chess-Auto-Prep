@@ -128,8 +128,9 @@ void main() {
           documents: startAliased ? documentAlias : documents,
           support: startAliased ? supportAlias : support,
           testHook: (step) async {
-            if (step == CompoundWriteStep.document)
+            if (step == CompoundWriteStep.document) {
               throw StateError('interrupted');
+            }
           },
         );
         final firstPath = p.join(

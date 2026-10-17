@@ -16,16 +16,19 @@ ChapterEdit editStudyTags(
   Map<String, String> values,
 ) {
   for (final key in values.keys) {
-    if (!RegExp(r'^[A-Za-z][A-Za-z0-9_]*$').hasMatch(key))
+    if (!RegExp(r'^[A-Za-z][A-Za-z0-9_]*$').hasMatch(key)) {
       return ChapterEditRefused('Invalid tag name: $key.');
-    if (studyOwnedTags.contains(key))
+    }
+    if (studyOwnedTags.contains(key)) {
       return ChapterEditRefused('$key belongs to the study.');
+    }
   }
   final result = values['Result'];
-  if (result != null && !{'*', '1-0', '0-1', '1/2-1/2'}.contains(result))
+  if (result != null && !{'*', '1-0', '0-1', '1/2-1/2'}.contains(result)) {
     return const ChapterEditRefused(
       'Use a PGN result: *, 1-0, 0-1 or 1/2-1/2.',
     );
+  }
   return _edit(chapter, index, (line, tree) {
     final remaining = {...values};
     final tags = <PgnHeader>[];
@@ -35,12 +38,13 @@ ChapterEdit editStudyTags(
         continue;
       }
       final value = remaining.remove(tag.key);
-      if (value != null)
+      if (value != null) {
         tags.add(
           value == tag.value
               ? tag
               : PgnTag(tag.key, value, trailer: tag.trailer),
         );
+      }
     }
     final ending = line.tags.firstOrNull?.trailer ?? '\n';
     tags.addAll(
@@ -98,13 +102,15 @@ ChapterEdit _edit(
   int index,
   _Replacement Function(ChapterLine, GameTree) change,
 ) {
-  if (index < 0 || index >= chapter.lines.length)
+  if (index < 0 || index >= chapter.lines.length) {
     return const ChapterEditRefused('That chapter is no longer in the study.');
+  }
   final line = chapter.lines[index];
-  if (!line.isWhole)
+  if (!line.isWhole) {
     return const ChapterEditRefused(
       'That chapter was not read whole, so it keeps its original text.',
     );
+  }
   final next = change(line, line.tree!);
   final updated = ChapterLine(
     tags: next.tags,
@@ -115,8 +121,9 @@ ChapterEdit _edit(
     separator: line.separator,
   );
   final written = rewritten(updated, next.tree);
-  if (written case LineRefused(:final reason))
+  if (written case LineRefused(:final reason)) {
     return ChapterEditRefused(reason);
+  }
   final lines = [...chapter.lines];
   lines[index] = (written as LineRewritten).line;
   return ChapterEdited(

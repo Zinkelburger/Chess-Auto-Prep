@@ -33,8 +33,9 @@ void main() {
         support: support,
         synchronize: (path) async {
           flushed.add(path);
-          if (path == root.path && fail)
+          if (path == root.path && fail) {
             throw FileSystemException('injected ancestor flush failure', path);
+          }
           await syncDirectory(path);
         },
       );

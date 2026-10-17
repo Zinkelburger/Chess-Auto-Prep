@@ -108,10 +108,11 @@ final class TournamentRun extends ChangeNotifier {
       case TournamentSaved(:final value, :final warnings):
         historyWarnings = warnings;
         history = value;
-        if (!running && !canRetry)
+        if (!running && !canRetry) {
           selected =
               value.where((t) => t.id == selected?.id).firstOrNull ??
               value.firstOrNull;
+        }
       case TournamentFailed(:final message):
         problem = message;
     }
@@ -189,8 +190,9 @@ final class TournamentRun extends ChangeNotifier {
 
   /// Takes the machine for this run, or says why it cannot start yet.
   bool _takeEngines() {
-    if (_jobs.take(this, 'Engine tournament', kind: EngineJobKind.tournament))
+    if (_jobs.take(this, 'Engine tournament', kind: EngineJobKind.tournament)) {
       return true;
+    }
     problem = _jobs.blockingMessage;
     _notify();
     return false;
@@ -292,7 +294,7 @@ final class TournamentRun extends ChangeNotifier {
       // them, then close the run as completed only if every game was played.
       await _checkpoint();
       final games = _games;
-      if (!canRetry && games != null)
+      if (!canRetry && games != null) {
         await _persist(
           _active!.changed({
             'status':
@@ -303,6 +305,7 @@ final class TournamentRun extends ChangeNotifier {
           }),
           _pgn ?? '',
         );
+      }
     }
   }
 
@@ -314,8 +317,9 @@ final class TournamentRun extends ChangeNotifier {
 
   Future<void> remove(Tournament value) async {
     if (running && value.id == _active?.id ||
-        canRetry && value.id == _active?.id)
+        canRetry && value.id == _active?.id) {
       return;
+    }
     final result = await pending.track(
       this,
       store.remove(value),

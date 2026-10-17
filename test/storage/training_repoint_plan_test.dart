@@ -192,8 +192,9 @@ void main() {
         attemptsFile: '{ "repertoireId": "${from.path}", "future": [1,2] }\n',
       };
       for (final entry in before.entries) {
-        if (entry.value != null)
+        if (entry.value != null) {
           await file(entry.key).writeAsString(entry.value!);
+        }
       }
       final native = await records.plan(from, to);
       for (final entry in await documents.list().toList()) {
@@ -339,8 +340,9 @@ void main() {
             '${jsonEncode({'repertoireId': alternateFrom.path, 'future': true})}\n',
       };
       for (final entry in before.entries) {
-        if (entry.value != null)
+        if (entry.value != null) {
           await file(entry.key).writeAsString(entry.value!);
+        }
       }
       final captured = TrainingRepointPlan.fromSnapshots(
         from: from,

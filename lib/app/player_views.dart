@@ -64,8 +64,9 @@ final class PlayerAnalysisView extends ModeView {
   Future<bool> _open(int index, PlayerPosition? at, {Fen? fen}) async {
     final analysis = players.analysis;
     final corpus = analysis.corpus;
-    if (corpus == null || index < 0 || index >= corpus.games.length)
+    if (corpus == null || index < 0 || index >= corpus.games.length) {
       return false;
+    }
     final game = corpus.games[index];
     fen ??= at?.fen;
     if (!await analysis.currentSources()) {
@@ -80,8 +81,9 @@ final class PlayerAnalysisView extends ModeView {
       ply: 0,
       side: game.side,
     );
-    if (result is! RequestDone || !identical(corpus, analysis.corpus))
+    if (result is! RequestDone || !identical(corpus, analysis.corpus)) {
       return false;
+    }
     if (workspace.session.persistedRevision !=
         analysis.revisionOf(game.source.file)) {
       requests.say(
@@ -128,10 +130,11 @@ final class PlayerAnalysisView extends ModeView {
         if (!await _open(gap.game, null)) return;
         final game = players.analysis.corpus?.games[gap.game];
         if (game != null &&
-            workspace.session.source?.path == game.source.file.path)
+            workspace.session.source?.path == game.source.file.path) {
           workspace.session.cursor.goTo(
             NodePath.of(List.filled(leftBookMoment(gap.gap), 0)),
           );
+        }
       },
     ),
     _ => null,

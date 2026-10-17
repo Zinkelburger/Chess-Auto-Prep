@@ -92,8 +92,9 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
     if (yes &&
         mounted &&
         identical(widget.session, session) &&
-        identical(session.chapter, chapter))
+        identical(session.chapter, chapter)) {
       session.discardHeld();
+    }
   }
 
   Future<void> _undo() async {

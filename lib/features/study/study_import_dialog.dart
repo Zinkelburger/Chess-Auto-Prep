@@ -71,11 +71,12 @@ class _ImportState extends State<_Import> {
         if (result is StudyImportProblem) _problem = result.message;
       });
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(
           () =>
               _problem = 'Could not read this source. Check it and try again.',
         );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -99,11 +100,12 @@ class _ImportState extends State<_Import> {
         Navigator.pop(context, result);
       }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(
           () => _problem =
               'Could not finish importing. Your preview is still available.',
         );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

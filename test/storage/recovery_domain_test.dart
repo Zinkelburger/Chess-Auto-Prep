@@ -255,8 +255,9 @@ Future<_Child> _hold(
       .listen(diagnostics.write);
   unawaited(
     process.exitCode.then((code) {
-      if (!ready.isCompleted)
+      if (!ready.isCompleted) {
         ready.completeError(StateError('Child exited $code: $diagnostics'));
+      }
     }),
   );
   final child = _Child(process, output, errors);

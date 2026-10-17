@@ -118,8 +118,9 @@ final class PlayerModes {
     final next = current.edited({'download': range.json});
     if (await directory.save(next, expected: current) &&
         !_disposed &&
-        analysis.player?.id == chosen.id)
+        analysis.player?.id == chosen.id) {
       await analysis.select(next, download: true);
+    }
   }
 
   Future<void> importPgn() async {
@@ -140,8 +141,9 @@ final class PlayerModes {
         });
         if (await directory.save(next, expected: current) &&
             !_disposed &&
-            analysis.player?.id == player.id)
+            analysis.player?.id == player.id) {
           await analysis.select(next);
+        }
       case ImportFailed(:final detail):
         requests.say(detail);
     }
@@ -209,10 +211,11 @@ final class PlayerModes {
       case Absent():
         return false;
       case Unreadable():
-        if (!_disposed)
+        if (!_disposed) {
           requests.say(
             '$what ${p.basename(path)} could not be read. Unlink it to start a new one.',
           );
+        }
         return null;
     }
   }
@@ -360,8 +363,9 @@ final class PlayerModes {
         }
       }
       if (_disposed) return null;
-      if (chapters.isEmpty)
+      if (chapters.isEmpty) {
         chapters.add(newStudyText(study: name, chapter: 'Preparation'));
+      }
       final ref = ChapterRef.at(
         p.join(
           env.folders.studies,
@@ -370,16 +374,18 @@ final class PlayerModes {
       );
       final made = await env.store.create(ref, '${chapters.join('\n\n')}\n');
       // As for a player's study: one left by a link that was not saved.
-      if (made is! Created && (made is! Collision || _linkedElsewhere(ref)))
+      if (made is! Created && (made is! Collision || _linkedElsewhere(ref))) {
         throw StateError(
           'A study with this name already exists. Rename the group or link its existing study.',
         );
+      }
       if (_disposed) return null;
       if (!await directory.saveGroup(
         group.edited({'study': ref.path}),
         expected: group,
-      ))
+      )) {
         return null;
+      }
       await studies.refresh();
       // An adopted study was seeded earlier, not from what was read now.
       return (ref: ref, leftOut: made is Created ? skipped : const <String>[]);
@@ -420,11 +426,12 @@ final class PlayerModes {
       if (_disposed) return;
       if (copy) {
         await Clipboard.setData(ClipboardData(text: text));
-        if (!_disposed)
+        if (!_disposed) {
           requests.say(
             'Prep sheet copied, including saved lines.',
             problem: false,
           );
+        }
         return;
       }
       final exporter = env.exportText;

@@ -460,8 +460,9 @@ Map<String, Object?>? readBookDocument(String? original) {
       throw const FormatException('Invalid book metadata.');
     }
     for (final folder in _entries(book, 'repertoires')) {
-      if (!isBookSelector(folder))
+      if (!isBookSelector(folder)) {
         throw const FormatException('Invalid book repertoire path.');
+      }
     }
     for (final entry in _entries(book, 'chapters')) {
       _chapter(entry);

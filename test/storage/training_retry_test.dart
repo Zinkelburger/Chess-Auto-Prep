@@ -150,8 +150,9 @@ void main() {
         support: Directory(p.join(documents.path, 'Support')),
         publish: (path, bytes) async {
           await replaceFile(path, bytes);
-          if (++publications == 1)
+          if (++publications == 1) {
             throw const FileSystemException('disk sync failed');
+          }
         },
       );
       final operation = accepted();
@@ -183,8 +184,9 @@ void main() {
       support: Directory(p.join(documents.path, 'Support')),
       publish: (path, bytes) async {
         await replaceFile(path, bytes);
-        if (++publications == 1)
+        if (++publications == 1) {
           throw const FileSystemException('acknowledgement lost');
+        }
       },
     );
     final operation = accepted();
@@ -351,8 +353,9 @@ void main() {
       support: Directory(p.join(documents.path, 'Support')),
       publish: (path, bytes) async {
         await replaceFile(path, bytes);
-        if (++publications == 1)
+        if (++publications == 1) {
           throw const FileSystemException('acknowledgement lost');
+        }
       },
     );
     final operation = accepted();

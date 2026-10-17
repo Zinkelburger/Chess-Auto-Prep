@@ -338,8 +338,9 @@ class Lesson extends ChangeNotifier {
     _rated.add(line.key);
     _tally = (lines: _rated.length, right: _tally.right, wrong: _tally.wrong);
     if (rating == Rating.again &&
-        (kind == SittingKind.learn || kind == SittingKind.review))
+        (kind == SittingKind.learn || kind == SittingKind.review)) {
       _left.add(line);
+    }
     if (_suspended) {
       _advanceOnResume = true;
     } else {

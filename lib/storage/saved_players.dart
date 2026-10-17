@@ -24,21 +24,24 @@ Future<List<Player>> savedPlayers(Directory root) async {
       if (data is! Map ||
           info is! Map ||
           info['platform'] is! String ||
-          info['username'] is! String)
+          info['username'] is! String) {
         throw const FormatException('A player manifest has no identity.');
+      }
       final key = '${info['platform']}:${info['username']}'.toLowerCase();
       hidden.add(key);
-      if (data['version'] != 1)
+      if (data['version'] != 1) {
         throw const FormatException(
           'An older player corpus uses an unsupported manifest version.',
         );
+      }
       if (data['deleted'] == true) continue;
       final revision = data['revision'];
       if (revision is! String ||
-          !RegExp(r'^\d+-[a-f0-9]{64}$').hasMatch(revision))
+          !RegExp(r'^\d+-[a-f0-9]{64}$').hasMatch(revision)) {
         throw const FormatException(
           'A player manifest has an invalid revision.',
         );
+      }
       final path = p.join(entry.path, 'versions', revision, 'games.pgn');
       found[key] = _player(info, path, p.basename(entry.path));
     } on FormatException catch (error) {
@@ -55,13 +58,15 @@ Future<List<Player>> savedPlayers(Directory root) async {
       final raw = jsonDecode(await file.readAsString());
       if (raw is! Map ||
           raw['platform'] is! String ||
-          raw['username'] is! String)
+          raw['username'] is! String) {
         continue;
+      }
       final key = '${raw['platform']}:${raw['username']}'.toLowerCase();
       if (hidden.contains(key)) continue;
       final path = p.setExtension(file.path, '.pgn');
-      if (await File(path).exists())
+      if (await File(path).exists()) {
         found[key] = _player(raw, path, p.basenameWithoutExtension(file.path));
+      }
     } on FormatException catch (error) {
       log.w('skip saved player ${file.path}', error);
     } on FileSystemException catch (error) {

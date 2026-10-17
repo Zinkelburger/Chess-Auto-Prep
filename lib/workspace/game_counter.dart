@@ -70,8 +70,9 @@ class _GameCounterState extends State<GameCounter>
   /// turn later, so the box is put right here rather than left to it.
   void _jump(String text) {
     final number = int.tryParse(text.trim());
-    if (number != null && number > 0 && number <= _order.length)
+    if (number != null && number > 0 && number <= _order.length) {
       widget.session.showGame(_order[number - 1]);
+    }
     _focus.unfocus();
     _show();
   }

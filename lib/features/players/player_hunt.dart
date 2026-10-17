@@ -220,8 +220,9 @@ final class PlayerHunt extends ChangeNotifier {
     bool current() => !_disposed && ticket == _ticket;
     Engine? engine;
     try {
-      if (!await analysis.currentSources())
+      if (!await analysis.currentSources()) {
         throw StateError('Saved games changed. Reload the player first.');
+      }
       if (!current()) return;
       switch (await launch()) {
         case Started(engine: final started):
@@ -316,10 +317,11 @@ final class PlayerHunt extends ChangeNotifier {
     if (_disposed || ticket != _ticket) return const [];
     final best = lines[1];
     if (best == null ||
-        (best.depth < depth && best.score is! MateIn && best.pv.isNotEmpty))
+        (best.depth < depth && best.score is! MateIn && best.pv.isNotEmpty)) {
       throw StateError(
         'The engine stopped before reaching the requested depth.',
       );
+    }
     return [
       for (final n in lines.keys.toList()..sort())
         if (lines[n]!.depth >= depth ||
@@ -339,8 +341,9 @@ final class PlayerHunt extends ChangeNotifier {
     if (!practical ||
         model == null ||
         _probed >= probes ||
-        practicalWarning != null)
+        practicalWarning != null) {
       return;
+    }
     _probed++;
     final best = lines.first;
     final baseline = expectedScore(packedCp(best.score));
@@ -358,7 +361,7 @@ final class PlayerHunt extends ChangeNotifier {
               (await _lines(engine, fen, ticket)).firstOrNull,
         );
         if (_disposed || ticket != _ticket) return;
-        if (estimate != null && estimate > baseline + .05)
+        if (estimate != null && estimate > baseline + .05) {
           findings.add(
             PlayerWeakness(
               position,
@@ -368,6 +371,7 @@ final class PlayerHunt extends ChangeNotifier {
               practicalGain: estimate - baseline,
             ),
           );
+        }
       } on Object catch (e) {
         practicalWarning = 'Practical search skipped: $e';
         return;

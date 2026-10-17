@@ -102,8 +102,9 @@ final class TrainingSelection extends ChangeNotifier {
   void update(TrainingOptions next) {
     _options = next;
     final store = settings;
-    if (store != null)
+    if (store != null) {
       unawaited(store.update(store.value.copyWith(training: next)));
+    }
     notifyListeners();
   }
 }

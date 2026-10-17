@@ -254,8 +254,9 @@ class Trainer extends ChangeNotifier {
         _session.source?.path == _read?.ref?.path;
     if (!returning &&
         revision == _savedRevision &&
-        revision.nativeIdentity == _savedRevision?.nativeIdentity)
+        revision.nativeIdentity == _savedRevision?.nativeIdentity) {
       return;
+    }
     _savedRevision = revision;
     final path = _session.source?.path;
     if (_read?.ref?.path != path) return;
@@ -270,8 +271,9 @@ class Trainer extends ChangeNotifier {
           .firstOrNull
           ?.revision;
       if (original == revision &&
-          original?.nativeIdentity == revision.nativeIdentity)
+          original?.nativeIdentity == revision.nativeIdentity) {
         return;
+      }
     }
     if (path != null &&
         state is TrainerReady &&
@@ -350,8 +352,9 @@ class Trainer extends ChangeNotifier {
       !selection.active && _session.game != null ? _session.chapter : null;
   int? get studyChapter => _session.game;
   String? setStudySides(Chapter expected, Map<int, Side> sides) {
-    if (!identical(expected, studyDocument))
+    if (!identical(expected, studyDocument)) {
       return 'The study changed. Choose the sides again.';
+    }
     return _session.apply((chapter) => setStudyTrainingSides(chapter, sides));
   }
 
@@ -505,10 +508,11 @@ class Trainer extends ChangeNotifier {
     _lesson = null;
     final retained = _retained;
     _retained = false;
-    if (retained)
+    if (retained) {
       scheduleMicrotask(() {
         if (!_disposed && _lesson == null) _follow();
       });
+    }
     board.value = null;
     _analysis.resume(this);
     notifyListeners();
@@ -561,8 +565,9 @@ class Trainer extends ChangeNotifier {
       if (state is TrainerReady &&
           _session.source != null &&
           state.chapters.any((c) => c.ref == _session.source) &&
-          !identical(_session.chapter, _read?.chapter))
+          !identical(_session.chapter, _read?.chapter)) {
         _relined();
+      }
       return;
     }
     final read = _read;
@@ -757,7 +762,7 @@ class Trainer extends ChangeNotifier {
           (previous != null &&
               (previous != revision ||
                   previous.nativeIdentity != revision.nativeIdentity))) {
-        if (load == _loads)
+        if (load == _loads) {
           _become(
             const TrainerFailed(
               ProgressFailed(
@@ -765,6 +770,7 @@ class Trainer extends ChangeNotifier {
               ),
             ),
           );
+        }
         return;
       }
       observed[chapter.ref.path] = revision;

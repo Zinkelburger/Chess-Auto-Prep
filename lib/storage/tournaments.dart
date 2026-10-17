@@ -94,8 +94,9 @@ final class FileTournaments
   }
 
   void _checkRoot() {
-    if (canonicalRecoveryRoot(_configuredRoot).path != root.path)
+    if (canonicalRecoveryRoot(_configuredRoot).path != root.path) {
       throw const FileSystemException('Tournament directory changed.');
+    }
   }
 
   String _folder(String id) {
@@ -104,8 +105,9 @@ final class FileTournaments
         id.startsWith('.') ||
         p.basename(id) != id ||
         id.contains('\\') ||
-        id.contains('\u0000'))
+        id.contains('\u0000')) {
       throw const FormatException('Invalid tournament identity.');
+    }
     return p.join(root.path, id);
   }
 
@@ -123,8 +125,9 @@ final class FileTournaments
       return withDirectoryLock(root, () async {
         final found = <Tournament>[];
         await for (final entry in root.list(followLinks: false)) {
-          if (entry is! Directory || p.basename(entry.path).startsWith('.'))
+          if (entry is! Directory || p.basename(entry.path).startsWith('.')) {
             continue;
+          }
           final id = p.basename(entry.path);
           final tournament = await _readTournament(id, warnings);
           if (tournament != null) found.add(tournament);
@@ -151,8 +154,9 @@ final class FileTournaments
       final text = await recoveryText(_metadata(id));
       if (text == null) return null;
       final tournament = Tournament(tournamentObject(jsonDecode(text)));
-      if (tournament.id != id)
+      if (tournament.id != id) {
         throw const FormatException('Mismatched tournament identity.');
+      }
       return tournament;
     } on Object catch (error) {
       log.w('read tournament $id', _reason(error));
@@ -171,10 +175,12 @@ final class FileTournaments
         final folder = Directory(_folder(initial.id));
         await recoveryDirectory(folder, create: true);
         final current = await recoveryText(_metadata(initial.id));
-        if (current != null && !_same(current, initial))
+        if (current != null && !_same(current, initial)) {
           throw StateError('That tournament already exists.');
-        if (current == null)
+        }
+        if (current == null) {
           await _publish(_metadata(initial.id), _encoded(initial));
+        }
         return initial;
       });
     },
@@ -189,18 +195,21 @@ final class FileTournaments
   }) => _guard('save tournament ${before.id}', () async {
     if (before.id != after.id) throw StateError('Tournament identity changed.');
     return withDirectoryLock(root, () async {
-      if (!await recoveryDirectory(Directory(_folder(before.id))))
+      if (!await recoveryDirectory(Directory(_folder(before.id)))) {
         throw StateError('The tournament was removed.');
+      }
       await _recover(before.id);
       final current = await recoveryText(_metadata(before.id));
       final target = _encoded(after);
       final prior = await documents.open(games(before.id));
       final written = _text(prior);
       if (current == target && written == pgn) return after;
-      if (!_same(current, before))
+      if (!_same(current, before)) {
         throw StateError('The tournament changed in another window.');
-      if (written != expectedPgn)
+      }
+      if (written != expectedPgn) {
         throw StateError('The saved games changed in another window.');
+      }
       // Version 2 names the PGN it replaces by hash: a checkpoint journals
       // the new games once rather than the whole file twice.
       final record = <String, Object?>{
@@ -234,8 +243,9 @@ final class FileTournaments
       };
       if ((before != null && before is! String) ||
           data['after'] is! String ||
-          data['pgnAfter'] is! String)
+          data['pgnAfter'] is! String) {
         throw const FormatException('Invalid tournament recovery record.');
+      }
     } on FormatException catch (error) {
       await _setAside(record, _reason(error));
     }
@@ -277,27 +287,27 @@ final class FileTournaments
   }
 
   @override
-  Future<TournamentResult<void>> remove(Tournament tournament) =>
-      _guard('remove tournament', () async {
-        await withDirectoryLock(root, () async {
-          await _recover(tournament.id);
-          if (!_same(await recoveryText(_metadata(tournament.id)), tournament))
-            throw StateError(
-              'The tournament changed. Refresh before deleting it.',
-            );
-          final trash = Directory(p.join(root.path, '.trash'));
-          await recoveryDirectory(trash, create: true);
-          await movePathNoReplace(
-            _folder(tournament.id),
-            p.join(
-              trash.path,
-              '${tournament.id}-${DateTime.now().microsecondsSinceEpoch}',
-            ),
-          );
-          await flushRecoveryDirectory(trash.path);
-          await flushRecoveryDirectory(root.path);
-        });
-      });
+  Future<TournamentResult<void>> remove(
+    Tournament tournament,
+  ) => _guard('remove tournament', () async {
+    await withDirectoryLock(root, () async {
+      await _recover(tournament.id);
+      if (!_same(await recoveryText(_metadata(tournament.id)), tournament)) {
+        throw StateError('The tournament changed. Refresh before deleting it.');
+      }
+      final trash = Directory(p.join(root.path, '.trash'));
+      await recoveryDirectory(trash, create: true);
+      await movePathNoReplace(
+        _folder(tournament.id),
+        p.join(
+          trash.path,
+          '${tournament.id}-${DateTime.now().microsecondsSinceEpoch}',
+        ),
+      );
+      await flushRecoveryDirectory(trash.path);
+      await flushRecoveryDirectory(root.path);
+    });
+  });
 
   @override
   Future<TournamentResult<List<TournamentEngine>>> engines() => _guard(
@@ -307,8 +317,9 @@ final class FileTournaments
       final text = await recoveryText(p.join(root.path, 'engines.json'));
       if (text == null) return <TournamentEngine>[];
       final data = jsonDecode(text);
-      if (data is! List)
+      if (data is! List) {
         throw const FormatException('Invalid engine registry.');
+      }
       return [for (final row in data) TournamentEngine(tournamentObject(row))];
     },
   );
@@ -327,8 +338,9 @@ final class FileTournaments
       final target = jsonEncode([for (final e in after) e.json]);
       if (current != null && jsonEncode(jsonDecode(current)) == target) return;
       if ((current == null && before.isNotEmpty) ||
-          (current != null && jsonEncode(jsonDecode(current)) != expected))
+          (current != null && jsonEncode(jsonDecode(current)) != expected)) {
         throw StateError('The engine registry changed. Refresh before saving.');
+      }
       await _publish(path, target);
     });
   });
@@ -470,8 +482,9 @@ final class _Metadata implements Pivot {
     try {
       final text = await recoveryText(path);
       if (text == record['after']) return;
-      if (text != record['before'])
+      if (text != record['before']) {
         throw const PivotTaken('Tournament metadata changed during save.');
+      }
       await _publish(path, record['after'] as String);
     } on RecoveryRequired catch (error) {
       // Unreadable or linked for now, as look treats it: retry next access.
@@ -486,8 +499,9 @@ final class _Metadata implements Pivot {
   @override
   Future<bool> putBack() async {
     final before = record['before'];
-    if (before is! String || await recoveryText(path) != record['after'])
+    if (before is! String || await recoveryText(path) != record['after']) {
       return false;
+    }
     await _publish(path, before);
     return true;
   }

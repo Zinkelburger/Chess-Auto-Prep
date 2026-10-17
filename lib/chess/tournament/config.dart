@@ -75,33 +75,44 @@ final class TournamentConfig {
   String? get problem {
     if (name.trim().isEmpty) return 'Name the tournament.';
     if (engines.length < 2 || engines.length > 32) return 'Pick 2–32 engines.';
-    if (gamesPerPairing < 1 || gamesPerPairing > 1000)
+    if (gamesPerPairing < 1 || gamesPerPairing > 1000) {
       return 'Use 1–1000 games per pairing.';
+    }
     if (gameCount > 100000) return 'Limit a run to 100000 games.';
-    if (concurrency < 1 || concurrency > 64)
+    if (concurrency < 1 || concurrency > 64) {
       return 'Use 1–64 simultaneous games.';
+    }
     if (maxMoves < 1 || maxMoves > 10000) return 'Use 1–10000 moves per game.';
     for (final engine in engines) {
       if (engine.threads < 1 ||
           engine.threads > 1024 ||
           engine.memory < 1 ||
-          engine.memory > 65536)
+          engine.memory > 65536) {
         return 'Use 1–1024 cores and 1–65536 MB per engine.';
+      }
       if (engine.options.entries.any(
         (e) => '${e.key}${e.value}'.contains(RegExp(r'[\r\n]')),
-      ))
+      )) {
         return 'Engine options must be single lines.';
+      }
     }
-    if (!{'movetime', 'incremental', 'fixedDepth', 'fixedNodes'}.contains(kind))
+    if (!{
+      'movetime',
+      'incremental',
+      'fixedDepth',
+      'fixedNodes',
+    }.contains(kind)) {
       return 'Choose a supported time control.';
+    }
     final key = switch (kind) {
       'incremental' => 'baseMs',
       'fixedDepth' => 'depth',
       'fixedNodes' => 'nodes',
       _ => 'movetimeMs',
     };
-    if (timeNumber(key, 1) <= 0 || timeNumber('incrementMs', 0) < 0)
+    if (timeNumber(key, 1) <= 0 || timeNumber('incrementMs', 0) < 0) {
       return 'Time and search limits must be positive.';
+    }
     try {
       Chess.fromSetup(Setup.parseFen(root.value));
     } on Object {

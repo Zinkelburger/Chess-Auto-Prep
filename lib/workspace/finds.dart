@@ -120,8 +120,9 @@ final class Finds extends ChangeNotifier {
         ? held == null
         : held != null &&
               held.length == positions.length &&
-              held.containsAll(positions))
+              held.containsAll(positions)) {
       return;
+    }
     _within = positions;
     _changed();
   }
@@ -193,8 +194,9 @@ final class Finds extends ChangeNotifier {
     required Side side,
     required int elo,
   }) {
-    if (_disposed)
+    if (_disposed) {
       return Future.value(const FindsUnsaved('The search owner is closed.'));
+    }
     final acceptedAt = _clock();
     final acceptedPrefix = List<String>.unmodifiable(prefix);
     List<Find>? lines;

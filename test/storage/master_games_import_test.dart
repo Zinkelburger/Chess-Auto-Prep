@@ -150,10 +150,12 @@ void main() {
       path,
       client: () => MockClient((request) async {
         asked.add(request.url.path);
-        if (request.url.path == '/twic')
+        if (request.url.path == '/twic') {
           return http.Response('<a href="/zips/twic1601g.zip">PGN</a>', 200);
-        if (request.url.path.endsWith('1600g.zip') && fail)
+        }
+        if (request.url.path.endsWith('1600g.zip') && fail) {
           return http.Response('', 503);
+        }
         return http.Response.bytes(zipped(game), 200);
       }),
     );
@@ -172,8 +174,9 @@ void main() {
     final run = TwicDownload(
       path,
       client: () => MockClient((request) async {
-        if (request.url.path == '/twic')
+        if (request.url.path == '/twic') {
           return http.Response('twic1601g.zip', 200);
+        }
         return http.Response.bytes(zipped(game), 200);
       }),
     );
@@ -200,8 +203,9 @@ void main() {
       final run = TwicDownload(
         path,
         client: () => MockClient((request) async {
-          if (request.url.path == '/twic')
+          if (request.url.path == '/twic') {
             return http.Response('twic1601g.zip', 200);
+          }
           return http.Response.bytes(zipped(game), 200);
         }),
       );
@@ -222,7 +226,9 @@ void main() {
     importTwicIssue(path, 1600, zipped(game));
     final bytes = File(path).readAsBytesSync();
     // Keep the header, wreck every page after the first.
-    for (var i = 4096; i < bytes.length; i++) bytes[i] = 0xAB;
+    for (var i = 4096; i < bytes.length; i++) {
+      bytes[i] = 0xAB;
+    }
     File(path).writeAsBytesSync(bytes);
     expect(importTwicIssue(path, 1601, zipped(game)), (1, 0));
     expect(masterGamesIssues(path).issues, {1601});

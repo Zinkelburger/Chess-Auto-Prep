@@ -300,8 +300,9 @@ final class DocumentSession extends ChangeNotifier {
     final leftAsIs = !_saver.settled;
     final read = await readDocument(_store, ref, game: game, parsed: _parsed);
     if (_disposed || ticket != _opens) return const OpenOvertaken();
-    if (access.versionOf(ref.path) != version)
+    if (access.versionOf(ref.path) != version) {
       return _opened(ref, game, ticket);
+    }
     final DocumentShown shown;
     switch (read) {
       case DocumentUnread(:final reason):
@@ -325,8 +326,9 @@ final class DocumentSession extends ChangeNotifier {
       // read from it.
       if (into == ref.path) return _opened(ref, game, ticket);
     }
-    if (access.versionOf(ref.path) != version)
+    if (access.versionOf(ref.path) != version) {
       return _opened(ref, game, ticket);
+    }
     _show(shown.chapter, ref, shown.revision, shown.readOnly, view: shown.view);
     return const DocumentOpened();
   }

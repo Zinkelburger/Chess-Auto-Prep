@@ -29,8 +29,9 @@ class StudyImportSource {
   final PgnFileImport? importer;
 
   Future<StudyImportRead?> file() async {
-    if (picker == null || importer == null)
+    if (picker == null || importer == null) {
       return const StudyImportProblem('File import is unavailable.');
+    }
     final path = await picker!.pickPgn();
     if (path == null) return null;
     return switch (await importer!.read(path)) {
@@ -47,8 +48,9 @@ class StudyImportSource {
 
   Future<StudyImportRead> url(String text) async {
     final link = parseStudyLink(text);
-    if (link == null)
+    if (link == null) {
       return const StudyImportProblem('Use a Lichess study or chapter link.');
+    }
     return switch (await lichess.fetch(link)) {
       StudyNotFetched(:final sentence) => StudyImportProblem(sentence),
       StudyFetched(:final pgn) => this.pgn(

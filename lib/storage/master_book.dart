@@ -119,10 +119,12 @@ final class _SqliteMasterReader implements MasterBook {
     if (!await File(path).exists()) return const BookAbsent();
     try {
       final db = _open();
-      if (db.select('SELECT 1 FROM games LIMIT 1').isEmpty)
+      if (db.select('SELECT 1 FROM games LIMIT 1').isEmpty) {
         return const BookAbsent();
-      if (classicalOnly && !_classicalComplete(db))
+      }
+      if (classicalOnly && !_classicalComplete(db)) {
         return const BookClassicalIncomplete();
+      }
       final rows = db.select(_bookSql, [positionKey(fen)]);
       final moves = <ExplorerMove>[];
       final citedBy = <String, int>{};

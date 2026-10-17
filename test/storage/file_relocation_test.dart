@@ -196,8 +196,9 @@ void main() {
         documents: alias,
         support: fixture.support,
         relocationHook: (step) async {
-          if (step == FileRelocationStep.document)
+          if (step == FileRelocationStep.document) {
             throw StateError('lost acknowledgement');
+          }
         },
       );
       expect(

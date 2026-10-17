@@ -38,8 +38,9 @@ void main() {
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('twic-download-test-');
     path = p.join(temp.path, 'master_games.db');
-    for (var issue = latest - 3; issue < latest; issue++)
+    for (var issue = latest - 3; issue < latest; issue++) {
       importTwicIssue(path, issue, issueZip(issue));
+    }
     asked = [];
   });
   tearDown(() async => temp.delete(recursive: true));
@@ -113,8 +114,9 @@ void main() {
     'an issue imported earlier in the run is kept after a later set-aside',
     () async {
       path = p.join(temp.path, 'partial.db');
-      for (var issue = latest - 3; issue < latest - 1; issue++)
+      for (var issue = latest - 3; issue < latest - 1; issue++) {
         importTwicIssue(path, issue, issueZip(issue));
+      }
       var corrupted = false;
       final run = download(
         before: (issue) {
@@ -162,6 +164,8 @@ void main() {
           name,
     ];
     expect(copies, hasLength(2));
-    for (final copy in copies) expect(run.problem, contains(copy));
+    for (final copy in copies) {
+      expect(run.problem, contains(copy));
+    }
   });
 }

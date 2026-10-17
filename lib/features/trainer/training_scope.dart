@@ -37,8 +37,9 @@ final class ScopeReader {
       final read = await _documents.open(DocumentRef(entry.key));
       if (read is! Opened ||
           read.revision != entry.value ||
-          read.revision.nativeIdentity != entry.value?.nativeIdentity)
+          read.revision.nativeIdentity != entry.value?.nativeIdentity) {
         return false;
+      }
     }
     return true;
   }

@@ -15,8 +15,9 @@ List<TournamentStanding> tournamentStandings(Tournament tournament) {
         game.white < 0 ||
         game.black < 0 ||
         game.white >= count ||
-        game.black >= count)
+        game.black >= count) {
       continue;
+    }
     final outcome = switch (game.result) {
       '1-0' => 0,
       '1/2-1/2' => 1,

@@ -81,8 +81,9 @@ final class GameReview extends ChangeNotifier {
   int get positions => session.tree == null ? 0 : _mainline.length + 1;
 
   List<ReviewValue?> get values {
-    if (running && identical(session.chapter, _chapter))
+    if (running && identical(session.chapter, _chapter)) {
       return List.unmodifiable(_values);
+    }
     final tree = session.tree;
     if (tree == null) return const [];
     final List<ReviewValue?> stored = [

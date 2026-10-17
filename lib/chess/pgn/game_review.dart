@@ -162,8 +162,9 @@ ChapterEdit _rewriteGame(Chapter chapter, GameTree? Function(GameTree) edit) {
   final tree = edit(line.tree!);
   if (tree == null) return const ChapterUnchanged();
   final rewrittenLine = rewritten(line, tree);
-  if (rewrittenLine case LineRefused(:final reason))
+  if (rewrittenLine case LineRefused(:final reason)) {
     return ChapterEditRefused(reason);
+  }
   final lines = [...chapter.lines];
   lines[index] = (rewrittenLine as LineRewritten).line;
   return ChapterEdited(

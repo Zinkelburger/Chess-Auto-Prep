@@ -81,8 +81,9 @@ final class ViewerReading {
           !identical(session.chapter, chapter) ||
           session.cursor.value != cursor ||
           filter.filter != filtering ||
-          sort() != sorting)
+          sort() != sorting) {
         return;
+      }
       setSort(place.sort);
       _restoredFilter = place.filter.isEmpty ? null : place.filter;
       filter.apply(place.filter);
@@ -90,8 +91,9 @@ final class ViewerReading {
         session.showGame(game);
         final tree = session.tree;
         if (tree != null &&
-            (place.fen == null || tree.fenAt(place.path).value == place.fen))
+            (place.fen == null || tree.fenAt(place.path).value == place.fen)) {
           session.cursor.goTo(place.path);
+        }
       }
     } finally {
       _restoring = false;
@@ -105,8 +107,9 @@ final class ViewerReading {
     if (_restoring || filter.busy) return;
     if (_restoredFilter == filter.applied) {
       _restoredFilter = null;
-      if (filter.problem == null && filter.kept == 0)
+      if (filter.problem == null && filter.kept == 0) {
         filter.apply(GameFilter.none);
+      }
     }
     capture();
   }
@@ -123,8 +126,9 @@ final class ViewerReading {
         lines == null ||
         game >= lines.length ||
         session.hasHeldEdits ||
-        filter.busy)
+        filter.busy) {
       return;
+    }
     final line = lines[game];
     if (!identical(_keyOf, line)) {
       _keyOf = line;

@@ -66,11 +66,12 @@ class _TagsState extends State<_Tags> {
                     IconButton(
                       tooltip: 'Remove tag',
                       onPressed: () {
-                        if (mounted)
+                        if (mounted) {
                           setState(() {
                             _rows.remove(row);
                             _removed.add(row);
                           });
+                        }
                       },
                       icon: const Icon(Icons.close),
                     ),

@@ -58,8 +58,9 @@ class _TableBoardsState extends State<TableBoards> {
   }
 
   void _tableChanged() {
-    if (!mounted || _picked == null || _stillPicked(_lab.position) != null)
+    if (!mounted || _picked == null || _stillPicked(_lab.position) != null) {
       return;
+    }
     setState(() => _picked = null);
   }
 

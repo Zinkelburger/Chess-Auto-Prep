@@ -229,8 +229,9 @@ class _PlayerDialogState extends State<_PlayerDialog> {
                         onDeleted: _saving
                             ? null
                             : () {
-                                if (mounted)
+                                if (mounted) {
                                   setState(() => _files.remove(file));
+                                }
                               },
                       ),
                   ],
@@ -300,13 +301,14 @@ class _ImportDialogState extends State<_ImportDialog> {
     setState(() => _saving = true);
     final saved = await widget.players.import(_preview!);
     if (!mounted) return;
-    if (saved)
+    if (saved) {
       Navigator.pop(context);
-    else
+    } else {
       setState(() {
         _saving = false;
         _error = widget.players.error;
       });
+    }
   }
 
   /// One person read from the pasted text: the name over the accounts.

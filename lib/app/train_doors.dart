@@ -75,8 +75,9 @@ final class TrainDoors {
       trainer.resume();
       return;
     }
-    if (!view().layout.isOpen(WorkspaceTab.analysis))
+    if (!view().layout.isOpen(WorkspaceTab.analysis)) {
       view().layout.reveal(WorkspaceTab.analysis);
+    }
     if (requests.mode == Mode.trainer) unawaited(workspace.analysis.enable());
   }
 }

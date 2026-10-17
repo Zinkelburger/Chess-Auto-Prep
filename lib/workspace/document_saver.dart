@@ -216,8 +216,9 @@ final class DocumentSaver extends ChangeNotifier {
         _disposed ||
         revision != expected ||
         revision?.nativeIdentity != expected.nativeIdentity ||
-        (_externalOwner != null && !identical(_externalOwner, command)))
+        (_externalOwner != null && !identical(_externalOwner, command))) {
       return false;
+    }
     _externalOwner = command;
     _set(const Saving());
     return true;

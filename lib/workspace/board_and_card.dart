@@ -40,8 +40,9 @@ class BoardAndCardState extends State<BoardAndCard> {
   }
 
   void _changed() {
-    if (mounted)
+    if (mounted) {
       setState(() => _share = widget.layout?.boardFraction ?? _share);
+    }
   }
 
   void _resize(double share) {

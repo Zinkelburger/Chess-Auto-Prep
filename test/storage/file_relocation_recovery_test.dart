@@ -352,8 +352,9 @@ void main() {
         documents: Directory(alias.path),
         support: fixture.support,
         testHook: (step) async {
-          if (step == FileRelocationStep.intent)
+          if (step == FileRelocationStep.intent) {
             throw StateError('interrupted');
+          }
         },
       );
       expect(
@@ -475,8 +476,9 @@ Future<_Child> _startChild(
       .transform(utf8.decoder)
       .transform(const LineSplitter())
       .listen((line) {
-        if (line == 'checkpoint durable' && !ready.isCompleted)
+        if (line == 'checkpoint durable' && !ready.isCompleted) {
           ready.complete();
+        }
         diagnostics.writeln(line);
       });
   final errors = process.stderr
