@@ -253,8 +253,13 @@ class _ProblemLine extends StatelessWidget {
     MoveRefused(:final uci) => '$uci is not legal here.',
     LineMisfits() => 'That line no longer fits the position.',
     PositionRefused(:final reason) => reason,
-    MovesRefused(token: null) => 'No bughouse moves to paste.',
-    MovesRefused(:final token?) => 'Not pasted: $token does not play.',
+    MovesRefused(token: null, file: null) => 'No bughouse moves to paste.',
+    MovesRefused(token: null, :final file?) => 'No bughouse moves in $file.',
+    MovesRefused(:final token?, file: null) =>
+      'Not pasted: $token does not play.',
+    MovesRefused(:final token?, :final file?) =>
+      'Not opened: $token in $file does not play.',
+    FileUnread(:final file) => '$file could not be read.',
     StepRefused(:final move) =>
       'Can’t step there: ${move.san} on ${move.board.label.toLowerCase()} '
           'would have no piece to drop.',

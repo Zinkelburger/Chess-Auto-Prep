@@ -14,6 +14,8 @@ import '../features/tactics/puzzle_trainer.dart';
 import '../features/tactics/source_games.dart';
 import '../features/tactics/tactics_set.dart';
 import '../features/trainer/trainer.dart';
+import '../storage/pgn_file_import.dart';
+import '../storage/pgn_file_picker.dart';
 import '../workspace/file_filter.dart';
 import 'trap_training.dart';
 
@@ -143,14 +145,21 @@ final class TrainingModes {
 }
 
 /// The owners behind the labs, the modes with a screen of their own: the
-/// Bughouse mode's table and what Hivemind makes of it. [offered] says
-/// whether this build has the engine, which is what puts the mode in the
-/// mode menu at all.
+/// Bughouse mode's table and what Hivemind makes of it, and the file dialog
+/// and reader its moves are opened through. [offered] says whether this
+/// build has the engine, which is what puts the mode in the mode menu at all.
 final class LabModes {
-  LabModes({required this.lab, required this.engine});
+  LabModes({
+    required this.lab,
+    required this.engine,
+    required this.picker,
+    required this.files,
+  });
 
   final BughouseLab lab;
   final LabEngine engine;
+  final PgnFilePicker picker;
+  final PgnFileImport files;
   final offered = ValueNotifier(false);
   bool _disposed = false;
 
