@@ -587,9 +587,11 @@ Regression contracts and open risks, not a feature list
   publication stay tied to their captured input.
 - **Platforms.** Linux process-kill tests do not prove Windows/macOS engine
   cleanup after the app is killed, or power-loss durability anywhere.
-- **Size pressure.** `workspace/document_session.dart`,
-  `workspace/document_saver.dart` and `workspace/fill_gaps.dart` sit at the
-  1,000-line cap. Extract a collaborator only when it owns a complete
+- **Size pressure.** `workspace/document_session.dart` and
+  `workspace/fill_gaps.dart` sit at the 1,000-line cap. The session is one
+  owner whose collaborators (projection, history, access, parsed files,
+  results, external edits) are already out; what is left shares its state,
+  so a further split needs a new collaborator and its callers moved to it. Extract a collaborator only when it owns a complete
   responsibility; do not loosen caps or fragment files to pass them. Retained
   memory across repeated large-file navigation and searches is unmeasured.
 
