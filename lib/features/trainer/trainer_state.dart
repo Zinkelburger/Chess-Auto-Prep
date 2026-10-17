@@ -8,7 +8,7 @@ library;
 import '../../chess/training/schedule.dart';
 import '../../chess/training/training_line.dart';
 import '../../storage/chapter_files.dart';
-import '../../storage/training_store.dart';
+import '../../storage/training_progress.dart';
 import 'progress.dart';
 import 'training_scope.dart';
 

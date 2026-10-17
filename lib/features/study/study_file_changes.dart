@@ -2,6 +2,7 @@ import 'package:path/path.dart' as p;
 
 import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
+import '../../storage/deleted_chapters.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/operation_id.dart';
 import '../../storage/pending_writes.dart';
