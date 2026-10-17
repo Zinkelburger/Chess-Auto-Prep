@@ -110,7 +110,7 @@ void main() {
         expect(await parts.env.pendingWrites.settle(), isNull);
         final attempts = File(p.join(disk.documents.path, attemptsFile));
         expect(await attempts.readAsLines(), hasLength(1));
-        parts.session.goTo(NodePath.of([0]));
+        parts.session.cursor.goTo(NodePath.of([0]));
         await _until(
           parts.workspace.gaps,
           () => parts.workspace.gaps.currentWalk != null,

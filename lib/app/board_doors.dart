@@ -88,7 +88,7 @@ final class BoardDoors {
     final side = session.orientation;
     final fen = await showBoardEditor(
       context,
-      initial: session.boardFen,
+      initial: session.cursor.boardFen,
       orientation: side,
     );
     if (fen == null) return;
@@ -113,7 +113,7 @@ final class BoardDoors {
         kept.find.sans.take(kept.find.ply).toList(),
       );
       if (path != null) {
-        session.goTo(path);
+        session.cursor.goTo(path);
         return;
       }
     }

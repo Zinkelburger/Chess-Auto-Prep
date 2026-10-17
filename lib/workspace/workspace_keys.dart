@@ -108,11 +108,11 @@ class _WorkspaceKeysState extends State<WorkspaceKeys> {
   /// the board, the variation, then the edit strip, then whatever the
   /// window adds.
   bool _escape() {
-    if (_session.commentLine.value != null) {
-      _session.closeCommentLine();
+    if (_session.cursor.commentLine.value != null) {
+      _session.cursor.closeCommentLine();
       return true;
     }
-    if (_session.leaveVariation()) return true;
+    if (_session.cursor.leaveVariation()) return true;
     if (widget.editing.value) {
       widget.editing.value = false;
       return true;
@@ -123,10 +123,10 @@ class _WorkspaceKeysState extends State<WorkspaceKeys> {
   Map<ShortcutActivator, VoidCallback> get _bindings {
     final tabs = widget.tabs;
     return {
-      ...AppKey.back.bind(_session.back),
-      ...AppKey.forward.bind(_session.forward),
-      ...AppKey.start.bind(_session.toStart),
-      ...AppKey.end.bind(_session.toEnd),
+      ...AppKey.back.bind(_session.cursor.back),
+      ...AppKey.forward.bind(_session.cursor.forward),
+      ...AppKey.start.bind(_session.cursor.toStart),
+      ...AppKey.end.bind(_session.cursor.toEnd),
       ...AppKey.previousGame.bind(_session.previousGame),
       ...AppKey.nextGame.bind(_session.nextGame),
       ...AppKey.flip.bind(_session.flip),
@@ -158,7 +158,7 @@ class _WorkspaceKeysState extends State<WorkspaceKeys> {
     // focus: a focused button, menu entry or lesson has its own use for it.
     if (AppKey.enterVariation.accepts(event)) {
       final ours = FocusManager.instance.primaryFocus == node;
-      return ours && _session.enterVariation()
+      return ours && _session.cursor.enterVariation()
           ? KeyEventResult.handled
           : KeyEventResult.ignored;
     }

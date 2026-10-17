@@ -184,7 +184,7 @@ void main() {
       () async {
         final (app, clubBook) = await start(['Najdorf']);
         await app.session.open(najdorf);
-        app.session.toEnd();
+        app.session.cursor.toEnd();
         app.session.playMove('g1f3');
         app.session.playMove('d7d6');
         await app.saver.flush();

@@ -247,7 +247,7 @@ final class GameReview extends ChangeNotifier {
     return ReviewValue(packedCp(white).cp, eval, verdict.pv);
   }
 
-  void goTo(int ply) => session.goTo(NodePath.of(List.filled(ply, 0)));
+  void goTo(int ply) => session.cursor.goTo(NodePath.of(List.filled(ply, 0)));
 
   @override
   void dispose() {

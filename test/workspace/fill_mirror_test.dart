@@ -102,7 +102,7 @@ void main() {
       {'e4': 0.75, 'e3': 0.25},
     );
     // One move on, the roles swap.
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     expect(fill.nodeAtBoard(), isA<OpponentNode>());
     expect(fill.nodeAtBoard(side: Side.black), isA<OurNode>());
   });

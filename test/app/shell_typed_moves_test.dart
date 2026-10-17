@@ -62,10 +62,14 @@ void main() {
       expect(fieldHasFocus(tester), isTrue);
       await tester.enterText(field, 'N');
       await tester.pump();
-      expect(w.session.cursor, const NodePath.root(), reason: 'which knight?');
+      expect(
+        w.session.cursor.value,
+        const NodePath.root(),
+        reason: 'which knight?',
+      );
       await tester.enterText(field, 'Nf6');
       await tester.pumpAndSettle();
-      expect(w.session.currentMove?.san, 'Nf6');
+      expect(w.session.cursor.currentMove?.san, 'Nf6');
       expect(kidOnDisk(), contains('Nf6'), reason: 'saved');
       expect(words(tester), isEmpty);
       expect(fieldHasFocus(tester), isTrue, reason: 'the next move goes too');
@@ -79,7 +83,7 @@ void main() {
       await key(tester, LogicalKeyboardKey.slash);
       await tester.enterText(field, 'c5');
       await tester.pumpAndSettle();
-      expect(w.session.cursor, NodePath.of([0]));
+      expect(w.session.cursor.value, NodePath.of([0]));
       expect(kidOnDisk(), before);
     });
 
@@ -88,10 +92,10 @@ void main() {
       await key(tester, LogicalKeyboardKey.slash);
       await tester.enterText(field, 'Nh');
       await tester.pump();
-      expect(w.session.cursor, const NodePath.root());
+      expect(w.session.cursor.value, const NodePath.root());
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
-      expect(w.session.currentMove?.san, 'Nh6');
+      expect(w.session.cursor.currentMove?.san, 'Nh6');
       expect(fieldHasFocus(tester), isTrue);
     });
 
@@ -110,7 +114,7 @@ void main() {
       expect(border.color, error);
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
-      expect(w.session.cursor, const NodePath.root());
+      expect(w.session.cursor.value, const NodePath.root());
       expect(find.byType(Dialog), findsNothing);
       expect(words(tester), 'Ke7', reason: 'left to be put right');
       expect(find.text('That move is not legal here.'), findsOneWidget);
@@ -162,7 +166,7 @@ void main() {
     await key(tester, LogicalKeyboardKey.slash);
     await tester.enterText(field, 'e2e4');
     await tester.pumpAndSettle();
-    expect(w.session.currentMove?.san, 'e4');
+    expect(w.session.cursor.currentMove?.san, 'e4');
     await key(tester, LogicalKeyboardKey.escape);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
@@ -188,7 +192,7 @@ void main() {
     expect(find.text('Correct! (1/2)'), findsOneWidget);
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
-    expect(w.session.currentMove?.san, 'Nf3', reason: 'the reply came');
+    expect(w.session.cursor.currentMove?.san, 'Nf3', reason: 'the reply came');
     expect(w.session.tree?.children.map((move) => move.san), ['e5']);
   });
 

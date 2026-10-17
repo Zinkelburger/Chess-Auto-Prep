@@ -30,7 +30,7 @@ void main() {
     // it is reading, and a file this app may not write still reads.
     fixture.session.playMove('c7c5');
     await pumpEventQueue();
-    expect(fixture.session.cursor, NodePath.of([0]));
+    expect(fixture.session.cursor.value, NodePath.of([0]));
     expect(fixture.store.requestedSaves, isEmpty);
     expect(
       fixture.session.refusedEdit,
@@ -81,7 +81,7 @@ void main() {
     test('takes a move and holds it, writing nothing', () async {
       fixture.session.playMove('e7e6');
       await pumpEventQueue();
-      expect(fixture.session.currentMove?.san, 'e6');
+      expect(fixture.session.cursor.currentMove?.san, 'e6');
       expect(fixture.session.hasHeldEdits, isTrue);
       expect(fixture.store.requestedSaves, isEmpty);
       expect(fixture.onDisk, blackChapter);

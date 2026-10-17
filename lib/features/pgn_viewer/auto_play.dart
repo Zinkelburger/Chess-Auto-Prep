@@ -34,32 +34,33 @@ final class AutoPlay extends ChangeNotifier {
     if (timer == null) return;
     timer.cancel();
     _timer = null;
-    _session.cursorListenable.removeListener(_tookOver);
+    _session.cursor.removeListener(_tookOver);
     _session.removeListener(_tookOver);
     notifyListeners();
   }
 
   void _start() {
     if (_atEnd) return;
-    _session.cursorListenable.addListener(_tookOver);
+    _session.cursor.addListener(_tookOver);
     _session.addListener(_tookOver);
     _timer = Timer(firstStep, _step);
     notifyListeners();
   }
 
   void _step() {
-    final before = _session.cursor;
+    final before = _session.cursor.value;
     _stepping = true;
-    _session.forward();
+    _session.cursor.forward();
     _stepping = false;
     // A move the session would not go to — a hidden answer — ends it too.
-    if (_session.cursor == before || _atEnd) return stop();
+    if (_session.cursor.value == before || _atEnd) return stop();
     _timer = Timer(step, _step);
   }
 
   /// Whether there is no next move on the main line from the cursor, or
   /// nothing on the board.
-  bool get _atEnd => _session.tree?.nodeAt(_session.cursor.mainChild) == null;
+  bool get _atEnd =>
+      _session.tree?.nodeAt(_session.cursor.value.mainChild) == null;
 
   void _tookOver() {
     if (!_stepping) stop();
@@ -69,7 +70,7 @@ final class AutoPlay extends ChangeNotifier {
   void dispose() {
     _timer?.cancel();
     _timer = null;
-    _session.cursorListenable.removeListener(_tookOver);
+    _session.cursor.removeListener(_tookOver);
     _session.removeListener(_tookOver);
     super.dispose();
   }

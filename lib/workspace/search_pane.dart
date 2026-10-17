@@ -91,7 +91,7 @@ class _SearchPaneState extends State<SearchPane>
   (FillTarget?, Fen)? _rowsFor;
 
   (FillTarget?, Fen) get _rowsNow =>
-      (widget.fill.found?.target, widget.session.fen);
+      (widget.fill.found?.target, widget.session.cursor.fen);
 
   @override
   void initState() {
@@ -627,7 +627,7 @@ class _SearchPaneState extends State<SearchPane>
     if (rows.isNotEmpty) {
       return SearchTable(
         rows: rows,
-        ours: widget.session.fen.whiteToMove == (side == Side.white),
+        ours: widget.session.cursor.fen.whiteToMove == (side == Side.white),
         sides: found.request.method == SearchMethod.mainline
             ? [side]
             : const [Side.white, Side.black],
@@ -678,7 +678,7 @@ class _SearchPaneState extends State<SearchPane>
           if (canGo) ...[
             const SizedBox(height: Space.s),
             OutlinedButton(
-              onPressed: () => session.goTo(start),
+              onPressed: () => session.cursor.goTo(start),
               child: const Text('Go to where it started'),
             ),
           ],

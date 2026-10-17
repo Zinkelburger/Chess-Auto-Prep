@@ -432,10 +432,10 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
     final applied = _filter.applied;
     if (applied.position case final position?) {
       if (_session.tree?.mainLineTo(position) case final path?)
-        _session.goTo(path);
+        _session.cursor.goTo(path);
     } else if (applied.readsMoves) {
       if (applied.reachIn(mainLineSans(_session.tree)) case final plies?)
-        _session.goTo(NodePath.of(List.filled(plies, 0)));
+        _session.cursor.goTo(NodePath.of(List.filled(plies, 0)));
     }
   }
 

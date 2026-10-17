@@ -47,13 +47,13 @@ void main() {
   }
 
   List<String> line() => [
-    for (final node in session.tree!.lineTo(session.cursor)) node.san,
+    for (final node in session.tree!.lineTo(session.cursor.value)) node.san,
   ];
 
   test('the window starts on an empty analysis board facing White', () {
     expect(session.isScratch, isTrue);
     expect(session.chapter?.name, analysisBoardName);
-    expect(session.fen, Fen.initial);
+    expect(session.cursor.fen, Fen.initial);
     expect(session.orientation, Side.white);
     expect(session.canUndo, isFalse);
   });
@@ -62,16 +62,16 @@ void main() {
     session
       ..playMove('e2e4')
       ..playMove('c7c5')
-      ..back()
+      ..cursor.back()
       ..playMove('e7e5');
-    session.setComment(session.cursor, 'Open game');
+    session.setComment(session.cursor.value, 'Open game');
     await pumpEventQueue();
     expect(line(), ['e4', 'e5']);
     expect(session.tree!.children.single.children.map((n) => n.san), [
       'c5',
       'e5',
     ]);
-    expect(session.commentAt(session.cursor), 'Open game');
+    expect(session.commentAt(session.cursor.value), 'Open game');
     expect(store.requestedSaves, isEmpty);
     expect(store.creates, isEmpty);
     expect(saver.state, isA<Saved>());
@@ -86,7 +86,7 @@ void main() {
     expect(line(), ['e4']);
     expect(await session.undo(), isA<Restored>());
     expect(session.tree!.children, isEmpty);
-    expect(session.cursor.isRoot, isTrue);
+    expect(session.cursor.value.isRoot, isTrue);
     expect(await session.undo(), isA<UndoRefused>());
   });
 
@@ -200,11 +200,11 @@ void main() {
       final blank = session.analysisPage;
       expect(await paste(_sicilian), isNull);
       expect(session.analysisPage, same(blank));
-      expect(session.fen, Fen(_sicilian));
+      expect(session.cursor.fen, Fen(_sicilian));
       session.playMove('g1f3');
       expect(await paste(_afterE4.value), isNull);
       expect(session.analysisPage, isNot(same(blank)));
-      expect(session.fen, _afterE4);
+      expect(session.cursor.fen, _afterE4);
     });
 
     test('the pasted board keeps the side the board faces', () async {
@@ -229,23 +229,27 @@ void main() {
       session
         ..playMove('d2d4')
         ..playMove('d7d5')
-        ..back();
+        ..cursor.back();
       await session.open(file.ref);
       expect(session.isScratch, isFalse);
       expect(session.source, file.ref);
       await session.showAnalysisBoard();
       expect(session.isScratch, isTrue);
-      expect(session.currentMove?.san, 'd4', reason: 'where the user was');
+      expect(
+        session.cursor.currentMove?.san,
+        'd4',
+        reason: 'where the user was',
+      );
       expect(session.canUndo, isTrue, reason: 'its history went with it');
     });
 
     test('a new board from here keeps the root and the side', () async {
       final session = file.session;
       session
-        ..forward()
-        ..forward();
+        ..cursor.forward()
+        ..cursor.forward();
       final sans = [
-        for (final node in session.tree!.lineTo(session.cursor)) node.san,
+        for (final node in session.tree!.lineTo(session.cursor.value)) node.san,
       ];
       await session.showAnalysisBoard(
         analysisBoard(
@@ -258,7 +262,7 @@ void main() {
       expect(session.source, isNull);
       expect(session.orientation, Side.black);
       expect(session.tree!.rootFen, _afterE4);
-      expect(session.currentMove?.san, 'Nf3');
+      expect(session.cursor.currentMove?.san, 'Nf3');
       expect(session.canUndo, isFalse, reason: 'a new board has no history');
     });
   });

@@ -66,7 +66,7 @@ final class ViewerReading {
       return;
     }
     final chapter = session.chapter;
-    final cursor = session.cursor;
+    final cursor = session.cursor.value;
     final filtering = filter.filter;
     final sorting = sort();
     if (chapter == null) return;
@@ -79,7 +79,7 @@ final class ViewerReading {
       if (_disposed ||
           !current() ||
           !identical(session.chapter, chapter) ||
-          session.cursor != cursor ||
+          session.cursor.value != cursor ||
           filter.filter != filtering ||
           sort() != sorting)
         return;
@@ -91,7 +91,7 @@ final class ViewerReading {
         final tree = session.tree;
         if (tree != null &&
             (place.fen == null || tree.fenAt(place.path).value == place.fen))
-          session.goTo(place.path);
+          session.cursor.goTo(place.path);
       }
     } finally {
       _restoring = false;
@@ -133,8 +133,8 @@ final class ViewerReading {
     final place = ReadingPlace(
       game: game,
       key: _key!,
-      path: session.cursor,
-      fen: session.fen.value,
+      path: session.cursor.value,
+      fen: session.cursor.fen.value,
       sort: sort(),
       filter: filter.applied,
       perspective: perspective(),

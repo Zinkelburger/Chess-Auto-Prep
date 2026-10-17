@@ -47,7 +47,7 @@ class PlayerTreePane extends StatelessWidget {
         return const ListMessage('This player has no games yet.');
       }
       final answer = corpus.openings.answer(
-        session.fen,
+        session.cursor.fen,
         keeps: (i) => analysis.includes(corpus.games[i]),
       );
       if (answer.moves.isEmpty) return _offBook();
@@ -65,7 +65,7 @@ class PlayerTreePane extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (onSave != null && session.cursor.indexes.isNotEmpty)
+          if (onSave != null && session.cursor.value.indexes.isNotEmpty)
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton(
@@ -78,7 +78,9 @@ class PlayerTreePane extends StatelessWidget {
             _MoveRow(
               move: move,
               // The index counts moves by their squares; the board names them.
-              san: pvMoves(session.fen, [move.uci]).firstOrNull?.san ?? '',
+              san:
+                  pvMoves(session.cursor.fen, [move.uci]).firstOrNull?.san ??
+                  '',
               total: total,
               onTap: () => session.playMove(move.uci),
             ),
@@ -112,7 +114,7 @@ class PlayerTreePane extends StatelessWidget {
                 onPressed: onStart,
                 child: const Text('Go to the first move'),
               ),
-              if (onSave != null && session.cursor.indexes.isNotEmpty)
+              if (onSave != null && session.cursor.value.indexes.isNotEmpty)
                 TextButton(
                   onPressed: onSave,
                   child: const Text('Save line to prep study'),

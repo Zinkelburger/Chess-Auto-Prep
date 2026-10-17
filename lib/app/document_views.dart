@@ -415,8 +415,8 @@ final class ViewerView extends _DocumentModeView {
   /// analysis board's while that is the one shown.
   void _filterByPosition() => _modes.filter.reaching(
     workspace.inspection?.active == true
-        ? workspace.inspection!.session.boardFen
-        : workspace.session.boardFen,
+        ? workspace.inspection!.session.cursor.boardFen
+        : workspace.session.cursor.boardFen,
   );
 
   @override

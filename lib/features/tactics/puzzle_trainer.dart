@@ -226,18 +226,18 @@ final class PuzzleTrainer extends ChangeNotifier {
     if (up.waiting) return;
     final reached = playedAlready(
       _session.chapter!,
-      at: _session.cursor,
+      at: _session.cursor.value,
       uci: uci,
     );
     if (up.finished) {
       // Once found or shown, the answer can be walked on the board; nothing
       // else is played into the set.
-      if (reached != null) _session.goTo(reached);
+      if (reached != null) _session.cursor.goTo(reached);
       return;
     }
-    if (_session.cursor != up.frontier) return;
+    if (_session.cursor.value != up.frontier) return;
     if (reached == up.frontier.mainChild) return _found(up);
-    final candidate = pvMoves(_session.fen, [uci]).firstOrNull;
+    final candidate = pvMoves(_session.cursor.fen, [uci]).firstOrNull;
     if (candidate == null) return;
     if (_settings.value.acceptAlternativeAnswers) {
       unawaited(_checkAlternative(up, candidate));
@@ -309,7 +309,7 @@ final class PuzzleTrainer extends ChangeNotifier {
     if (move == null || up == null || !up.finished) return;
     _alternativeMove = null;
     board.value = null;
-    _session.showCommentLine(up.frontier, [move], 0);
+    _session.cursor.showCommentLine(up.frontier, [move], 0);
   }
 
   // The E shortcut and Actions menu must inspect the same position as Analyze.
@@ -321,7 +321,7 @@ final class PuzzleTrainer extends ChangeNotifier {
     if (_disposed || board.value == null) return;
     final up = _up;
     if (up == null ||
-        _session.cursor != up.frontier ||
+        _session.cursor.value != up.frontier ||
         (_alternative != null &&
             !identical(_checkingChapter, _session.chapter))) {
       _cancelAlternative();
@@ -348,7 +348,7 @@ final class PuzzleTrainer extends ChangeNotifier {
   void _found(PuzzleUp up) {
     final path = up.frontier.mainChild;
     _session.showOnlyTo(path);
-    _session.goTo(path);
+    _session.cursor.goTo(path);
     final next = up.advanced(path);
     if (next.found >= next.puzzle.answer.length) return _solved(next);
     _up = next.copyWith(
@@ -367,7 +367,7 @@ final class PuzzleTrainer extends ChangeNotifier {
     if (up == null || _disposed || _suspended) return;
     final path = up.frontier.mainChild;
     _session.showOnlyTo(path);
-    _session.goTo(path);
+    _session.cursor.goTo(path);
     final next = up.advanced(path).copyWith(waiting: false);
     if (next.found >= next.puzzle.answer.length) return _solved(next);
     _up = next;
@@ -387,7 +387,9 @@ final class PuzzleTrainer extends ChangeNotifier {
 
   void _missed(PuzzleUp up, String uci) {
     final move = Move.parse(uci);
-    final san = move == null ? uci : moveNode(_session.fen, move)?.san ?? uci;
+    final san = move == null
+        ? uci
+        : moveNode(_session.cursor.fen, move)?.san ?? uci;
     _up = up.copyWith(feedback: Incorrect(san));
     _record(up, Outcome.failed);
     notifyListeners();
@@ -412,7 +414,7 @@ final class PuzzleTrainer extends ChangeNotifier {
       finished: true,
     );
     _session.showOnlyTo(null);
-    _session.goTo(up.frontier.mainChild);
+    _session.cursor.goTo(up.frontier.mainChild);
     notifyListeners();
   }
 
@@ -425,7 +427,7 @@ final class PuzzleTrainer extends ChangeNotifier {
     _cancelTimers();
     _up = PuzzleUp.start(up.puzzle, at: _now(), decided: up.decided);
     _session.showOnlyTo(const NodePath.root());
-    _session.goTo(const NodePath.root());
+    _session.cursor.goTo(const NodePath.root());
     notifyListeners();
   }
 

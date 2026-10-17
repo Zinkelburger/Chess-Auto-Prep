@@ -94,7 +94,7 @@ final class GapHunt extends ChangeNotifier {
     _gapIndex = (_gapIndex + 1) % gaps.length;
     final gap = gaps[_gapIndex];
     _highlighted = gap;
-    _session.goTo(gap.at);
+    _session.cursor.goTo(gap.at);
     notifyListeners();
   }
 
@@ -118,7 +118,7 @@ final class GapHunt extends ChangeNotifier {
       return;
     }
     var changed = false;
-    if (_highlighted != null && _session.cursor != _highlighted!.at) {
+    if (_highlighted != null && _session.cursor.value != _highlighted!.at) {
       _highlighted = null;
       changed = true;
     }

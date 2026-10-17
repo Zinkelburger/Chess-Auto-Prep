@@ -21,7 +21,9 @@ and [the tooling map](agents/tooling.md) for detail and remaining scope.
   opens, mode changes and dirty-draft decisions. [`app/mode.dart`](../lib/app/mode.dart)
   defines every top-level mode.
 - [`workspace/document_session.dart`](../lib/workspace/document_session.dart)
-  owns the active parsed document, cursor, edits and save state. The shared
+  owns the active parsed document, edits and save state; its
+  `DocumentCursor` (`session.cursor`, `document_cursor.dart`) owns where the
+  reader is and a comment's line on the board. The shared
   board, move tree, engine and explorer are reused across mode panels.
 - [`storage/`](../lib/storage/) owns file/SQLite I/O, settings, revisions,
   backups, recovery and accepted durable writes. UI and pure algorithms do

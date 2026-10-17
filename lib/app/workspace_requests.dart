@@ -207,7 +207,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     mode: _mode,
     source: _session.isScratch ? null : _session.source,
     game: _session.game,
-    cursor: _session.cursor,
+    cursor: _session.cursor.value,
     scratch: _session.isScratch,
   );
 
@@ -247,7 +247,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     final result = await _open(_nextRequest(), source, game: place.game);
     if (_disposed || result is! RequestDone) return result;
     documents.carry(place.mode);
-    _session.goTo(place.cursor);
+    _session.cursor.goTo(place.cursor);
     return result;
   }
 
@@ -308,7 +308,8 @@ final class WorkspaceRequests extends ChangeNotifier {
   }) async {
     final result = await open(ref, game: game);
     if (_disposed || result is! RequestDone) return result;
-    if (_session.tree case final tree?) _session.goTo(pathAlong(tree, sans));
+    if (_session.tree case final tree?)
+      _session.cursor.goTo(pathAlong(tree, sans));
     return result;
   }
 
@@ -345,7 +346,7 @@ final class WorkspaceRequests extends ChangeNotifier {
   }) async {
     final result = await open(ref, game: game);
     if (_disposed || result is! RequestDone) return result;
-    _session.goTo(NodePath.of(List.filled(ply, 0)));
+    _session.cursor.goTo(NodePath.of(List.filled(ply, 0)));
     if (_session.orientation != side) _session.flip();
     return result;
   }
@@ -395,7 +396,7 @@ final class WorkspaceRequests extends ChangeNotifier {
       case GameKept(:final ref, ply: final at):
         final result = await _inViewer(ticket, ref, game: 0);
         if (_disposed || result is! RequestDone) return result;
-        _session.goTo(NodePath.of(List.filled(at, 0)));
+        _session.cursor.goTo(NodePath.of(List.filled(at, 0)));
         return result;
     }
   }
@@ -407,9 +408,10 @@ final class WorkspaceRequests extends ChangeNotifier {
   RequestResult _showFileGame(ExplorerGame game) {
     final index = int.tryParse(game.id);
     if (index == null || _session.game == null) return const RequestDropped();
-    final at = _session.fen;
+    final at = _session.cursor.fen;
     _session.showGame(index);
-    if (_session.tree?.mainLineTo(at) case final path?) _session.goTo(path);
+    if (_session.tree?.mainLineTo(at) case final path?)
+      _session.cursor.goTo(path);
     return const RequestDone();
   }
 
@@ -474,8 +476,8 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (_session.shownTo != null) return const RequestDropped();
     final ticket = _nextRequest();
     _session.snapshot();
-    final cursor = _session.cursor;
-    final preview = _session.commentLine.value;
+    final cursor = _session.cursor.value;
+    final preview = _session.cursor.commentLine.value;
     final side = _session.orientation;
     final board = withSide(
       await readChapter(
@@ -489,7 +491,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (_overtaken(ticket) || leave == null) return const RequestDropped();
     final shown = await _session.showAnalysisBoard(board);
     if (!shown || _overtaken(ticket)) return const RequestDropped();
-    _session.goTo(cursor);
+    _session.cursor.goTo(cursor);
     // A read-only line preview belongs only in the new scratch tab. Preserve
     // the full source game and insert the visible line as a variation there.
     if (preview != null) {
@@ -518,7 +520,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     );
     if (!shown || _overtaken(ticket)) return const RequestDropped();
     if (_session.tree case final tree?) {
-      _session.goTo(pathAlong(tree, sans.take(ply).toList()));
+      _session.cursor.goTo(pathAlong(tree, sans.take(ply).toList()));
     }
     _saidCopy(leave);
     return const RequestDone();

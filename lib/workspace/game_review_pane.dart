@@ -23,7 +23,7 @@ class GameReviewPane extends StatelessWidget {
     listenable: Listenable.merge([
       review,
       review.session,
-      review.session.cursorListenable,
+      review.session.cursor,
     ]),
     builder: (context, _) {
       final theme = Theme.of(context);
@@ -110,7 +110,7 @@ class GameReviewPane extends StatelessWidget {
               values: values,
               marks: marks,
               extent: math.max(review.positions, values.length),
-              current: _plyOf(review.session.cursor),
+              current: _plyOf(review.session.cursor.value),
               label: (ply) => ply == 0 || ply > moves.length
                   ? 'Start'
                   : displaySan(
@@ -128,7 +128,7 @@ class GameReviewPane extends StatelessWidget {
                 marks: marks,
                 rootWhite: rootWhite,
                 white: white,
-                current: _plyOf(review.session.cursor),
+                current: _plyOf(review.session.cursor.value),
                 onPly: review.goTo,
               ),
           ],

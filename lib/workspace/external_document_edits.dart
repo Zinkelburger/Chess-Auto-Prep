@@ -247,10 +247,12 @@ final class ExternalDocumentEdits {
           );
           session._follow(command.landing.view);
           session._clearRefusal();
-          session._cursor.value = samePathIn(
-            command._shown.chapter.tree,
-            command.landing.chapter.tree,
-            session.cursor,
+          session.cursor._place(
+            samePathIn(
+              command._shown.chapter.tree,
+              command.landing.chapter.tree,
+              session.cursor.value,
+            ),
           );
           session.notifyListeners();
         });

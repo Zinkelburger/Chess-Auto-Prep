@@ -82,12 +82,12 @@ void main() {
       expect(w.trainer.board.value!.lastMove, 'e7e5');
       expect(engine.quitCalled, isTrue);
       expect(w.session.tree!.children.single.uci, 'd7d5');
-      expect(w.session.cursor, const NodePath.root());
+      expect(w.session.cursor.value, const NodePath.root());
       expect(w.trainer.run!.outcomes.values, [Outcome.solved]);
       expect(w.tactics.at(3)!.stats.successes, 1);
       w.trainer.inspectAlternative();
       expect(w.trainer.board.value, isNull);
-      expect(w.session.boardLastMove, 'e7e5');
+      expect(w.session.cursor.boardLastMove, 'e7e5');
       expect(w.session.tree!.children.single.uci, 'd7d5');
     }),
   );
@@ -103,7 +103,7 @@ void main() {
       expect(w.trainer.up!.decided, Outcome.failed);
       expect(w.trainer.board.value, isNull);
       expect(w.trainer.up!.waiting, isFalse);
-      expect(w.session.cursor, const NodePath.root());
+      expect(w.session.cursor.value, const NodePath.root());
     }),
   );
 
@@ -270,9 +270,9 @@ void main() {
       unawaited(w.analysis.enable());
       async.flushMicrotasks();
       expect(w.trainer.board.value, isNull);
-      expect(w.session.boardLastMove, 'e7e5');
-      expect(w.analysis.position, w.session.boardFen);
-      expect(engine.current.fen, w.session.boardFen);
+      expect(w.session.cursor.boardLastMove, 'e7e5');
+      expect(w.analysis.position, w.session.cursor.boardFen);
+      expect(engine.current.fen, w.session.cursor.boardFen);
     }),
   );
 
@@ -288,7 +288,7 @@ void main() {
       unawaited(w.requests.newAnalysisBoard());
       async.flushMicrotasks();
       expect(w.session.source, isNull);
-      expect(w.session.fen, expected);
+      expect(w.session.cursor.fen, expected);
       expect(w.session.tree!.children.map((n) => n.uci), ['d7d5', 'e7e5']);
       expect(w.tactics.at(3)!.answer, ['d5']);
       expect(w.tactics.at(3)!.stats.reviews, 1);

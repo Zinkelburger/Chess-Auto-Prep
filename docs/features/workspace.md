@@ -6,8 +6,9 @@ leaves with a position on the board and, where the mode allows it, a move,
 comment or annotation written into the document.
 
 Code: `lib/workspace/` — `Workspace` (`workspace.dart`, the owners as one
-value), `DocumentSession` (`document_session.dart`: the document, cursor, edits,
-held edits, scratch analysis board), `WorkspaceView` (`workspace_view.dart`:
+value), `DocumentSession` (`document_session.dart`: the document, edits,
+held edits, scratch analysis board; its cursor and comment lines in
+`DocumentCursor`, `document_cursor.dart`), `WorkspaceView` (`workspace_view.dart`:
 the board column and the reading card; `WorkspaceHooks` in
 `workspace_hooks.dart`, the board column in `board_column.dart`, the
 navigation row in `nav_row.dart`), `BoardView` (`board_view.dart`), `MoveTreeView` (`move_tree_view.dart`),

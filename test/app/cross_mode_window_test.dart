@@ -41,7 +41,7 @@ void main() {
         reason: 'layout in ${app.requests.mode}',
       );
       final node = NodePath.of([0]);
-      app.session.goTo(node);
+      app.session.cursor.goTo(node);
       await _ctrl(tester, LogicalKeyboardKey.keyE);
       final field = find.descendant(
         of: find.byType(CommentField),
@@ -53,7 +53,11 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
       expect(app.session.orientation, orientation);
-      expect(app.session.cursor, node, reason: 'text editing owns the arrow');
+      expect(
+        app.session.cursor.value,
+        node,
+        reason: 'text editing owns the arrow',
+      );
       app.store.saves.add(const SaveRefused('injected save refusal'));
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pumpAndSettle();

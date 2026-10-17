@@ -80,16 +80,16 @@ void main() {
     });
     var told = 0;
     outline.addListener(() => told++);
-    fixture.session.goTo(outline.lines.first.at);
+    fixture.session.cursor.goTo(outline.lines.first.at);
     outline.showAtPosition(true);
     expect(outline.lines.map((line) => line.name), ['Indian', 'English']);
-    fixture.session.back();
+    fixture.session.cursor.back();
     expect(outline.lines.map((line) => line.name), ['Indian']);
-    fixture.session.back();
+    fixture.session.cursor.back();
     expect(outline.lines.map((line) => line.name), ['Indian', 'Other']);
     final before = told;
-    fixture.session.forward();
-    fixture.session.back();
+    fixture.session.cursor.forward();
+    fixture.session.cursor.back();
     expect(told, before + 2);
     outline.showAtPosition(false);
     expect(outline.lines, hasLength(3));
@@ -156,22 +156,22 @@ void main() {
     await open();
 
     final indian = outline.lines.last;
-    fixture.session.goTo(indian.at);
+    fixture.session.cursor.goTo(indian.at);
 
-    expect(fixture.session.currentMove!.san, 'Nf6');
+    expect(fixture.session.cursor.currentMove!.san, 'Nf6');
   });
 
   test('the line holding the cursor is the current one', () async {
     await open();
     final tree = fixture.session.tree!;
 
-    fixture.session.goTo(pathOfSans(tree, ['d4', 'd5', 'c4'])!);
+    fixture.session.cursor.goTo(pathOfSans(tree, ['d4', 'd5', 'c4'])!);
     expect(
       [outline.isCurrent(0).value, outline.isCurrent(1).value],
       [true, false],
     );
 
-    fixture.session.goTo(pathOfSans(tree, ['d4', 'Nf6'])!);
+    fixture.session.cursor.goTo(pathOfSans(tree, ['d4', 'Nf6'])!);
     expect(
       [outline.isCurrent(0).value, outline.isCurrent(1).value],
       [false, true],

@@ -77,14 +77,14 @@ class _MoveTreeViewState extends State<MoveTreeView>
   @override
   void initState() {
     super.initState();
-    _selection.follow(widget.session.cursorListenable);
+    _selection.follow(widget.session.cursor);
   }
 
   @override
   void didUpdateWidget(MoveTreeView old) {
     super.didUpdateWidget(old);
     if (old.session == widget.session) return;
-    _selection.follow(widget.session.cursorListenable);
+    _selection.follow(widget.session.cursor);
     _built = null;
   }
 
@@ -108,7 +108,7 @@ class _MoveTreeViewState extends State<MoveTreeView>
     onHover: hoverMove,
     onLeave: leaveMove,
     from: from,
-    shown: session.commentLine,
+    shown: session.cursor.commentLine,
     onRead: (moves, at) => readFrom(from, moves, at),
   );
 
@@ -348,7 +348,8 @@ final class _LineBuilder {
         selected: selection.of(NodePath.of(limit.indexes.take(depth + 1))),
         quizStarts: false,
         quizEnds: false,
-        onTap: () => session.goTo(NodePath.of(limit.indexes.take(depth + 1))),
+        onTap: () =>
+            session.cursor.goTo(NodePath.of(limit.indexes.take(depth + 1))),
         actions: () => const [],
         showMenu: showMenu,
       ),
@@ -370,7 +371,8 @@ final class _LineBuilder {
       selected: selection.of(path),
       quizStarts: hasToken(node.comment, quizStartMarker),
       quizEnds: hasToken(node.comment, quizEndMarker),
-      onTap: () => preview == null ? session.goTo(path) : preview!.onRead(path),
+      onTap: () =>
+          preview == null ? session.cursor.goTo(path) : preview!.onRead(path),
       actions: () => preview != null
           ? const []
           : [

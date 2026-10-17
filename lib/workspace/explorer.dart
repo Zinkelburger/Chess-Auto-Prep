@@ -215,14 +215,14 @@ final class Explorer extends ChangeNotifier {
     final local = _databases.local(_choiceNow.source);
     return local == null ||
         (local
-                .answerAt(_session.fen)
+                .answerAt(_session.cursor.fen)
                 ?.moves
                 .any((move) => move.uci == row.uci) ??
             false);
   }
 
   /// How many plies deep the position on the board is.
-  int get ply => plyOf(_session.fen);
+  int get ply => plyOf(_session.cursor.fen);
 
   /// Changes what is asked; the settings remember it.
   void choose(ExplorerChoice choice) {
@@ -239,7 +239,7 @@ final class Explorer extends ChangeNotifier {
   Future<void> retry() async {
     _notice = null;
     _recovery = null;
-    final fen = _session.fen;
+    final fen = _session.cursor.fen;
     if (_session.chapter == null) return;
     if (_databases.local(_choiceNow.source) case final games?) {
       games.forget();
@@ -257,7 +257,7 @@ final class Explorer extends ChangeNotifier {
     // One turn of the event loop first: a move made along with the click
     // is asked about where the board went, not the position it left.
     await Future<void>.value();
-    if (_disposed || fen != _session.fen || choice != _choiceNow) return;
+    if (_disposed || fen != _session.cursor.fen || choice != _choiceNow) return;
     await _ask(fen, line, kept: kept);
   }
 
@@ -274,7 +274,7 @@ final class Explorer extends ChangeNotifier {
   /// they are. A move just written tells this twice, cursor then chapter,
   /// and is asked about once.
   void _followTheBoard() {
-    final board = (tree: _session.tree, at: _session.cursor);
+    final board = (tree: _session.tree, at: _session.cursor.value);
     final seen = _board;
     if (seen != null &&
         identical(seen.tree, board.tree) &&
@@ -297,7 +297,7 @@ final class Explorer extends ChangeNotifier {
       _show(const ExplorerIdle());
       return;
     }
-    final fen = _session.fen;
+    final fen = _session.cursor.fen;
     if (_databases.local(_choiceNow.source) case final games?) {
       _showLocal(fen, games);
       return;
@@ -328,8 +328,9 @@ final class Explorer extends ChangeNotifier {
   /// How the board got where it is, from the document's root.
   ExplorerLine _lineHere() {
     final tree = _session.tree;
-    return ExplorerLine(tree?.rootFen ?? _session.fen, [
-      for (final move in tree?.lineTo(_session.cursor) ?? const <MoveNode>[])
+    return ExplorerLine(tree?.rootFen ?? _session.cursor.fen, [
+      for (final move
+          in tree?.lineTo(_session.cursor.value) ?? const <MoveNode>[])
         move.uci,
     ]);
   }
@@ -385,7 +386,7 @@ final class Explorer extends ChangeNotifier {
     if (answer != null) _answers.remember(fen, choice, answer, line);
     // The board has moved on, or another database was chosen: what is on
     // the screen now is about somewhere else, and a failure here is not.
-    if (fen != _session.fen || choice != _choiceNow) return;
+    if (fen != _session.cursor.fen || choice != _choiceNow) return;
     _recovery = recovery;
     if (answer == null) {
       if (kept != null) {
@@ -404,7 +405,8 @@ final class Explorer extends ChangeNotifier {
       return const ExplorerNothing('No games found for this position.');
     }
     final tree = _session.tree;
-    final siblings = tree?.nodeAt(_session.cursor)?.children ?? tree?.children;
+    final siblings =
+        tree?.nodeAt(_session.cursor.value)?.children ?? tree?.children;
     final rows = <ExplorerRow>[];
     for (final move in answer.moves) {
       final parsed = Move.parse(move.uci);

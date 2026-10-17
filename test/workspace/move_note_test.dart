@@ -40,7 +40,7 @@ void main() {
     expect(find.byTooltip('Play d4 (→)'), findsOneWidget);
     await tester.tap(find.textContaining('1. d4'));
     await tester.pump();
-    expect(fixture.session.currentMove!.san, 'd4');
+    expect(fixture.session.cursor.currentMove!.san, 'd4');
     expect(find.byTooltip('Play d4 (→)'), findsNothing);
   });
 
@@ -74,15 +74,15 @@ void main() {
       matching: find.byType(Material),
     );
     expect(card(), findsNothing, reason: 'the start, nothing said');
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     await tester.pump();
     expect(card(), findsNothing, reason: '1. e4, nothing said');
     fixture.session
-      ..forward()
-      ..forward();
+      ..cursor.forward()
+      ..cursor.forward();
     await tester.pump();
     expect(find.text("The king's knight."), findsOneWidget);
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     await tester.pump();
     expect(card(), findsNothing);
     editing.value = true;
@@ -110,14 +110,14 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    fixture.session.toEnd();
+    fixture.session.cursor.toEnd();
     await tester.pump();
     expect(find.textContaining('2. c4!'), findsOneWidget);
     expect(find.textContaining('Good move'), findsOneWidget);
     expect(find.textContaining('main line'), findsOneWidget);
     expect(find.text('Play the Exchange.'), findsNothing);
 
-    fixture.session.back();
+    fixture.session.cursor.back();
     await tester.pump();
     expect(find.textContaining('1... d5'), findsOneWidget);
     expect(find.text('The solid reply.'), findsOneWidget);
@@ -127,29 +127,29 @@ void main() {
   testWidgets('a move written in the note goes on the board, marked, and '
       'is not written into the game', (tester) async {
     await pump(tester);
-    fixture.session.toEnd();
+    fixture.session.cursor.toEnd();
     await tester.pump();
-    final end = fixture.session.cursor;
+    final end = fixture.session.cursor.value;
     final tree = fixture.session.tree;
     await tester.tap(find.text('3. e4'));
     await tester.pump();
-    final line = fixture.session.commentLine.value!;
+    final line = fixture.session.cursor.commentLine.value!;
     expect(line.move.san, 'e4');
-    expect(fixture.session.boardFen, line.move.after);
-    expect(fixture.session.cursor, end);
+    expect(fixture.session.cursor.boardFen, line.move.after);
+    expect(fixture.session.cursor.value, end);
     expect(identical(fixture.session.tree, tree), isTrue);
     expect(fixture.session.hasHeldEdits, isFalse);
     expect(_marked(tester, '3. e4'), isTrue);
     expect(_marked(tester, '2... dxc4'), isFalse);
 
-    fixture.session.back();
+    fixture.session.cursor.back();
     await tester.pump();
-    expect(fixture.session.commentLine.value!.move.san, 'dxc4');
+    expect(fixture.session.cursor.commentLine.value!.move.san, 'dxc4');
     expect(_marked(tester, '2... dxc4'), isTrue);
-    fixture.session.back();
+    fixture.session.cursor.back();
     await tester.pump();
-    expect(fixture.session.commentLine.value, isNull);
-    expect(fixture.session.cursor, end);
+    expect(fixture.session.cursor.commentLine.value, isNull);
+    expect(fixture.session.cursor.value, end);
   });
 }
 

@@ -59,10 +59,10 @@ void main() {
   test(
     'a move played in the workspace is in the file the old app reads',
     () async {
-      session.toEnd(); // 1. d4 d5 2. c4 e6 3. cxd5 exd5 4. Nc3
-      expect(session.currentMove?.san, 'Nc3');
+      session.cursor.toEnd(); // 1. d4 d5 2. c4 e6 3. cxd5 exd5 4. Nc3
+      expect(session.cursor.currentMove?.san, 'Nc3');
       session.playMove('g8f6'); // 4... Nf6
-      final played = session.cursor;
+      final played = session.cursor.value;
       session.setComment(played, 'Their main answer');
       await settled();
       expect(saver.state, isA<Saved>());

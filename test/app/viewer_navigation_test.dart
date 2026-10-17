@@ -41,7 +41,7 @@ void main() {
     await app.requests.openFile(ref, game: 2);
     await tester.pumpAndSettle();
     expect(app.parts.session.game, 2);
-    expect(app.parts.session.cursor.isRoot, isTrue);
+    expect(app.parts.session.cursor.value.isRoot, isTrue);
     expect(app.parts.documents.filter.kept, 3);
     expect(find.text('of 3'), findsOneWidget);
     expect(tester.takeException(), isNull);

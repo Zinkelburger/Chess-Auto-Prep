@@ -133,7 +133,7 @@ void main() {
     StaticChessboard board() =>
         tester.widget<StaticChessboard>(find.byType(StaticChessboard));
     expect(board().lastMove?.uci, 'e2e4');
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     await tester.pump();
     expect(find.byType(StaticChessboard), findsNothing);
     await tester.pump(previewDelay);

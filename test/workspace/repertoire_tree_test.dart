@@ -145,11 +145,13 @@ void main() {
 
   void walk(List<String> sans) {
     for (final san in sans) {
-      final at = fixture.session.cursor;
+      final at = fixture.session.cursor.value;
       final children =
           fixture.session.tree!.nodeAt(at)?.children ??
           fixture.session.tree!.children;
-      fixture.session.goTo(at.child(children.indexWhere((n) => n.san == san)));
+      fixture.session.cursor.goTo(
+        at.child(children.indexWhere((n) => n.san == san)),
+      );
     }
   }
 
@@ -246,7 +248,7 @@ void main() {
     walk(['e4', 'e5', 'Nf3', 'Nc6', 'Bc4']);
     fixture.session.playMove('d7d6');
     await pumpEventQueue();
-    fixture.session.goTo(fixture.session.cursor.parent);
+    fixture.session.cursor.goTo(fixture.session.cursor.value.parent);
     await pumpEventQueue();
     expect([
       for (final row in rows()) row.san,
@@ -288,7 +290,11 @@ void main() {
     await pumpEventQueue();
     final before = fixture.session.tree;
     tree.play('g1f3');
-    expect(fixture.session.currentMove!.san, 'Nf3', reason: 'in the file');
+    expect(
+      fixture.session.cursor.currentMove!.san,
+      'Nf3',
+      reason: 'in the file',
+    );
     expect(tree.board.value, isNull);
     tree.play('b8c6');
     expect(tree.offFile, isEmpty, reason: 'still in the file');
@@ -309,14 +315,14 @@ void main() {
     expect(rows(), hasLength(3));
     tree.back();
     expect(tree.board.value, isNull);
-    expect(fixture.session.currentMove!.san, 'Nc6');
+    expect(fixture.session.cursor.currentMove!.san, 'Nc6');
   });
 
   test('moving in the file or leaving the tab ends the free board', () async {
     walk(['e4', 'e5', 'Nf3', 'Nc6']);
     tree.play('f1b5');
     expect(tree.board.value, isNotNull);
-    fixture.session.back();
+    fixture.session.cursor.back();
     expect(tree.board.value, isNull);
     tree.play('g8f6');
     expect(tree.offFile, hasLength(1));
@@ -335,8 +341,8 @@ void main() {
     walk(['e4', 'e5', 'Nf3', 'Nc6']);
     tree.play('f1b5');
     expect(analysis.position, tree.fen);
-    expect(analysis.position, isNot(fixture.session.fen));
+    expect(analysis.position, isNot(fixture.session.cursor.fen));
     tree.backToFile();
-    expect(analysis.position, fixture.session.fen);
+    expect(analysis.position, fixture.session.cursor.fen);
   });
 }

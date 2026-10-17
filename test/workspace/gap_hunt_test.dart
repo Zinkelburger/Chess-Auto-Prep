@@ -113,9 +113,9 @@ void main() {
       'the mark', () async {
     await pumpEventQueue();
     gaps.nextGap();
-    expect(fixture.session.cursor, NodePath.of([0]));
+    expect(fixture.session.cursor.value, NodePath.of([0]));
     expect((gaps.highlighted as MissingReply).san, 'c5');
-    fixture.session.back();
+    fixture.session.cursor.back();
     expect(gaps.highlighted, isNull);
   });
 
@@ -123,8 +123,8 @@ void main() {
     await pumpEventQueue();
     var told = 0;
     gaps.addListener(() => told++);
-    fixture.session.forward();
-    fixture.session.back();
+    fixture.session.cursor.forward();
+    fixture.session.cursor.back();
     expect(told, 0);
   });
 
@@ -172,7 +172,7 @@ void main() {
     expect(gaps.walking, isTrue);
     expect(gaps.highlighted, isNull);
     gaps.nextGap();
-    expect(fixture.session.cursor, const NodePath.root());
+    expect(fixture.session.cursor.value, const NodePath.root());
     files
       ..hold = false
       ..releaseAll();
@@ -194,7 +194,7 @@ void main() {
     expect(gaps.walk!.gaps.whereType<MissingReply>().single.san, 'c5');
     // Back in Main, 1...c5 gets an answer.
     await fixture.session.open(main);
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     fixture.session.playMove('c7c5');
     fixture.session.playMove('c2c3');
     await fixture.session.open(ref);
@@ -219,7 +219,7 @@ void main() {
       files.hold = true;
       await settings.update(settings.value.copyWith(opponentElo: 1500));
       gaps.nextGap();
-      expect(fixture.session.cursor, const NodePath.root());
+      expect(fixture.session.cursor.value, const NodePath.root());
       expect(gaps.highlighted, isNull);
       files
         ..hold = false

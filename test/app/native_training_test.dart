@@ -121,7 +121,7 @@ void main() {
       final ref = ChapterRef.at(disk.ref('repertoires/Prep/Main.pgn').path);
       await disk.put(ref, _repertoire);
       await app.parts.session.open(ref);
-      app.parts.session.goTo(NodePath.of([0, 0]));
+      app.parts.session.cursor.goTo(NodePath.of([0, 0]));
       app.parts.session.playMove('g1f3');
       await app.parts.training.lines.reload();
       expect(ready().lines.single.moves.last.san, 'Nf3');

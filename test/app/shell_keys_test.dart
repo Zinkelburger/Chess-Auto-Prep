@@ -94,18 +94,20 @@ void main() {
   testWidgets('Enter steps into the variation at the cursor; Esc goes back '
       'to where it branched', (tester) async {
     await openKid(tester);
-    w.session.goTo(NodePath.of([0, 0])); // 2. Nf3, before 2... d6 (2... Nc6)
+    w.session.cursor.goTo(
+      NodePath.of([0, 0]),
+    ); // 2. Nf3, before 2... d6 (2... Nc6)
     await key(tester, LogicalKeyboardKey.enter);
-    expect(w.session.currentMove?.san, 'Nc6');
+    expect(w.session.cursor.currentMove?.san, 'Nc6');
     await key(tester, LogicalKeyboardKey.arrowRight);
-    expect(w.session.currentMove?.san, 'd4');
+    expect(w.session.cursor.currentMove?.san, 'd4');
     await key(tester, LogicalKeyboardKey.escape);
-    expect(w.session.cursor, NodePath.of([0, 0]));
+    expect(w.session.cursor.value, NodePath.of([0, 0]));
   });
 
   testWidgets('Enter on a focused button is the button\'s', (tester) async {
     await openKid(tester);
-    w.session.goTo(NodePath.of([0, 0]));
+    w.session.cursor.goTo(NodePath.of([0, 0]));
     await tester.pump();
     final forward = find.byTooltip('Forward (→)');
     Focus.of(
@@ -113,7 +115,7 @@ void main() {
     ).requestFocus();
     await tester.pump();
     await key(tester, LogicalKeyboardKey.enter);
-    expect(w.session.currentMove?.san, 'd6', reason: 'Forward, not Nc6');
+    expect(w.session.cursor.currentMove?.san, 'd6', reason: 'Forward, not Nc6');
   });
 
   testWidgets('Esc closes the edit strip once out of the variations', (
@@ -163,7 +165,7 @@ void main() {
       clipboardHolds(tester, fen);
       await ctrl(tester, LogicalKeyboardKey.keyV, shift: true);
       expect(w.session.isScratch, isTrue);
-      expect(w.session.fen, const Fen(fen));
+      expect(w.session.cursor.fen, const Fen(fen));
     });
 
     testWidgets('leaves the chapter up when the clipboard holds no FEN', (
@@ -188,7 +190,7 @@ void main() {
       await ctrl(tester, LogicalKeyboardKey.keyV);
       expect(w.requests.mode, Mode.repertoires);
       expect(w.session.isScratch, isTrue);
-      expect(w.session.fen, const Fen(fen));
+      expect(w.session.cursor.fen, const Fen(fen));
       expect(w.store.creates, isEmpty);
     });
 
@@ -205,7 +207,7 @@ void main() {
       await ctrl(tester, LogicalKeyboardKey.keyV);
       expect(w.requests.mode, Mode.pgnViewer);
       expect(w.session.isScratch, isTrue);
-      expect(w.session.currentMove?.san, 'Nf3');
+      expect(w.session.cursor.currentMove?.san, 'Nf3');
     });
 
     testWidgets('a FEN cut short is read, facing the side to move', (
@@ -215,7 +217,10 @@ void main() {
       clipboardHolds(tester, '4k3/8/8/8/8/8/4P3/4K3 b');
       await ctrl(tester, LogicalKeyboardKey.keyV);
       expect(w.session.isScratch, isTrue);
-      expect(w.session.fen, const Fen('4k3/8/8/8/8/8/4P3/4K3 b - - 0 1'));
+      expect(
+        w.session.cursor.fen,
+        const Fen('4k3/8/8/8/8/8/4P3/4K3 b - - 0 1'),
+      );
       expect(w.session.orientation, Side.black);
     });
 
@@ -227,7 +232,7 @@ void main() {
       clipboardHolds(tester, fen);
       await ctrl(tester, LogicalKeyboardKey.keyV);
       expect(w.requests.mode, Mode.repertoires);
-      expect(w.session.fen, const Fen(fen));
+      expect(w.session.cursor.fen, const Fen(fen));
     });
   });
 
@@ -237,9 +242,9 @@ void main() {
     testWidgets('edits the position on the board into a new analysis board, '
         'the same way up', (tester) async {
       await openKid(tester);
-      w.session.forward();
+      w.session.cursor.forward();
       await tester.pumpAndSettle();
-      final here = w.session.fen;
+      final here = w.session.cursor.fen;
       await ctrl(tester, LogicalKeyboardKey.keyE, shift: true);
       expect(find.text('Set up a position'), findsOneWidget);
       final field = find.widgetWithText(TextField, 'FEN');
@@ -249,7 +254,7 @@ void main() {
       await tester.tap(find.text('Use this position'));
       await tester.pumpAndSettle();
       expect(w.session.isScratch, isTrue);
-      expect(w.session.fen, const Fen(fen));
+      expect(w.session.cursor.fen, const Fen(fen));
       expect(w.session.orientation, Side.black, reason: 'KID is for Black');
       expect(w.store.creates, isEmpty);
     });
@@ -276,12 +281,16 @@ void main() {
     expect(w.requests.mode, Mode.pgnViewer);
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.pump(const Duration(milliseconds: 300));
-    expect(w.session.currentMove?.san, 'e4');
+    expect(w.session.cursor.currentMove?.san, 'e4');
     await tester.pump(const Duration(seconds: 1));
-    expect(w.session.currentMove?.san, 'e5');
+    expect(w.session.cursor.currentMove?.san, 'e5');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pump(const Duration(seconds: 3));
-    expect(w.session.currentMove?.san, 'e4', reason: 'the arrow stopped it');
+    expect(
+      w.session.cursor.currentMove?.san,
+      'e4',
+      reason: 'the arrow stopped it',
+    );
   });
 
   testWidgets('once the game box lets go of the focus, the keys are the '
@@ -304,7 +313,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(w.session.game, 1);
     await key(tester, LogicalKeyboardKey.arrowRight);
-    expect(w.session.currentMove?.san, 'd4');
+    expect(w.session.cursor.currentMove?.san, 'd4');
     final side = w.session.orientation;
     await key(tester, LogicalKeyboardKey.keyF);
     expect(w.session.orientation, isNot(side));
@@ -331,6 +340,6 @@ void main() {
     w.requests.switchTo(Mode.pgnViewer);
     await tester.pumpAndSettle();
     expect(w.session.source, games);
-    expect(w.session.currentMove?.san, 'e4');
+    expect(w.session.cursor.currentMove?.san, 'e4');
   });
 }

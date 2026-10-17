@@ -236,7 +236,7 @@ void main() {
       'the move under the cursor, the board shows it, and a left click takes '
       'it out again', (tester) async {
     await pump(tester);
-    session.goTo(NodePath.of(const [0]));
+    session.cursor.goTo(NodePath.of(const [0]));
     await tester.pump();
     final board = find.byType(Chessboard);
     final corner = tester.getTopLeft(board);
@@ -253,7 +253,7 @@ void main() {
     await gesture.up();
     await tester.pump();
     expect(
-      session.commentAt(session.cursor),
+      session.commentAt(session.cursor.value),
       'The Sicilian [%eval 0.30] [%cal Gg1f3]',
     );
     expect(
@@ -263,7 +263,10 @@ void main() {
     expect(find.textContaining('[%cal'), findsNothing);
     await tester.tapAt(at(4, 4));
     await tester.pump();
-    expect(session.commentAt(session.cursor), 'The Sicilian [%eval 0.30]');
+    expect(
+      session.commentAt(session.cursor.value),
+      'The Sicilian [%eval 0.30]',
+    );
     expect(
       tester.widget<BoardArrows>(find.byType(BoardArrows)).arrows,
       isEmpty,
@@ -276,14 +279,14 @@ void main() {
     await pump(tester);
     await tester.tap(find.textContaining('Nc3'));
     await tester.pump();
-    expect(session.cursor, NodePath.of([0, 1]));
-    expect(session.currentMove?.san, 'Nc3');
+    expect(session.cursor.value, NodePath.of([0, 1]));
+    expect(session.cursor.currentMove?.san, 'Nc3');
     // Two moves render as "2... Nc6"; walk on instead of picking one.
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    expect(session.cursor, NodePath.of([0, 1, 0]));
+    expect(session.cursor.value, NodePath.of([0, 1, 0]));
     await tester.tap(find.textContaining('cxd4'));
     await tester.pump();
-    expect(session.cursor, NodePath.of([0, 0, 0, 0, 0]));
+    expect(session.cursor.value, NodePath.of([0, 0, 0, 0, 0]));
   });
 
   testWidgets('the arrows walk the line; Home and End are its ends', (
@@ -293,17 +296,17 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
-    expect(session.currentMove?.san, 'Nf3');
+    expect(session.cursor.currentMove?.san, 'Nf3');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-    expect(session.currentMove?.san, 'c5');
+    expect(session.cursor.currentMove?.san, 'c5');
     await tester.sendKeyEvent(LogicalKeyboardKey.end);
-    expect(session.currentMove?.san, 'cxd4');
+    expect(session.cursor.currentMove?.san, 'cxd4');
     await tester.sendKeyEvent(LogicalKeyboardKey.home);
-    expect(session.cursor.isRoot, isTrue);
+    expect(session.cursor.value.isRoot, isTrue);
     await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
-    expect(session.currentMove?.san, 'cxd4');
+    expect(session.cursor.currentMove?.san, 'cxd4');
     await tester.sendKeyEvent(LogicalKeyboardKey.pageUp);
-    expect(session.cursor.isRoot, isTrue);
+    expect(session.cursor.value.isRoot, isTrue);
   });
 
   testWidgets('four real Explorer panes and Expectimax fit the workspace', (
@@ -511,7 +514,7 @@ void main() {
     final sicilian = NodePath.of([0]);
     editing.value = true;
     await pump(tester);
-    session.goTo(sicilian);
+    session.cursor.goTo(sicilian);
     session.setComment(sicilian, 'Mine'); // one edit there is to take back
     await tester.pumpAndSettle();
     final field = comment;
@@ -521,7 +524,7 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pump();
-    expect(session.cursor, sicilian, reason: 'the arrow moved the caret');
+    expect(session.cursor.value, sicilian, reason: 'the arrow moved the caret');
     final editable = tester.widget<EditableText>(
       find.descendant(of: comment, matching: find.byType(EditableText)),
     );

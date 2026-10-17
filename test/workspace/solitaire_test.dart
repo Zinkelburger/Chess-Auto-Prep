@@ -58,15 +58,15 @@ void main() {
       solitaire.start();
       expect(solitaire.play('e2e3'), isTrue);
       expect(solitaire.lastWrong, isTrue);
-      expect(f.session.cursor, const NodePath.root());
+      expect(f.session.cursor.value, const NodePath.root());
       expect(solitaire.play('e2e4'), isTrue);
-      expect(f.session.currentMove?.san, 'e4');
+      expect(f.session.cursor.currentMove?.san, 'e4');
       async.elapse(Solitaire.replyDelay);
-      expect(f.session.currentMove?.san, 'e5');
-      expect(f.session.shownTo, f.session.cursor);
+      expect(f.session.cursor.currentMove?.san, 'e5');
+      expect(f.session.shownTo, f.session.cursor.value);
       expect(solitaire.play('g1f3'), isTrue);
       async.elapse(Solitaire.replyDelay);
-      expect(f.session.currentMove?.san, 'Nc6');
+      expect(f.session.cursor.currentMove?.san, 'Nc6');
       solitaire.showHint();
       expect(solitaire.hint, 'Move your bishop.');
       solitaire.reveal();
@@ -91,11 +91,11 @@ void main() {
       solitaire.setSide(Side.black);
       solitaire.start();
       expect(solitaire.play('e7e5'), isTrue, reason: 'taken, not the turn');
-      expect(f.session.cursor, const NodePath.root());
+      expect(f.session.cursor.value, const NodePath.root());
       async.elapse(Solitaire.replyDelay);
-      expect(f.session.currentMove?.san, 'e4');
+      expect(f.session.cursor.currentMove?.san, 'e4');
       solitaire.play('e7e5');
-      expect(f.session.currentMove?.san, 'e5');
+      expect(f.session.cursor.currentMove?.san, 'e5');
     });
   });
 

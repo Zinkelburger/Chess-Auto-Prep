@@ -76,7 +76,7 @@ void main() {
     await w.pumpShell(tester);
     await w.requests.openStudy(ref, chapter: 0);
     await tester.pumpAndSettle();
-    w.session.goTo(NodePath.of([0]));
+    w.session.cursor.goTo(NodePath.of([0]));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Annotate'));
     await tester.pumpAndSettle();
@@ -85,19 +85,19 @@ void main() {
     await tester.tap(find.text('Quiz starts here'));
     await tester.tap(find.text('Quiz ends here'));
     await tester.pumpAndSettle();
-    expect(w.session.currentMove!.nags, containsAll([1, 16]));
-    expect(w.session.currentMove!.comment, contains('[%tstart]'));
-    expect(w.session.currentMove!.comment, contains('[%tend]'));
-    w.session.goTo(NodePath.of([0, 0]));
+    expect(w.session.cursor.currentMove!.nags, containsAll([1, 16]));
+    expect(w.session.cursor.currentMove!.comment, contains('[%tstart]'));
+    expect(w.session.cursor.currentMove!.comment, contains('[%tend]'));
+    w.session.cursor.goTo(NodePath.of([0, 0]));
     await tester.pump();
     await tester.tap(find.text('Quiz ends here'));
     await tester.pumpAndSettle();
-    expect(w.session.currentMove!.comment, contains('[%tend]'));
-    expect(w.session.currentMove!.comment, isNot(contains('[%tstart]')));
-    w.session.goTo(const NodePath.root());
+    expect(w.session.cursor.currentMove!.comment, contains('[%tend]'));
+    expect(w.session.cursor.currentMove!.comment, isNot(contains('[%tstart]')));
+    w.session.cursor.goTo(const NodePath.root());
     await tester.pump();
     expect(find.text('Quiz ends here'), findsNothing);
-    w.session.goTo(NodePath.of([0]));
+    w.session.cursor.goTo(NodePath.of([0]));
     await tester.pump();
     expect(find.text('Quiz ends here'), findsOneWidget);
 

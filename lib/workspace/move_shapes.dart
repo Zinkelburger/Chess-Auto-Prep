@@ -13,17 +13,17 @@ import 'engine_analysis.dart';
 /// is hidden: a puzzle's or a solitaire game's arrows would give its answer
 /// away.
 List<BoardShape> shapesOnBoard(DocumentSession session) {
-  if (session.commentLine.value != null || session.shownTo != null) {
+  if (session.cursor.commentLine.value != null || session.shownTo != null) {
     return const [];
   }
-  return shapesIn(session.commentAt(session.cursor));
+  return shapesIn(session.commentAt(session.cursor.value));
 }
 
 /// The engine's threat as a red arrow, while it is for the position shown
 /// and nothing of the game is hidden; a click on the board leaves it.
 BoardShape? threatOnBoard(DocumentSession session, Threat? threat) {
   if (session.shownTo != null || threat == null) return null;
-  if (threat.fen != session.boardFen) return null;
+  if (threat.fen != session.cursor.boardFen) return null;
   return switch (Move.parse(threat.uci)) {
     NormalMove(:final from, :final to) => BoardShape(from, to, ShapeColour.red),
     _ => null,
@@ -37,7 +37,7 @@ BoardShape? threatOnBoard(DocumentSession session, Threat? threat) {
 bool drawsIntoComment(DocumentSession session, {required bool editing}) =>
     session.chapter != null &&
     session.readOnly == null &&
-    session.commentLine.value == null &&
+    session.cursor.commentLine.value == null &&
     session.shownTo == null &&
     (editing || !session.holdsEdits);
 
@@ -45,7 +45,7 @@ bool drawsIntoComment(DocumentSession session, {required bool editing}) =>
 /// cursor, through the session's one edit path: drawn again it goes, in
 /// another colour it is recoloured.
 void drawIntoComment(DocumentSession session, BoardShape shape) {
-  final at = session.cursor;
+  final at = session.cursor.value;
   session.apply((chapter) {
     final comment = at.isRoot
         ? chapter.tree.rootComment
@@ -58,7 +58,7 @@ void drawIntoComment(DocumentSession session, BoardShape shape) {
 /// Takes every shape out of the comment on the move under the cursor, as a
 /// left click on Lichess's analysis board does; nothing when there are none.
 void clearCommentShapes(DocumentSession session) {
-  final at = session.cursor;
+  final at = session.cursor.value;
   if (shapesIn(session.commentAt(at)).isEmpty) return;
   session.apply((chapter) => setShapes(chapter, at: at, shapes: const []));
 }

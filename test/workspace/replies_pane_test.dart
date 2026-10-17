@@ -103,7 +103,7 @@ void main() {
 
   testWidgets('shows their replies with shares, a tick for the one the '
       'chapter plays and the word gap for the one it does not', (tester) async {
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     await show(tester);
     expect(find.textContaining('Their replies · 2200'), findsOneWidget);
     // c5 is unanswered, and after 1. e4 e5 the chapter stops: two gaps.
@@ -125,7 +125,7 @@ void main() {
       'counted and the coverage left out', (tester) async {
     fixture.dispose();
     fixture = await openSession(longerChapter);
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     await show(tester, policy: FirstReplyOnly());
     expect(find.text('Their replies · 2200 · 1 gap'), findsOneWidget);
   });
@@ -142,17 +142,17 @@ void main() {
       find.byType(StaticChessboard),
     );
     expect(board.lastMove?.uci, 'e2e4');
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     await tester.pump();
     expect(find.byType(StaticChessboard), findsNothing);
   });
 
   testWidgets('clicking a reply plays it into the chapter', (tester) async {
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     await show(tester);
     await tester.tap(find.text('40%'));
     await tester.pumpAndSettle();
-    expect(fixture.session.currentMove?.san, 'c5');
+    expect(fixture.session.cursor.currentMove?.san, 'c5');
     expect(fixture.onDisk, contains('1. e4 c5'));
   });
 
@@ -171,7 +171,7 @@ void main() {
     await show(tester);
     expect(find.text('+0.42'), findsOneWidget);
     expect(find.text('not in tree'), findsOneWidget);
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     await tester.pumpAndSettle();
     expect(find.text('not in tree'), findsNothing, reason: 'their move');
   });

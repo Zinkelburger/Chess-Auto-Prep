@@ -27,55 +27,61 @@ void main() {
   tearDown(() => fixture.dispose());
 
   test('opening a chapter shows its root from its side', () {
-    expect(session.cursor.isRoot, isTrue);
-    expect(session.fen.whiteToMove, isFalse);
+    expect(session.cursor.value.isRoot, isTrue);
+    expect(session.cursor.fen.whiteToMove, isFalse);
     expect(session.orientation, Side.black);
-    expect(session.currentMove, isNull);
+    expect(session.cursor.currentMove, isNull);
     expect(session.source, fixture.ref);
   });
 
   test('forward and back walk the main line', () {
-    session.forward();
-    expect(session.currentMove?.san, 'c5');
-    session.forward();
-    expect(session.currentMove?.san, 'Nf3');
-    session.back();
-    expect(session.currentMove?.san, 'c5');
-    session.back();
-    expect(session.cursor.isRoot, isTrue);
+    session.cursor.forward();
+    expect(session.cursor.currentMove?.san, 'c5');
+    session.cursor.forward();
+    expect(session.cursor.currentMove?.san, 'Nf3');
+    session.cursor.back();
+    expect(session.cursor.currentMove?.san, 'c5');
+    session.cursor.back();
+    expect(session.cursor.value.isRoot, isTrue);
     final before = notifications;
-    session.back();
+    session.cursor.back();
     expect(notifications, before, reason: 'backing off the root does nothing');
   });
 
   test('Enter steps into the variation at the cursor and Esc back out to '
       'where it branched', () {
-    expect(session.enterVariation(), isFalse, reason: 'one first move');
-    expect(session.leaveVariation(), isFalse, reason: 'on the main line');
-    session.goTo(NodePath.of([0, 0])); // 2. Nf3, with 2... d6 or 2... Nc6
-    expect(session.enterVariation(), isTrue);
-    expect(session.currentMove?.san, 'Nc6');
-    session.forward();
-    expect(session.currentMove?.san, 'd4');
-    expect(session.leaveVariation(), isTrue);
-    expect(session.cursor, NodePath.of([0, 0]));
-    expect(session.leaveVariation(), isFalse);
+    expect(session.cursor.enterVariation(), isFalse, reason: 'one first move');
+    expect(
+      session.cursor.leaveVariation(),
+      isFalse,
+      reason: 'on the main line',
+    );
+    session.cursor.goTo(
+      NodePath.of([0, 0]),
+    ); // 2. Nf3, with 2... d6 or 2... Nc6
+    expect(session.cursor.enterVariation(), isTrue);
+    expect(session.cursor.currentMove?.san, 'Nc6');
+    session.cursor.forward();
+    expect(session.cursor.currentMove?.san, 'd4');
+    expect(session.cursor.leaveVariation(), isTrue);
+    expect(session.cursor.value, NodePath.of([0, 0]));
+    expect(session.cursor.leaveVariation(), isFalse);
   });
 
   test('goTo ignores paths outside the tree', () {
-    session.goTo(NodePath.of([0, 1]));
-    expect(session.currentMove?.san, 'Nc3');
-    session.goTo(NodePath.of([9]));
-    expect(session.currentMove?.san, 'Nc3');
+    session.cursor.goTo(NodePath.of([0, 1]));
+    expect(session.cursor.currentMove?.san, 'Nc3');
+    session.cursor.goTo(NodePath.of([9]));
+    expect(session.cursor.currentMove?.san, 'Nc3');
   });
 
   test('toEnd follows the main line from the cursor; toStart returns', () {
-    session.goTo(NodePath.of([0, 0, 1]));
-    session.toEnd();
-    expect(session.currentMove?.san, 'd4');
-    expect(session.cursor, NodePath.of([0, 0, 1, 0]));
-    session.toStart();
-    expect(session.cursor.isRoot, isTrue);
+    session.cursor.goTo(NodePath.of([0, 0, 1]));
+    session.cursor.toEnd();
+    expect(session.cursor.currentMove?.san, 'd4');
+    expect(session.cursor.value, NodePath.of([0, 0, 1, 0]));
+    session.cursor.toStart();
+    expect(session.cursor.value.isRoot, isTrue);
   });
 
   test('a chapter that is gone or unreadable is a sentence', () async {
@@ -98,24 +104,26 @@ void main() {
 
   test('a move already in the tree only moves the cursor', () async {
     session.playMove('c7c5');
-    expect(session.currentMove?.san, 'c5');
+    expect(session.cursor.currentMove?.san, 'c5');
     await pumpEventQueue();
     expect(fixture.store.requestedSaves, isEmpty);
   });
 
   test('a move at the end of a line extends that line', () async {
-    session.goTo(NodePath.of([0, 0, 0, 0, 0])); // 1... c5 2. Nf3 d6 3. d4 cxd4
+    session.cursor.goTo(
+      NodePath.of([0, 0, 0, 0, 0]),
+    ); // 1... c5 2. Nf3 d6 3. d4 cxd4
     session.playMove('f3d4');
-    expect(session.currentMove?.san, 'Nxd4');
+    expect(session.cursor.currentMove?.san, 'Nxd4');
     expect(session.chapter?.gameCount, 2, reason: 'no new line was needed');
     await pumpEventQueue();
     expect(fixture.onDisk, contains('cxd4 4. Nxd4'));
   });
 
   test('a move at a branch point becomes a line of its own', () async {
-    session.goTo(NodePath.of([0]));
+    session.cursor.goTo(NodePath.of([0]));
     session.playMove('c2c3');
-    expect(session.currentMove?.san, 'c3');
+    expect(session.cursor.currentMove?.san, 'c3');
     expect(session.chapter?.gameCount, 3);
     await pumpEventQueue();
     expect(fixture.onDisk, contains('1... c5 2. c3'));
@@ -127,24 +135,32 @@ void main() {
     final from = NodePath.of([0]); // 1... c5
     final line = pvMoves(session.tree!.fenAt(from), ['g1f3', 'e7e6', 'd2d4']);
     final tree = session.tree;
-    session.showCommentLine(from, line, 1);
-    expect(session.cursor, from);
-    expect(session.boardFen, line[1].after);
-    expect(session.boardLastMove, 'e7e6');
-    expect(session.fen, session.tree!.fenAt(from), reason: 'the file stays');
+    session.cursor.showCommentLine(from, line, 1);
+    expect(session.cursor.value, from);
+    expect(session.cursor.boardFen, line[1].after);
+    expect(session.cursor.boardLastMove, 'e7e6');
+    expect(
+      session.cursor.fen,
+      session.tree!.fenAt(from),
+      reason: 'the file stays',
+    );
     session.playMove('d2d4');
     expect(identical(session.tree, tree), isTrue, reason: 'no board moves');
 
-    session.forward();
-    expect(session.boardFen, line[2].after);
-    session.forward();
-    expect(session.boardFen, line[2].after, reason: 'the line ends there');
-    session.back();
-    session.back();
-    session.back();
-    expect(session.commentLine.value, isNull);
-    expect(session.boardFen, session.fen);
-    expect(session.cursor, from);
+    session.cursor.forward();
+    expect(session.cursor.boardFen, line[2].after);
+    session.cursor.forward();
+    expect(
+      session.cursor.boardFen,
+      line[2].after,
+      reason: 'the line ends there',
+    );
+    session.cursor.back();
+    session.cursor.back();
+    session.cursor.back();
+    expect(session.cursor.commentLine.value, isNull);
+    expect(session.cursor.boardFen, session.cursor.fen);
+    expect(session.cursor.value, from);
     await pumpEventQueue();
     expect(fixture.store.requestedSaves, isEmpty);
   });
@@ -152,29 +168,41 @@ void main() {
   test('moving in the file puts the board back on it', () {
     final from = NodePath.of([0]);
     final line = pvMoves(session.tree!.fenAt(from), ['c2c3']);
-    session.showCommentLine(from, line, 0);
-    session.goTo(from);
-    expect(session.commentLine.value, isNull, reason: 'the same move again');
-    session.showCommentLine(from, line, 0);
-    session.goTo(NodePath.of([0, 0]));
-    expect(session.commentLine.value, isNull);
-    session.showCommentLine(from, line, 0);
-    expect(session.cursor, from, reason: 'the line starts at its comment');
-    session.showCommentLine(from, line, 0);
+    session.cursor.showCommentLine(from, line, 0);
+    session.cursor.goTo(from);
+    expect(
+      session.cursor.commentLine.value,
+      isNull,
+      reason: 'the same move again',
+    );
+    session.cursor.showCommentLine(from, line, 0);
+    session.cursor.goTo(NodePath.of([0, 0]));
+    expect(session.cursor.commentLine.value, isNull);
+    session.cursor.showCommentLine(from, line, 0);
+    expect(
+      session.cursor.value,
+      from,
+      reason: 'the line starts at its comment',
+    );
+    session.cursor.showCommentLine(from, line, 0);
     session.flip();
-    expect(session.commentLine.value, isNull, reason: 'a change to the view');
+    expect(
+      session.cursor.commentLine.value,
+      isNull,
+      reason: 'a change to the view',
+    );
   });
 
   test('a comment line the file already plays moves the cursor there', () {
     final line = pvMoves(session.tree!.rootFen, ['c7c5', 'g1f3', 'b8c6']);
-    session.showCommentLine(const NodePath.root(), line, 2);
-    expect(session.commentLine.value, isNull);
-    expect(session.currentMove?.san, 'Nc6');
+    session.cursor.showCommentLine(const NodePath.root(), line, 2);
+    expect(session.cursor.commentLine.value, isNull);
+    expect(session.cursor.currentMove?.san, 'Nc6');
   });
 
   test('an illegal move changes nothing at all', () async {
     session.playMove('a1a8');
-    expect(session.cursor.isRoot, isTrue);
+    expect(session.cursor.value.isRoot, isTrue);
     expect(notifications, 0);
     await pumpEventQueue();
     expect(fixture.store.requestedSaves, isEmpty);

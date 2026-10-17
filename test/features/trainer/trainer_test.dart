@@ -630,7 +630,7 @@ void main() {
     fakeAsync((async) {
       final trainer = ready(async);
       final before = readyState(trainer);
-      fixture.session.toStart();
+      fixture.session.cursor.toStart();
       fixture.session.playMove('d2d4');
       async.flushMicrotasks();
       expect(files.reads, 1);

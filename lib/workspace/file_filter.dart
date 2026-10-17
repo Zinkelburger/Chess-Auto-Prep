@@ -65,7 +65,7 @@ final class FileFilter extends ChangeNotifier {
   GameFilter get filter => _filter;
 
   /// Capture once: later board navigation never changes the search target.
-  void reachingBoardPosition() => reaching(_session.boardFen);
+  void reachingBoardPosition() => reaching(_session.cursor.boardFen);
   void reaching(Fen position) => apply(_filter.copyWith(position: position));
 
   /// The rules the games were last filtered by.

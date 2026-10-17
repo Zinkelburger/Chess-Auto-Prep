@@ -193,7 +193,7 @@ final class FillGaps extends ChangeNotifier {
   (Object?, Fen, Side)? _board;
   (Object?, Fen, Side) get _boardNow => (
     _session.source ?? _session.analysisPage,
-    _session.fen,
+    _session.cursor.fen,
     _session.orientation,
   );
   Future<String?>? _following;
@@ -220,7 +220,9 @@ final class FillGaps extends ChangeNotifier {
     final tree = _session.tree;
     if (tree == null) return null;
     side ??= _session.orientation;
-    final sans = [for (final move in tree.lineTo(_session.cursor)) move.san];
+    final sans = [
+      for (final move in tree.lineTo(_session.cursor.value)) move.san,
+    ];
     final searches = [?_found, ?_mirror, ..._history.reversed];
     // Prefer an exact root, keeping newest-first order within each group.
     // List.sort is not stable, so sorting only by root can show an older run.
@@ -231,7 +233,7 @@ final class FillGaps extends ChangeNotifier {
         continue;
       final node = found.at(tree.rootFen, sans);
       if (node == null) continue;
-      if (found.tree.fen == _session.fen) return node;
+      if (found.tree.fen == _session.cursor.fen) return node;
       subtree ??= node;
     }
     return subtree;
@@ -322,11 +324,11 @@ final class FillGaps extends ChangeNotifier {
     final tree = _session.tree;
     if (chapter == null || tree == null) return 'Nothing is on the board.';
     if (_session.shownTo != null) return 'Finish the puzzle first.';
-    final root = positionOf(_session.fen);
+    final root = positionOf(_session.cursor.fen);
     if (root == null) return 'The position on the board cannot be searched.';
     final side = _session.orientation;
     final source = _session.source;
-    final line = tree.lineTo(_session.cursor);
+    final line = tree.lineTo(_session.cursor.value);
     final drafting =
         source != null &&
         chapter.game == null &&
@@ -334,7 +336,7 @@ final class FillGaps extends ChangeNotifier {
         chapter.side == side;
     final target = FillTarget(
       rootFen: tree.rootFen,
-      cursor: _session.cursor,
+      cursor: _session.cursor.value,
       sans: [for (final move in line) move.san],
       side: side,
       chapter: drafting ? (chapter, source) : null,
@@ -429,7 +431,7 @@ final class FillGaps extends ChangeNotifier {
     final load = _loadTree;
     return source == null || load == null
         ? 'No saved search is available for this board.'
-        : savedSeed(load(source, _session.fen), request, side);
+        : savedSeed(load(source, _session.cursor.fen), request, side);
   }
 
   Future<void> _run(

@@ -97,12 +97,12 @@ void main() {
     final fixture = await openSession(threeLines);
     addTearDown(fixture.dispose);
     final tree = fixture.session.tree!;
-    fixture.session.goTo(pathOfSans(tree, ['d4', 'd5', 'c4', 'c6'])!);
+    fixture.session.cursor.goTo(pathOfSans(tree, ['d4', 'd5', 'c4', 'c6'])!);
 
     makeMainLine(fixture.session, pathOfSans(tree, ['d4', 'Nf6'])!);
     await pumpEventQueue();
 
-    expect(fixture.session.currentMove!.san, 'c6');
+    expect(fixture.session.cursor.currentMove!.san, 'c6');
   });
 
   test('deleting from a move takes the moves under it off the disk', () async {
@@ -115,7 +115,7 @@ void main() {
 
     expect(fixture.onDisk, isNot(contains('c4')));
     expect(fixture.onDisk, contains('[Event "Slav"]'));
-    expect(fixture.session.cursor, const NodePath.root());
+    expect(fixture.session.cursor.value, const NodePath.root());
   });
 
   test('changing the side writes the Color line and turns the board', () async {

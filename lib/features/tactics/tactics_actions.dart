@@ -48,7 +48,7 @@ List<AppAction> tacticsActions({
       'Copy FEN',
       open
           ? () => unawaited(
-              Clipboard.setData(ClipboardData(text: session.fen.value)),
+              Clipboard.setData(ClipboardData(text: session.cursor.fen.value)),
             )
           : null,
       group: 'Board',
