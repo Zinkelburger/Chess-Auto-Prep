@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/storage/pgn_document_store.dart'
 import 'package:chess_auto_prep/workspace/document_saver.dart';
 import 'package:chess_auto_prep/workspace/document_session.dart';
 import 'package:chess_auto_prep/workspace/session_results.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';
@@ -92,28 +93,41 @@ void main() {
     expect(fixture.onDisk, isNot(contains('two')));
   });
 
-  test('every edit restarts the clock, and a flush ends it', () async {
-    const tick = Duration(milliseconds: 40);
-    final slow = await openSession(blackChapter, delay: tick * 2);
-    addTearDown(slow.dispose);
-    void editSlow(String words) => slow.session.setComment(sicilian, words);
-    editSlow('one');
-    await Future<void>.delayed(tick);
-    editSlow('two');
-    await Future<void>.delayed(tick);
-    expect(
-      slow.store.requestedSaves,
-      isEmpty,
-      reason: 'the second edit restarted the clock',
-    );
-    await Future<void>.delayed(tick * 2);
-    expect(slow.store.requestedSaves, hasLength(1));
-    expect(slow.onDisk, contains('{two [%eval 0.30]}'));
-    editSlow('three');
-    await slow.saver.flush();
-    expect(slow.store.requestedSaves, hasLength(2), reason: 'flushed at once');
-    expect(slow.onDisk, contains('{three [%eval 0.30]}'));
-    expect(slow.saver.state, isA<Saved>());
+  test('every edit restarts the clock, and a flush ends it', () {
+    // On the test's own clock: a wall-clock wait raced the save's timer, and
+    // a loaded machine let the wrong one win.
+    fakeAsync((async) {
+      const second = Duration(seconds: 1);
+      late final SessionFixture slow;
+      openSession(blackChapter, delay: second).then((opened) => slow = opened);
+      async.flushMicrotasks();
+      void editSlow(String words) => slow.session.setComment(sicilian, words);
+      editSlow('one');
+      async.elapse(second * 0.6);
+      editSlow('two');
+      async.elapse(second * 0.6);
+      expect(
+        slow.store.requestedSaves,
+        isEmpty,
+        reason: 'the second edit restarted the clock',
+      );
+      async.elapse(second * 0.4);
+      expect(slow.store.requestedSaves, hasLength(1));
+      expect(slow.onDisk, contains('{two [%eval 0.30]}'));
+      editSlow('three');
+      var flushed = false;
+      slow.saver.flush().then((_) => flushed = true);
+      async.flushMicrotasks();
+      expect(flushed, isTrue);
+      expect(
+        slow.store.requestedSaves,
+        hasLength(2),
+        reason: 'flushed at once',
+      );
+      expect(slow.onDisk, contains('{three [%eval 0.30]}'));
+      expect(slow.saver.state, isA<Saved>());
+      slow.dispose();
+    });
   });
 
   test('edits during a save collapse into one save of the newest', () async {

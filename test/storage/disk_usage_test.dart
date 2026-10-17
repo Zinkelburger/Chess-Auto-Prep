@@ -102,14 +102,19 @@ void main() {
     db.execute('INSERT INTO t VALUES (randomblob(100000))');
     expect(File('$path-wal').existsSync(), isTrue);
     // A reader that finishes shortly: on Windows its open handle refuses the
-    // delete until it closes, and the delete must wait rather than fail.
+    // delete until it closes, and the delete must wait rather than fail. The
+    // delete starts once the reader says it has the file open, not after a
+    // guess at how long an isolate takes to start.
+    final opened = ReceivePort();
+    final hasIt = opened.sendPort;
     final reader = Isolate.run(() async {
       final other = sqlite3.open(path, mode: OpenMode.readOnly);
       other.select('SELECT count(*) FROM t');
+      hasIt.send(null);
       await Future<void>.delayed(const Duration(milliseconds: 400));
       other.close();
     });
-    await Future<void>.delayed(const Duration(milliseconds: 100));
+    await opened.first;
     db.close();
     await deleteDerivedFile(path);
     await reader;
