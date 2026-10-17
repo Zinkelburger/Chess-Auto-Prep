@@ -52,7 +52,8 @@ list. When a spec gains a *Not built* item, add a row here.
 | Scid export | **Deferred** | No writer in `lib/`; the specification and C++ oracle are in [SCID_FORMAT_FINDINGS.md](SCID_FORMAT_FINDINGS.md) and `tools/scid_reference/` |
 | Resume a stopped tournament | **Not started** | `TournamentRun` has no resume; `Run again` starts a new folder |
 | Tournament setup gaps | **Not started** | No opening-label field (`setup_dialog.dart`; only the headless `--opening`), no pondering (always `ponder: false`), history rows lack time control, start time and duration (`history_list.dart`) |
-| Bughouse match extras | **Not started** | No crosstable (`match_panel.dart` shows the opening score); no start from a typed line (`new_match_dialog.dart`) |
+| Frozen partner board for one-board bughouse | **Not started** | The desktop Hivemind is unpatched, so a one-board search may still move on the partner board; the website's build has `tools/bughouse_web/patches/frozen-board.patch` ([spec](features/bughouse.md)) |
+| Bughouse sit panel | **Not started** | The website's "wait for a piece" rows; not in `lib/features/bughouse/` |
 
 ## Settings, accounts and release
 

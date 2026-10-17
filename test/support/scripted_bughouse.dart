@@ -5,10 +5,6 @@ import 'package:chess_auto_prep/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/engines/engine.dart';
 import 'package:chess_auto_prep/engines/hivemind_engine.dart';
-import 'package:chess_auto_prep/chess/bughouse/match.dart';
-import 'package:chess_auto_prep/storage/bughouse_books.dart';
-import 'package:chess_auto_prep/storage/hivemind_write.dart';
-import 'package:chess_auto_prep/storage/bughouse_matches.dart';
 
 /// A Hivemind the test drives. Each search answers [answer] — by default a
 /// few lines of the searched team's first legal moves — at once, or when
@@ -100,115 +96,12 @@ HivemindAnswer firstMoves(HivemindQuestion question) {
   return HivemindSearched(best: lines.firstOrNull?.pv.first, lines: lines);
 }
 
-/// The precomputed book, from a map of positions by key.
-final class ScriptedHivemindBook implements HivemindBook {
-  final positions = <int, HivemindLookup>{};
-  int lookups = 0;
-
-  @override
-  Future<HivemindLookup> lookup(TablePosition position) async {
-    lookups++;
-    return positions[position.bookKey] ?? const HivemindNotFound();
-  }
-
-  /// What the engine added, in order.
-  final saved = <HivemindEntry>[];
-
-  @override
-  Future<HivemindSave> save(HivemindEntry entry, {HivemindWrite? write}) async {
-    if (saving != null) return saving!(entry);
-    saved.add(entry);
-    return const HivemindSaved();
-  }
-
-  Future<HivemindSave> Function(HivemindEntry entry)? saving;
-}
-
-/// The FICS archive, from a map of positions by key; none by default.
-final class ScriptedFicsBook implements FicsBook {
-  bool present = false;
-  final positions = <int, FicsPosition>{};
-
-  @override
-  Future<bool> available() async => present;
-
-  @override
-  Future<FicsLookup> explore(TablePosition position) async => present
-      ? FicsFound((
-          games: 5000,
-          years: '2001–2021',
-          maxPly: 12,
-          minGames: 3,
-        ), positions[position.bookKey] ?? (games: 0, moves: const []))
-      : const FicsAbsent();
-}
-
-/// The matches in memory, as the folder keeps them; [failCreate] makes the
-/// next create fail as a folder that cannot be made does.
-final class ScriptedMatchStore implements MatchStore {
-  final saved = <String, StoredMatch>{};
-  final deleted = <String>[];
-  String? failCreate;
-  String? failSave;
-  String? failList;
-
-  @override
-  Future<MatchListing> list() async {
-    if (failList != null) throw StateError(failList!);
-    return MatchListing(
-      [for (final match in saved.values) StoredMatch.fromJson(match.toJson())]
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt)),
-    );
-  }
-
-  @override
-  Future<StoredMatch?> read(String id) async {
-    if (failList != null) throw StateError(failList!);
-    final match = saved[id];
-    return match == null ? null : StoredMatch.fromJson(match.toJson());
-  }
-
-  @override
-  Future<MatchCreate> create(MatchConfig config, DateTime now) async {
-    if (failCreate case final detail?) return MatchCreateFailed(detail);
-    final id = 'match-${saved.length + 1}';
-    final match = StoredMatch(
-      id: id,
-      config: config,
-      createdAt: now,
-      status: MatchStatus.pending,
-    );
-    saved[id] = match;
-    return MatchCreated(match);
-  }
-
-  @override
-  Future<MatchWriteProblem> save(
-    StoredMatch match, {
-    MatchCheckpoint? checkpoint,
-  }) async {
-    if (failSave != null) return failSave;
-    saved[match.id] = match;
-    return null;
-  }
-
-  @override
-  Future<MatchWriteProblem> delete(String id) async {
-    saved.remove(id);
-    deleted.add(id);
-    return null;
-  }
-}
-
-/// The lab's outside world for a window test: the engine bundled, one
-/// scripted engine, a book and an archive the test fills.
+/// The Bughouse mode's outside world for a window test: the engine
+/// bundled, and one scripted engine.
 final class ScriptedBughouse {
   /// The engine the last start handed out; a start after it went away
   /// hands out a new one that answers the same way.
   ScriptedHivemind engine = ScriptedHivemind();
-  final book = ScriptedHivemindBook();
-  final archive = ScriptedFicsBook();
-  final matches = ScriptedMatchStore();
   bool bundled = true;
   String? startFailure;
   int starts = 0;
@@ -224,8 +117,5 @@ final class ScriptedBughouse {
       }
       return HivemindStarted(engine);
     },
-    hivemindBook: book,
-    ficsBook: archive,
-    matches: matches,
   );
 }

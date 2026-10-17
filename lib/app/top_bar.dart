@@ -52,7 +52,7 @@ class TopBar extends StatelessWidget {
   final VoidCallback? onBack;
   final VoidCallback? onForward;
 
-  /// Whether this build can offer [Mode] at all: the Bughouse lab needs its
+  /// Whether this build can offer [Mode] at all: the Bughouse mode needs its
   /// engine, which a build may not carry. A mode not offered is left out
   /// of the menu, not greyed.
   final bool Function(Mode mode) offered;

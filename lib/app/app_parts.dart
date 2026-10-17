@@ -174,7 +174,7 @@ final class AppParts {
   );
   TrainingModes get training => _training.modes;
 
-  /// The labs: the Bughouse lab's owners.
+  /// The labs: the Bughouse mode's owners.
   late final labs = wireLabModes(env);
   late final players = PlayerModes(
     env,
@@ -271,8 +271,7 @@ final class AppParts {
     training.myGames.pause();
     training.lines.leave();
     training.puzzles.suspend();
-    labs.search.close();
-    labs.matches.stop();
+    labs.engine.close();
     unawaited(account.cancel());
   }
 

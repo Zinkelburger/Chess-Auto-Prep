@@ -6,7 +6,6 @@ import 'package:crypto/crypto.dart';
 
 import '../diagnostics/log.dart';
 import 'engine.dart';
-import 'crazyara_engine.dart';
 import 'hivemind_engine.dart';
 import 'hivemind_install.dart';
 import 'uci_engine.dart';
@@ -54,13 +53,6 @@ Future<String?> _unrunnable(String executable) async {
   }
   return null;
 }
-
-/// What the Bughouse expectimax search says when no CrazyAra is found: the
-/// installer in the source tree (Linux x86-64) or a launcher of the user's
-/// own, the two ways [EngineSupervisor.startCrazyara] can find one.
-const crazyaraMissing =
-    'CrazyAra is not installed. Install it with tools/setup_crazyara.py, or '
-    'set CRAZYARA_BIN to its launcher.';
 
 /// Owns every engine process the app starts and ends them all on
 /// [dispose]. One per app; nothing else spawns an engine.
@@ -270,57 +262,6 @@ final class EngineSupervisor {
       await process.kill();
       log.e('start the bughouse engine', error);
       return HivemindStartFailed('Could not start the bughouse engine: $error');
-    } finally {
-      _handshakes.remove(process);
-    }
-  }
-
-  /// The optional CrazyAra installation, kept under the same supervisor as
-  /// Stockfish and Hivemind, including a launch interrupted by app shutdown.
-  /// [environment] stands in for the process's own in tests.
-  Future<CrazyaraProcess> startCrazyara(
-    String support, {
-    Map<String, String>? environment,
-  }) => _own(_startCrazyara(support, environment ?? Platform.environment));
-
-  Future<CrazyaraProcess> _startCrazyara(
-    String support,
-    Map<String, String> env,
-  ) async {
-    if (_disposed) throw const EngineFailure('The app is closing.');
-    final home = env['HOME'] ?? env['USERPROFILE'] ?? '';
-    final data = env['XDG_DATA_HOME'] ?? p.join(home, '.local', 'share');
-    final candidates = [
-      if (env['CRAZYARA_BIN'] case final path?) path,
-      p.join(support, 'crazyara', 'crazyara'),
-      p.join(data, 'chess-prep', 'crazyara', 'crazyara'),
-    ];
-    String? executable;
-    for (final candidate in candidates) {
-      if (await File(candidate).exists()) {
-        executable = candidate;
-        break;
-      }
-    }
-    if (executable == null) {
-      throw const EngineFailure(crazyaraMissing);
-    }
-    final process = await SpawnedProcess.start(
-      executable,
-      workingDirectory: p.dirname(executable),
-    );
-    _handshakes.add(process);
-    try {
-      if (_disposed) throw const EngineFailure('The app is closing.');
-      final engine = await CrazyaraProcess.start(process);
-      if (!_keep(engine, process)) {
-        await engine.quit();
-        throw const EngineFailure('The app is closing.');
-      }
-      return engine;
-    } on Object {
-      await process.kill();
-      rethrow;
     } finally {
       _handshakes.remove(process);
     }

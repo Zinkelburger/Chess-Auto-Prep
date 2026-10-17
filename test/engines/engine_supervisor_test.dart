@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:chess_auto_prep/diagnostics/log.dart';
-import 'package:chess_auto_prep/engines/engine.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/engines/hivemind_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,27 +29,6 @@ void main() {
       expect(entries.single.action, 'start no-such-engine');
     },
   );
-
-  test('a missing CrazyAra names the installer and CRAZYARA_BIN', () async {
-    final empty = await Directory.systemTemp.createTemp('v2-crazyara-');
-    addTearDown(() => empty.delete(recursive: true));
-    final engines = EngineSupervisor();
-    addTearDown(engines.dispose);
-    await expectLater(
-      engines.startCrazyara(
-        empty.path,
-        environment: {'HOME': empty.path, 'XDG_DATA_HOME': empty.path},
-      ),
-      throwsA(
-        isA<EngineFailure>().having(
-          (failure) => failure.message,
-          'message',
-          'CrazyAra is not installed. Install it with '
-              'tools/setup_crazyara.py, or set CRAZYARA_BIN to its launcher.',
-        ),
-      ),
-    );
-  });
 
   test(
     'a program that is not a UCI engine is killed and reported',
