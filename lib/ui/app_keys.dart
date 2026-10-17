@@ -222,6 +222,9 @@ enum AppKey {
   ]),
   bughouseEngine('Toggle engine', KeyPlace.bughouse, [
     SingleActivator(LogicalKeyboardKey.keyE),
+  ]),
+  playBest('Play the engine’s best move', KeyPlace.bughouse, [
+    SingleActivator(LogicalKeyboardKey.space),
   ]);
 
   const AppKey(this.action, this.place, this.keys, {this._named});

@@ -25,36 +25,49 @@ typedef _Hovered = ({
 });
 
 /// Moves of an engine line shown in a row.
-const _oneBoardMoves = 8;
-const _twoBoardActions = 4;
+const _rowMoves = 8;
 
-/// The engine's lines under its bar, as the workspace's engine lines work:
-/// each move is its own token; resting on one floats the board it is on
-/// after it, hands and all, and clicking one plays the line up to it. The
-/// right button copies the line as PGN. One board: three rows of board 1's
-/// moves. Two boards: each team's header over three rows of seat-lettered
-/// joint actions. Every row is 28 px whether it holds a line or not, and
-/// nothing hovered changes its size.
-class LabLineRows extends StatefulWidget {
-  const LabLineRows({super.key, required this.lab, required this.lines});
+/// What a row's score means, on its tooltip.
+String scoreHint({required bool single}) => single
+    ? '+ is good for White on board 1 (A + B). Hivemind’s scale, not pawns.'
+    : '+ is good for A + B: White on board 1, Black on board 2. '
+          'Hivemind’s scale, not pawns.';
+
+/// One board's best moves for the player on move there, as lila's engine
+/// lines: a row per move, its score, then the moves of that board that
+/// follow, each its own token. Resting on a move floats the board it is on
+/// after it, hands and all, and clicking one plays the line up to it — with
+/// both boards shown, the other board's moves before it too. Pointing at a
+/// row draws its move on the board; clicking the row plays it there. The
+/// right button copies the line as PGN. Every row is 28 px whether it holds
+/// a move or not, and nothing hovered changes its size.
+class BoardLineRows extends StatefulWidget {
+  const BoardLineRows({
+    super.key,
+    required this.lab,
+    required this.lines,
+    required this.board,
+  });
 
   final BughouseLab lab;
   final LabLines lines;
+  final BoardNumber board;
 
   @override
-  State<LabLineRows> createState() => _LabLineRowsState();
+  State<BoardLineRows> createState() => _BoardLineRowsState();
 }
 
-class _LabLineRowsState extends State<LabLineRows> {
+class _BoardLineRowsState extends State<BoardLineRows> {
   final _hovered = ValueNotifier<_Hovered?>(null);
   Timer? _settle;
 
   BughouseLab get lab => widget.lab;
+  BoardNumber get board => widget.board;
 
   /// Rows for another table take the floated board with them; a deeper
   /// search of the same table keeps it.
   @override
-  void didUpdateWidget(LabLineRows old) {
+  void didUpdateWidget(BoardLineRows old) {
     super.didUpdateWidget(old);
     if (_tableOf(old.lines) != _tableOf(widget.lines)) _leave();
   }
@@ -98,7 +111,9 @@ class _LabLineRowsState extends State<LabLineRows> {
   @override
   Widget build(BuildContext context) {
     final lines = widget.lines;
-    final on = lines is LinesOn && lines.boards == lab.boards ? lines : null;
+    final rows = lines is LinesOn && lines.boards == lab.boards
+        ? lines.rows[board]
+        : null;
     return FloatingPreview<_Hovered>(
       preview: _hovered,
       anchor: (hovered) => hovered.anchor,
@@ -110,62 +125,48 @@ class _LabLineRowsState extends State<LabLineRows> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: lab.single
-            ? _rows(on?.teams.values.firstOrNull)
-            : [
-                for (final team in Team.values) ...[
-                  _TeamHeader(team: team),
-                  ..._rows(on?.teams[team]),
-                ],
-              ],
+        children: [
+          for (var i = 0; i < labLineCount; i++)
+            if (rows != null && i < rows.length)
+              _row(rows[i])
+            else
+              const SizedBox(height: labTableRowHeight),
+        ],
       ),
     );
   }
 
-  List<Widget> _rows(List<EngineRow>? rows) => [
-    for (var i = 0; i < labLineCount; i++)
-      if (rows != null && i < rows.length)
-        _row(rows[i])
-      else
-        const SizedBox(height: labTableRowHeight),
-  ];
+  List<PvStep> _steps(EngineRow row, int limit) => pvSteps(
+    row.table,
+    row.pv,
+    board: board,
+    throughBoth: !lab.single,
+    limit: limit,
+  );
 
   Widget _row(EngineRow row) {
-    final single = lab.single;
-    final steps = pvSteps(
-      row.table,
-      row.pv,
-      board: single ? BoardNumber.one : null,
-      limit: single ? _oneBoardMoves : _twoBoardActions,
-    );
+    final steps = _steps(row, _rowMoves);
+    final move = row.move;
     return _LineRow(
       score: row.score.text,
+      scoreHint: scoreHint(single: lab.single),
+      sits: move == null,
       steps: steps,
-      joints: !single,
-      onEnter: () => lab.preview.value = {
-        for (final board in BoardNumber.values)
-          if (!single || board == BoardNumber.one) board: ?row.move.on(board),
-      },
+      onEnter: () => lab.preview.value = move == null ? null : {board: move},
       onExit: () {
         _leave();
         lab.preview.value = null;
       },
       onTap: () {
         _leave();
-        if (!single) return lab.playJoint(row.move);
-        if (row.move.one case final uci?) lab.play(BoardNumber.one, uci);
+        if (move != null) lab.play(board, move);
       },
       onHover: _hover,
       onLeave: _leave,
       onPlay: (index) => _play(steps, index),
       menu: () => [
         AppAction('Copy line PGN', () {
-          final all = pvSteps(
-            row.table,
-            row.pv,
-            board: single ? BoardNumber.one : null,
-            limit: row.pv.length * 2,
-          );
+          final all = _steps(row, row.pv.length * 2);
           final text = lab.linePgnWith(pvMovesTo(all, all.length - 1));
           unawaited(Clipboard.setData(ClipboardData(text: text)));
         }),
@@ -174,38 +175,16 @@ class _LabLineRowsState extends State<LabLineRows> {
   }
 }
 
-class _TeamHeader extends StatelessWidget {
-  const _TeamHeader({required this.team});
-
-  final Team team;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      height: labTableRowHeight,
-      alignment: Alignment.centerLeft,
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: scheme.outline)),
-      ),
-      child: Text(
-        team.label,
-        style: Theme.of(
-          context,
-        ).textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant),
-      ),
-    );
-  }
-}
-
 /// One engine line: the score in a mono gutter, then its moves, clipped to
-/// the row. Pointing at the row draws its first move on the board; a click
-/// outside the moves plays that first move.
+/// the row, the first in bold: the move the row is about. A row that sits
+/// says so first, muted. Pointing at the row draws its move on the board; a
+/// click outside the moves plays it.
 class _LineRow extends StatelessWidget {
   const _LineRow({
     required this.score,
+    required this.scoreHint,
+    required this.sits,
     required this.steps,
-    required this.joints,
     required this.onEnter,
     required this.onExit,
     required this.onTap,
@@ -216,10 +195,11 @@ class _LineRow extends StatelessWidget {
   });
 
   final String score;
-  final List<PvStep> steps;
+  final String scoreHint;
 
-  /// Whether a `·` parts one joint action from the next: with two boards.
-  final bool joints;
+  /// Whether the row's choice is to sit on its board rather than move.
+  final bool sits;
+  final List<PvStep> steps;
   final VoidCallback onEnter;
   final VoidCallback onExit;
   final VoidCallback onTap;
@@ -231,20 +211,37 @@ class _LineRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final tokens = <Widget>[];
-    for (final (i, step) in steps.indexed) {
-      if (joints && i > 0 && step.joint != steps[i - 1].joint) {
-        tokens.add(_Separator(colour: scheme.onSurfaceVariant));
-      }
-      tokens.add(
+    final tokens = <Widget>[
+      if (sits)
+        Tooltip(
+          message: 'Sit: wait here rather than move',
+          waitDuration: previewDelay,
+          child: SizedBox(
+            height: labTableRowHeight,
+            child: Center(
+              widthFactor: 1,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: Text(
+                  'sit',
+                  style: monoText.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      for (final (i, step) in steps.indexed)
         _StepToken(
           step: step,
+          strong: i == 0 && !sits,
           onHover: (anchor) => onHover(step, anchor),
           onLeave: onLeave,
           onTap: () => onPlay(i),
         ),
-      );
-    }
+    ];
     return MouseRegion(
       onEnter: (_) => onEnter(),
       onExit: (_) => onExit(),
@@ -258,11 +255,15 @@ class _LineRow extends StatelessWidget {
             height: labTableRowHeight,
             child: Row(
               children: [
-                SizedBox(
-                  width: labScoreWidth,
-                  child: Text(
-                    score,
-                    style: monoText.copyWith(fontWeight: FontWeight.w600),
+                Tooltip(
+                  message: scoreHint,
+                  waitDuration: previewDelay,
+                  child: SizedBox(
+                    width: labScoreWidth,
+                    child: Text(
+                      score,
+                      style: monoText.copyWith(fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ),
                 Expanded(
@@ -279,32 +280,20 @@ class _LineRow extends StatelessWidget {
   }
 }
 
-class _Separator extends StatelessWidget {
-  const _Separator({required this.colour});
-
-  final Color colour;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    height: labTableRowHeight,
-    child: Center(
-      widthFactor: 1,
-      child: Text(' · ', style: monoText.copyWith(color: colour)),
-    ),
-  );
-}
-
 /// One move of a line: what goes before it muted, the move in the text
-/// colour, a tint under the pointer. A `sit` is muted and does nothing.
+/// colour — bold when [strong] — a tint under the pointer. A `sit` is muted
+/// and does nothing.
 class _StepToken extends StatelessWidget {
   const _StepToken({
     required this.step,
+    required this.strong,
     required this.onHover,
     required this.onLeave,
     required this.onTap,
   });
 
   final PvStep step;
+  final bool strong;
   final ValueChanged<Offset> onHover;
   final VoidCallback onLeave;
   final VoidCallback onTap;
@@ -338,6 +327,7 @@ class _StepToken extends StatelessWidget {
             color: step.uci == null
                 ? scheme.onSurfaceVariant
                 : scheme.onSurface,
+            fontWeight: strong ? FontWeight.w600 : null,
           ),
         ),
       ),

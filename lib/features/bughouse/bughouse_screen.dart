@@ -15,7 +15,8 @@ import 'table_boards.dart';
 /// window leaves.
 ///
 /// ← → step the board last moved or stepped on, Home / PgUp and End / PgDn
-/// go to its ends, F flips the boards, E switches the engine.
+/// go to its ends, F flips the boards, E switches the engine and Space
+/// plays the engine's best move on that board.
 class BughouseScreen extends StatelessWidget {
   const BughouseScreen({
     super.key,
@@ -70,6 +71,7 @@ class BughouseScreen extends StatelessWidget {
                 SingleChildScrollView(
                   child: TableBoards(
                     lab: lab,
+                    engine: engine,
                     boardSize: boardSize(box, lab.boards),
                   ),
                 ),
@@ -133,6 +135,7 @@ class _LabKeysState extends State<_LabKeys> {
     ...AppKey.flipBoards.bind(lab.flip),
     ...widget.windowKeys,
     ...AppKey.bughouseEngine.bind(widget.engine.toggle),
+    ...AppKey.playBest.bind(() => widget.engine.playBest(lab.focus)),
   };
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {

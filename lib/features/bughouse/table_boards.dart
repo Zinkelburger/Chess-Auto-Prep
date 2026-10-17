@@ -2,21 +2,34 @@ import 'dart:async';
 
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../chess/bughouse/table.dart';
 import '../../chess/bughouse/table_line.dart';
+import '../../chess/pgn/board_shapes.dart';
 import '../../ui/action_context_menu.dart';
 import '../../ui/app_action.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
+import '../../workspace/board_view.dart';
 import 'bughouse_lab.dart';
+import 'lab_engine.dart';
+import 'lab_lines.dart';
 import 'pocket.dart';
 
 /// The boards on screen, each with its two players' hands: board 1 alone,
-/// or both side by side, each with its own move list and step buttons.
+/// or both side by side, each with its engine's best moves, its own move
+/// list and step buttons under it.
+///
+/// While the engine is on, each board shows its best moves as lila's
+/// analysis board does: the engine's choice a pale blue arrow, the moves
+/// close behind it thinner grey ones, a drop as its piece faint on the
+/// square. A right-drag draws an arrow and a right-click a circle, in
+/// lila's colours; a left click or a new position takes them away. The
+/// wheel over a board steps that board.
 ///
 /// Board 1 has A (White) and C (Black), board 2 D (White) and B (Black); our
 /// team's colour is at the bottom of board 1 unless the boards are flipped.
@@ -24,9 +37,15 @@ import 'pocket.dart';
 /// or clicked and then its square clicked, the squares it may go to ringed.
 /// The + above and − below each hand's piece add one or take one away.
 class TableBoards extends StatefulWidget {
-  const TableBoards({super.key, required this.lab, required this.boardSize});
+  const TableBoards({
+    super.key,
+    required this.lab,
+    required this.engine,
+    required this.boardSize,
+  });
 
   final BughouseLab lab;
+  final LabEngine engine;
   final double boardSize;
 
   @override
@@ -105,7 +124,7 @@ class _TableBoardsState extends State<TableBoards> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: _lab,
+      listenable: Listenable.merge([_lab, widget.engine]),
       builder: (context, _) {
         final picked = _stillPicked(_lab.position);
         final shown = _lab.single ? [BoardNumber.one] : BoardNumber.values;
@@ -116,6 +135,7 @@ class _TableBoardsState extends State<TableBoards> {
               if (board == BoardNumber.two) const SizedBox(width: labBoardGap),
               _BoardColumn(
                 lab: _lab,
+                engine: widget.engine,
                 board: board,
                 size: widget.boardSize,
                 picked: picked?.board == board ? picked!.role : null,
@@ -134,6 +154,7 @@ class _TableBoardsState extends State<TableBoards> {
 class _BoardColumn extends StatelessWidget {
   const _BoardColumn({
     required this.lab,
+    required this.engine,
     required this.board,
     required this.size,
     required this.picked,
@@ -143,6 +164,7 @@ class _BoardColumn extends StatelessWidget {
   });
 
   final BughouseLab lab;
+  final LabEngine engine;
   final BoardNumber board;
   final double size;
   final Role? picked;
@@ -177,48 +199,104 @@ class _BoardColumn extends StatelessWidget {
                 ),
               ),
             seat(bottom.opposite),
-            ValueListenableBuilder(
-              valueListenable: lab.preview,
-              builder: (context, preview, _) => _Board(
-                key: ValueKey(board),
-                position: lab.position.board(board),
-                size: size,
-                orientation: bottom,
-                lastMove: lab.line.current(board)?.uci,
-                shapes: _shapes(preview?[board]),
-                onMove: onMove,
-                onTouched: onTouched,
+            Listener(
+              onPointerSignal: _wheel,
+              child: ValueListenableBuilder(
+                valueListenable: lab.preview,
+                builder: (context, preview, _) {
+                  final pointed = preview?[board];
+                  final rows = pointed == null
+                      ? engine.rowsOn(board)
+                      : const <EngineRow>[];
+                  return _Board(
+                    key: ValueKey(board),
+                    position: lab.position.board(board),
+                    size: size,
+                    orientation: bottom,
+                    lastMove: lab.line.current(board)?.uci,
+                    shapes: _shapes(pointed, rows),
+                    arrows: [
+                      if (pointed != null) ?_arrow(pointed, best: true),
+                      for (final (i, row) in rows.indexed)
+                        if (row.move case final uci?
+                            when i == 0 || row.shift < engineArrowCutoff)
+                          ?_arrow(uci, best: i == 0, shift: row.shift),
+                    ],
+                    onMove: onMove,
+                    onTouched: onTouched,
+                  );
+                },
               ),
             ),
             seat(bottom),
-            if (!lab.single) BoardMoves(lab: lab, board: board),
+            if (!lab.single) ...[
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  ),
+                ),
+                child: BoardLineRows(
+                  lab: lab,
+                  lines: engine.lines,
+                  board: board,
+                ),
+              ),
+              BoardMoves(lab: lab, board: board),
+            ],
           ],
         ),
       ),
     );
   }
 
-  /// The move pointed at in a table, as an arrow or, for a drop, the piece
-  /// faint on its square; and while a reserve piece is picked up, the
-  /// squares it may go to.
-  Set<Shape> _shapes(String? pointed) {
+  /// The wheel steps this board: down a move forward, up a move back, as
+  /// on lila; the column around it does not scroll.
+  void _wheel(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || event.scrollDelta.dy == 0) return;
+    GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+      final to = lab.line.upto(board) + (event.scrollDelta.dy > 0 ? 1 : -1);
+      if (to >= 0 && to <= lab.line.of(board).length) lab.go(board, to);
+    });
+  }
+
+  /// A move pointed at in a row, or one of the engine's best, as lila's
+  /// engine arrow: pale blue for the choice, grey and thinner the further
+  /// [shift] behind it. A drop has no arrow.
+  EngineArrow? _arrow(String uci, {required bool best, double shift = 0}) =>
+      switch (Move.parse(uci)) {
+        NormalMove(:final from, :final to) => (
+          from: from,
+          to: to,
+          colour: best ? engineBestArrow : engineOtherArrow,
+          width: best ? engineArrowWidth : (12 - shift * 50).roundToDouble(),
+        ),
+        _ => null,
+      };
+
+  /// Drops pointed at or among the engine's best, their piece faint on the
+  /// square, the choice in the arrow's blue; and while a reserve piece is
+  /// picked up, the squares it may go to.
+  Set<Shape> _shapes(String? pointed, List<EngineRow> rows) {
     final position = lab.position.board(board);
+    Shape? drop(String uci, {required bool best}) => switch (Move.parse(uci)) {
+      DropMove(:final to, :final role) => PieceShape(
+        color: best ? labHintColor : null,
+        orig: to,
+        piece: Piece(color: position.turn, role: role),
+        pieceAssets: PieceSet.cburnettAssets,
+        opacity: best ? 0.5 : 0.3,
+      ),
+      _ => null,
+    };
     return {
-      if (pointed != null)
-        switch (Move.parse(pointed)) {
-          NormalMove(:final from, :final to) => Arrow(
-            color: labHintColor,
-            orig: from,
-            dest: to,
-          ),
-          DropMove(:final to, :final role) => PieceShape(
-            color: labHintColor,
-            orig: to,
-            piece: Piece(color: position.turn, role: role),
-            pieceAssets: PieceSet.cburnettAssets,
-          ),
-          null => null,
-        },
+      if (pointed != null) drop(pointed, best: true),
+      for (final (i, row) in rows.indexed)
+        if (row.move case final uci?
+            when i == 0 || row.shift < engineArrowCutoff)
+          drop(uci, best: i == 0),
       if (picked case final role?)
         for (final square in position.legalDrops.squares)
           if (position.isLegal(DropMove(to: square, role: role)))
@@ -373,6 +451,7 @@ class _Board extends StatefulWidget {
     required this.orientation,
     required this.lastMove,
     required this.shapes,
+    required this.arrows,
     required this.onMove,
     required this.onTouched,
   });
@@ -382,6 +461,9 @@ class _Board extends StatefulWidget {
   final Side orientation;
   final String? lastMove;
   final Set<Shape> shapes;
+
+  /// The engine's arrows, under any the user draws.
+  final List<EngineArrow> arrows;
   final ValueChanged<Move> onMove;
   final ValueChanged<Square> onTouched;
 
@@ -391,6 +473,10 @@ class _Board extends StatefulWidget {
 
 class _BoardState extends State<_Board> {
   late final _controller = ChessboardController(game: _game());
+
+  /// What the user drew on this position, and the shape under a right-drag.
+  List<BoardShape> _drawn = const [];
+  BoardShape? _drawing;
 
   GameData _game() {
     final position = widget.position;
@@ -413,6 +499,10 @@ class _BoardState extends State<_Board> {
     if (old.position != widget.position || old.lastMove != widget.lastMove) {
       _controller.updatePosition(_game());
     }
+    if (old.position != widget.position) {
+      _drawn = const [];
+      _drawing = null;
+    }
   }
 
   @override
@@ -426,15 +516,87 @@ class _BoardState extends State<_Board> {
     final settings = BoardTheme.of(
       context,
     ).settings(coordinates: true).copyWith(enableDrops: true);
-    return Chessboard(
-      size: widget.size,
-      controller: _controller,
-      orientation: widget.orientation,
-      settings: settings,
-      shapes: widget.shapes,
-      onMove: (move, {viaDragAndDrop}) => widget.onMove(move),
-      onTouchedSquare: widget.onTouched,
+    final shown = [..._drawn, ?_drawing];
+    return Listener(
+      onPointerDown: _down,
+      onPointerMove: _move,
+      onPointerUp: (_) => _up(),
+      onPointerCancel: (_) => setState(() => _drawing = null),
+      child: Stack(
+        children: [
+          Chessboard(
+            size: widget.size,
+            controller: _controller,
+            orientation: widget.orientation,
+            settings: settings,
+            shapes: {
+              ...widget.shapes,
+              for (final shape in shown)
+                if (shape.isCircle) circleShape(shape),
+            },
+            onMove: (move, {viaDragAndDrop}) => widget.onMove(move),
+            onTouchedSquare: widget.onTouched,
+          ),
+          // Over the pieces, as on lila, and away while a pawn waits for
+          // the piece it becomes.
+          Positioned.fill(
+            child: IgnorePointer(
+              child: ValueListenableBuilder(
+                // ignore: invalid_use_of_internal_member
+                valueListenable: _controller.pendingPromotionNotifier,
+                builder: (context, promotion, _) => promotion != null
+                    ? const SizedBox.shrink()
+                    : BoardArrows(
+                        engine: widget.arrows,
+                        arrows: [
+                          for (final shape in shown)
+                            if (!shape.isCircle) shape,
+                        ],
+                        drawing: _drawing?.isCircle ?? true ? null : _drawing,
+                        orientation: widget.orientation,
+                      ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
+  }
+
+  /// The right button starts a shape on the square under it; the left one
+  /// takes the drawn ones away, as a click does on lila, and plays on.
+  void _down(PointerDownEvent event) {
+    if (event.buttons == kSecondaryButton) {
+      final square = squareAt(
+        event.localPosition,
+        widget.size,
+        widget.orientation,
+      );
+      if (square == null) return;
+      setState(() => _drawing = BoardShape.circle(square, heldShapeColour()));
+    } else if (event.buttons == kPrimaryButton && _drawn.isNotEmpty) {
+      setState(() => _drawn = const []);
+    }
+  }
+
+  void _move(PointerMoveEvent event) {
+    final drawing = _drawing;
+    final square = squareAt(
+      event.localPosition,
+      widget.size,
+      widget.orientation,
+    );
+    if (drawing == null || square == null || square == drawing.to) return;
+    setState(() => _drawing = BoardShape(drawing.from, square, drawing.colour));
+  }
+
+  void _up() {
+    final drawn = _drawing;
+    if (drawn == null) return;
+    setState(() {
+      _drawing = null;
+      _drawn = withShapeDrawn(_drawn, drawn);
+    });
   }
 }
 

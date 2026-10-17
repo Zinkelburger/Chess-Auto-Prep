@@ -30,23 +30,39 @@ panel (440–480 px) on the right.
   them: `One more knight for Black`, `One knight fewer for Black`. Only the
   player on move can drop: click the piece (its legal squares ringed) then a
   square, or drag it.
+- **Arrows** — while the engine is on, each board shows its best moves as
+  lila's analysis board does: the first in lila's pale blue (15/64 of a
+  square wide), the others in pale grey, 12/64 wide when level with it down
+  to 2/64, and none once a move is 0.2 behind (half the difference in
+  Hivemind's Q). A drop is its piece faint on the square instead. A
+  right-drag draws an arrow and a right-click a circle, green, or red with
+  Shift, blue with Alt, yellow with Ctrl; a left click or a new position
+  takes them away.
 - **Panel** — `1 board` | `2 boards`, and `Edit board` at the right of that
-  row. With two boards, `Time` follows: `A + B may sit` / `Even` / `C + D may
-  sit`. The tooltips explain each.
+  row. Then `Time`: `A + B may sit` / `Even` / `C + D may sit`, or with one
+  board `White may sit` / `Even` / `Black may sit`. Each chip carries A + B's
+  score under that case (`–` until known, blank with the engine off): the
+  chosen one follows the search, the others come from short searches once a
+  search rests. The tooltips explain each.
 - **Engine bar** — a switch (`Toggle engine (E)`), the score in 18 px mono,
   then `Hivemind · 12,400 nodes` (the size of the search the rows come from,
   both teams' together with two boards), or why the engine stopped, in the
   error colour. While the engine searches, a 2 px bar under it fills towards
   the size the search rests at.
-- **Lines** — one board: three rows, each with a score and up to eight of
-  board 1's moves (`1. e4 e5 2. Nf3`). Two boards: an `A + B` and a `C + D`
-  header, each over three rows of up to four seat-lettered joint actions
-  (`A e4 · C e5 D d4`, `sit` when nothing moves). Each move is its own token,
-  as in the workspace's engine lines. Rows are 28 px, clip what does not fit,
-  and keep their place and size whether the engine is on or off or a move is
-  hovered; an empty row is blank. Scores are A + B's, White's on board 1, on
-  Hivemind's scale (`+ is good for White on board 1 (A + B). Hivemind's
-  scale, not pawns.`).
+- **Lines** — each board's three best moves for the player on move there,
+  one row each: in the panel with one board, under the board (between its
+  bottom hand and its move list) with two. A row is its score, then the
+  move in bold and that board's moves after it, up to eight (`1. d4 d5 2.
+  Nf3`); a row whose choice is to wait there starts with a muted `sit`.
+  The engine ranks joint actions over both boards, so a team on move on
+  both repeats one board's move across its lines; the rows are the three
+  moves it visited most on that board (from 16 lines asked), each with its
+  most-visited line, the engine's choice first and the rest best-scoring
+  first. Each move is its own token, as in the workspace's engine lines.
+  Rows are 28 px, clip what does not fit, and keep their place and size
+  whether the engine is on or off or a move is hovered; an empty row is
+  blank. Scores are A + B's, on Hivemind's scale (`+ is good for A + B:
+  White on board 1, Black on board 2. Hivemind's scale, not pawns.`).
 - **Problem line** — one fixed line saying why a move, step or paste was
   refused.
 - **Moves** — with one board, board 1's moves and hand edits fill the rest of the panel, with
@@ -76,17 +92,21 @@ board last clicked (two boards), without the hands → `Use this position` sets
 that board's pieces, side to move and castling, keeps both hands and starts a
 new line. A board no game can go on from: `That board cannot be played from.`
 **Step a board** — its list, its buttons, or ← → and Home / PgUp, End / PgDn
-for the board last used (always board 1 with one board). F flips the boards. Only that board moves. A refused step:
+for the board last used (always board 1 with one board); the mouse wheel over
+a board steps that board, down forward and up back. F flips the boards. Only that board moves. A refused step:
 `Can't step there: <san> on board 2 would have no piece to drop.`
-**Point at a line** — draws its first move on the board (an arrow, or a faint
-piece for a drop) until the pointer leaves. Resting on one of its moves for
+**Point at a line** — draws its move on its board alone, in the best
+move's blue (an arrow, or a faint piece for a drop), until the pointer
+leaves. Resting on one of its moves for
 80 ms floats a 200 px board under it: the board that move is on, after it,
 with the move highlighted and both hands. A new table takes the floated board
 away; the search's next report on the same table keeps it.
 **Play a line** — clicking a move plays the line up to and including it: with
 one board, board 1's moves; with two, every move of both boards before it in
 order. All or nothing: `That line no longer fits the position.` Clicking the
-row outside its moves plays its first move or joint action. The right button
+row outside its moves plays its move on that board; a `sit` row plays
+nothing. Space plays the first row's move on the board last used, as on
+lila. The right button
 on a row offers `Copy line PGN`: the moves on the boards now followed by the
 line, as far as it plays, in the same form as a move's.
 **Move menu** — the right button on a move in a board's list: `Copy line PGN`
@@ -108,13 +128,16 @@ on its own engine process; the two processes share the mode's cores. The
 score, rows and node count follow the search about four times a second, the
 first within about a second of a position, and the search rests at 100,000
 nodes until the table changes. One board: the team on move on board 1 must
-move there, nobody may sit, and the partner board stands as it is (the
+move there unless `Time` lets it sit, and the partner board stands as it is (the
 desktop Hivemind lacks the website's
 `tools/bughouse_web/patches/frozen-board.patch`, so its search may still weigh
 partner-board moves). The partner board is given the other team's turn, so
 that team can be searched, to 20,000 nodes, for the score's zero; until its
 first report the level table's zero stands in. Two boards: each team with a
-move is searched, and may sit as `Time` says. A new position, board count or
+move is searched, and may sit as `Time` says. The two `Time` cases not
+chosen are scored with 4,000-node searches of each team (one that matches a
+search already made is reused), one after another on the first engine
+free: with one board the zero's once it rests, with two the first to rest. A new position, board count or
 clock cuts the searches short. Finished searches are remembered for the
 session. Leaving the mode quits the engines. An engine build that cannot
 report while it searches is asked in passes of 800, 4,000 and 20,000 nodes on
@@ -126,7 +149,10 @@ are BPGN movetext in played order (`1A. e4 1B. d4 1a. e5`), after
 `[SetUpDualFEN "…"]` for a set-up start; a hand edit is a comment where it
 was made, `{ Hands edited on board 1: +2n }`, and pastes back. A paste takes that or a FICS game,
 and is refused whole (`Not pasted: <token> does not play.`, `No bughouse
-moves to paste.`). The window's paste commands are refused here with
+moves to paste.`). `Open BPGN…` asks for a `.bpgn`, `.pgn` or `.txt` file
+and reads it as a paste, where it is, without keeping it (`Not opened:
+<token> in <file> does not play.`, `<file> could not be read.`). The window's
+paste commands are refused here with
 `Bughouse pastes from Actions: Paste FEN or dual FEN, or Paste moves.`
 
 ## Data
@@ -157,8 +183,11 @@ moves to paste.`). The window's paste commands are refused here with
 - One board and two boards, both with + and − on every hand; no precomputed
   book, FICS archive, expectimax or matches in the app (owner, 2026-10-16).
 - One engine, behind a switch (2026-09-23).
-- The three `Time` chips are the only clock question, and only with two boards
-  (2026-09-23).
+- The three `Time` chips are the only clock question, with one board too, so
+  lines can be found with the opponent allowed to sit; each shows its score
+  so the cases compare at a glance (2026-10-17).
+- Two-board lines are per board, under their board, not per team; engine
+  arrows and drawn shapes as on lila's analysis board (2026-10-17).
 - No engine settings rows: Hivemind takes half the cores, 256 MB, batch 8
   (2026-09-23).
 - The engine behaves like Stockfish elsewhere: switched on, its score, lines

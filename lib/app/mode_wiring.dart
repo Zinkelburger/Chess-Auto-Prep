@@ -220,5 +220,7 @@ LabModes wireLabModes(AppEnvironment env) {
   return LabModes(
     lab: lab,
     engine: LabEngine(lab: lab, startEngine: env.startHivemind),
+    picker: env.viewerPicker,
+    files: env.fileImport,
   );
 }

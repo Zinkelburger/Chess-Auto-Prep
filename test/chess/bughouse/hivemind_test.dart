@@ -68,6 +68,43 @@ void main() {
     ]);
   });
 
+  group('one board\'s choices', () {
+    JointLine line(int rank, int cp, String? one, String? two) =>
+        JointLine(rank: rank, cp: cp, nodes: 100, pv: [JointMove(one, two)]);
+
+    test('each move once, from its most-visited line, the engine\'s choice '
+        'first and the rest best-scoring first', () {
+      final lines = [
+        line(1, 20, 'g1f3', 'd7d5'),
+        line(2, 10, 'g1f3', 'e7e6'),
+        line(3, 40, 'e2e4', 'd7d5'),
+        line(4, 90, 'e2e4', null),
+        line(5, 30, 'd2d4', 'c7c5'),
+        line(6, 99, 'c2c4', null),
+      ];
+      final one = boardChoices(lines, BoardNumber.one);
+      expect(one.map((l) => l.pv.first.one), ['g1f3', 'e2e4', 'd2d4']);
+      expect(one[1].rank, 3);
+      final two = boardChoices(lines, BoardNumber.two);
+      expect(two.map((l) => l.pv.first.two), ['d7d5', null, 'e7e6']);
+    });
+
+    test('how far a line falls behind the best, half the value apart', () {
+      final best = line(1, 0, 'e2e4', null);
+      expect(shiftFrom(best, best), 0);
+      const worse = JointLine(
+        rank: 2,
+        cp: -180,
+        nodes: 100,
+        pv: [JointMove('d2d4', null)],
+      );
+      expect(shiftFrom(best, worse), closeTo(-qOf(-180) / 2, 1e-9));
+      expect(shiftFrom(worse, best), 0);
+      const mated = JointLine(rank: 3, mate: -2, nodes: 100, pv: []);
+      expect(shiftFrom(best, mated), 0.5);
+    });
+  });
+
   group('joint moves', () {
     test('read both halves; pass and none are a sit', () {
       expect(JointMove.parse('(g1f3,pass)'), const JointMove('g1f3', null));

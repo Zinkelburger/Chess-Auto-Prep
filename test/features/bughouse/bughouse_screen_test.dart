@@ -7,6 +7,7 @@ import 'package:chess_auto_prep/features/bughouse/lab_engine.dart';
 import 'package:chess_auto_prep/features/bughouse/lab_lines.dart';
 import 'package:chess_auto_prep/features/bughouse/pocket.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
+import 'package:chess_auto_prep/workspace/board_view.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart' show Role, Side, Square;
 import 'package:flutter/gestures.dart';
@@ -53,9 +54,13 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// A's team answers with [pv]; the other team as the script does.
-  Future<void> engineSays(WidgetTester tester, List<JointMove> pv) async {
-    hivemind.answer = (question) => question.team == Team.ab
+  /// [team] answers with [pv]; the other team as the script does.
+  Future<void> engineSays(
+    WidgetTester tester,
+    List<JointMove> pv, {
+    Team team = Team.ab,
+  }) async {
+    hivemind.answer = (question) => question.team == team
         ? HivemindSearched(
             best: pv.first,
             lines: [JointLine(rank: 1, cp: -200, nodes: 800, pv: pv)],
@@ -171,7 +176,7 @@ void main() {
       expect(find.text('1. e4'), findsOneWidget);
       // One board's moves are one game: nothing parts them.
       expect(find.text(' · '), findsNothing);
-      final rows = tester.getSize(find.byType(LabLineRows));
+      final rows = tester.getSize(find.byType(BoardLineRows));
       final pointer = await mouse(tester);
       await pointer.moveTo(tester.getCenter(find.text('e5')));
       await tester.pump(previewDelay * 2);
@@ -181,7 +186,7 @@ void main() {
       expect(preview.lastMove, 'e7e5');
       expect(preview.position.turn, Side.white);
       expect(find.byType(StaticChessboard), findsOneWidget);
-      expect(tester.getSize(find.byType(LabLineRows)), rows);
+      expect(tester.getSize(find.byType(BoardLineRows)), rows);
       // The row still draws its first move on the board.
       expect(lab.preview.value, {BoardNumber.one: 'e2e4'});
       await tester.tap(find.text('e5'));
@@ -190,28 +195,92 @@ void main() {
       expect(find.byType(BughousePreviewBoard), findsNothing);
     });
 
-    testWidgets('two boards: a move floats the board it is on and plays the '
-        'line up to it', (tester) async {
+    testWidgets('two boards: each board\'s moves are under it; a move '
+        'floats its board and plays both boards up to it', (tester) async {
       build();
       lab.showBoards(LabBoards.two);
       await pump(tester);
-      await engineSays(tester, const [
+      // C + D: D d4 on board 2; A e4, C e5 on board 1; then B d5.
+      await engineSays(tester, team: Team.cd, const [
+        JointMove(null, 'd2d4'),
         JointMove('e2e4', null),
-        JointMove('e7e5', 'd2d4'),
+        JointMove('e7e5', null),
+        JointMove(null, 'd7d5'),
       ]);
+      final board2 = tester.getRect(find.byType(Chessboard).at(1));
+      final d4 = find.text('1. d4');
+      expect(tester.getTopLeft(d4).dx, greaterThanOrEqualTo(board2.left));
+      expect(tester.getTopLeft(d4).dy, greaterThan(board2.bottom));
+      // Board 2's line shows board 2's moves only.
+      expect(find.text('e5'), findsNothing);
       final pointer = await mouse(tester);
-      await pointer.moveTo(tester.getCenter(find.text('D d4')));
+      await pointer.moveTo(tester.getCenter(find.text('d5')));
       await tester.pump(previewDelay * 2);
       final preview = tester.widget<BughousePreviewBoard>(
         find.byType(BughousePreviewBoard),
       );
-      expect(preview.lastMove, 'd2d4');
+      expect(preview.lastMove, 'd7d5');
       expect(preview.position.board.pieceAt(Square.d4)?.role, Role.pawn);
       // Board 2 has Black, B, below.
       expect(preview.orientation, Side.black);
-      await tester.tap(find.text('D d4'));
+      await tester.tap(find.text('d5'));
       await tester.pumpAndSettle();
-      expect(lab.line.moves.map((m) => m.san), ['e4', 'e5', 'd4']);
+      expect(lab.line.moves.map((m) => m.san), ['d4', 'e4', 'e5', 'd5']);
+    });
+
+    testWidgets('the engine\'s choice is an arrow on its board, and Space '
+        'plays it there', (tester) async {
+      build();
+      lab.showBoards(LabBoards.two);
+      await pump(tester);
+      await engineSays(tester, team: Team.cd, const [JointMove(null, 'g1f3')]);
+      final arrows = tester.widgetList<BoardArrows>(find.byType(BoardArrows));
+      expect(arrows.last.engine.first.to, Square.f3);
+      expect(arrows.last.engine.first.colour, engineBestArrow);
+      lab.focusOn(BoardNumber.two);
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pumpAndSettle();
+      expect(lab.line.of(BoardNumber.two).single.san, 'Nf3');
+    });
+
+    testWidgets('the wheel over a board steps it', (tester) async {
+      build();
+      lab
+        ..play(BoardNumber.one, 'e2e4')
+        ..play(BoardNumber.one, 'e7e5');
+      await pump(tester);
+      final centre = tester.getCenter(find.byType(Chessboard));
+      Future<void> wheel(double dy) => tester.sendEventToBinding(
+        PointerScrollEvent(position: centre, scrollDelta: Offset(0, dy)),
+      );
+      await wheel(-40);
+      await tester.pumpAndSettle();
+      expect(lab.line.upto(BoardNumber.one), 1);
+      await wheel(40);
+      await tester.pumpAndSettle();
+      expect(lab.line.upto(BoardNumber.one), 2);
+    });
+
+    testWidgets('a right-drag draws an arrow; a left click takes it away', (
+      tester,
+    ) async {
+      build();
+      await pump(tester);
+      final drag = await tester.startGesture(
+        squareCenter(tester, BoardNumber.one, Square.e2),
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryButton,
+      );
+      await drag.moveTo(squareCenter(tester, BoardNumber.one, Square.e4));
+      await drag.up();
+      await tester.pumpAndSettle();
+      BoardArrows arrows() =>
+          tester.widget<BoardArrows>(find.byType(BoardArrows));
+      expect(arrows().arrows.single.to, Square.e4);
+      await tester.tapAt(squareCenter(tester, BoardNumber.one, Square.a6));
+      await tester.pumpAndSettle();
+      expect(arrows().arrows, isEmpty);
+      expect(lab.line.moves, isEmpty);
     });
 
     testWidgets('the right button copies an engine line as PGN', (

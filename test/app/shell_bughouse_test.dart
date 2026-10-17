@@ -1,5 +1,7 @@
 import 'package:chess_auto_prep/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
+import 'package:chess_auto_prep/storage/pgn_file_import.dart';
+import 'package:chess_auto_prep/storage/pgn_file_picker.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart' show Role, Side, Square;
 import 'package:flutter/gestures.dart';
@@ -8,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_input.dart';
+import '../support/viewer_fixture.dart';
 import '../support/window_fixture.dart';
 
 /// The Bughouse mode in the window: one board or two, hands with + and −,
@@ -50,7 +53,8 @@ void main() {
   testWidgets('it opens on one board; + and − change a hand', (tester) async {
     await toBughouse(tester);
     expect(find.byType(Chessboard), findsOneWidget);
-    expect(find.text('Time'), findsNothing);
+    // With one board the clock cases name the colours.
+    expect(find.text('White may sit'), findsOneWidget);
     final more = find.byTooltip('One more knight for Black');
     await tester.tap(more);
     await tester.tap(more);
@@ -121,14 +125,15 @@ void main() {
     expect(w.lab.line.of(BoardNumber.two), isEmpty);
   });
 
-  testWidgets('two boards: both teams’ lines, a line plays and pointing '
+  testWidgets('two boards: each board’s moves, a line plays and pointing '
       'draws it', (tester) async {
     await toBughouse(tester);
     await twoBoards(tester);
     await engineOn(tester);
-    expect(find.text('A + B'), findsOneWidget);
-    expect(find.text('C + D'), findsOneWidget);
-    final line = find.text('A Na3').first;
+    expect(find.text('A + B'), findsNothing);
+    // Board 1's A and board 2's D each have their best moves.
+    expect(find.text('1. Na3'), findsNWidgets(2));
+    final line = find.text('1. Na3').first;
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: Offset.zero);
     addTearDown(mouse.removePointer);
@@ -224,6 +229,42 @@ void main() {
     await tester.tap(find.text('Paste moves'));
     await tester.pumpAndSettle();
     expect(w.lab.movesText, '1A. e4 1a. d5');
+  });
+
+  group('Open BPGN', () {
+    ScriptedPicker picker() => w.parts.env.viewerPicker as ScriptedPicker;
+    ScriptedImport files() => w.parts.env.fileImport as ScriptedImport;
+
+    Future<void> open(WidgetTester tester, String path) async {
+      picker().answer = path;
+      await tester.tap(find.text('Actions'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open BPGN…'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('puts a file\'s moves on the boards', (tester) async {
+      await toBughouse(tester);
+      files().picked['/games/playout.bpgn'] = const PickedText(
+        '[Event "Hivemind playout"]\n\n1A. e4 1B. d4 1a. e5 *\n',
+      );
+      await open(tester, '/games/playout.bpgn');
+      expect(picker().offered.single, bpgnExtensions);
+      expect(w.lab.movesText, '1A. e4 1B. d4 1a. e5');
+    });
+
+    testWidgets('says which file could not be used', (tester) async {
+      await toBughouse(tester);
+      await open(tester, '/games/gone.bpgn');
+      expect(find.text('gone.bpgn could not be read.'), findsOneWidget);
+      files().picked['/games/bad.bpgn'] = const PickedText('1A. e4 1a. Ke7');
+      await open(tester, '/games/bad.bpgn');
+      expect(
+        find.text('Not opened: 1a. Ke7 in bad.bpgn does not play.'),
+        findsOneWidget,
+      );
+      expect(w.lab.line.moves, isEmpty);
+    });
   });
 }
 
