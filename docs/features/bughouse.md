@@ -5,8 +5,8 @@ moves pieces on one board, or on both boards of a game. They put any piece in
 any hand with + and −, and switch the engine on to see its score and lines.
 
 Code: `lib/features/bughouse/` (`BughouseLab` table owner, `LabEngine`, screen,
-boards and panel), plus `lib/chess/bughouse/` (table, line, FEN reading, BPGN,
-Hivemind score scale), `lib/engines/hivemind_engine.dart`,
+boards, hands, engine lines and panel), plus `lib/chess/bughouse/` (table, line,
+FEN reading, BPGN, crazyhouse PGN, engine-line steps, Hivemind score scale), `lib/engines/hivemind_engine.dart`,
 `lib/engines/hivemind_install.dart`, `lib/app/bughouse_view.dart` (`BughouseView`),
 the shared board editor `lib/workspace/board_editor.dart` and
 `lib/app/self_test.dart`. Engine internals: [Hivemind](../HIVEMIND.md).
@@ -37,11 +37,13 @@ panel (440–480 px) on the right.
   then `Hivemind · 4,000 nodes` (the size of the search shown), or why the
   engine stopped, in the error colour. A 2 px bar runs under it while a deeper
   search is under way.
-- **Lines** — one board: three rows, each with a score and board 1's moves
-  (`1. e4 e5 2. Nf3`). Two boards: an `A + B` and a `C + D` header, each over
-  three rows of seat-lettered joint actions (`A e4 B sits · C e5 D d4`). Rows
-  are 28 px and keep their place whether the engine is on or off; an empty row
-  is blank. Scores are A + B's, White's on board 1, on Hivemind's scale (`+ is
+- **Lines** — one board: three rows, each with a score and up to eight of
+  board 1's moves (`1. e4 e5 2. Nf3`). Two boards: an `A + B` and a `C + D`
+  header, each over three rows of up to four seat-lettered joint actions
+  (`A e4 · C e5 D d4`, `sit` when nothing moves). Each move is its own token,
+  as in the workspace's engine lines. Rows are 28 px, clip what does not fit,
+  and keep their place and size whether the engine is on or off or a move is
+  hovered; an empty row is blank. Scores are A + B's, White's on board 1, on Hivemind's scale (`+ is
   good for White on board 1 (A + B). Hivemind's scale, not pawns.`).
 - **Problem line** — one fixed line saying why a move, step or paste was
   refused.
@@ -52,7 +54,11 @@ panel (440–480 px) on the right.
 
 **Play a move or drop** — on a board, or by clicking an engine row → it joins
 that board's line after what is shown, and a capture goes to the partner's
-hand. With one board the partner board is not shown, so a captured piece
+hand. A pawn reaching the last rank waits for the piece it becomes, on either
+board, with the workspace board's chooser (queen, knight, rook, bishop down
+the file); clicking away plays nothing. Underpromotions keep their piece in
+copied and pasted moves and in engine moves; an engine move without a piece is
+a queen. With one board the partner board is not shown, so a captured piece
 leaves board 1. Refusals: `That drop is not legal.`, `It is not black's turn
 on board 2.`, `That line no longer fits the position.`
 **Add or take a hand's piece** — + or − → one more or one fewer of that piece,
@@ -67,11 +73,33 @@ that board's later moves.
 board last clicked (two boards), without the hands → `Use this position` sets
 that board's pieces, side to move and castling, keeps both hands and starts a
 new line. A board no game can go on from: `That board cannot be played from.`
-**Step a board** — its list, its buttons, or ← → Home End for the board last
-used (always board 1 with one board). Only that board moves. A refused step:
+**Step a board** — its list, its buttons, or ← → and Home / PgUp, End / PgDn
+for the board last used (always board 1 with one board). F flips the boards. Only that board moves. A refused step:
 `Can't step there: <san> on board 2 would have no piece to drop.`
 **Point at a line** — draws its first move on the board (an arrow, or a faint
-piece for a drop) until the pointer leaves.
+piece for a drop) until the pointer leaves. Resting on one of its moves for
+80 ms floats a 200 px board under it: the board that move is on, after it,
+with the move highlighted and both hands. A new table takes the floated board
+away; a deeper search of the same table keeps it.
+**Play a line** — clicking a move plays the line up to and including it: with
+one board, board 1's moves; with two, every move of both boards before it in
+order. All or nothing: `That line no longer fits the position.` Clicking the
+row outside its moves plays its first move or joint action. The right button
+on a row offers `Copy line PGN`: the moves on the boards now followed by the
+line, as far as it plays, in the same form as a move's.
+**Move menu** — the right button on a move in a board's list: `Copy line PGN`
+(the line up to that move in the order played), `Copy FEN` (that board's
+crazyhouse FEN just after it), with two boards `Copy dual FEN`, and `Delete
+from here` (that move and the board's later moves and hand edits; the other
+board keeps its moves). A delete that would take a capture the other board
+dropped is refused: `Can't delete: P@d5 on board 2 would have no piece to
+drop.` With one board the line PGN is crazyhouse, which Lichess imports:
+`[Variant "Crazyhouse"]`, `[SetUp "1"]` and `[FEN …]` with the hands when the
+start is not the usual one, then SAN with drops as `N@f3` and `P@e5`. It plays
+by crazyhouse rules, so a piece taken stays in the taker's hand there; a drop
+those rules would not allow (a piece from a hand edit) starts the PGN again
+from the board just before it. With two boards it is the BPGN `Copy moves`
+writes.
 **Engine switch** (E, or `Toggle engine`) — Hivemind runs only while the switch
 is on and the mode is on screen. Each pass searches 800, then 4,000, then
 20,000 nodes. The rows update when a pass ends, and the engine rests after the

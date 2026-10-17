@@ -169,6 +169,8 @@ void main() {
         JointMove('g1f3', null),
       ]);
       expect(find.text('1. e4'), findsOneWidget);
+      // One board's moves are one game: nothing parts them.
+      expect(find.text(' · '), findsNothing);
       final rows = tester.getSize(find.byType(LabLineRows));
       final pointer = await mouse(tester);
       await pointer.moveTo(tester.getCenter(find.text('e5')));

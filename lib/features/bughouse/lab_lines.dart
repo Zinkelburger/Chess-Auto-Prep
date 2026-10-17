@@ -141,6 +141,7 @@ class _LabLineRowsState extends State<LabLineRows> {
     return _LineRow(
       score: row.score.text,
       steps: steps,
+      joints: !single,
       onEnter: () => lab.preview.value = {
         for (final board in BoardNumber.values)
           if (!single || board == BoardNumber.one) board: ?row.move.on(board),
@@ -204,6 +205,7 @@ class _LineRow extends StatelessWidget {
   const _LineRow({
     required this.score,
     required this.steps,
+    required this.joints,
     required this.onEnter,
     required this.onExit,
     required this.onTap,
@@ -215,6 +217,9 @@ class _LineRow extends StatelessWidget {
 
   final String score;
   final List<PvStep> steps;
+
+  /// Whether a `·` parts one joint action from the next: with two boards.
+  final bool joints;
   final VoidCallback onEnter;
   final VoidCallback onExit;
   final VoidCallback onTap;
@@ -228,7 +233,7 @@ class _LineRow extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final tokens = <Widget>[];
     for (final (i, step) in steps.indexed) {
-      if (i > 0 && step.joint != steps[i - 1].joint) {
+      if (joints && i > 0 && step.joint != steps[i - 1].joint) {
         tokens.add(_Separator(colour: scheme.onSurfaceVariant));
       }
       tokens.add(
