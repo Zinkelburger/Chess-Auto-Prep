@@ -6,7 +6,7 @@
  * clicking a move plays the line up to it. When the engine waits for the
  * player (a phone's first download) or has failed, one button starts it.
  * Screen readers hear the evaluation once a search ends, not every update.
- * Hivemind on the bughouse board and Stockfish on the PGN page both use it;
+ * Fairy-Stockfish on the bughouse board and Stockfish on the PGN page both use it;
  * the small board shows the hands where the page has places for them.
  */
 import { Chessground } from '@lichess-org/chessground';
@@ -22,15 +22,14 @@ import { pieceSrc } from './board';
 const PV_MOVES = 16;
 const HAND_ROLES: Role[] = ['pawn', 'knight', 'bishop', 'rook', 'queen'];
 
-/** What the panel shows of an engine: Hivemind reports every kind, Stockfish loading, ready and failed. */
+/** What the panel shows of an engine: the bughouse board's reports every kind, the PGN page's loading, ready and failed. */
 export type CevalStatus =
   | { kind: 'off' }
   /** Waits for the player before downloading `megabytes` (phones and data saving). */
   | { kind: 'ask'; megabytes: number }
   /** `fraction` of the download, while downloading. */
   | { kind: 'loading'; text: string; fraction?: number }
-  /** `error`: the last analysis of `fen` failed; the engine still runs. */
-  | { kind: 'ready'; gpu?: boolean; threads?: number; error?: { fen: string; text: string } }
+  | { kind: 'ready'; threads?: number }
   | { kind: 'failed'; text: string };
 
 /** A search's report as the panel shows it. */
@@ -135,7 +134,7 @@ export class CevalView {
     threat.hidden = !state.enabled || state.inCheck || !!state.over;
     threat.setAttribute('aria-pressed', String(state.threat));
     const { engineName } = this.options;
-    name.textContent = state.threat ? 'Show threat' : state.status.kind === 'ready' && state.status.gpu ? `${engineName} · GPU` : engineName;
+    name.textContent = state.threat ? 'Show threat' : engineName;
     // The running engine's thread count, for the browser test: the gear's label changes before the restart.
     if (state.status.kind === 'ready' && state.status.threads !== undefined) name.dataset.threads = String(state.status.threads); else delete name.dataset.threads;
     info.classList.remove('ch-failed');
@@ -149,9 +148,8 @@ export class CevalView {
     if (!state.result) this.hideBoard();
     const result = state.result;
     const status = state.status;
-    const error = status.kind === 'ready' && status.error?.fen === state.fen ? status.error.text : null;
     if (!result) {
-      const waiting = status.kind === 'ask' || status.kind === 'failed' || error !== null;
+      const waiting = status.kind === 'ask' || status.kind === 'failed';
       header.classList.toggle('ch-waiting', waiting);
       if (waiting) pearl.textContent = '';
       else pearl.innerHTML = '<span class="ch-spinner" aria-hidden="true"></span>';
@@ -164,9 +162,6 @@ export class CevalView {
         info.classList.add('ch-failed');
         action.textContent = 'Try again';
         action.hidden = false;
-      } else if (error !== null) {
-        info.textContent = error;
-        info.classList.add('ch-failed');
       } else if (status.kind === 'loading') {
         info.textContent = status.text;
         if (status.fraction !== undefined) bar.style.width = `${Math.round(100 * status.fraction)}%`;

@@ -85,13 +85,10 @@ void main() {
     expect(lines.rows[BoardNumber.one], hasLength(3));
     // Both teams read cp −200: the zero is measured and the table level.
     expect(lines.score.text, '0.00');
-    // Then each side that may sit is scored briefly, the searches that
-    // match Even's reused.
-    expect(hivemind.asked.skip(4).map((q) => (q.team, q.maySit, nodes(q))), [
-      (Team.ab, true, labClockNodes),
-      (Team.cd, true, labClockNodes),
-    ]);
-    expect(lines.byClock.keys, [ClockCase.abMaySit, ClockCase.cdMaySit]);
+    // Black may sit by default: the zero's search is C + D's, with it.
+    expect(zero.maySit, isTrue);
+    // Nothing else is searched.
+    expect(hivemind.asked, hasLength(4));
   });
 
   test('one board: the side on move may sit when the clock says so', () async {
@@ -265,10 +262,7 @@ void main() {
       expect(lines.nodes, 200);
       expect(lines.thinking, isFalse);
       // Never restarted on the same table.
-      expect(
-        hivemind.asked.where((q) => nodes(q) != labClockNodes),
-        hasLength(2),
-      );
+      expect(hivemind.asked, hasLength(2));
     });
 
     test('two boards: both teams stream, their nodes added', () async {

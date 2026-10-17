@@ -169,7 +169,7 @@ class _BoardLineRowsState extends State<BoardLineRows> {
           final all = _steps(row, row.pv.length * 2);
           final text = lab.linePgnWith(pvMovesTo(all, all.length - 1));
           unawaited(Clipboard.setData(ClipboardData(text: text)));
-        }),
+        }, icon: Icons.content_copy),
       ],
     );
   }

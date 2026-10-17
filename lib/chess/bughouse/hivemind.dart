@@ -2,14 +2,14 @@
 /// are read back.
 ///
 /// **The score is not pawns.** Hivemind prints `180·tan(1.56·Q)` of an MCTS
-/// value Q in −1…1, so the tangent inverts exactly ([qOf]). Q carries a
-/// large offset that is not the position's: the network reads its one clock
-/// input — may this team sit instead of moving? — as about ±0.58 of Q, more
-/// than a queen, so a level opening reads about −2.3 from both seats when
-/// neither team may sit. The offset also differs from position to position
-/// (−0.31 to −0.67 of Q across dead-level mirrored tables), so it is
-/// measured: search the table once for each team, and with each team's
-/// value written `q = ±advantage + offset`,
+/// value Q in −1…1, so the tangent inverts exactly ([qOf]). The network
+/// reads its one clock input — may this team sit instead of moving? — as
+/// about ±0.58 of Q, more than a queen, and in its search exactly one team
+/// may sit ([ClockCase]), so a level opening reads about +2.3 for the team
+/// that may and −2.3 for the other. That is the clock's real worth and it
+/// stays in the score. Whatever else the two searches disagree on is
+/// measured and taken out: search the table once for each team, and with
+/// each team's value written `q = ±advantage + offset`,
 ///
 ///     offset    = (q_A+B + q_C+D) / 2
 ///     advantage = (q_A+B − q_C+D) / 2
@@ -17,12 +17,11 @@
 /// The shift is taken in Q and the tangent put back afterwards ([scoreOf]):
 /// the tangent is steeper at the offset than at zero, so subtracting from the
 /// printed number would inflate every advantage. The result is Hivemind's
-/// scale re-centred — 0.00 level, + good for the team named — which is what
-/// the precomputed book stores and what the Bughouse mode prints.
+/// scale, + good for the team named, which is what the Bughouse mode prints.
 ///
-/// Example: a level opening, neither team may sit: A + B's search prints
-/// cp −228 (Q −0.573), C + D's cp −231 (Q −0.577); the offset is −0.575,
-/// A + B's advantage +0.002 of Q, printed `+0.01` — level, as it should be.
+/// Example: a level opening, C + D may sit: A + B's search prints cp −228
+/// (Q −0.573), C + D's cp +231 (Q +0.577); the offset is +0.002 and A + B's
+/// score −0.575 of Q, printed `-2.29`: C + D's right to sit.
 library;
 
 import 'dart:math' as math;
@@ -32,34 +31,28 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'table.dart';
 
 /// Which team is up on the diagonal clock, and so may sit — wait for a
-/// piece rather than move — while it is on move. The two diagonal margins
-/// are one number (both boards start together and one clock per board
-/// runs), so a team is up, level or down: three cases, not four.
+/// piece rather than move — while it is on move. Hivemind knows only these
+/// two: its `TimeAdvantage` says whether the searched team may sit, and its
+/// search gives the other team the opposite, so one team or the other
+/// always may. There is no case where neither may.
 enum ClockCase {
   abMaySit(
     'A + B may sit',
-    'ahead',
     'A + B are up on the diagonal clock, so they can wait rather than move',
   ),
-  even('Even', 'even', 'Neither team is up on the clock: both have to move'),
   cdMaySit(
     'C + D may sit',
-    'behind',
     'C + D are up on the diagonal clock, so they can wait rather than move',
   );
 
-  const ClockCase(this.label, this.bookName, this.hint);
+  const ClockCase(this.label, this.hint);
 
   final String label;
-
-  /// The `clock` column of the precomputed book.
-  final String bookName;
   final String hint;
 
   /// The engine's `TimeAdvantage` input for [team] in this case.
   bool maySit(Team team) => switch (this) {
     abMaySit => team == Team.ab,
-    even => false,
     cdMaySit => team == Team.cd,
   };
 }
@@ -151,18 +144,6 @@ double qOf(num cp) => math.atan(cp / _tangentScale) / _tangentRate;
 double scoreOf(double q) =>
     _tangentScale * math.tan(_tangentRate * q.clamp(-0.9, 0.9)) / 100;
 
-/// What the clock bit alone is worth to the network, in Q: a level table
-/// reads cp −230 with it off and +230 with it on, from either seat.
-const sitBitQ = 0.5814;
-
-/// The offset a level table gives, for when a team has no move to search:
-/// each team reads its own bit as ±[sitBitQ], and the offset is their mean.
-double assumedOffset(ClockCase clock) =>
-    Team.values
-        .map((team) => clock.maySit(team) ? sitBitQ : -sitBitQ)
-        .reduce((a, b) => a + b) /
-    2;
-
 /// Where the zero of a score came from.
 enum ZeroSource {
   /// Both teams were searched here, so the offset cancels exactly.
@@ -242,8 +223,11 @@ List<JointLine> rankedLines(Iterable<JointLine> lines) {
 
 /// The searched team's [count] choices on [board], one line each: the
 /// moves there the engine visited most — a null move is a sit on that
-/// board — each with its most-visited line, the engine's own choice first
-/// and the rest best-scoring first, as [rankedLines] orders them.
+/// board — each with its most-visited line, best-scoring first.
+///
+/// The engine's own choice, the most-visited, is not kept on top: its
+/// visit lead settles early, so pinned there it held a worse score above a
+/// better one for the rest of a live search, and the rows never swapped.
 ///
 /// The engine ranks joint actions, both boards' moves at once, so a team on
 /// move on both boards shows the same move on one board across several of
@@ -262,7 +246,12 @@ List<JointLine> boardChoices(
     if (picked.length == count) break;
     if (seen.add(line.pv.first.on(board))) picked.add(line);
   }
-  return rankedLines(picked);
+  double strength(JointLine line) =>
+      TableScore(score: line.q, mate: line.mate).strength;
+  return picked..sort((a, b) {
+    final better = strength(b).compareTo(strength(a));
+    return better != 0 ? better : a.rank.compareTo(b.rank);
+  });
 }
 
 /// How far [line] falls behind [best] for the team searched, 0 to 1: half

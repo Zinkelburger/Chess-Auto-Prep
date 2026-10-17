@@ -23,7 +23,7 @@ panel (440–480 px) on the right.
   window. Board 1 has A (White) and C (Black); board 2 has D (White) and B
   (Black). The teams are A + B and C + D. With two boards, A + B's colour is
   at the bottom of both boards unless flipped, and each board has its name
-  above it and its own move list and step buttons under it.
+  above it and its engine rows under it.
 - **Hands** — above and below each board, as lila's crazyhouse pocket: a turn
   dot, the seat letter (two boards only), then five square-sized slots (P N
   B R Q) with counts. A row of + sits over the slots and a row of − under
@@ -39,34 +39,38 @@ panel (440–480 px) on the right.
   Shift, blue with Alt, yellow with Ctrl; a left click or a new position
   takes them away.
 - **Panel** — `1 board` | `2 boards`, and `Edit board` at the right of that
-  row. Then `Time`: `A + B may sit` / `Even` / `C + D may sit`, or with one
-  board `White may sit` / `Even` / `Black may sit`. Each chip carries A + B's
-  score under that case (`–` until known, blank with the engine off): the
-  chosen one follows the search, the others come from short searches once a
-  search rests. The tooltips explain each.
+  row. Under it, in the same compact segments, who may sit: `A + B may sit`
+  | `C + D may sit`, or with one board `White may sit` | `Black may sit`
+  (the default is C + D, Black). Hivemind has no case where neither may:
+  its one clock input says whether the searched team may sit, and its
+  search gives the other team the opposite. The tooltips explain each.
 - **Engine bar** — a switch (`Toggle engine (E)`), the score in 18 px mono,
   then `Hivemind · 12,400 nodes` (the size of the search the rows come from,
   both teams' together with two boards), or why the engine stopped, in the
   error colour. While the engine searches, a 2 px bar under it fills towards
   the size the search rests at.
 - **Lines** — each board's three best moves for the player on move there,
-  one row each: in the panel with one board, under the board (between its
-  bottom hand and its move list) with two. A row is its score, then the
+  one row each: in the panel with one board, under the board (below its
+  bottom hand) with two. A row is its score, then the
   move in bold and that board's moves after it, up to eight (`1. d4 d5 2.
   Nf3`); a row whose choice is to wait there starts with a muted `sit`.
   The engine ranks joint actions over both boards, so a team on move on
   both repeats one board's move across its lines; the rows are the three
   moves it visited most on that board (from 16 lines asked), each with its
-  most-visited line, the engine's choice first and the rest best-scoring
-  first. Each move is its own token, as in the workspace's engine lines.
+  most-visited line, best-scoring first. The engine's own choice is not
+  pinned on top, so rows swap as the scores move during a live search.
+  Each move is its own token, as in the workspace's engine lines.
   Rows are 28 px, clip what does not fit, and keep their place and size
   whether the engine is on or off or a move is hovered; an empty row is
   blank. Scores are A + B's, on Hivemind's scale (`+ is good for A + B:
   White on board 1, Black on board 2. Hivemind's scale, not pawns.`).
 - **Problem line** — one fixed line saying why a move, step or paste was
   refused.
-- **Moves** — with one board, board 1's moves and hand edits fill the rest of the panel, with
-  `First move`, `Back`, `Forward` and `Last move` under them.
+- **Moves** — the rest of the panel. With one board, board 1's moves and
+  hand edits; with two, board 1's and board 2's lists side by side, each
+  under its board's name, the list of the board last used outlined in the
+  accent. Each list has `First move`, `Back`, `Forward` and `Last move`
+  under it.
 
 ## Actions
 
@@ -115,30 +119,27 @@ crazyhouse FEN just after it), with two boards `Copy dual FEN`, and `Delete
 from here` (that move and the board's later moves and hand edits; the other
 board keeps its moves). A delete that would take a capture the other board
 dropped is refused: `Can't delete: P@d5 on board 2 would have no piece to
-drop.` With one board the line PGN is crazyhouse, which Lichess imports:
+drop.` With one board the line PGN is crazyhouse, from the line's start:
 `[Variant "Crazyhouse"]`, `[SetUp "1"]` and `[FEN …]` with the hands when the
-start is not the usual one, then SAN with drops as `N@f3` and `P@e5`. It plays
-by crazyhouse rules, so a piece taken stays in the taker's hand there; a drop
-those rules would not allow (a piece from a hand edit) starts the PGN again
-from the board just before it. With two boards it is the BPGN `Copy moves`
-writes.
+start is not the usual one, then SAN with drops as `N@f3` and `P@e5`, and each
+hand edit a comment where it was made, `{ +P +B }`. Lichess imports it by
+crazyhouse rules, where a piece taken stays in the taker's hand and an edit is
+only a comment, so its import stops at a drop of a piece from a hand edit.
+With two boards it is the BPGN `Copy moves` writes.
 **Engine switch** (E, or `Toggle engine`) — Hivemind runs only while the switch
 is on and the mode is on screen. Each team searched gets one continuous search
 on its own engine process; the two processes share the mode's cores. The
 score, rows and node count follow the search about four times a second, the
 first within about a second of a position, and the search rests at 100,000
 nodes until the table changes. One board: the team on move on board 1 must
-move there unless `Time` lets it sit, and the partner board stands as it is (the
+move there unless the clock choice lets it sit, and the partner board stands as it is (the
 desktop Hivemind lacks the website's
 `tools/bughouse_web/patches/frozen-board.patch`, so its search may still weigh
 partner-board moves). The partner board is given the other team's turn, so
 that team can be searched, to 20,000 nodes, for the score's zero; until its
-first report the level table's zero stands in. Two boards: each team with a
-move is searched, and may sit as `Time` says. The two `Time` cases not
-chosen are scored with 4,000-node searches of each team (one that matches a
-search already made is reused), one after another on the first engine
-free: with one board the zero's once it rests, with two the first to rest. A new position, board count or
-clock cuts the searches short. Finished searches are remembered for the
+first report the score is the shown team's own. Two boards: each team with a
+move is searched, and may sit as the clock choice says. A new position,
+board count or clock cuts the searches short. Finished searches are remembered for the
 session. Leaving the mode quits the engines. An engine build that cannot
 report while it searches is asked in passes of 800, 4,000 and 20,000 nodes on
 one process, the rows changing as each pass ends.
@@ -171,10 +172,10 @@ paste commands are refused here with
   `.github/workflows/windows-check.yml` (pushes to `windows-check`, Server
   2022 and 2025) run it.
 - **Score** — Hivemind prints `180·tan(1.56·Q)`. The mode re-centres in Q with
-  offset `(q_A+B + q_C+D) / 2` from both teams' latest reports, or the
-  level-table offset (±0.5814 per team's sit bit) when one team was not
-  searched or has not reported yet. 0.00 is
-  level. It is not pawns.
+  offset `(q_A+B + q_C+D) / 2` from both teams' latest reports, or none when
+  one team was not searched or has not reported yet. The right to sit stays
+  in the score: a level opening reads about +2.3 when A + B may sit and
+  −2.3 when C + D may. It is not pawns.
 - Nothing is saved. Leaving the mode keeps the table for the session; quitting
   the app loses it. No database is read or written.
 
@@ -183,11 +184,14 @@ paste commands are refused here with
 - One board and two boards, both with + and − on every hand; no precomputed
   book, FICS archive, expectimax or matches in the app (owner, 2026-10-16).
 - One engine, behind a switch (2026-09-23).
-- The three `Time` chips are the only clock question, with one board too, so
-  lines can be found with the opponent allowed to sit; each shows its score
-  so the cases compare at a glance (2026-10-17).
+- Who may sit is the only clock question, with one board too, so lines can
+  be found with the opponent allowed to sit. Two choices, as Hivemind has
+  them, styled like the board count; only the chosen case is searched and
+  scored (2026-10-17).
 - Two-board lines are per board, under their board, not per team; engine
   arrows and drawn shapes as on lila's analysis board (2026-10-17).
+- With two boards the move lists are in the panel, side by side, so the
+  boards get the height (2026-10-17).
 - No engine settings rows: Hivemind takes half the cores, 256 MB, batch 8
   (2026-09-23).
 - The engine behaves like Stockfish elsewhere: switched on, its score, lines

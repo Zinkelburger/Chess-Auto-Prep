@@ -21,8 +21,8 @@ import 'lab_lines.dart';
 import 'pocket.dart';
 
 /// The boards on screen, each with its two players' hands: board 1 alone,
-/// or both side by side, each with its engine's best moves, its own move
-/// list and step buttons under it.
+/// or both side by side, each with its engine's best moves under it. The
+/// move lists are in the panel.
 ///
 /// While the engine is on, each board shows its best moves as lila's
 /// analysis board does: the engine's choice a pale blue arrow, the moves
@@ -244,7 +244,6 @@ class _BoardColumn extends StatelessWidget {
                   board: board,
                 ),
               ),
-              BoardMoves(lab: lab, board: board),
             ],
           ],
         ),
@@ -602,19 +601,12 @@ class _BoardState extends State<_Board> {
 
 /// A board's own moves, numbered as that board counts them, the current
 /// one marked and the ones stepped past faint, with the four step buttons.
-/// Under a board the list is a few rows tall; with [fill] it takes the
-/// height its parent leaves.
+/// The list takes the height its parent leaves.
 class BoardMoves extends StatelessWidget {
-  const BoardMoves({
-    super.key,
-    required this.lab,
-    required this.board,
-    this.fill = false,
-  });
+  const BoardMoves({super.key, required this.lab, required this.board});
 
   final BughouseLab lab;
   final BoardNumber board;
-  final bool fill;
 
   @override
   Widget build(BuildContext context) {
@@ -624,7 +616,6 @@ class BoardMoves extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final focused = lab.focus == board && !lab.single;
     final list = Container(
-      height: fill ? null : labMoveListHeight,
       decoration: BoxDecoration(
         border: Border.symmetric(
           horizontal: BorderSide(
@@ -637,7 +628,7 @@ class BoardMoves extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (fill) Expanded(child: list) else list,
+        Expanded(child: list),
         const SizedBox(height: Space.xs),
         Row(
           children: [
@@ -817,17 +808,27 @@ typedef _Half = ({LineMove move, int index});
 List<AppAction> moveMenu(BughouseLab lab, LineMove move) {
   final after = lab.positionAfter(move);
   return [
-    AppAction('Copy line PGN', () => _copy(lab.linePgnThrough(move))),
+    AppAction(
+      'Copy line PGN',
+      () => _copy(lab.linePgnThrough(move)),
+      icon: Icons.content_copy,
+    ),
     AppAction(
       'Copy FEN',
       after == null ? null : () => _copy(after.board(move.board).fen),
+      icon: Icons.content_copy,
     ),
     if (!lab.single)
       AppAction(
         'Copy dual FEN',
         after == null ? null : () => _copy(after.dualFen),
+        icon: Icons.content_copy,
       ),
-    AppAction('Delete from here', () => lab.deleteFrom(move)),
+    AppAction(
+      'Delete from here',
+      () => lab.deleteFrom(move),
+      icon: Icons.delete_outline,
+    ),
   ];
 }
 

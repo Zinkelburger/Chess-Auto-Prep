@@ -2,7 +2,7 @@
  * The sit panel: for the side to move, what the position is worth if it
  * moves now, and if it waits for one more pawn, knight, bishop, rook or queen
  * from its partner, with the best move once that piece arrives. Each row is
- * its own Hivemind search of the same size, run after the analysis of the
+ * its own engine search of the same size, run after the analysis of the
  * position, so the rows compare like with like. A row that mates is marked.
  * While the engine has failed or waits for the player, rows show a dash; they
  * are searched once it runs again.
@@ -26,7 +26,7 @@ interface Row {
   failed?: string;
 }
 
-/** `nodes` is the search size of each row, in positions (the setting). */
+/** `nodes` is the search size of each row, in nodes (the setting). */
 interface Ladder { fen: string; nodes: number; turn: Color; rows: Row[] }
 
 const keyOf = (fen: string, nodes: number) => `${nodes} ${fen}`;
@@ -115,7 +115,7 @@ export class SitPanel implements Extra {
     this.box.hidden = !ladder;
     if (!ladder) { this.box.replaceChildren(); return; }
     const table = el('table', 'bs-sit-table');
-    table.title = `Each row is its own search of ${ladder.nodes.toLocaleString()} positions, so the rows compare with each other; the analysis above searches longer`;
+    table.title = `Each row is its own search of ${ladder.nodes.toLocaleString()} nodes, so the rows compare with each other; the analysis above searches longer`;
     const heading = el('tr', '');
     for (const label of ['Option', 'Eval', 'Best move']) {
       const th = el('th', '', label); th.setAttribute('scope', 'col'); heading.append(th);

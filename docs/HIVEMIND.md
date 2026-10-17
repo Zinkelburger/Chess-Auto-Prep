@@ -1,8 +1,10 @@
 # Hivemind, end to end
 
-The bughouse engine behind the app's Bughouse mode, the `bughouse` MCP server
-and the website's `/bughouse` board (one board, the partner board
-held still, on the GPU through WebGPU). This document
+The bughouse engine behind the app's Bughouse mode and the `bughouse` MCP
+server. `tools/bughouse_web/` also builds it for the browser (one board, the
+partner board held still, on the GPU through WebGPU), but no website page
+loads that build: the site's `/bughouse` board runs Lichess's crazyhouse
+Fairy-Stockfish. This document
 is the one place that explains *how it works* rather than how to call it:
 what the network sees, what the search does with it, and — the question that
 sends everyone here — **why the evaluation sits near 0.00 when one side is
@@ -219,10 +221,19 @@ the true advantage is 0 by construction), our team white on A.
 
 The number in `info … score cp` is `180·tan(1.56·Q)` of an MCTS Q that
 carries a large offset, and the offset is mostly the network reading plane 31.
-With neither team allowed to sit, a dead-equal position reads **cp −230 from
-both seats**. That is not a bug, and it is not a bias you can subtract once:
-it is the network saying *"a team that can never sit is losing"*, and how
-much it is losing by depends on the position.
+With `TimeAdvantage false`, a dead-equal position reads **cp −230 from
+both seats**. That is not a bug, and it is not a bias you can subtract once.
+`false` does not mean "neither team may sit": the search gives the team to
+play at every node the root team's flag or its opposite
+(`searchthread.cc`, `teamToPlayHasTimeAdvantage`), so exactly one team may
+sit, and `false` means the opponent may. Each seat's −230 is that seat
+losing to an opponent who can wait, and how much depends on the position.
+Two `false` searches therefore describe two different clocks; the
+calibration below cancels the clock between them rather than modelling an
+even one. The app's Bughouse mode searches one consistent case instead
+(A + B may sit, or C + D may), so its score keeps the clock's worth, and so
+does the browser build's one board (White may sit, or Black may; the frozen
+partner board lets nobody actually sit there).
 
 The `policy` UCI command prints the network's opinion with no search at all,
 which separates the network from the MCTS. Raw value, our seat, no sitting
@@ -359,7 +370,7 @@ setoption name TimeAdvantage value true|false
 setoption name RequireMoveOn value none|A|B
 setoption name MultiPV value N            ← not a `go` argument
 position fen <fenA>|<fenB> [moves 1e2e4 2d7d5 …]
-setoption name ReportIntervalMs value N   ← lines while searching every N ms (default 250, 0 = only at the end)
+setoption name ReportIntervalMs value N   ← every ranked line while searching, every N ms (0 = rank 1 per new depth)
 go [ponder] [movetime <ms>] [nodes <N>]   ← nodes wins if both; default 1000 ms
 go infinite                                ← until stop (or a solved root), then bestmove
 stop                                       ← always, to kill the permanent brain
@@ -379,12 +390,13 @@ bestmove (d2d4,pass) ponder (d7d5,d2d4)
 parsers exclude by requiring `info ` *and* ` depth `.
 
 While it searches, the engine prints the whole MultiPV block — the same
-lines as the block before `bestmove`, ranks 1 to N — every `ReportIntervalMs`
-and whenever the search reaches a new depth, for node, time and infinite
-searches alike. A periodic block leaves out root moves no visit has reached
-yet, so early blocks can be shorter than `MultiPV`. Each block is one write;
-a reader that keeps the latest line per rank sees the block before
-`bestmove` last. The `uci` reply's `option name ReportIntervalMs` line is
+lines as the block before `bestmove`, ranks 1 to N — every `ReportIntervalMs`,
+for node, time and infinite searches alike. Upstream leaves the option at 0,
+so the handshake sets it to 250 whenever the `uci` reply offers it. A
+periodic block leaves out root moves no visit has reached yet, except rank 1,
+the move `bestmove` would play at that moment, so early blocks can be shorter
+than `MultiPV`. Each block is one write; a reader that keeps the latest line
+per rank sees the block before `bestmove` last. The `uci` reply's `option name ReportIntervalMs` line is
 how a reader tells this engine from an older build, which prints only that
 final block in a node search and the rank-1 line on each new depth in a
 timed one. `go infinite` starts no permanent brain after its `bestmove`.
@@ -522,8 +534,10 @@ either book.
 
 ## The web payload
 
-**About 54.7 MB (52.1 MiB) before a visitor gets one evaluation**, from the
-files `prepare_assets.py` writes into `public/bughouse-engine/`:
+No page loads this payload; `prepare_assets.py` still writes it, and its
+plain ONNX Runtime serves the Expectimax tab's Maia. Loading the browser
+build costs **about 54.7 MB (52.1 MiB) before one evaluation**, from the files
+`prepare_assets.py` writes into `public/bughouse-engine/`:
 
 | Artifact | Bytes | Share |
 |---|---:|---:|

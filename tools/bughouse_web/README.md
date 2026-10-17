@@ -1,14 +1,13 @@
 # Static Hivemind build
 
-The website's `/bughouse` page runs Hivemind, the bughouse engine, **entirely
-in the visitor's browser**: a WebAssembly build of the engine with its network
-on ONNX Runtime Web, on the GPU through WebGPU or on CPU threads. Cloudflare
-Pages only serves static files; no server runs an engine and no account is
-needed. What the page does — one board with the partner board held still,
-+ and − on every hand, the board editor, the sit panel, the gear and the
-download — is in the
-[frontend guide](../../python/twic-position-finder/frontend/README.md#bughouse-board).
-This folder builds the engine module and prepares its assets.
+This folder builds Hivemind, the bughouse engine, to run **entirely in a
+visitor's browser**: a WebAssembly build of the engine with its network on
+ONNX Runtime Web, on the GPU through WebGPU or on CPU threads, searching one
+board with the partner board held still. No page of the website loads it:
+the site's `/bughouse` board runs Lichess's crazyhouse Fairy-Stockfish (see
+the [frontend guide](../../python/twic-position-finder/frontend/README.md#bughouse-board)).
+`prepare_assets.py` runs on every frontend build, because the ONNX Runtime it
+copies also serves the Expectimax tab's Maia.
 
 ## Deploy on Cloudflare Pages
 
@@ -66,25 +65,28 @@ npm run preview
 in name order, plus three browser adapters. `patches/frozen-board.patch` adds
 `g_frozenBoardB`: board B gets no moves, a check on A that a drop could block
 lets the checked side drop the blocker it waits for (a pawn, or a knight where
-a pawn cannot stand), nobody's sit plane is set, and `g_frozenValueOffset` is
-subtracted from every network value. With the flag off searches are unchanged.
+a pawn cannot stand), nobody sits (nothing would arrive), the sit plane says
+which team is up on the clock as Hivemind's `TimeAdvantage` gives it
+(`g_frozenRootMaySit`: the root team's, the other team the opposite), and
+`g_frozenValueOffset` is subtracted from every network value. With the flag off searches are unchanged.
 
 * `bridge.cc`: the validated position interface and the searches, over the
   engine's own `Board`, `SearchThread` and `Node`.
-  `bh_frozen_search(fen, nodes, millisCap, lines, reportMs, batch, keep)` is
-  the one the page calls. It searches one board's FEN (hands in brackets) for
+  `bh_frozen_search(fen, whiteMaySit, nodes, millisCap, lines, reportMs, batch, keep)` is
+  the one-board search. It searches one board's FEN (hands in brackets) for
   the side to move. Board B is the starting position held still, the
   opponent's colour to move there, with every piece missing from A in the
   pocket of whoever captured it (bughouse conserves pieces; without them the
   network barely notices a missing queen). Two static inferences first
-  measure the network's shared offset (both seats with no sit plane rate
-  themselves about −0.5); the search subtracts it, so q is a winning chance
-  from the side to move and the start position reads about 0. It stops at
+  measure the two seats' shared offset under one clock (`whiteMaySit`: White
+  up on the clock, else Black); the search subtracts it, so q is a winning
+  chance from the side to move with the clock's worth in it (a level opening
+  is clearly winning for the side up on the clock). It stops at
   the node budget (up to 1,000,000), the time cap, a solved root or Stop,
   reports to `Module.onFrozenReport` every `reportMs` and returns up to five
   lines with board A's moves only. `batch` (1 to 64) leaves are evaluated
   together: 32 on a GPU, 1 on the CPU. With `keep`, the search keeps its
-  tree, and a later `keep` search of the same FEN carries on from it: node
+  tree, and a later `keep` search of the same FEN and clock carries on from it: node
   count and depth continue, and `resumed_nodes` says how many came from
   before.
   The module also exports `bh_position` (both boards' FENs and legal moves

@@ -13,6 +13,7 @@ import '../features/trainer/trainer.dart';
 import '../features/trainer/trainer_state.dart';
 import '../ui/app_action.dart';
 import '../ui/app_keys.dart';
+import '../ui/theme.dart';
 import '../workspace/board_book.dart';
 import '../workspace/board_book_pane.dart';
 import '../workspace/book_chip.dart';
@@ -408,6 +409,7 @@ final class ViewerView extends _DocumentModeView {
           onPressed: () => unawaited(
             requests.addToStudy([?lineDraft(workspace.session, path)]),
           ),
+          leadingIcon: const Icon(Icons.playlist_add, size: IconSize.menu),
           child: const Text('Add line to study…'),
         ),
       ];

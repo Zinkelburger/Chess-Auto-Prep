@@ -11,8 +11,7 @@ import 'lab_panel.dart';
 import 'table_boards.dart';
 
 /// The Bughouse mode: board 1 alone or both boards on the left, the engine
-/// and (with one board) the moves on the right. The boards take what the
-/// window leaves.
+/// and the move lists on the right. The boards take what the window leaves.
 ///
 /// ← → step the board last moved or stepped on, Home / PgUp and End / PgDn
 /// go to its ends, F flips the boards, E switches the engine and Space

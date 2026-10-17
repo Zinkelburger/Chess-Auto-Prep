@@ -17,7 +17,7 @@ final class AnsweringProcess implements UciProcess {
   /// Says nothing at all, as a binary that never reaches `main`.
   final bool silent;
 
-  /// Offers `ReportIntervalMs`, as a build with live-search.patch does.
+  /// Offers `ReportIntervalMs`, off by default as upstream Hivemind has it.
   final bool live;
   final sent = <String>[];
   final searches = <List<String>>[];
@@ -41,9 +41,7 @@ final class AnsweringProcess implements UciProcess {
       say('id name hivemind');
       say('option name MultiPV type spin default 1 min 1 max 500');
       if (live) {
-        say(
-          'option name ReportIntervalMs type spin default 250 min 0 max 60000',
-        );
+        say('option name ReportIntervalMs type spin default 0 min 0 max 60000');
       }
       say('uciok');
     } else if (line == 'isready') {
@@ -132,8 +130,12 @@ void main() {
 
   test('an engine that offers ReportIntervalMs streams; one that does not, '
       'does not', () async {
-    final (live, _) = await started(live: true);
+    final (live, liveProcess) = await started(live: true);
     expect(live.streams, isTrue);
+    expect(
+      liveProcess.sent,
+      contains('setoption name ReportIntervalMs value 250'),
+    );
     final (old, _) = await started();
     expect(old.streams, isFalse);
   });

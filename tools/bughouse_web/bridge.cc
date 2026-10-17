@@ -268,10 +268,15 @@ std::string run_search(const char* fen, int team, int timeAdvantage, int require
 namespace {
 // One-board analysis. Board B is the starting position held still behind
 // board A (see g_frozenBoardB), with the opponent's colour to move there, so
-// our team only ever moves on A. Nobody's sit plane is set: nothing arrives.
+// our team only ever moves on A. Nobody sits, since nothing would arrive, but
+// one team is up on the clock, and the network reads that as Hivemind's
+// TimeAdvantage gives it (g_frozenRootMaySit).
 struct FrozenScope {
-    FrozenScope() { g_frozenBoardB = true; g_frozenValueOffset = 0; g_requiredMoveBoard = REQUIRE_MOVE_NONE; }
-    ~FrozenScope() { g_frozenBoardB = false; g_frozenValueOffset = 0; }
+    FrozenScope() {
+        g_frozenBoardB = true; g_frozenRootMaySit = false; g_frozenValueOffset = 0;
+        g_requiredMoveBoard = REQUIRE_MOVE_NONE;
+    }
+    ~FrozenScope() { g_frozenBoardB = false; g_frozenRootMaySit = false; g_frozenValueOffset = 0; }
 };
 
 // Pieces are conserved in bughouse: a piece missing from board A (on the
@@ -337,14 +342,15 @@ std::string child_mate(const std::shared_ptr<Node>& root, int index) {
     return "null";
 }
 
-// The network's value from the side to move and from the other side, each
-// with no sit plane. Their mean is the shared offset; half their difference
-// is the static score from the side to move.
-std::array<float, 2> frozen_values(Board& board, Color side, Engine& engine) {
+// The network's value from the side to move and from the other side, under
+// the same clock: the side to move's sit plane is `rootMaySit`, the other
+// side's the opposite. Their mean is the shared offset; half their difference
+// is the static score from the side to move, the clock's worth included.
+std::array<float, 2> frozen_values(Board& board, Color side, bool rootMaySit, Engine& engine) {
     std::vector<float> input(NB_INPUT_VALUES());
     std::array<float, 2> values{};
     for (int i = 0; i < 2; i++) {
-        board_to_planes(board, input.data(), i ? ~side : side, false);
+        board_to_planes(board, input.data(), i ? ~side : side, i ? !rootMaySit : rootMaySit);
         Engine::HalfInferenceOutputs output;
         if (cancelled() || !engine.enqueueInferenceHalf(input.data())
             || !engine.synchronizeInferenceHalf(output))
@@ -393,6 +399,7 @@ std::string frozen_json(Board& board, const std::shared_ptr<Node>& root, const S
 // player comes back to.
 struct KeptSearch {
     std::string fen;
+    bool whiteMaySit = false;
     std::unique_ptr<Board> board;
     Color side = WHITE;
     std::shared_ptr<Node> root;
@@ -518,7 +525,8 @@ const char* bh_search_nodes(const char* fen, int team, int timeAdvantage, int re
 
 extern "C" {
 // One board searched with the partner board held still (g_frozenBoardB) for
-// the side to move. Stops at the node budget (1..1000000), the time cap
+// the side to move, with White up on the clock when `whiteMaySit` is set and
+// Black otherwise (the network's sit plane; nobody sits). Stops at the node budget (1..1000000), the time cap
 // (1..3600000 ms), a solved root or Stop. Every reportMs it hands the current
 // lines to Module.onFrozenReport. q values are from the side to move. `batch`
 // (1..64) leaves are evaluated together: one at a time suits a CPU, while a
@@ -526,30 +534,32 @@ extern "C" {
 // later and carries on from the kept tree when that was the same position;
 // its node count and depth then continue from the kept search, and
 // "resumed_nodes" says how many of the nodes were searched before.
-const char* bh_frozen_search(const char* fen, int nodes, int millisCap, int lines, int reportMs, int batch, int keep) {
+const char* bh_frozen_search(const char* fen, int whiteMaySit, int nodes, int millisCap, int lines, int reportMs, int batch, int keep) {
     try {
         FrozenScope frozen;
         SearchParams::RuntimeConfig config;
         // The offset is measured on the value head alone.
         config.enableWdlEval = false;
         Engine engine(0, std::clamp(batch, 1, 64));
-        const bool resume = keep && g_kept.root && g_kept.fen == fen;
+        const bool resume = keep && g_kept.root && g_kept.fen == fen && g_kept.whiteMaySit == (whiteMaySit != 0);
         KeptSearch run;
         if (resume) run = std::move(g_kept);
         else {
             // A new tree replaces the kept one; free that one first.
             if (keep) g_kept = KeptSearch{};
             run.fen = fen;
+            run.whiteMaySit = whiteMaySit != 0;
             run.board = load_frozen(fen, run.side);
             if (!run.board->has_any_legal_move(0)) throw std::runtime_error("The side to move has no move.");
             // The static values evaluate one position each; the search fills whole batches.
             Engine single(0, 1);
-            const auto values = frozen_values(*run.board, run.side, single);
+            const auto values = frozen_values(*run.board, run.side, (run.side == WHITE) == run.whiteMaySit, single);
             run.offset = (values[0] + values[1]) / 2;
             run.staticScore = (values[0] - values[1]) / 2;
             run.root = std::make_shared<Node>(run.side);
             run.root->configure_root_search(config, false);
         }
+        g_frozenRootMaySit = (run.side == WHITE) == run.whiteMaySit;
         g_frozenValueOffset = run.offset;
         frozen_report(("{\"static\":" + std::to_string(run.staticScore) + "}").c_str());
         Board& board = *run.board;

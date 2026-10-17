@@ -1,8 +1,8 @@
 /**
- * Bughouse analysis: lichess.org/analysis on one bughouse board, with a +
- * above and − below every piece in both hands and lila's board editor.
- * Captures leave for the partner and nothing arrives unless you add it, so
- * the hands are exactly what you set. Hivemind searches it, and the
+ * Bughouse analysis: lichess.org/analysis/crazyhouse, with a + above and −
+ * below every piece in both hands and lila's board editor. Captures go to
+ * the capturer's hand, as in crazyhouse, and whatever a partner would send
+ * you add yourself. Lichess's crazyhouse Fairy-Stockfish searches it, and the
  * sit panel (sit.ts) shows what one more piece is worth to the side to move.
  *
  * This file wires the parts together: the tree and the current position,
@@ -39,7 +39,7 @@ const TREE_KEY = 'bughouse-analysis-tree-v1';
 export interface ExtraHost {
   readonly fen: string;
   readonly settings: Settings;
-  /** Each row's search, in positions: the setting, or the default for the engine's backend. */
+  /** Each row's search, in nodes: the setting, or the default. */
   readonly sitNodes: number;
   /** The engine is on and the board is in analysis (not the editor or practice). */
   readonly active: boolean;
@@ -138,7 +138,7 @@ export class BughouseApp {
     const onStatus = (status: EngineStatus) => { this.engineStatus = status; this.renderCeval(); this.renderGear(); this.extra?.update(); };
     const onResult = (result: EngineResult) => this.engineResult(result);
     this.engine = new Engine(onStatus, onResult);
-    this.engine.configure({ gpu: this.settings.gpu, threads: threadsFor(this.settings) });
+    this.engine.configure(threadsFor(this.settings));
     this.board = new CrazyBoard($('ch-board-wrap'), $('ch-board'), {
       move: (orig, dest) => void this.boardMove(orig, dest),
       drop: (role, key) => this.play(`${ROLE_LETTER[role]}@${key}`, 'user'),
@@ -181,11 +181,11 @@ export class BughouseApp {
       hover: (uci) => this.hover(uci, 'paleBlue'),
       play: (pv, upTo) => this.playLine(pv, upTo),
       start: () => this.startEngine(),
-    }, { engineName: 'Hivemind', playLine, hands: (fen) => positionOf(fen).pockets });
+    }, { engineName: 'Fairy-Stockfish', playLine, hands: (fen) => positionOf(fen).pockets });
     this.extra = new SitPanel({
       get fen() { return app.current.fen; },
       get settings() { return app.settings; },
-      get sitNodes() { return sitNodesFor(app.settings, app.engine.gpu); },
+      get sitNodes() { return sitNodesFor(app.settings); },
       get active() { return app.mode === 'analysis' && !app.practice && app.settings.engineOn; },
       get engineReady() { return app.engineStatus.kind === 'ready'; },
       get engineStopped() { return app.engineStatus.kind === 'failed' || app.engineStatus.kind === 'ask'; },
@@ -449,8 +449,8 @@ export class BughouseApp {
 
   private engineResult(result: EngineResult) {
     const kept = this.evals.get(result.fen);
-    // A position searched again starts from nothing: keep the further search until the new one passes it.
-    if (!kept || result.nodes >= kept.nodes || result.lines.length > kept.lines.length || kept.lines.length > this.settings.multiPv)
+    // A position searched again starts from depth 1: keep the deeper search until the new one reaches it.
+    if (!kept || result.depth >= kept.depth || result.lines.length > kept.lines.length || kept.lines.length > this.settings.multiPv)
       this.evals.set(result.fen, result);
     const searched = this.threat ? threatFen(this.current.fen) : this.current.fen;
     if (result.fen !== this.current.fen && result.fen !== searched) return;
@@ -863,14 +863,13 @@ export class BughouseApp {
     const changed = (restart: boolean) => {
       saveSettings(this.settings);
       this.renderGear();
-      if (restart) this.engine.configure({ gpu: this.settings.gpu, threads: threadsFor(this.settings) });
+      if (restart) this.engine.configure(threadsFor(this.settings));
       this.renderCeval();
       this.analyse();
     };
     this.gear = new GearPanel(settings, {
       searchSeconds: (seconds) => { this.settings.searchSeconds = seconds; changed(false); },
       lines: (n) => { this.settings.multiPv = n; this.evals.clear(); changed(false); },
-      gpu: (on) => { this.settings.gpu = on; changed(true); },
       threads: (n) => { this.settings.threads = n; changed(true); },
       sitNodes: (n) => { this.settings.sitNodes = n; changed(false); },
     });
@@ -911,9 +910,7 @@ export class BughouseApp {
     const max = maxThreads();
     this.gear.render({
       settings: this.settings,
-      sitNodes: sitNodesFor(this.settings, this.engine.gpu),
-      gpuAvailable: this.engine.gpuAvailable,
-      onGpu: this.engine.gpu,
+      sitNodes: sitNodesFor(this.settings),
       maxThreads: max,
       recommendedThreads: recommendedThreads(max),
       threads: threadsFor(this.settings),

@@ -242,6 +242,11 @@ active pane's a brighter grey. Dividers between panes are 1px lines with a
 ### Pane tabs
 - **Style:** 34px tall, up to 220px wide and never wider than the strip (a long title ends in an ellipsis), 6px radius; the chosen tab filled in Selection Grey; a 2px line shows where a dragged tab will land. Tabs close from the right-click menu. The list column's Repertoires / Chapters / Positions tabs use the same height and inset.
 
+### Menus
+- **Style:** Graphite Panel, 1px outline, 8px radius, 32px rows with the body-small label. The top bar's menus and every right-click menu look the same.
+- **Opening:** at once, with no fade, grow or slide; a right-click menu appears under the pointer on the release.
+- **Symbols:** a move's right-click menu gives each action its symbol in muted ink in a 16px slot before the label, as on the website's analysis board: copy for Copy line PGN / Copy FEN / Copy dual FEN, a bin for Delete from here, an up arrow for Promote variation, a tick for Make main line, the move list's own play and stop marks for the quiz markers. When one row of a menu has a symbol, rows without one keep the slot empty so the labels line up.
+
 ### Inputs / Fields
 - Empty fields contain no example text or typing prompts. Keep names on labels, search purposes in accessible names and hover help, and required formats in labels. New names start blank; saved values and functional settings remain visible.
 - **Style:** shared `search_field`, `choice_field`, `number_field` controls with a label above and an underline; search always shows its magnifier and clear action.
@@ -262,7 +267,7 @@ active pane's a brighter grey. Dividers between panes are 1px lines with a
 - **Style:** an inline bar, not a Lichess headline: a small switch and status, then 28px rows with a 54px score gutter and the moves after it. Hovering a move floats its board.
 - **Status:** depth, speed and nodes, then the engine's own name (`Depth 24 · 12 MN/s · 345M nodes · Stockfish 19`), in tabular figures; the rows carry no depth. The gear's rows are typeable steppers, as in Settings ▸ Engine.
 - **Room:** the switch's row and the rows below keep their height whether the engine is on, off, paused or showing its settings; empty rows are blank space, never a placeholder. The board above never changes size when the engine is switched.
-- **Bughouse:** one block of rows per board, each row one move for the player on move there, the move in bold; with two boards the rows sit under their board. The engine's moves are drawn on the board as lila draws them: its choice in pale blue (`engineBestArrow`), close alternatives in thinner pale grey (`engineOtherArrow`).
+- **Bughouse:** one block of rows per board, each row one move for the player on move there, the move in bold; with two boards the rows sit under their board and both move lists stand side by side in the panel. The engine's moves are drawn on the board as lila draws them: its choice in pale blue (`engineBestArrow`), close alternatives in thinner pale grey (`engineOtherArrow`).
 
 ### Bughouse reserve (lila's pocket)
 - **Style:** lila's crazyhouse pocket, kept on purpose over the flat rules: five square-sized slots (pawn to queen) in a #888 grey well with lila's inset top shade, 4px radius, beside the seat's letter. A held piece shows in full with its count in white bold on lila's orange (#D64F00) in the slot's lower right; an empty slot keeps its place with the piece at 10% opacity. On the player's turn a slot brightens to #AAA under the pointer, a picked piece takes the board's selection green, and its drop squares are ringed on the board.

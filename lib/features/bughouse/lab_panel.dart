@@ -13,9 +13,10 @@ import 'lab_engine.dart';
 import 'lab_lines.dart';
 import 'table_boards.dart';
 
-/// The column beside the boards: how many boards, who may sit,
-/// the engine switch with its score, and with one board its best moves and
-/// move list; with two, each board's best moves are under that board. Every
+/// The column beside the boards: how many boards, who may sit, the engine
+/// switch with its score, then the moves: with one board its best moves and
+/// its move list; with two, both boards' move lists side by side in the
+/// boards' order, each board's best moves staying under that board. Every
 /// row keeps its height whether the engine is on or off.
 class LabPanel extends StatelessWidget {
   const LabPanel({super.key, required this.lab, required this.engine});
@@ -31,7 +32,7 @@ class LabPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _BoardsSwitch(lab: lab),
-          _TimeChips(lab: lab, lines: engine.lines),
+          _TimeChips(lab: lab),
           const SizedBox(height: Space.s),
           _EngineBar(engine: engine, single: lab.single),
           if (lab.single)
@@ -41,10 +42,11 @@ class LabPanel extends StatelessWidget {
               board: BoardNumber.one,
             ),
           _ProblemLine(lab: lab),
-          if (lab.single)
-            Expanded(
-              child: BoardMoves(lab: lab, board: BoardNumber.one, fill: true),
-            ),
+          Expanded(
+            child: lab.single
+                ? BoardMoves(lab: lab, board: BoardNumber.one)
+                : _BothMoves(lab: lab),
+          ),
         ],
       ),
     );
@@ -106,104 +108,93 @@ class _BoardsSwitch extends StatelessWidget {
   }
 }
 
-/// A crazyhouse FEN as plain chess: no hands, no promoted marks.
-String _withoutHands(String fen) =>
-    fen.replaceFirst(RegExp(r'\[[^\]]*\]'), '').replaceAll('~', '');
-
-/// The clock case the engine answers for: who may sit rather than move.
-/// While the engine is on, each case shows A + B's score under it, the
-/// chosen one live and the others once a short search has scored them, so
-/// sitting and not sitting can be compared at a glance.
-class _TimeChips extends StatelessWidget {
-  const _TimeChips({required this.lab, required this.lines});
+/// Both boards' move lists side by side, each under its board's name, in
+/// the order the boards stand.
+class _BothMoves extends StatelessWidget {
+  const _BothMoves({required this.lab});
 
   final BughouseLab lab;
-  final LabLines lines;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final lines = this.lines;
-    final on = lines is LinesOn && lines.boards == lab.boards ? lines : null;
-    String scoreOf(ClockCase clock) {
-      if (on == null) return '';
-      final score = clock == lab.clock
-          ? (on.nodes == null ? null : on.score)
-          : on.byClock[clock];
-      return score?.text ?? '–';
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(top: Space.s),
-      child: Row(
-        children: [
-          SizedBox(
-            width: labLabelWidth,
-            child: Text(
-              'Time',
-              style: TextStyle(color: scheme.onSurfaceVariant),
-            ),
-          ),
-          Flexible(
-            child: SegmentedButton<ClockCase>(
-              segments: [
-                for (final clock in ClockCase.values)
-                  ButtonSegment(
-                    value: clock,
-                    label: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(_label(clock)),
-                        Text(
-                          scoreOf(clock),
-                          style: monoText.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                    tooltip: _hint(clock),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final board in BoardNumber.values) ...[
+          if (board == BoardNumber.two) const SizedBox(width: Space.l),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  height: labBoardLabelHeight,
+                  child: Text(
+                    board.label,
+                    style: TextStyle(color: scheme.onSurfaceVariant),
                   ),
-              ],
-              selected: {lab.clock},
-              showSelectedIcon: false,
-              style: const ButtonStyle(
-                visualDensity: VisualDensity.compact,
-                padding: WidgetStatePropertyAll(
-                  EdgeInsets.symmetric(horizontal: Space.s, vertical: Space.xs),
                 ),
-              ),
-              onSelectionChanged: (picked) => lab.setClock(picked.single),
+                Expanded(
+                  child: BoardMoves(lab: lab, board: board),
+                ),
+              ],
             ),
           ),
         ],
-      ),
+      ],
     );
   }
+}
+
+/// A crazyhouse FEN as plain chess: no hands, no promoted marks.
+String _withoutHands(String fen) =>
+    fen.replaceFirst(RegExp(r'\[[^\]]*\]'), '').replaceAll('~', '');
+
+/// Who may sit rather than move, in the same compact segments as the board
+/// count: Hivemind always lets one team or the other.
+class _TimeChips extends StatelessWidget {
+  const _TimeChips({required this.lab});
+
+  final BughouseLab lab;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: Space.s),
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: SegmentedButton<ClockCase>(
+        segments: [
+          for (final clock in ClockCase.values)
+            ButtonSegment(
+              value: clock,
+              label: Text(_label(clock)),
+              tooltip: _hint(clock),
+            ),
+        ],
+        selected: {lab.clock},
+        showSelectedIcon: false,
+        style: const ButtonStyle(visualDensity: VisualDensity.compact),
+        onSelectionChanged: (picked) => lab.setClock(picked.single),
+      ),
+    ),
+  );
 
   /// With one board the seats are not shown: the cases name the colours.
   String _label(ClockCase clock) => !lab.single
       ? clock.label
       : switch (clock) {
           ClockCase.abMaySit => 'White may sit',
-          ClockCase.even => 'Even',
           ClockCase.cdMaySit => 'Black may sit',
         };
 
-  /// What the case means, then what its number is.
-  String _hint(ClockCase clock) {
-    if (!lab.single) {
-      return '${clock.hint}. The number under it is A + B’s score then.';
-    }
-    final means = switch (clock) {
-      ClockCase.abMaySit =>
-        'White is up on the clock, so can wait rather than move',
-      ClockCase.even => 'Neither side is up on the clock: both have to move',
-      ClockCase.cdMaySit =>
-        'Black is up on the clock, so can wait rather than move',
-    };
-    return '$means. The number under it is White’s score then.';
-  }
+  String _hint(ClockCase clock) => !lab.single
+      ? clock.hint
+      : switch (clock) {
+          ClockCase.abMaySit =>
+            'White is up on the clock, so can wait rather than move',
+          ClockCase.cdMaySit =>
+            'Black is up on the clock, so can wait rather than move',
+        };
 }
 
 /// The switch, the score, the engine's name with the size of the search

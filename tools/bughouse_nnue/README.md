@@ -7,7 +7,7 @@ build — but its evaluation is the hand-written one, and the crazyhouse NNUE
 never saw material leave the game. This package builds the training data for
 an evaluation that has: an NNUE for pocketknight, trained on how real bughouse
 games turned out. Nothing in the app or on the website loads such a net; the
-website's `/bughouse` board runs Hivemind.
+website's `/bughouse` board runs Lichess's crazyhouse net.
 
 ## What the net learns from
 

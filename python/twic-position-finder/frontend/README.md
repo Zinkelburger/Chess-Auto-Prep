@@ -8,7 +8,7 @@ Static Astro site deployed to Cloudflare Pages. Browser preparation tools, one s
 | `/pgn`                | Analysis board on its PGN tab: lichess.org/analysis with Stockfish 18, PGN games, comments and variations | `src/components/AnalysisPage.astro`, `src/prep/*`, `src/analysis/*` |
 | `/expectimax`         | The same board on its Expectimax tab: practical moves for both sides against Maia's replies, on this device | the same |
 | `/tactics`            | Tactics Trainer — Stockfish in the browser mines puzzles from games  | `src/tactics/*`                        |
-| `/bughouse`           | Bughouse — one bughouse board on lichess.org/analysis's layout, with + and − on every piece in both hands, lila's board editor and a sit panel; Hivemind in the browser, on the GPU through WebGPU | `src/analysis/*`, `../../../tools/bughouse_web/` |
+| `/bughouse`           | Bughouse — lichess.org/analysis/crazyhouse with + and − on every piece in both hands, lila's board editor and a sit panel; Lichess's crazyhouse Fairy-Stockfish in the browser | `src/analysis/*`, `../../../tools/prepare_crazyhouse_web.py` |
 | `/bughouse-puzzles`   | Bughouse Puzzles — mates and tactics mined from FICS games, reserves frozen | `src/bughouse-puzzles/*`, `public/bughouse-puzzles/` |
 | `/charles-clock`      | Charles Clock — a full-screen phone clock with its own `<html>`      | `src/pages/charles-clock.astro`, `src/lib/charles-clock.ts` |
 
@@ -31,13 +31,14 @@ npm run test:prep      # PGN reading, the analysis tree, Maia input, expectimax,
 Environment (build-time): `PUBLIC_API_URL` (default `https://api.chessautoprep.com`),
 `PUBLIC_TURNSTILE_SITE_KEY` (empty disables the CAPTCHA widget).
 `npm run dev` and `npm run build` also prepare the engines the pages
-download: `tools/bughouse_web/prepare_assets.py` puts Hivemind's network in
-checksum-pinned parts and ONNX Runtime (the WebGPU build for the bughouse
-board, the plain one for the Expectimax tab's Maia) under
-`/bughouse-engine/`, from the
-[static Hivemind build](../../../tools/bughouse_web/README.md), and
-`tools/prepare_prep_web.py` splits Maia's model into checksum-verified
-chunks. Every file fits Cloudflare Pages' 25 MiB asset limit.
+download: `tools/prepare_crazyhouse_web.py` copies Fairy-Stockfish out of
+`@lichess-org/stockfish-web` and puts Lichess's crazyhouse net, pinned by
+checksum, in gzipped parts under `/crazyhouse-engine/`;
+`tools/bughouse_web/prepare_assets.py` copies ONNX Runtime for the
+Expectimax tab's Maia under `/bughouse-engine/` (with the
+[static Hivemind build](../../../tools/bughouse_web/README.md), which no page
+loads now); and `tools/prepare_prep_web.py` splits Maia's model into
+checksum-verified chunks. Every file fits Cloudflare Pages' 25 MiB asset limit.
 
 ## Layout
 
@@ -66,8 +67,8 @@ chunks. Every file fits Cloudflare Pages' 25 MiB asset limit.
     marks and practice verdicts; `menu.ts` the ☰ menu (replay mode, the
     analysis switches) and the keyboard help; `settings.ts` the saved
     settings;
-  - for `/bughouse` only: `tree.ts` (the bughouse move tree and hand edits),
-    `engine.ts` and `hivemind.worker.ts` (Hivemind), `sit.ts` (the sit
+  - for `/bughouse` only: `tree.ts` (the crazyhouse move tree and hand edits),
+    `engine.ts` (Fairy-Stockfish), `sit.ts` (the sit
     panel), `hand.ts` (a hand with + and −), `practice.ts` (Practice with
     computer) and `app.ts` (the page).
 - `src/prep/` — the PGN and Expectimax tabs (below). `pgn.ts`,
@@ -81,49 +82,44 @@ chunks. Every file fits Cloudflare Pages' 25 MiB asset limit.
 
 ## Bughouse board
 
-`/bughouse` is one bughouse board with bughouse rules for that board: a
-capture goes to the partner and leaves the board, and nothing arrives unless
-a hand is edited (`tree.ts`, pure, `npm run test:analysis`). A hand edit is
+`/bughouse` is one board with crazyhouse rules, as Lichess's crazyhouse
+analysis: a capture goes to the capturer's hand, and what a partner would
+send arrives through a hand edit (`tree.ts`, pure, `npm run test:analysis`).
+PGN is written with `[Variant "Crazyhouse"]`. A hand edit is
 kept on its position and carried through the moves after it; the engine
 always gets a bare FEN. Hands are capped at 16 of a piece and 64 pieces in
-all. The tree is kept in `localStorage` and comes back on a plain `/bughouse`
-and on reload; a `?fen=` link opens that position unless it is the saved one.
+all (the crazyhouse net has 16 slots a piece). The tree is kept in
+`localStorage` and comes back on a plain `/bughouse` and on reload; a `?fen=`
+link opens that position unless it is the saved one.
 
-`engine.ts` runs Hivemind, the bughouse engine, on that one board, its
-partner board held still (`tools/bughouse_web/patches/frozen-board.patch`).
-`hivemind.worker.ts` runs the engine's WebAssembly build and its network with
-ONNX Runtime Web: on the GPU through WebGPU when the browser has it,
-evaluating 32 positions per batch (about 350 positions a second on a laptop's
-integrated GPU), and otherwise on CPU threads, one position at a time (about
-25 a second on four). One worker serves everything: the shown position is
-searched first for 10 seconds (reporting several times a second, as
-Lichess's engine), then the sit panel's rows (`sit.ts`: the side to move's
-position again with one more pawn, knight, bishop, rook or queen, mating rows
-marked; 800 positions a row on the GPU, 200 on the CPU, unless the gear's Sit
-search says otherwise). The worker keeps the analysis's search tree, so
-infinite analysis carries on from it after the rows, and so does a position
-searched again. Hivemind's value is a winning chance; lines show it as
-Lichess's centipawns for that chance.
+`engine.ts` runs Fairy-Stockfish 14 with Lichess's crazyhouse NNUE, the
+engine of lichess.org/analysis/crazyhouse (`@lichess-org/stockfish-web`),
+multi-threaded on the page's main thread. One engine serves everything: the
+shown position is searched first (10 seconds by default), then the sit
+panel's rows (`sit.ts`: the side to move's position again with one more
+pawn, knight, bishop, rook or queen, mating rows marked; 500,000 nodes a row
+unless the gear's Sit search says otherwise). With ∞, the position is then
+searched again without a limit; the hash keeps what the first search found,
+and the panel keeps the deeper result until the new search reaches it.
+Practice with computer answers after 600,000 nodes, Lichess's casual
+strength.
 
-The first download (network and ONNX Runtime's WebGPU build, about 55 MB)
-shows its progress in the engine header and is kept in the Cache API, checked
-against `model.json`'s checksums; on a phone, tablet or data-saving
-connection the header asks first (Download). A failed download, a crashed
-worker or a search silent for 30 s past its limit stops the engine with a Try
-again button (a hang retries on the CPU), and a GPU error during a search
-moves the worker to the CPU and runs the search again. The gear has sliders
-for Search time (2 s to ∞), Multiple lines, Threads (1 to every thread, with
-a tick on the recommended count: half the threads up to four) and Sit search,
-plus GPU | CPU when the browser has WebGPU; Threads and hardware start a new
-worker that carries on with the same search.
-`localStorage['bughouse-engine-backend'] = 'cpu'` forces the CPU path.
+The first download (the net, about 30 MB) shows its progress in the engine
+header and is kept in the Cache API, checked against `net.json`'s checksums;
+on a phone, tablet or data-saving connection the header asks first
+(Download). A failed download or an engine error stops the engine with a Try
+again button. The gear has sliders for Search time (2 s to ∞), Multiple
+lines, Threads (1 to every thread up to 32, with a tick on the recommended
+count, all but one, as lila) and Sit search; changing Threads restarts the
+running search with them. The hash is 256 MB, or 64 MB on a device with
+less than 8 GB of memory.
 
 ## Cross-origin isolation
 
-The CPU path's threads need SharedArrayBuffer, so `/bughouse` and
-`/bughouse-engine/*` are cross-origin isolated, and `/_astro/*` (where the
-worker is bundled) carries COEP too (`public/_headers`, and the dev server in
-`astro.config.mjs`). Every bundled worker is then isolated, so
+Fairy-Stockfish's threads need SharedArrayBuffer, so `/bughouse`,
+`/crazyhouse-engine/*` and `/bughouse-engine/*` are cross-origin isolated,
+and `/_astro/*` (the bundled scripts) carries COEP too (`public/_headers`,
+and the dev server in `astro.config.mjs`). Every bundled worker is then isolated, so
 `/stockfish/*`, which the Expectimax tab's worker starts, is isolated as
 well. The other pages are not cross-origin isolated.
 
@@ -317,5 +313,4 @@ scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test
   `build/prep-web/`.
 - `test:bughouse:browser` drives `/bughouse` with the real engine at desktop,
   1366×768 and phone sizes, through a failed download and a phone's first
-  visit, and writes screenshots to `build/bughouse-web/`;
-  `BUGHOUSE_BACKEND=cpu` runs it on the CPU path.
+  visit, and writes screenshots to `build/bughouse-web/`.

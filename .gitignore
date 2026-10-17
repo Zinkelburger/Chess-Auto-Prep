@@ -158,5 +158,6 @@ packaging/windows/prerequisites/VC_redist.x64.exe
 # per-session scratch, never repository content.
 .claude/worktrees/
 
-# Generated browser Maia assets
+# Generated browser Maia assets and the bughouse board's Fairy-Stockfish
 python/twic-position-finder/frontend/public/prep-engine/
+python/twic-position-finder/frontend/public/crazyhouse-engine/

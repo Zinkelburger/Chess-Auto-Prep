@@ -17,20 +17,16 @@ void main() {
       expect(scoreOf(qOf(-230)), closeTo(-2.30, 0.001));
     });
 
-    test('a level opening re-centres to zero from both teams', () {
-      // Measured: A + B cp −228, C + D cp −231, neither may sit.
-      final offset = (qOf(-228) + qOf(-231)) / 2;
-      expect(TableScore.of(line(-228), Team.ab, offset).text, '+0.01');
+    test('a level opening keeps the clock\'s worth: C + D may sit', () {
+      // A + B cp −228 without the right to sit, C + D cp +231 with it.
+      final offset = (qOf(-228) + qOf(231)) / 2;
+      expect(TableScore.of(line(-228), Team.ab, offset).text, '-2.29');
       // C + D's line reads for A + B with the sign turned: the same number.
-      expect(TableScore.of(line(-231), Team.cd, offset).text, '+0.01');
+      expect(TableScore.of(line(231), Team.cd, offset).text, '-2.29');
     });
 
     test('a searched team up a piece reads + for it, − for the other', () {
-      final score = TableScore.of(
-        line(100),
-        Team.cd,
-        assumedOffset(ClockCase.even),
-      );
+      final score = TableScore.of(line(100), Team.cd, 0);
       expect(score.score, lessThan(0));
       expect(score.forTeam(Team.cd).score, greaterThan(0));
     });
@@ -48,32 +44,21 @@ void main() {
       expect(nothing.text, '—');
       expect(nothing.strength, double.negativeInfinity);
     });
-
-    test('the assumed offset: −0.58 when nobody may sit, 0 when one may', () {
-      expect(assumedOffset(ClockCase.even), closeTo(-sitBitQ, 1e-9));
-      expect(assumedOffset(ClockCase.abMaySit), 0);
-      expect(assumedOffset(ClockCase.cdMaySit), 0);
-    });
   });
 
   test('the clock cases give each team its bit', () {
     expect(ClockCase.abMaySit.maySit(Team.ab), isTrue);
     expect(ClockCase.abMaySit.maySit(Team.cd), isFalse);
-    expect(ClockCase.even.maySit(Team.ab), isFalse);
+    expect(ClockCase.cdMaySit.maySit(Team.ab), isFalse);
     expect(ClockCase.cdMaySit.maySit(Team.cd), isTrue);
-    expect(ClockCase.values.map((c) => c.bookName), [
-      'ahead',
-      'even',
-      'behind',
-    ]);
   });
 
   group('one board\'s choices', () {
     JointLine line(int rank, int cp, String? one, String? two) =>
         JointLine(rank: rank, cp: cp, nodes: 100, pv: [JointMove(one, two)]);
 
-    test('each move once, from its most-visited line, the engine\'s choice '
-        'first and the rest best-scoring first', () {
+    test('each move once, from its most-visited line, best-scoring '
+        'first', () {
       final lines = [
         line(1, 20, 'g1f3', 'd7d5'),
         line(2, 10, 'g1f3', 'e7e6'),
@@ -83,10 +68,32 @@ void main() {
         line(6, 99, 'c2c4', null),
       ];
       final one = boardChoices(lines, BoardNumber.one);
-      expect(one.map((l) => l.pv.first.one), ['g1f3', 'e2e4', 'd2d4']);
-      expect(one[1].rank, 3);
+      expect(one.map((l) => l.pv.first.one), ['e2e4', 'd2d4', 'g1f3']);
+      expect(one.first.rank, 3);
       final two = boardChoices(lines, BoardNumber.two);
-      expect(two.map((l) => l.pv.first.two), ['d7d5', null, 'e7e6']);
+      expect(two.map((l) => l.pv.first.two), [null, 'd7d5', 'e7e6']);
+    });
+
+    test('a better line overtakes the engine\'s choice as scores move', () {
+      // Measured: d4 kept the most visits while e4 scored better.
+      final early = boardChoices([
+        line(1, -199, 'd2d4', 'e7e5'),
+        line(2, -204, 'e2e4', 'e7e5'),
+      ], BoardNumber.one);
+      expect(early.map((l) => l.pv.first.one), ['d2d4', 'e2e4']);
+      final later = boardChoices([
+        line(1, -218, 'd2d4', 'e7e5'),
+        line(2, -212, 'e2e4', 'e7e5'),
+      ], BoardNumber.one);
+      expect(later.map((l) => l.pv.first.one), ['e2e4', 'd2d4']);
+    });
+
+    test('equal scores keep the engine\'s order', () {
+      final tied = boardChoices([
+        line(1, 10, 'd2d4', null),
+        line(2, 10, 'e2e4', null),
+      ], BoardNumber.one);
+      expect(tied.map((l) => l.pv.first.one), ['d2d4', 'e2e4']);
     });
 
     test('how far a line falls behind the best, half the value apart', () {

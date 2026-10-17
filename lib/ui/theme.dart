@@ -49,6 +49,9 @@ const nameDialogWidth = 360.0;
 /// Room for action labels with shortcuts in a separate right-hand gutter.
 const actionMenuWidth = 260.0;
 
+/// A menu row, in the top bar's menus and the right-click menus alike.
+const menuRowHeight = 32.0;
+
 /// How tall a dialog that asks the user to pick from a list is. Fixed, so the
 /// list does not grow and shrink under the pointer as the search narrows it.
 const choiceDialogHeight = 280.0;
@@ -501,9 +504,12 @@ ThemeData darkTheme() {
         ),
       ),
     ),
+    popupMenuTheme: _popupMenu(_sized(base.textTheme)),
     menuButtonTheme: MenuButtonThemeData(
       style: ButtonStyle(
-        minimumSize: const WidgetStatePropertyAll(Size(actionMenuWidth, 32)),
+        minimumSize: const WidgetStatePropertyAll(
+          Size(actionMenuWidth, menuRowHeight),
+        ),
         padding: const WidgetStatePropertyAll(
           EdgeInsets.symmetric(horizontal: Space.l),
         ),
@@ -670,9 +676,8 @@ const labBoardMax = 480.0;
 const labOneBoardMax = 720.0;
 
 /// What the board column needs with both boards besides the boards and
-/// their hands: the board's name above, the engine's rows, the move list
-/// and step buttons under it.
-const labBoardChrome = 120.0 + 3 * labTableRowHeight + 1;
+/// their hands: the board's name above and the engine's rows under it.
+const labBoardChrome = labBoardLabelHeight + 3 * labTableRowHeight + 9;
 const labBoardLabelHeight = 22.0;
 
 /// The narrowest the right-hand panel may become before the boards shrink.
@@ -690,13 +695,10 @@ const labSeatPadding = 8.0;
 const labTurnDot = 11.0;
 const labStepHeight = 26.0;
 
-/// Each board's own move list under it: a few moves tall, then it scrolls.
-const labMoveListHeight = 48.0;
+/// A board's move list in the panel, side by side with the other board's
+/// when both are shown.
 const labMoveRowHeight = 22.0;
 const labMoveNumberWidth = 34.0;
-
-/// The label column of the right panel's rows (`Time`).
-const labLabelWidth = 64.0;
 
 /// An engine line, and its score gutter.
 const labTableRowHeight = 28.0;
@@ -804,3 +806,19 @@ const readingNumberColor = _muted;
 const boardFocusWidth = 3.0;
 
 const double moveFeedbackHeight = 36;
+
+/// The right-click menus, drawn like the top bar's menus.
+PopupMenuThemeData _popupMenu(TextTheme text) => PopupMenuThemeData(
+  color: _panel,
+  surfaceTintColor: Colors.transparent,
+  menuPadding: const EdgeInsets.symmetric(vertical: Space.xs),
+  shape: RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(readingCardRadius),
+    side: const BorderSide(color: _outline),
+  ),
+  labelTextStyle: WidgetStateProperty.resolveWith(
+    (states) => text.bodySmall?.copyWith(
+      color: states.contains(WidgetState.disabled) ? _disabledText : _text,
+    ),
+  ),
+);
