@@ -57,8 +57,8 @@ void main() {
     JointLine line(int rank, int cp, String? one, String? two) =>
         JointLine(rank: rank, cp: cp, nodes: 100, pv: [JointMove(one, two)]);
 
-    test('each move once, from its most-visited line, the engine\'s choice '
-        'first and the rest best-scoring first', () {
+    test('each move once, from its most-visited line, best-scoring '
+        'first', () {
       final lines = [
         line(1, 20, 'g1f3', 'd7d5'),
         line(2, 10, 'g1f3', 'e7e6'),
@@ -68,10 +68,32 @@ void main() {
         line(6, 99, 'c2c4', null),
       ];
       final one = boardChoices(lines, BoardNumber.one);
-      expect(one.map((l) => l.pv.first.one), ['g1f3', 'e2e4', 'd2d4']);
-      expect(one[1].rank, 3);
+      expect(one.map((l) => l.pv.first.one), ['e2e4', 'd2d4', 'g1f3']);
+      expect(one.first.rank, 3);
       final two = boardChoices(lines, BoardNumber.two);
-      expect(two.map((l) => l.pv.first.two), ['d7d5', null, 'e7e6']);
+      expect(two.map((l) => l.pv.first.two), [null, 'd7d5', 'e7e6']);
+    });
+
+    test('a better line overtakes the engine\'s choice as scores move', () {
+      // Measured: d4 kept the most visits while e4 scored better.
+      final early = boardChoices([
+        line(1, -199, 'd2d4', 'e7e5'),
+        line(2, -204, 'e2e4', 'e7e5'),
+      ], BoardNumber.one);
+      expect(early.map((l) => l.pv.first.one), ['d2d4', 'e2e4']);
+      final later = boardChoices([
+        line(1, -218, 'd2d4', 'e7e5'),
+        line(2, -212, 'e2e4', 'e7e5'),
+      ], BoardNumber.one);
+      expect(later.map((l) => l.pv.first.one), ['e2e4', 'd2d4']);
+    });
+
+    test('equal scores keep the engine\'s order', () {
+      final tied = boardChoices([
+        line(1, 10, 'd2d4', null),
+        line(2, 10, 'e2e4', null),
+      ], BoardNumber.one);
+      expect(tied.map((l) => l.pv.first.one), ['d2d4', 'e2e4']);
     });
 
     test('how far a line falls behind the best, half the value apart', () {

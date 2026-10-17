@@ -223,8 +223,11 @@ List<JointLine> rankedLines(Iterable<JointLine> lines) {
 
 /// The searched team's [count] choices on [board], one line each: the
 /// moves there the engine visited most — a null move is a sit on that
-/// board — each with its most-visited line, the engine's own choice first
-/// and the rest best-scoring first, as [rankedLines] orders them.
+/// board — each with its most-visited line, best-scoring first.
+///
+/// The engine's own choice, the most-visited, is not kept on top: its
+/// visit lead settles early, so pinned there it held a worse score above a
+/// better one for the rest of a live search, and the rows never swapped.
 ///
 /// The engine ranks joint actions, both boards' moves at once, so a team on
 /// move on both boards shows the same move on one board across several of
@@ -243,7 +246,12 @@ List<JointLine> boardChoices(
     if (picked.length == count) break;
     if (seen.add(line.pv.first.on(board))) picked.add(line);
   }
-  return rankedLines(picked);
+  double strength(JointLine line) =>
+      TableScore(score: line.q, mate: line.mate).strength;
+  return picked..sort((a, b) {
+    final better = strength(b).compareTo(strength(a));
+    return better != 0 ? better : a.rank.compareTo(b.rank);
+  });
 }
 
 /// How far [line] falls behind [best] for the team searched, 0 to 1: half

@@ -231,7 +231,9 @@ losing to an opponent who can wait, and how much depends on the position.
 Two `false` searches therefore describe two different clocks; the
 calibration below cancels the clock between them rather than modelling an
 even one. The app's Bughouse mode searches one consistent case instead
-(A + B may sit, or C + D may), so its score keeps the clock's worth.
+(A + B may sit, or C + D may), so its score keeps the clock's worth, and so
+does the browser build's one board (White may sit, or Black may; the frozen
+partner board lets nobody actually sit there).
 
 The `policy` UCI command prints the network's opinion with no search at all,
 which separates the network from the MCTS. Raw value, our seat, no sitting
