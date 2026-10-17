@@ -76,4 +76,38 @@ void main() {
         : 'no installed Hivemind on this machine',
     timeout: const Timeout(Duration(minutes: 2)),
   );
+
+  test(
+    'the engine reports its lines while it searches',
+    () async {
+      final engines = EngineSupervisor();
+      final start = await engines.startHivemind(_files, cores: 2);
+      final engine = (start as HivemindStarted).engine;
+      // Every shipped build streams; an older install may not.
+      if (named) expect(engine.streams, isTrue);
+      if (engine.streams) {
+        final reports = <List<JointLine>>[];
+        final answer =
+            await engine.search((
+                  position: TablePosition.initial,
+                  team: Team.ab,
+                  maySit: false,
+                  mustMove: MustMove.one,
+                  lines: 3,
+                  budget: const NodeBudget(400),
+                ), onLines: reports.add)
+                as HivemindSearched;
+        expect(reports, isNotEmpty);
+        final sizes = [for (final report in reports) report.first.nodes];
+        expect(sizes, orderedEquals([...sizes]..sort()));
+        expect(sizes.first, lessThan(answer.top!.nodes));
+        expect(reports.last.length, 3);
+      }
+      await engines.dispose();
+    },
+    skip: named || Platform.isLinux && binary.existsSync()
+        ? false
+        : 'no installed Hivemind on this machine',
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 }

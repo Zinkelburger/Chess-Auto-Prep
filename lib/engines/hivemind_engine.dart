@@ -13,7 +13,8 @@ sealed class HivemindBudget {
 
   String get go;
 
-  /// How long to wait for `bestmove` before the engine is taken for wedged.
+  /// How long the engine may say nothing before it is taken for wedged:
+  /// every `info` line it prints starts the wait again.
   Duration get patience;
 }
 
@@ -93,14 +94,27 @@ final class HivemindStartFailed extends HivemindStart {
   final String reason;
 }
 
+/// The lines a search has so far, rank 1 first as [rankedLines] orders
+/// them; their `nodes` is the size of the search when they were printed.
+typedef HivemindLines = void Function(List<JointLine> lines);
+
 /// Hivemind as the lab and the matches use it; a scripted engine in tests.
 abstract interface class Hivemind {
   /// Identity of the actual binary/network and effective startup options.
   Map<String, Object?> get provenance;
 
-  /// Searches [question]. Questions are answered one at a time, in the
-  /// order asked.
-  Future<HivemindAnswer> search(HivemindQuestion question);
+  /// Whether the engine prints its lines while it searches. A build
+  /// without it (an unpatched engine) says nothing until `bestmove`, so
+  /// [search] never calls its `onLines`.
+  bool get streams;
+
+  /// Searches [question], handing [onLines] each block of lines the engine
+  /// prints along the way (a few times a second when it [streams]).
+  /// Questions are answered one at a time, in the order asked.
+  Future<HivemindAnswer> search(
+    HivemindQuestion question, {
+    HivemindLines? onLines,
+  });
 
   /// Cuts the search now running short; its answer still arrives, with
   /// what it found so far.
@@ -119,6 +133,10 @@ abstract interface class Hivemind {
 /// After `bestmove` the engine goes on thinking in the background, so every
 /// search is followed by a `stop`, or the next one would share the cores
 /// with it.
+///
+/// A build carrying `tools/bughouse_windows/live-search.patch` offers the
+/// option `ReportIntervalMs` and prints its whole MultiPV block every 250 ms
+/// while it searches; that is what [streams] reads.
 final class HivemindProcess implements Hivemind, EngineProcess {
   HivemindProcess._(this._process) {
     _process.lines.listen(_onLine, onDone: _onExit);
@@ -157,6 +175,10 @@ final class HivemindProcess implements Hivemind, EngineProcess {
   @override
   Map<String, Object?> get provenance => Map.unmodifiable(_provenance);
 
+  bool _streams = false;
+  @override
+  bool get streams => _streams;
+
   final UciProcess _process;
   final _exited = Completer<EngineExit>();
   bool _unresponsive = false;
@@ -179,25 +201,33 @@ final class HivemindProcess implements Hivemind, EngineProcess {
   Future<EngineExit> get exited => _exited.future;
 
   @override
-  Future<HivemindAnswer> search(HivemindQuestion question) {
-    final answer = _queue.then((_) => _search(question));
+  Future<HivemindAnswer> search(
+    HivemindQuestion question, {
+    HivemindLines? onLines,
+  }) {
+    final answer = _queue.then((_) => _search(question, onLines));
     _queue = answer.then((_) {});
     return answer;
   }
 
-  Future<HivemindAnswer> _search(HivemindQuestion question) async {
+  Future<HivemindAnswer> _search(
+    HivemindQuestion question,
+    HivemindLines? onLines,
+  ) async {
     if (_exited.isCompleted) return const HivemindFailed(_gone);
     _searching = true;
     _cut = false;
     try {
       await _configure(question);
       _send('position fen ${question.position.dualFen}');
-      final collecting = _collecting = _Collecting();
+      final collecting = _collecting = _Collecting(
+        wanted: question.lines,
+        patience: question.budget.patience,
+        onLines: onLines,
+      );
       _send(question.budget.go);
       if (_cut) _send('stop');
-      final answer = await collecting.done.future.timeout(
-        question.budget.patience,
-      );
+      final answer = await collecting.done.future;
       _send('stop');
       return answer;
     } on TimeoutException {
@@ -209,6 +239,7 @@ final class HivemindProcess implements Hivemind, EngineProcess {
       log.e('search on the bughouse engine', error);
       return HivemindFailed(error.message);
     } finally {
+      _collecting?.dispose();
       _collecting = null;
       _searching = false;
     }
@@ -273,6 +304,9 @@ final class HivemindProcess implements Hivemind, EngineProcess {
   void _onLine(String raw) {
     if (raw.startsWith('id name ')) {
       _provenance['engine_name'] = raw.substring(8).trim();
+    } else if (raw.startsWith('option name ReportIntervalMs ')) {
+      _streams = true;
+      _provenance['streams'] = true;
     }
     final line = raw.trim();
     final awaited = _awaited;
@@ -299,19 +333,56 @@ final class HivemindProcess implements Hivemind, EngineProcess {
 
 const _gone = 'The bughouse engine stopped.';
 
-/// The `info` lines of one search, the latest of each rank kept.
+/// The `info` lines of one search. The engine prints a block of up to
+/// [wanted] ranks at a time, rank 1 first; each rank 1 starts a new block,
+/// and a block is handed on when its last rank arrives or the next block
+/// starts. The answer holds the last block, which the engine prints just
+/// before `bestmove`.
 final class _Collecting {
-  final done = Completer<HivemindAnswer>();
-  final _byRank = <int, JointLine>{};
+  _Collecting({required this.wanted, required this.patience, this.onLines}) {
+    _watch();
+  }
 
-  void add(JointLine line) => _byRank[line.rank] = line;
+  final int wanted;
+
+  /// How long the engine may print nothing before it is taken for wedged.
+  final Duration patience;
+  final HivemindLines? onLines;
+  final done = Completer<HivemindAnswer>();
+  var _block = <int, JointLine>{};
+  bool _handed = false;
+  Timer? _watchdog;
+
+  void add(JointLine line) {
+    _watch();
+    if (line.rank == 1) {
+      _hand();
+      _block = {};
+      _handed = false;
+    }
+    _block[line.rank] = line;
+    if (line.rank >= wanted) _hand();
+  }
+
+  void _hand() {
+    if (_handed || _block.isEmpty) return;
+    _handed = true;
+    onLines?.call(rankedLines(_block.values));
+  }
+
+  void _watch() {
+    _watchdog?.cancel();
+    _watchdog = Timer(patience, () {
+      if (!done.isCompleted) done.completeError(TimeoutException(null));
+    });
+  }
 
   void finish(String bestmove) {
     if (done.isCompleted) return;
     done.complete(
       HivemindSearched(
         best: parseBestMove(bestmove),
-        lines: rankedLines(_byRank.values),
+        lines: rankedLines(_block.values),
       ),
     );
   }
@@ -319,6 +390,8 @@ final class _Collecting {
   void fail(EngineFailure failure) {
     if (!done.isCompleted) done.completeError(failure);
   }
+
+  void dispose() => _watchdog?.cancel();
 }
 
 /// `bestmove (d2d4,pass) ponder (d7d5,d2d4)` → the chosen action; null for

@@ -13,17 +13,24 @@ void main() {
   late ScriptedHivemind hivemind;
   late LabEngine engine;
   String? startFailure;
+  var starts = 0;
 
   setUp(() {
     lab = BughouseLab();
     hivemind = ScriptedHivemind();
     startFailure = null;
+    starts = 0;
     engine = LabEngine(
       lab: lab,
       passes: const [800, 4000],
-      startEngine: () async => switch (startFailure) {
-        final reason? => HivemindStartFailed(reason),
-        null => HivemindStarted(hivemind),
+      liveNodes: 800,
+      zeroNodes: 400,
+      startEngine: () async {
+        starts++;
+        return switch (startFailure) {
+          final reason? => HivemindStartFailed(reason),
+          null => HivemindStarted(hivemind),
+        };
       },
     );
   });
@@ -159,5 +166,90 @@ void main() {
     await on();
     expect(hivemind.asked, isEmpty);
     expect((engine.lines as LinesOn).thinking, isFalse);
+  });
+
+  group('an engine that reports as it searches', () {
+    setUp(() => hivemind.streams = true);
+
+    test('one board: one search per team, on two engines, the rows '
+        'following each report', () async {
+      hivemind.hold = true;
+      await on();
+      expect(starts, 2);
+      expect(hivemind.asked.map((q) => (q.team, nodes(q))), [
+        (Team.ab, 800),
+        (Team.cd, 400),
+      ]);
+      var lines = engine.lines as LinesOn;
+      expect(lines.teams[Team.ab], hasLength(3));
+      expect(lines.nodes, 50);
+      expect(lines.progress, 50 / 800);
+      expect(lines.thinking, isTrue);
+      hivemind.report();
+      await settle();
+      lines = engine.lines as LinesOn;
+      expect(lines.nodes, 100);
+      // The other team has reported too: the zero is measured.
+      expect(lines.score.text, '0.00');
+      hivemind.release();
+      for (var i = 0; i < 20; i++) {
+        await settle();
+      }
+      lines = engine.lines as LinesOn;
+      expect(lines.nodes, 200);
+      expect(lines.thinking, isFalse);
+      // Never restarted on the same table.
+      expect(hivemind.asked, hasLength(2));
+    });
+
+    test('two boards: both teams stream, their nodes added', () async {
+      lab.showBoards(LabBoards.two);
+      hivemind.hold = true;
+      await on();
+      expect(hivemind.asked.map((q) => (q.team, nodes(q))), [
+        (Team.ab, 800),
+        (Team.cd, 800),
+      ]);
+      final lines = engine.lines as LinesOn;
+      expect(lines.teams.keys, [Team.ab, Team.cd]);
+      expect(lines.nodes, 100);
+      expect(lines.progress, 100 / 1600);
+    });
+
+    test('a new position cuts both searches short and drops their '
+        'reports', () async {
+      hivemind.hold = true;
+      await on();
+      final asked = hivemind.asked.length;
+      lab.play(BoardNumber.one, 'e2e4');
+      expect(hivemind.stops, greaterThan(0));
+      for (var i = 0; i < 20; i++) {
+        await settle();
+      }
+      expect(hivemind.asked.length, asked + 2);
+      hivemind.report();
+      await settle();
+      final lines = engine.lines as LinesOn;
+      expect(lines.position, lab.position);
+      expect(lines.teams.keys, [Team.cd]);
+      expect(lines.thinking, isTrue);
+    });
+
+    test('a finished search is remembered for the table', () async {
+      await on();
+      final asked = hivemind.asked.length;
+      lab.play(BoardNumber.one, 'e2e4');
+      for (var i = 0; i < 20; i++) {
+        await settle();
+      }
+      lab.step(-1);
+      for (var i = 0; i < 20; i++) {
+        await settle();
+      }
+      expect(hivemind.asked.length, asked * 2);
+      final lines = engine.lines as LinesOn;
+      expect(lines.nodes, 200);
+      expect(lines.thinking, isFalse);
+    });
   });
 }

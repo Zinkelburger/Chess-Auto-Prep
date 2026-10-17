@@ -37,16 +37,16 @@ resemblance:
 
 | | |
 |---|---|
-| Upstream | `github.com/Zinkelburger/hivemind`, pinned at `5508ba9daf4164e48a8a8a9b39e101efdc60e97a` |
+| Upstream | `github.com/Zinkelburger/hivemind` (the owner's fork of aminwoo/hivemind), branch `portable-desktop-builds`. The desktop engines are release `engine-v0.2.0`, revision `0b025880cf6b2fe3175e210e224c0764a9b4838e`; the web build stays on `5508ba9daf4164e48a8a8a9b39e101efdc60e97a` with its own patches |
 | Language | C++23, CMake + Ninja; embeds a stripped Fairy-Stockfish for move generation |
 | Licence | Hivemind MIT; the bundled Fairy-Stockfish is GPL-3.0 |
 | Backends | `tensorrt` (FP16, default upstream) or `onnxruntime` (FP32, portable) — **we ship ORT** |
 | Corresponding source, vendored | `tools/bughouse_windows/hivemind-source.tar.gz` and `python/twic-position-finder/frontend/public/bughouse-engine/hivemind-source.tar.gz` |
 
 The repository holds no Hivemind checkout. When you need to read the
-engine's own code, unpack one of those two tarballs; when you need to
-*change* it, clone upstream at that revision and rebuild with
-`--hivemind <checkout>` (see [Rebuilding](#rebuilding-and-repackaging)).
+engine's own code, unpack one of those two tarballs (the Windows one is the
+desktop revision); when you need to *change* it, commit to the fork and
+release it (see [Rebuilding](#rebuilding-and-repackaging)).
 
 ## The path a position takes
 
@@ -370,7 +370,9 @@ setoption name TimeAdvantage value true|false
 setoption name RequireMoveOn value none|A|B
 setoption name MultiPV value N            ← not a `go` argument
 position fen <fenA>|<fenB> [moves 1e2e4 2d7d5 …]
+setoption name ReportIntervalMs value N   ← lines while searching every N ms (default 250, 0 = only at the end)
 go [ponder] [movetime <ms>] [nodes <N>]   ← nodes wins if both; default 1000 ms
+go infinite                                ← until stop (or a solved root), then bestmove
 stop                                       ← always, to kill the permanent brain
 policy                        → Value / WDL / plies, then per-board priors (debug, not UCI)
 ```
@@ -387,6 +389,17 @@ bestmove (d2d4,pass) ponder (d7d5,d2d4)
 20 deep. Everything non-search goes through `info string …`, which both
 parsers exclude by requiring `info ` *and* ` depth `.
 
+While it searches, the engine prints the whole MultiPV block — the same
+lines as the block before `bestmove`, ranks 1 to N — every `ReportIntervalMs`
+and whenever the search reaches a new depth, for node, time and infinite
+searches alike. A periodic block leaves out root moves no visit has reached
+yet, so early blocks can be shorter than `MultiPV`. Each block is one write;
+a reader that keeps the latest line per rank sees the block before
+`bestmove` last. The `uci` reply's `option name ReportIntervalMs` line is
+how a reader tells this engine from an older build, which prints only that
+final block in a node search and the rank-1 line on each new depth in a
+timed one. `go infinite` starts no permanent brain after its `bestmove`.
+
 Three rules the options carry that a chess engine has no place for:
 
 | Option | Rule |
@@ -398,9 +411,10 @@ Three rules the options carry that a chess engine has no place for:
 There is deliberately **no `Threads`**: `uci` never offers one, and setting it
 is swallowed without changing the reported `workers N intra-op threads N`.
 
-Two reader-side quirks worth knowing. The first `info` line of every search
-reports the root's unvisited prior, `Q = −1`, which prints as cp **−16671**;
-both parsers drop lines with `nodes <= 1` for this reason. And an illegal move
+Two reader-side quirks worth knowing. In a timed search on an older build
+the first `info` line reports the root's unvisited prior, `Q = −1`, which
+prints as cp **−16671**; both parsers drop lines with `nodes <= 1` for this
+reason. And an illegal move
 in a `position` command prints the FEN and the full legal-move list **to
 stderr** and abandons the rest of the list — so a silently wrong position is
 possible if you are not reading stderr.
@@ -456,9 +470,18 @@ independent mate-probe allowance. This is a small consistency study, not an Elo
 calibration. Its two-core quota and machine load produced slower timings than
 the earlier throughput figures above; use its measured settings when comparing.
 
-Bulk analysis and the desktop mode's first pass use **800 nodes**. This
-changes the neural budget only; the native root mate allowance still follows
-the engine's existing coupling described in the study.
+Bulk analysis uses **800 nodes**. This changes the neural budget only; the
+native root mate allowance still follows the engine's existing coupling
+described in the study.
+
+The desktop mode does not pick a budget per question. Each team it shows
+gets one continuous `go nodes 100000` on its own engine process, its lines
+following every report (the first within about a second, then four a
+second), and rests there; the one-board zero search rests at 20,000. The two
+processes share the half of the machine's cores the mode takes, so each
+runs at roughly half the single-process rate until the other rests. An
+engine without `ReportIntervalMs` is asked in passes of 800, 4,000 and
+20,000 nodes on one process instead.
 
 ## The two books
 
@@ -634,7 +657,15 @@ has to do the work.
 # unpack the vendored corresponding source to read it
 tar xzf tools/bughouse_windows/hivemind-source.tar.gz
 
-# desktop: package a local engine build into assets/bughouse/
+# desktop engines: commit to the fork's portable-desktop-builds branch, then
+# push a new tag engine-vX.Y.Z; its Engine release workflow builds Linux,
+# Windows and both Macs and attaches them. Attach hivemind-network-fp32.onnx.gz
+# from the previous release by hand. Then bump BUGHOUSE_TAG and refetch:
+python3 tools/fetch_assets.py --only bughouse-linux --force    # and each platform
+# Windows ships our own cross-build of the same revision (tools/bughouse_windows)
+scripts/ci.sh with -- python3 tools/bughouse_windows/build.py --source <fork-checkout>
+
+# or package a local engine build into assets/bughouse/
 python3 tools/fetch_assets.py --only bughouse --hivemind <hivemind-checkout>
 
 # web: recompile the WASM bridge (only when bridge.cc/engine_web.cc change)

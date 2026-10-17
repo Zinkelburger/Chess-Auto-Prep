@@ -1,7 +1,7 @@
 # Windows Hivemind runtime
 
 The Windows executable is built from Hivemind revision
-`5508ba9daf4164e48a8a8a9b39e101efdc60e97a` at
+`0b025880cf6b2fe3175e210e224c0764a9b4838e` (tag `engine-v0.2.0`) at
 https://github.com/Zinkelburger/hivemind plus `engine.patch` and `ort_loader.h`.
 The patch disables implicit ONNX initialization and Windows import-library
 linking. The engine loads `hivemind_ort.dll` by absolute Unicode path relative

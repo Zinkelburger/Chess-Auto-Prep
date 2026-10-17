@@ -34,9 +34,10 @@ panel (440–480 px) on the right.
   row. With two boards, `Time` follows: `A + B may sit` / `Even` / `C + D may
   sit`. The tooltips explain each.
 - **Engine bar** — a switch (`Toggle engine (E)`), the score in 18 px mono,
-  then `Hivemind · 4,000 nodes` (the size of the search shown), or why the
-  engine stopped, in the error colour. A 2 px bar runs under it while a deeper
-  search is under way.
+  then `Hivemind · 12,400 nodes` (the size of the search the rows come from,
+  both teams' together with two boards), or why the engine stopped, in the
+  error colour. While the engine searches, a 2 px bar under it fills towards
+  the size the search rests at.
 - **Lines** — one board: three rows, each with a score and board 1's moves
   (`1. e4 e5 2. Nf3`). Two boards: an `A + B` and a `C + D` header, each over
   three rows of seat-lettered joint actions (`A e4 B sits · C e5 D d4`). Rows
@@ -73,16 +74,22 @@ used (always board 1 with one board). Only that board moves. A refused step:
 **Point at a line** — draws its first move on the board (an arrow, or a faint
 piece for a drop) until the pointer leaves.
 **Engine switch** (E, or `Toggle engine`) — Hivemind runs only while the switch
-is on and the mode is on screen. Each pass searches 800, then 4,000, then
-20,000 nodes. The rows update when a pass ends, and the engine rests after the
-last until the table changes. One board: the team on move on board 1 must move
-there, nobody may sit, and the partner board stands as it is (the desktop
-Hivemind is unpatched, so its search may still weigh partner-board moves; the
-website's build applies `tools/bughouse_web/patches/frozen-board.patch`). The partner
-board is given the other team's turn, so that team can be searched for the
-score's zero. Two boards: each team with a move is searched, and may sit as
-`Time` says. A new position, board count or clock cuts the search short.
-Searches are remembered for the session. Leaving the mode quits the engine.
+is on and the mode is on screen. Each team searched gets one continuous search
+on its own engine process; the two processes share the mode's cores. The
+score, rows and node count follow the search about four times a second, the
+first within about a second of a position, and the search rests at 100,000
+nodes until the table changes. One board: the team on move on board 1 must
+move there, nobody may sit, and the partner board stands as it is (the
+desktop Hivemind lacks the website's
+`tools/bughouse_web/patches/frozen-board.patch`, so its search may still weigh
+partner-board moves). The partner board is given the other team's turn, so
+that team can be searched, to 20,000 nodes, for the score's zero; until its
+first report the level table's zero stands in. Two boards: each team with a
+move is searched, and may sit as `Time` says. A new position, board count or
+clock cuts the searches short. Finished searches are remembered for the
+session. Leaving the mode quits the engines. An engine build that cannot
+report while it searches is asked in passes of 800, 4,000 and 20,000 nodes on
+one process, the rows changing as each pass ends.
 **Actions menu** — `Toggle engine`, `New game` (start position, clock kept),
 `Flip board(s)`, `Copy dual FEN`, `Paste FEN or dual FEN` (one board's FEN
 sets board 1 and starts board 2 afresh), `Copy moves`, `Paste moves`. Moves
@@ -95,8 +102,9 @@ moves to paste.`). The window's paste commands are refused here with
 
 ## Data
 
-- **Engine** — `hivemind` (~3.7 MB), ONNX Runtime (~28 MB) and `hivemind.onnx`
-  (~54 MB) from `assets/bughouse/`. They are installed into
+- **Engine** — `hivemind` (~3.7 MB, release `engine-v0.2.0` of the
+  Zinkelburger/hivemind fork; Windows builds the same revision itself), ONNX
+  Runtime (~28 MB) and `hivemind.onnx` (~54 MB) from `assets/bughouse/`. They are installed into
   `<support>/bughouse/` and checked against `manifest.json` (size, SHA-256)
   before every launch; a mismatch is rewritten via a `.part` file. Windows:
   the VC++ DLLs from `data/bughouse-runtime/` are copied the same way, the
@@ -108,8 +116,9 @@ moves to paste.`). The window's paste commands are refused here with
   `.github/workflows/windows-check.yml` (pushes to `windows-check`, Server
   2022 and 2025) run it.
 - **Score** — Hivemind prints `180·tan(1.56·Q)`. The mode re-centres in Q with
-  offset `(q_A+B + q_C+D) / 2` from both teams' searches, or the level-table
-  offset (±0.5814 per team's sit bit) when one team was not searched. 0.00 is
+  offset `(q_A+B + q_C+D) / 2` from both teams' latest reports, or the
+  level-table offset (±0.5814 per team's sit bit) when one team was not
+  searched or has not reported yet. 0.00 is
   level. It is not pawns.
 - Nothing is saved. Leaving the mode keeps the table for the session; quitting
   the app loses it. No database is read or written.
@@ -123,4 +132,6 @@ moves to paste.`). The window's paste commands are refused here with
   (2026-09-23).
 - No engine settings rows: Hivemind takes half the cores, 256 MB, batch 8
   (2026-09-23).
+- The engine behaves like Stockfish elsewhere: switched on, its score, lines
+  and node count update as it searches, with no visible passes (2026-10-17).
 - No eval bar and no filler empty states (DESIGN.md).

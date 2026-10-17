@@ -151,7 +151,8 @@ class _TimeChips extends StatelessWidget {
 }
 
 /// The switch, the score, the engine's name with the size of the search
-/// shown, and a thin bar while a deeper one runs.
+/// shown, and a thin bar while it runs: how far towards the size it rests
+/// at, or moving without a measure while an engine searches in passes.
 class _EngineBar extends StatelessWidget {
   const _EngineBar({required this.engine});
 
@@ -208,7 +209,10 @@ class _EngineBar extends StatelessWidget {
         SizedBox(
           height: labThinkingHeight,
           child: lines is LinesOn && lines.thinking
-              ? const LinearProgressIndicator(minHeight: labThinkingHeight)
+              ? LinearProgressIndicator(
+                  minHeight: labThinkingHeight,
+                  value: lines.progress,
+                )
               : null,
         ),
       ],

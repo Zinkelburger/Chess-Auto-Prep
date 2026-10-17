@@ -19,9 +19,9 @@ final class LinesOff extends LabLines {
 }
 
 /// On, over [position] as [boards] shows it: each searched team's best
-/// first actions from the deepest search that finished — none until the
-/// first ends — the score they agree on, and whether a deeper search is
-/// under way.
+/// first actions as the engine has them now — none before its first
+/// report — the score they agree on, and whether the engine is still
+/// searching.
 final class LinesOn extends LabLines {
   const LinesOn({
     required this.position,
@@ -30,6 +30,7 @@ final class LinesOn extends LabLines {
     this.score = const TableScore(),
     this.nodes,
     this.thinking = true,
+    this.progress,
   });
 
   final TablePosition position;
@@ -39,9 +40,14 @@ final class LinesOn extends LabLines {
   /// A + B's advantage — White's on board 1 — on Hivemind's scale.
   final TableScore score;
 
-  /// The search size the rows come from; null before the first ends.
+  /// The size of the search the rows come from — with two teams shown,
+  /// both searches together; null before there are rows.
   final int? nodes;
   final bool thinking;
+
+  /// How far the rows' searches are towards the size they rest at, 0 to 1;
+  /// null when that is not known (an engine searching in passes).
+  final double? progress;
 }
 
 /// The engine is on but could not answer; it stays off until switched on
@@ -63,9 +69,19 @@ typedef EngineRow = ({
   TablePosition table,
 });
 
-/// Each pass searches this many nodes, deeper each time; the switch rests
-/// after the last until the table changes. At about 350 nodes a second
-/// the first answers in two seconds and the last in about a minute.
+/// The size a search of the team shown rests at, at which the engine
+/// stops until the table changes. Its lines are reported as it goes.
+const labLiveNodes = 100000;
+
+/// The other team's search with one board only measures the score's zero,
+/// so it rests sooner and leaves the cores to the search shown.
+const labZeroNodes = 20000;
+
+/// An engine that reports nothing while it searches (a build without
+/// `live-search.patch`) is asked in passes instead, deeper each time; the
+/// switch rests after the last until the table changes. At about 350 nodes
+/// a second the first answers in two seconds and the last in about a
+/// minute.
 const labPasses = [800, 4000, 20000];
 
 /// Rows shown per searched team.
@@ -80,15 +96,23 @@ const labLineCount = 3;
 /// `hivemind.dart`). Two boards: each team with a move is searched, and may
 /// sit when the chosen clock case says so.
 ///
-/// A new position, board count or clock makes whatever the engine was
-/// doing stale: its search is cut short and its answer dropped. Searches
-/// are remembered for the session. The engine is quit when the mode is
-/// left and started again on return.
+/// Each team's search is one continuous search on its own engine process
+/// (two processes share the engine's cores), shown as it reports and
+/// resting at [labLiveNodes]; until the other team's first report the
+/// level table's zero stands in. An engine that cannot report as it goes
+/// is asked in [labPasses] on one process instead.
+///
+/// A new position, board count or clock makes whatever the engines were
+/// doing stale: their searches are cut short and their answers dropped.
+/// Finished searches are remembered for the session. The engines are quit
+/// when the mode is left and started again on return.
 final class LabEngine extends ChangeNotifier {
   LabEngine({
     required this.lab,
     required this._startEngine,
     this._passes = labPasses,
+    this._liveNodes = labLiveNodes,
+    this._zeroNodes = labZeroNodes,
   }) {
     lab.addListener(_labChanged);
   }
@@ -96,6 +120,8 @@ final class LabEngine extends ChangeNotifier {
   final BughouseLab lab;
   final Future<HivemindStart> Function() _startEngine;
   final List<int> _passes;
+  final int _liveNodes;
+  final int _zeroNodes;
 
   LabLines _lines = const LinesOff();
   bool _on = false;
@@ -108,11 +134,13 @@ final class LabEngine extends ChangeNotifier {
   /// Bumped by everything that makes the engine's work stale.
   int _run = 0;
 
-  Hivemind? _engine;
-  Future<HivemindStart>? _starting;
+  /// The engine processes, one per team searched at once; the first also
+  /// answers the passes of an engine that cannot report as it goes.
+  final _engines = <Hivemind?>[null, null];
+  final _starting = <Future<HivemindStart>?>[null, null];
 
-  /// The search the engine is on, which the next one waits for.
-  Future<void> _busy = Future.value();
+  /// The search each engine is on, which its next one waits for.
+  final _busy = <Future<void>>[Future.value(), Future.value()];
 
   final _searches = <_SearchKey, HivemindSearched>{};
 
@@ -134,9 +162,20 @@ final class LabEngine extends ChangeNotifier {
   void close() {
     _open = false;
     _run++;
-    final engine = _engine;
-    _engine = null;
-    if (engine != null) unawaited(engine.quit());
+    _quitAll();
+  }
+
+  void _quitAll() {
+    for (final (seat, engine) in _engines.indexed) {
+      _engines[seat] = null;
+      if (engine != null) _busy[seat] = engine.quit();
+    }
+  }
+
+  void _stopAll() {
+    for (final engine in _engines) {
+      engine?.stop();
+    }
   }
 
   /// The engine switch: on, the engine runs over the table on screen; off,
@@ -148,7 +187,7 @@ final class LabEngine extends ChangeNotifier {
       _labChanged();
     } else {
       _run++;
-      _engine?.stop();
+      _stopAll();
       _set(const LinesOff());
     }
   }
@@ -161,12 +200,12 @@ final class LabEngine extends ChangeNotifier {
     if (asked == _asked) return;
     _asked = asked;
     final run = ++_run;
-    _engine?.stop();
+    _stopAll();
     _set(LinesOn(position: lab.position, boards: lab.boards));
-    unawaited(_passesOver(run, asked));
+    unawaited(_analyse(run, asked));
   }
 
-  Future<void> _passesOver(
+  Future<void> _analyse(
     int run,
     (TablePosition, LabBoards, ClockCase) asked,
   ) async {
@@ -179,6 +218,124 @@ final class LabEngine extends ChangeNotifier {
       _set(LinesOn(position: position, boards: boards, thinking: false));
       return;
     }
+    final first = await _acquire(0);
+    if (!wanted()) return;
+    if (first == null) {
+      _stopped(_startFailure ?? 'The bughouse engine did not start.');
+      return;
+    }
+    if (first.streams) {
+      await _live(questions, asked, wanted);
+    } else {
+      await _passesOver(questions, asked, wanted);
+    }
+  }
+
+  /// One continuous search per team, each on its own engine, the rows
+  /// following every report.
+  Future<void> _live(
+    List<_Question> questions,
+    (TablePosition, LabBoards, ClockCase) asked,
+    bool Function() wanted,
+  ) async {
+    final (position, boards, clock) = asked;
+    final latest = <Team, HivemindSearched>{};
+    final done = <Team>{};
+    int cap(_Question question) => question.shown ? _liveNodes : _zeroNodes;
+    void show() {
+      if (!wanted()) return;
+      // Question order, so the team shown comes first for the score.
+      final found = {
+        for (final question in questions)
+          if (latest[question.team] case final answer?) question.team: answer,
+      };
+      final offset = _offset(found, clock);
+      final shown = [
+        for (final question in questions)
+          if (question.shown && found.containsKey(question.team)) question,
+      ];
+      final nodes = shown.fold(
+        0,
+        (sum, q) => sum + (found[q.team]!.top?.nodes ?? 0),
+      );
+      final size = shown.fold(0, (sum, q) => sum + cap(q));
+      _set(
+        LinesOn(
+          position: position,
+          boards: boards,
+          teams: {
+            for (final question in shown)
+              question.team: _rows(found[question.team]!, question, offset),
+          },
+          score: _score(found, offset),
+          nodes: shown.isEmpty ? null : nodes,
+          thinking: done.length < questions.length,
+          progress: size == 0 ? null : (nodes / size).clamp(0.0, 1.0),
+        ),
+      );
+    }
+
+    final searching = <_Question>[];
+    for (final question in questions) {
+      if (_searches[_key(question, cap(question))] case final known?) {
+        latest[question.team] = known;
+        done.add(question.team);
+      } else {
+        searching.add(question);
+      }
+    }
+    show();
+    await Future.wait([
+      for (final (seat, question) in searching.indexed)
+        _stream(seat, question, cap(question), wanted, (answer, finished) {
+          latest[question.team] = answer;
+          if (finished) done.add(question.team);
+          show();
+        }),
+    ]);
+  }
+
+  /// [question] searched on engine [seat] to [nodes], every report handed
+  /// to [update]; the finished search is remembered.
+  Future<void> _stream(
+    int seat,
+    _Question question,
+    int nodes,
+    bool Function() wanted,
+    void Function(HivemindSearched answer, bool finished) update,
+  ) async {
+    final engine = await _acquire(seat);
+    if (!wanted()) return;
+    if (engine == null) {
+      _stopped(_startFailure ?? 'The bughouse engine did not start.');
+      return;
+    }
+    await _busy[seat];
+    if (!wanted()) return;
+    final searching = engine.search(
+      _toAsk(question, nodes),
+      onLines: (lines) {
+        if (wanted()) update(HivemindSearched(best: null, lines: lines), false);
+      },
+    );
+    _busy[seat] = searching.then((_) {}, onError: (Object _) {});
+    final answer = await searching;
+    if (!wanted()) return;
+    switch (answer) {
+      case HivemindFailed(:final reason):
+        _stopped('Analysis failed: $reason');
+      case final HivemindSearched found:
+        _remember(_key(question, nodes), found);
+        update(found, true);
+    }
+  }
+
+  Future<void> _passesOver(
+    List<_Question> questions,
+    (TablePosition, LabBoards, ClockCase) asked,
+    bool Function() wanted,
+  ) async {
+    final (position, boards, clock) = asked;
     for (final (i, nodes) in _passes.indexed) {
       final found = <Team, HivemindSearched>{};
       for (final question in questions) {
@@ -256,32 +413,18 @@ final class LabEngine extends ChangeNotifier {
     int nodes,
     bool Function() wanted,
   ) async {
-    final key = (
-      question.table.dualFen,
-      question.team,
-      question.mustMove,
-      question.maySit,
-      question.lines,
-      nodes,
-    );
+    final key = _key(question, nodes);
     if (_searches[key] case final known?) return known;
-    final engine = await _acquire();
+    final engine = await _acquire(0);
     if (!wanted()) return null;
     if (engine == null) {
       _stopped(_startFailure ?? 'The bughouse engine did not start.');
       return null;
     }
-    await _busy;
+    await _busy[0];
     if (!wanted()) return null;
-    final searching = engine.search((
-      position: question.table,
-      team: question.team,
-      maySit: question.maySit,
-      mustMove: question.mustMove,
-      lines: question.lines,
-      budget: NodeBudget(nodes),
-    ));
-    _busy = searching.then((_) {}, onError: (Object _) {});
+    final searching = engine.search(_toAsk(question, nodes));
+    _busy[0] = searching.then((_) {}, onError: (Object _) {});
     final answer = await searching;
     if (!wanted()) return null;
     switch (answer) {
@@ -289,10 +432,32 @@ final class LabEngine extends ChangeNotifier {
         _stopped('Analysis failed: $reason');
         return null;
       case final HivemindSearched found:
-        if (_searches.length > _rememberedSearches) _searches.clear();
-        return _searches[key] = found;
+        return _remember(key, found);
     }
   }
+
+  HivemindSearched _remember(_SearchKey key, HivemindSearched found) {
+    if (_searches.length > _rememberedSearches) _searches.clear();
+    return _searches[key] = found;
+  }
+
+  static _SearchKey _key(_Question question, int nodes) => (
+    question.table.dualFen,
+    question.team,
+    question.mustMove,
+    question.maySit,
+    question.lines,
+    nodes,
+  );
+
+  static HivemindQuestion _toAsk(_Question question, int nodes) => (
+    position: question.table,
+    team: question.team,
+    maySit: question.maySit,
+    mustMove: question.mustMove,
+    lines: question.lines,
+    budget: NodeBudget(nodes),
+  );
 
   /// [answer]'s best first actions, one row each, A + B's side.
   List<EngineRow> _rows(
@@ -336,13 +501,14 @@ final class LabEngine extends ChangeNotifier {
 
   String? _startFailure;
 
-  /// The engine, started the first time it is needed and again after it
-  /// went away; null when it will not start.
-  Future<Hivemind?> _acquire() async {
-    final running = _engine;
+  /// Engine [seat], started the first time it is needed and again after
+  /// it went away; null when it will not start.
+  Future<Hivemind?> _acquire(int seat) async {
+    final running = _engines[seat];
     if (running != null) return running;
-    final start = await (_starting ??= _startEngine());
-    _starting = null;
+    final starting = _starting[seat] ??= _startEngine();
+    final start = await starting;
+    if (identical(_starting[seat], starting)) _starting[seat] = null;
     switch (start) {
       case HivemindStartFailed(:final reason):
         _startFailure = reason;
@@ -353,25 +519,25 @@ final class LabEngine extends ChangeNotifier {
           unawaited(engine.quit());
           return null;
         }
+        // Two waiting on one start share its engine.
+        if (_engines[seat] case final other?) return other;
         _startFailure = null;
-        _engine = engine;
-        unawaited(engine.exited.then((_) => _lost(engine)));
+        _engines[seat] = engine;
+        unawaited(engine.exited.then((_) => _lost(seat, engine)));
         return engine;
     }
   }
 
   /// Lets go of an engine that went away, so the next search starts one.
-  void _lost(Hivemind engine) {
-    if (identical(_engine, engine)) _engine = null;
+  void _lost(int seat, Hivemind engine) {
+    if (identical(_engines[seat], engine)) _engines[seat] = null;
   }
 
-  /// The engine could not answer: the switch goes off and says why.
+  /// An engine could not answer: the switch goes off and says why.
   void _stopped(String reason) {
     _on = false;
     _run++;
-    final engine = _engine;
-    _engine = null;
-    if (engine != null) _busy = engine.quit();
+    _quitAll();
     _set(LinesStopped(reason));
   }
 
@@ -386,11 +552,10 @@ final class LabEngine extends ChangeNotifier {
     _disposed = true;
     _run++;
     lab.removeListener(_labChanged);
-    final engine = _engine;
-    if (engine != null) {
+    if (_engines.any((engine) => engine != null)) {
       log.i('quit the bughouse engine');
-      unawaited(engine.quit());
     }
+    _quitAll();
     super.dispose();
   }
 }
@@ -400,7 +565,7 @@ const _rememberedSearches = 4000;
 
 typedef _SearchKey = (String, Team, MustMove, bool, int, int);
 
-/// One search a pass makes, and whether its rows are shown.
+/// One team's search, and whether its rows are shown.
 typedef _Question = ({
   TablePosition table,
   Team team,

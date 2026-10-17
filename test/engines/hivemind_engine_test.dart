@@ -12,10 +12,13 @@ import 'package:flutter_test/flutter_test.dart';
 /// gives each `go`: `uciok`, `readyok`, the search's `info` lines and its
 /// `bestmove`. Lines printed by a real 200-node search of the start.
 final class AnsweringProcess implements UciProcess {
-  AnsweringProcess({this.silent = false});
+  AnsweringProcess({this.silent = false, this.live = false});
 
   /// Says nothing at all, as a binary that never reaches `main`.
   final bool silent;
+
+  /// Offers `ReportIntervalMs`, as a build with live-search.patch does.
+  final bool live;
   final sent = <String>[];
   final searches = <List<String>>[];
   final _out = StreamController<String>();
@@ -36,6 +39,12 @@ final class AnsweringProcess implements UciProcess {
     if (silent || _out.isClosed) return;
     if (line == 'uci') {
       say('id name hivemind');
+      say('option name MultiPV type spin default 1 min 1 max 500');
+      if (live) {
+        say(
+          'option name ReportIntervalMs type spin default 250 min 0 max 60000',
+        );
+      }
       say('uciok');
     } else if (line == 'isready') {
       say('readyok');
@@ -87,9 +96,26 @@ HivemindQuestion question({
   budget: budget,
 );
 
+/// Two reports of a live search, the second block one line short (the
+/// third move not yet visited), then the final block and bestmove.
+const liveSearch = [
+  'info depth 2 multipv 1 score cp -221 nodes 12 nps 73 time 163 pv (e2e4,pass) (e7e5,e2e4)',
+  'info depth 2 multipv 2 score cp -259 nodes 12 nps 73 time 163 pv (g2g3,pass)',
+  'info depth 2 multipv 3 score cp -232 nodes 12 nps 73 time 163 pv (d2d3,pass)',
+  'info depth 3 multipv 1 score cp -218 nodes 60 nps 111 time 539 pv (d2d4,pass) (d7d5,e2e4)',
+  'info depth 3 multipv 2 score cp -210 nodes 60 nps 111 time 539 pv (e2e4,pass)',
+  'info depth 3 multipv 1 score cp -228 nodes 245 nps 249 time 981 pv (d2d4,pass) (d7d5,d2d4)',
+  'info depth 3 multipv 2 score cp -231 nodes 245 nps 249 time 981 pv (e2e4,pass) (e7e5,e2e4)',
+  'info depth 3 multipv 3 score cp -200 nodes 245 nps 249 time 981 pv (g1f3,pass) (d7d5,d2d4)',
+  'info string root width 20 generated',
+  'bestmove (d2d4,pass) ponder (d7d5,d2d4)',
+];
+
 void main() {
-  Future<(HivemindProcess, AnsweringProcess)> started() async {
-    final process = AnsweringProcess();
+  Future<(HivemindProcess, AnsweringProcess)> started({
+    bool live = false,
+  }) async {
+    final process = AnsweringProcess(live: live);
     final engine = await HivemindProcess.start(
       process,
       options: {'Hash': '256'},
@@ -102,6 +128,59 @@ void main() {
     expect(engine.provenance['engine_name'], 'hivemind');
     expect(engine.provenance['options'], {'Hash': '256'});
     expect(process.sent, ['uci', 'setoption name Hash value 256', 'isready']);
+  });
+
+  test('an engine that offers ReportIntervalMs streams; one that does not, '
+      'does not', () async {
+    final (live, _) = await started(live: true);
+    expect(live.streams, isTrue);
+    final (old, _) = await started();
+    expect(old.streams, isFalse);
+  });
+
+  test('a live search hands on each block as it is printed', () async {
+    final (engine, process) = await started(live: true);
+    process.next = liveSearch;
+    final reports = <List<JointLine>>[];
+    final answer =
+        await engine.search(question(), onLines: reports.add)
+            as HivemindSearched;
+    // The short block is handed on when the next one starts; the final
+    // block is the answer.
+    expect(reports.map((r) => r.first.nodes), [12, 60, 245]);
+    expect(reports[0].map((l) => l.rank), [1, 3, 2]);
+    expect(reports[1].map((l) => l.rank), [1, 2]);
+    expect(reports[1].first.pv.first, const JointMove('d2d4', null));
+    expect(answer.lines.map((l) => (l.rank, l.nodes)), [
+      (1, 245),
+      (3, 245),
+      (2, 245),
+    ]);
+    expect(answer.best, const JointMove('d2d4', null));
+  });
+
+  test('a live search that goes quiet for its patience is killed', () {
+    fakeAsync((time) {
+      late HivemindProcess engine;
+      final process = AnsweringProcess(live: true);
+      unawaited(HivemindProcess.start(process).then((e) => engine = e!));
+      time.flushMicrotasks();
+      HivemindAnswer? answer;
+      unawaited(engine.search(question()).then((a) => answer = a));
+      // Reports keep it alive well past ten minutes of searching.
+      for (var minute = 0; minute < 15; minute++) {
+        time.elapse(const Duration(minutes: 1));
+        process.say(
+          'info depth 4 multipv 1 score cp -230 nodes ${1000 * minute + 2} '
+          'pv (d2d4,pass)',
+        );
+        time.flushMicrotasks();
+      }
+      expect(process.killed, isFalse);
+      time.elapse(const Duration(minutes: 11));
+      expect(process.killed, isTrue);
+      expect((answer as HivemindFailed).reason, contains('stopped answering'));
+    });
   });
 
   test('a search reads the joint lines, rank 1 first, then by score', () async {

@@ -112,7 +112,7 @@ STOCKFISH_TARGETS = {
 BUGHOUSE_ASSETS = REPO_ROOT / "assets" / "bughouse"
 BUGHOUSE_MANIFEST = BUGHOUSE_ASSETS / "manifest.json"
 
-BUGHOUSE_TAG = "engine-v0.1.0"
+BUGHOUSE_TAG = "engine-v0.2.0"
 BUGHOUSE_BASE = (
     f"https://github.com/Zinkelburger/hivemind/releases/download/{BUGHOUSE_TAG}"
 )
@@ -378,15 +378,23 @@ def dest_is_current(key: str, dest: Path, lock: dict) -> bool:
     return False
 
 
-def verify_source(name: str, archive: Path, lock: dict) -> str:
+def verify_source(name: str, archive: Path, lock: dict, url: str | None = None) -> str:
+    """The archive's hash, checked against the lock for the same URL.
+
+    A URL the lock does not pin yet (a bumped release tag) has nothing to be
+    checked against: its hash is what the lock records from now on.
+    """
     digest = sha256_file(archive)
-    expected = lock.get(name, {}).get("source_sha256")
+    entry = lock.get(name, {})
+    expected = entry.get("source_sha256")
+    if url is not None and entry.get("url") not in (None, url):
+        expected = None
     if expected and digest != expected:
         raise SystemExit(
             f"ERROR: checksum mismatch for {name}\n"
             f"  expected {expected}\n  got      {digest}\n"
-            "  Upstream artifact changed. Verify before trusting it, then "
-            "re-run with --force to accept."
+            "  The pinned upstream artifact changed. Verify it before "
+            "trusting it, then remove its source_sha256 from the lock."
         )
     return digest
 
@@ -517,7 +525,7 @@ def fetch_bughouse_network(lock: dict, force: bool) -> None:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td) / BUGHOUSE_NETWORK["asset"]
         download(url, tmp, "https://github.com/Zinkelburger/hivemind/releases")
-        digest = verify_source(key, tmp, lock)
+        digest = verify_source(key, tmp, lock, url)
         # Already gzipped upstream; pass it through rather than recompressing.
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(tmp, dest)
@@ -587,7 +595,7 @@ def fetch_bughouse(name: str, lock: dict, force: bool) -> None:
         # a generic temp name would send the Windows zip down the tar path.
         tmp = Path(td) / os.path.basename(urllib.parse.urlparse(url).path)
         download(url, tmp, "https://github.com/Zinkelburger/hivemind/releases")
-        digest = verify_source(name, tmp, lock)
+        digest = verify_source(name, tmp, lock, url)
         engine_bytes = read_member(tmp, engine_member)
         runtime_bytes = read_member(tmp, runtime_member)
 
