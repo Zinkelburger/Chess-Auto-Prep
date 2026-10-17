@@ -3,8 +3,8 @@
 Where things live in the code and how the pieces connect. Production code is
 under `lib/`, tests under `test/`; `lib/main.dart` is the entry point for local
 and release builds. Use [the architecture contracts](ARCHITECTURE.md),
-[mode specifications](features/README.md), [the backlog](FUTURE_FEATURES.md)
-and [the tooling map](agents/tooling.md) for detail and remaining scope.
+[mode specifications](features/README.md) and
+[the tooling map](agents/tooling.md) for detail.
 
 ## Entry points and ownership
 

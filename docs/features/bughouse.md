@@ -71,7 +71,9 @@ piece for a drop) until the pointer leaves.
 is on and the mode is on screen. Each pass searches 800, then 4,000, then
 20,000 nodes. The rows update when a pass ends, and the engine rests after the
 last until the table changes. One board: the team on move on board 1 must move
-there, nobody may sit, and the partner board stands as it is. The partner
+there, nobody may sit, and the partner board stands as it is (the desktop
+Hivemind is unpatched, so its search may still weigh partner-board moves; the
+website's build applies `tools/bughouse_web/patches/frozen-board.patch`). The partner
 board is given the other team's turn, so that team can be searched for the
 score's zero. Two boards: each team with a move is searched, and may sit as
 `Time` says. A new position, board count or clock cuts the search short.
@@ -116,11 +118,3 @@ moves to paste.`). The window's paste commands are refused here with
 - No engine settings rows: Hivemind takes half the cores, 256 MB, batch 8
   (2026-09-23).
 - No eval bar and no filler empty states (DESIGN.md).
-
-## Not built
-
-- A truly frozen partner board for one-board analysis. The website's WASM
-  build patches Hivemind for it (`tools/bughouse_web/patches/frozen-board.patch`).
-  The desktop binary is unpatched, so its search may still consider moves on
-  the partner board.
-- A sit panel (the website's "what if I wait for a piece" rows).

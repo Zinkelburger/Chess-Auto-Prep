@@ -151,16 +151,3 @@ shared document mutation workflow.
   mirror is not written or read.
 - Studies keep their own editing workflow; training a study never converts it
   to a repertoire.
-
-## Not built
-
-Checked against `lib/chess/training/` and `lib/features/trainer/`:
-
-- Per-move scheduling — `schedule.dart` schedules whole lines, so one slip in a
-  long line makes the whole line Again (Chessable gap).
-- Partial-line depth / skip to the first comment — `training_line.dart` drills
-  from the line start (or the `[%tstart]` marker).
-- A choice of review order — `sitting.dart` `dueNow` always takes the longest
-  overdue first.
-- Automatic walkthrough advancement, per-move streak thresholds and custom
-  chapter grouping — no options in `TrainingOptions`.

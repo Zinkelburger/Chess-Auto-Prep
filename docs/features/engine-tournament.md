@@ -162,13 +162,3 @@ called "<id>" under Documents/engine_tournaments.`
 - Unsettled (no ruling yet): whether fields above two engines keep both
   formats, whether rating statistics should always show, and whether stopped
   runs should resume.
-
-## Not built
-
-- Resuming a stopped or crashed run: `TournamentRun` has no resume; `Run
-  again` starts a new folder.
-- An opening-label field in the app: `setup_dialog.dart` has none; only the
-  headless runner (`--opening`) or a copied config sets `openingLabel`.
-- Pondering: the engine editor always saves `ponder: false`.
-- Per-run time control, start time or duration in history rows
-  (`history_list.dart` shows status, game count and points only).

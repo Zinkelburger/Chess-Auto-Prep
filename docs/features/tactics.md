@@ -200,12 +200,3 @@ and the card's tabs.
   the Puzzle tab; filters fold open inline under the count they change, not in
   a dialog.
 - Usernames only: no password, OAuth or login to fetch games.
-
-## Not built
-
-- Checking for new games at launch: nothing in `MyGames` or `TacticsView`
-  starts a download unprompted.
-- Editing a puzzle, making a custom one, or multi-select / bulk delete: the
-  row menu in `TacticsPanel._menu` has only the five entries above.
-- Writing `HintsUsed` on a reveal (`PuzzleTrainer.showSolution` writes
-  nothing); flaw tags are neither mined nor shown.

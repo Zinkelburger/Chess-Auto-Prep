@@ -133,14 +133,3 @@ instead of failing on SQLite's lock.
   evaluation and ChessDB dump stores, broadcast collections in the app, Scid
   export, automatic TWIC checks, a first-run download prompt, waiting on a
   download during a build, and rebuilding an old database's classical index.
-
-## Not built
-
-- Classical index rebuild: a database without complete classical counts makes
-  the explorer say `The classical index for this database is not built.`
-  (`lib/workspace/explorer.dart`); nothing in `lib/` builds it.
-- Scid export: no Scid writer in `lib/` (the C++ reference lives in
-  `tools/scid_reference`).
-- Automatic TWIC update checks and a first-run download prompt: `TwicDownload`
-  runs only when the user starts it.
-- Lichess evaluation and ChessDB dump stores: no code in `lib/`.

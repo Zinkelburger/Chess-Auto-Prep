@@ -268,10 +268,3 @@ time.
   analysis ([players.md](players.md)).
 - **Fail open** (2026-09-25): an unreadable folder or chapter is named and
   skipped; it never blocks the rest of the library.
-
-## Not built
-
-- Replies, Expectimax and non-Book Explorer panes read
-  `DocumentCursor.fen`, not `RepertoireTree.fen`, so they do not follow the
-  explorer Book's free board past the end of the file
-  (`lib/workspace/replies.dart`, `explorer.dart`, `repertoire_tree.dart`).

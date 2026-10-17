@@ -113,10 +113,3 @@ study lines goes to the same files as the repertoire trainer
 - Study practice is line practice through the shared trainer, not Lichess
   interactive-lesson authoring. Lichess collaboration, member permissions,
   chat and publication/discovery are out of scope for this local editor.
-
-## Not built
-
-- Study puzzle review — reviewing a study's chapters as a puzzle/flashcard set
-  with stats in its headers. Nothing in `lib/features/study/` or
-  `lib/features/tactics/` opens a study as a puzzle set; backlog only if
-  requested.

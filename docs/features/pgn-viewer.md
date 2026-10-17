@@ -235,20 +235,3 @@ Keys: ←/→, Home/End, ↑/↓ (game), Enter/Esc (variation), F, E, Space, Ctr
 - A file opens as a book: moves alone, no engine, no extra buttons until used
   (owner, 2026-10-01: "sometimes I just want to view a PGN like a book").
   `Filter` is a tab (owner, 2026-10-01).
-
-## Not built
-
-- Right-click ▸ Comment as a second way into editing: the move menu in
-  `lib/workspace/move_tree_view.dart` has no Comment entry.
-- Autoplay speed setting and rolling into the next game: `AutoPlay` has a
-  fixed 1 s step and stops at the end of the line.
-- Solitaire reveal timer and guessing in sidelines: `lib/workspace/solitaire.dart`
-  follows the main line only.
-- Game review of existing variations: `GameReview` covers the main line at
-  fixed depth 14.
-- `Include variations` in the `This file` explorer source, and a gap limit
-  (at most N plies) in `Moves` filters: `chess/move_sequence.dart` treats a
-  gap as any number of plies.
-- Multiple position conditions in one filter: `GameFilter`
-  (`lib/chess/game_filter.dart`) holds one `position`.
-- Scid export: no Scid writer in `lib/`.

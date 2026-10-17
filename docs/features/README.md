@@ -48,11 +48,10 @@ and which other modes read the same data.
 
 ## Owner decisions
 Binding product decisions, dated, written as rules.
-
-## Not built
-Planned items confirmed absent from the code; each also appears in
-[the backlog](../FUTURE_FEATURES.md).
 ```
+
+A spec describes what the app does. Do not list things it does not do: that
+reads as a request, and agents build it. New work comes from the owner.
 
 When behaviour changes, rewrite the affected lines rather than appending a
 dated diary entry. Numbers (limits, sizes, timings) are written down when the

@@ -184,8 +184,3 @@ be read is logged and left out.
   `SearchSettingCopy`).
 - Updates come from GitHub Releases only; `Update now` reopens the app on the
   new version.
-
-## Not built
-
-- `Reset settings` (back to the defaults, accounts kept): no reset action in
-  `setting_rows.dart` or `SettingsStore`.
