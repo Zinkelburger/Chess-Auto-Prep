@@ -670,9 +670,8 @@ const labBoardMax = 480.0;
 const labOneBoardMax = 720.0;
 
 /// What the board column needs with both boards besides the boards and
-/// their hands: the board's name above, the engine's rows, the move list
-/// and step buttons under it.
-const labBoardChrome = 120.0 + 3 * labTableRowHeight + 1;
+/// their hands: the board's name above and the engine's rows under it.
+const labBoardChrome = labBoardLabelHeight + 3 * labTableRowHeight + 9;
 const labBoardLabelHeight = 22.0;
 
 /// The narrowest the right-hand panel may become before the boards shrink.
@@ -690,8 +689,8 @@ const labSeatPadding = 8.0;
 const labTurnDot = 11.0;
 const labStepHeight = 26.0;
 
-/// Each board's own move list under it: a few moves tall, then it scrolls.
-const labMoveListHeight = 48.0;
+/// A board's move list in the panel, side by side with the other board's
+/// when both are shown.
 const labMoveRowHeight = 22.0;
 const labMoveNumberWidth = 34.0;
 

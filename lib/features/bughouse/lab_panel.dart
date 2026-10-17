@@ -13,9 +13,10 @@ import 'lab_engine.dart';
 import 'lab_lines.dart';
 import 'table_boards.dart';
 
-/// The column beside the boards: how many boards, who may sit,
-/// the engine switch with its score, and with one board its best moves and
-/// move list; with two, each board's best moves are under that board. Every
+/// The column beside the boards: how many boards, who may sit, the engine
+/// switch with its score, then the moves: with one board its best moves and
+/// its move list; with two, both boards' move lists side by side in the
+/// boards' order, each board's best moves staying under that board. Every
 /// row keeps its height whether the engine is on or off.
 class LabPanel extends StatelessWidget {
   const LabPanel({super.key, required this.lab, required this.engine});
@@ -41,10 +42,11 @@ class LabPanel extends StatelessWidget {
               board: BoardNumber.one,
             ),
           _ProblemLine(lab: lab),
-          if (lab.single)
-            Expanded(
-              child: BoardMoves(lab: lab, board: BoardNumber.one, fill: true),
-            ),
+          Expanded(
+            child: lab.single
+                ? BoardMoves(lab: lab, board: BoardNumber.one)
+                : _BothMoves(lab: lab),
+          ),
         ],
       ),
     );
@@ -103,6 +105,44 @@ class _BoardsSwitch extends StatelessWidget {
     );
     if (fen == null || !context.mounted) return;
     lab.editBoard(board, Setup.parseFen(fen.value));
+  }
+}
+
+/// Both boards' move lists side by side, each under its board's name, in
+/// the order the boards stand.
+class _BothMoves extends StatelessWidget {
+  const _BothMoves({required this.lab});
+
+  final BughouseLab lab;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final board in BoardNumber.values) ...[
+          if (board == BoardNumber.two) const SizedBox(width: Space.l),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  height: labBoardLabelHeight,
+                  child: Text(
+                    board.label,
+                    style: TextStyle(color: scheme.onSurfaceVariant),
+                  ),
+                ),
+                Expanded(
+                  child: BoardMoves(lab: lab, board: board),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
   }
 }
 
@@ -170,7 +210,7 @@ class _TimeChips extends StatelessWidget {
               style: const ButtonStyle(
                 visualDensity: VisualDensity.compact,
                 padding: WidgetStatePropertyAll(
-                  EdgeInsets.symmetric(horizontal: Space.s, vertical: Space.xs),
+                  EdgeInsets.symmetric(horizontal: Space.m, vertical: Space.s),
                 ),
               ),
               onSelectionChanged: (picked) => lab.setClock(picked.single),

@@ -6,6 +6,8 @@ import 'package:chess_auto_prep/features/bughouse/bughouse_screen.dart';
 import 'package:chess_auto_prep/features/bughouse/lab_engine.dart';
 import 'package:chess_auto_prep/features/bughouse/lab_lines.dart';
 import 'package:chess_auto_prep/features/bughouse/pocket.dart';
+import 'package:chess_auto_prep/features/bughouse/table_boards.dart';
+import 'package:chess_auto_prep/ui/app_keys.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/board_view.dart';
 import 'package:chessground/chessground.dart';
@@ -195,7 +197,7 @@ void main() {
       expect(find.byType(BughousePreviewBoard), findsNothing);
     });
 
-    testWidgets('two boards: each board\'s moves are under it; a move '
+    testWidgets('two boards: each board\'s lines are under it; a move '
         'floats its board and plays both boards up to it', (tester) async {
       build();
       lab.showBoards(LabBoards.two);
@@ -226,6 +228,32 @@ void main() {
       await tester.tap(find.text('d5'));
       await tester.pumpAndSettle();
       expect(lab.line.moves.map((m) => m.san), ['d4', 'e4', 'e5', 'd5']);
+    });
+
+    testWidgets('two boards: both move lists are in the panel, board 1\'s '
+        'first; a move there steps its board', (tester) async {
+      build();
+      lab
+        ..showBoards(LabBoards.two)
+        ..play(BoardNumber.one, 'e2e4')
+        ..play(BoardNumber.two, 'd2d4');
+      await pump(tester);
+      final board2 = tester.getRect(find.byType(Chessboard).at(1));
+      final lists = find.byType(BoardMoves);
+      expect(lists, findsNWidgets(2));
+      final one = tester.getRect(lists.at(0));
+      final two = tester.getRect(lists.at(1));
+      expect(one.left, greaterThan(board2.right));
+      expect(two.left, greaterThan(one.right));
+      expect(two.top, one.top);
+      // Without the lists under them the boards are larger than they were.
+      expect(board2.width, greaterThan(300));
+      await tester.tap(
+        find.byTooltip('${AppKey.firstMove.tip('First move')}, board 2'),
+      );
+      await tester.pumpAndSettle();
+      expect(lab.line.upto(BoardNumber.two), 0);
+      expect(lab.line.upto(BoardNumber.one), 1);
     });
 
     testWidgets('the engine\'s choice is an arrow on its board, and Space '

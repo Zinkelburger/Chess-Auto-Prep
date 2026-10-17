@@ -23,7 +23,7 @@ panel (440–480 px) on the right.
   window. Board 1 has A (White) and C (Black); board 2 has D (White) and B
   (Black). The teams are A + B and C + D. With two boards, A + B's colour is
   at the bottom of both boards unless flipped, and each board has its name
-  above it and its own move list and step buttons under it.
+  above it and its engine rows under it.
 - **Hands** — above and below each board, as lila's crazyhouse pocket: a turn
   dot, the seat letter (two boards only), then five square-sized slots (P N
   B R Q) with counts. A row of + sits over the slots and a row of − under
@@ -50,8 +50,8 @@ panel (440–480 px) on the right.
   error colour. While the engine searches, a 2 px bar under it fills towards
   the size the search rests at.
 - **Lines** — each board's three best moves for the player on move there,
-  one row each: in the panel with one board, under the board (between its
-  bottom hand and its move list) with two. A row is its score, then the
+  one row each: in the panel with one board, under the board (below its
+  bottom hand) with two. A row is its score, then the
   move in bold and that board's moves after it, up to eight (`1. d4 d5 2.
   Nf3`); a row whose choice is to wait there starts with a muted `sit`.
   The engine ranks joint actions over both boards, so a team on move on
@@ -65,8 +65,11 @@ panel (440–480 px) on the right.
   White on board 1, Black on board 2. Hivemind's scale, not pawns.`).
 - **Problem line** — one fixed line saying why a move, step or paste was
   refused.
-- **Moves** — with one board, board 1's moves and hand edits fill the rest of the panel, with
-  `First move`, `Back`, `Forward` and `Last move` under them.
+- **Moves** — the rest of the panel. With one board, board 1's moves and
+  hand edits; with two, board 1's and board 2's lists side by side, each
+  under its board's name, the list of the board last used outlined in the
+  accent. Each list has `First move`, `Back`, `Forward` and `Last move`
+  under it.
 
 ## Actions
 
@@ -188,6 +191,8 @@ paste commands are refused here with
   so the cases compare at a glance (2026-10-17).
 - Two-board lines are per board, under their board, not per team; engine
   arrows and drawn shapes as on lila's analysis board (2026-10-17).
+- With two boards the move lists are in the panel, side by side, so the
+  boards get the height (2026-10-17).
 - No engine settings rows: Hivemind takes half the cores, 256 MB, batch 8
   (2026-09-23).
 - The engine behaves like Stockfish elsewhere: switched on, its score, lines
