@@ -55,6 +55,13 @@ Future<String?> _unrunnable(String executable) async {
   return null;
 }
 
+/// What the Bughouse expectimax search says when no CrazyAra is found: the
+/// installer in the source tree (Linux x86-64) or a launcher of the user's
+/// own, the two ways [EngineSupervisor.startCrazyara] can find one.
+const crazyaraMissing =
+    'CrazyAra is not installed. Install it with tools/setup_crazyara.py, or '
+    'set CRAZYARA_BIN to its launcher.';
+
 /// Owns every engine process the app starts and ends them all on
 /// [dispose]. One per app; nothing else spawns an engine.
 final class EngineSupervisor {
@@ -270,12 +277,17 @@ final class EngineSupervisor {
 
   /// The optional CrazyAra installation, kept under the same supervisor as
   /// Stockfish and Hivemind, including a launch interrupted by app shutdown.
-  Future<CrazyaraProcess> startCrazyara(String support) =>
-      _own(_startCrazyara(support));
+  /// [environment] stands in for the process's own in tests.
+  Future<CrazyaraProcess> startCrazyara(
+    String support, {
+    Map<String, String>? environment,
+  }) => _own(_startCrazyara(support, environment ?? Platform.environment));
 
-  Future<CrazyaraProcess> _startCrazyara(String support) async {
+  Future<CrazyaraProcess> _startCrazyara(
+    String support,
+    Map<String, String> env,
+  ) async {
     if (_disposed) throw const EngineFailure('The app is closing.');
-    final env = Platform.environment;
     final home = env['HOME'] ?? env['USERPROFILE'] ?? '';
     final data = env['XDG_DATA_HOME'] ?? p.join(home, '.local', 'share');
     final candidates = [
@@ -291,9 +303,7 @@ final class EngineSupervisor {
       }
     }
     if (executable == null) {
-      throw const EngineFailure(
-        'CrazyAra is not installed. See the Bughouse Lab setup guide.',
-      );
+      throw const EngineFailure(crazyaraMissing);
     }
     final process = await SpawnedProcess.start(
       executable,

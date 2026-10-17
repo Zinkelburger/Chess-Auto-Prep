@@ -236,9 +236,6 @@ Paste moves.`
 
 ## Not built
 
-- The CrazyAra "Bughouse Lab setup guide" named by the error: no such guide
-  exists in `docs/`; install notes live only in `docs/ALGORITHM.md` and
-  `tools/setup_crazyara.py`.
 - Match crosstable or per-team settings block: `match_panel.dart` shows the
   opening score only.
 - Typed-line match start: `new_match_dialog.dart` offers only `The boards` and
