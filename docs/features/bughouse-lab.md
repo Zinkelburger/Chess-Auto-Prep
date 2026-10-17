@@ -14,7 +14,7 @@ score scale, match model, expectimax), `lib/storage/bughouse_books.dart`,
 `lib/storage/hivemind_write.dart`, `lib/storage/bughouse_matches.dart`,
 `lib/storage/bughouse_expectimax.dart`, `lib/engines/hivemind_engine.dart`,
 `lib/engines/hivemind_install.dart`, `lib/engines/crazyara_engine.dart`,
-`lib/engines/bughouse_backend.dart`, `lib/app/mode_view.dart` (`BughouseView`),
+`lib/engines/bughouse_backend.dart`, `lib/app/bughouse_view.dart` (`BughouseView`),
 `lib/app/self_test.dart`. Engine internals: [Hivemind](../HIVEMIND.md);
 expectimax algorithm: [ALGORITHM.md](../ALGORITHM.md#bughouse-expectimax).
 

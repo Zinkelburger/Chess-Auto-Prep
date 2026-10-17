@@ -16,7 +16,8 @@ the explorer's Book source (`repertoire_tree.dart`, `tree_pane.dart`), pane
 tabs and layout (`workspace_tabs.dart`, `action_layout.dart`,
 `action_panes.dart`), `BoardEditor` (`board_editor.dart`), the move field
 (`move_field.dart`, resolver `lib/chess/typed_move.dart`). Window wiring:
-`lib/app/shell.dart`, `lib/app/top_bar.dart`, `lib/app/mode_view.dart`,
+`lib/app/shell.dart`, `lib/app/top_bar.dart`, `lib/app/mode_view.dart`
+(`ModeView`; each mode's view in its own file), `lib/app/save_held.dart`,
 `lib/app/board_doors.dart`, `lib/app/document_tabs.dart`,
 `lib/app/workspace_requests.dart`, `lib/app/layout_memory.dart`. Keys:
 `lib/ui/app_keys.dart`. Architecture: [ARCHITECTURE](../ARCHITECTURE.md).

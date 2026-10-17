@@ -8,7 +8,7 @@ copy written.
 
 Code: `lib/features/pgn_viewer/` (`PgnViewer` owner, `PgnViewerPanel` list
 column, `ViewerFilterPane`, `ViewerReading`, `AutoPlay`, `PlayerSideChoice`,
-`export_dialog.dart`), mode wiring `ViewerView` in `lib/app/mode_view.dart`
+`export_dialog.dart`), mode wiring `ViewerView` in `lib/app/document_views.dart`
 and `WorkspaceRequests.openFile` / `browse` in `lib/app/workspace_requests.dart`.
 Shared owners: `DocumentSession` (`lib/workspace/document_session.dart`), the
 filter `FileFilter` (`lib/workspace/file_filter.dart`, rules in

@@ -78,7 +78,9 @@ A widget file outside `app/` never imports `dart:io` or `net/`. From
 - A mode is a `ModeView` (`app/mode_view.dart`): it owns its card tabs and
   answers for its list, Actions menu, tab bodies and flags. `Shell` asks the
   mode on screen instead of switching on which mode it is; a new mode is a
-  subclass and one arm of `modeViews`. `WorkspaceView` takes one
+  subclass in its own file (`document_views.dart` holds the builder,
+  trainer, viewer and Study, which share a base) and one arm of
+  `modeViews`. `WorkspaceView` takes one
   `WorkspaceHooks` value for what the window adds.
 - `WorkspaceRequests` (`app/workspace_requests.dart`) owns the mode, the
   status line and every cross-mode request that puts a document on the board
