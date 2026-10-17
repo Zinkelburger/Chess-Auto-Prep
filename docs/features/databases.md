@@ -112,7 +112,8 @@ instead of failing on SQLite's lock.
   MCP tools, which is why the schema stays fixed.
 - **Kept game copies** — `Documents/pgn_collections/database games/`.
 - **Storage list** — `nativeStoragePlaces` names every store: master games,
-  engine evaluations (`eval_cache.db`), search finds, chapter audits, your
+  engine evaluations (`eval_cache.db`), search finds, chapter audits,
+  dismissed audit findings, your
   games (`app_games.db`), kept versions, the bughouse engine, and the
   repertoire, study, PGN collection, games library, tactics and engine
   tournament folders. Databases count their `-wal`/`-shm`/`-journal`

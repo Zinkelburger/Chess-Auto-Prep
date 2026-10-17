@@ -223,7 +223,7 @@ focus: arrows, Enter/Space, Esc. A text field with focus keeps its keys.
   (`lib/chess/pgn/comment_text.dart`). A round trip must keep `[%eval]`,
   `[%pv]`, `[%clk]`, `[%cal]`/`[%csl]`, `[%tstart]`/`[%tend]`, the review
   markers and the app's generated metrics (`[%score]`, `[%expectimax]`,
-  `[%maia]`, …).
+  `[%cumProb]`).
 - **Settings** are global across boards (`settings.json`): coordinates,
   figurines, engine choice, cores, memory, lines, threat, explorer source and
   chips, layouts. See [settings](settings.md).
