@@ -42,7 +42,7 @@ void main() {
     expect(file.existsSync(), isTrue);
   });
 
-  test('on disk it keeps the existing file\'s tables and version', () {
+  test('on disk a new file holds only the evals table', () {
     final dir = Directory.systemTemp.createTempSync('eval_cache');
     addTearDown(() => dir.deleteSync(recursive: true));
     final cache = EvalCache.open(dir);
@@ -51,15 +51,35 @@ void main() {
     cache.close();
     final db = sqlite3.open(p.join(dir.path, 'eval_cache.db'));
     addTearDown(db.close);
-    expect(db.select('PRAGMA user_version').first.columnAt(0), 4);
     final tables = db
         .select("SELECT name FROM sqlite_master WHERE type = 'table'")
         .map((row) => row.columnAt(0))
         .toSet();
-    expect(tables, containsAll(['evals', 'maia_cache']));
+    expect(tables, {'evals'});
     final row = db.select('SELECT eval_cp_white, depth FROM evals').single;
     expect(row.columnAt(0), 35);
     expect(row.columnAt(1), 14);
+  });
+
+  test('an existing file with other tables and a version still opens', () {
+    final dir = Directory.systemTemp.createTempSync('eval_cache');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    sqlite3.open(p.join(dir.path, 'eval_cache.db'))
+      ..execute(
+        'CREATE TABLE evals(fen TEXT PRIMARY KEY, eval_cp_white INTEGER '
+        'NOT NULL, depth INTEGER NOT NULL, created_at INTEGER NOT NULL)',
+      )
+      ..execute(
+        'CREATE TABLE maia_cache(fen TEXT NOT NULL, elo INTEGER NOT NULL, '
+        'PRIMARY KEY (fen, elo))',
+      )
+      ..execute('INSERT INTO evals VALUES (?, 35, 14, 0)', [fen4])
+      ..execute('PRAGMA user_version = 4')
+      ..close();
+    final cache = EvalCache.open(dir);
+    addTearDown(cache.close);
+    expect(cache.available, isTrue);
+    expect(cache.read(fen4, minDepth: 14), 35);
   });
 
   test('a file that will not open leaves a cache that answers nothing', () {

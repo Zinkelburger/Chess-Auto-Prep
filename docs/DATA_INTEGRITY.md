@@ -45,7 +45,7 @@ and is quarantined if unreadable; *derived* may be discarded and rebuilt.
 | Settings | Support `settings.json` | JSON; unknown keys kept ([settings](ARCHITECTURE.md#settings-and-credentials)) | Defaults always valid |
 | Unsaved viewer edits | Support `viewer-drafts/<sha256 of path>.json` | JSON | Kept |
 | Master games | Support `master_games.db` | SQLite, written by `master_games_import.dart`, also read by the Python MCP tools | Derived (re-importable) |
-| Engine evaluations | Support `eval_cache.db` | SQLite `evals` + `maia_cache` | Derived |
+| Engine evaluations | Support `eval_cache.db` | SQLite `evals`; other tables in the file are ignored | Derived |
 | Search finds | Support `finds.db` | SQLite | Derived |
 | Chapter audits | Support `audit.db` | SQLite | Derived |
 | Dismissed findings | Support `audit_dismissed.db` | SQLite, keyed by kind, position and move | Kept |
@@ -146,16 +146,19 @@ come only through `PgnFileStore`. Platform durability:
 [Filesystem notes](ARCHITECTURE.md#filesystem-notes).
 
 `withDirectoryLock` (`storage/file_lock.dart`) serialises writers to one
-directory across isolates and processes. The mutex is a SQLite write
+directory across isolates and processes, including another copy of the app. The mutex is a SQLite write
 transaction on an empty database,
 `<system temp>/chess-auto-prep-file-locks/<FNV-1a of the resolved directory path>.sqlite3`:
 busy timeout 0, `BEGIN IMMEDIATE` retried every 10 ms for two minutes, rolled
 back however the action ends; the OS drops it when a process dies. Never nest
 one directory's lock: the inner call fails after the deadline. Every
 document access takes the profile-wide lock keyed on
-`repertoires/.cap-directory-domain` (`storage/recovery_gate.dart`). Locks
-coordinate the app's own writers; external editors are caught by revision
-checks.
+`repertoires/.cap-directory-domain` (`storage/recovery_gate.dart`). A
+document write then takes the Documents root, which is also the training
+files' folder and the trainer's lock, and then each folder it writes in, in
+path order (`storage/mutation_guards.dart`); a PGN copied into Documents takes
+only its folder's. Locks coordinate the app's own writers; external editors
+are caught by revision checks.
 
 ## Backing up
 

@@ -15,9 +15,8 @@ import '../diagnostics/log.dart';
 ///
 /// One table is read and written: `evals(fen, eval_cp_white, depth,
 /// created_at)` keyed by the four-field FEN, the score from White's side, and
-/// the deeper of two verdicts winning. Existing files also carry a
-/// `maia_cache` table and schema version 4; a fresh file is made in that same
-/// shape.
+/// the deeper of two verdicts winning. Anything else a file holds is left
+/// alone.
 ///
 /// A file that will not open is logged once and the cache answers nothing:
 /// a build runs without it, slower, rather than not at all.
@@ -34,9 +33,6 @@ final class EvalCache {
       db.execute('PRAGMA journal_mode = WAL');
       db.execute('PRAGMA synchronous = NORMAL');
       db.execute(_createEvals);
-      db.execute(_createMaia);
-      final version = db.select('PRAGMA user_version').first.columnAt(0);
-      if (version == 0) db.execute('PRAGMA user_version = $_schemaVersion');
       return EvalCache._(db);
     } on Object catch (error) {
       opened?.close();
@@ -52,26 +48,12 @@ final class EvalCache {
     return EvalCache._(db);
   }
 
-  /// The schema version existing cache files carry.
-  static const _schemaVersion = 4;
-
   static const _createEvals = '''
     CREATE TABLE IF NOT EXISTS evals(
       fen TEXT PRIMARY KEY,
       eval_cp_white INTEGER NOT NULL,
       depth INTEGER NOT NULL,
       created_at INTEGER NOT NULL
-    )
-  ''';
-
-  static const _createMaia = '''
-    CREATE TABLE IF NOT EXISTS maia_cache(
-      fen TEXT NOT NULL,
-      elo INTEGER NOT NULL,
-      policy_json TEXT NOT NULL,
-      win_prob REAL NOT NULL,
-      created_at INTEGER NOT NULL,
-      PRIMARY KEY (fen, elo)
     )
   ''';
 
