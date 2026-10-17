@@ -99,7 +99,7 @@ starts at the root and later edits a subdirectory.
 | Tools, engines, MCP, packaging or the separate web service | [Tooling map](docs/agents/tooling.md), then only the relevant skill/README |
 | Changing what a mode does | Its spec under [docs/features/](docs/features/README.md) |
 | Storage, recovery, ownership or cross-mode wiring | [Architecture](docs/ARCHITECTURE.md) |
-| Documenting behavior/API/layout changes or changing the backlog | [Documentation](docs/agents/documentation.md) |
+| Documenting behavior/API/layout changes | [Documentation](docs/agents/documentation.md) |
 | Changing agent rules, skills or their loading | [Rule maintenance](docs/agents/README.md) |
 
 Use `chess-prep-mcp` for chess data, expectimax, tournaments and roster work;

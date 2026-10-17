@@ -103,7 +103,9 @@ Top to bottom, left to right:
   position: `Move` · `Lines` · `Goes on` · `Found in` (a click opens that
   file there). While it is up the board is free: a move the file does not play
   is shown, never written, and the header reads `Off the file: …` with a
-  take-back and `Back to the file`; the engine follows the free board.
+  take-back and `Back to the file`; the engine follows the free board, while
+  Replies, Expectimax and the other explorer sources stay on the file's
+  position (they read `DocumentCursor.fen`, not `RepertoireTree.fen`).
 - **Panes** — the pane's `+` (Tools) lists the mode's tabs, a few actions with
   their keys, `More room` / `Less room` (with several panes), `New pane`,
   `Close pane`, `Join all panes`. Up to four panes. Dragging a tab shows `Move

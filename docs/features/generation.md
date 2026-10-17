@@ -200,9 +200,3 @@ the chapter's draft and trained there.
   with Maia as fallback under N games.
 - **Nothing is computed while browsing** (2026-08-21): stored values only;
   a missing one reads `not in tree`.
-
-## Not built
-
-- The chess-prep MCP `expectimax_resume` refuses the app's algorithm-version-4
-  (shortlisted) trees, so an agent cannot continue an interactive app search
-  (`tools/mcp/chess_prep/expectimax_chapters.py`, `algorithm_version` check).

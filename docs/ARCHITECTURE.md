@@ -504,8 +504,7 @@ note keeps it. Arrows and circles follow the same rule.
 - Lichess and account credentials live in SharedPreferences
   (`storage/lichess_token.dart`, `storage/my_accounts.dart`); unreadable or
   mistyped keys read as signed out and are removed. Secrets never appear in
-  settings, logs or exports. Moving tokens to an OS vault is backlog: migrate
-  and verify one account before removing its key.
+  settings, logs or exports.
 
 ## Network and offline
 
@@ -570,8 +569,7 @@ rewritten from its owner's public API and the theme alone:
 
 ## Known hard problems
 
-Regression contracts and open risks, not a feature list
-([backlog](FUTURE_FEATURES.md)):
+Regression contracts and open risks, not a feature list:
 
 - **Recoverable references.** Relocation, compound writes and line transfers
   (`storage/file_relocation.dart`, `storage/compound_write.dart`,

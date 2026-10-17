@@ -116,10 +116,3 @@ Repertoire builder at that position. Clicking a book move's file name (`Open
 - 2026-09-23: games are read against the one opening book in use app-wide
   (Books), shown and switched with the book chip wherever a book is read. The
   default is no book, not every repertoire.
-
-## Not built
-
-- A moments strip (small boards at each deviation and mistake) and board
-  thumbnails on game rows: `MyGamesPanel._GameRow` is text only.
-- Commentary lines in a repertoire marked as "not recommended" are treated as
-  ordinary book moves: `chess/book/book_check.dart` has no such notion.
