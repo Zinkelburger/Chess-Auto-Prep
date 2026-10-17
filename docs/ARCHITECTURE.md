@@ -69,7 +69,9 @@ A widget file outside `app/` never imports `dart:io` or `net/`. From
 
 - `app/environment.dart` (`AppEnvironment`) is every way out of the app —
   files, dialogs, sites, engines, Maia, the clock, timings; `.native()` builds
-  the real ones. A new way out of the app is a field here.
+  the real ones, from `native_engines.dart` (engine and Maia launches) and
+  `native_desktop.dart` (browser, file manager, window, updates). A new way
+  out of the app is a field here.
 - `app/app_parts.dart` (`AppParts`) builds the app over any environment in
   order and disposes it in reverse, calling `app/mode_wiring.dart` and
   `app/workspace_wiring.dart`. Window tests build a scripted environment and
