@@ -5,7 +5,7 @@
 // - repertoires: KID with chapter files and a course file whose chapters are
 //   `[ChapterName]` sections, and Benko with a CRLF chapter;
 // - a Lichess-style study;
-// - the four training files: a BOM, CRLF, 8-, 10- and 11-column review rows,
+// - the four training files: a BOM, CRLF, review rows,
 //   attempt lines carrying keys no app writes, rows for chapters no scenario
 //   touches, and one row whose chapter was gone before any scenario ran;
 // - books.json with unknown keys and section selectors;
@@ -146,19 +146,26 @@ Future<void> _writeTraining(Profile profile) async {
   const due = '2026-09-16T08:12:00.000Z';
   const last = '2026-09-10T08:12:00.000Z';
   String row(List<String> cells) => encodeCsvRecord(cells);
-  // Eight columns, then pass and fail counts (10) and the exclusion flag (11).
   String review(
     String path,
     String id,
     String name,
-    String rating, [
-    List<String> more = const [],
-  ]) => row([path, id, name, '2.50', '1.00', due, rating, last, ...more]);
+    String rating,
+    List<String> counts,
+  ) => row([path, id, name, '2.50', '1.00', due, rating, last, ...counts]);
   final reviews = [
     reviewsHeader,
     review(at(kidMain), main[0], 'Main', 'good', ['3', '1', 'false']),
-    review(at(kidCourse), course[0], 'Mar del Plata', 'hard', ['1', '2']),
-    review(at(benkoAccepted), accepted[1], 'Accepted', 'again'),
+    review(at(kidCourse), course[0], 'Mar del Plata', 'hard', [
+      '1',
+      '2',
+      'false',
+    ]),
+    review(at(benkoAccepted), accepted[1], 'Accepted', 'again', [
+      '0',
+      '0',
+      'false',
+    ]),
     review(at(benkoDeclined), declined[0], 'Declined', 'easy', [
       '4',
       '0',

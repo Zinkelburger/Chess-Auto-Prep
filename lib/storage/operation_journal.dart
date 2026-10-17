@@ -30,10 +30,6 @@ import 'recovery_ledger.dart';
 abstract interface class Recorded {
   String get id;
 
-  /// False for a record an earlier build kept after it finished or gave up:
-  /// it is removed, never carried out.
-  bool get live;
-
   /// The record as its owner writes it.
   Map<String, Object?> get json;
 }
@@ -111,7 +107,7 @@ final class OperationJournal<R extends Recorded> {
       return (record: done, done: true);
     }
     for (final (file, record) in await _readAll()) {
-      if (record.id != id || !record.live) continue;
+      if (record.id != id) continue;
       if (await _movedAside(file, id)) return null;
       return (record: record, done: false);
     }
@@ -272,7 +268,7 @@ final class OperationJournal<R extends Recorded> {
     bool Function(R record) same,
   ) async {
     for (final (file, record) in await _readAll()) {
-      if (!record.live || !same(record)) continue;
+      if (!same(record)) continue;
       if (await _movedAside(file, record.id)) continue;
       final settlement = await finish(record, setAside: false);
       if (settlement is Finished) ledger.remember(name, id, record);
@@ -446,7 +442,7 @@ final class OperationJournal<R extends Recorded> {
   /// the rest and is answered; one that can never finish is set aside.
   Future<Deferred?> finishOverlapping(bool Function(R record) overlaps) async {
     for (final (file, record) in await _readAll()) {
-      if (!record.live || !overlaps(record)) continue;
+      if (!overlaps(record)) continue;
       if (await _movedAside(file, record.id)) continue;
       if (await finish(record) case final Deferred deferred) return deferred;
     }
@@ -458,10 +454,6 @@ final class OperationJournal<R extends Recorded> {
   /// whose record is damaged, is set aside and logged; the rest still run.
   Future<void> recover() async {
     for (final (file, record) in await _readAll()) {
-      if (!record.live) {
-        await _forgetLeftover(file, record.id);
-        continue;
-      }
       if (await _movedAside(file, record.id)) continue;
       if (await _locked(record) case Deferred(:final detail)) {
         log.w('finish the operation recorded at ${file.path}', detail);
@@ -479,24 +471,6 @@ final class OperationJournal<R extends Recorded> {
     } on Object catch (error) {
       final phase = ledger.owing(name, record.id)?.phase ?? Phase.pivots;
       return _settle(record, Deferred(describe(error), phase: phase));
-    }
-  }
-
-  /// Removes a finished or abandoned record, which earlier builds kept too.
-  /// One that cannot be removed yet is tried again but guards nothing.
-  Future<void> _forgetLeftover(File record, String id) async {
-    try {
-      await forgetRecord(record, synchronize: _synchronize);
-      ledger.settled(name, id);
-    } on Object catch (error) {
-      ledger.deferred(
-        name,
-        id,
-        paths: const {},
-        detail: describe(error),
-        now: _clock(),
-      );
-      log.w('remove the finished record at ${record.path}', error);
     }
   }
 

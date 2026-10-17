@@ -4,12 +4,14 @@ import 'package:path/path.dart' as p;
 
 import 'directory_entries.dart';
 import '../diagnostics/log.dart';
-import 'relocation_notes.dart' show recoveryFolder;
 
 // The chapters the user deleted, which are still on disk: a delete moves a
-// chapter into the recovery folder beside it (`relocation_notes.dart`)
-// under `<microseconds>-<token>-<file name>`, the name every deleted chapter
-// already in a recovery folder carries.
+// chapter into the recovery folder beside it ([recoveryFolder]) under
+// `<microseconds>-<token>-<file name>`.
+
+/// The folder inside a repertoire, or a studies folder, that deleted chapters
+/// are moved into.
+const recoveryFolder = '.cap-pgn-history';
 
 /// One deleted chapter file, and where it came from.
 final class DeletedChapter {

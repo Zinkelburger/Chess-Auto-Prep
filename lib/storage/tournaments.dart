@@ -238,12 +238,7 @@ final class FileTournaments
     final Map<String, Object?> data;
     try {
       data = tournamentObject(jsonDecode(text));
-      // Version 1 records, which keep the whole earlier PGN, stay readable.
-      final before = switch (data['version']) {
-        1 => data['pgnBefore'],
-        2 => data['pgnBeforeSha256'],
-        _ => 0,
-      };
+      final before = data['version'] == 2 ? data['pgnBeforeSha256'] : 0;
       if ((before != null && before is! String) ||
           data['after'] is! String ||
           data['pgnAfter'] is! String) {
@@ -387,8 +382,7 @@ Future<void> _publish(String path, String text) async {
 }
 
 /// A tournament's games, through the document store: before is the PGN the
-/// record names (whole in version 1, by hash in version 2), after the new
-/// one. Games once published stay as they are, even when the save is set
+/// record names by its hash, after the new one. Games once published stay as they are, even when the save is set
 /// aside.
 final class _Games implements Pivot {
   _Games(this.documents, this.ref, this.record, this._read);
@@ -412,9 +406,8 @@ final class _Games implements Pivot {
     }
     final text = _text(read);
     if (text == _after) return const HoldsAfter();
-    final before = record['version'] == 1
-        ? text == record['pgnBefore']
-        : (text == null ? null : _sha256(text)) == record['pgnBeforeSha256'];
+    final before =
+        (text == null ? null : _sha256(text)) == record['pgnBeforeSha256'];
     return before
         ? const HoldsBefore()
         : const HoldsOther('Tournament recovery found an external edit.');

@@ -8,7 +8,6 @@ import '../../storage/operation_id.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/pgn_document_store.dart' as store;
 import '../../storage/player_files.dart';
-import '../../storage/relocation_notes.dart' show recoveryFolder;
 import '../../ui/file_names.dart';
 import '../../workspace/document_saver.dart';
 import '../../workspace/document_session.dart';

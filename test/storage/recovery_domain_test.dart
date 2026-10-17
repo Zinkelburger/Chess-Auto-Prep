@@ -3,8 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/storage/recovery_gate.dart';
-import 'package:chess_auto_prep/storage/training_store.dart';
-import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -42,7 +40,7 @@ void main() {
 
   // The child is another copy of the app: a separate process that holds the
   // domain through its own gate.
-  const folder = 'unfinished-moves';
+  const folder = 'relocation-writes';
   test(
     'another copy\'s domain excludes the app through a canonical alias',
     () async {
@@ -99,76 +97,6 @@ void main() {
     skip: !Platform.isLinux,
     timeout: const Timeout(Duration(seconds: 60)),
   );
-  test(
-    'a landed move an earlier build noted is finished once its holder is '
-    'killed',
-    () async {
-      final from = p.join(documents.path, 'repertoires', 'Old', 'Main.pgn');
-      final to = p.join(documents.path, 'repertoires', 'New', 'Main.pgn');
-      await Directory(p.dirname(from)).create();
-      await File(from).writeAsString('1. e4 *');
-      final original = _training(from);
-      for (final entry in original.entries) {
-        await File(
-          p.join(documents.path, entry.key),
-        ).writeAsString(entry.value);
-      }
-      final child = await _hold(
-        harness,
-        documents,
-        support,
-        false,
-        checkpoint: true,
-      );
-      addTearDown(child.close);
-      expect(await File(from).exists(), isFalse);
-      expect(await File(to).readAsString(), '1. e4 *');
-      final notes = Directory(p.join(support.path, folder));
-      final note =
-          (await notes.list().where((entry) => entry is File).toList()).single
-              as File;
-      final recorded = await note.readAsString();
-      expect(child.process.kill(ProcessSignal.sigkill), isTrue);
-      await child.process.exitCode.timeout(const Duration(seconds: 10));
-      expect(await note.readAsString(), recorded);
-      for (final entry in original.entries) {
-        expect(
-          await File(p.join(documents.path, entry.key)).readAsString(),
-          entry.value,
-        );
-      }
-      Future<void> recover() async {
-        final progress = await TrainingStore(
-          documents,
-          support: support,
-        ).read({to});
-        expect(progress, isA<ProgressLoaded>());
-        final loaded = progress as ProgressLoaded;
-        expect(loaded.reviews, hasLength(1));
-        expect(loaded.streaks, hasLength(1));
-        expect(loaded.mistakes, hasLength(1));
-      }
-
-      await recover().timeout(const Duration(seconds: 10));
-      final recovered = <String, String>{};
-      for (final name in original.keys) {
-        final text = await File(p.join(documents.path, name)).readAsString();
-        expect(to.allMatches(text), hasLength(1), reason: name);
-        expect(text, isNot(contains(from)), reason: name);
-        recovered[name] = text;
-      }
-      await recover().timeout(const Duration(seconds: 10));
-      for (final entry in recovered.entries) {
-        expect(
-          await File(p.join(documents.path, entry.key)).readAsString(),
-          entry.value,
-        );
-      }
-      expect(await notes.list().toList(), isEmpty);
-    },
-    skip: !Platform.isLinux,
-    timeout: const Timeout(Duration(seconds: 60)),
-  );
 }
 
 /// The contents of every file set aside under Support/recovery-quarantine.
@@ -181,33 +109,19 @@ Future<List<String>> _quarantined(Directory support) async {
   ];
 }
 
-Map<String, String> _training(String source) => {
-  'repertoire_reviews.csv':
-      'repertoire_id,line_id,line_name,difficulty,interval_days,due_utc,last_rating,last_reviewed_utc,pass_count,fail_count,excluded\n'
-      '$source,line,Opening,2.50,7,2027-01-01T00:00:00.000Z,good,,4,2,false\n',
-  'repertoire_move_progress.csv':
-      'repertoire_id,line_id,move_index,correct_streak,learned\n$source,line,2,5,1\n',
-  'repertoire_review_history.csv':
-      'repertoire_id,line_id,timestamp_utc,rating,had_mistake,session_type\n'
-      '$source,line,2026-09-16T00:00:00.000Z,good,0,drilling\n',
-  'repertoire_move_attempts.jsonl':
-      '${jsonEncode({'repertoireId': source, 'lineId': 'line', 'moveIndex': 2, 'fen': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', 'playedSan': 'd4', 'expectedSan': 'e4', 'correct': false, 'phase': 'drilling', 'timestampUtc': '2026-09-16T00:00:00.000Z', 'futureField': 7})}\n',
-};
-
 Future<_Child> _hold(
   File harness,
   Directory documents,
   Directory support,
-  bool interrupted, {
-  bool checkpoint = false,
-}) async {
+  bool interrupted,
+) async {
   final process = await Process.start('dart', [
     'run',
     '--packages=${p.join(Directory.current.path, '.dart_tool', 'package_config.json')}',
     harness.path,
     documents.path,
     support.path,
-    checkpoint ? 'checkpoint' : '$interrupted',
+    '$interrupted',
   ], workingDirectory: Directory.current.path);
   final ready = Completer<void>();
   final diagnostics = StringBuffer();
@@ -253,45 +167,27 @@ final class _Child {
 }
 
 // Real separate Dart VM process holding the domain through the app's gate.
-// The malformed retained note models a crash during metadata publication: it
-// may not be taken for no pending operation. No new recovery format is
-// created.
+// The malformed retained record models a crash during metadata publication:
+// it may not be taken for no pending operation.
 const _harness = r'''
 import 'dart:convert';
 import 'dart:io';
 import 'package:chess_auto_prep/storage/recovery_gate.dart';
 import 'package:path/path.dart' as p;
-import 'package:document_file_io/document_file_io.dart';
 
 Future<void> main(List<String> args) async {
   final documents = Directory(args[0]);
   final support = Directory(args[1]);
   Future<void> hold() async {
     if (args[2] == 'true') {
-      final folder = Directory(p.join(support.path, 'unfinished-moves'));
+      final folder = Directory(p.join(support.path, 'relocation-writes'));
       await folder.create();
       await File(p.join(folder.path, '1-a.json')).writeAsString('interrupted-json', flush: true);
     }
     stdout.writeln('domain held');
     await stdin.transform(utf8.decoder).transform(const LineSplitter()).first;
   }
-  final from = p.join(documents.path, 'repertoires', 'Old');
-  final to = p.join(documents.path, 'repertoires', 'New');
   final gate = RecoveryGate(documents: documents, support: support);
-  await gate.run(() async {
-    if (args[2] == 'checkpoint') {
-      final identity = (await observeDirectory(from)).identity!;
-      // The note an older build wrote before its rename; this build only
-      // finishes them.
-      final note = File(p.join(support.path, 'unfinished-moves', '1-a.json'));
-      await note.parent.create(recursive: true);
-      await note.writeAsString(
-          jsonEncode({'from': from, 'to': to, 'identity': identity, 'folder': true}),
-          flush: true);
-      await Directory(from).rename(to);
-      await syncDirectory(p.dirname(from));
-    }
-    await hold();
-  });
+  await gate.run(hold);
 }
 ''';

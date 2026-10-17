@@ -79,24 +79,6 @@ void main() {
     expect((review.lastRating, review.passes, review.fails), ('good', 3, 1));
   });
 
-  test('rows from older versions: 8 and 10 columns, and an unquoted path '
-      'with a comma', () async {
-    await file(reviewsFile).writeAsString(
-      '$reviewsHeader\n'
-      '$kid,line_8,Eight,2.50,1.00,,good,\n'
-      '$kid,line_10,Ten,2.50,1.00,,good,,2,0\n'
-      '$comma,line_c,Comma,2.50,1.00,,good,,1,1,true\n',
-    );
-    final loaded = await read({kid, comma});
-    expect(loaded.reviews.keys, [
-      (source: kid, id: 'line_8'),
-      (source: kid, id: 'line_10'),
-      (source: comma, id: 'line_c'),
-    ]);
-    expect(loaded.reviews[(source: kid, id: 'line_10')]!.passes, 2);
-    expect(loaded.reviews[(source: comma, id: 'line_c')]!.excluded, isTrue);
-  });
-
   test('a line of empty cells, as a spreadsheet writes one, is passed '
       'over', () async {
     await file(
@@ -259,7 +241,6 @@ void main() {
       '$historyHeader\n$kid,line_1,2026-09-22T12:00:00.000Z,good,0,'
       'trainer\n',
     );
-    expect(file('$reviewsFile.pre-csv-v2.bak').existsSync(), isFalse);
   });
 
   for (final (name, blank, kept) in [
@@ -325,40 +306,6 @@ void main() {
         '2026-09-14T00:00:00.000Z,3,1,false\n',
       ),
     );
-  });
-
-  test('a write under an older header writes the current one', () async {
-    const eightColumns =
-        'repertoire_id,line_id,line_name,difficulty,interval_days,due_utc,'
-        'last_rating,last_reviewed_utc';
-    final eight = '$benko,line_8,Eight,2.50,1.00,,good,';
-    await file(
-      reviewsFile,
-    ).writeAsString('$eightColumns\n$eight\n${_review(kid, 'line_1')}\n');
-    final before = (await read({kid})).reviews[mainline];
-    await store.write(
-      operation: operation(),
-      reviews: [(before: before, after: rated(before))],
-    );
-    final lines = await file(reviewsFile).readAsLines();
-    expect(lines.first, reviewsHeader);
-    expect(lines[1], eight, reason: 'an older row keeps its bytes');
-    expect((await read({kid, benko})).reviews.length, 2);
-  });
-
-  test('keeps what the file held first, once', () async {
-    final original = '$reviewsHeader\n${_review(kid, 'line_1')}\n';
-    await file(reviewsFile).writeAsString(original);
-    final before = (await read({kid})).reviews[mainline];
-    await store.write(
-      operation: operation(),
-      reviews: [(before: before, after: rated(before))],
-    );
-    await store.write(
-      operation: operation(),
-      reviews: [(before: rated(before), after: rated(before))],
-    );
-    expect(await file('$reviewsFile.pre-csv-v2.bak').readAsString(), original);
   });
 
   test('refuses a row somebody else changed since it was read', () async {

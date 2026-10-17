@@ -72,7 +72,7 @@ void main() {
   });
 
   test('a damaged recovery note does not stop an import', () async {
-    final note = File(p.join(support.path, 'unfinished-moves', 'bad.json'));
+    final note = File(p.join(support.path, 'relocation-writes', 'bad.json'));
     await note.parent.create(recursive: true);
     await note.writeAsString('{');
     final result = await library.importText(

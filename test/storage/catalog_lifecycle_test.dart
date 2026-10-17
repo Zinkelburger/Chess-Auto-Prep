@@ -163,55 +163,41 @@ void main() {
     },
   );
 
-  test(
-    'flat files migrate guardedly, nested files follow rename and recovery',
-    () async {
-      final disk = await StoreFixture.create();
-      addTearDown(disk.dispose);
-      final root = Directory(p.join(disk.documents.path, 'repertoires'));
-      final flat = disk.ref('repertoires/Legacy.pgn');
-      await disk.put(flat, '[Event "Legacy"]\n\n1. e4 *\n');
-      final nested = disk.ref('repertoires/KID/Week 1/Main.pgn');
-      final revision = await disk.put(nested, '[Event "Nested"]\n\n1. d4 *\n');
-      await disk.edit(nested, '[Event "Nested"]\n\n1. d4 d5 *\n', revision);
-      final files = ChapterDirectory(
-        root,
-        documents: disk.store,
-        recovery: disk.store.recovery,
-      );
-      final listing = await files.list() as Repertoires;
-      expect(listing.folders.map((f) => f.name), ['KID', 'Legacy']);
-      expect(listing.folders.first.chapters.single.repertoire, 'KID');
-      expect(
-        listing.folders.last.chapters.single.path,
-        p.join(root.path, 'Legacy', 'Main.pgn'),
-      );
-      expect(await File(flat.path).exists(), isFalse);
-      const book = Book(id: 'k', name: 'KID', repertoires: {'KID'});
-      expect(book.includes('KID/Week 1/Main.pgn', null), isTrue);
-      final from = p.join(root.path, 'KID');
-      final to = p.join(root.path, 'Renamed');
-      expect(await disk.store.moveFolder(from, to), isA<FolderMoved>());
-      final moved = DocumentRef(p.join(to, 'Week 1', 'Main.pgn'));
-      expect(
-        disk.keptVersions(moved),
-        isNotEmpty,
-        reason: 'nested history follows the move',
-      );
-      final opened = await disk.store.open(moved) as Opened;
-      expect(
-        await disk.store.delete(moved, expected: opened.revision),
-        isA<Deleted>(),
-      );
-      final deleted = await files.deleted() as DeletedChapters;
-      expect(deleted.chapters.single.folder, p.dirname(moved.path));
-      final recovery = DocumentRef(deleted.chapters.single.path);
-      final read = await disk.store.open(recovery) as Opened;
-      expect(
-        await disk.store.move(recovery, moved, expected: read.revision),
-        isA<Moved>(),
-      );
-      expect((await disk.store.open(moved) as Opened).text, contains('d4 d5'));
-    },
-  );
+  test('nested files follow rename and recovery', () async {
+    final disk = await StoreFixture.create();
+    addTearDown(disk.dispose);
+    final root = Directory(p.join(disk.documents.path, 'repertoires'));
+    final nested = disk.ref('repertoires/KID/Week 1/Main.pgn');
+    final revision = await disk.put(nested, '[Event "Nested"]\n\n1. d4 *\n');
+    await disk.edit(nested, '[Event "Nested"]\n\n1. d4 d5 *\n', revision);
+    final files = ChapterDirectory(root, recovery: disk.store.recovery);
+    final listing = await files.list() as Repertoires;
+    expect(listing.folders.map((f) => f.name), ['KID']);
+    expect(listing.folders.first.chapters.single.repertoire, 'KID');
+    const book = Book(id: 'k', name: 'KID', repertoires: {'KID'});
+    expect(book.includes('KID/Week 1/Main.pgn', null), isTrue);
+    final from = p.join(root.path, 'KID');
+    final to = p.join(root.path, 'Renamed');
+    expect(await disk.store.moveFolder(from, to), isA<FolderMoved>());
+    final moved = DocumentRef(p.join(to, 'Week 1', 'Main.pgn'));
+    expect(
+      disk.keptVersions(moved),
+      isNotEmpty,
+      reason: 'nested history follows the move',
+    );
+    final opened = await disk.store.open(moved) as Opened;
+    expect(
+      await disk.store.delete(moved, expected: opened.revision),
+      isA<Deleted>(),
+    );
+    final deleted = await files.deleted() as DeletedChapters;
+    expect(deleted.chapters.single.folder, p.dirname(moved.path));
+    final recovery = DocumentRef(deleted.chapters.single.path);
+    final read = await disk.store.open(recovery) as Opened;
+    expect(
+      await disk.store.move(recovery, moved, expected: read.revision),
+      isA<Moved>(),
+    );
+    expect((await disk.store.open(moved) as Opened).text, contains('d4 d5'));
+  });
 }

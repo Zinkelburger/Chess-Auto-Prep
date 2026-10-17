@@ -16,7 +16,9 @@ import 'training_rows.dart';
 
 enum FileRelocationKind { move, delete }
 
-enum RelocationState { prepared, committing, complete, cancelled }
+/// The one state a relocation record is written in: it names an operation
+/// still to be carried out.
+const _committing = 'committing';
 
 /// One concrete namespace move and its complete captured reference read set.
 /// Versions remain operation-specific; old file records keep their encoding.
@@ -50,17 +52,12 @@ sealed class RelocationRecord implements Recorded {
   TrainingRepointPlan get training;
   String? get booksBefore;
   String? get booksAfter;
-  RelocationState get state;
-  set state(RelocationState value);
   Iterable<BackupMove> get backups;
-  Map<String, Object?> toJson(RelocationState phase);
+  Map<String, Object?> toJson();
   void validate({required Directory documents, required Directory support});
 
   @override
-  bool get live => state == RelocationState.committing;
-
-  @override
-  Map<String, Object?> get json => toJson(RelocationState.committing);
+  Map<String, Object?> get json => toJson();
 }
 
 /// The durable immutable plan of a single file relocation. Only its phase
@@ -78,7 +75,6 @@ final class FileRelocationRecord extends RelocationRecord {
     required this.booksBefore,
     required this.booksAfter,
     required this.backup,
-    this.state = RelocationState.prepared,
   });
 
   factory FileRelocationRecord.fromJson(
@@ -116,10 +112,8 @@ final class FileRelocationRecord extends RelocationRecord {
     final to = _string(json['to']);
     final trainingRoot = _string(json['trainingRoot']);
     final training = _decodeTraining(json, documents);
-    final state = RelocationState.values
-        .where((s) => s.name == json['state'])
-        .firstOrNull;
-    if (state == null || json['backup'] is! Map<String, Object?>) {
+    if (json['state'] != _committing ||
+        json['backup'] is! Map<String, Object?>) {
       throw const RecoveryRequired('Unsupported relocation state or backup.');
     }
     return FileRelocationRecord(
@@ -134,7 +128,6 @@ final class FileRelocationRecord extends RelocationRecord {
       booksBefore: _nullable(json['booksBefore']),
       booksAfter: _nullable(json['booksAfter']),
       backup: BackupMove.fromJson(json['backup'] as Map<String, Object?>),
-      state: state,
     );
   }
 
@@ -159,15 +152,13 @@ final class FileRelocationRecord extends RelocationRecord {
   final BackupMove backup;
   @override
   Iterable<BackupMove> get backups => [backup];
-  @override
-  RelocationState state;
 
   @override
-  Map<String, Object?> toJson(RelocationState phase) => {
+  Map<String, Object?> toJson() => {
     'version': 1,
     'kind': kind.name,
     'id': id,
-    'state': phase.name,
+    'state': _committing,
     'from': from,
     'to': to,
     'trainingRoot': trainingRoot,
@@ -251,7 +242,6 @@ final class FolderRelocationRecord extends RelocationRecord {
     required this.booksBefore,
     required this.booksAfter,
     required Map<String, BackupMove> backupByPath,
-    this.state = RelocationState.prepared,
   }) : backupByPath = Map.unmodifiable(backupByPath);
 
   factory FolderRelocationRecord.fromJson(
@@ -282,10 +272,7 @@ final class FolderRelocationRecord extends RelocationRecord {
         json['id'] != id) {
       throw const RecoveryRequired('Unsupported folder relocation schema.');
     }
-    final state = RelocationState.values
-        .where((s) => s.name == json['state'])
-        .firstOrNull;
-    if (state == null) {
+    if (json['state'] != _committing) {
       throw const RecoveryRequired('Unsupported folder relocation state.');
     }
     return FolderRelocationRecord(
@@ -301,7 +288,6 @@ final class FolderRelocationRecord extends RelocationRecord {
       booksBefore: _nullable(json['booksBefore']),
       booksAfter: _nullable(json['booksAfter']),
       backupByPath: _decodeFolderBackups(json['backups']),
-      state: state,
     );
   }
 
@@ -322,18 +308,16 @@ final class FolderRelocationRecord extends RelocationRecord {
   final String? booksAfter;
   final Map<String, BackupMove> backupByPath;
   @override
-  RelocationState state;
-  @override
   String get identity => snapshot.identity;
   @override
   Iterable<BackupMove> get backups => backupByPath.values;
 
   @override
-  Map<String, Object?> toJson(RelocationState phase) => {
+  Map<String, Object?> toJson() => {
     'version': 2,
     'kind': 'folder',
     'id': id,
-    'state': phase.name,
+    'state': _committing,
     'from': from,
     'to': to,
     'identity': identity,
@@ -570,14 +554,11 @@ void validateFolderParticipantPaths(
       'backup-moves',
       'compound-writes',
       'recovery-quarantine',
-      'unfinished-moves',
       'backups',
       'books.json',
-      'repertoire-mutations',
     ])
       p.join(support.path, name),
     p.join(documents.path, '.cap-reference-history'),
-    p.join(documents.path, 'repertoires', '.cap-repertoire-publications'),
   ];
   for (final endpoint in [from, to]) {
     if (p.equals(endpoint, support.path) ||

@@ -55,7 +55,7 @@ final class GenerationTrees {
       );
     }
     final bytes = utf8.encode(tree);
-    final root = recovery.training.documents;
+    final root = recovery.canonicalDocuments;
     final source = p.join(root.path, p.relative(path, from: configured));
     final folder = p.join(
       p.dirname(source),
@@ -98,7 +98,7 @@ final class GenerationTrees {
         !p.isWithin(configured, chapter.path)) {
       throw const FileSystemException('Invalid saved search location.');
     }
-    final root = recovery.training.documents;
+    final root = recovery.canonicalDocuments;
     final source = p.join(
       root.path,
       p.relative(chapter.path, from: configured),

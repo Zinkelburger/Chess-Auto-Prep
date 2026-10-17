@@ -7,7 +7,6 @@ import 'dart:io';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/file_relocation.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/storage/relocation_notes.dart';
 import 'package:document_file_io/document_file_io.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -16,7 +15,6 @@ import 'store_fixture.dart';
 
 void main() {
   late StoreFixture fixture;
-  late RelocationNotes notes;
   late List<String> flushed;
   String? failAt;
   String canonical(String path) => p.normalize(
@@ -30,27 +28,8 @@ void main() {
     fixture = await StoreFixture.create();
     flushed = [];
     failAt = null;
-    notes = RelocationNotes(
-      documents: fixture.documents,
-      support: fixture.support,
-      synchronize: (path) async {
-        flushed.add(path);
-        if (path == failAt) {
-          throw FileSystemException('injected flush failure', path);
-        }
-        await syncDirectory(path);
-      },
-    );
   });
   tearDown(() => fixture.dispose());
-
-  List<File> quarantined() {
-    final folder = Directory(
-      p.join(fixture.support.path, 'recovery-quarantine'),
-    );
-    if (!folder.existsSync()) return const [];
-    return folder.listSync(recursive: true).whereType<File>().toList();
-  }
 
   File getRows() =>
       File(p.join(fixture.documents.path, 'repertoire_move_progress.csv'));
@@ -58,62 +37,6 @@ void main() {
     'repertoire_id,line_id,move_index,correct_streak,learned\n'
     '${ref.path},line_1,4,2,true\n',
   );
-
-  for (final endpoint in ['source', 'destination', 'ancestor']) {
-    test(
-      'an old folder note whose $endpoint flush fails is finished later',
-      () async {
-        final from = fixture.ref('repertoires/Before/Main.pgn');
-        await fixture.put(from, oneGame('1. d4'));
-        await rowsFor(from);
-        final sourceParent = p.dirname(p.dirname(from.path));
-        final destinationParent = p.join(fixture.documents.path, 'nested');
-        await Directory(destinationParent).create();
-        failAt = canonical(switch (endpoint) {
-          'source' => sourceParent,
-          'destination' => destinationParent,
-          _ => fixture.documents.path,
-        });
-        // Replay a real original-format note, which only older builds
-        // wrote. New folder commands use the complete journal.
-        final source = p.dirname(from.path);
-        final target = p.join(destinationParent, 'After');
-        await leaveMoveNote(
-          fixture.support,
-          'old-folder',
-          from: source,
-          to: target,
-          identity: (await observeDirectory(source)).identity!,
-          folder: true,
-        );
-        await movePathNoReplace(source, target);
-        // A failed flush never throws at the caller and keeps the note for
-        // the next start rather than setting it aside.
-        await notes.finishOwed();
-        expect(notedMoves(fixture.support), hasLength(1));
-        expect(quarantined(), isEmpty);
-        expect(await getRows().readAsString(), contains(from.path));
-        failAt = null;
-        flushed.clear();
-        await notes.finishOwed();
-        expect(
-          flushed,
-          containsAll([
-            canonical(sourceParent),
-            canonical(destinationParent),
-            canonical(fixture.documents.path),
-          ]),
-        );
-        expect(notedMoves(fixture.support), isEmpty);
-        final movedPath = p.join(target, 'Main.pgn');
-        expect(await File(movedPath).readAsString(), oneGame('1. d4'));
-        expect(await getRows().readAsString(), contains(movedPath));
-        final committedRows = await getRows().readAsString();
-        await notes.finishOwed();
-        expect(await getRows().readAsString(), committedRows);
-      },
-    );
-  }
 
   for (final operation in ['move', 'rename', 'delete']) {
     for (final endpoint in ['source', 'destination', 'ancestor']) {
@@ -212,7 +135,6 @@ void main() {
       ),
       isA<Moved>(),
     );
-    expect(notedMoves(fixture.support), isEmpty);
   });
 
   test('new metadata ancestry must flush before a move may start', () async {
@@ -354,30 +276,4 @@ void main() {
       );
     }
   }
-
-  test(
-    'a cancelled move whose flush fails keeps its note until it can finish',
-    () async {
-      final from = fixture.ref('repertoires/Before/Main.pgn');
-      final to = fixture.ref('repertoires/Absent/Nested/Main.pgn');
-      await fixture.put(from, oneGame('1. d4'));
-      final identity = (await observeFile(from.path)).identity!;
-      await leaveMoveNote(
-        fixture.support,
-        'cancelled',
-        from: from.path,
-        to: to.path,
-        identity: identity,
-        folder: false,
-      );
-      failAt = canonical(p.dirname(from.path));
-      await notes.finishOwed();
-      expect(notedMoves(fixture.support), hasLength(1));
-      failAt = null;
-      await notes.finishOwed();
-      expect(notedMoves(fixture.support), isEmpty);
-      expect(quarantined(), isEmpty);
-      expect(await File(from.path).exists(), isTrue);
-    },
-  );
 }

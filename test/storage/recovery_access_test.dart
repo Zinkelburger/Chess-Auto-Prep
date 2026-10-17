@@ -5,7 +5,6 @@ import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/games_written.dart';
 import 'package:chess_auto_prep/chess/training/records.dart';
 import 'package:chess_auto_prep/storage/compound_write.dart';
-import 'package:chess_auto_prep/storage/document_probe.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/file_lock.dart';
@@ -59,28 +58,19 @@ void main() {
   test('first document read recovers a landed move before returning', () async {
     final before = fixture.ref('repertoires/Opening/Old.pgn');
     final after = fixture.ref('repertoires/Opening/New.pgn');
-    await fixture.put(before, oneGame('1. d4'));
-    final identity = (await probeDocument(before.path) as FileFound).identity;
+    final revision = await fixture.put(before, oneGame('1. d4'));
     final rows = File(
       p.join(fixture.documents.path, 'repertoire_move_progress.csv'),
     );
     await rows.writeAsString(
       'repertoire_id,line_id,move_index,correct_streak,learned\n${before.path},line_1,4,2,true\n',
     );
-    await leaveMoveNote(
-      fixture.support,
-      'landed',
-      from: before.path,
-      to: after.path,
-      identity: identity,
-      folder: false,
-    );
-    await File(before.path).rename(after.path);
+    await _landedMove(fixture, before, after, revision);
 
     final store = restarted(fixture);
     expect(await store.open(after), isA<Opened>());
     expect(await rows.readAsString(), contains('${after.path},line_1'));
-    expect(notedMoves(fixture.support), isEmpty);
+    expect(_owedMoves(fixture), isEmpty);
     final settled = await rows.readAsBytes();
     expect(await store.open(after), isA<Opened>());
     expect(await rows.readAsBytes(), settled);
@@ -107,7 +97,7 @@ void main() {
     final ref = fixture.ref('repertoires/Opening/Main.pgn');
     await fixture.put(ref, oneGame('1. d4'));
     final note = File(
-      p.join(fixture.support.path, 'unfinished-moves', 'bad.json'),
+      p.join(fixture.support.path, FileRelocations.journal, 'bad.json'),
     );
     await note.parent.create(recursive: true);
     await note.writeAsString('not-json');
@@ -131,7 +121,7 @@ void main() {
     final flat = fixture.ref('repertoires/Flat.pgn');
     await fixture.put(flat, oneGame('1. d4'));
     final note = File(
-      p.join(fixture.support.path, 'unfinished-moves', 'bad.json'),
+      p.join(fixture.support.path, FileRelocations.journal, 'bad.json'),
     );
     await note.parent.create(recursive: true);
     await note.writeAsString('not-json');
@@ -142,7 +132,6 @@ void main() {
     final chapters = ChapterDirectory(
       Directory(p.join(fixture.documents.path, 'repertoires')),
       recovery: store.recovery,
-      documents: store,
     );
     expect(await chapters.list(), isA<Repertoires>());
     expect(await chapters.deleted(), isA<DeletedChapters>());
@@ -845,8 +834,7 @@ Future<List<String>> _setAside(StoreFixture fixture) async => [
 Future<void> _firstAccess(StoreFixture fixture, String firstAccess) async {
   final before = fixture.ref('repertoires/Opening/Old.pgn');
   final after = fixture.ref('repertoires/Opening/New.pgn');
-  await fixture.put(before, oneGame('1. d4'));
-  final identity = (await probeDocument(before.path) as FileFound).identity;
+  final revision = await fixture.put(before, oneGame('1. d4'));
   final files = {
     'repertoire_reviews.csv':
         'repertoire_id,line_id,line_name,ease,interval_days,due_at,last_rating,last_reviewed_at,passes,fails,excluded\n${before.path},line_1,Main,2.5,1,,good,,1,0,false\n',
@@ -862,15 +850,7 @@ Future<void> _firstAccess(StoreFixture fixture, String firstAccess) async {
       p.join(fixture.documents.path, entry.key),
     ).writeAsString(entry.value);
   }
-  await leaveMoveNote(
-    fixture.support,
-    'landed',
-    from: before.path,
-    to: after.path,
-    identity: identity,
-    folder: false,
-  );
-  await File(before.path).rename(after.path);
+  await _landedMove(fixture, before, after, revision);
   final store = restarted(fixture);
   final chapters = ChapterDirectory(
     Directory(p.join(fixture.documents.path, 'repertoires')),
@@ -897,7 +877,7 @@ Future<void> _firstAccess(StoreFixture fixture, String firstAccess) async {
     case 'deleted':
       expect(await chapters.deleted(), isA<DeletedChapters>());
   }
-  expect(notedMoves(fixture.support), isEmpty);
+  expect(_owedMoves(fixture), isEmpty);
   for (final entry in files.entries) {
     final file = File(p.join(fixture.documents.path, entry.key));
     expect(
@@ -912,4 +892,35 @@ Future<void> _firstAccess(StoreFixture fixture, String firstAccess) async {
       entry.value.replaceAll(before.path, after.path),
     );
   }
+}
+
+/// Moves [from] to [to] with a store that stops once the file has landed,
+/// so its record is left for the next access to finish.
+Future<void> _landedMove(
+  StoreFixture fixture,
+  DocumentRef from,
+  DocumentRef to,
+  Revision revision,
+) async {
+  final stopping = PgnFileStore(
+    documents: fixture.documents,
+    support: fixture.support,
+    relocationHook: stopOnceAt(FileRelocationStep.document.name),
+  );
+  expect(
+    await stopping.move(from, to, expected: revision, operationId: 'landed'),
+    isNot(isA<Moved>()),
+  );
+  expect(File(to.path).existsSync(), isTrue);
+  expect(_owedMoves(fixture), isNotEmpty);
+}
+
+/// The relocation records still to finish.
+List<FileSystemEntity> _owedMoves(StoreFixture fixture) {
+  final folder = Directory(
+    p.join(fixture.support.path, FileRelocations.journal),
+  );
+  return folder.existsSync()
+      ? folder.listSync().whereType<File>().toList()
+      : const [];
 }

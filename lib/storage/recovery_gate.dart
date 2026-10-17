@@ -9,8 +9,6 @@ import 'file_lock.dart';
 import 'file_relocation.dart';
 import 'mutation_guards.dart';
 import 'recovery_ledger.dart';
-import 'relocation_notes.dart';
-import 'training_writes.dart';
 
 /// Why a write an unfinished operation guards is refused; the next write
 /// tries again.
@@ -49,13 +47,8 @@ final class Records extends Access {
   const Records(super.paths);
 }
 
-/// The journal folders a pass finishes, the last two left by older builds.
-const _journals = [
-  CompoundWrites.journal,
-  FileRelocations.journal,
-  RelocationNotes.journal,
-  TrainingQueueMigration.journal,
-];
+/// The journal folders a pass finishes.
+const _journals = [CompoundWrites.journal, FileRelocations.journal];
 
 /// The profile-wide lock every document access and change takes, in this
 /// process and any other copy of the app, and the place where operations a
@@ -94,16 +87,11 @@ final class RecoveryGate {
     this.escalateAfter = const Duration(minutes: 5),
     DateTime Function() clock = DateTime.now,
   }) : _clock = clock,
-       notes = RelocationNotes(documents: documents, support: support),
        relocations = FileRelocations(
          documents: documents,
          support: support,
          testHook: relocationHook,
          clock: clock,
-       ),
-       training = TrainingQueueMigration(
-         documents: documents,
-         support: support,
        ),
        compounds = CompoundWrites(
          documents: documents,
@@ -115,10 +103,11 @@ final class RecoveryGate {
 
   final Directory documents;
   final Directory support;
-  final RelocationNotes notes;
   final CompoundWrites compounds;
   final FileRelocations relocations;
-  final TrainingQueueMigration training;
+
+  /// [documents] spelled the way recovery records name it.
+  Directory get canonicalDocuments => relocations.documents;
 
   /// What this process owes on the profile, shared by all its gates.
   final RecoveryLedger ledger;
@@ -228,8 +217,6 @@ final class RecoveryGate {
   Future<bool> _finishEach() async {
     var ran = true;
     for (final (name, step) in [
-      ('the old training queue', training.recover),
-      ('older relocation notes', notes.finishOwed),
       ('unfinished edits', compounds.recover),
       ('unfinished moves', relocations.recover),
     ]) {

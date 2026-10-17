@@ -1,6 +1,5 @@
 // Records split from the training CSVs, each keeping the bytes it came from.
 import 'package:chess_auto_prep/storage/csv_records.dart';
-import 'package:chess_auto_prep/storage/training_rows.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -14,10 +13,5 @@ void main() {
       ('"",""', '\r\n'),
     ]);
     expect(records.map((r) => '${r.source}${r.terminator}').join(), text);
-  });
-
-  test('a blank review line takes the header width', () {
-    final blank = (readCsvRecords('\n') as CsvParsed).records.single;
-    expect(rowWidth(reviewsFile, blank, 11), 11);
   });
 }

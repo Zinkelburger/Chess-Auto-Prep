@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/storage/audit_store.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqlite3/sqlite3.dart';
 
 void main() {
   test('kept lines come back only when deep and wide enough', () {
@@ -38,40 +37,6 @@ void main() {
     expect(again.dismissed(), {'weak|x|e2e4', 'reply|y|e7e6'});
     again.restore(['weak|x|e2e4']);
     expect(again.dismissed(), {'reply|y|e7e6'});
-  });
-
-  test('dismissals the first audit kept in audit.db, per chapter, are '
-      'carried over once and the old table dropped', () async {
-    final support = await Directory.systemTemp.createTemp('audit_store');
-    addTearDown(() => support.delete(recursive: true));
-    final old = sqlite3.open('${support.path}/audit.db');
-    old.execute(
-      'CREATE TABLE dismissed(chapter TEXT NOT NULL, finding TEXT NOT NULL, '
-      'PRIMARY KEY (chapter, finding))',
-    );
-    old.execute(
-      "INSERT INTO dismissed VALUES ('/r/KID/Main.pgn', 'weak|x|e2e4'), "
-      "('/r/KID/Sidelines.pgn', 'weak|x|e2e4'), "
-      "('/r/KID/Main.pgn', 'reply|y|e7e6')",
-    );
-    old.close();
-
-    final store = AuditStore.open(support);
-    expect(store.dismissed(), {'weak|x|e2e4', 'reply|y|e7e6'});
-    store.restore(['weak|x|e2e4']);
-    store.close();
-
-    final again = AuditStore.open(support);
-    addTearDown(again.close);
-    expect(again.dismissed(), {
-      'reply|y|e7e6',
-    }, reason: 'a restored finding is not carried over a second time');
-    final lines = sqlite3.open('${support.path}/audit.db');
-    addTearDown(lines.close);
-    expect(
-      lines.select("SELECT name FROM sqlite_master WHERE name = 'dismissed'"),
-      isEmpty,
-    );
   });
 
   test('a file that will not open keeps nothing and never throws', () async {

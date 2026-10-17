@@ -76,9 +76,6 @@ void main() {
       };
       for (final entry in before.entries) {
         await file(entry.key).writeAsString(entry.value);
-        await file(
-          '${entry.key}.pre-csv-v2.bak',
-        ).writeAsString('legacy backup');
       }
       final plan = await records.plan(from, to);
       expect(plan.rowsChanged, 4);
@@ -87,10 +84,6 @@ void main() {
         expect(entry.before, before[entry.name]);
         expect(entry.after, contains(to.path));
         expect(await file(entry.name).readAsString(), entry.before);
-        expect(
-          await file('${entry.name}.pre-csv-v2.bak').readAsString(),
-          'legacy backup',
-        );
       }
       expect(
         await Directory(

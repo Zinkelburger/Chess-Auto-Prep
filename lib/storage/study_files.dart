@@ -7,7 +7,6 @@ import 'chapter_files.dart';
 import 'deleted_chapters.dart';
 import 'recovery_gate.dart';
 import 'recovery_files.dart';
-import 'relocation_notes.dart' show recoveryFolder;
 
 /// The study files under `Documents/studies/`: one `.pgn` per study, one
 /// game in it per chapter.

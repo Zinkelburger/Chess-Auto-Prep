@@ -9,8 +9,7 @@
 /// is refused rather than put over their answer. Only the rows a write names
 /// are touched; every other record keeps its bytes.
 ///
-/// Every file is read and checked before any is written. The first write to
-/// a file keeps a `<file>.pre-csv-v2.bak` copy of it.
+/// Every file is read and checked before any is written.
 library;
 
 import 'dart:convert';
@@ -718,10 +717,9 @@ final class TrainingStore implements ProgressFiles {
             CsvParsed(:final records) => records,
             CsvUnreadable(:final line) => throw _Unreadable(name, line),
           };
-    final header = headerWidth(records);
     final rows = <T>[];
     for (final record in records) {
-      final cells = codec.cells(record, header);
+      final cells = dataCells(record);
       if (cells == null) continue;
       final row = codec.decode(cells);
       if (row != null) {
@@ -759,11 +757,6 @@ final class _Codec<T, K> {
   final K Function(T) key;
 
   String row(T value) => encodeCsvRecord(encode(value));
-
-  /// The cells of a data row, or null for the header and blank lines. The
-  /// width rule is the one a chapter move reads the file with too.
-  List<String>? cells(CsvRecord record, int? header) =>
-      dataCells(record, record.isBlank ? null : rowWidth(file, record, header));
 }
 
 const _reviewCodec = _Codec<Review, LineKey>(

@@ -1,11 +1,7 @@
-/// The four training files and the shape of their rows, shared with the old
-/// app, which reads and writes the same files on the same profile.
+/// The four training files and the shape of their rows.
 ///
-/// The three CSVs open with a header row. A record written before the old
-/// app's quoting migration may carry a chapter path with commas in it
-/// unquoted; the header's width is what tells such a record apart, so a file
-/// without a header is not read. Reviews come in three widths — 8 and 10
-/// columns from older versions, 11 now — and are written at 11.
+/// The three CSVs open with a header row and quote any field holding a
+/// comma, a quote or a newline. Reviews have 11 columns.
 library;
 
 import 'dart:convert';
@@ -20,9 +16,7 @@ const streaksFile = 'repertoire_move_progress.csv';
 const historyFile = 'repertoire_review_history.csv';
 const attemptsFile = 'repertoire_move_attempts.jsonl';
 
-/// The four files, in the order every record and plan lists them. A
-/// `<name>.pre-csv-v2.bak` beside one holds the bytes from before the quoting
-/// migration and is never one of them.
+/// The four files, in the order every record and plan lists them.
 const trainingParticipants = [
   reviewsFile,
   streaksFile,
@@ -49,24 +43,9 @@ int? headerWidth(List<CsvRecord> records) {
   return null;
 }
 
-/// How many columns a data [record] of the CSV [file] should have, given
-/// the width its header declares.
-///
-/// A review row says for itself, whatever the header says — a file can hold
-/// rows of all three widths under one header. It ends in `true` or `false`
-/// when it has the exclusion column (11), in the fail count when it has the
-/// pass and fail counts (10), and otherwise in the time it was last reviewed,
-/// never a bare number (8). Every other row has the header's width.
-int? rowWidth(String file, CsvRecord record, int? header) {
-  if (file != reviewsFile || record.isBlank) return header;
-  final last = record.fields.last;
-  if (last == 'true' || last == 'false') return 11;
-  return int.tryParse(last) != null ? 10 : 8;
-}
-
 /// Whether [cells] of the CSV [file] are a whole row this app can read: a
-/// review or streak row must decode, whatever its width, so a width guessed
-/// wrongly is refused rather than written back.
+/// review or streak row must decode, and any other row has the width its
+/// header declares.
 bool isWholeRow(String file, List<String> cells, int? header) => switch (file) {
   reviewsFile => decodeReview(cells) != null,
   streaksFile => decodeStreak(cells) != null,
@@ -100,34 +79,17 @@ String headerOf(String file) => switch (file) {
 };
 
 /// The cells of a record that names a chapter, or null for the header and
-/// for blank lines. [width] is how many columns the record should have; null
-/// when nothing says, and the cells are taken as they are.
-List<String>? dataCells(CsvRecord record, int? width) {
-  if (record.isBlank || record.fields.first == idColumn) return null;
-  return width == null || record.source.startsWith('"')
-      ? record.fields
-      : _rejoinLegacyPath(record.fields, width);
-}
-
-/// Writers before the quoting migration put the chapter path in unquoted,
-/// commas and all, so a path with a comma spilled into the columns after it.
-/// Every later column has a fixed position, so the path is whatever is left
-/// once they are accounted for.
-List<String> _rejoinLegacyPath(List<String> cells, int width) {
-  if (cells.length <= width) return cells;
-  final spilled = cells.length - width + 1;
-  return [cells.take(spilled).join(','), ...cells.skip(spilled)];
-}
+/// for blank lines.
+List<String>? dataCells(CsvRecord record) =>
+    record.isBlank || record.fields.first == idColumn ? null : record.fields;
 
 /// A review row, or null when the cells are not one.
 Review? decodeReview(List<String> cells) {
-  if (cells.length != 8 && cells.length != 10 && cells.length != 11) {
-    return null;
-  }
+  if (cells.length != 11) return null;
   final ease = double.tryParse(cells[3]);
   final interval = double.tryParse(cells[4]);
-  final passes = cells.length > 8 ? int.tryParse(cells[8]) : 0;
-  final fails = cells.length > 9 ? int.tryParse(cells[9]) : 0;
+  final passes = int.tryParse(cells[8]);
+  final fails = int.tryParse(cells[9]);
   if (ease == null || interval == null || passes == null || fails == null) {
     return null;
   }
@@ -141,7 +103,7 @@ Review? decodeReview(List<String> cells) {
     lastReviewed: _time(cells[7]),
     passes: passes,
     fails: fails,
-    excluded: cells.length > 10 && cells[10] == 'true',
+    excluded: cells[10] == 'true',
   );
 }
 

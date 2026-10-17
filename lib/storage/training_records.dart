@@ -512,16 +512,12 @@ _Plan _planRecords(
   String to,
 ) {
   final width = headerWidth(records);
-  // Without the header there is no way to tell a record from before the
-  // quoting migration whose path held commas from a record with the wrong
-  // number of fields.
+  // A file without its header is not one this app wrote.
   if (width == null) return _Refused(Malformed(name, 1));
   final out = StringBuffer();
   var rows = 0;
   for (final record in records) {
-    final cells = record.isBlank
-        ? null
-        : dataCells(record, rowWidth(name, record, width));
+    final cells = record.isBlank ? null : dataCells(record);
     final whole = cells != null && isWholeRow(name, cells, width);
     if (cells != null && !whole) {
       if (mayName(record.source, from)) {
@@ -558,7 +554,7 @@ String? _rewritten(
   final meant = [moved, ...cells.skip(1)];
   final text = encodeCsvRecord(meant);
   if (readCsvRecords(text) case CsvParsed(records: [final written])) {
-    final read = dataCells(written, rowWidth(name, written, width));
+    final read = dataCells(written);
     if (read != null &&
         read.length == meant.length &&
         Iterable<int>.generate(read.length).every((i) => read[i] == meant[i])) {

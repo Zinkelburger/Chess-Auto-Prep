@@ -80,20 +80,6 @@ void main() {
     },
   );
 
-  test('a saved account with a refresh key is read and cleaned', () async {
-    SharedPreferences.setMockInitialValues({
-      'lichess_access_token': 'lip_shared',
-      'lichess_refresh_token': 'stale',
-      'lichess_auth_username': 'Shared',
-      'lichess_is_pat': true,
-    });
-    final read = await readLichessAccount();
-    expect(read?.username, 'Shared');
-    await writeLichessAccount(read);
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.containsKey('lichess_refresh_token'), isFalse);
-  });
-
   test('forgetting removes every key', () async {
     await writeLichessAccount(
       LichessAccount(token: 'lip_t', username: 'S', until: DateTime(2027)),

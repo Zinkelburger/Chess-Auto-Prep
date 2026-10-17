@@ -453,25 +453,6 @@ void main() {
       expect(newest.first.text, game(400));
     });
   });
-
-  test('an older separate list of analysed games is read', () async {
-    expect(await readOlderAnalyzed(fixture.documents), isEmpty);
-    await File(
-      p.join(fixture.documents.path, 'analyzed_games.txt'),
-    ).writeAsString('lichess_a\n\nchesscom_1\n');
-    expect(await readOlderAnalyzed(fixture.documents), {
-      'lichess_a',
-      'chesscom_1',
-    });
-  });
-
-  test('a list of analysed games that cannot be read is no answer, not '
-      'an empty one', () async {
-    await File(
-      p.join(fixture.documents.path, 'analyzed_games.txt'),
-    ).writeAsBytes([0x6c, 0x69, 0xff, 0xfe, 0x0a]);
-    expect(await readOlderAnalyzed(fixture.documents), isNull);
-  });
 }
 
 /// The native publication lands, but the caller receives no acknowledgement.

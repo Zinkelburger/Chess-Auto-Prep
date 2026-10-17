@@ -1,12 +1,11 @@
-// Every kind of journal record the app writes, or once wrote, kept as bytes
-// under fixtures/journal. A record written today must be exactly what
-// today's encoder writes, every record must still decode, and a record of a
-// version this build does not know is set aside, never obeyed. Paths in the
+// Every kind of journal record the app writes, kept as bytes under
+// fixtures/journal. A record written today must be exactly what today's
+// encoder writes, every record must still decode, and a record of a version
+// this build does not know is set aside, never obeyed. Paths in the
 // fixtures are spelt under /profile.
 //
 // UPDATE_JOURNAL_FORMAT=1 records the fixtures again from today's encoders,
-// but never over a fixture of another version: that one stays frozen, so
-// what older builds left on disk is still proved to recover.
+// but never over a fixture of another version.
 import 'dart:convert';
 import 'dart:io';
 
@@ -14,17 +13,14 @@ import 'package:chess_auto_prep/chess/tournament/config.dart';
 import 'package:chess_auto_prep/chess/tournament/result.dart';
 import 'package:chess_auto_prep/storage/compound_commit.dart';
 import 'package:chess_auto_prep/storage/compound_write.dart';
-import 'package:chess_auto_prep/storage/document_probe.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/file_relocation.dart';
 import 'package:chess_auto_prep/storage/operation_participants.dart';
 import 'package:chess_auto_prep/storage/recovery_files.dart';
 import 'package:chess_auto_prep/storage/recovery_ledger.dart';
-import 'package:chess_auto_prep/storage/relocation_notes.dart';
 import 'package:chess_auto_prep/storage/relocation_record.dart';
 import 'package:chess_auto_prep/storage/tournaments.dart';
 import 'package:chess_auto_prep/storage/training_rows.dart';
-import 'package:chess_auto_prep/storage/training_writes.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -292,9 +288,7 @@ void main() {
   }
 
   _relocations(() => fixture, () => root);
-  _notes(() => fixture, () => root);
   _tournaments(() => fixture);
-  _trainingQueue(() => fixture);
 
   test('every fixture is plain JSON as jsonEncode writes it', () async {
     final folder = _fixture('x').parent;
@@ -355,7 +349,7 @@ void _relocations(StoreFixture Function() fixture, String Function() root) {
           documents: under('Documents'),
           support: under('Support'),
         );
-        expect(utf8.decode(encodeJournal(record.toJson(record.state))), text);
+        expect(utf8.decode(encodeJournal(record.toJson())), text);
       });
 
       test('of an unknown version is refused', () async {
@@ -446,57 +440,6 @@ Future<void> _recordRelocation(
   await _expectFixture(name, text);
 }
 
-/// The four-key note an earlier relocation left in `unfinished-moves`.
-void _notes(StoreFixture Function() fixture, String Function() root) {
-  const name = 'relocation_note';
-  const id = '1-abc';
-  group(name, () {
-    test('is finished by the next recovery', () async {
-      // Older builds spelt the note under the configured Documents folder.
-      final kid = p.join(fixture().documents.path, 'repertoires', 'KID');
-      final from = p.join(kid, 'A.pgn');
-      final to = p.join(kid, 'C.pgn');
-      await fixture().put(DocumentRef(from), _a);
-      final identity = (await probeDocument(from) as FileFound).identity;
-      final reviews = File(p.join(fixture().documents.path, reviewsFile));
-      await reviews.writeAsString('$reviewsHeader\n${_review(from)}');
-      await File(from).rename(to);
-      final note = File(
-        p.join(fixture().support.path, 'unfinished-moves', '$id.json'),
-      );
-      await note.parent.create(recursive: true);
-      await note.writeAsString(
-        (await _rooted(
-          name,
-          fixture().root.path,
-        )).replaceAll('2049:1234567', identity),
-      );
-      await RelocationNotes(
-        documents: fixture().documents,
-        support: fixture().support,
-      ).finishOwed();
-      expect(await note.exists(), isFalse);
-      expect(fixture().quarantined(), isEmpty);
-      expect(RecoveryLedger.of(fixture().support).owed, isEmpty);
-      expect(await reviews.readAsString(), '$reviewsHeader\n${_review(to)}');
-    });
-
-    test('decodes and encodes again to the same bytes', () async {
-      final text = await _fixture(name).readAsString();
-      final note = decodeMoveNote(jsonDecode(text), id);
-      expect(jsonEncode(note.toJson()), text);
-    });
-
-    test('with a version it does not know is refused', () async {
-      final json = jsonDecode(await _fixture(name).readAsString()) as Map;
-      expect(
-        () => decodeMoveNote({...json, 'version': 2}, id),
-        throwsA(isA<RecoveryRequired>()),
-      );
-    });
-  }, skip: Platform.isWindows ? _posixOnly : false);
-}
-
 /// A tournament's `.v2-pending.json`: version 2 as written today, and
 /// version 1, which kept the whole earlier PGN, as earlier builds wrote it.
 void _tournaments(StoreFixture Function() fixture) {
@@ -551,34 +494,17 @@ void _tournamentRecords(
     await store.save(initial, after, games, expectedPgn: earlier);
     final text = await pending().readAsString();
     await _expectFixture('tournament_pending_v2', text);
-    if (!_update) return;
-    // Version 1 as the earlier builds encoded it, from the same save.
-    final v2 = jsonDecode(text) as Map<String, Object?>;
-    await _expectFixture(
-      'tournament_pending_v1',
-      jsonEncode({
-        'version': 1,
-        'before': v2['before'],
-        'after': v2['after'],
-        'pgnBefore': earlier,
-        'pgnAfter': v2['pgnAfter'],
-      }),
-    );
   });
 
-  for (final version in [1, 2]) {
-    test('tournament_pending_v$version is finished by the next list', () async {
-      final text = await _fixture(
-        'tournament_pending_v$version',
-      ).readAsString();
-      await pending().writeAsString(text);
-      final listed = await store.list() as TournamentSaved<List<Tournament>>;
-      expect(listed.warnings, isEmpty);
-      expect(listed.value.single.json['status'], 'running');
-      expect(await File(store.games('test').path).readAsString(), games);
-      expect(await pending().exists(), isFalse);
-    });
-  }
+  test('tournament_pending_v2 is finished by the next list', () async {
+    final text = await _fixture('tournament_pending_v2').readAsString();
+    await pending().writeAsString(text);
+    final listed = await store.list() as TournamentSaved<List<Tournament>>;
+    expect(listed.warnings, isEmpty);
+    expect(listed.value.single.json['status'], 'running');
+    expect(await File(store.games('test').path).readAsString(), games);
+    expect(await pending().exists(), isFalse);
+  });
 
   test(
     'a pending tournament record of an unknown version is set aside',
@@ -595,50 +521,4 @@ void _tournamentRecords(
       expect(fixture().quarantined(), hasLength(1));
     },
   );
-}
-
-/// The training queue earlier builds kept in `training-writes`: a finished
-/// receipt is removed, and a record that never finished is set aside whole,
-/// whatever its version, never replayed.
-void _trainingQueue(StoreFixture Function() fixture) =>
-    group('training_write', () => _trainingRecords(fixture));
-
-void _trainingRecords(StoreFixture Function() fixture) {
-  Future<File> leave(String name) async {
-    final file = File(
-      p.join(fixture().support.path, 'training-writes', '$name.json'),
-    );
-    await file.parent.create(recursive: true);
-    return file.writeAsString(
-      await _fixture('training_write_$name').readAsString(),
-    );
-  }
-
-  TrainingQueueMigration migration() => TrainingQueueMigration(
-    documents: fixture().documents,
-    support: fixture().support,
-  );
-
-  test('a finished training receipt is removed', () async {
-    final receipt = await leave('complete');
-    await migration().recover();
-    expect(await receipt.exists(), isFalse);
-    expect(fixture().quarantined(), isEmpty);
-  });
-
-  test('an unfinished training record is set aside, not replayed', () async {
-    await leave('incomplete');
-    await migration().recover();
-    expect(fixture().quarantined().map((f) => p.basename(f.path)), [
-      'training-writes-incomplete.json',
-    ]);
-    expect(
-      File(p.join(fixture().documents.path, reviewsFile)).existsSync(),
-      isFalse,
-    );
-    expect(
-      Directory(p.join(fixture().support.path, 'training-writes')).existsSync(),
-      isFalse,
-    );
-  });
 }
