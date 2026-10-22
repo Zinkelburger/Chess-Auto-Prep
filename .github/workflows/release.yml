@@ -153,7 +153,7 @@ jobs:
           flatpak build-bundle flatpak-repo \
             chess-auto-prep-${{ needs.prepare.outputs.tag }}-linux.flatpak com.example.chess_auto_prep
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: linux-build
           path: |
@@ -298,7 +298,7 @@ jobs:
           codesign --verify --deep --strict "$APP"
           python3 tools/test_desktop_bundle.py "$APP/Contents/MacOS/$EXEC" --report desktop-release.json
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: macos-desktop-release-report-${{ matrix.arch }}
@@ -306,7 +306,7 @@ jobs:
             desktop-release.json
             macos-build.log
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: macos-${{ matrix.arch }}-build
           path: chess-auto-prep-${{ needs.prepare.outputs.tag }}-macos-${{ matrix.arch }}.zip
@@ -321,22 +321,22 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: linux-build
           path: artifacts/linux-build
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: windows-build
           path: artifacts/windows-build
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: macos-arm64-build
           path: artifacts/macos-arm64-build
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: macos-x86_64-build
           path: artifacts/macos-x86_64-build
