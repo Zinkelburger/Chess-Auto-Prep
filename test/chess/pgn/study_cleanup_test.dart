@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/chess/pgn/chapter_edit.dart';
 import 'package:chess_auto_prep/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/chess/pgn/study.dart';
 import 'package:chess_auto_prep/chess/pgn/study_cleanup.dart';
+import 'package:chess_auto_prep/chess/pgn/study_edits.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const annotated = '''[Event "Study: First"]
@@ -126,5 +127,59 @@ void main() {
     final after = edit.chapter.lines[1];
     expect(tagValue(after.tags, 'ChapterName'), 'Tata Steel: Round 5');
     expect(studyChapters(edit.chapter.lines)[1].name, named);
+  });
+
+  test('a game\'s own event is the chapter\'s; taking it away gives the '
+      'study\'s back', () {
+    final before = parseChapter(name: 'Study', text: annotated, game: 0);
+    final typed =
+        editStudyTags(before, 0, {
+              'Result': '*',
+              'Unknown': 'keep me',
+              'Event': 'Club championship',
+            })
+            as ChapterEdited;
+    final line = typed.chapter.lines.first;
+    expect(tagValue(line.tags, 'Event'), 'Club championship');
+    expect(
+      line.tags.whereType<PgnTag>().where((t) => t.key == 'Event'),
+      hasLength(1),
+    );
+    final renamed =
+        renameChapter(typed.chapter, study: 'Study', index: 0, name: 'Opera')
+            as ChapterEdited;
+    expect(
+      tagValue(renamed.chapter.lines.first.tags, 'Event'),
+      'Club championship',
+      reason: 'a rename keeps the game\'s event',
+    );
+    final cleared =
+        editStudyTags(renamed.chapter, 0, {'Result': '*'}) as ChapterEdited;
+    expect(tagValue(cleared.chapter.lines.first.tags, 'Event'), 'Study: Opera');
+  });
+
+  test('the training id is not the editor\'s to change', () {
+    const withId =
+        '[Event "Study: First"]\n[StudyName "Study"]\n'
+        '[ChapterName "First"]\n[LineID "line_ABC123"]\n\n1. e4 *\n';
+    final before = parseChapter(name: 'Study', text: withId, game: 0);
+    expect(
+      editStudyTags(before, 0, {'LineID': 'x'}),
+      isA<ChapterEditRefused>(),
+    );
+    final edited = editStudyTags(before, 0, {'White': 'Me'}) as ChapterEdited;
+    expect(tagValue(edited.chapter.lines.first.tags, 'LineID'), 'line_ABC123');
+    expect(
+      editableStudyTag(const PgnTag('LineID', 'x'), study: 'Study'),
+      isFalse,
+    );
+    expect(
+      editableStudyTag(const PgnTag('Event', 'Study: First'), study: 'Study'),
+      isFalse,
+    );
+    expect(
+      editableStudyTag(const PgnTag('Event', 'Tata Steel'), study: 'Study'),
+      isTrue,
+    );
   });
 }

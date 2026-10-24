@@ -44,17 +44,16 @@ const chapterUrlTag = 'ChapterURL';
 /// The tags of [line] Lichess keeps, with the values the chapter has. A
 /// value Lichess would drop (empty, `?`) is left out, as is the `Event` the
 /// study wrote for itself.
-Map<String, String> lichessTagsOf(ChapterLine line, {required int index}) {
+Map<String, String> lichessTagsOf(ChapterLine line) {
   final study = studyNameIn([line]);
-  final generated = study == null
-      ? null
-      : '$study: ${studyChapterName(line, index: index, study: study)}';
   return {
     for (final key in lichessChapterTags)
       if (tagValue(line.tags, key)?.trim() case final value?
           when value.isNotEmpty &&
               value != '?' &&
-              !(key == 'Event' && value == generated))
+              !(key == 'Event' &&
+                  study != null &&
+                  !ownEvent(value, study: study)))
         key: value,
   };
 }
@@ -62,10 +61,10 @@ Map<String, String> lichessTagsOf(ChapterLine line, {required int index}) {
 /// [line] as one chapter's PGN for Lichess: the tags it keeps, the starting
 /// position when it is not the usual one, and every move, comment, glyph and
 /// shape. Null when the chapter could not be read whole.
-String? lichessChapterPgn(ChapterLine line, {required int index}) {
+String? lichessChapterPgn(ChapterLine line) {
   final tree = line.tree;
   if (tree == null || !line.isWhole) return null;
-  final tags = lichessTagsOf(line, index: index);
+  final tags = lichessTagsOf(line);
   final custom = tagValue(line.tags, 'FEN');
   final buffer = StringBuffer();
   for (final MapEntry(:key, :value) in tags.entries) {

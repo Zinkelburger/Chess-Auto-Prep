@@ -10,6 +10,20 @@ import 'games_written.dart';
 import 'rewrite_gate.dart';
 import 'study.dart';
 
+/// Tags the tag editor neither shows nor takes: the id training records a
+/// line under, which an edit would cut its progress off from.
+const hiddenStudyTags = {'LineID'};
+
+/// The tags the tag editor offers a chapter: everything but what the study
+/// writes for itself and [hiddenStudyTags]. A game's own `Event` is the
+/// chapter's to edit; the study's `Study: Chapter` is not shown.
+bool editableStudyTag(PgnTag tag, {required String study}) =>
+    !hiddenStudyTags.contains(tag.key) &&
+    (!studyOwnedTags.contains(tag.key) ||
+        (tag.key == 'Event' && ownEvent(tag.value, study: study)));
+
+/// [values] as the chapter's editable tags, in place of the ones it had. An
+/// `Event` taken away gives the chapter back the study's own.
 ChapterEdit editStudyTags(
   Chapter chapter,
   int index,
@@ -19,7 +33,8 @@ ChapterEdit editStudyTags(
     if (!RegExp(r'^[A-Za-z][A-Za-z0-9_]*$').hasMatch(key)) {
       return ChapterEditRefused('Invalid tag name: $key.');
     }
-    if (studyOwnedTags.contains(key)) {
+    if ((studyOwnedTags.contains(key) && key != 'Event') ||
+        hiddenStudyTags.contains(key)) {
       return ChapterEditRefused('$key belongs to the study.');
     }
   }
@@ -29,11 +44,16 @@ ChapterEdit editStudyTags(
       'Use a PGN result: *, 1-0, 0-1 or 1/2-1/2.',
     );
   }
+  final study = studyNameIn(chapter.lines) ?? chapter.name;
   return _edit(chapter, index, (line, tree) {
     final remaining = {...values};
     final tags = <PgnHeader>[];
     for (final tag in line.tags) {
-      if (tag is! PgnTag || studyOwnedTags.contains(tag.key)) {
+      if (tag is! PgnTag || !editableStudyTag(tag, study: study)) {
+        // The study's own Event gives way to one the user typed.
+        if (tag is PgnTag && tag.key == 'Event' && values['Event'] != null) {
+          continue;
+        }
         tags.add(tag);
         continue;
       }
@@ -50,6 +70,11 @@ ChapterEdit editStudyTags(
     tags.addAll(
       remaining.entries.map((e) => PgnTag(e.key, e.value, trailer: ending)),
     );
+    final hadEvent = tagValue(line.tags, 'Event') != null;
+    if (hadEvent && tagValue(tags, 'Event') == null) {
+      final name = studyChapterName(line, index: index, study: study);
+      tags.insert(0, PgnTag('Event', '$study: $name', trailer: ending));
+    }
     return (tags: tags, tree: tree, result: result ?? line.terminator);
   });
 }

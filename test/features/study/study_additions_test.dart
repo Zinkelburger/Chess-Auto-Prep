@@ -47,7 +47,8 @@ void main() {
       }
       final added = edited.lines[2];
       expect(tagValue(added.tags, 'ChapterName'), 'Carlsen – Nakamura');
-      expect(tagValue(added.tags, 'Event'), 'Endgames: Carlsen – Nakamura');
+      // The game's own event stays, as Lichess keeps it.
+      expect(tagValue(added.tags, 'Event'), 'Tata Steel');
       expect(tagValue(added.tags, 'White'), 'Carlsen');
       expect(tagValue(added.tags, 'Orientation'), 'black');
       expect(added.text, endsWith('1. e4 c5 0-1'));
@@ -102,7 +103,7 @@ void main() {
       ]);
       expect((result as StudyDone).opened, studyRef('Prep'));
       final made = study.store.documents[studyRef('Prep')]! as Opened;
-      expect(made.text, startsWith('[Event "Prep: Carlsen – Nakamura"]'));
+      expect(made.text, startsWith('[Event "Tata Steel"]'));
       expect(await readChapter(name: 'Prep', text: made.text), isNotNull);
     });
 

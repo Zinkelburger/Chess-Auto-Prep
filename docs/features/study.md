@@ -24,7 +24,12 @@ the chapter menu also supports long-distance moves without dragging. Reordering
 keeps the current chapter selected and is undoable.
 
 **New study** creates a file with one chapter. **New chapter** supports the
-initial position or the shared position editor. The chapter menu provides
+initial position or the shared position editor. **PGN tags…** lists the game's
+own tags first, `White`, `Black`, `Result`, `Date`, `Event`, `Round`, ready to
+fill in from a scoresheet, then any others; a tag left empty is not written,
+and the study's own tags and the training `LineID` are not shown. A chapter
+still called `Chapter N` takes its players' names (`White - Black`) once both
+are entered, as Lichess names an imported game. The chapter menu provides
 **Rename…**, **PGN tags…**, **Set starting position…**, **Face White/Black**,
 **Move to position…**, **Move up/down**, **Copy chapter PGN**, **Clear comments,
 glyphs and shapes…**, **Clear variations…** and **Delete chapter…**. Changing a starting
@@ -86,6 +91,9 @@ an existing `!`. Comments retain embedded clocks, engine values and shapes.
 At a move, visible **Quiz starts here** and **Quiz ends here** toggles control
 the same `[%tstart]` / `[%tend]` tokens as the move menu.
 
+**Game review** is open in Study's tab strip beside **Moves** and **Train**
+(see [pgn-viewer](pgn-viewer.md) for the review itself).
+
 **Train study** opens the shared trainer inside Study. Choose **This chapter**
 or **Whole study**. **Training sides…** assigns each chapter's practice side,
 with **Set missing to White/Black** for bulk setup and individual overrides.
@@ -123,7 +131,9 @@ tracking; widgets do not write files directly.
 
 A study is one PGN under `Documents/studies/`, with one game per chapter.
 Study metadata uses `Event`, `StudyName`, `ChapterName`, `Orientation`, and
-`FEN`/`SetUp` for custom starts. Explicit practice choices add `TrainingSide`.
+`FEN`/`SetUp` for custom starts. `Event` is written as `Study: Chapter` only
+for a chapter without an event of its own; a game's real event (typed in, or
+brought by an added game) is the chapter's and is kept, as on Lichess. Explicit practice choices add `TrainingSide`.
 `ChapterURL` (as Lichess's export writes it) links a chapter to its Lichess
 chapter; Send to Lichess reads and writes it.
 Unchanged chapters keep their original text, while edits refuse incomplete

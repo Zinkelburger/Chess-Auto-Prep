@@ -36,7 +36,7 @@ void main() {
   final chapter = parseChapter(name: 'Plane games', text: _study, game: 0);
 
   test('a chapter goes with the tags Lichess keeps and every annotation', () {
-    final pgn = lichessChapterPgn(chapter.lines.first, index: 0)!;
+    final pgn = lichessChapterPgn(chapter.lines.first)!;
     expect(pgn, contains('[White "Morphy, Paul"]'));
     expect(pgn, contains('[Black "Duke Karl / Count Isouard"]'));
     expect(pgn, contains('[Date "1858.11.02"]'));
@@ -53,12 +53,12 @@ void main() {
   });
 
   test('an event the player typed goes; a set-up position goes with it', () {
-    final pgn = lichessChapterPgn(chapter.lines.last, index: 1)!;
+    final pgn = lichessChapterPgn(chapter.lines.last)!;
     expect(pgn, contains('[Event "Paris Opera, 1858"]'));
     expect(pgn, contains('[FEN "8/8/4k3/8/8/4K3/4P3/8 w - - 0 1"]'));
     expect(pgn, contains('[SetUp "1"]'));
     expect(pgn, isNot(contains('ChapterURL')));
-    expect(lichessTagsOf(chapter.lines.last, index: 1), {
+    expect(lichessTagsOf(chapter.lines.last), {
       'Result': '*',
       'Event': 'Paris Opera, 1858',
     });

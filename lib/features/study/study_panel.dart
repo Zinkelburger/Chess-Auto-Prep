@@ -173,10 +173,32 @@ class _StudyPanelState extends State<StudyPanel> {
   Future<void> _tags(StudyChapter chapter) async {
     final line = _line(chapter);
     if (line == null) return;
-    final values = await showStudyTags(context, line.tags);
+    final study = widget.session.chapter;
+    final values = await showStudyTags(
+      context,
+      line.tags,
+      study: study == null ? '' : studyNameOf(study),
+    );
     if (values == null || !_same(chapter, line)) return;
     _edited(setStudyTags(widget.session, chapter.index, values));
+    // A chapter still called `Chapter N` takes its players' names, as
+    // Lichess names a game it imports.
+    final white = values['White']?.trim() ?? '';
+    final black = values['Black']?.trim() ?? '';
+    if (_numbered.hasMatch(chapter.name) &&
+        white.isNotEmpty &&
+        black.isNotEmpty) {
+      _edited(
+        renameStudyChapter(
+          widget.session,
+          index: chapter.index,
+          name: '$white - $black',
+        ),
+      );
+    }
   }
+
+  static final _numbered = RegExp(r'^Chapter \d+$');
 
   Future<void> _root(StudyChapter chapter) async {
     final line = _line(chapter);

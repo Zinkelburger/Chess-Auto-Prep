@@ -125,7 +125,7 @@ final class StudySender extends ChangeNotifier {
     ChapterLine line,
     String? study,
   ) async {
-    final pgn = lichessChapterPgn(line, index: index);
+    final pgn = lichessChapterPgn(line);
     if (pgn == null) {
       run.skipped++;
       return null;
@@ -140,7 +140,7 @@ final class StudySender extends ChangeNotifier {
         run.study,
         link!.chapterId!,
         pgn: pgn,
-        tags: lichessTagsOf(line, index: index),
+        tags: lichessTagsOf(line),
       );
       if (result is LichessWritten) run.updated++;
       // A chapter deleted on Lichess since is sent again as a new one.
