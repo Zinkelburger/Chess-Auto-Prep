@@ -236,23 +236,29 @@ class _Tabbed extends StatelessWidget {
 
   Widget _moves() {
     final solitaire = workspace.solitaire;
-    Widget reader() => MoveTreeView(
-      session: workspace.session,
-      moveMenu: (path) => [
-        if (hooks.onAnnotate != null)
-          MenuItemButton(
-            onPressed: () {
-              workspace.session.cursor.goTo(path);
-              hooks.onAnnotate!();
-            },
-            child: const Text('Comment this move'),
-          ),
-        ...?hooks.moveMenu?.call(path),
-      ],
-      heading: hooks.header ? _heading() : null,
-      preview: solitaire?.active == true && solitaire?.record != null
-          ? (tree: solitaire!.record!, onRead: solitaire.inspect)
-          : null,
+    // A click on a move while a note is being typed goes there at once: in
+    // the note's tap region the press does not take its focus first, which
+    // would commit the note and redraw the list under the pointer. Leaving
+    // the move commits the note to the move it was typed for.
+    Widget reader() => TextFieldTapRegion(
+      child: MoveTreeView(
+        session: workspace.session,
+        moveMenu: (path) => [
+          if (hooks.onAnnotate != null)
+            MenuItemButton(
+              onPressed: () {
+                workspace.session.cursor.goTo(path);
+                hooks.onAnnotate!();
+              },
+              child: const Text('Comment this move'),
+            ),
+          ...?hooks.moveMenu?.call(path),
+        ],
+        heading: hooks.header ? _heading() : null,
+        preview: solitaire?.active == true && solitaire?.record != null
+            ? (tree: solitaire!.record!, onRead: solitaire.inspect)
+            : null,
+      ),
     );
     Widget annotatedReader() => hooks.onAnnotate == null
         ? reader()
