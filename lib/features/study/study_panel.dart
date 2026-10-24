@@ -537,23 +537,17 @@ class _Toolbar extends StatelessWidget {
 
   /// Lichess in and out, side by side: what came in goes back the same
   /// way.
-  Widget _transfers() => Row(
+  Widget _transfers() => Wrap(
+    alignment: WrapAlignment.spaceEvenly,
     children: [
-      Expanded(
-        child: TextButton(
-          onPressed: busy ? null : onImport,
-          child: const Text('Import…'),
-        ),
+      TextButton(
+        onPressed: busy ? null : onImport,
+        child: const Text('Import…'),
       ),
       if (hasOpenStudy && onSendToLichess != null)
-        Expanded(
-          child: TextButton(
-            onPressed: busy ? null : onSendToLichess,
-            child: const Text(
-              'Send to Lichess…',
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
+        TextButton(
+          onPressed: busy ? null : onSendToLichess,
+          child: const Text('Send to Lichess…'),
         ),
     ],
   );
