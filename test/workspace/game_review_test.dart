@@ -144,6 +144,34 @@ void main() {
     expect(cleared.chapter.tree.children.first.comment, contains('My note'));
   });
 
+  test("the engine's own move is never marked, however the evals moved", () {
+    final tree = fixture.session.tree!;
+    final e4 = tree.children.first;
+    // A search of the next position can disagree with the search before
+    // it; the move the engine chose is still not a mistake.
+    const before = ReviewValue(1017, '+10.17', ['e2e4']);
+    const after = ReviewValue(549, '+5.49', []);
+    expect(moveReviewMark(tree.rootFen, e4, before, after), isNull);
+    const elsewhere = ReviewValue(1017, '+10.17', ['d2d4']);
+    expect(
+      moveReviewMark(tree.rootFen, e4, elsewhere, after),
+      ReviewMark.blunder,
+    );
+  });
+
+  test('marks read back from the file are the ones the review wrote', () {
+    final marked =
+        annotateGame(fixture.session.chapter!, const [
+              ReviewValue(0, '0.00', ['d2d4']),
+              ReviewValue(-250, '-2.50', []),
+              ReviewValue(-250, '-2.50', []),
+            ])
+            as ChapterEdited;
+    final tree = marked.chapter.tree;
+    expect(writtenReviewMark(tree.children.first), ReviewMark.blunder);
+    expect(writtenReviewMark(tree.children.first.children.first), isNull);
+  });
+
   test('stored eval supports depth and signed mate', () {
     expect(storedReviewValue('text [%eval -0.34,18]')?.cp, -34);
     expect(storedReviewValue('[%eval #-3]')?.cp, -10000);

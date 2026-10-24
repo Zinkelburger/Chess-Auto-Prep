@@ -41,6 +41,27 @@ ReviewMark? reviewMark(int loss) => loss >= 200
 
 int? reviewGlyph(int loss) => reviewMark(loss)?.nag;
 
+/// The mark a review gives [move], played from [from]: by what its side
+/// lost between [before] and [after], and none when it is the move the
+/// engine itself chose there, whatever two searches of different positions
+/// made of it. The graph, the counts and the annotations all ask this.
+ReviewMark? moveReviewMark(
+  Fen from,
+  MoveNode move,
+  ReviewValue before,
+  ReviewValue after,
+) {
+  final loss = (before.cp - after.cp) * (move.fen.whiteToMove ? -1 : 1);
+  final mark = reviewMark(loss);
+  if (mark == null) return null;
+  return _san(from, before.pv.firstOrNull) == move.san ? null : mark;
+}
+
+/// The mark a review wrote on [move], if it wrote one.
+ReviewMark? writtenReviewMark(MoveNode move) => ReviewMark.ofNag(
+  int.tryParse(_nagMarker.firstMatch(move.comment ?? '')?.group(1) ?? '') ?? 0,
+);
+
 /// What the review writes is marked, so it can be taken out again without
 /// touching anything the file had: an eval it added, a glyph and its
 /// "Mistake. Nf3 was best." note, and a variation it added. A variation's
@@ -205,11 +226,10 @@ GameTree _reviewMove(
   ReviewValue after,
 ) {
   final node = tree.nodeAt(at)!;
-  final loss = (before.cp - after.cp) * (!node.fen.whiteToMove ? 1 : -1);
-  final mark = reviewMark(loss);
+  final from = tree.fenAt(at.parent);
+  final mark = moveReviewMark(from, node, before, after);
   if (mark == null) return tree;
-  final best = _san(tree.fenAt(at.parent), before.pv.firstOrNull);
-  if (best == node.san) return tree;
+  final best = _san(from, before.pv.firstOrNull);
   if (!node.nags.any((n) => n >= 1 && n <= 6)) {
     tree = withNodeChanged(
       tree,

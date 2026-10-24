@@ -39,12 +39,10 @@ class GameReviewPane extends StatelessWidget {
       }
       final values = review.values;
       final reviewed = values.any((v) => v != null);
-      final moves = _mainline(review.session.tree);
-      final rootWhite = review.session.tree?.rootFen.whiteToMove ?? true;
-      final marks = [
-        for (var ply = 0; ply < values.length; ply++)
-          _markAt(values, ply, rootWhite),
-      ];
+      final tree = review.session.tree;
+      final moves = _mainline(tree);
+      final rootWhite = tree?.rootFen.whiteToMove ?? true;
+      final marks = _marks(tree, moves, values);
       return ListView(
         padding: const EdgeInsets.all(Space.m),
         children: [
@@ -147,6 +145,39 @@ class GameReviewPane extends StatelessWidget {
     return moves;
   }
 
+  /// Each position's mark, as the moves show it. Values read back from a
+  /// game the review annotated carry no engine lines, so the marks are the
+  /// ones it wrote; otherwise each move is asked as the review asks it.
+  static List<ReviewMark?> _marks(
+    GameTree? tree,
+    List<MoveNode> moves,
+    List<ReviewValue?> values,
+  ) {
+    final written =
+        tree != null &&
+        hasReview(tree) &&
+        !values.any((value) => value?.pv.isNotEmpty ?? false);
+    return [
+      for (var ply = 0; ply < values.length; ply++)
+        if (ply == 0 || ply > moves.length || tree == null)
+          null
+        else if (written)
+          writtenReviewMark(moves[ply - 1])
+        else if ((values[ply - 1], values[ply]) case (
+          final before?,
+          final after?,
+        ))
+          moveReviewMark(
+            ply == 1 ? tree.rootFen : moves[ply - 2].fen,
+            moves[ply - 1],
+            before,
+            after,
+          )
+        else
+          null,
+    ];
+  }
+
   /// The main-line ply the cursor is on or branched from.
   static int _plyOf(NodePath path) =>
       path.indexes.takeWhile((index) => index == 0).length;
@@ -161,9 +192,6 @@ int _loss(List<ReviewValue?> values, int ply, bool rootWhite) {
   if (before == null || after == null) return 0;
   return (before.cp - after.cp) * (_whiteMoved(ply, rootWhite) ? 1 : -1);
 }
-
-ReviewMark? _markAt(List<ReviewValue?> values, int ply, bool rootWhite) =>
-    reviewMark(_loss(values, ply, rootWhite));
 
 Color markColor(ReviewMark mark) => switch (mark) {
   ReviewMark.inaccuracy => ReviewColors.inaccuracy,
