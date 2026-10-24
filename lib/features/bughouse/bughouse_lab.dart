@@ -107,10 +107,10 @@ final class BughouseLab extends ChangeNotifier {
     _show(position, focus: _focus);
   }
 
-  /// [board] stepped to its first [count] moves, unless the other board's
-  /// moves would no longer play from there.
-  void go(BoardNumber board, int count) {
-    final next = _line.go(board, count);
+  /// [board] at [node] of its lines (null for its start), unless the other
+  /// board's moves would no longer play from there.
+  void goTo(BoardNumber board, int? node) {
+    final next = _line.goTo(board, node);
     switch (next.replay()) {
       case LineReplayed(:final position):
         _line = next;
@@ -121,14 +121,12 @@ final class BughouseLab extends ChangeNotifier {
     }
   }
 
-  /// [move] and every later move on its board taken out of the line, with
-  /// the hand edits made after them; the other board's moves stay. Refused
-  /// when one of those dropped a piece a move taken out had captured.
-  void deleteFrom(LineMove move) {
-    final board = move.board;
-    final index = _line.of(board).indexOf(move);
-    if (index < 0) return;
-    final next = _line.cut(board, index);
+  /// [node] and everything after it on its board taken out of the line,
+  /// variations too; the other board's moves stay. Refused when one of those
+  /// dropped a piece a move taken out had captured.
+  void deleteFrom(int node) {
+    final board = _line.nodes[node].board;
+    final next = _line.without(node);
     switch (next.replay()) {
       case LineReplayed(:final position):
         _line = next;
@@ -139,12 +137,38 @@ final class BughouseLab extends ChangeNotifier {
     }
   }
 
-  /// The focused board a move forward (1) or back (−1).
-  void step(int by) => go(_focus, _line.upto(_focus) + by);
+  /// The focused board a step forward (1), along its main continuation,
+  /// or back (−1).
+  void step(int by) => stepOn(_focus, by);
 
-  void toStart() => go(_focus, 0);
+  /// [board] a step forward (1), along its main continuation, or back (−1);
+  /// nothing at either end.
+  void stepOn(BoardNumber board, int by) {
+    final at = _line.at(board);
+    if (by < 0 && at != null) goTo(board, _line.nodes[at].parent);
+    if (by > 0) {
+      if (_line.mainChild(board, at) case final next?) goTo(board, next);
+    }
+  }
 
-  void toEnd() => go(_focus, _line.of(_focus).length);
+  void toStart() => goTo(_focus, null);
+
+  /// The focused board at the end of the line it is on.
+  void toEnd() {
+    final line = _line.lineOf(_focus);
+    if (line.isNotEmpty) goTo(_focus, line.last);
+  }
+
+  /// The variation [node] is in one place up among the lines there.
+  void promote(int node) => _arrange(_line.promoted(node));
+
+  /// [node]'s line made its board's main line.
+  void makeMainLine(int node) => _arrange(_line.mainLineThrough(node));
+
+  void _arrange(TableLine line) {
+    _line = line;
+    notifyListeners();
+  }
 
   /// A new game from the start; the clock stays.
   void newGame() => _reset(TablePosition.initial);
@@ -197,23 +221,23 @@ final class BughouseLab extends ChangeNotifier {
     }
   }
 
-  /// Both boards' moves as the mode copies them (see [tableLineText]).
+  /// Each board's line as the mode copies it (see [tableLineText]).
   String get movesText => tableLineText(_line);
 
-  /// The line up to and including [move] as a PGN: with one board, a
+  /// The line up to and including [node] as a PGN: with one board, a
   /// crazyhouse PGN of board 1 that Lichess imports; with two, the BPGN
   /// [movesText] writes.
-  String linePgnThrough(LineMove move) {
-    final line = _line.through(move);
+  String linePgnThrough(int node) {
+    final line = _line.through(node);
     return single
-        ? crazyhouseLinePgn(line, move.board, line.of(move.board).length)
+        ? crazyhouseLinePgn(line, _line.nodes[node].board)
         : tableLineText(line);
   }
 
-  /// The table just after [move], as the line up to it leaves it; null when
+  /// The table just after [node], as the line up to it leaves it; null when
   /// that no longer replays.
-  TablePosition? positionAfter(LineMove move) =>
-      switch (_line.through(move).replay()) {
+  TablePosition? positionAfter(int node) =>
+      switch (_line.through(node).replay()) {
         LineReplayed(:final position) => position,
         LineBroken() => null,
       };
@@ -230,7 +254,7 @@ final class BughouseLab extends ChangeNotifier {
       position = played.after;
     }
     return single
-        ? crazyhouseLinePgn(line, BoardNumber.one, line.upto(BoardNumber.one))
+        ? crazyhouseLinePgn(line, BoardNumber.one)
         : tableLineText(line);
   }
 
