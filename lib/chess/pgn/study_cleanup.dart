@@ -49,11 +49,23 @@ ChapterEdit editStudyTags(
     final remaining = {...values};
     final tags = <PgnHeader>[];
     for (final tag in line.tags) {
+      // `Event` keeps its place, whoever's it is: a game in the file starts
+      // at it.
+      if (tag is PgnTag && tag.key == 'Event') {
+        final typed = remaining.remove('Event');
+        final name = studyChapterName(line, index: index, study: study);
+        tags.add(
+          typed == null
+              ? (editableStudyTag(tag, study: study)
+                    ? PgnTag('Event', '$study: $name', trailer: tag.trailer)
+                    : tag)
+              : typed == tag.value
+              ? tag
+              : PgnTag('Event', typed, trailer: tag.trailer),
+        );
+        continue;
+      }
       if (tag is! PgnTag || !editableStudyTag(tag, study: study)) {
-        // The study's own Event gives way to one the user typed.
-        if (tag is PgnTag && tag.key == 'Event' && values['Event'] != null) {
-          continue;
-        }
         tags.add(tag);
         continue;
       }
@@ -67,13 +79,10 @@ ChapterEdit editStudyTags(
       }
     }
     final ending = line.tags.firstOrNull?.trailer ?? '\n';
-    tags.addAll(
-      remaining.entries.map((e) => PgnTag(e.key, e.value, trailer: ending)),
-    );
-    final hadEvent = tagValue(line.tags, 'Event') != null;
-    if (hadEvent && tagValue(tags, 'Event') == null) {
-      final name = studyChapterName(line, index: index, study: study);
-      tags.insert(0, PgnTag('Event', '$study: $name', trailer: ending));
+    for (final MapEntry(:key, :value) in remaining.entries) {
+      final tag = PgnTag(key, value, trailer: ending);
+      // A game in the file starts at its Event.
+      key == 'Event' ? tags.insert(0, tag) : tags.add(tag);
     }
     return (tags: tags, tree: tree, result: result ?? line.terminator);
   });

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_edit.dart';
@@ -5,6 +7,7 @@ import 'package:chess_auto_prep/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/chess/pgn/study.dart';
 import 'package:chess_auto_prep/chess/pgn/study_cleanup.dart';
 import 'package:chess_auto_prep/chess/pgn/study_edits.dart';
+import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const annotated = '''[Event "Study: First"]
@@ -181,5 +184,31 @@ void main() {
       editableStudyTag(const PgnTag('Event', 'Tata Steel'), study: 'Study'),
       isTrue,
     );
+  });
+
+  test('a typed event leaves every game where the file says it starts', () {
+    const two =
+        '[Event "Plane: Chapter 1"]\n[StudyName "Plane"]\n'
+        '[ChapterName "Chapter 1"]\n[LineID "line_A"]\n[White "Me"]\n\n'
+        '1. e4 *\n\n[Event "Plane: Chapter 2"]\n[StudyName "Plane"]\n'
+        '[ChapterName "Chapter 2"]\n\n1. d4 *\n';
+    final before = parseChapter(name: 'Plane', text: two, game: 0);
+    for (final values in [
+      {'White': 'Me', 'Event': 'Club championship'},
+      {'White': 'Me'},
+    ]) {
+      final edit = editStudyTags(before, 0, values) as ChapterEdited;
+      final next = writeChapter(edit.chapter);
+      expect(
+        changeOutsideScope(
+          previous: utf8.encode(two),
+          next: utf8.encode(next),
+          scope: GamesRearranged(edit.games),
+        ),
+        isNull,
+        reason: next,
+      );
+      expect(next, startsWith('[Event '));
+    }
   });
 }
