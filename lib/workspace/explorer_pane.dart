@@ -691,7 +691,7 @@ class _OpeningName extends StatelessWidget {
               : openingLine(
                   openings.book,
                   chapter,
-                  session.cursor,
+                  session.cursor.value,
                   answerHidden: session.shownTo != null,
                 ),
           key: const ValueKey('explorer-opening'),

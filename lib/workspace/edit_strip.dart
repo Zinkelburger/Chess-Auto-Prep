@@ -17,9 +17,11 @@ import '../ui/app_keys.dart';
 
 /// Everything about changing the document, under the moves: Done, Undo, the
 /// save state, the six glyphs and the note on the move the board is on.
+/// Where the card has `Read | Edit` at its foot, that is what closes it,
+/// and the strip has no Done of its own.
 ///
 /// It exists while [editing] is on and the whole game is on view, while
-/// the file has edits that are not saved (the PGN Viewer's), and otherwise
+/// the file has edits that are not saved (made while reading), and otherwise
 /// only when there is trouble to report — a save that failed, a
 /// file that changed on disk, a file this app may not write, an edit that
 /// was refused — because reading a file is not editing it and needs none of
@@ -36,11 +38,15 @@ class EditStrip extends StatefulWidget {
     this.onSave,
     this.commentInNote = false,
     this.studyTools = false,
+    this.done = true,
   });
 
   final DocumentSession session;
   final bool commentInNote;
   final bool studyTools;
+
+  /// Whether the strip has its own Done to close it.
+  final bool done;
   final DocumentSaver saver;
   final ValueNotifier<bool> editing;
 
@@ -92,8 +98,9 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
     if (yes &&
         mounted &&
         identical(widget.session, session) &&
-        identical(session.chapter, chapter))
+        identical(session.chapter, chapter)) {
       session.discardHeld();
+    }
   }
 
   Future<void> _undo() async {
@@ -131,7 +138,7 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
     return ListenableBuilder(
       listenable: Listenable.merge([
         widget.session,
-        widget.session.cursorListenable,
+        widget.session.cursor,
         widget.saver,
         widget.editing,
       ]),
@@ -191,7 +198,7 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
                     _Glyphs(session: widget.session, position: true),
                   ],
                 ),
-                if (widget.studyTools && !widget.session.cursor.isRoot)
+                if (widget.studyTools && !widget.session.cursor.value.isRoot)
                   _QuizControls(session: widget.session),
                 const SizedBox(height: Space.s),
                 if (!widget.commentInNote)
@@ -207,15 +214,19 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
   Widget _stateRow(bool editing, SaveState state) => Row(
     children: [
       if (editing) ...[
-        Tooltip(
-          message: AppKey.edit.tip('Done editing'),
-          child: FilledButton(
-            onPressed: () => widget.editing.value = false,
-            style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
-            child: const Text('Done'),
+        if (widget.done) ...[
+          Tooltip(
+            message: AppKey.edit.tip('Done editing'),
+            child: FilledButton(
+              onPressed: () => widget.editing.value = false,
+              style: FilledButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+              ),
+              child: const Text('Done'),
+            ),
           ),
-        ),
-        const SizedBox(width: Space.s),
+          const SizedBox(width: Space.s),
+        ],
         IconButton(
           onPressed: widget.session.canUndo ? _undo : null,
           icon: const Icon(Icons.undo, size: IconSize.action),
@@ -233,8 +244,8 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
           DocumentSession(hasHeldEdits: true) => const _Notice(
             'Unsaved changes',
           ),
-          // The viewer keeps edits off the file, so there is nothing for
-          // the save line to report until one is made.
+          // Held edits are off the file, so there is nothing for the save
+          // line to report until one is made.
           DocumentSession(holdsEdits: true) => const _Notice(
             'Edits stay unsaved until you save them',
           ),
@@ -281,8 +292,8 @@ String _refusalNotice(EditRefused refusal) => switch (refusal) {
   NotEditable(:final detail) =>
     'This file opened to read: $detail. Save a copy to edit it here.',
   LineNotWhole() =>
-    'That line could not be read in full, so it is left as it is. Edit it '
-        'in the old app.',
+    'That line could not be read in full, so it is left as it is. The file '
+        'is unchanged.',
   WordsRefused(:final reason) =>
     'The note was not saved: $reason. Take it out and try again.',
   EditNotWritten(:final reason) =>
@@ -394,12 +405,12 @@ class _Glyphs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder(
-    valueListenable: session.cursorListenable,
+    valueListenable: session.cursor,
     builder: (context, at, _) => _buttons(at),
   );
 
   Widget _buttons(NodePath at) {
-    final move = session.currentMove;
+    final move = session.cursor.currentMove;
     final current = move?.nags
         .where(position ? isPositionGlyph : isGlyph)
         .firstOrNull;
@@ -473,7 +484,7 @@ class _QuizControls extends StatelessWidget {
   final DocumentSession session;
   @override
   Widget build(BuildContext context) {
-    final at = session.cursor;
+    final at = session.cursor.value;
     final comment = session.commentAt(at);
     return Wrap(
       spacing: Space.s,

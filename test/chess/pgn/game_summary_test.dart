@@ -49,4 +49,20 @@ void main() {
       'carlsen, magnus – nakamura, hikaru 1-0 tata steel · 2024',
     );
   });
+
+  test('a study chapter\'s own name is not shown as where it was played', () {
+    final chapter = parseChapter(
+      name: 'x',
+      text:
+          '[Event "Plane games: Chapter 1"]\n[StudyName "Plane games"]\n'
+          '[White "Me"]\n[Black "Rival"]\n[Date "2026.10.20"]\n\n1. e4 *\n\n'
+          '[Event "Club championship"]\n[StudyName "Plane games"]\n'
+          '[White "Me"]\n[Black "Rival"]\n\n1. d4 *\n',
+    );
+    expect(summarizeGame(chapter.lines[0], index: 0).setting, '2026');
+    expect(
+      summarizeGame(chapter.lines[1], index: 1).setting,
+      'Club championship',
+    );
+  });
 }

@@ -143,7 +143,7 @@ TrainingLine _lineOf(
 /// The plies of [moves] a quiz asks: from the first move marked
 /// `[%tstart]` up to and including the first marked `[%tend]`, the whole
 /// line where a marker is missing. An end marked before the start would
-/// leave nothing to ask, so it is not taken, as the old app did not take it.
+/// leave nothing to ask, so it is not taken.
 ({int start, int end}) quizWindow(List<MoveNode> moves) {
   int? first(String marker) {
     final at = moves.indexWhere((move) => hasToken(move.comment, marker));
@@ -177,18 +177,10 @@ bool _isModelGame(ChapterLine line) {
   return result.isNotEmpty && result != '*';
 }
 
-/// `[CumProb "0.1253"]` as this app writes it, `[CumProb "12.53%"]` as the
-/// old one did, or the older `[Importance "0.125"]`.
+/// `[CumProb "0.1253"]`, a likelihood from 0 to 1; null for any other
+/// value.
 double? _likelihood(ChapterLine line) {
-  for (final key in const ['CumProb', 'Importance']) {
-    final raw = tagValue(line.tags, key)?.trim();
-    if (raw == null || raw.isEmpty) continue;
-    final percent = raw.endsWith('%');
-    final value = double.tryParse(
-      percent ? raw.substring(0, raw.length - 1) : raw,
-    );
-    if (value == null) continue;
-    return percent || value > 1 ? value / 100 : value;
-  }
-  return null;
+  final raw = tagValue(line.tags, 'CumProb')?.trim();
+  final value = raw == null ? null : double.tryParse(raw);
+  return value == null || value < 0 || value > 1 ? null : value;
 }

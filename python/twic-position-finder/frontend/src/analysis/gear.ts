@@ -3,74 +3,67 @@
  * dropped over the engine lines with one slider per setting. Search time
  * runs from 2 s to ∞ (infinite analysis), lines from 1 to 5, threads from 1
  * to this computer's thread count with a tick on the recommended count (see
- * recommendedThreads), and
- * the sit panel's search per row. Hivemind has no hash table, so lila's
- * Memory slider has no counterpart; where lila picks an engine, this picks
- * where the network runs (GPU or CPU) when the browser has a GPU.
+ * recommendedThreads), and the sit panel's search per row. The hash follows
+ * the device's memory, so lila's Memory slider is left out.
+ *
+ * The PGN page's Stockfish runs on one thread, so its gear is the first two
+ * sliders alone (`SearchGear`).
  */
 import { SEARCH_TICKS, SIT_TICKS, type Settings } from './settings';
 import { el } from './moves';
 
 export interface GearState {
   settings: Settings;
-  /** The sit panel's search per row now: the setting or the backend's default. */
+  /** The sit panel's search per row now: the setting or the default. */
   sitNodes: number;
-  /** Whether this browser offers WebGPU; null until the engine has loaded. */
-  gpuAvailable: boolean | null;
-  /** The network runs on the GPU now. */
-  onGpu: boolean;
-  /** Threads the CPU path can use here (1 when the page is not cross-origin isolated). */
+  /** Threads the engine can use here (1 when the page is not cross-origin isolated). */
   maxThreads: number;
   recommendedThreads: number;
   threads: number;
 }
 
-export interface GearHooks {
+export interface SearchHooks {
   searchSeconds(seconds: number): void;
   lines(n: number): void;
-  gpu(on: boolean): void;
+}
+
+export interface GearHooks extends SearchHooks {
   threads(n: number): void;
   sitNodes(n: number): void;
 }
 
 const seconds = (s: number) => (s === 0 ? '∞' : `${s}s`);
+const nodes = (n: number) => (n >= 1e6 ? `${n / 1e6}M` : `${n / 1000}k`);
 
-export class GearPanel {
+const row = (id: string, label: string, title: string, control: HTMLElement, value?: HTMLElement) => {
+  const r = el('div', 'ch-setting');
+  r.title = title;
+  const l = el('label', '', label) as HTMLLabelElement;
+  l.htmlFor = id;
+  r.append(l, control);
+  if (value) r.append(value);
+  return r;
+};
+
+const range = (id: string, max: number, min = 0) => {
+  const input = document.createElement('input');
+  input.type = 'range';
+  input.className = 'ch-range';
+  input.id = id;
+  input.min = String(min);
+  input.max = String(max);
+  input.step = '1';
+  return input;
+};
+
+/** Search time and Multiple lines: the whole gear for the PGN page, the start of the bughouse board's. */
+export class SearchGear {
   private readonly search: HTMLInputElement;
   private readonly searchValue: HTMLElement;
   private readonly lines: HTMLInputElement;
   private readonly linesValue: HTMLElement;
-  private readonly hardwareRow: HTMLElement;
-  private readonly hardware: HTMLButtonElement[];
-  private readonly threadsRow: HTMLElement;
-  private readonly threads: HTMLInputElement;
-  private readonly threadsValue: HTMLElement;
-  private readonly tick: HTMLButtonElement;
-  private readonly sit: HTMLInputElement;
-  private readonly sitValue: HTMLElement;
-  private state: GearState | null = null;
 
-  constructor(private readonly box: HTMLElement, hooks: GearHooks) {
-    const row = (id: string, label: string, title: string, control: HTMLElement, value?: HTMLElement) => {
-      const r = el('div', 'ch-setting');
-      r.title = title;
-      const l = el('label', '', label) as HTMLLabelElement;
-      l.htmlFor = id;
-      r.append(l, control);
-      if (value) r.append(value);
-      return r;
-    };
-    const range = (id: string, max: number, min = 0) => {
-      const input = document.createElement('input');
-      input.type = 'range';
-      input.className = 'ch-range';
-      input.id = id;
-      input.min = String(min);
-      input.max = String(max);
-      input.step = '1';
-      return input;
-    };
-
+  constructor(protected readonly box: HTMLElement, hooks: SearchHooks, engine = 'the engine') {
     this.search = range('ch-set-search', SEARCH_TICKS.length - 1);
     this.searchValue = el('span', 'ch-setting-value');
     // Lines and search time change at once, as on lila; they only restart the search.
@@ -79,22 +72,38 @@ export class GearPanel {
     this.lines = range('ch-set-lines', 5, 1);
     this.linesValue = el('span', 'ch-setting-value');
     this.lines.oninput = () => hooks.lines(Number(this.lines.value));
+    box.replaceChildren(
+      row('ch-set-search', 'Search time', `How long ${engine} searches each new position. ∞ searches until you move on.`, this.search, this.searchValue),
+      row('ch-set-lines', 'Multiple lines', 'Engine lines shown, and their arrows on the board.', this.lines, this.linesValue),
+    );
+  }
 
-    const choice = el('div', 'ch-choice ch-setting-choice');
-    choice.setAttribute('role', 'radiogroup');
-    choice.setAttribute('aria-label', 'Hardware');
-    choice.id = 'ch-set-hardware';
-    this.hardware = (['GPU', 'CPU'] as const).map((name) => {
-      const b = el('button', '', name) as HTMLButtonElement;
-      b.type = 'button';
-      b.setAttribute('role', 'radio');
-      b.dataset.hardware = name.toLowerCase();
-      b.onclick = () => { if (b.getAttribute('aria-checked') !== 'true') hooks.gpu(name === 'GPU'); };
-      return b;
-    });
-    choice.append(...this.hardware);
+  renderSearch(settings: Settings) {
+    const search = Math.max(0, SEARCH_TICKS.indexOf(settings.searchSeconds));
+    this.search.value = String(search);
+    this.searchValue.textContent = seconds(SEARCH_TICKS[search]);
+    this.search.setAttribute('aria-valuetext', SEARCH_TICKS[search] === 0 ? 'Infinite' : `${SEARCH_TICKS[search]} seconds`);
 
-    // Threads start a new engine, so they apply when the slider is let go.
+    this.lines.value = String(settings.multiPv);
+    this.linesValue.textContent = `${settings.multiPv} / 5`;
+  }
+
+  get open(): boolean { return !this.box.hidden; }
+}
+
+/** The bughouse board's gear: the search sliders, then Threads and Sit search. */
+export class GearPanel extends SearchGear {
+  private readonly threadsRow: HTMLElement;
+  private readonly threads: HTMLInputElement;
+  private readonly threadsValue: HTMLElement;
+  private readonly tick: HTMLButtonElement;
+  private readonly sit: HTMLInputElement;
+  private readonly sitValue: HTMLElement;
+  private state: GearState | null = null;
+
+  constructor(box: HTMLElement, hooks: GearHooks) {
+    super(box, hooks);
+    // Threads restart the search, so they apply when the slider is let go.
     this.threads = range('ch-set-threads', 1, 1);
     this.threadsValue = el('span', 'ch-setting-value');
     this.threads.oninput = () => this.showThreads(Number(this.threads.value));
@@ -110,34 +119,20 @@ export class GearPanel {
     this.sitValue = el('span', 'ch-setting-value');
     this.sit.oninput = () => hooks.sitNodes(SIT_TICKS[Number(this.sit.value)]);
 
-    this.hardwareRow = row('ch-set-hardware', 'Hardware', 'Where Hivemind’s network runs. A GPU is usually several times faster.', choice);
-    this.threadsRow = row('ch-set-threads', 'Threads', 'CPU threads for the network. The tick marks the usual best: one evaluation at a time gains little from more.', track, this.threadsValue);
-    box.replaceChildren(
-      row('ch-set-search', 'Search time', 'How long the engine searches each new position. ∞ searches until you move on.', this.search, this.searchValue),
-      row('ch-set-lines', 'Multiple lines', 'Engine lines shown, and their arrows on the board.', this.lines, this.linesValue),
-      this.hardwareRow,
+    this.threadsRow = row('ch-set-threads', 'Threads', 'CPU threads for the search. The tick marks all but one, which keeps the page responsive.', track, this.threadsValue);
+    box.append(
       this.threadsRow,
-      row('ch-set-sit', 'Sit search', 'Positions searched for each row of the sit panel. More is steadier and slower.', this.sit, this.sitValue),
+      row('ch-set-sit', 'Sit search', 'Nodes searched for each row of the sit panel. More is steadier and slower.', this.sit, this.sitValue),
     );
   }
 
   render(state: GearState) {
     this.state = state;
     const { settings } = state;
-    const search = Math.max(0, SEARCH_TICKS.indexOf(settings.searchSeconds));
-    this.search.value = String(search);
-    this.searchValue.textContent = seconds(SEARCH_TICKS[search]);
-    this.search.setAttribute('aria-valuetext', SEARCH_TICKS[search] === 0 ? 'Infinite' : `${SEARCH_TICKS[search]} seconds`);
+    this.renderSearch(settings);
 
-    this.lines.value = String(settings.multiPv);
-    this.linesValue.textContent = `${settings.multiPv} / 5`;
-
-    // Shown once the engine knows the browser has a GPU; without one there is nothing to choose.
-    this.hardwareRow.hidden = state.gpuAvailable !== true;
-    for (const b of this.hardware) b.setAttribute('aria-checked', String((b.dataset.hardware === 'gpu') === settings.gpu));
-
-    // Threads apply to the CPU path only, and need more than one to choose from.
-    this.threadsRow.hidden = state.onGpu || state.maxThreads < 2;
+    // Threads need more than one to choose from.
+    this.threadsRow.hidden = state.maxThreads < 2;
     this.threads.max = String(state.maxThreads);
     if (document.activeElement !== this.threads) {
       this.threads.value = String(state.threads);
@@ -148,7 +143,7 @@ export class GearPanel {
 
     const sit = SIT_TICKS.indexOf(state.sitNodes);
     this.sit.value = String(sit < 0 ? SIT_TICKS.findIndex((n) => n >= state.sitNodes) : sit);
-    this.sitValue.textContent = state.sitNodes.toLocaleString();
+    this.sitValue.textContent = nodes(state.sitNodes);
     this.placeTick();
   }
 
@@ -166,6 +161,4 @@ export class GearPanel {
     const ratio = (state.recommendedThreads - 1) / Math.max(1, state.maxThreads - 1);
     this.tick.style.left = `${Math.round(7 + (width - 14) * ratio)}px`;
   }
-
-  get open(): boolean { return !this.box.hidden; }
 }

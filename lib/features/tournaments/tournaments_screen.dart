@@ -125,8 +125,9 @@ class _ScreenState extends State<TournamentsScreen> {
     if (show &&
         _previews == null &&
         t.games.isNotEmpty &&
-        run.store is TournamentPreviews)
+        run.store is TournamentPreviews) {
       _previews = (run.store as TournamentPreviews).positions(t.id);
+    }
     return FutureBuilder<TournamentResult<List<String?>>>(
       future: show ? _previews : null,
       builder: (context, snapshot) => _detailScroll(
@@ -281,8 +282,9 @@ class _ScreenState extends State<TournamentsScreen> {
       title: 'Move tournament to trash',
       message: 'Move ${t.config.name} and its games to the tournament trash?',
       confirm: 'Move to trash',
-    ))
+    )) {
       await run.remove(t);
+    }
   }
 }
 

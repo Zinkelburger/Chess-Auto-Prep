@@ -9,8 +9,8 @@ import 'package:http/http.dart' as http;
 import '../diagnostics/log.dart';
 import 'lichess_http.dart';
 
-/// Logging into Lichess: the OAuth PKCE flow the old app used, and a typed
-/// personal access token as the way in when a browser is not to hand.
+/// Logging into Lichess: the OAuth PKCE flow, and a typed personal access
+/// token as the way in when a browser is not to hand.
 ///
 /// Lichess registers no clients: any id and any loopback redirect are
 /// accepted, the token lasts about a year and there is no refresh token.
@@ -102,16 +102,18 @@ final class LoginFailed extends LoginOutcome {
   final LoginProblem problem;
 }
 
-/// The old app's client id; any string does for a public PKCE client.
+/// The client id sent to Lichess; any string does for a public PKCE client.
 const lichessClientId = 'chess-auto-prep';
 
-/// The port the old app listened on; another is taken when it is busy.
+/// The port the callback listens on first; another is taken when it is
+/// busy.
 const lichessCallbackPort = 8919;
 
-/// What the token may do: the account's name, and private studies.
+/// What the token may do: the account's name, reading private studies and
+/// writing the user's own.
 /// Game exports and the explorer need no scope; the token only lifts the
 /// rate limit.
-const lichessScopes = 'preference:read study:read';
+const lichessScopes = 'preference:read study:read study:write';
 
 const _authorizeUrl = 'https://lichess.org/oauth';
 const _tokenUrl = 'https://lichess.org/api/token';
@@ -126,11 +128,10 @@ const _requestTimeout = Duration(seconds: 20);
 final class LichessLoginApi implements LichessLogin {
   LichessLoginApi(
     this._client, {
-    required Future<bool> Function(Uri) openBrowser,
+    required this._openBrowser,
     this.wait = const Duration(minutes: 5),
     Random? random,
-  }) : _openBrowser = openBrowser,
-       _random = random ?? Random.secure();
+  }) : _random = random ?? Random.secure();
 
   final http.Client _client;
 
@@ -202,7 +203,7 @@ final class LichessLoginApi implements LichessLogin {
   /// Bind the same literal loopback address the redirect names. A dual-stack
   /// IPv6 bind behaves differently on macOS; letting localhost choose a
   /// family can send the browser to a different process on the other one.
-  /// Try the old app's port first, then any free port on this address.
+  /// Try [lichessCallbackPort] first, then any free port on this address.
   Future<HttpServer> _bind() async {
     for (final port in [lichessCallbackPort, 0]) {
       try {

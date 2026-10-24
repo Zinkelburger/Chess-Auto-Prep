@@ -1,5 +1,5 @@
 // Training progress read and written against real files in a disposable
-// Documents folder, in the old app's formats, beside rows the old app wrote.
+// Documents folder, in the existing formats, beside rows already there.
 import 'dart:convert';
 import 'dart:io';
 
@@ -11,13 +11,13 @@ import 'package:chess_auto_prep/storage/training_records.dart'
     show Repointed, TrainingRecords;
 import 'package:chess_auto_prep/storage/training_rows.dart';
 import 'package:chess_auto_prep/storage/training_store.dart';
+import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:sqlite3/sqlite3.dart';
 
-import '../support/lock_path.dart';
+import '../support/other_copy_lock.dart';
 
-/// A review row as the old app writes it, 11 columns.
+/// A review row as existing files hold it, 11 columns.
 String _review(String source, String id, {String name = 'Mainline'}) =>
     '$source,$id,$name,2.50,6.00,2026-09-20T00:00:00.000Z,good,'
     '2026-09-14T00:00:00.000Z,3,1,false';
@@ -79,24 +79,6 @@ void main() {
     expect((review.lastRating, review.passes, review.fails), ('good', 3, 1));
   });
 
-  test('rows from older versions: 8 and 10 columns, and an unquoted path '
-      'with a comma', () async {
-    await file(reviewsFile).writeAsString(
-      '$reviewsHeader\n'
-      '$kid,line_8,Eight,2.50,1.00,,good,\n'
-      '$kid,line_10,Ten,2.50,1.00,,good,,2,0\n'
-      '$comma,line_c,Comma,2.50,1.00,,good,,1,1,true\n',
-    );
-    final loaded = await read({kid, comma});
-    expect(loaded.reviews.keys, [
-      (source: kid, id: 'line_8'),
-      (source: kid, id: 'line_10'),
-      (source: comma, id: 'line_c'),
-    ]);
-    expect(loaded.reviews[(source: kid, id: 'line_10')]!.passes, 2);
-    expect(loaded.reviews[(source: comma, id: 'line_c')]!.excluded, isTrue);
-  });
-
   test('a line of empty cells, as a spreadsheet writes one, is passed '
       'over', () async {
     await file(
@@ -147,7 +129,7 @@ void main() {
     },
   );
 
-  test('the log read again once it has grown, by either app', () async {
+  test('the log read again once it has grown, by any writer', () async {
     await file(
       attemptsFile,
     ).writeAsString('${encodeAttempt(_attempt(mainline, correct: false))}\n');
@@ -157,7 +139,7 @@ void main() {
       operation: operation(),
     );
     expect((await read({kid})).mistakes, hasLength(2));
-    // The old app's own answer, written behind this store's back.
+    // Another writer's answer, written behind this store's back.
     await file(attemptsFile).writeAsString(
       '${encodeAttempt(_attempt(mainline, correct: false))}\n',
       mode: FileMode.append,
@@ -232,7 +214,7 @@ void main() {
     expect(await file(reviewsFile).readAsLines(), lines);
   });
 
-  test('into no files: each with the header the old app writes', () async {
+  test('into no files: each with the existing header', () async {
     final written = await store.write(
       operation: operation(),
       reviews: [(before: null, after: rated(null))],
@@ -259,7 +241,6 @@ void main() {
       '$historyHeader\n$kid,line_1,2026-09-22T12:00:00.000Z,good,0,'
       'trainer\n',
     );
-    expect(file('$reviewsFile.pre-csv-v2.bak').existsSync(), isFalse);
   });
 
   for (final (name, blank, kept) in [
@@ -327,46 +308,12 @@ void main() {
     );
   });
 
-  test('a write under an older header writes the current one', () async {
-    const eightColumns =
-        'repertoire_id,line_id,line_name,difficulty,interval_days,due_utc,'
-        'last_rating,last_reviewed_utc';
-    final eight = '$benko,line_8,Eight,2.50,1.00,,good,';
-    await file(
-      reviewsFile,
-    ).writeAsString('$eightColumns\n$eight\n${_review(kid, 'line_1')}\n');
-    final before = (await read({kid})).reviews[mainline];
-    await store.write(
-      operation: operation(),
-      reviews: [(before: before, after: rated(before))],
-    );
-    final lines = await file(reviewsFile).readAsLines();
-    expect(lines.first, reviewsHeader);
-    expect(lines[1], eight, reason: 'an older row keeps its bytes');
-    expect((await read({kid, benko})).reviews.length, 2);
-  });
-
-  test('keeps what the file held first, once', () async {
-    final original = '$reviewsHeader\n${_review(kid, 'line_1')}\n';
-    await file(reviewsFile).writeAsString(original);
-    final before = (await read({kid})).reviews[mainline];
-    await store.write(
-      operation: operation(),
-      reviews: [(before: before, after: rated(before))],
-    );
-    await store.write(
-      operation: operation(),
-      reviews: [(before: rated(before), after: rated(before))],
-    );
-    expect(await file('$reviewsFile.pre-csv-v2.bak').readAsString(), original);
-  });
-
   test('refuses a row somebody else changed since it was read', () async {
     await file(
       reviewsFile,
     ).writeAsString('$reviewsHeader\n${_review(kid, 'line_1')}\n');
     final before = (await read({kid})).reviews[mainline];
-    // The old app rates the same line meanwhile.
+    // Another writer rates the same line meanwhile.
     final theirs = _review(kid, 'line_1').replaceFirst(',good,', ',easy,');
     await file(reviewsFile).writeAsString('$reviewsHeader\n$theirs\n');
     final written = await store.write(
@@ -512,21 +459,20 @@ void main() {
     expect((await read({kid})).mistakes, hasLength(2));
   });
 
-  test('waits for the old app holding the Documents folder', () async {
-    final old = sqlite3.open(await lockPathOf(documents));
-    old.execute('PRAGMA busy_timeout = 0');
-    old.execute('BEGIN IMMEDIATE');
-    var done = false;
-    final logged = store
-        .logAttempt(_attempt(mainline, correct: true), operation: operation())
-        .whenComplete(() => done = true);
-    await Future<void>.delayed(const Duration(milliseconds: 200));
-    expect(done, isFalse);
-    old
-      ..execute('ROLLBACK')
-      ..close();
-    expect(await logged, isA<ProgressWritten>());
-  });
+  test(
+    'waits for another copy of the app holding the Documents folder',
+    () async {
+      final release = await holdLockElsewhere(documents);
+      var done = false;
+      final logged = store
+          .logAttempt(_attempt(mainline, correct: true), operation: operation())
+          .whenComplete(() => done = true);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(done, isFalse);
+      await release();
+      expect(await logged, isA<ProgressWritten>());
+    },
+  );
 }
 
 Attempt _attempt(LineKey key, {required bool correct}) => Attempt(

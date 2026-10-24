@@ -40,8 +40,8 @@ final class BookUnreadable extends BookLookup {
   final String detail;
 }
 
-/// Classical only was asked of a book whose classical counts the old app
-/// has not finished building (`meta.classical_counts`); they would read as
+/// Classical only was asked of a book whose classical counts are not
+/// finished (`meta.classical_counts`); they would read as
 /// a near-empty answer, so the tab says the index is missing instead.
 final class BookClassicalIncomplete extends BookLookup {
   const BookClassicalIncomplete();
@@ -62,7 +62,7 @@ abstract interface class MasterBook {
   Future<String?> gamePgn(String id);
 }
 
-/// How many games the answer names: the old app's number for TWIC.
+/// How many games the answer names for TWIC.
 const twicGamesListed = 12;
 
 /// SQLite can wait on the importer or a cold disk. Run reads off the UI
@@ -119,10 +119,12 @@ final class _SqliteMasterReader implements MasterBook {
     if (!await File(path).exists()) return const BookAbsent();
     try {
       final db = _open();
-      if (db.select('SELECT 1 FROM games LIMIT 1').isEmpty)
+      if (db.select('SELECT 1 FROM games LIMIT 1').isEmpty) {
         return const BookAbsent();
-      if (classicalOnly && !_classicalComplete(db))
+      }
+      if (classicalOnly && !_classicalComplete(db)) {
         return const BookClassicalIncomplete();
+      }
       final rows = db.select(_bookSql, [positionKey(fen)]);
       final moves = <ExplorerMove>[];
       final citedBy = <String, int>{};
@@ -257,9 +259,9 @@ final class _SqliteMasterReader implements MasterBook {
     return utf8.decode(decoder.convert(blob));
   }
 
-  /// Whether the old app has built every row's classical counts. It marks
-  /// a migrated or rebuilding file `incomplete`; a missing key reads as
-  /// built, as it does there.
+  /// Whether every row's classical counts are built. A migrated or
+  /// rebuilding file is marked `incomplete`; a missing key reads as built,
+  /// as older files have none.
   bool _classicalComplete(Database db) {
     final rows = db.select('SELECT value FROM meta WHERE key = ?', [
       'classical_counts',

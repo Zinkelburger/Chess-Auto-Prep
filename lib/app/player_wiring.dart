@@ -16,10 +16,11 @@ import '../features/players/player_book.dart';
 import '../features/players/players.dart';
 import '../features/players/saved_games.dart';
 import '../features/study/studies.dart';
+import '../features/study/studies_state.dart';
 import '../features/trainer/trainer.dart';
+import '../features/trainer/trainer_state.dart';
 import '../storage/chapter_files.dart';
 import '../storage/my_games_files.dart';
-import '../storage/my_accounts.dart';
 import '../storage/pgn_file_import.dart';
 import '../workspace/study_drafts.dart';
 import '../workspace/study_choice.dart';
@@ -45,11 +46,9 @@ final class PlayerModes {
     );
     analysis = PlayerAnalysis(
       documents: env.store,
-      archive: env.gameStore,
       cache: cache,
       sites: env.gameSites,
       pending: env.pendingWrites,
-      archiveCopies: p.join(env.folders.gamesLibrary, 'player_archives'),
     );
     hunt = PlayerHunt(
       analysis,
@@ -84,29 +83,6 @@ final class PlayerModes {
     unawaited(analysis.select(player));
   }
 
-  Future<void> addSavedPlayers() async {
-    try {
-      final saved = [...await env.savedPlayerList()];
-      final accounts = await env.accounts.snapshot();
-      if (accounts is AccountsSnapshot) {
-        saved.addAll([
-          for (final a in accounts.accounts.entries)
-            Player.create(
-              a.value.username,
-            ).edited({a.key.name: a.value.username}),
-        ]);
-      }
-      if (_disposed) return;
-      if (saved.isEmpty) {
-        requests.say('No older player game sets were found.');
-        return;
-      }
-      await directory.import(saved);
-    } on Object catch (e) {
-      if (!_disposed) requests.say('Could not read saved players: $e');
-    }
-  }
-
   void showDirectory() => requests.switchTo(Mode.players);
   Future<void> download(PlayerDownloadRange range) async {
     final chosen = analysis.player;
@@ -116,8 +92,9 @@ final class PlayerModes {
     final next = current.edited({'download': range.json});
     if (await directory.save(next, expected: current) &&
         !_disposed &&
-        analysis.player?.id == chosen.id)
+        analysis.player?.id == chosen.id) {
       await analysis.select(next, download: true);
+    }
   }
 
   Future<void> importPgn() async {
@@ -138,8 +115,9 @@ final class PlayerModes {
         });
         if (await directory.save(next, expected: current) &&
             !_disposed &&
-            analysis.player?.id == player.id)
+            analysis.player?.id == player.id) {
           await analysis.select(next);
+        }
       case ImportFailed(:final detail):
         requests.say(detail);
     }
@@ -207,10 +185,11 @@ final class PlayerModes {
       case Absent():
         return false;
       case Unreadable():
-        if (!_disposed)
+        if (!_disposed) {
           requests.say(
             '$what ${p.basename(path)} could not be read. Unlink it to start a new one.',
           );
+        }
         return null;
     }
   }
@@ -230,8 +209,7 @@ final class PlayerModes {
   Future<void> openStudy(Player player) async {
     final ref = await _study(player);
     if (_disposed || ref == null) return;
-    requests.switchTo(Mode.study);
-    await requests.open(ref, game: 0);
+    await requests.openStudy(ref);
   }
 
   Future<void> linkStudy(Player player) async {
@@ -284,8 +262,7 @@ final class PlayerModes {
       index = match.index;
     }
     if (_disposed) return;
-    requests.switchTo(Mode.study);
-    await requests.open(ref, game: index);
+    await requests.openStudy(ref, chapter: index);
   }
 
   Future<void> openGroupStudy(PlayerGroup group) async {
@@ -360,8 +337,9 @@ final class PlayerModes {
         }
       }
       if (_disposed) return null;
-      if (chapters.isEmpty)
+      if (chapters.isEmpty) {
         chapters.add(newStudyText(study: name, chapter: 'Preparation'));
+      }
       final ref = ChapterRef.at(
         p.join(
           env.folders.studies,
@@ -370,16 +348,18 @@ final class PlayerModes {
       );
       final made = await env.store.create(ref, '${chapters.join('\n\n')}\n');
       // As for a player's study: one left by a link that was not saved.
-      if (made is! Created && (made is! Collision || _linkedElsewhere(ref)))
+      if (made is! Created && (made is! Collision || _linkedElsewhere(ref))) {
         throw StateError(
           'A study with this name already exists. Rename the group or link its existing study.',
         );
+      }
       if (_disposed) return null;
       if (!await directory.saveGroup(
         group.edited({'study': ref.path}),
         expected: group,
-      ))
+      )) {
         return null;
+      }
       await studies.refresh();
       // An adopted study was seeded earlier, not from what was read now.
       return (ref: ref, leftOut: made is Created ? skipped : const <String>[]);
@@ -420,11 +400,12 @@ final class PlayerModes {
       if (_disposed) return;
       if (copy) {
         await Clipboard.setData(ClipboardData(text: text));
-        if (!_disposed)
+        if (!_disposed) {
           requests.say(
             'Prep sheet copied, including saved lines.',
             problem: false,
           );
+        }
         return;
       }
       final exporter = env.exportText;

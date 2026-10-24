@@ -12,8 +12,10 @@ import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/reference_change.dart';
 import 'package:chess_auto_prep/chess/pgn/games_written.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/chapter_directory.dart';
 import 'package:chess_auto_prep/workspace/books.dart';
 import 'package:chess_auto_prep/workspace/document_saver.dart';
+import 'package:chess_auto_prep/workspace/session_results.dart';
 import 'package:chess_auto_prep/workspace/document_session.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -50,7 +52,7 @@ void main() {
       compoundHook: (step) async {
         if (step == failAt) {
           failAt = null;
-          throw StateError("lost acknowledgement");
+          throw StateError('lost acknowledgement');
         }
       },
     );
@@ -67,7 +69,7 @@ void main() {
           Book(
             id: 'one',
             name: 'Preparation',
-            chapters: {BookChapter('Course/Course.pgn', 'A')},
+            chapters: {const BookChapter('Course/Course.pgn', 'A')},
           ),
         ],
       ).encode(),

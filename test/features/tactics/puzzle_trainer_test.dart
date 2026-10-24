@@ -82,8 +82,8 @@ void main() {
       expect(w.trainer.up?.puzzle.index, 1);
       expect(w.session.shownTo, const NodePath.root());
       // The answer is not one arrow key away.
-      w.session.forward();
-      expect(w.session.cursor, const NodePath.root());
+      w.session.cursor.forward();
+      expect(w.session.cursor.value, const NodePath.root());
     }),
   );
 
@@ -95,7 +95,7 @@ void main() {
       w.trainer.play('d7d5');
       expect(w.trainer.up?.feedback, isA<Incorrect>());
       expect((w.trainer.up!.feedback! as Incorrect).san, 'd5');
-      expect(w.session.cursor, const NodePath.root());
+      expect(w.session.cursor.value, const NodePath.root());
       async.elapse(Duration.zero);
       expect(gameOnDisk(1), contains('[ReviewCount "1"]\n[SuccessCount "0"]'));
       expect(w.trainer.run?.outcomes.values, [Outcome.failed]);
@@ -114,9 +114,9 @@ void main() {
       expect(w.trainer.up!.waiting, isTrue);
       // Nothing is taken while the reply is on its way.
       w.trainer.play('b8c6');
-      expect(w.session.cursor, NodePath.of([0]));
+      expect(w.session.cursor.value, NodePath.of([0]));
       async.elapse(replyDelay);
-      expect(w.session.cursor, NodePath.of([0, 0]));
+      expect(w.session.cursor.value, NodePath.of([0, 0]));
       expect(w.session.shownTo, NodePath.of([0, 0]));
       w.trainer.play('b8c6');
       expect(w.trainer.up!.feedback, isA<Solved>());
@@ -170,7 +170,7 @@ void main() {
       w.trainer.play('e7e5');
       w.trainer.setAutoAdvance(false);
       async.elapse(replyDelay);
-      expect(w.session.cursor, NodePath.of([0, 0]));
+      expect(w.session.cursor.value, NodePath.of([0, 0]));
       expect(w.trainer.up?.waiting, isFalse);
       w.trainer.play('b8c6');
       async.elapse(advanceDelay);
@@ -190,13 +190,13 @@ void main() {
       expect(w.session.game, 0);
       w.trainer.showSolution();
       expect((w.trainer.up!.feedback! as Revealed).rest, ['Qxf7#']);
-      expect(w.session.cursor, NodePath.of([0]));
+      expect(w.session.cursor.value, NodePath.of([0]));
       expect(w.session.shownTo, isNull);
       async.elapse(const Duration(seconds: 10));
       expect(gameOnDisk(0), isNot(contains('ReviewCount')));
       // Walking the answer is allowed; nothing new is played into the set.
       w.trainer.play('e1d1');
-      expect(w.session.cursor, NodePath.of([0]));
+      expect(w.session.cursor.value, NodePath.of([0]));
     }),
   );
 
@@ -252,7 +252,11 @@ void main() {
       expect(w.trainer.run, isNotNull);
       expect(w.session.shownTo, isNull);
       async.elapse(replyDelay);
-      expect(w.session.cursor, NodePath.of([0]), reason: 'no reply played');
+      expect(
+        w.session.cursor.value,
+        NodePath.of([0]),
+        reason: 'no reply played',
+      );
       unawaited(w.trainer.show(w.tactics.at(0)!));
       async.flushMicrotasks();
       expect(w.trainer.up?.puzzle.index, 0);
@@ -288,7 +292,7 @@ void main() {
       expect(w.trainer.up, isNull);
       async.elapse(replyDelay);
       expect(w.session.shownTo, isNull);
-      expect(w.session.cursor, const NodePath.root());
+      expect(w.session.cursor.value, const NodePath.root());
     }),
   );
 
@@ -300,7 +304,7 @@ void main() {
       w.trainer.play('e7e5');
       async.elapse(replyDelay);
       w.trainer.reset();
-      expect(w.session.cursor, const NodePath.root());
+      expect(w.session.cursor.value, const NodePath.root());
       expect(w.session.shownTo, const NodePath.root());
       expect(w.trainer.up!.decided, Outcome.failed);
       expect(w.trainer.up!.feedback, isNull);

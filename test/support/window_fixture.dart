@@ -12,9 +12,8 @@ import 'package:chess_auto_prep/app/window_input.dart';
 import 'package:chess_auto_prep/app/workspace_requests.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/engines/maia/move_policy.dart';
-import 'package:chess_auto_prep/features/bughouse/archive_moves.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_lab.dart';
-import 'package:chess_auto_prep/features/bughouse/table_search.dart';
+import 'package:chess_auto_prep/features/bughouse/lab_engine.dart';
 import 'package:chess_auto_prep/features/library/chapter_outline.dart';
 import 'package:chess_auto_prep/features/my_games/game_book.dart';
 import 'package:chess_auto_prep/features/library/library.dart';
@@ -44,6 +43,8 @@ import 'package:chess_auto_prep/workspace/session_results.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:chess_auto_prep/net/lichess_study_writes.dart';
+
 import 'fixtures.dart';
 import 'scripted_bughouse.dart';
 import 'scripted_explorer.dart';
@@ -72,30 +73,34 @@ final benkoMain = ref('benko', 'Main');
 /// the test sets. The wiring is the app's own, so a window test checks how
 /// the app is put together, not a copy of it.
 final class WindowFixture {
-  /// [input] is the window the requests read from; by default the real
-  /// dialogs over [navigator], for tests that pump [Shell]. [settings] is a
+  /// [_input] is the window the requests read from; by default the real
+  /// dialogs over [navigator], for tests that pump [Shell]. [_settings] is a
   /// store over a real folder, for a test of how they are read; by default
-  /// they are in memory. [launchEngine] starts the Stockfish the workspace
-  /// and the fill ask for; by default none starts. [players] is the player
+  /// they are in memory. [_launchEngine] starts the Stockfish the workspace
+  /// and the fill ask for; by default none starts. [_players] is the player
   /// directory; by default in memory.
   WindowFixture({
-    WindowInput? input,
-    SettingsStore? settings,
-    EngineLauncher? launchEngine,
+    this._input,
+    this._settings,
+    this._launchEngine,
     this.launchRegisteredEngine,
     this.coresAvailable,
     this.tournaments,
     this.viewerPlaces,
     this.viewerDrafts,
     this.launchTournament,
-    PlayerStore? players,
+    this._players,
     this.exitWait = const Duration(milliseconds: 20),
-    MovePolicy maia = const NoOpinion(),
-  }) : _input = input,
-       _settings = settings,
-       _launchEngine = launchEngine,
-       _players = players,
-       _maia = maia;
+    this._maia = const NoOpinion(),
+    this.lichessWriter,
+  });
+
+  /// The Lichess studies are written to; none, so no Send to Lichess,
+  /// unless the test gives one.
+  final LichessStudyWriter? lichessWriter;
+
+  /// The pages the window asked the browser for.
+  final openedPages = <Uri>[];
 
   final TournamentStore? tournaments;
 
@@ -126,7 +131,7 @@ final class WindowFixture {
   /// in [ScriptedDraftQuestion.answer].
   final question = ScriptedDraftQuestion();
 
-  /// The Bughouse lab's engine, book and archive.
+  /// The Bughouse mode's engine.
   final bughouse = ScriptedBughouse();
 
   late final parts = AppParts(
@@ -186,9 +191,13 @@ final class WindowFixture {
       lichessStudies: ScriptedLichess(
         const StudyNotFetched(StudyFetchProblem.unreachable),
       ),
+      lichessStudyWriter: lichessWriter,
+      openPage: (page) async {
+        openedPages.add(page);
+        return true;
+      },
       lichessExplorer: lichess,
       masterBook: ScriptedBook(),
-      gameStore: ScriptedGameStore(),
       gameSites: const [],
       // The usernames, in memory: none until a test sets them.
       accounts: MemoryAccounts(),
@@ -203,7 +212,6 @@ final class WindowFixture {
       ),
       progressFiles: ScriptedProgress(),
       players: _players,
-      olderAnalyzed: () async => {},
       maia: _maia,
       launchEngine:
           _launchEngine ??
@@ -266,8 +274,7 @@ final class WindowFixture {
   GamesCache get gamesCache => parts.gamesCache;
 
   BughouseLab get lab => parts.labs.lab;
-  TableSearch get tableSearch => parts.labs.search;
-  ArchiveMoves get archive => parts.labs.archive;
+  LabEngine get labEngine => parts.labs.engine;
 
   /// The window over these parts, the library listed and both
   /// repertoires' rows opened, since the chapters are what tests click.

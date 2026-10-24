@@ -15,8 +15,9 @@ List<TournamentStanding> tournamentStandings(Tournament tournament) {
         game.white < 0 ||
         game.black < 0 ||
         game.white >= count ||
-        game.black >= count)
+        game.black >= count) {
       continue;
+    }
     final outcome = switch (game.result) {
       '1-0' => 0,
       '1/2-1/2' => 1,
@@ -88,11 +89,11 @@ final class MatchScore {
   MatchScore plus(MatchScore other) =>
       MatchScore(wins + other.wins, draws + other.draws, losses + other.losses);
 
-  /// The legacy score-to-Elo convention. The finite estimate is undefined
+  /// The usual score-to-Elo convention. The finite estimate is undefined
   /// for an empty record or a perfect/zero score.
   double? get elo => played == 0 ? null : _rating(points / played);
 
-  /// The legacy normal approximation in score space, transformed to Elo.
+  /// The plain normal approximation in score space, transformed to Elo.
   /// Kept for comparison with existing reports; all-draw samples have zero
   /// plug-in variance, which is not evidence of certainty about future games.
   double? get margin {

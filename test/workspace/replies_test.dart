@@ -113,7 +113,7 @@ void main() {
   test('at their move an unanswered frequent reply is a gap, and the walk '
       'over the chapter finds it too', () async {
     await pumpEventQueue();
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     await pumpEventQueue();
     final shown = replies.table as RepliesShown;
     expect(shown.ourMove, isFalse);
@@ -158,9 +158,9 @@ void main() {
 
   test('the model is asked once per position and rating', () async {
     await pumpEventQueue();
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     await pumpEventQueue();
-    fixture.session.back();
+    fixture.session.cursor.back();
     await pumpEventQueue();
     final start = policy.asked.where((k) => k.endsWith(' w@2000')).length;
     expect(start, 1);
@@ -171,8 +171,8 @@ void main() {
 
   test('a model with no opinion says so instead of showing nothing', () async {
     await pumpEventQueue();
-    fixture.session.forward();
-    fixture.session.forward();
+    fixture.session.cursor.forward();
+    fixture.session.cursor.forward();
     await pumpEventQueue();
     expect(replies.table, isA<RepliesFailed>());
     expect((replies.table as RepliesFailed).reason, 'no opinion');
@@ -191,7 +191,7 @@ void main() {
     // A settings change walks the chapter again, now with the sibling there.
     await settings.update(const Settings(opponentElo: 2000, coverOnceIn: 4));
     await pumpEventQueue();
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     await pumpEventQueue();
     final shown = replies.table as RepliesShown;
     final byMove = {for (final row in shown.rows) row.san: row};

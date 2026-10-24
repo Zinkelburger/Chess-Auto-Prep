@@ -11,7 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../support/viewer_fixture.dart';
 
 /// A game with no id of its own, spelled as a file may spell it and as
-/// v2 does not: `0-0`, a disambiguation it does not need, a promotion with
+/// the app does not: `0-0`, a disambiguation it does not need, a promotion with
 /// no `=` and checks with no `+`.
 const _oddlySpelled = '''
 [Event "Casual"]

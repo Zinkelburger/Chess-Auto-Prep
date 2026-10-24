@@ -1,13 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
-import '../chess/pgn/chapter.dart' show readOffThreadFrom;
 import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 import 'backups.dart';
@@ -17,7 +15,7 @@ import 'book_references.dart';
 import 'compound_commit.dart';
 import 'line_progress.dart';
 import 'compound_write.dart';
-import 'operation_journal.dart';
+import 'operation_participants.dart';
 import 'document_probe.dart';
 import 'document_ref.dart';
 import 'edit_scope.dart';
@@ -27,18 +25,18 @@ import 'mutation_guards.dart';
 import 'pgn_document_store.dart';
 import 'recovery_files.dart';
 import 'recovery_gate.dart';
-import 'section_reference_check.dart';
+import 'save_preparation.dart';
 
 /// The documents root as files on disk.
 ///
-/// Every mutation runs under the directory lock the old app also takes, so the
-/// two apps cannot write one folder at once, and publishes through the atomic
+/// Every mutation runs under the directory lock, so two processes cannot
+/// write one folder at once, and publishes through the atomic
 /// writer, so a reader never sees half a document. Every access first holds
 /// the shared recovery domain and settles known relocation notes or refuses.
 /// The native probe takes bytes and hash from one open handle.
 ///
-/// What that does and does not promise. Against the old app and against
-/// another copy of this one, which take the same lock, a mutation is
+/// What that does and does not promise. Against another copy of this app,
+/// which takes the same lock, a mutation is
 /// exclusive and neither side can lose the other's write. Against a program
 /// that does not take the lock — a text editor, a sync client — the file is
 /// read under the lock and the mutation refuses on any change since the
@@ -137,7 +135,7 @@ final class PgnFileStore implements PgnDocumentStore {
         log.w('open ${ref.path}', detail);
         return Unreadable(detail);
       case FileFound(:final bytes, :final revision):
-        switch (await _decoded(bytes)) {
+        switch (await decodedDocument(bytes)) {
           case PlainText(:final text):
             return Opened(text, revision, readOnly: _outsideRoot(ref));
           case ForeignText(:final text, :final detail):
@@ -184,7 +182,7 @@ final class PgnFileStore implements PgnDocumentStore {
   }
 
   Future<CreateResult> _create(DocumentRef ref, String text) async {
-    final bytes = await _encoded(text);
+    final bytes = await encodedDocument(text);
     var landed = false;
     try {
       await removeStaleTemporaries(folderOf(ref));
@@ -301,7 +299,7 @@ final class PgnFileStore implements PgnDocumentStore {
                   revision.nativeIdentity != edit.expected.nativeIdentity)) {
             return Conflict(revision);
           }
-          final prepared = await _prepared(
+          final prepared = await preparedSave(
             edit.ref.path,
             bytes,
             revision.contentHash,
@@ -309,13 +307,13 @@ final class PgnFileStore implements PgnDocumentStore {
             edit.scope,
           );
           switch (prepared) {
-            case _NotReplaceable(:final result):
+            case NotReplaceable(:final result):
               return result;
-            case _OutsideScope(:final detail):
+            case OutsideScope(:final detail):
               return SaveRefused(detail);
-            case _Unchanged(:final before):
+            case UnchangedText(:final before):
               inputs.add((edit: edit, found: observed, before: before));
-            case _Ready(:final before, :final hash, :final undeclared):
+            case ReadyToWrite(:final before, :final hash, :final undeclared):
               if (undeclared) log.w('save pair ${edit.ref.path}', _undeclared);
               if (edit.scope is RestoredVersion) {
                 final refused = await _keptHere(edit.ref, hash);
@@ -490,7 +488,7 @@ final class PgnFileStore implements PgnDocumentStore {
     EditScope scope,
     String? expectedBooks,
   ) async {
-    final prepared = await _prepared(
+    final prepared = await preparedSave(
       ref.path,
       current,
       revision.contentHash,
@@ -498,19 +496,24 @@ final class PgnFileStore implements PgnDocumentStore {
       scope,
     );
     switch (prepared) {
-      case _NotReplaceable(:final result, :final detail):
+      case NotReplaceable(:final result, :final detail):
         log.w('save ${ref.path}', detail);
         return result;
-      case _OutsideScope(:final detail):
+      case OutsideScope(:final detail):
         log.e('save ${ref.path}', detail);
         return SaveRefused(detail);
-      case _Unchanged(:final before):
+      case UnchangedText(:final before):
         // Nothing to replace, so nothing to keep and nothing to write.
         if (_compoundId(scope) != null) {
           return _compound(ref, before, text, revision, scope, expectedBooks);
         }
         return Saved(_receipt(before, revision, revision));
-      case _Ready(:final before, :final bytes, :final hash, :final undeclared):
+      case ReadyToWrite(
+        :final before,
+        :final bytes,
+        :final hash,
+        :final undeclared,
+      ):
         if (undeclared) log.w('save ${ref.path}', _undeclared);
         if (scope is RestoredVersion) {
           final refused = await _keptHere(ref, hash);
@@ -826,131 +829,6 @@ final class PgnFileStore implements PgnDocumentStore {
 
   Receipt _receipt(String before, Revision was, Revision committed) =>
       Receipt(committed: committed, before: before, beforeRevision: was);
-}
-
-/// [bytes] as a document. A small file is decoded here; a large one on
-/// another isolate, because decoding megabytes is work the screen would
-/// otherwise wait for.
-Future<DocumentText> _decoded(Uint8List bytes) =>
-    bytes.length < readOffThreadFrom
-    ? Future.value(readDocumentText(bytes))
-    : Isolate.run(() => readDocumentText(bytes));
-
-/// [text] as the bytes a file will hold, and their hash.
-Future<({Uint8List bytes, String hash})> _encoded(String text) =>
-    text.length < readOffThreadFrom
-    ? Future.value(_encode(text))
-    : Isolate.run(() => _encode(text));
-
-/// What a save works out before it writes, on another isolate once either
-/// side of the comparison is big enough to be worth the trip.
-Future<_Prepared> _prepared(
-  String documentPath,
-  Uint8List current,
-  String currentHash,
-  String text,
-  EditScope scope,
-) => current.length < readOffThreadFrom && text.length < readOffThreadFrom
-    ? Future.value(_prepare(documentPath, current, currentHash, text, scope))
-    : Isolate.run(
-        () => _prepare(documentPath, current, currentHash, text, scope),
-      );
-
-({Uint8List bytes, String hash}) _encode(String text) {
-  final bytes = utf8.encode(text);
-  return (bytes: bytes, hash: sha256.convert(bytes).toString());
-}
-
-/// Everything a save works out before it touches the disk: whether the
-/// current bytes may be replaced at all, whether the new text changes only
-/// what the scope declared, and the bytes and hash to write.
-sealed class _Prepared {
-  const _Prepared();
-}
-
-/// The file on disk is not one this app may replace; [result] says so.
-final class _NotReplaceable extends _Prepared {
-  const _NotReplaceable(this.result, this.detail);
-
-  final SaveResult result;
-  final String detail;
-}
-
-/// The text would change a game the save did not declare.
-final class _OutsideScope extends _Prepared {
-  const _OutsideScope(this.detail);
-
-  final String detail;
-}
-
-/// The text is already what the file holds.
-final class _Unchanged extends _Prepared {
-  const _Unchanged(this.before);
-
-  final String before;
-}
-
-final class _Ready extends _Prepared {
-  const _Ready({
-    required this.before,
-    required this.bytes,
-    required this.hash,
-    required this.undeclared,
-  });
-
-  /// The text being replaced, as it was read from disk.
-  final String before;
-
-  final Uint8List bytes;
-  final String hash;
-
-  /// Whether the save replaced the whole document without saying which
-  /// game it changed, which is logged so that a writer that does it is
-  /// visible.
-  final bool undeclared;
-}
-
-/// Runs on another isolate: everything about a save that reads every byte.
-_Prepared _prepare(
-  String documentPath,
-  Uint8List current,
-  String currentHash,
-  String text,
-  EditScope scope,
-) {
-  final read = readDocumentText(current);
-  // A document this app cannot read is not one it may replace: a save over
-  // a compressed chapter would leave bytes neither app can open.
-  if (read case NotText(:final detail)) {
-    return _NotReplaceable(IoFailure(detail), detail);
-  }
-  // Nor one it had to guess at: this writes UTF-8, so putting a Latin-1
-  // file back would change every game holding an accented letter.
-  if (read case ForeignText(:final detail)) {
-    return _NotReplaceable(NotWritable(detail), detail);
-  }
-  final before = (read as PlainText).text;
-  final referenceProblem = sectionReferenceProblem(
-    documentPath: documentPath,
-    before: before,
-    after: text,
-    scope: scope,
-  );
-  if (referenceProblem != null) return _OutsideScope(referenceProblem);
-  final encoded = _encode(text);
-  if (encoded.hash == currentHash) return _Unchanged(before);
-  final outside = changeOutsideScope(
-    previous: current,
-    next: encoded.bytes,
-    scope: scope,
-  );
-  if (outside != null) return _OutsideScope(outside);
-  return _Ready(
-    before: before,
-    bytes: encoded.bytes,
-    hash: encoded.hash,
-    undeclared: scope is WholeDocument,
-  );
 }
 
 const _unkeptVersion =

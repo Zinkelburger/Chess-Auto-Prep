@@ -7,57 +7,42 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
-import 'package:url_launcher/url_launcher.dart';
-import 'package:window_manager/window_manager.dart';
 
-import '../chess/fen.dart';
 import '../chess/tournament/config.dart';
 import '../engines/analysis_launch.dart';
 import '../storage/settings.dart';
 import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
-import '../engines/bughouse_backend.dart';
-import '../engines/engine.dart';
 import '../engines/hivemind_engine.dart';
-import '../engines/hivemind_install.dart';
-import '../engines/maia/maia_model.dart';
 import '../engines/maia/move_policy.dart';
 import '../engines/stockfish_install.dart';
 import '../engines/tournament_launch.dart';
 import '../features/settings/app_updates.dart';
 import '../net/remote_queue.dart';
-import '../net/github_releases.dart';
 import '../net/lichess_explorer.dart';
 import '../net/lichess_login.dart';
 import '../net/lichess_studies.dart';
+import '../net/lichess_study_writes.dart';
 import '../net/recent_games.dart';
 import '../net/player_ratings.dart';
 import '../storage/book_file.dart';
 import '../storage/player_files.dart';
 import '../storage/text_export.dart';
 import '../storage/player_reports.dart';
-import '../storage/saved_players.dart';
-import '../chess/players/player.dart';
-import '../storage/bughouse_books.dart';
-import '../storage/bughouse_expectimax.dart';
-import '../storage/bughouse_matches.dart';
 import '../storage/chapter_files.dart';
+import '../storage/chapter_directory.dart';
 import '../storage/eval_cache.dart';
 import '../storage/audit_store.dart';
 import '../storage/finds_store.dart';
 import '../storage/generation_trees.dart';
 import '../storage/backup_history.dart';
-import '../storage/game_store.dart';
 import '../storage/lichess_token.dart';
 import '../storage/master_book.dart';
 import '../storage/master_corpus.dart';
 import '../storage/my_accounts.dart';
-import '../storage/my_games_files.dart';
 import '../storage/pgn_document_store.dart';
 import '../storage/pgn_file_import.dart';
 import '../storage/pgn_file_picker.dart';
@@ -69,8 +54,8 @@ import '../storage/settings_store.dart';
 import '../storage/viewer_drafts.dart';
 import '../storage/study_files.dart';
 import '../storage/training_store.dart';
-import '../storage/update_files.dart';
-import '../storage/update_install.dart';
+import 'native_desktop.dart';
+import 'native_engines.dart';
 
 /// Where the user's things are: each folder the modes list or write into.
 typedef AppFolders = ({
@@ -81,15 +66,11 @@ typedef AppFolders = ({
   ChapterRef tacticsSet,
 });
 
-/// What the Bughouse lab reaches outside the app: whether this build has
-/// the engine at all, how to start it on so many cores, the two books the
-/// Python tools build, and the matches under `Documents/bughouse_matches`.
+/// What the Bughouse mode reaches outside the app: whether this build has
+/// the engine at all, and how to start it on so many cores.
 typedef BughouseOutside = ({
   Future<bool> Function() bundled,
   Future<HivemindStart> Function({required int cores}) launch,
-  HivemindBook hivemindBook,
-  FicsBook ficsBook,
-  MatchStore matches,
 });
 
 /// Starts a Stockfish with these threads and this table.
@@ -126,6 +107,8 @@ final class AppEnvironment {
     required this.readAccount,
     required this.writeAccount,
     required this.lichessStudies,
+    this.lichessStudyWriter,
+    this.openPage = _noPage,
     required this.lichessExplorer,
     required this.masterBook,
     this.masterGames,
@@ -134,11 +117,9 @@ final class AppEnvironment {
     this.tournaments,
     this.launchTournament,
     this.pickExecutable = _noFile,
-    required this.gameStore,
     required this.gameSites,
     required this.accounts,
     required this.progressFiles,
-    required this.olderAnalyzed,
     required this.maia,
     required this.launchEngine,
     this.launchRegisteredEngine = _noRegisteredEngine,
@@ -154,7 +135,6 @@ final class AppEnvironment {
     BookStore? books,
     PlayerStore? players,
     PlayerReports? playerReports,
-    this.savedPlayerList = _noSavedPlayers,
     this.openingBook = _noOpeningBook,
     this.playerRating,
     this.exportText,
@@ -163,8 +143,6 @@ final class AppEnvironment {
     this.viewerDrafts,
     required this.setFullScreen,
     required this.bughouse,
-    this.launchBughouseSearch = _noBughouseSearch,
-    this.bughouseExpectimaxBook,
     this.updates,
     this.now = DateTime.now,
     this.jitter = _noJitter,
@@ -193,13 +171,6 @@ final class AppEnvironment {
     final client = http.Client();
     final engines = EngineSupervisor();
     final maia = MaiaLaunch();
-    final expectimaxBook = BughouseExpectimaxBook(
-      bughouseBookPlaces(
-        'bughouse_expectimax.db',
-        environment: Platform.environment,
-        support: support.path,
-      ).first,
-    );
     final masterGames = p.join(support.path, 'master_games.db');
     final evalCache = EvalCacheOnDemand(support);
     final finds = FindsStoreOnDemand(support);
@@ -208,20 +179,6 @@ final class AppEnvironment {
     final studies = p.join(documents.path, 'studies');
     final collections = p.join(documents.path, 'pgn_collections');
     final dice = Random();
-    final hivemindBook = SqliteHivemindBook(
-      bughouseBookPlaces(
-        'hivemind_book.db',
-        environment: Platform.environment,
-        support: support.path,
-      ),
-    );
-    final ficsBook = SqliteFicsBook(
-      bughouseBookPlaces(
-        'bughouse_book.db',
-        environment: Platform.environment,
-        support: support.path,
-      ),
-    );
     final documentsStore = PgnFileStore(documents: documents, support: support);
     return AppEnvironment(
       folders: (
@@ -237,7 +194,6 @@ final class AppEnvironment {
       settings: SettingsStore(support: support),
       chapterFiles: ChapterDirectory(
         Directory(repertoires),
-        documents: documentsStore,
         recovery: documentsStore.recovery,
       ),
       studyFiles: StudyDirectory(
@@ -256,11 +212,15 @@ final class AppEnvironment {
       readAccount: readLichessAccount,
       writeAccount: writeLichessAccount,
       lichessStudies: LichessStudyApi(client, token: readLichessToken),
+      lichessStudyWriter: LichessStudyWriterApi(
+        client,
+        token: readLichessToken,
+      ),
+      openPage: openInBrowser,
       lichessExplorer: LichessExplorerApi(client, token: readLichessToken),
       masterBook: SqliteMasterBook(masterGames),
       masterGames: masterGames,
       storage: nativeStoragePlaces(documents: documents, support: support),
-      gameStore: SqliteGameStore(p.join(support.path, 'app_games.db')),
       gameSites: [
         LichessGamesApi(client, token: readLichessToken),
         ChesscomGamesApi(client),
@@ -271,7 +231,6 @@ final class AppEnvironment {
         support: support,
         recovery: documentsStore.recovery,
       ),
-      olderAnalyzed: () => readOlderAnalyzed(documents),
       maia: maia,
       launchEngine: ({required cores, required memoryMb}) => launchStockfish(
         support: support,
@@ -297,7 +256,7 @@ final class AppEnvironment {
         transcript,
         stockfish: StockfishInstall(
           supportDirectory: support,
-          readAsset: _readAsset,
+          readAsset: readBundledAsset,
         ),
         engines: engines,
       ),
@@ -320,47 +279,18 @@ final class AppEnvironment {
       viewerPlaces: PreferencesViewerPlaces(),
       viewerDrafts: ViewerDraftFiles(support),
       openingBook: _bundledOpeningBook,
-      savedPlayerList: () =>
-          savedPlayers(Directory(p.join(documents.path, 'analysis_games'))),
-      setFullScreen: _setFullScreen,
-      bughouseExpectimaxBook: expectimaxBook,
-      launchBughouseSearch: (nodes) async {
-        final native = await BughouseBackend.start(
-          crazyara: () => engines.startCrazyara(support.path),
-          hivemind: () =>
-              launchHivemind(support: support, engines: engines, cores: 2),
-          nodes: nodes,
-        );
-        return BughouseBackend(
-          policy: native.policy,
-          identity: native.identity,
-          evaluate: (position, board) => expectimaxBook.evaluate(
-            position,
-            board,
-            nodes,
-            native.identity,
-            native.evaluate,
-          ),
-          close: native.close,
-        );
-      },
+      setFullScreen: setWindowFullScreen,
       bughouse: (
-        bundled: _bughouseBundled,
+        bundled: bughouseBundled,
         launch: ({required cores}) =>
             launchHivemind(support: support, engines: engines, cores: cores),
-        hivemindBook: hivemindBook,
-        ficsBook: ficsBook,
-        matches: MatchFolder(p.join(documents.path, 'bughouse_matches')),
       ),
-      updates: cache == null ? null : _nativeUpdates(client, cache),
+      updates: cache == null ? null : nativeUpdates(client, cache),
       jitter: () => dice.nextDouble() * 2 - 1,
       close: () {
-        expectimaxBook.close();
         evalCache.close();
         finds.close();
         audits.close();
-        hivemindBook.close();
-        ficsBook.close();
         maia.dispose();
         client.close();
         unawaited(engines.dispose());
@@ -398,6 +328,13 @@ final class AppEnvironment {
   final Future<LichessAccount?> Function() readAccount;
   final Future<bool> Function(LichessAccount?) writeAccount;
   final LichessStudies lichessStudies;
+
+  /// Writes studies to the user's Lichess account; none in the window tests
+  /// unless one is scripted.
+  final LichessStudyWriter? lichessStudyWriter;
+
+  /// Shows a page in the desktop's browser and says whether it went.
+  final Future<bool> Function(Uri page) openPage;
   final LichessExplorer lichessExplorer;
 
   /// The master games database read as an opening book.
@@ -412,19 +349,12 @@ final class AppEnvironment {
   /// leftovers it may delete; null in tests that do not measure.
   final StoragePlaces? storage;
 
-  /// The old app's database of the user's games, `app_games.db`.
-  final GameStore gameStore;
-
   /// Where the user's own games are downloaded from.
   final List<RecentGames> gameSites;
 
   /// The user's usernames on those sites.
   final AccountStore accounts;
   final ProgressFiles progressFiles;
-
-  /// The games the old app already mined for puzzles; null when the file is
-  /// there and could not be read.
-  final Future<Set<String>?> Function() olderAnalyzed;
 
   /// The human-move model: the Replies tab, the gaps and the fill.
   final MovePolicy maia;
@@ -444,8 +374,7 @@ final class AppEnvironment {
   /// Quits every engine; the way out waits for it.
   final Future<void> Function() stopEngines;
 
-  /// The engine's verdicts, shared with the old app, opened the first time
-  /// a fill asks.
+  /// The engine's stored verdicts, opened the first time a fill asks.
   final EvalCache Function() evalCache;
 
   /// What the searches point out, kept between runs, opened the first time
@@ -466,7 +395,6 @@ final class AppEnvironment {
   final BookStore books;
   final PlayerStore players;
   final PlayerReports playerReports;
-  final Future<List<Player>> Function() savedPlayerList;
 
   /// The text of each volume of the bundled opening book; none in a test.
   final Future<List<String>> Function() openingBook;
@@ -480,7 +408,7 @@ final class AppEnvironment {
   /// Puts the window in or out of full screen.
   final Future<void> Function(bool on) setFullScreen;
 
-  /// The Bughouse lab's engine and books.
+  /// The Bughouse mode's engine.
   final BughouseOutside bughouse;
 
   /// GitHub releases, the downloads and the install helper; null where the
@@ -504,9 +432,6 @@ final class AppEnvironment {
 
   /// Closes what this opened: the network, the databases, the engines.
   final void Function() close;
-
-  final Future<BughouseBackend> Function(int nodes) launchBughouseSearch;
-  final BughouseExpectimaxBook? bughouseExpectimaxBook;
 
   /// A Stockfish with the threads and the table the settings give it now.
   Future<EngineStart> startEngine() => launchEngine(
@@ -558,35 +483,14 @@ final class AppEnvironment {
         StartFailed(:final reason) => StartFailed('$notice. $reason'),
       };
 
-  /// Hivemind on half of this machine's cores, as BughouseDB runs it. Not
-  /// the Stockfish setting, which the user may have turned down: a network
-  /// engine on one core takes a minute over what the lab asks in ten
-  /// seconds.
+  /// Hivemind on half of this machine's cores, not the Stockfish setting,
+  /// which the user may have turned down: a network engine on one core
+  /// takes a minute over what it otherwise answers in ten seconds.
   Future<HivemindStart> startHivemind() =>
       bughouse.launch(cores: max(1, coresAvailable ~/ 2));
 }
 
 double _noJitter() => 0;
-
-/// Updates from GitHub into `<cache>/updates`. A development build checks
-/// only when asked, unless `CHESS_AUTO_PREP_RELEASES_URL` points it at a
-/// local release fixture for a headless check of the prompt.
-UpdateOutside _nativeUpdates(http.Client client, Directory cache) {
-  final fixture = Platform.environment['CHESS_AUTO_PREP_RELEASES_URL'];
-  final folder = UpdateFolder(Directory(p.join(cache.path, 'updates')));
-  return (
-    releases: GitHubReleases(
-      client,
-      latestUrl: fixture == null ? null : Uri.parse(fixture),
-    ),
-    folder: folder,
-    installer: UpdateInstaller(readHelper: rootBundle.loadString),
-    version: () async => (await PackageInfo.fromPlatform()).version,
-    automatic: kReleaseMode || fixture != null,
-    openPage: openInBrowser,
-    showFolder: (path) => unawaited(openFolder(Directory(path))),
-  );
-}
 
 Future<List<String>> _noOpeningBook() async => const [];
 
@@ -598,159 +502,6 @@ Future<List<String>> _bundledOpeningBook() => Future.wait([
 
 void _nothingToClose() {}
 
-/// The window in or out of full screen. The window plugin wants its
-/// handshake before the first call; it is cheap and harmless to repeat.
-Future<void> _setFullScreen(bool on) async {
-  await windowManager.ensureInitialized();
-  await windowManager.setFullScreen(on);
-}
-
-/// Shows [folder] in the desktop's file manager. A desktop that will not
-/// open it is the desktop's failure; the user saw nothing happen, and the
-/// log says why.
-Future<void> openFolder(Directory folder) async {
-  try {
-    await folder.create(recursive: true);
-    final opened = await launchUrl(Uri.directory(folder.path));
-    if (!opened) log.w('open ${folder.path}', 'the desktop declined');
-  } on Object catch (error) {
-    log.w('open ${folder.path}', error);
-  }
-}
-
-/// Sends [page] to the desktop's browser and says whether it went. The
-/// caller shows the link when it did not; the log says why.
-Future<bool> openInBrowser(Uri page) async {
-  try {
-    final opened = await launchUrl(page, mode: LaunchMode.externalApplication);
-    if (!opened) {
-      log.w('open ${page.host} in the browser', 'the desktop declined');
-    }
-    return opened;
-  } on Object catch (error) {
-    log.w('open ${page.host} in the browser', error);
-    return false;
-  }
-}
-
-/// Where the workspace's opponent model comes from: the bundled Maia-3
-/// network and its move table, loaded once, the first time anything asks.
-///
-/// Loading parses a 45 MB graph, so it is not done at start-up on the
-/// chance nobody opens a repertoire; and every caller shares the one load,
-/// so two panels asking at once do not build two sessions. A model that
-/// cannot load answers every question with the reason, once logged, and
-/// is not asked to load again: the assets do not change while the app runs.
-final class MaiaLaunch implements MovePolicy {
-  Future<MaiaLoad>? _loading;
-
-  Future<MaiaLoad> _load() => _loading ??= _loadOnce();
-
-  Future<MaiaLoad> _loadOnce() async {
-    try {
-      final model = await rootBundle.load('assets/maia3_simplified.onnx');
-      final moves = await rootBundle.loadString(
-        'assets/data/all_moves_maia3.json',
-      );
-      final loaded = await MaiaModel.load(
-        model: model.buffer.asUint8List(
-          model.offsetInBytes,
-          model.lengthInBytes,
-        ),
-        moveVocabulary: moves,
-      );
-      if (loaded case MaiaUnavailable(:final reason)) {
-        log.e('load the Maia model', reason);
-      }
-      return loaded;
-    } on Object catch (error) {
-      log.e('read the Maia assets', error);
-      return MaiaUnavailable('The opponent model could not be read: $error');
-    }
-  }
-
-  @override
-  Future<MaiaAnswer> policy(Fen fen, int elo) async => switch (await _load()) {
-    MaiaReady(:final model) => model.policy(fen, elo),
-    MaiaUnavailable(:final reason) => MaiaFailed(reason),
-  };
-
-  void dispose() {
-    unawaited(
-      _loading?.then((loaded) {
-        if (loaded case MaiaReady(:final model)) model.dispose();
-      }),
-    );
-  }
-}
-
-/// Where the workspace's Stockfish comes from: the bundled asset, installed
-/// once under the support folder, then started under [engines] with the
-/// threads and the table the settings give it.
-Future<EngineStart> launchStockfish({
-  required Directory support,
-  required EngineSupervisor engines,
-  required int cores,
-  required int memoryMb,
-}) async {
-  final install = StockfishInstall(
-    supportDirectory: support,
-    readAsset: _readAsset,
-  );
-  final location = await install.locate();
-  if (location case StockfishMissing(:final reason)) {
-    log.e('install Stockfish', reason);
-  }
-  return switch (location) {
-    StockfishMissing(:final reason) => StartFailed(reason),
-    StockfishReady(:final path) => engines.start(
-      path,
-      options: {'Threads': '$cores', 'Hash': '$memoryMb'},
-    ),
-  };
-}
-
-/// The bundle has no way to ask whether an asset exists, only to load it.
-Future<Uint8List?> _readAsset(String asset) async {
-  try {
-    final data = await rootBundle.load(asset);
-    return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-  } on FlutterError {
-    return null;
-  }
-}
-
-/// The bughouse engine: installed from the bundle into the support folder,
-/// checked against its manifest, then started under [engines].
-Future<HivemindStart> launchHivemind({
-  required Directory support,
-  required EngineSupervisor engines,
-  required int cores,
-}) async {
-  final install = HivemindInstall(
-    supportDirectory: support,
-    readAsset: _readAsset,
-  );
-  return switch (await install.locate()) {
-    HivemindMissing(:final reason) => HivemindStartFailed(reason),
-    HivemindReady(:final files) => engines.startHivemind(files, cores: cores),
-  };
-}
-
-/// Whether this build carries the bughouse engine, from the asset list the
-/// build ships: the bundle is fetched separately and may be missing.
-Future<bool> _bughouseBundled() async {
-  try {
-    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
-    return HivemindInstall.bundledIn(manifest.listAssets());
-  } on Object catch (error) {
-    log.w('read the asset list for the bughouse engine', error);
-    return false;
-  }
-}
-
-Future<List<Player>> _noSavedPlayers() async => const [];
-
 Future<EngineStart> _noRegisteredEngine(
   TournamentEngine engine, {
   required int cores,
@@ -758,6 +509,8 @@ Future<EngineStart> _noRegisteredEngine(
 }) async => const StartFailed('No registered engines here.');
 
 Future<String?> _noFile() async => null;
+
+Future<bool> _noPage(Uri page) async => false;
 
 /// Everything the app keeps, as the Databases mode measures it. Only the
 /// master games, which can be downloaded and imported again, and leftovers
@@ -786,7 +539,6 @@ StoragePlaces nativeStoragePlaces({
         path: sup('audit_dismissed.db'),
         removable: false,
       ),
-      (name: 'Your games', path: sup('app_games.db'), removable: false),
       (name: 'Kept versions', path: sup('backups'), removable: false),
       (name: 'Bughouse engine', path: sup('bughouse'), removable: false),
       (name: 'Repertoires', path: doc('repertoires'), removable: false),
@@ -802,6 +554,3 @@ StoragePlaces nativeStoragePlaces({
     ],
   );
 }
-
-Future<BughouseBackend> _noBughouseSearch(int nodes) async =>
-    throw const EngineFailure('Bughouse expectimax is unavailable.');

@@ -10,13 +10,13 @@
 /// Splitting records is not the same job as reading fields: a newline inside
 /// a quoted field is part of the record. Hence the scan below, over the
 /// package's decoder for the fields themselves and its encoder for the rows
-/// that are written again, so both apps read and write one dialect.
+/// that are written again, so every record is read and written in one
+/// dialect.
 library;
 
 import 'package:csv/csv.dart';
 
-/// Line feeds, not carriage returns: what the old app writes into these
-/// files, and the two apps share them on one profile.
+/// Line feeds, not carriage returns: what the existing training files hold.
 final _dialect = Csv(autoDetect: false, lineDelimiter: '\n');
 
 /// One record, its fields, and the exact text it occupied.
@@ -163,7 +163,7 @@ const _unclosed = 'a quoted field is never closed';
 CsvRecord? _record(String source, String terminator, int line) {
   // The decoder reports a top type per cell; these files hold text only.
   // It returns no row at all for one whose cells are all empty, `,,,` as a
-  // spreadsheet writes an empty row, which the old app passes over too.
+  // spreadsheet writes an empty row, and such a row holds nothing to read.
   final List<List<Object?>> rows = source.trim().isEmpty
       ? const []
       : _dialect.decode(source);

@@ -50,20 +50,20 @@ void main() {
       );
       addTearDown(f.dispose);
       await f.open();
-      f.session.goTo(NodePath.of([0, 0, 0, 0]));
-      final target = f.session.fen;
+      f.session.cursor.goTo(NodePath.of([0, 0, 0, 0]));
+      final target = f.session.cursor.fen;
       f.filter.reachingBoardPosition();
       expect(
         f.viewer.exportText(),
         isNull,
         reason: 'no stale export during filtering',
       );
-      f.session.toStart();
+      f.session.cursor.toStart();
       await filtered(f);
       expect(f.viewer.gameOrder, [0, 1]);
       expect(f.filter.applied.position, target);
       f.viewer.showGame(1);
-      expect(f.session.fen.position, target.position);
+      expect(f.session.cursor.fen.position, target.position);
       final text = f.viewer.exportText()!;
       expect(text, contains('Keep this note'));
       expect(text, contains('(3. d3)'));
@@ -80,7 +80,7 @@ void main() {
       final saved = ReadingPlace(
         game: 0,
         key: 'game',
-        path: f.session.cursor,
+        path: f.session.cursor.value,
         sort: f.viewer.sort,
         filter: f.filter.filter,
       );
@@ -114,9 +114,9 @@ $moves e4 *
 ''');
       addTearDown(f.dispose);
       await f.open();
-      f.session.toEnd();
-      final position = f.session.fen;
-      expect(f.session.cursor.indexes.length, 61);
+      f.session.cursor.toEnd();
+      final position = f.session.cursor.fen;
+      expect(f.session.cursor.value.indexes.length, 61);
       f.filter.reaching(position);
       await filtered(f);
       expect(f.viewer.gameOrder, [0, 2]);

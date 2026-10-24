@@ -68,8 +68,8 @@ void main() {
     await tester.tap(find.textContaining('e5 2.Nf3!', findRichText: true));
     await tester.pumpAndSettle();
     expect(w.session.isScratch, isTrue);
-    expect(w.session.fen, afterE4E5);
-    expect(w.session.currentMove?.san, 'e5');
+    expect(w.session.cursor.fen, afterE4E5);
+    expect(w.session.cursor.currentMove?.san, 'e5');
     expect(w.session.orientation, Side.white);
 
     await ctrlP(tester);

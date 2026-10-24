@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:chess_auto_prep/app/mode.dart';
-import 'package:chess_auto_prep/features/trainer/trainer.dart';
+import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/features/trainer/lesson_view.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
@@ -55,8 +55,8 @@ void main() {
         await tester.pumpAndSettle();
         expect(w.requests.mode, Mode.repertoires);
         expect(w.session.source, kidMain);
-        expect(w.session.fen, shown);
-        expect(w.session.currentMove?.san, 'c5');
+        expect(w.session.cursor.fen, shown);
+        expect(w.session.cursor.currentMove?.san, 'c5');
         expect(w.lineTrainer.lesson, isNull);
         expect(w.lineTrainer.board.value, isNull);
         expect(find.byType(MoveTreeView), findsOneWidget);
@@ -118,8 +118,8 @@ void main() {
       await openBuilder(tester);
       await tester.pumpAndSettle();
       expect(w.session.source, second);
-      expect(w.session.fen, shown);
-      expect(w.session.currentMove?.san, 'd4');
+      expect(w.session.cursor.fen, shown);
+      expect(w.session.cursor.currentMove?.san, 'd4');
       unawaited(w.requests.back());
       await tester.pumpAndSettle();
       expect(w.requests.mode, Mode.trainer);

@@ -54,9 +54,9 @@ final class CollectionAnalysis extends ChangeNotifier {
     source.snapshot();
     final key = _sourceKey;
     final ticket = ++_generation;
-    final cursor = source.cursor;
+    final cursor = source.cursor.value;
     final side = source.orientation;
-    final preview = source.commentLine.value;
+    final preview = source.cursor.commentLine.value;
     var page = _pages[key];
     final created = page == null;
     if (page == null) {
@@ -71,8 +71,9 @@ final class CollectionAnalysis extends ChangeNotifier {
     if (!await session.restoreAnalysisPage(page) ||
         _disposed ||
         ticket != _generation ||
-        key != _sourceKey)
+        key != _sourceKey) {
       return false;
+    }
     if (preview != null && created) {
       for (final move in preview.moves.take(preview.at + 1)) {
         session.playMove(move.uci);
@@ -108,8 +109,9 @@ final class CollectionAnalysis extends ChangeNotifier {
     if (!await session.showAnalysisBoard(board) ||
         _disposed ||
         ticket != _generation ||
-        key != _sourceKey)
+        key != _sourceKey) {
       return;
+    }
     _pages[key] = session.analysisPage;
   }
 
@@ -120,7 +122,7 @@ final class CollectionAnalysis extends ChangeNotifier {
     session.snapshot();
     session.analysisPage
       ..chapter = session.chapter!
-      ..cursor = session.cursor;
+      ..cursor = session.cursor.value;
     active = false;
     engine.pause(this, 'Analysis tab is hidden');
     sourceEngine.resume(this);

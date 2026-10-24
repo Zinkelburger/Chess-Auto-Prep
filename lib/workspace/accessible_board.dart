@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -59,8 +61,9 @@ class _AccessibleBoardState extends State<AccessibleBoard> {
   }
 
   KeyEventResult _key(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent)
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
+    }
     final direction = switch (event) {
       _ when AppKey.squareLeft.accepts(event) => (-1, 0),
       _ when AppKey.squareRight.accepts(event) => (1, 0),
@@ -79,7 +82,7 @@ class _AccessibleBoardState extends State<AccessibleBoard> {
       return KeyEventResult.handled;
     }
     if (AppKey.squareChoose.accepts(event)) {
-      _activate(_cursor);
+      unawaited(_activate(_cursor));
       return KeyEventResult.handled;
     }
     if (AppKey.squareClear.accepts(event) && _from != null) {
@@ -110,8 +113,9 @@ class _AccessibleBoardState extends State<AccessibleBoard> {
     if (moves.isNotEmpty) {
       final fen = widget.fen;
       final move = moves.length == 1 ? moves.single : await _promotion(moves);
-      if (!mounted || move == null || widget.fen != fen || !widget.movable)
+      if (!mounted || move == null || widget.fen != fen || !widget.movable) {
         return;
+      }
       setState(() {
         _from = null;
         _notice = null;

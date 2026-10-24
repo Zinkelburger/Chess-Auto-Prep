@@ -3,9 +3,9 @@ import '../../chess/training/drill.dart';
 import '../../chess/training/line_order.dart';
 import '../../chess/training/schedule.dart';
 import '../../chess/training/sitting.dart';
-import '../../storage/training_store.dart';
+import '../../storage/training_progress.dart';
 import 'lesson.dart';
-import 'trainer.dart';
+import 'trainer_state.dart';
 
 /// The trainer's typed states in the words the tab shows.
 
@@ -52,7 +52,7 @@ String orderName(LineOrder order) => switch (order) {
   LineOrder.likely => 'Most likely first',
 };
 
-/// Why a sitting ended, in the old app's words.
+/// Why a sitting ended.
 String sittingOver(SittingKind kind) => switch (kind) {
   SittingKind.learn => "That is this sitting's new lines — nicely done.",
   SittingKind.review => 'Review session done.',

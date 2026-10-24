@@ -24,13 +24,12 @@ const navigationSideBySideMinWidth = 1480.0;
 /// A reading pane needs room for a sentence, not only a legal move token.
 const movesPaneComfortWidth = 280.0;
 
-/// How wide the chapter outline between the list and the board starts out.
-/// The old app's column is 18% of the window's body clamped to 220–280;
-/// the low end leaves the builder's two tool panes their room at 1280px.
+/// How wide the chapter outline between the list and the board starts out:
+/// 220 leaves the builder's two tool panes their room at 1280px.
 const outlineColumnWidth = 220.0;
 
 /// How tall one row of the outline is, and how far a line sits in under the
-/// chapter it belongs to. Both are the old app's values.
+/// chapter it belongs to.
 const outlineRowHeight = 30.0;
 const outlineIndent = 14.0;
 
@@ -49,6 +48,9 @@ const nameDialogWidth = 360.0;
 
 /// Room for action labels with shortcuts in a separate right-hand gutter.
 const actionMenuWidth = 260.0;
+
+/// A menu row, in the top bar's menus and the right-click menus alike.
+const menuRowHeight = 32.0;
 
 /// How tall a dialog that asks the user to pick from a list is. Fixed, so the
 /// list does not grow and shrink under the pointer as the search narrows it.
@@ -107,10 +109,9 @@ const monoText = TextStyle(
   fontSize: 13,
 );
 
-/// The reading column's own two sizes, the old app's reading pane: moves in
-/// mono at 16 with its line height, prose upright in the text face. A
-/// comment is read, so it gets a book's measure rather than the column's
-/// width.
+/// The reading column's own two sizes: moves in mono at 16 with its line
+/// height, prose upright in the text face. A comment is read, so it gets a
+/// book's measure rather than the column's width.
 const readingMoveText = TextStyle(
   fontFamily: 'SourceCodePro',
   fontFamilyFallback: figurineFont,
@@ -128,8 +129,8 @@ const proseMaxWidth = 640.0;
 /// tokens, little enough that a line still reads as a line.
 const moveTokenPadding = EdgeInsets.symmetric(horizontal: 4, vertical: 1);
 
-/// The reading column is a card, the old app's: its corners, and the room
-/// between its edge and the words.
+/// The reading column is a card: its corners, and the room between its
+/// edge and the words.
 const readingCardRadius = 8.0;
 const readingCardInset = Space.xl;
 
@@ -243,13 +244,25 @@ const previewBoardGap = 6.0;
 /// sweeping across a line does not flash every position in it.
 const previewDelay = Duration(milliseconds: 80);
 
-/// The colours arrows and circles are drawn in: Lichess's four, at the
-/// strength the old app drew them. Green with no key held, red with Shift,
-/// blue with Alt, yellow with Ctrl; the engine's threat is red too.
+/// The colours arrows and circles are drawn in: Lichess's four, a little
+/// translucent. Green with no key held, red with Shift, blue with Alt, yellow
+/// with Ctrl; the engine's threat is red too.
 const shapeGreen = Color(0xCC15781B);
 const shapeRed = Color(0xCCCC2222);
 const shapeBlue = Color(0xCC003088);
 const shapeYellow = Color(0xCCE6A800);
+
+/// An engine's moves drawn on its board as lila draws them: its choice in
+/// lila's pale blue, the moves close behind it in pale grey, each arrow as
+/// wide as [engineArrowWidth] or thinner the further behind it is.
+const engineBestArrow = Color(0x66003088);
+const engineOtherArrow = Color(0x594A4A4A);
+
+/// lila's engine arrow widths in sixty-fourths of a square: its choice
+/// 15, another move 12 when level with it down to 2, and none drawn once
+/// a move is [engineArrowCutoff] behind (half the difference in value).
+const engineArrowWidth = 15.0;
+const engineArrowCutoff = 0.2;
 
 /// The board editor: its board, the column of controls beside it, the
 /// width of a side's name before its castling boxes, and the line held
@@ -413,8 +426,8 @@ const _surface = Color(0xFF1B1B1D);
 const _panel = Color(0xFF242427);
 const _selection = Color(0xFF38383D);
 
-/// The reading card, near black under the moves: the old app's, and what
-/// made its reading pane look the way it did.
+/// The reading card, near black under the moves: what gives the reading
+/// pane its look.
 const _reading = Color(0xFF0C0C0E);
 const _outline = Color(0xFF3A3A3E);
 const _text = Color(0xFFE6E6E8);
@@ -491,9 +504,12 @@ ThemeData darkTheme() {
         ),
       ),
     ),
+    popupMenuTheme: _popupMenu(_sized(base.textTheme)),
     menuButtonTheme: MenuButtonThemeData(
       style: ButtonStyle(
-        minimumSize: const WidgetStatePropertyAll(Size(actionMenuWidth, 32)),
+        minimumSize: const WidgetStatePropertyAll(
+          Size(actionMenuWidth, menuRowHeight),
+        ),
         padding: const WidgetStatePropertyAll(
           EdgeInsets.symmetric(horizontal: Space.l),
         ),
@@ -653,51 +669,58 @@ const resultBarBlackInk = Color(0xFF9A9AA0);
 /// The number in a bar part: mono at the small size.
 const resultBarText = TextStyle(fontFamily: 'SourceCodePro', fontSize: 12);
 
-/// The Bughouse lab, laid out as the BughouseDB page: two boards side by
-/// side, each as large as the window leaves room for between these two.
+/// The Bughouse mode's boards, as large as the window leaves room for
+/// between these: one board alone may grow larger than two side by side.
 const labBoardMin = 200.0;
 const labBoardMax = 480.0;
+const labOneBoardMax = 720.0;
 
-/// What the left column needs under the boards besides the seat rows: the
-/// move list, navigation and archive. Expanded setup can scroll.
-const labBoardChrome = 250.0;
+/// What the board column needs with both boards besides the boards and
+/// their hands: the board's name above and the engine's rows under it.
+const labBoardChrome = labBoardLabelHeight + 3 * labTableRowHeight + 9;
+const labBoardLabelHeight = 22.0;
 
-/// The narrowest the right-hand panel may become before the boards shrink.
+/// The narrowest the right-hand panel may become before the boards shrink,
+/// and the widest it grows beside both boards and beside board 1 alone,
+/// where its engine lines can use the room.
 const labPanelMinWidth = 440.0;
 const labPanelMaxWidth = 480.0;
+const labOneBoardPanelMaxWidth = 640.0;
 
 /// The gap between the two boards, and between the boards and the panel.
 const labBoardGap = 20.0;
 const labColumnGap = 16.0;
 
-/// A seat row beside a board: the turn dot, `Player A`, then the reserve
-/// tray, its pieces as large as the board's squares, and the room around
-/// them.
+/// A hand beside a board: the turn dot, the seat's letter with both boards,
+/// then the pocket, its pieces as large as the board's squares, and the
+/// room around them.
 const labSeatPadding = 8.0;
 const labTurnDot = 11.0;
 
-/// Each board's own move list: a few moves tall, then it scrolls.
-const labMoveListHeight = 48.0;
-const labMoveRowHeight = 22.0;
-const labMoveNumberWidth = 34.0;
+/// The − and + in a pocket slot's upper corners while the pointer is over
+/// it: a dark chip with a white sign, about two fifths of the slot
+/// within these bounds.
+const labHandStepMin = 16.0;
+const labHandStepMax = 24.0;
+const labHandStep = Color(0xE01B1B1D);
+const labHandStepInk = Color(0xFFFFFFFF);
 
-/// The label column of the right panel's rows (`Time`).
-const labLabelWidth = 64.0;
-
-/// The FICS archive under each board: its heading and this many
-/// continuations.
-const labArchiveRows = 6;
-const labArchiveGamesWidth = 80.0;
-
-/// A row of a board's move table, and its score column.
+/// An engine line, and its score gutter.
 const labTableRowHeight = 28.0;
 const labScoreWidth = 60.0;
 
-/// The status line over the tables, shown when there is a problem.
-const labStatusHeight = 30.0;
+/// The engine's score beside its switch, in mono at the title size, and
+/// the thin bar under the switch while a deeper search runs.
+const labPearlWidth = 72.0;
+const labPearlText = TextStyle(
+  fontFamily: 'SourceCodePro',
+  fontSize: 18,
+  fontWeight: FontWeight.w600,
+);
+const labThinkingHeight = 2.0;
 
-/// The setup boxes' text: FENs and reserves in mono at the small size.
-const labSetupText = TextStyle(fontFamily: 'SourceCodePro', fontSize: 12);
+/// The line that says why a move, a step or a paste was refused.
+const labStatusHeight = 30.0;
 
 /// The turn dot of the seat to move: White's plain white, Black's black in
 /// a grey ring so it shows on the dark panel. A fact, not decoration.
@@ -788,3 +811,19 @@ const readingNumberColor = _muted;
 const boardFocusWidth = 3.0;
 
 const double moveFeedbackHeight = 36;
+
+/// The right-click menus, drawn like the top bar's menus.
+PopupMenuThemeData _popupMenu(TextTheme text) => PopupMenuThemeData(
+  color: _panel,
+  surfaceTintColor: Colors.transparent,
+  menuPadding: const EdgeInsets.symmetric(vertical: Space.xs),
+  shape: RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(readingCardRadius),
+    side: const BorderSide(color: _outline),
+  ),
+  labelTextStyle: WidgetStateProperty.resolveWith(
+    (states) => text.bodySmall?.copyWith(
+      color: states.contains(WidgetState.disabled) ? _disabledText : _text,
+    ),
+  ),
+);

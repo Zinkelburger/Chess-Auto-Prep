@@ -78,8 +78,8 @@ final class NativePgnFileImport implements PgnFileImport {
   const NativePgnFileImport({
     required this.documents,
     required this.into,
-    required RecoveryGate recovery,
-  }) : _recovery = recovery;
+    required this._recovery,
+  });
 
   final RecoveryGate _recovery;
 

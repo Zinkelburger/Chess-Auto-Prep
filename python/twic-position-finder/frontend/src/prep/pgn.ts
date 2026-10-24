@@ -71,7 +71,7 @@ export function readPgn(text: string): Game[] {
   return games;
 }
 
-export function moveLabel(node: MoveNode, game: Game): string {
+function moveLabel(node: MoveNode, game: Game): string {
   const before = game.nodes[node.parent ?? 0].fen.split(' ');
   return `${before[5]}${before[1] === 'w' ? '.' : '…'} ${node.san}`;
 }

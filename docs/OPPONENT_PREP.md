@@ -4,9 +4,10 @@ Keep one saved record per person, link their online accounts and prep studies,
 and include them in any number of groups. A group can be a tournament entry
 list, club regulars, or any other list of players to prepare against.
 
-**Library → Players & prep** opens the editable directory; **Groups** opens
-your saved preparation lists. The optional MCP tools below can help
-identify accounts before importing, but ordinary editing and prep run in the app.
+The **Players & prep** mode is the editable directory and its groups; see
+[the players spec](features/players.md) for the app side. This page covers
+the optional MCP tools that help identify accounts and build lists before
+importing; ordinary editing and prep run in the app.
 
 ## The MCP server
 
@@ -136,8 +137,9 @@ so move order does not matter:
 
 After `1. d4 c5 2. e3` (a position the PGN may never have reached), `pgn_position`
 still lists **Nf6** under `transposing_moves` because playing it lands on a
-known FEN. The Flutter opening tree (`OpeningTree.continuations`) does the
-same; transposing rows are marked `≈`.
+known FEN. The app's explorer `Book` source (`RepertoireTree`) also matches
+positions without the move counters, so a transposition finds the lines the
+other move order wrote.
 
 Typical agent flow against a White repertoire PGN:
 
@@ -236,8 +238,7 @@ pages the website leaderboard callback (50 per page, far past the API's top
 downloads their archives for the clue months, and then verifies every
 opponent sighted at a clue rating from that opponent's own archive. That
 verification step is what finds an account that has since dropped off the
-leaderboard: the September 2026 search found its target only as somebody's
-opponent. Requests are serial with ~0.15 s spacing and a `max_requests`
+leaderboard: a target can turn up only as somebody's opponent. Requests are serial with ~0.15 s spacing and a `max_requests`
 budget (default 1500); everything downloaded stays cached, so rerunning the
 same clues resumes for free. Dates are the player's local day: `tz: "US"`
 (default) spans every US zone, `UTC` is exact, or give an IANA zone. Friend
@@ -245,8 +246,8 @@ counts are never visible logged out; followers are not friends.
 
 ### Master games (TWIC)
 
-The app downloads The Week in Chess into `master_games.db` (Settings → Master
-games database). The `master_*` tools read that file directly — no app
+The app downloads The Week in Chess into `master_games.db` (Databases ▸
+`Download TWIC…`). The `master_*` tools read that file directly — no app
 running, no PGN parsing — from the app's support directory
 (`~/.local/share/com.example.chess_auto_prep/`; override with
 `CHESS_PREP_MASTER_DB`). Positions are keyed the same way as the PGN tree
@@ -341,56 +342,17 @@ array is accepted too, so a list typed by hand or produced by any other
 script works. Only **confirmed** identities are exported by default;
 proposals are listed under `skipped` in the tool result.
 
-## In the app
+## Shared files
 
-The player workflow has two destinations:
-
-| View | Purpose | Navigation |
-|---|---|---|
-| **Players & prep** | All players in an autosaving table, plus preparation groups: names, USCF IDs, online accounts, ratings, notes, study links and group readiness | Open from Library in the mode menu, or the Players & prep shortcut in analysis. **Analyze games** switches to Player analysis. Return through the mode menu or breadcrumb; the selected group and filters remain. |
-| **Player analysis** | Choose a saved game set from the compact cards, download online games or import PGNs, then explore positions and games | Online and PGN are the two Add player sources. Advanced engine and study actions stay in the existing Actions menu. |
-
-Players & prep opens directly to **All players**. Existing saved accounts and PGN
-sets are linked on first opening; **Add saved accounts** can refresh those links.
-**Add player** inserts an editable row. Valid edits save automatically; failed
-saves show an error on the cell and Enter retries. Use commas, semicolons or
-whitespace for multiple accounts. Stable game-set keys preserve saved games
-when a player's display name or account fields change.
-
-**Paste players** accepts headed CSV/TSV, Markdown, aligned text, opponent JSON
-or a URL with an HTML table. Preview, then **Add to database**. USCF IDs and
-known handles reuse directory records and imports fill blanks without
-replacing edited information. Importing does not create a group.
-
-**Reference studies** keeps links with the person. **New study** creates a
-personal study; **Link study** opens the study/chapter browser with a PGN file
-picker. Links open their target; unlinking removes only the association.
-Missing files report their path. **Analyze games** reuses saved games before
-downloading accounts and deduplicates games across saved sources.
-
-Within analysis, the left column selects **Positions** or the advanced **Holes**
-report; the centre is the board. The right panel has three tabs: **Move Tree**
-for aggregate continuations, **Games** for matching games and their reader
-(with **Back to games**), and **Try moves** for scratch variations. There is
-no separate PGN tab or ambiguously named Analysis tab inside Player analysis.
-
-**Groups** contains searchable saved lists for tournaments, clubs or practice.
-Create a named group, include saved people or paste a player list, and track
-prepared status per person. Removing someone from a group keeps their directory
-record. Group study, training, rating lookup and notes export remain available
-on the sheet. Both tabs and the sheet keep the mode picker and settings visible;
-this destination does not start an analysis engine. Game-set links refresh when
-you return after importing or analyzing elsewhere.
-
-Analysis keeps its board and advanced tools. Its Players & prep shortcut returns
-to the shared directory rather than opening another nested database route.
-
-Files remain backward compatible: `Documents/opponents/people.json` and
-`Documents/opponents/tournaments/<id>.json` retain their original format IDs.
-The people file records whether saved-account onboarding has completed, so deleting a record is respected on reopening. People optionally carry `game_sets` (stable cached-corpus keys) and `studies`
-(path plus optional chapter name); groups optionally carry `study` (PGN path).
-Existing personal `prep_file` paths, dates, rounds and pairing data are retained.
-Writes are ordered so quick edits cannot leave an older snapshot on disk.
+The app and the MCP tools share `Documents/opponents/people.json`
+(`chess-auto-prep/people@1`, a JSON object with a `people` list) and
+`Documents/opponents/tournaments/<id>.json` (`chess-auto-prep/tournament@1`,
+one per group). The app updates them under a folder lock, rereading before
+every edit (`lib/storage/player_files.dart`): a stale row is refused, and
+unrelated rows and unknown fields survive. People optionally carry
+`game_sets` (stable cached-corpus keys) and `studies` (path plus optional
+chapter name); groups optionally carry `study` (a PGN path). **Paste players**
+in the app accepts the `opponents@1` JSON above as well as tables.
 
 ## Where the code lives
 
@@ -403,6 +365,7 @@ tools/mcp/chess_prep/
   roster.py       roster model, entry-list parser, persistence
   swiss.py        Swiss pairer + Monte Carlo simulator
   opponents.py    the opponent-list export
+  people.py       the shared people directory (people.json)
   uscf.py         US Chess ratings API
   chesscom.py     chess.com archive cache + rating/opening index, account search job
   paths.py        data + working-file locations
@@ -412,17 +375,12 @@ tools/mcp/test_chesscom.py
 tools/mcp/test_opening_tree.py
 tools/mcp/requirements.txt   python-chess (opening-tree tools only)
 
-lib/services/opponent_list.dart              parser + OpponentEntry → AnalysisPlayerInfo
-lib/features/opponents/                      tournaments, people, prep files, US Chess lookup,
-                                             repertoire check, text export (models/ services/ widgets/)
-lib/screens/analysis_screen_prep.dart        Player analysis: personal study context and repertoire check
-lib/screens/player_selection_screen.dart     the picker ("Which player?")
-lib/models/analysis_player_info.dart         accounts / group
+lib/chess/players/                   player, group and download-range values
+lib/storage/player_files.dart        people.json and tournaments/<id>.json
+lib/features/players/                Players & prep and Player analysis
 ```
 
-Tests: `python3 tools/mcp/test_chess_prep.py` (80),
-`python3 tools/mcp/test_chesscom.py` (15),
-`python3 tools/mcp/test_opening_tree.py` (10),
-`flutter test test/services/opponent_list_test.dart
-test/services/analysis_games_service_download_test.dart
-test/widgets/opponent_list_import_dialog_test.dart`.
+Tests: `python3 tools/mcp/test_chess_prep.py`, `test_chesscom.py`,
+`test_opening_tree.py`, `test_people.py`, `test_roster.py`, `test_swiss.py`
+and `test_directory.py` under `tools/mcp/`; the app side is
+`scripts/ci.sh test test/features/players`.

@@ -1,15 +1,27 @@
-import 'package:dartchess/dartchess.dart' show Side, Square;
+import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../chess/bughouse/bpgn_moves.dart';
+import '../../chess/bughouse/crazyhouse_pgn.dart';
 import '../../chess/bughouse/hivemind.dart';
 import '../../chess/bughouse/table.dart';
 import '../../chess/bughouse/table_line.dart';
 import '../../chess/bughouse/table_setup.dart';
 
-/// The Bughouse lab's table: the two boards, the line played on them with a
-/// cursor per board, the clock case the tables and the engine answer, and
-/// what the user is pointing at.
+/// How many boards the Bughouse mode shows: board 1 alone, its partner
+/// board held still behind it, or the whole table.
+enum LabBoards {
+  one('1 board'),
+  two('2 boards');
+
+  const LabBoards(this.label);
+
+  final String label;
+}
+
+/// The Bughouse mode's table: the two boards, the line played on them with
+/// a cursor per board, how many boards are shown, the clock case the engine
+/// answers for, and what the user is pointing at.
 ///
 /// A scratchpad: nothing here is saved. Leaving the mode keeps the table
 /// for when the user comes back; quitting the app loses it.
@@ -17,15 +29,10 @@ final class BughouseLab extends ChangeNotifier {
   TableLine _line = const TableLine(TablePosition.initial);
   TablePosition _position = TablePosition.initial;
   BoardNumber _focus = BoardNumber.one;
-  ClockCase _clock = ClockCase.even;
+  LabBoards _boards = LabBoards.one;
+  ClockCase _clock = ClockCase.cdMaySit;
   bool _flipped = false;
-  bool _showMatches = false;
-  bool expectimaxOn = false;
-  void showExpectimax(bool value) => _change(() => expectimaxOn = value);
-  bool get showMatches => _showMatches;
-  void toggleMatches() => _change(() => _showMatches = !_showMatches);
   TableRefusal? _problem;
-  Map<BoardNumber, String> _setupProblems = const {};
 
   /// The move a table row, an analysis row or an archive row is pointing
   /// at, drawn as an arrow on its board. Apart from the rest, so a pointer
@@ -38,14 +45,13 @@ final class BughouseLab extends ChangeNotifier {
   /// The board the arrow keys and the step buttons act on: the one last
   /// moved or stepped on.
   BoardNumber get focus => _focus;
+  LabBoards get boards => _boards;
+  bool get single => _boards == LabBoards.one;
   ClockCase get clock => _clock;
   bool get flipped => _flipped;
 
   /// Why the last move or step was refused, for the status line.
   TableRefusal? get problem => _problem;
-
-  /// What is wrong in each board's setup boxes after `Set position`.
-  Map<BoardNumber, String> get setupProblems => _setupProblems;
 
   /// The colour at the bottom of [board]: A + B's, unless flipped.
   Side bottom(BoardNumber board) {
@@ -65,24 +71,29 @@ final class BughouseLab extends ChangeNotifier {
     _show(played.after, focus: board);
   }
 
-  /// [line] on the boards, every move of it played, as a match's game is
-  /// shown; a line that does not replay is not shown.
+  /// [line] on the boards, every move of it played; a line that does not
+  /// replay is not shown.
   void showLine(TableLine line) {
     if (line.replay() case LineReplayed(:final position)) {
       _line = line;
-      _setupProblems = const {};
       _show(position, focus: _focus);
     }
   }
 
   /// Both halves of an engine's joint action, board 1 first; a sitting
   /// board keeps its moves.
-  void playJoint(JointMove joint) {
+  void playJoint(JointMove joint) => playMoves([
+    for (final board in BoardNumber.values)
+      if (joint.on(board) case final uci?) (board, uci),
+  ]);
+
+  /// [moves] played in order from the table on screen: an engine line up to
+  /// the move clicked. All or nothing: when one no longer plays, none is
+  /// played and the line is said not to fit.
+  void playMoves(List<(BoardNumber, String)> moves) {
     var line = _line;
     var position = _position;
-    for (final board in BoardNumber.values) {
-      final uci = joint.on(board);
-      if (uci == null) continue;
+    for (final (board, uci) in moves) {
       final played = lineMove(position, board, uci);
       if (played == null) {
         _refuse(const LineMisfits());
@@ -91,14 +102,15 @@ final class BughouseLab extends ChangeNotifier {
       line = line.played(played.move);
       position = played.after;
     }
+    if (moves.isEmpty) return;
     _line = line;
     _show(position, focus: _focus);
   }
 
-  /// [board] stepped to its first [count] moves, unless the other board's
-  /// moves would no longer play from there.
-  void go(BoardNumber board, int count) {
-    final next = _line.go(board, count);
+  /// [board] at [node] of its lines (null for its start), unless the other
+  /// board's moves would no longer play from there.
+  void goTo(BoardNumber board, int? node) {
+    final next = _line.goTo(board, node);
     switch (next.replay()) {
       case LineReplayed(:final position):
         _line = next;
@@ -109,65 +121,176 @@ final class BughouseLab extends ChangeNotifier {
     }
   }
 
-  /// The focused board a move forward (1) or back (−1).
-  void step(int by) => go(_focus, _line.upto(_focus) + by);
+  /// [node] and everything after it on its board taken out of the line,
+  /// variations too; the other board's moves stay. Refused when one of those
+  /// dropped a piece a move taken out had captured.
+  void deleteFrom(int node) {
+    final board = _line.nodes[node].board;
+    final next = _line.without(node);
+    switch (next.replay()) {
+      case LineReplayed(:final position):
+        _line = next;
+        _show(position, focus: board);
+      case LineBroken(move: final broken):
+        _focus = board;
+        _refuse(DeleteRefused(broken));
+    }
+  }
 
-  void toStart() => go(_focus, 0);
+  /// The focused board a step forward (1), along its main continuation,
+  /// or back (−1).
+  void step(int by) => stepOn(_focus, by);
 
-  void toEnd() => go(_focus, _line.of(_focus).length);
+  /// [board] a step forward (1), along its main continuation, or back (−1);
+  /// nothing at either end.
+  void stepOn(BoardNumber board, int by) {
+    final at = _line.at(board);
+    if (by < 0 && at != null) goTo(board, _line.nodes[at].parent);
+    if (by > 0) {
+      if (_line.mainChild(board, at) case final next?) goTo(board, next);
+    }
+  }
+
+  void toStart() => goTo(_focus, null);
+
+  /// The focused board at the end of the line it is on.
+  void toEnd() {
+    final line = _line.lineOf(_focus);
+    if (line.isNotEmpty) goTo(_focus, line.last);
+  }
+
+  /// The variation [node] is in one place up among the lines there.
+  void promote(int node) => _arrange(_line.promoted(node));
+
+  /// [node]'s line made its board's main line.
+  void makeMainLine(int node) => _arrange(_line.mainLineThrough(node));
+
+  void _arrange(TableLine line) {
+    _line = line;
+    notifyListeners();
+  }
 
   /// A new game from the start; the clock stays.
   void newGame() => _reset(TablePosition.initial);
 
-  /// The table from the setup boxes, as a new line from there.
-  void setPosition(BoardBoxes one, BoardBoxes two) {
-    switch (readBoxes(one, two)) {
-      case SetupReady(:final position):
-        _reset(position);
-      case SetupRefused(:final problems):
-        _setupProblems = problems;
-        notifyListeners();
+  /// One [role] more (+1) or fewer (−1) in [side]'s hand on [board], within
+  /// 0…[handLimit], noted in the line after that board's move on screen, as
+  /// the website notes it. The moves before it stay; that board's later
+  /// moves go, as when a different move is played there.
+  void adjustHand(BoardNumber board, Side side, Role role, int delta) {
+    final count = _position.board(board).pockets!.of(side, role) + delta;
+    if (count < 0 || count > handLimit) return;
+    final edited = _line.edited(board, side, role, delta);
+    if (edited.replay() case LineReplayed(:final position)) {
+      _line = edited;
+      _show(position, focus: board);
     }
   }
 
-  /// A pasted dual FEN, as a new line from there.
+  /// [board]'s pieces, side to move and castling from [setup], its hands
+  /// kept, as the start of a new line. Refused when no game could go on from
+  /// there.
+  void editBoard(BoardNumber board, Setup setup) {
+    final hands = _position.board(board).pockets;
+    try {
+      final edited = Crazyhouse.fromSetup(
+        Setup(
+          board: setup.board,
+          pockets: hands,
+          turn: setup.turn,
+          castlingRights: setup.castlingRights,
+          epSquare: setup.epSquare,
+          halfmoves: setup.halfmoves,
+          fullmoves: setup.fullmoves,
+        ),
+      );
+      _reset(_position.withBoard(board, edited), focus: board);
+    } on PositionSetupException {
+      _refuse(const PositionRefused('That board cannot be played from.'));
+    }
+  }
+
+  /// A pasted dual FEN, or one board's FEN for board 1, as a new line from
+  /// there.
   void loadDualFen(String text) {
     switch (readDualFen(text)) {
       case SetupReady(:final position):
         _reset(position);
       case SetupRefused(:final problems):
-        _setupProblems = problems;
-        notifyListeners();
+        _refuse(PositionRefused(problems.values.join(' ')));
     }
   }
 
-  /// Both boards' moves as the lab copies them (see [tableLineText]).
+  /// Each board's line as the mode copies it (see [tableLineText]).
   String get movesText => tableLineText(_line);
 
+  /// The line up to and including [node] as a PGN: with one board, a
+  /// crazyhouse PGN of board 1 that Lichess imports; with two, the BPGN
+  /// [movesText] writes.
+  String linePgnThrough(int node) {
+    final line = _line.through(node);
+    return single
+        ? crazyhouseLinePgn(line, _line.nodes[node].board)
+        : tableLineText(line);
+  }
+
+  /// The table just after [node], as the line up to it leaves it; null when
+  /// that no longer replays.
+  TablePosition? positionAfter(int node) =>
+      switch (_line.through(node).replay()) {
+        LineReplayed(:final position) => position,
+        LineBroken() => null,
+      };
+
+  /// The line on the boards now, followed by [moves] as far as they play,
+  /// as a PGN: what an engine line copies.
+  String linePgnWith(List<(BoardNumber, String)> moves) {
+    var line = _line.onBoards;
+    var position = _position;
+    for (final (board, uci) in moves) {
+      final played = lineMove(position, board, uci);
+      if (played == null) break;
+      line = line.played(played.move);
+      position = played.after;
+    }
+    return single
+        ? crazyhouseLinePgn(line, BoardNumber.one)
+        : tableLineText(line);
+  }
+
   /// Pasted movetext as a new line, every move played; refused whole when
-  /// one does not play.
-  void pasteMoves(String text) {
+  /// one does not play. [file] names the file it was read from, when it was
+  /// opened rather than pasted.
+  void pasteMoves(String text, {String? file}) {
     switch (readTableLineText(text)) {
       case PastedLine(:final line):
         showLine(line);
       case PastedMovesRefused(:final token):
-        _refuse(MovesRefused(token));
+        _refuse(MovesRefused(token, file: file));
     }
   }
+
+  /// The file called [file] could not be read; the boards stay as they are.
+  void fileUnread(String file) => _refuse(FileUnread(file));
 
   void flip() => _change(() => _flipped = !_flipped);
 
   void setClock(ClockCase clock) => _change(() => _clock = clock);
+
+  /// One board or both; with one, the keys step board 1.
+  void showBoards(LabBoards boards) => _change(() {
+    _boards = boards;
+    if (single) _focus = BoardNumber.one;
+  });
 
   /// The board the user is working on, when they click into its half.
   void focusOn(BoardNumber board) {
     if (board != _focus) _change(() => _focus = board);
   }
 
-  void _reset(TablePosition position) {
+  void _reset(TablePosition position, {BoardNumber focus = BoardNumber.one}) {
     _line = TableLine(position);
-    _setupProblems = const {};
-    _show(position, focus: BoardNumber.one);
+    _show(position, focus: focus);
   }
 
   void _show(TablePosition position, {required BoardNumber focus}) {
@@ -245,12 +368,37 @@ final class StepRefused extends TableRefusal {
   final LineMove move;
 }
 
+/// A delete that would leave [move], on the other board, without the piece
+/// it dropped.
+final class DeleteRefused extends TableRefusal {
+  const DeleteRefused(this.move);
+
+  final LineMove move;
+}
+
+/// A pasted position or an edited board that could not be played from;
+/// [reason] says why.
+final class PositionRefused extends TableRefusal {
+  const PositionRefused(this.reason);
+
+  final String reason;
+}
+
 /// Pasted moves that were not taken: [token] is the first that does not
-/// play, or null when there were no bughouse moves in the text.
+/// play, or null when there were no bughouse moves in the text. [file] is
+/// the file they were opened from, or null when they were pasted.
 final class MovesRefused extends TableRefusal {
-  const MovesRefused(this.token);
+  const MovesRefused(this.token, {this.file});
 
   final String? token;
+  final String? file;
+}
+
+/// A file opened for its moves that could not be read.
+final class FileUnread extends TableRefusal {
+  const FileUnread(this.file);
+
+  final String file;
 }
 
 /// A move being pointed at: on one board, or a joint action over both.

@@ -1,14 +1,10 @@
 # Component map
 
-V2 is the sole application as of 2026-09-30. Production code lives directly in
-`lib/`, tests in `test/`, and `lib/main.dart` is the entry point for local and
-release builds. V1 source and its old layering/debt ledgers have been removed.
-The owner's switch-over decision explicitly excludes legacy/backward-compatibility
-requirements. Existing user files are neither migrated nor deleted.
-
-Use [architecture contracts](ARCHITECTURE_RENEWAL.md),
-[mode specifications](v2/features/README.md), [the backlog](FUTURE_FEATURES.md)
-and [tooling map](agents/tooling.md) for details and remaining product scope.
+Where things live in the code and how the pieces connect. Production code is
+under `lib/`, tests under `test/`; `lib/main.dart` is the entry point for local
+and release builds. Use [the architecture contracts](ARCHITECTURE.md),
+[mode specifications](features/README.md) and
+[the tooling map](agents/tooling.md) for detail.
 
 ## Entry points and ownership
 
@@ -16,12 +12,18 @@ and [tooling map](agents/tooling.md) for details and remaining product scope.
   bundled licenses, the optional agent driver and packaged-app self-tests.
 - [`app/app.dart`](../lib/app/app.dart) owns the Flutter app lifetime.
   [`app/environment.dart`](../lib/app/environment.dart) wires filesystem,
-  engine and network boundaries. App composition passes concrete owners.
+  engine and network boundaries; the native engine launches (Stockfish,
+  Hivemind, Maia) are in [`app/native_engines.dart`](../lib/app/native_engines.dart)
+  and the desktop's browser, file manager, full screen and updates in
+  [`app/native_desktop.dart`](../lib/app/native_desktop.dart). App
+  composition passes concrete owners.
 - [`app/workspace_requests.dart`](../lib/app/workspace_requests.dart) coordinates
   opens, mode changes and dirty-draft decisions. [`app/mode.dart`](../lib/app/mode.dart)
   defines every top-level mode.
 - [`workspace/document_session.dart`](../lib/workspace/document_session.dart)
-  owns the active parsed document, cursor, edits and save state. The shared
+  owns the active parsed document, edits and save state; its
+  `DocumentCursor` (`session.cursor`, `document_cursor.dart`) owns where the
+  reader is and a comment's line on the board. The shared
   board, move tree, engine and explorer are reused across mode panels.
 - [`storage/`](../lib/storage/) owns file/SQLite I/O, settings, revisions,
   backups, recovery and accepted durable writes. UI and pure algorithms do
@@ -45,7 +47,7 @@ and [tooling map](agents/tooling.md) for details and remaining product scope.
 
 All mode names are defined in `app/mode.dart`: Repertoire builder, Opening books,
 PGN Viewer, Repertoire trainer, Study, Tactics, My games, Player analysis,
-Players & prep, Databases, Engine tournament and Bughouse lab. The optional
+Players & prep, Databases, Engine tournament and Bughouse. The optional
 Bughouse mode is offered when its engine assets are present.
 
 - Library and chapter outline share guarded PGN storage; edits, moves, deletes,
@@ -68,30 +70,48 @@ Bughouse mode is offered when its engine assets are present.
   repertoire; Ctrl+Shift+V takes a FEN only. A FEN faces the side to move. A
   blank board (nothing played or edited) is reused rather than opening another
   tab. Tactics, the trainer and the modes without a board send the board to the
-  Repertoire builder; the Bughouse lab names its own paste. `Set up position…`
+  Repertoire builder; Bughouse names its own paste. `Set up position…`
   (Ctrl+Shift+E) opens the shared `workspace/board_editor.dart` on the board's
   position and returns an analysis board the same way up. While the Analysis
   tab is up, both fill that tab's scratch game instead.
+- The viewer and Study share `_ReadingView` (`app/document_views.dart`): one
+  card with `Read | Edit` (`workspace/edit_switch.dart`, at the start of
+  `NavRow`) bound to the shell's editing notifier, which keeps a side per mode
+  (`ModeView.startsEditing`: Study). Read sets `DocumentSession.holdsEdits`;
+  turning to Edit keeps the held edits first. `DocumentSession.apply(writes:
+  true)` is for Study's own commands, written even while edits are held. Both
+  views supply Solitaire, My books, the book deviation line, `Analyze game` /
+  `Analyze all`, Play through, `Comment this move` and `Add line to study…`,
+  and open tools under the moves (`opensBeside`).
 - Viewer owns collections, selection/filter/sort and held edits; analysis tabs
   preserve their source draft. Export uses the exclusive PGN exporter. It opens
   on the moves alone (`viewerTabs`), has its own Explorer starting on `This
   file` (`Explorer.independent(starting:)`), and supplies the Filter tab
   (`ViewerFilterPane`) and the followed player's colour choice
   (`PlayerSideChoice`) through `ModeView`.
-- Viewer Solitaire uses `engines/solitaire_evaluator.dart` for depth-14,
+- `GameReview` (`workspace/game_review.dart`) reviews the game on the board
+  (`start`) or every game of the file without a review in turn (`startAll`);
+  marks come from `moveReviewMark` in `chess/pgn/game_review.dart`, Lichess's
+  winning-chance drop and mate rules.
+- Solitaire (viewer and Study) uses `engines/solitaire_evaluator.dart` for depth-14,
   five-line comparisons, with a 50-centipawn tolerance and better-move badges.
   `chess/pgn/solitaire_record.dart` builds a spoiler-free progress tree and
   full annotated review; `MoveTreeView.preview` reads these without document
   edits. The final PGN can be copied or added to a study. See
-  [Solitaire behavior](v2/features/pgn-viewer.md#game-buttons-and-solitaire-2026-09-28).
+  [the viewer spec](features/pgn-viewer.md#actions).
 - Study uses the same document session for chapters, tags, starts, cleanup,
   quiz markers, import/export and retained retry commands. `studyTabs` and
-  `Train study` expose the shared trainer without leaving Study. The chapter
+  `Train study` expose the shared trainer without leaving Study; Train opens
+  under the moves. The chapter
   list has search, drag ordering and move-to-position; the import preview joins
   PGN files, pasted PGN and Lichess URLs with new/current-study destinations.
   `TrainingSide` separates practice choices from board orientation, with chapter
   or whole-study scope. Deleted-study restoration retains uncertain moves for
-  exact retry. See [Study](v2/features/study.md).
+  exact retry. `StudySender` (`features/study/study_sender.dart`) sends the
+  open study to Lichess through `net/lichess_study_writes.dart`, formatting
+  each chapter with `chess/pgn/study_lichess.dart` and recording the returned
+  chapter links (`ChapterURL`) through the session. See
+  [Study](features/study.md).
 - Tactics mines downloaded games into `tactics_sets/Default.pgn`, trains puzzles
   on the shared board and can inspect the source game. Text search and filters
   define both the visible puzzle list and Play's counted queue.
@@ -120,6 +140,8 @@ Bughouse mode is offered when its engine assets are present.
   or any stop command invalidates earlier pending starts, including an away-and-back
   navigation. Exact-root results take precedence while preserving newest-first
   order. Engine depths and continuation lines share the same source/depth scope.
+  Turning a finished run into a draft chapter, and retrying that draft's save,
+  is `workspace/fill_lines.dart`'s.
 - `workspace/index_build.dart` owns each opening-index build. Incremental work
   and isolate messages use the same guarded completion: success, failure and
   cancellation close the timer, receive port and worker. Progress-consumer failures
@@ -151,8 +173,8 @@ Bughouse mode is offered when its engine assets are present.
   (`ui/fold_button.dart`); where the databases do not fit side by side they
   become one typeable box (`ChoiceField`).
 - Engine tournaments use the shared supervisor, retryable checkpoints, saved
-  history, ratings/crosstables and viewer handoff. Bughouse keeps its own two-board
-  screen, Hivemind analysis, archive/book reads and saved matches.
+  history, ratings/crosstables and viewer handoff. Bughouse keeps its own one- or
+  two-board screen with + and − on every hand and live Hivemind lines.
 - Text fields leave the typing area blank until the user enters a value.
   `SearchField` keeps its magnifier, clear action, accessible name and hover
   help; `ChoiceField` uses persistent labels. New-name dialogs start empty,
@@ -182,9 +204,7 @@ Bughouse mode is offered when its engine assets are present.
   through `EngineSettingCopy`); both write the same settings, which the
   workspace wiring applies to the running engine. CPU cores is automatic
   until chosen (`Settings.autoCores`, resolved by `Settings.coresOn` to half
-  the machine) and the table defaults to 256 MB; a file written before
-  `engineDefaults` holds the old 1 core / 128 MB defaults, which read as the
-  new ones. Settings ▸ Engine ▸ Analysis engine picks the bundled Stockfish
+  the machine) and the table defaults to 256 MB. Settings ▸ Engine ▸ Analysis engine picks the bundled Stockfish
   or an engine registered in Engine tournament (`Settings.analysisEngine`,
   the registry's id). `AppEnvironment.startAnalysisEngine` starts it for the
   board's lines and the Analysis tab through `engines/analysis_launch.dart`,
@@ -205,8 +225,6 @@ Bughouse mode is offered when its engine assets are present.
   Played share marks a Maia stand-in `~` with a tooltip naming the source
   and a visible legend explaining the marker.
 
-Unported conveniences remain in the feature specs/backlog; the presence of a
-mode is not a claim of every historical v1 control being reproduced.
 
 ## Persistence and shutdown
 
@@ -214,57 +232,40 @@ The app uses its existing Documents, Support and cache locations. The document
 session owns the draft; storage owns commit/revision checks and compound
 operations. Accepted writes survive panel disposal. Close flushes user data
 before engine shutdown. Unreadable authoritative recovery data is kept or
-quarantined; derived views can be rebuilt. Foreign v1 journals are no longer
-processed or used to block current saves, and are left untouched.
+quarantined; derived views can be rebuilt. See
+[DATA_INTEGRITY.md](DATA_INTEGRITY.md) for every store and recovery file.
 
-Line IDs, serialized records and retained fixtures may still describe older
-formats. They are data contracts, not dependencies on deleted source. Current
-save/reopen, conflict, process-kill and recovery tests remain.
+Line IDs, serialized records and fixtures are data contracts: the current
+code reads exactly the formats it writes.
 
 ## Checks and tools
 
 - [`test/`](../test/) mirrors the production areas; `test/support/` supplies
   scripted ports, fixtures and property generators.
-- [`integration_test/v2_desktop_test.dart`](../integration_test/v2_desktop_test.dart)
+- [`integration_test/desktop_test.dart`](../integration_test/desktop_test.dart)
   exercises the actual desktop app. Engine/native checks have separate targets.
-- [`scripts/check_v2.py`](../scripts/check_v2.py) retains its filename but now
-  enforces the sole app's architecture under `lib/` and `test/`.
+- [`scripts/check_architecture.py`](../scripts/check_architecture.py) enforces the architecture
+  rules under `lib/` and `test/` (the name is historical).
 - `scripts/ci.sh analyze lint`, `scripts/ci.sh test` and `scripts/ci.sh tools`
   run through bounded jobs. The headless driver defaults to `lib/main.dart`.
 - Platform runners, `packages/document_file_io`, engine assets/updaters,
-  `tools/mcp/`, `tools/bughouse_db/` and the separate `tree_builder/` prototype
+  `tools/mcp/`, `tools/bughouse_db/` and the standalone C builder `tree_builder/`
   retain their own responsibilities. See [tooling](agents/tooling.md).
-
-### Bughouse practical search
-
-- `chess/bughouse/expectimax.dart` expands Hivemind best + top four human moves
-  above 1%, backing up both prepared colours in the same tree. See
-  [Bughouse expectimax](ALGORITHM.md#bughouse-expectimax) for the score convention,
-  unexpanded probability, calibration and limitations.
-- `engines/crazyara_engine.dart`, `engines/bughouse_backend.dart` and Hivemind's
-  `inspect` protocol provide policy and searched evaluations under the engine
-  supervisor. `tools/setup_crazyara.py` installs the optional pinned Linux runtime.
-- `features/bughouse/expectimax_search.dart` owns cancellation and progress;
-  `expectimax_panel.dart` shows Played, Eval, Exp W and Exp B, with replies for
-  the selected move. `storage/bughouse_expectimax.dart` owns evaluation checkpoints
-  and complete snapshots in `bughouse_expectimax.db`.
-- `tools/bughouse_db/expectimax.py` seeds/supervises a resumable queue;
-  `tools/build_bughouse_expectimax.dart` runs the production Dart implementation.
-  The API reader/importer is `python/twic-position-finder/bughouse_expectimax.py`;
-  `frontend/src/bughouse/expectimax.ts` renders the shared snapshots on both
-  bughouse web pages.
 
 ## Static browser preparation
 
-The separately deployed Astro frontend now exposes `/pgn`, `/expectimax`,
-`/tactics` and `/bughouse` from one site navigation. `/pgn` and `/expectimax`
-are one lila-style analysis board with PGN and Expectimax tabs
-(`python/twic-position-finder/frontend/src/prep/`): Stockfish 18 lines over the
-board, PGN games with comments and variations, and the desktop's practical
-expectimax (both sides, Played / White / Black / Engine) run on a Stockfish
-worker pool and Maia in the browser. It shares the board, judge, shapes and
-menu with `/bughouse` (`src/analysis/`). Local PGNs can move from the viewer
-into tactics; both accept custom FEN starts. These browser owners do not
-import Flutter/native storage. See the
-[frontend guide](../python/twic-position-finder/frontend/README.md#pgn-workspace-and-browser-expectimax)
+The separately deployed Astro frontend exposes `/pgn`, `/expectimax`,
+`/tactics`, `/bughouse` and `/bughouse-puzzles` from one site navigation.
+`/pgn` and `/expectimax` are one lila-style analysis board with PGN and
+Expectimax tabs (`python/twic-position-finder/frontend/src/prep/`):
+Stockfish 18 lines over the board, PGN games with comments and variations,
+and the desktop's practical expectimax (both sides, Played / White / Black /
+Engine) run on a Stockfish worker pool and Maia in the browser. Its board and
+editor strips, move list and rules-free variation tree, engine panel and
+gear, judge, shapes and menu are shared with `/bughouse` (`src/analysis/`);
+the Tactics Trainer reuses the PGN reader and browser storage from `src/prep/`
+and the winning-chances formula from `src/analysis/judge.ts`. The viewer can
+send its games to Tactics; both accept custom FEN starts. These browser
+owners do not import Flutter/native storage. See the
+[frontend guide](../python/twic-position-finder/frontend/README.md#pgn-and-expectimax)
 for persistence, search semantics, asset preparation and browser verification.

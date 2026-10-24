@@ -5,6 +5,7 @@ import '../../workspace/move_field.dart';
 import 'lesson_view.dart';
 import 'line_list.dart';
 import 'trainer.dart';
+import 'trainer_state.dart';
 import 'trainer_words.dart';
 import 'training_home.dart';
 

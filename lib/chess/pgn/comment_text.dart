@@ -2,7 +2,7 @@
 /// machine tokens (engine evals, clocks, arrows and this app's own
 /// statistics such as `[%score 46.4%]`).
 ///
-/// This is the one definition of "prose" in v2. A comment is kept whole in
+/// This is the app's one definition of "prose". A comment is kept whole in
 /// the tree so it round-trips byte for byte; only display strips tokens.
 /// dartchess's `PgnComment` is not used because it knows only the standard
 /// tokens and would keep `[%score]` as text.
@@ -59,9 +59,9 @@ String withoutToken(String text, String token) => text
 /// Why [text] cannot be a comment in a PGN file, or null when it can be.
 ///
 /// A comment ends at its first `}` and the format gives no way to escape
-/// one: the old app and Lichess both strip braces rather than invent an
-/// escape. So a `}` in the words would cut the comment — and every move
-/// written after it — out of the file. Saying no is the only honest answer.
+/// one: Lichess strips braces rather than invent an escape. So a `}` in the
+/// words would cut the comment — and every move written after it — out of
+/// the file. Saying no is the only honest answer.
 String? commentRefusal(String text) =>
     text.contains('}') ? 'a comment cannot hold a closing brace' : null;
 

@@ -269,27 +269,24 @@ void main() {
     expect(saved.containsKey('maia_elo'), isFalse);
   });
 
-  test(
-    'the settings the old app resumes from are written when known',
-    () async {
-      const config = SearchConfig(side: Side.white, horizonPlies: 2);
-      final tree = await _treeFrom(_kingAndPawn, config: config);
+  test('the settings a build resumes from are written when known', () async {
+    const config = SearchConfig(side: Side.white, horizonPlies: 2);
+    final tree = await _treeFrom(_kingAndPawn, config: config);
 
-      final document = _asJson(
-        encodeTreeV4(
-          tree,
-          config,
-          complete: false,
-          startMoves: const ['e4', 'c5'],
-          evalDepth: 18,
-          opponentRating: 1900,
-        ),
-      );
-      final saved = document['config']! as Map<String, Object?>;
+    final document = _asJson(
+      encodeTreeV4(
+        tree,
+        config,
+        complete: false,
+        startMoves: const ['e4', 'c5'],
+        evalDepth: 18,
+        opponentRating: 1900,
+      ),
+    );
+    final saved = document['config']! as Map<String, Object?>;
 
-      expect(document['start_moves'], 'e4 c5');
-      expect(saved['eval_depth'], 18);
-      expect(saved['maia_elo'], 1900);
-    },
-  );
+    expect(document['start_moves'], 'e4 c5');
+    expect(saved['eval_depth'], 18);
+    expect(saved['maia_elo'], 1900);
+  });
 }

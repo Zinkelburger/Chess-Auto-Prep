@@ -1,7 +1,7 @@
 /**
  * Lichess's "Practice with computer" (lila ui/analyse/src/practice): you
  * play the side at the bottom of the board, the engine answers after about
- * 400 positions, and each of your moves gets a verdict with the move the
+ * 600,000 nodes, and each of your moves gets a verdict with the move the
  * engine preferred. Hands can still be edited: the engine plays on from
  * whatever position is on the board.
  */
@@ -15,8 +15,8 @@ import { el } from './moves';
 import { moveShapes } from './shapes';
 import { positionOf, readMove, sanLine, type Tree, type TreeNode } from './tree';
 
-/** About a second of Hivemind on a GPU, a few on a CPU. */
-export const PRACTICE_NODES = 400;
+/** Lichess's casual practice strength. */
+export const PRACTICE_NODES = 600_000;
 
 export interface PracticeHost {
   readonly tree: Tree;

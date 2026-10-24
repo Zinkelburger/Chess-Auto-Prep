@@ -11,7 +11,6 @@ import '../chess/pgn/chapter_line.dart';
 import '../chess/tactics/game_ids.dart';
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
-import '../storage/game_store.dart';
 import '../storage/my_accounts.dart';
 import '../storage/my_games_files.dart';
 import 'file_filter.dart';
@@ -108,7 +107,7 @@ abstract interface class SavedGames implements LocalGames {
 /// anything holds that list ([_indexes]), so a file gone back to with its
 /// games unchanged — another tab and back — answers at once.
 final class FileTree extends ChangeNotifier implements LocalGames {
-  FileTree({required FileFilter filter}) : _filter = filter {
+  FileTree({required this._filter}) {
     _filter.addListener(_follow);
     _follow();
   }
@@ -239,29 +238,18 @@ final class FileTree extends ChangeNotifier implements LocalGames {
   }
 }
 
-/// `My games`: every game of the user's that is on this machine, as one
-/// tree. The files the downloads keep, `games_library/<site>_<user>.pgn`
-/// (what My games and Tactics read, and what the old app treats as the
-/// truth), and in the old app's games database the same accounts' library
-/// and Player analysis collections and its tactics archive. A game in more
-/// than one of them counts once. Newest first, so the games list under the
-/// table starts with the latest.
+/// `My games`: every game of the user's that is on this machine, as one tree:
+/// the files the downloads keep, `games_library/<site>_<user>.pgn` (what My
+/// games and Tactics read). A game in more than one of them counts once.
+/// Newest first, so the games list under the table starts with the latest.
 ///
 /// Read the first time the explorer asks, and again after [forget] — a
-/// download or a changed username. A database that cannot be read leaves
-/// the downloaded games in the tree and says so beside them.
+/// download or a changed username.
 final class MyGamesTree extends ChangeNotifier implements SavedGames {
-  MyGamesTree({
-    required AccountStore accounts,
-    required GamesCache cache,
-    required GameStore store,
-  }) : _accounts = accounts,
-       _cache = cache,
-       _store = store;
+  MyGamesTree({required this._accounts, required this._cache});
 
   final AccountStore _accounts;
   final GamesCache _cache;
-  final GameStore _store;
 
   TreeState _state = const TreeUnbuilt();
   OpeningIndex? _index;
@@ -326,8 +314,11 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
       });
       _from = List.unmodifiable(corpus.from);
       _state = index == null
-          ? _empty(corpus.notice)
-          : TreeBuilt(notice: corpus.notice);
+          ? const TreeEmpty(
+              'No games of yours are saved yet. '
+              'Get games in Tactics or My games.',
+            )
+          : const TreeBuilt();
     } on Object catch (error) {
       if (gone()) return;
       log.w('read your games', error);
@@ -335,12 +326,6 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
     }
     notifyListeners();
   }
-
-  static TreeState _empty(String? notice) => notice == null
-      ? const TreeEmpty(
-          'No games of yours are saved yet. Get games in Tactics or My games.',
-        )
-      : const TreeFailed('Your games database could not be read.');
 
   Future<OpeningIndex?> _indexCorpus(MyGamesCorpus corpus, int ticket) async {
     final total = corpus.texts.length;
@@ -383,39 +368,8 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
       }
       files.add((site, [for (final game in read.games) game.text]));
     }
-    final stored = await _readStore({
-      GameCollections.tactics,
-      for (final MapEntry(key: site, value: account) in accounts.entries) ...[
-        GameCollections.library(site, account.username),
-        ...GameCollections.analysis(site, account.username),
-      ],
-    });
     if (gone()) return null;
-    String? notice;
-    var rows = const <StoredGame>[];
-    switch (stored) {
-      case StoredGamesFound(:final games, :final skipped):
-        rows = games;
-        if (skipped > 0) log.w('read app_games.db', '$skipped rows had no PGN');
-      case StoredGamesAbsent():
-        break;
-      case StoredGamesUnreadable(:final detail):
-        log.w('read app_games.db', detail);
-        notice =
-            'Your games database could not be read, so only your '
-            'downloaded games are here.';
-    }
-    return (corpus: myGamesCorpus(files: files, stored: rows, notice: notice));
-  }
-
-  /// The database's answer; one that throws is one that could not be
-  /// read, which leaves the downloaded games standing.
-  Future<StoredGamesRead> _readStore(Set<String> collections) async {
-    try {
-      return await _store.read(collections);
-    } on Object catch (error) {
-      return StoredGamesUnreadable('$error');
-    }
+    return (corpus: myGamesCorpus(files: files));
   }
 
   void _stop() {
@@ -433,27 +387,21 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
 
 typedef _MyGamesRead = ({MyGamesCorpus corpus});
 
-/// The user's games gathered from everywhere they are kept, each once,
-/// newest first, with the id the games list names each by.
+/// The user's games gathered from every downloaded file, each once, newest
+/// first, with the id the games list names each by.
 typedef MyGamesCorpus = ({
   List<String> texts,
   List<String> ids,
   List<String> from,
-  String? notice,
 });
 
-/// Merges the downloaded [files] with the database's [stored] games.
+/// Merges the downloaded [files].
 ///
 /// A game is the same game wherever it is kept when it names the same
 /// site game (`lichess_AbCd1234`); one that names none is the same when its
-/// text is. The file's copy wins, as the file is the truth the database
-/// mirrors. [MyGamesCorpus.from] names where games came from, in the order
-/// first met.
-MyGamesCorpus myGamesCorpus({
-  required List<(GameSite, List<String>)> files,
-  required List<StoredGame> stored,
-  String? notice,
-}) {
+/// text is. [MyGamesCorpus.from] names the sites games came from, in the
+/// order first met.
+MyGamesCorpus myGamesCorpus({required List<(GameSite, List<String>)> files}) {
   final byId = <String, ({String text, String played, int met})>{};
   final from = <String>[];
   void add(String text, String where) {
@@ -468,9 +416,6 @@ MyGamesCorpus myGamesCorpus({
       add(game, site.label);
     }
   }
-  for (final game in stored) {
-    add(game.pgn, _collectionLabel(game.collection));
-  }
   // Games that do not say when they were played keep the order they were
   // met in.
   final newest = byId.entries.toList()
@@ -482,7 +427,6 @@ MyGamesCorpus myGamesCorpus({
     texts: [for (final entry in newest) entry.value.text],
     ids: [for (final entry in newest) entry.key],
     from: from,
-    notice: notice,
   );
 }
 
@@ -492,13 +436,4 @@ String _idOf(String text) {
   if (site.isNotEmpty) return site;
   final digest = sha256.convert(utf8.encode(text.trim()));
   return 'pgn_${digest.toString().substring(0, 16)}';
-}
-
-String _collectionLabel(String collection) {
-  if (collection == GameCollections.tactics) return 'tactics archive';
-  if (collection.startsWith('analysis:')) return 'player analysis';
-  for (final site in GameSite.values) {
-    if (collection.startsWith('library:${site.name}_')) return site.label;
-  }
-  return collection;
 }

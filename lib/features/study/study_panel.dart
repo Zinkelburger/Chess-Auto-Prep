@@ -21,10 +21,12 @@ import '../../workspace/board_editor.dart';
 import '../../workspace/document_session.dart';
 import 'new_chapter_dialog.dart';
 import 'studies.dart';
+import 'studies_state.dart';
 import 'study_commands.dart';
 import 'study_chapter_list.dart';
 import 'chapter_position_dialog.dart';
 import 'study_import_dialog.dart';
+import 'study_send_dialog.dart';
 import 'study_recovery_dialog.dart';
 
 /// Opens one chapter of a study in the workspace.
@@ -43,6 +45,7 @@ class StudyPanel extends StatefulWidget {
     required this.session,
     required this.onOpen,
     this.onTrain,
+    this.onLichessLogin,
     this.trailing,
   });
 
@@ -50,6 +53,9 @@ class StudyPanel extends StatefulWidget {
   final DocumentSession session;
   final OpenChapter onOpen;
   final VoidCallback? onTrain;
+
+  /// The Lichess login, for a send that needs one; true once logged in.
+  final Future<bool> Function(BuildContext)? onLichessLogin;
 
   /// What sits in the toolbar's corner: the host's toggle for the pane.
   final Widget? trailing;
@@ -146,6 +152,20 @@ class _StudyPanelState extends State<StudyPanel> {
     _became(await _studies.exportPgn(name));
   }
 
+  Future<void> _sendToLichess() async {
+    final sender = _studies.sender;
+    final chapter = widget.session.snapshot();
+    final study = _studies.open;
+    if (sender == null || chapter == null || study == null) return;
+    await showSendToLichess(
+      context,
+      sender: sender,
+      study: chapter,
+      name: study.name,
+      onLogIn: widget.onLichessLogin,
+    );
+  }
+
   ChapterLine? _line(StudyChapter chapter) =>
       widget.session.chapter?.lines.elementAtOrNull(chapter.index);
   bool _same(StudyChapter chapter, ChapterLine line) =>
@@ -153,10 +173,32 @@ class _StudyPanelState extends State<StudyPanel> {
   Future<void> _tags(StudyChapter chapter) async {
     final line = _line(chapter);
     if (line == null) return;
-    final values = await showStudyTags(context, line.tags);
+    final study = widget.session.chapter;
+    final values = await showStudyTags(
+      context,
+      line.tags,
+      study: study == null ? '' : studyNameOf(study),
+    );
     if (values == null || !_same(chapter, line)) return;
     _edited(setStudyTags(widget.session, chapter.index, values));
+    // A chapter still called `Chapter N` takes its players' names, as
+    // Lichess names a game it imports.
+    final white = values['White']?.trim() ?? '';
+    final black = values['Black']?.trim() ?? '';
+    if (_numbered.hasMatch(chapter.name) &&
+        white.isNotEmpty &&
+        black.isNotEmpty) {
+      _edited(
+        renameStudyChapter(
+          widget.session,
+          index: chapter.index,
+          name: '$white - $black',
+        ),
+      );
+    }
   }
+
+  static final _numbered = RegExp(r'^Chapter \d+$');
 
   Future<void> _root(StudyChapter chapter) async {
     final line = _line(chapter);
@@ -336,6 +378,9 @@ class _StudyPanelState extends State<StudyPanel> {
             onImport: _import,
             onRenameStudy: () => unawaited(_renameStudy()),
             onExportStudy: () => unawaited(_exportStudy()),
+            onSendToLichess: _studies.sender == null
+                ? null
+                : () => unawaited(_sendToLichess()),
             onRetrySave: _studies.canRetrySave
                 ? () => unawaited(_studies.retrySave().then(_became))
                 : null,
@@ -436,6 +481,7 @@ class _Toolbar extends StatelessWidget {
     required this.onImport,
     required this.onRenameStudy,
     required this.onExportStudy,
+    this.onSendToLichess,
     this.onRetryRename,
     this.onRetrySave,
     required this.onCopyStudy,
@@ -454,6 +500,9 @@ class _Toolbar extends StatelessWidget {
   final VoidCallback onNewStudy;
   final VoidCallback onImport;
   final VoidCallback onRenameStudy, onExportStudy;
+
+  /// Null where the app cannot write to Lichess.
+  final VoidCallback? onSendToLichess;
   final VoidCallback? onRetryRename, onRetrySave;
   final VoidCallback onCopyStudy;
   final VoidCallback onDeleteStudy;
@@ -483,6 +532,13 @@ class _Toolbar extends StatelessWidget {
       busy: busy || !hasOpenStudy,
       icon: Icons.save_outlined,
     ),
+    if (onSendToLichess case final send?)
+      rowAction(
+        'Send to Lichess…',
+        send,
+        busy: busy || !hasOpenStudy,
+        icon: Icons.cloud_upload_outlined,
+      ),
     if (onRetrySave != null)
       rowAction('Retry study save', onRetrySave!, busy: busy),
     if (onRetryRename != null)
@@ -500,6 +556,23 @@ class _Toolbar extends StatelessWidget {
       icon: Icons.delete_outline,
     ),
   ];
+
+  /// Lichess in and out, side by side: what came in goes back the same
+  /// way.
+  Widget _transfers() => Wrap(
+    alignment: WrapAlignment.spaceEvenly,
+    children: [
+      TextButton(
+        onPressed: busy ? null : onImport,
+        child: const Text('Import…'),
+      ),
+      if (hasOpenStudy && onSendToLichess != null)
+        TextButton(
+          onPressed: busy ? null : onSendToLichess,
+          child: const Text('Send to Lichess…'),
+        ),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -550,10 +623,7 @@ class _Toolbar extends StatelessWidget {
               onPressed: busy ? null : onNewStudy,
               child: const Text('New study'),
             ),
-          TextButton(
-            onPressed: busy ? null : onImport,
-            child: const Text('Import…'),
-          ),
+          _transfers(),
           if (hasOpenStudy && onTrain != null)
             OutlinedButton(
               onPressed: busy ? null : onTrain,
@@ -699,14 +769,21 @@ List<Widget> quizMenuItems(DocumentSession session, NodePath path) {
   return [
     _item(
       starts ? 'Do not start a quiz here' : 'Start quiz from this move',
+      Icons.play_arrow,
       () => session.setMarker(path, quizStartMarker, on: !starts),
     ),
     _item(
       ends ? 'Do not end a quiz here' : 'End quiz after this move',
+      Icons.stop,
       () => session.setMarker(path, quizEndMarker, on: !ends),
     ),
   ];
 }
 
-MenuItemButton _item(String label, VoidCallback run) =>
-    MenuItemButton(onPressed: run, child: Text(label));
+/// The icons are the marks the move list shows for each marker.
+MenuItemButton _item(String label, IconData icon, VoidCallback run) =>
+    MenuItemButton(
+      onPressed: run,
+      leadingIcon: Icon(icon, size: IconSize.menu),
+      child: Text(label),
+    );

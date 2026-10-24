@@ -102,7 +102,7 @@ void main() {
       expect(session.source, alapin);
       // The chapter opened was read again after the words went in, so its
       // next save is made against the file as it is now.
-      session.toEnd();
+      session.cursor.toEnd();
       session.playMove('d7d5');
       await saver.flush();
       expect(saver.state, isA<Saved>());

@@ -579,7 +579,6 @@ void main() {
         Authority.staging,
       );
       expect(classify('Support/finds.db'), Authority.derived);
-      expect(classify('Support/app_games.db'), Authority.authoritative);
     });
 
     test(

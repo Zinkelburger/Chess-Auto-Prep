@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:dartchess/dartchess.dart' show Move;
 
 import '../fen.dart';
@@ -30,26 +32,103 @@ enum ReviewMark {
       values.where((mark) => mark.nag == nag).firstOrNull;
 }
 
-/// Conservative centipawn-loss labels; never overwrite a user's glyph.
-ReviewMark? reviewMark(int loss) => loss >= 200
-    ? ReviewMark.blunder
-    : loss >= 100
-    ? ReviewMark.mistake
-    : loss >= 50
-    ? ReviewMark.inaccuracy
-    : null;
+/// A move's mark and the words Lichess puts before "X was best.".
+typedef ReviewJudgement = ({ReviewMark mark, String words});
 
-int? reviewGlyph(int loss) => reviewMark(loss)?.nag;
+/// [cp], White's centipawns, as Lichess's winning chances for White: -1 lost,
+/// 0 even, 1 won.
+double winningChances(int cp) => 2 / (1 + math.exp(-0.00368208 * cp)) - 1;
+
+/// How Lichess judges a move by the evaluations before and after it
+/// (`lila` `Advice`): by the winning chances its side gave away, 0.1 an
+/// inaccuracy, 0.2 a mistake, 0.3 a blunder; and when a forced mate appears
+/// against it or slips away, by how much was left. [whiteMoved] says whose
+/// move it was. Never overwrites a user's glyph; the caller checks.
+ReviewJudgement? judgeMove(
+  ReviewValue before,
+  ReviewValue after, {
+  required bool whiteMoved,
+}) {
+  final side = whiteMoved ? 1 : -1;
+  final wasMate = before.eval.startsWith('#');
+  final isMate = after.eval.startsWith('#');
+  if (!wasMate && !isMate) {
+    final lost = (winningChances(before.cp) - winningChances(after.cp)) * side;
+    final mark = lost >= 0.3
+        ? ReviewMark.blunder
+        : lost >= 0.2
+        ? ReviewMark.mistake
+        : lost >= 0.1
+        ? ReviewMark.inaccuracy
+        : null;
+    return mark == null ? null : (mark: mark, words: mark.label);
+  }
+  // The same evaluations from the mover's side: a mate for them is positive.
+  final was = before.cp * side, now = after.cp * side;
+  if (!wasMate && isMate && now < 0) {
+    return (
+      mark: was < -999
+          ? ReviewMark.inaccuracy
+          : was < -700
+          ? ReviewMark.mistake
+          : ReviewMark.blunder,
+      words: 'Checkmate is now unavoidable',
+    );
+  }
+  if (wasMate && was > 0 && (!isMate || now < 0)) {
+    final left = isMate ? 0 : now;
+    return (
+      mark: left > 999
+          ? ReviewMark.inaccuracy
+          : left > 700
+          ? ReviewMark.mistake
+          : ReviewMark.blunder,
+      words: 'Lost forced checkmate sequence',
+    );
+  }
+  return null;
+}
+
+/// The judgement a review gives [move], played from [from]; none when it is
+/// the move the engine itself chose there, whatever two searches of
+/// different positions made of it. The graph, the counts and the
+/// annotations all ask this.
+ReviewJudgement? moveJudgement(
+  Fen from,
+  MoveNode move,
+  ReviewValue before,
+  ReviewValue after,
+) {
+  final judged = judgeMove(before, after, whiteMoved: !move.fen.whiteToMove);
+  if (judged == null) return null;
+  return _san(from, before.pv.firstOrNull) == move.san ? null : judged;
+}
+
+/// [moveJudgement]'s mark.
+ReviewMark? moveReviewMark(
+  Fen from,
+  MoveNode move,
+  ReviewValue before,
+  ReviewValue after,
+) => moveJudgement(from, move, before, after)?.mark;
+
+/// The mark a review wrote on [move], if it wrote one.
+ReviewMark? writtenReviewMark(MoveNode move) => ReviewMark.ofNag(
+  int.tryParse(_nagMarker.firstMatch(move.comment ?? '')?.group(1) ?? '') ?? 0,
+);
 
 /// What the review writes is marked, so it can be taken out again without
 /// touching anything the file had: an eval it added, a glyph and its
 /// "Mistake. Nf3 was best." note, and a variation it added. A variation's
-/// marker counts its moves; files written before that carry the bare form.
+/// marker counts its moves.
 const _evalMarker = '[%cap_review_eval]';
-final _lineMarker = RegExp(r'\[%cap_review_line(?: (\d+))?\]');
+final _lineMarker = RegExp(r'\[%cap_review_line (\d+)\]');
 final _nagMarker = RegExp(r'\s*\[%cap_review_nag (\d+)\]');
 final _eval = RegExp(r'\s*\[%eval\s+[^\]]*\]');
-final _prose = RegExp(r'^(?:Inaccuracy|Mistake|Blunder)\. \S+ was best\.\s*');
+final _prose = RegExp(
+  r'^(?:Inaccuracy|Mistake|Blunder|Checkmate is now unavoidable|'
+  r'Lost forced checkmate sequence)\. \S+ was best\.\s*',
+);
 
 bool _marked(String? comment) =>
     comment != null &&
@@ -85,13 +164,11 @@ List<MoveNode> _unmarkedChildren(
 ]);
 
 /// Whether the variation from [head] is still exactly as the review wrote it:
-/// one move after another, as many as its marker counts (at most the eight
-/// the review writes for the bare marker), with no glyph or note on any.
-/// The bare marker of older files carries no count, so a short line the user
-/// extended to eight moves or fewer there still reads as the review's.
+/// one move after another, as many as its marker counts, with no glyph or
+/// note on any.
 bool _pristineReviewLine(MoveNode head) {
   final marker = _lineMarker.firstMatch(head.comment!)!;
-  final count = int.tryParse(marker.group(1) ?? '');
+  final count = int.parse(marker.group(1)!);
   if (head.comment!.replaceAll(_lineMarker, '').trim().isNotEmpty) {
     return false;
   }
@@ -107,7 +184,7 @@ bool _pristineReviewLine(MoveNode head) {
     length++;
     node = node.children.firstOrNull;
   }
-  return count == null ? length <= 8 : length == count;
+  return length == count;
 }
 
 MoveNode _unmarkedNode(MoveNode node, {required bool main}) {
@@ -146,13 +223,26 @@ ChapterEdit removeReview(Chapter chapter) => _rewriteGame(
   (tree) => hasReview(tree) ? withoutReview(tree) : null,
 );
 
-ChapterEdit annotateGame(Chapter chapter, List<ReviewValue> values) =>
-    _rewriteGame(chapter, (tree) => _annotated(withoutReview(tree), values));
+/// [values] written into the game on the board, or into game [game] of
+/// the file when given: a review of every chapter writes each as it ends.
+ChapterEdit annotateGame(
+  Chapter chapter,
+  List<ReviewValue> values, {
+  int? game,
+}) => _rewriteGame(
+  chapter,
+  (tree) => _annotated(withoutReview(tree), values),
+  game: game,
+);
 
-ChapterEdit _rewriteGame(Chapter chapter, GameTree? Function(GameTree) edit) {
-  final index = chapter.game ?? 0;
+ChapterEdit _rewriteGame(
+  Chapter chapter,
+  GameTree? Function(GameTree) edit, {
+  int? game,
+}) {
+  final index = game ?? chapter.game ?? 0;
   if (index >= chapter.lines.length ||
-      (chapter.game == null && chapter.lines.length != 1)) {
+      (game == null && chapter.game == null && chapter.lines.length != 1)) {
     return const ChapterEditRefused('Open one game to review it.');
   }
   final line = chapter.lines[index];
@@ -162,8 +252,9 @@ ChapterEdit _rewriteGame(Chapter chapter, GameTree? Function(GameTree) edit) {
   final tree = edit(line.tree!);
   if (tree == null) return const ChapterUnchanged();
   final rewrittenLine = rewritten(line, tree);
-  if (rewrittenLine case LineRefused(:final reason))
+  if (rewrittenLine case LineRefused(:final reason)) {
     return ChapterEditRefused(reason);
+  }
   final lines = [...chapter.lines];
   lines[index] = (rewrittenLine as LineRewritten).line;
   return ChapterEdited(
@@ -206,11 +297,11 @@ GameTree _reviewMove(
   ReviewValue after,
 ) {
   final node = tree.nodeAt(at)!;
-  final loss = (before.cp - after.cp) * (!node.fen.whiteToMove ? 1 : -1);
-  final mark = reviewMark(loss);
-  if (mark == null) return tree;
-  final best = _san(tree.fenAt(at.parent), before.pv.firstOrNull);
-  if (best == node.san) return tree;
+  final from = tree.fenAt(at.parent);
+  final judged = moveJudgement(from, node, before, after);
+  if (judged == null) return tree;
+  final mark = judged.mark;
+  final best = _san(from, before.pv.firstOrNull);
   if (!node.nags.any((n) => n >= 1 && n <= 6)) {
     tree = withNodeChanged(
       tree,
@@ -218,7 +309,7 @@ GameTree _reviewMove(
       (move) => withNodeComment(
         withNags(move, [...move.nags, mark.nag]),
         _joined([
-          best == null ? null : '${mark.label}. $best was best.',
+          best == null ? null : '${judged.words}. $best was best.',
           move.comment,
           '[%cap_review_nag ${mark.nag}]',
         ]),

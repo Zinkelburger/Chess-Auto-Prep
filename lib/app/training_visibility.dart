@@ -11,12 +11,10 @@ import 'workspace_requests.dart';
 /// leave it by, so the sitting pauses.
 final class SittingInView {
   SittingInView({
-    required Trainer trainer,
-    required WorkspaceRequests requests,
-    required bool Function() trainTabOpen,
-  }) : _trainer = trainer,
-       _requests = requests,
-       _trainTabOpen = trainTabOpen {
+    required this._trainer,
+    required this._requests,
+    required this._trainTabOpen,
+  }) {
     for (final owner in _owners) {
       owner.addListener(check);
     }
@@ -61,11 +59,7 @@ final class SittingInView {
 /// show its answer and the arrows walk the puzzles, with nothing on screen
 /// to say so; so it is put down, and the run is kept for Tactics.
 final class PuzzleInView {
-  PuzzleInView({
-    required PuzzleTrainer puzzles,
-    required WorkspaceRequests requests,
-  }) : _puzzles = puzzles,
-       _requests = requests {
+  PuzzleInView({required this._puzzles, required this._requests}) {
     for (final owner in _owners) {
       owner.addListener(check);
     }

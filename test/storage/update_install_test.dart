@@ -499,7 +499,7 @@ void main() {
     expect(alive(), isFalse);
   }, skip: !Platform.isLinux);
 
-  test('the real Linux helper swaps a portable v2 bundle after the app '
+  test('the real Linux helper swaps a portable bundle after the app '
       'exits and restarts it', () async {
     final app = Directory(p.join(root.path, "Chess app 'quoted'"))
       ..createSync();

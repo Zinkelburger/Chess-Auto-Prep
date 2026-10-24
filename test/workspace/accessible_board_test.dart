@@ -39,10 +39,7 @@ void main() {
     final node = tester.getSemantics(
       find.bySemanticsLabel(RegExp('^$square, ')),
     );
-    tester.binding.pipelineOwner.semanticsOwner!.performAction(
-      node.id,
-      SemanticsAction.tap,
-    );
+    node.owner!.performAction(node.id, SemanticsAction.tap);
     await tester.pump();
   }
 

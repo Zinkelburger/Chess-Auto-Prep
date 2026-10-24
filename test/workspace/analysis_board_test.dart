@@ -2,6 +2,7 @@ import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/workspace/document_saver.dart';
+import 'package:chess_auto_prep/workspace/session_results.dart';
 import 'package:chess_auto_prep/workspace/document_session.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
@@ -46,13 +47,13 @@ void main() {
   }
 
   List<String> line() => [
-    for (final node in session.tree!.lineTo(session.cursor)) node.san,
+    for (final node in session.tree!.lineTo(session.cursor.value)) node.san,
   ];
 
   test('the window starts on an empty analysis board facing White', () {
     expect(session.isScratch, isTrue);
     expect(session.chapter?.name, analysisBoardName);
-    expect(session.fen, Fen.initial);
+    expect(session.cursor.fen, Fen.initial);
     expect(session.orientation, Side.white);
     expect(session.canUndo, isFalse);
   });
@@ -61,16 +62,16 @@ void main() {
     session
       ..playMove('e2e4')
       ..playMove('c7c5')
-      ..back()
+      ..cursor.back()
       ..playMove('e7e5');
-    session.setComment(session.cursor, 'Open game');
+    session.setComment(session.cursor.value, 'Open game');
     await pumpEventQueue();
     expect(line(), ['e4', 'e5']);
     expect(session.tree!.children.single.children.map((n) => n.san), [
       'c5',
       'e5',
     ]);
-    expect(session.commentAt(session.cursor), 'Open game');
+    expect(session.commentAt(session.cursor.value), 'Open game');
     expect(store.requestedSaves, isEmpty);
     expect(store.creates, isEmpty);
     expect(saver.state, isA<Saved>());
@@ -85,7 +86,7 @@ void main() {
     expect(line(), ['e4']);
     expect(await session.undo(), isA<Restored>());
     expect(session.tree!.children, isEmpty);
-    expect(session.cursor.isRoot, isTrue);
+    expect(session.cursor.value.isRoot, isTrue);
     expect(await session.undo(), isA<UndoRefused>());
   });
 
@@ -150,12 +151,12 @@ void main() {
       ]) {
         expect(
           pastedFen(text)?.position,
-          Fen(_sicilian).position,
+          const Fen(_sicilian).position,
           reason: text,
         );
       }
-      expect(pastedFen('$placement w'), Fen('$placement w - - 0 1'));
-      expect(pastedFen(placement), Fen('$placement w - - 0 1'));
+      expect(pastedFen('$placement w'), const Fen('$placement w - - 0 1'));
+      expect(pastedFen(placement), const Fen('$placement w - - 0 1'));
       expect(pastedFen('$_sicilian\n1. e4'), isNull);
       expect(pastedFen('1. e4 c5'), isNull);
     });
@@ -163,7 +164,7 @@ void main() {
     test('castling rights the board does not allow are dropped', () {
       expect(
         pastedFen('4k3/8/8/8/8/8/8/4K3 w KQkq - 0 1'),
-        Fen('4k3/8/8/8/8/8/8/4K3 w - - 0 1'),
+        const Fen('4k3/8/8/8/8/8/8/4K3 w - - 0 1'),
       );
     });
 
@@ -199,11 +200,11 @@ void main() {
       final blank = session.analysisPage;
       expect(await paste(_sicilian), isNull);
       expect(session.analysisPage, same(blank));
-      expect(session.fen, Fen(_sicilian));
+      expect(session.cursor.fen, const Fen(_sicilian));
       session.playMove('g1f3');
       expect(await paste(_afterE4.value), isNull);
       expect(session.analysisPage, isNot(same(blank)));
-      expect(session.fen, _afterE4);
+      expect(session.cursor.fen, _afterE4);
     });
 
     test('the pasted board keeps the side the board faces', () async {
@@ -228,23 +229,27 @@ void main() {
       session
         ..playMove('d2d4')
         ..playMove('d7d5')
-        ..back();
+        ..cursor.back();
       await session.open(file.ref);
       expect(session.isScratch, isFalse);
       expect(session.source, file.ref);
       await session.showAnalysisBoard();
       expect(session.isScratch, isTrue);
-      expect(session.currentMove?.san, 'd4', reason: 'where the user was');
+      expect(
+        session.cursor.currentMove?.san,
+        'd4',
+        reason: 'where the user was',
+      );
       expect(session.canUndo, isTrue, reason: 'its history went with it');
     });
 
     test('a new board from here keeps the root and the side', () async {
       final session = file.session;
       session
-        ..forward()
-        ..forward();
+        ..cursor.forward()
+        ..cursor.forward();
       final sans = [
-        for (final node in session.tree!.lineTo(session.cursor)) node.san,
+        for (final node in session.tree!.lineTo(session.cursor.value)) node.san,
       ];
       await session.showAnalysisBoard(
         analysisBoard(
@@ -257,7 +262,7 @@ void main() {
       expect(session.source, isNull);
       expect(session.orientation, Side.black);
       expect(session.tree!.rootFen, _afterE4);
-      expect(session.currentMove?.san, 'Nf3');
+      expect(session.cursor.currentMove?.san, 'Nf3');
       expect(session.canUndo, isFalse, reason: 'a new board has no history');
     });
   });
@@ -286,8 +291,8 @@ void main() {
   });
 
   test('a board from a position with no moves takes its first move', () {
-    final board = analysisBoard(side: Side.white, root: Fen(_sicilian));
-    expect(board.tree.rootFen, Fen(_sicilian));
+    final board = analysisBoard(side: Side.white, root: const Fen(_sicilian));
+    expect(board.tree.rootFen, const Fen(_sicilian));
     expect(board.tree.children, isEmpty);
     expect(board.tree.nodeAt(const NodePath.root()), isNull);
   });

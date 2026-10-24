@@ -127,8 +127,9 @@ final class ActionLayout extends ChangeNotifier {
       final leaves = tree.indices.toList();
       if (!leaves.contains(0) ||
           leaves.length > 4 ||
-          leaves.toSet().length != leaves.length)
+          leaves.toSet().length != leaves.length) {
         return false;
+      }
       final panes = data['panes'] as Map;
       if (leaves.any((i) => panes['$i'] is! Map)) return false;
     } on Object {
@@ -159,8 +160,9 @@ final class ActionLayout extends ChangeNotifier {
               ? null
               : known[entry['selected']],
         );
-        if (entry['empty'] == true && !pane(i).tabs.any((t) => t.pinned))
+        if (entry['empty'] == true && !pane(i).tabs.any((t) => t.pinned)) {
           _empty.add(i);
+        }
       }
       _active = data['active'] is int && visible.contains(data['active'])
           ? data['active'] as int
@@ -186,13 +188,14 @@ final class ActionLayout extends ChangeNotifier {
     }
 
     final split = parent(_root);
-    if (split != null)
+    if (split != null) {
       resize(
         split,
         (split.share +
                 (split.first.indices.contains(active) ? change : -change))
             .clamp(0.1, 0.9),
       );
+    }
   }
 
   ActionPaneNode get root => _root;
@@ -593,9 +596,7 @@ final class ActionLayout extends ChangeNotifier {
   /// ones. The main pane keeps the other tabs to be shown by name.
   void startBuilding() {
     if (count > 1) return;
-    if (_book == null) {
-      _book = ValueNotifier(false)..addListener(notifyListeners);
-    }
+    _book ??= ValueNotifier(false)..addListener(notifyListeners);
     _ensure(1, WorkspaceTab.search);
     pane(0)
       ..show(WorkspaceTab.moves)

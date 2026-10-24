@@ -9,7 +9,12 @@ import 'action_layout.dart';
 /// Pixel minima keep both usable as the window changes; the current mode
 /// supplies their content without replacing the retained layout owner.
 class BoardAndCard extends StatefulWidget {
-  const BoardAndCard({required this.board, required this.card, this.layout});
+  const BoardAndCard({
+    super.key,
+    required this.board,
+    required this.card,
+    this.layout,
+  });
 
   final ActionLayout? layout;
 
@@ -31,17 +36,18 @@ class BoardAndCardState extends State<BoardAndCard> {
   }
 
   @override
-  void didUpdateWidget(BoardAndCard old) {
-    super.didUpdateWidget(old);
-    if (old.layout == widget.layout) return;
-    old.layout?.removeListener(_changed);
+  void didUpdateWidget(BoardAndCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.layout == widget.layout) return;
+    oldWidget.layout?.removeListener(_changed);
     widget.layout?.addListener(_changed);
     _share = widget.layout?.boardFraction ?? 0.4;
   }
 
   void _changed() {
-    if (mounted)
+    if (mounted) {
       setState(() => _share = widget.layout?.boardFraction ?? _share);
+    }
   }
 
   void _resize(double share) {

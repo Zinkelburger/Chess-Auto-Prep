@@ -161,7 +161,7 @@ void main() {
   });
 
   test('castling is found in the tree whichever way it is spelled', () {
-    final position = const Fen(
+    const position = Fen(
       'r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4',
     );
     final tree = parseChapter(

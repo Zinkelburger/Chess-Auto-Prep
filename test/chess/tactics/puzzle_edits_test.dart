@@ -18,7 +18,7 @@ void main() {
   Fen fenOf(Chapter chapter, int index) =>
       puzzleOf(chapter.lines[index], index)!.fen;
 
-  test('an attempt adds the old app\'s headers in its order, before the long '
+  test('an attempt adds the stored headers in their order, before the long '
       'ones, and rewrites that game alone', () {
     final before = set();
     final after = edited(

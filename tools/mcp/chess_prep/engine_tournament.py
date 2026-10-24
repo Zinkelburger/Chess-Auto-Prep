@@ -616,8 +616,9 @@ def register_engine_tournament_tools(registry: Any) -> None:
             }
         pid = int(run["pid"])
         try:
-            # SIGINT, not SIGTERM: the runner catches it and stops cleanly
-            # after the game in flight, so the PGN stays whole.
+            # SIGINT, not SIGTERM: the runner catches it, cuts the games in
+            # flight short at their current move, saves them unfinished and
+            # marks the tournament stopped. A kill would save nothing.
             os.kill(pid, signal.SIGINT)
         except OSError as e:
             raise ToolError(f"Could not signal pid {pid}: {e}") from None
@@ -625,7 +626,10 @@ def register_engine_tournament_tools(registry: Any) -> None:
             "id": directory.name,
             "stopped": True,
             "pid": pid,
-            "note": "It finishes the game in flight first.",
+            "note": (
+                "Games in flight stop at their current move and are saved "
+                "unfinished (*); no new game starts."
+            ),
         }
 
     # ── open in the app ────────────────────────────────────────────────────
@@ -907,8 +911,9 @@ def register_engine_tournament_tools(registry: Any) -> None:
 
     registry._add(
         "tournament_game_pgn",
-        "The PGN of one game, with the engines' own evaluations, depths and "
-        "times in the move comments.",
+        "The PGN of one game as saved: tags (result, termination, time "
+        "control) and the moves. Runs started by tournament_run carry no "
+        "evaluations in the move comments.",
         _obj(
             {
                 "id": _s("Tournament id (default: the most recent)."),
@@ -921,8 +926,9 @@ def register_engine_tournament_tools(registry: Any) -> None:
 
     registry._add(
         "tournament_stop",
-        "Stop a running tournament. It finishes the game in flight first, so "
-        "the PGN and the crosstable stay consistent.",
+        "Stop a running tournament. Games in flight stop at their current "
+        "move and are saved unfinished (result *); finished games and the "
+        "crosstable are kept and no new game starts.",
         _obj({"id": _s("Tournament id (default: the most recent).")}),
         tournament_stop,
     )

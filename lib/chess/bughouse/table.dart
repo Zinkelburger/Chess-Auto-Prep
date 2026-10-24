@@ -70,6 +70,9 @@ enum Seat {
   Team get team => this == a || this == b ? Team.ab : Team.cd;
 }
 
+/// Most of one piece a hand may hold, as on the website.
+const handLimit = 16;
+
 /// One legal move on one board: UCI as the engine and the books spell it
 /// (castling `e1g1`, a drop `N@f3`, a pawn drop `P@e5`) and SAN as a
 /// bughouse player writes it (`P@e5`, not dartchess's `@e5`).
@@ -98,6 +101,21 @@ final class TablePosition {
 
   /// The engine's form: two crazyhouse FENs joined by `|`.
   String get dualFen => '${one.fen}|${two.fen}';
+
+  /// [by] more (or, negative, fewer) [role] in [side]'s hand on [board],
+  /// the count kept within 0…[handLimit].
+  TablePosition withHand(BoardNumber board, Side side, Role role, int by) {
+    final position = this.board(board);
+    var pockets = position.pockets!;
+    final target = (pockets.of(side, role) + by).clamp(0, handLimit);
+    while (pockets.of(side, role) < target) {
+      pockets = pockets.increment(side, role);
+    }
+    while (pockets.of(side, role) > target) {
+      pockets = pockets.decrement(side, role);
+    }
+    return withBoard(board, position.copyWith(pockets: pockets) as Crazyhouse);
+  }
 
   TablePosition withBoard(BoardNumber board, Crazyhouse position) =>
       board == BoardNumber.one

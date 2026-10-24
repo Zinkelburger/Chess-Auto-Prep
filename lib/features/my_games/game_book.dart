@@ -101,20 +101,14 @@ final class BookChecked extends BookState {
 /// the list is hiding.
 final class GameBook extends ChangeNotifier {
   GameBook({
-    required AccountStore accounts,
-    required GamesCache cache,
-    required RepertoireShelf shelf,
-    required Books books,
+    required this._accounts,
+    required this._cache,
+    required this._shelf,
+    required this._books,
     required SettingsStore settings,
-    required ValueListenable<Map<String, MistakeCounts>> mistakes,
-    required Future<void> Function() readMistakes,
-  }) : _accounts = accounts,
-       _cache = cache,
-       _shelf = shelf,
-       _books = books,
-       _settings = settings,
-       _mistakes = mistakes,
-       _readMistakes = readMistakes,
+    required this._mistakes,
+    required this._readMistakes,
+  }) : _settings = settings,
        _speedsSeen = settings.value.myGameSpeeds {
     _books.addListener(_bookChanged);
     _settings.addListener(_settingsChanged);

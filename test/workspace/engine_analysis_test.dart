@@ -47,7 +47,7 @@ void main() {
     fakeAsync((async) {
       running(async);
       expect(analysis.state, isA<EngineRunning>());
-      expect(engine.current.fen, session.fen);
+      expect(engine.current.fen, session.cursor.fen);
       engine.current.emit(line(multiPv: 1, score: const Centipawns(30)));
       engine.current.emit(line(multiPv: 2, score: const Centipawns(10)));
       async.flushMicrotasks();
@@ -72,16 +72,16 @@ void main() {
     fakeAsync((async) {
       running(async);
       final old = engine.current;
-      session.forward();
+      session.cursor.forward();
       expect(old.stopped, isTrue);
       expect(engine.searches, hasLength(2));
-      expect(engine.current.fen, session.fen);
+      expect(engine.current.fen, session.cursor.fen);
       old.emit(line(score: const Centipawns(99))); // still finishing
       engine.current.emit(line(score: const Centipawns(1)));
       async.elapse(tick);
       old.end();
       async.flushMicrotasks();
-      expect(analysis.snapshot!.fen, session.fen);
+      expect(analysis.snapshot!.fen, session.cursor.fen);
       expect(analysis.snapshot!.best!.score, const Centipawns(1));
     });
   });
@@ -119,7 +119,7 @@ void main() {
       async.flushMicrotasks();
       expect(start.stopped, isTrue);
       expect(engine.searches, hasLength(2));
-      expect(engine.current.fen, session.fen);
+      expect(engine.current.fen, session.cursor.fen);
     });
   });
 
@@ -143,13 +143,13 @@ void main() {
       );
       expect(analysis.enabled, isTrue, reason: 'the switch stays on');
       final searches = engine.searches.length;
-      session.forward();
+      session.cursor.forward();
       async.flushMicrotasks();
       expect(engine.searches, hasLength(searches), reason: 'not following');
       analysis.resume(fill);
       async.flushMicrotasks();
       expect(engine.searches, hasLength(searches + 1));
-      expect(engine.current.fen, session.fen);
+      expect(engine.current.fen, session.cursor.fen);
       expect(analysis.state, isA<EngineRunning>());
     });
   });
@@ -187,7 +187,7 @@ void main() {
       async.flushMicrotasks();
       expect(analysis.paused, isFalse);
       expect(engine.searches, hasLength(searches + 1));
-      expect(engine.current.fen, session.fen);
+      expect(engine.current.fen, session.cursor.fen);
     });
   });
 
@@ -242,7 +242,7 @@ void main() {
         (analysis.state as EngineFailed).reason,
         'Scripted 1 stopped unexpectedly',
       );
-      session.forward();
+      session.cursor.forward();
       expect(
         engine.searches,
         hasLength(1),
@@ -260,7 +260,7 @@ void main() {
       engine.crash();
       async.flushMicrotasks();
       expect(analysis.snapshot, isNull, reason: 'nothing is searching it');
-      session.forward();
+      session.cursor.forward();
       async.elapse(tick);
       expect(analysis.snapshot, isNull, reason: 'and the cursor has moved on');
     });
@@ -282,7 +282,11 @@ void main() {
 
       expect(engines, hasLength(2), reason: 'a fresh engine takes over');
       expect(analysis.state, isA<EngineRunning>());
-      expect(engines.last.current.fen, session.fen, reason: 'and searches');
+      expect(
+        engines.last.current.fen,
+        session.cursor.fen,
+        reason: 'and searches',
+      );
       engines.last.current.emit(line(score: const Centipawns(30)));
       async.elapse(tick);
       expect(analysis.snapshot!.best!.score, const Centipawns(-30));
@@ -356,7 +360,7 @@ void main() {
       running(async);
       analysis.dispose();
       expect(engine.quitCalled, isTrue);
-      session.forward();
+      session.cursor.forward();
       expect(engine.searches, hasLength(1));
     });
   });
@@ -367,7 +371,7 @@ void main() {
     ScriptedSearch showThreat(FakeAsync async) {
       analysis.showThreat(true);
       async.flushMicrotasks();
-      final passed = threatFen(session.fen);
+      final passed = threatFen(session.cursor.fen);
       return engine.searches.lastWhere(
         (search) => search.depth == threatDepth && search.fen == passed,
       );
@@ -378,10 +382,10 @@ void main() {
       fakeAsync((async) {
         running(async);
         final look = showThreat(async);
-        expect(look.fen, threatFen(session.fen));
+        expect(look.fen, threatFen(session.cursor.fen));
         expect(look.depth, threatDepth);
         expect(look.multiPv, 1);
-        expect(engine.current.fen, session.fen);
+        expect(engine.current.fen, session.cursor.fen);
         expect(engine.current.depth, isNull, reason: 'the lines stay open');
         look.emit(line(pv: const ['d2d4']));
         look.emit(line(depth: 12, pv: const ['g1f3', 'g8f6']));
@@ -389,7 +393,7 @@ void main() {
         expect(analysis.threat.value, isNull, reason: 'not before the end');
         look.end();
         async.flushMicrotasks();
-        expect(analysis.threat.value, (fen: session.fen, uci: 'g1f3'));
+        expect(analysis.threat.value, (fen: session.cursor.fen, uci: 'g1f3'));
       });
     });
 
@@ -399,13 +403,13 @@ void main() {
         fakeAsync((async) {
           running(async);
           final look = showThreat(async);
-          session.forward();
+          session.cursor.forward();
           expect(look.stopped, isTrue);
           look.emit(line(pv: const ['d2d4']));
           look.end();
           async.flushMicrotasks();
           expect(analysis.threat.value, isNull);
-          expect(engine.current.fen, session.fen);
+          expect(engine.current.fen, session.cursor.fen);
         });
       },
     );
@@ -447,7 +451,7 @@ void main() {
         );
         look.end();
         async.flushMicrotasks();
-        expect(analysis.threat.value, (fen: session.fen, uci: 'd1h5'));
+        expect(analysis.threat.value, (fen: session.cursor.fen, uci: 'd1h5'));
       });
     });
 
@@ -482,7 +486,7 @@ void main() {
     test('is not looked for while it is not shown', () {
       fakeAsync((async) {
         running(async);
-        session.forward();
+        session.cursor.forward();
         expect(engine.searches.every((search) => search.depth == null), isTrue);
       });
     });

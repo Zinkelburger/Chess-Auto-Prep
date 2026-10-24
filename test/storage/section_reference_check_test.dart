@@ -136,10 +136,10 @@ void main() {
   test(
     'header lexer handles whitespace, escaping, same-line tags and comments',
     () {
-      final before =
+      const before =
           '[Event "Line"] [ChapterName " A "]\n\n1. e4 { [ChapterName "false"] } *\n';
-      final after =
-          '[Event "Line"] [ChapterName "Quote\\\"Name"]\n\n1. e4 { [ChapterName "false"] } *\n';
+      const after =
+          '[Event "Line"] [ChapterName "Quote\\"Name"]\n\n1. e4 { [ChapterName "false"] } *\n';
       expect(
         problem(
           before,

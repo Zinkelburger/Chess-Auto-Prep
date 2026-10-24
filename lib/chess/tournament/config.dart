@@ -75,33 +75,44 @@ final class TournamentConfig {
   String? get problem {
     if (name.trim().isEmpty) return 'Name the tournament.';
     if (engines.length < 2 || engines.length > 32) return 'Pick 2–32 engines.';
-    if (gamesPerPairing < 1 || gamesPerPairing > 1000)
+    if (gamesPerPairing < 1 || gamesPerPairing > 1000) {
       return 'Use 1–1000 games per pairing.';
+    }
     if (gameCount > 100000) return 'Limit a run to 100000 games.';
-    if (concurrency < 1 || concurrency > 64)
+    if (concurrency < 1 || concurrency > 64) {
       return 'Use 1–64 simultaneous games.';
+    }
     if (maxMoves < 1 || maxMoves > 10000) return 'Use 1–10000 moves per game.';
     for (final engine in engines) {
       if (engine.threads < 1 ||
           engine.threads > 1024 ||
           engine.memory < 1 ||
-          engine.memory > 65536)
+          engine.memory > 65536) {
         return 'Use 1–1024 cores and 1–65536 MB per engine.';
+      }
       if (engine.options.entries.any(
         (e) => '${e.key}${e.value}'.contains(RegExp(r'[\r\n]')),
-      ))
+      )) {
         return 'Engine options must be single lines.';
+      }
     }
-    if (!{'movetime', 'incremental', 'fixedDepth', 'fixedNodes'}.contains(kind))
+    if (!{
+      'movetime',
+      'incremental',
+      'fixedDepth',
+      'fixedNodes',
+    }.contains(kind)) {
       return 'Choose a supported time control.';
+    }
     final key = switch (kind) {
       'incremental' => 'baseMs',
       'fixedDepth' => 'depth',
       'fixedNodes' => 'nodes',
       _ => 'movetimeMs',
     };
-    if (timeNumber(key, 1) <= 0 || timeNumber('incrementMs', 0) < 0)
+    if (timeNumber(key, 1) <= 0 || timeNumber('incrementMs', 0) < 0) {
       return 'Time and search limits must be positive.';
+    }
     try {
       Chess.fromSetup(Setup.parseFen(root.value));
     } on Object {
@@ -160,9 +171,8 @@ bool legalOpeningMove(String? uci) {
       Chess.fromSetup(Setup.parseFen(Fen.initial.value)).isLegal(move);
 }
 
-/// One-click time controls for a new run, the old app's list. Clocks are
-/// scaled for engines: an engine's blitz is a minute, not three. Sudden
-/// death leaves `movesPerSession` out: v1 reads a 0 as a 0-move period.
+/// One-click time controls for a new run. Clocks are scaled for engines: an
+/// engine's blitz is a minute, not three.
 const tournamentTimePresets = <({String label, Map<String, Object?> time})>[
   (label: '1 s / move', time: {'kind': 'movetime', 'movetimeMs': 1000}),
   (label: '2 s / move', time: {'kind': 'movetime', 'movetimeMs': 2000}),
@@ -201,17 +211,18 @@ String describeTime(Map<String, Object?> time) {
     'incremental' => [
       if (number('movesPerSession', 0) case final moves when moves > 0)
         '$moves moves in',
-      '${_seconds(number('baseMs', 60000))} s +',
-      '${_seconds(number('incrementMs', 600))} s',
+      '${tournamentSeconds(number('baseMs', 60000))} s +',
+      '${tournamentSeconds(number('incrementMs', 600))} s',
     ].join(' '),
     'fixedDepth' => 'Depth ${number('depth', 12)}',
     'fixedNodes' => '${_count(number('nodes', 1000000))} nodes',
-    _ => '${_seconds(number('movetimeMs', 2000))} s / move',
+    _ => '${tournamentSeconds(number('movetimeMs', 2000))} s / move',
   };
 }
 
 /// Milliseconds as seconds without a trailing `.0`: 600 → `0.6`, 2000 → `2`.
-String _seconds(int ms) => ms % 1000 == 0 ? '${ms ~/ 1000}' : '${ms / 1000}';
+String tournamentSeconds(int ms) =>
+    ms % 1000 == 0 ? '${ms ~/ 1000}' : '${ms / 1000}';
 
 /// 1000000 → `1M`, 5000 → `5k`, 1234 → `1234`.
 String _count(int n) => n % 1000000 == 0

@@ -26,8 +26,8 @@ mixin ListeningState<T extends StatefulWidget> on State<T> {
   }
 
   @override
-  void didUpdateWidget(T old) {
-    super.didUpdateWidget(old);
+  void didUpdateWidget(T oldWidget) {
+    super.didUpdateWidget(oldWidget);
     final now = listenableOf(widget);
     if (_followed == null || _followed == now) return;
     _followed!.removeListener(_changed);

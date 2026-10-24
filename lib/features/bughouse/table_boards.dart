@@ -1,34 +1,45 @@
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../chess/bughouse/table.dart';
-import '../../chess/bughouse/table_line.dart';
-import '../../ui/app_keys.dart';
+import '../../chess/pgn/board_shapes.dart';
 import '../../ui/theme.dart';
+import '../../workspace/board_view.dart';
 import 'bughouse_lab.dart';
-import 'archive_moves.dart';
-import 'move_tables.dart';
-import '../../ui/move_notation.dart';
+import 'lab_engine.dart';
+import 'lab_lines.dart';
+import 'pocket.dart';
 
-/// Both boards side by side, each with its two players and their
-/// reserves, its own move list, step buttons and FICS continuations.
+/// The boards on screen, each with its two players' hands: board 1 alone,
+/// or both side by side, each with its engine's best moves under it. The
+/// move lists are in the panel.
+///
+/// While the engine is on, each board shows its best moves as lila's
+/// analysis board does: the engine's choice a pale blue arrow, the moves
+/// close behind it thinner grey ones, a drop as a ring on its square with
+/// the piece inside. A right-drag draws an arrow and a right-click a circle, in
+/// lila's colours; a left click or a new position takes them away. The
+/// wheel over a board steps that board.
 ///
 /// Board 1 has A (White) and C (Black), board 2 D (White) and B (Black); our
 /// team's colour is at the bottom of board 1 unless the boards are flipped.
-/// A piece moves by click or drag; a reserve piece is dragged onto a square,
+/// A piece moves by click or drag; a hand's piece is dragged onto a square,
 /// or clicked and then its square clicked, the squares it may go to ringed.
+/// The − and + in a hand's slot, shown while the pointer is over it, take
+/// one of that piece away or add one.
 class TableBoards extends StatefulWidget {
   const TableBoards({
     super.key,
     required this.lab,
+    required this.engine,
     required this.boardSize,
-    this.archive,
   });
 
   final BughouseLab lab;
+  final LabEngine engine;
   final double boardSize;
-  final ArchiveMoves? archive;
 
   @override
   State<TableBoards> createState() => _TableBoardsState();
@@ -65,8 +76,9 @@ class _TableBoardsState extends State<TableBoards> {
   }
 
   void _tableChanged() {
-    if (!mounted || _picked == null || _stillPicked(_lab.position) != null)
+    if (!mounted || _picked == null || _stillPicked(_lab.position) != null) {
       return;
+    }
     setState(() => _picked = null);
   }
 
@@ -105,19 +117,20 @@ class _TableBoardsState extends State<TableBoards> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([_lab, ?widget.archive]),
+      listenable: Listenable.merge([_lab, widget.engine]),
       builder: (context, _) {
         final picked = _stillPicked(_lab.position);
+        final shown = _lab.single ? [BoardNumber.one] : BoardNumber.values;
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final board in BoardNumber.values) ...[
+            for (final board in shown) ...[
               if (board == BoardNumber.two) const SizedBox(width: labBoardGap),
               _BoardColumn(
                 lab: _lab,
+                engine: widget.engine,
                 board: board,
                 size: widget.boardSize,
-                archive: widget.archive,
                 picked: picked?.board == board ? picked!.role : null,
                 onPick: (role) => _pick(board, role),
                 onTouched: (square) => _touched(board, square),
@@ -134,17 +147,17 @@ class _TableBoardsState extends State<TableBoards> {
 class _BoardColumn extends StatelessWidget {
   const _BoardColumn({
     required this.lab,
+    required this.engine,
     required this.board,
     required this.size,
     required this.picked,
     required this.onPick,
     required this.onTouched,
     required this.onMove,
-    this.archive,
   });
 
   final BughouseLab lab;
-  final ArchiveMoves? archive;
+  final LabEngine engine;
   final BoardNumber board;
   final double size;
   final Role? picked;
@@ -156,7 +169,7 @@ class _BoardColumn extends StatelessWidget {
   Widget build(BuildContext context) {
     final bottom = lab.bottom(board);
     Widget seat(Side side) => _SeatRow(
-      position: lab.position,
+      lab: lab,
       board: board,
       side: side,
       square: size / 8,
@@ -170,70 +183,133 @@ class _BoardColumn extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              board.label,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
+            if (!lab.single)
+              SizedBox(
+                height: labBoardLabelHeight,
+                child: Text(
+                  board.label,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
             seat(bottom.opposite),
-            ValueListenableBuilder(
-              valueListenable: lab.preview,
-              builder: (context, preview, _) => _Board(
-                key: ValueKey(board),
-                position: lab.position.board(board),
-                size: size,
-                orientation: bottom,
-                lastMove: lab.line.current(board)?.uci,
-                shapes: _shapes(preview?[board]),
-                onMove: onMove,
-                onTouched: onTouched,
+            Listener(
+              onPointerSignal: _wheel,
+              child: ValueListenableBuilder(
+                valueListenable: lab.preview,
+                builder: (context, preview, _) {
+                  final pointed = preview?[board];
+                  final rows = pointed == null
+                      ? engine.rowsOn(board)
+                      : const <EngineRow>[];
+                  return _Board(
+                    key: ValueKey(board),
+                    position: lab.position.board(board),
+                    size: size,
+                    orientation: bottom,
+                    lastMove: lab.line.current(board)?.uci,
+                    shapes: _shapes(pointed, rows),
+                    arrows: [
+                      if (pointed != null) ?_arrow(pointed, best: true),
+                      for (final (i, row) in rows.indexed)
+                        if (row.move case final uci?
+                            when i == 0 || row.shift < engineArrowCutoff)
+                          ?_arrow(uci, best: i == 0, shift: row.shift),
+                    ],
+                    onMove: onMove,
+                    onTouched: onTouched,
+                  );
+                },
               ),
             ),
             seat(bottom),
-            BoardMoves(lab: lab, board: board),
-            if (archive case final archive? when archive.available)
-              ArchiveBlock(lab: lab, archive: archive, board: board),
+            if (!lab.single) ...[
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  ),
+                ),
+                child: BoardLineRows(
+                  lab: lab,
+                  lines: engine.lines,
+                  board: board,
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  /// The move pointed at in a table, as an arrow or, for a drop, the piece
-  /// faint on its square; and while a reserve piece is picked up, the
-  /// squares it may go to.
-  Set<Shape> _shapes(String? pointed) {
+  /// The wheel steps this board: down a move forward, up a move back, as
+  /// on lila; the column around it does not scroll.
+  void _wheel(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || event.scrollDelta.dy == 0) return;
+    GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+      lab.stepOn(board, event.scrollDelta.dy > 0 ? 1 : -1);
+    });
+  }
+
+  /// A move pointed at in a row, or one of the engine's best, as lila's
+  /// engine arrow: pale blue for the choice, grey and thinner the further
+  /// [shift] behind it. A drop has no arrow.
+  EngineArrow? _arrow(String uci, {required bool best, double shift = 0}) =>
+      switch (Move.parse(uci)) {
+        NormalMove(:final from, :final to) => (
+          from: from,
+          to: to,
+          colour: best ? engineBestArrow : engineOtherArrow,
+          width: best ? engineArrowWidth : (12 - shift * 50).roundToDouble(),
+        ),
+        _ => null,
+      };
+
+  /// Drops pointed at or among the engine's best as lila draws them: a ring
+  /// on the square in the arrow's colour, pale blue for the choice and grey
+  /// for the rest, with the piece inside it; and while a reserve piece is
+  /// picked up, the squares it may go to.
+  Set<Shape> _shapes(String? pointed, List<EngineRow> rows) {
     final position = lab.position.board(board);
+    List<Shape> drop(String uci, {required bool best}) =>
+        switch (Move.parse(uci)) {
+          DropMove(:final to, :final role) => [
+            Circle(color: best ? engineBestArrow : engineOtherArrow, orig: to),
+            PieceShape(
+              orig: to,
+              piece: Piece(color: position.turn, role: role),
+              pieceAssets: PieceSet.cburnettAssets,
+              opacity: best ? 0.6 : 0.4,
+              scale: 0.8,
+            ),
+          ],
+          _ => const [],
+        };
     return {
-      if (pointed != null)
-        switch (Move.parse(pointed)) {
-          NormalMove(:final from, :final to) => Arrow(
-            color: labHintColor,
-            orig: from,
-            dest: to,
-          ),
-          DropMove(:final to, :final role) => PieceShape(
-            color: labHintColor,
-            orig: to,
-            piece: Piece(color: position.turn, role: role),
-            pieceAssets: PieceSet.cburnettAssets,
-          ),
-          null => null,
-        },
+      if (pointed != null) ...drop(pointed, best: true),
+      for (final (i, row) in rows.indexed)
+        if (row.move case final uci?
+            when i == 0 || row.shift < engineArrowCutoff)
+          ...drop(uci, best: i == 0),
       if (picked case final role?)
         for (final square in position.legalDrops.squares)
           if (position.isLegal(DropMove(to: square, role: role)))
             Circle(color: labHintColor, orig: square, scale: 0.5),
-    }.nonNulls.toSet();
+    };
   }
 }
 
-/// A player's reserve as lila's crazyhouse pocket: five slots, each the size
-/// of a board square, in a grey well beside the seat's letter. Pieces held
-/// show in full with their count; empty slots stay in place, faint. Only
-/// the player on move can drop, by click then square, or drag.
+/// A player's hand as lila's crazyhouse pocket: five slots, each the size
+/// of a board square, in a grey well beside the turn dot and, with both
+/// boards shown, the seat's letter. Pieces held show in full with their
+/// count; empty slots stay in place, faint. Only the player on move can
+/// drop, by click then square, or drag. While the pointer is over a slot
+/// a − and a + in its corners take one of that piece away or add one.
 class _SeatRow extends StatelessWidget {
   const _SeatRow({
-    required this.position,
+    required this.lab,
     required this.board,
     required this.side,
     required this.square,
@@ -241,11 +317,11 @@ class _SeatRow extends StatelessWidget {
     required this.onPick,
   });
 
-  final TablePosition position;
+  final BughouseLab lab;
   final BoardNumber board;
   final Side side;
 
-  /// A square of the board, the size of a reserve piece.
+  /// A square of the board, the size of a hand's piece.
   final double square;
   final Role? picked;
   final ValueChanged<Role> onPick;
@@ -253,187 +329,41 @@ class _SeatRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final position = lab.position;
     final seat = Seat.of(board, side);
     final toMove = position.turn(board) == side;
     final pockets = position.board(board).pockets!;
-    return SizedBox(
-      height: square + labSeatPadding,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: labSeatPadding / 2),
       child: Row(
         children: [
-          _TurnDot(side: side, shown: toMove),
+          TurnDot(side: side, shown: toMove),
           const SizedBox(width: Space.s),
-          SizedBox(
-            width: Space.l,
-            child: Text(
-              seat.letter,
-              style: TextStyle(
-                color: toMove ? scheme.onSurface : scheme.onSurfaceVariant,
-                fontWeight: toMove ? FontWeight.w600 : null,
+          if (!lab.single)
+            SizedBox(
+              width: Space.l,
+              child: Text(
+                seat.letter,
+                style: TextStyle(
+                  color: toMove ? scheme.onSurface : scheme.onSurfaceVariant,
+                  fontWeight: toMove ? FontWeight.w600 : null,
+                ),
               ),
             ),
-          ),
-          Container(
-            width: square * reserveRoles.length,
-            height: square,
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              gradient: labPocketWell,
-              borderRadius: BorderRadius.circular(Space.xs),
-            ),
-            child: Row(
-              children: [
-                for (final role in reserveRoles)
-                  _ReservePiece(
-                    key: ValueKey(('reserve', seat, role)),
-                    piece: Piece(color: side, role: role),
-                    count: pockets.of(side, role),
-                    seat: seat,
-                    size: square,
-                    live: toMove && pockets.of(side, role) > 0,
-                    picked: toMove && picked == role,
-                    onPick: () => onPick(role),
-                  ),
-              ],
-            ),
+          PocketWell(
+            pockets: pockets,
+            side: side,
+            seat: seat,
+            owner: lab.single
+                ? (side == Side.white ? 'White' : 'Black')
+                : 'Player ${seat.letter}',
+            square: square,
+            live: toMove,
+            picked: picked,
+            onPick: onPick,
+            onStep: (role, by) => lab.adjustHand(board, side, role, by),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _TurnDot extends StatelessWidget {
-  const _TurnDot({required this.side, required this.shown});
-
-  final Side side;
-  final bool shown;
-
-  @override
-  Widget build(BuildContext context) => Visibility.maintain(
-    visible: shown,
-    child: Tooltip(
-      message: side == Side.white ? 'White to move' : 'Black to move',
-      child: Container(
-        width: labTurnDot,
-        height: labTurnDot,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: side == Side.white ? labWhiteDot : labBlackDot,
-          border: side == Side.black
-              ? Border.all(color: labBlackDotRing)
-              : null,
-        ),
-      ),
-    ),
-  );
-}
-
-class _ReservePiece extends StatefulWidget {
-  const _ReservePiece({
-    super.key,
-    required this.piece,
-    required this.count,
-    required this.seat,
-    required this.size,
-    required this.live,
-    required this.picked,
-    required this.onPick,
-  });
-
-  final Piece piece;
-  final int count;
-  final Seat seat;
-  final double size;
-
-  /// Whether its player is on move, so it may be dropped now.
-  final bool live;
-  final bool picked;
-  final VoidCallback onPick;
-
-  @override
-  State<_ReservePiece> createState() => _ReservePieceState();
-}
-
-class _ReservePieceState extends State<_ReservePiece> {
-  bool _hovered = false;
-
-  void _hover(bool on) {
-    if (mounted && _hovered != on) setState(() => _hovered = on);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final size = widget.size;
-    final count = widget.count;
-    final role = widget.piece.role.name;
-    Widget image() => PieceWidget(
-      piece: widget.piece,
-      size: size,
-      pieceAssets: PieceSet.cburnettAssets,
-    );
-    final face = Container(
-      width: size,
-      height: size,
-      color: widget.picked
-          ? BoardTheme.of(context).selected
-          : widget.live && _hovered
-          ? labPocketHover
-          : null,
-      child: Stack(
-        children: [
-          Opacity(
-            opacity: count == 0 ? labPocketEmptyOpacity : 1,
-            child: image(),
-          ),
-          if (count > 0)
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: Space.xs,
-                  vertical: 3,
-                ),
-                decoration: BoxDecoration(
-                  color: labPocketCount,
-                  borderRadius: BorderRadius.circular(Space.xs),
-                ),
-                child: Text('$count', style: labPocketCountStyle(size)),
-              ),
-            ),
-        ],
-      ),
-    );
-    final label = 'Player ${widget.seat.letter}: $count $role in reserve';
-    if (!widget.live) {
-      return Tooltip(
-        message: count == 0
-            ? 'No $role in reserve'
-            : '$label · waiting for turn',
-        child: Semantics(label: label, child: face),
-      );
-    }
-    return Tooltip(
-      message:
-          '$label · click, then click a highlighted square, or drag onto the board',
-      child: Semantics(
-        label: label,
-        selected: widget.picked,
-        button: true,
-        child: Draggable<Piece>(
-          data: widget.piece,
-          // Held under the pointer by its middle, as a piece on the board is.
-          dragAnchorStrategy: (draggable, context, position) =>
-              Offset(size / 2, size / 2),
-          feedback: image(),
-          childWhenDragging: Opacity(opacity: 0.3, child: face),
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            onEnter: (_) => _hover(true),
-            onExit: (_) => _hover(false),
-            child: GestureDetector(onTap: widget.onPick, child: face),
-          ),
-        ),
       ),
     );
   }
@@ -450,6 +380,7 @@ class _Board extends StatefulWidget {
     required this.orientation,
     required this.lastMove,
     required this.shapes,
+    required this.arrows,
     required this.onMove,
     required this.onTouched,
   });
@@ -459,6 +390,9 @@ class _Board extends StatefulWidget {
   final Side orientation;
   final String? lastMove;
   final Set<Shape> shapes;
+
+  /// The engine's arrows, under any the user draws.
+  final List<EngineArrow> arrows;
   final ValueChanged<Move> onMove;
   final ValueChanged<Square> onTouched;
 
@@ -468,6 +402,10 @@ class _Board extends StatefulWidget {
 
 class _BoardState extends State<_Board> {
   late final _controller = ChessboardController(game: _game());
+
+  /// What the user drew on this position, and the shape under a right-drag.
+  List<BoardShape> _drawn = const [];
+  BoardShape? _drawing;
 
   GameData _game() {
     final position = widget.position;
@@ -490,6 +428,10 @@ class _BoardState extends State<_Board> {
     if (old.position != widget.position || old.lastMove != widget.lastMove) {
       _controller.updatePosition(_game());
     }
+    if (old.position != widget.position) {
+      _drawn = const [];
+      _drawing = null;
+    }
   }
 
   @override
@@ -503,239 +445,86 @@ class _BoardState extends State<_Board> {
     final settings = BoardTheme.of(
       context,
     ).settings(coordinates: true).copyWith(enableDrops: true);
-    return Chessboard(
-      size: widget.size,
-      controller: _controller,
-      orientation: widget.orientation,
-      settings: settings,
-      shapes: widget.shapes,
-      onMove: (move, {viaDragAndDrop}) => widget.onMove(move),
-      onTouchedSquare: widget.onTouched,
-    );
-  }
-}
-
-/// A board's own moves, numbered as that board counts them, the current
-/// one marked and the ones stepped past faint, with the four step buttons.
-class BoardMoves extends StatelessWidget {
-  const BoardMoves({super.key, required this.lab, required this.board});
-
-  final BughouseLab lab;
-  final BoardNumber board;
-
-  @override
-  Widget build(BuildContext context) {
-    final line = lab.line;
-    final upto = line.upto(board);
-    final total = line.of(board).length;
-    final scheme = Theme.of(context).colorScheme;
-    final focused = lab.focus == board;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          height: labMoveListHeight,
-          decoration: BoxDecoration(
-            border: Border.symmetric(
-              horizontal: BorderSide(
-                color: focused ? scheme.primary : scheme.outline,
+    final shown = [..._drawn, ?_drawing];
+    return Listener(
+      onPointerDown: _down,
+      onPointerMove: _move,
+      onPointerUp: (_) => _up(),
+      onPointerCancel: (_) => setState(() => _drawing = null),
+      child: Stack(
+        children: [
+          Chessboard(
+            size: widget.size,
+            controller: _controller,
+            orientation: widget.orientation,
+            settings: settings,
+            shapes: {
+              ...widget.shapes,
+              for (final shape in shown)
+                if (shape.isCircle) circleShape(shape),
+            },
+            onMove: (move, {viaDragAndDrop}) => widget.onMove(move),
+            onTouchedSquare: widget.onTouched,
+          ),
+          // Over the pieces, as on lila, and away while a pawn waits for
+          // the piece it becomes.
+          Positioned.fill(
+            child: IgnorePointer(
+              child: ValueListenableBuilder(
+                // ignore: invalid_use_of_internal_member
+                valueListenable: _controller.pendingPromotionNotifier,
+                builder: (context, promotion, _) => promotion != null
+                    ? const SizedBox.shrink()
+                    : BoardArrows(
+                        engine: widget.arrows,
+                        arrows: [
+                          for (final shape in shown)
+                            if (!shape.isCircle) shape,
+                        ],
+                        drawing: _drawing?.isCircle ?? true ? null : _drawing,
+                        orientation: widget.orientation,
+                      ),
               ),
             ),
           ),
-          child: _MoveRows(lab: lab, board: board),
-        ),
-        const SizedBox(height: Space.xs),
-        Row(
-          children: [
-            _step(
-              Icons.first_page,
-              AppKey.firstMove.tip('First move'),
-              upto > 0,
-              0,
-            ),
-            _step(
-              Icons.chevron_left,
-              AppKey.stepBack.tip('Back'),
-              upto > 0,
-              upto - 1,
-            ),
-            _step(
-              Icons.chevron_right,
-              AppKey.stepForward.tip('Forward'),
-              upto < total,
-              upto + 1,
-            ),
-            _step(
-              Icons.last_page,
-              AppKey.lastMove.tip('Last move'),
-              upto < total,
-              total,
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _step(IconData icon, String tip, bool enabled, int to) => IconButton(
-    icon: Icon(icon, size: IconSize.action),
-    tooltip: '$tip, ${board.label.toLowerCase()}',
-    visualDensity: VisualDensity.compact,
-    onPressed: enabled ? () => lab.go(board, to) : null,
-  );
-}
-
-/// The move list, kept scrolled so the current move is in view.
-class _MoveRows extends StatefulWidget {
-  const _MoveRows({required this.lab, required this.board});
-
-  final BughouseLab lab;
-  final BoardNumber board;
-
-  @override
-  State<_MoveRows> createState() => _MoveRowsState();
-}
-
-class _MoveRowsState extends State<_MoveRows> {
-  final _scroll = ScrollController();
-
-  BughouseLab get lab => widget.lab;
-  BoardNumber get board => widget.board;
-
-  @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  /// After the frame, the least scroll that shows the row of the current
-  /// move.
-  void _reveal(int row) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scroll.hasClients) return;
-      final position = _scroll.position;
-      final top = row * labMoveRowHeight;
-      final bottom = top + labMoveRowHeight - position.viewportDimension;
-      final offset = position.pixels.clamp(bottom, top);
-      if (offset != position.pixels) {
-        _scroll.jumpTo(offset.clamp(0, position.maxScrollExtent));
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final moves = lab.line.of(board);
-    final scheme = Theme.of(context).colorScheme;
-    if (moves.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(Space.xs),
-        child: Text(
-          'No moves yet',
-          style: TextStyle(color: scheme.onSurfaceVariant),
-        ),
-      );
-    }
-    final rows = _pairs(moves);
-    final upto = lab.line.upto(board);
-    _reveal(
-      rows
-          .indexWhere(
-            (row) => [row.white, row.black].any((h) => h?.index == upto - 1),
-          )
-          .clamp(0, rows.length - 1),
-    );
-    return ListView.builder(
-      controller: _scroll,
-      itemExtent: labMoveRowHeight,
-      itemCount: rows.length,
-      itemBuilder: (context, i) => Row(
-        children: [
-          SizedBox(
-            width: labMoveNumberWidth,
-            child: Text(
-              '${rows[i].number}.',
-              style: monoText.copyWith(color: scheme.onSurfaceVariant),
-            ),
-          ),
-          for (final half in [rows[i].white, rows[i].black])
-            Expanded(
-              child: half == null
-                  ? const SizedBox.shrink()
-                  : _MoveToken(
-                      move: half.move,
-                      current: half.index == upto - 1,
-                      future: half.index >= upto,
-                      onTap: () => lab.go(board, half.index + 1),
-                    ),
-            ),
         ],
       ),
     );
   }
 
-  /// The moves two to a row, White's then Black's, a row starting with
-  /// Black's move when the board began with Black to move.
-  static List<_MovePair> _pairs(List<LineMove> moves) {
-    final rows = <_MovePair>[];
-    for (final (i, move) in moves.indexed) {
-      final half = (move: move, index: i);
-      if (move.side == Side.white || rows.isEmpty || rows.last.black != null) {
-        rows.add((
-          number: move.number,
-          white: move.side == Side.white ? half : null,
-          black: move.side == Side.black ? half : null,
-        ));
-      } else {
-        final last = rows.removeLast();
-        rows.add((number: last.number, white: last.white, black: half));
-      }
+  /// The right button starts a shape on the square under it; the left one
+  /// takes the drawn ones away, as a click does on lila, and plays on.
+  void _down(PointerDownEvent event) {
+    if (event.buttons == kSecondaryButton) {
+      final square = squareAt(
+        event.localPosition,
+        widget.size,
+        widget.orientation,
+      );
+      if (square == null) return;
+      setState(() => _drawing = BoardShape.circle(square, heldShapeColour()));
+    } else if (event.buttons == kPrimaryButton && _drawn.isNotEmpty) {
+      setState(() => _drawn = const []);
     }
-    return rows;
   }
-}
 
-typedef _Half = ({LineMove move, int index});
-typedef _MovePair = ({int number, _Half? white, _Half? black});
-
-class _MoveToken extends StatelessWidget {
-  const _MoveToken({
-    required this.move,
-    required this.current,
-    required this.future,
-    required this.onTap,
-  });
-
-  final LineMove move;
-  final bool current;
-  final bool future;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final seat = Seat.of(move.board, move.side);
-    return Tooltip(
-      message: 'Player ${seat.letter}',
-      waitDuration: previewDelay,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          padding: moveTokenPadding,
-          color: current ? scheme.surfaceContainerHighest : null,
-          child: Text(
-            displaySan(context, move.san),
-            style: monoText.copyWith(
-              color: current
-                  ? scheme.primary
-                  : future
-                  ? scheme.onSurfaceVariant
-                  : scheme.onSurface,
-              fontWeight: current ? FontWeight.w600 : null,
-            ),
-          ),
-        ),
-      ),
+  void _move(PointerMoveEvent event) {
+    final drawing = _drawing;
+    final square = squareAt(
+      event.localPosition,
+      widget.size,
+      widget.orientation,
     );
+    if (drawing == null || square == null || square == drawing.to) return;
+    setState(() => _drawing = BoardShape(drawing.from, square, drawing.colour));
+  }
+
+  void _up() {
+    final drawn = _drawing;
+    if (drawn == null) return;
+    setState(() {
+      _drawing = null;
+      _drawn = withShapeDrawn(_drawn, drawn);
+    });
   }
 }

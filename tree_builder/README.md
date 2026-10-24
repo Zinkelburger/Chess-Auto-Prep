@@ -1,19 +1,21 @@
-> Stockfish expectimax (Pure and Fast) now uses **Maia throughout**. Master
+> Stockfish expectimax (Pure and Fast) uses **Maia throughout**. Master
 > and Lichess flags apply only to separate database build modes; old settings
 > cannot re-enable master replies. Start a new build for an old master-based
 > tree. Maia must be available; there is no database fallback.
 
 # Standalone expectimax builder
 
-Both this C program and the Flutter app follow [the same Pure contract](../docs/ALGORITHM.md).
-The C program is also what the chess-prep MCP expectimax tools launch.
+This C program implements [the Pure expectimax contract](../docs/ALGORITHM.md).
+The app's search (`lib/chess/generation/search.dart`) uses the same recurrence
+and v4 tree format, with a narrower interactive candidate policy.
+It is what the chess-prep MCP expectimax tools launch.
 
 Pure searches every legal candidate within the explicit engine-loss constraint
 and every positive-probability opponent reply. No novelty/setup bonuses, MultiPV
 caps, probability cutoffs, or separate deep-verification promise. The app's
 opponent-reply cut is opt-in: `--reply-mass 0.9 --max-replies 5` keeps the
 likeliest replies to 90% of Maia's distribution, at most five, renormalized
-(the chess-prep MCP always passes these). A saved tree records its cut and
+(the chess-prep MCP passes these by default). A saved tree records its cut and
 resumes only with it.
 
 ## Requirements
@@ -51,10 +53,11 @@ The executable will be at `bin/tree_builder`.
 
 ## Usage
 
-Pure is the default. Add `--search fast` for approximate repeated four-ply
-lookahead: commit our next move, retain every modeled opponent reply, and repeat.
-See [the design and tradeoffs](../docs/ROLLING_SEARCH_AND_STUDY_LINES.md).
-
+Pure is the default. Add `--search fast` (alias `rolling`) for approximate
+repeated four-ply lookahead: commit our next move, retain every modeled
+opponent reply, and repeat. Only this builder and the MCP that launches it have
+Fast; the app reads only Pure trees. See
+[Fast search](../docs/ALGORITHM.md#fast-search-c-builder-and-mcp-only).
 
 Start small: branching is exponential. A four-ply tree can still be expensive.
 
@@ -63,14 +66,19 @@ Start small: branching is exponential. A four-ply tree can still be expensive.
   --maia-model /path/to/maia3_simplified.onnx -S /path/to/stockfish output
 ```
 
-Master targeting is on by default: Lichess master-game frequencies in book,
-Maia off-book. Add `--maia-only` to use Maia throughout. `--maia-elo` controls
-the predicted opponent rating. The app's local book is a different data source.
+Stockfish expectimax (the default `--build-mode`) uses Maia for every
+opponent position; `--maia-model` is required. `-m`/`--masters` and `--lichess`
+apply only to the database build modes and cannot switch expectimax off Maia,
+including when `--resume` restores them. `--maia-elo` sets the predicted
+opponent rating (default 2200). Defaults: `-d 4`, `-e 16`, `--max-eval-loss 50`.
 
 Output includes `output.pgn`, `output.tree.json`, and the cache database.
-`--resume` continues a compatible saved Pure tree. Change engine depth, safety
-limit, opponent model, or root by starting a new build. Legacy trees remain
-readable but cannot be resumed as Pure. An interrupted search is incomplete;
+Running again with the same name continues `output.tree.json`; `--resume`
+additionally restores the earlier run's flags from `output.db`. A continued
+tree keeps its root, side, engine depth, loss limit, Maia rating, search method
+and reply cut, and its horizon may only grow; change any of those by starting a
+new build. Heuristic trees from earlier builder versions remain readable but
+cannot be resumed as Pure. An interrupted search is incomplete;
 its current move ordering is provisional and its value bounds are reported.
 
 `make test-pure` checks production backup against the shared independently

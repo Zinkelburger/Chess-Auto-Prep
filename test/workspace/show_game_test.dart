@@ -18,11 +18,11 @@ void main() {
       fixture = await openSession(twoChapterStudy);
       session = fixture.session;
       await session.open(fixture.ref, game: 0);
-      session.forward();
-      expect(session.cursor.isRoot, isFalse);
+      session.cursor.forward();
+      expect(session.cursor.value.isRoot, isFalse);
       session.showGame(1);
       expect(session.game, 1);
-      expect(session.cursor.isRoot, isTrue);
+      expect(session.cursor.value.isRoot, isTrue);
       expect(session.tree?.children.single.san, 'd4');
       expect(session.source, fixture.ref);
       expect(session.chapter?.lines.length, 2);

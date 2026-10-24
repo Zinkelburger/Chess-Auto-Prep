@@ -49,7 +49,7 @@ void main() {
       expect(judge(const Verdict(cp: 800), const Verdict(cp: -1500)), isNull);
     });
 
-    test('scores are written as the old app writes them in the note', () {
+    test('scores are written in the note in its stored format', () {
       expect(evalText(const Verdict(cp: 63)), '+0.6');
       expect(evalText(const Verdict(cp: 63), negate: true), '-0.6');
       expect(evalText(const Verdict()), '+0.0');
@@ -103,7 +103,7 @@ void main() {
       expect(playedBest(e5, const Verdict()), isFalse);
     });
 
-    test('a blunder becomes the old app\'s puzzle, word for word', () {
+    test('a blunder becomes the stored puzzle text, word for word', () {
       final nf6 = movesBy(tree, Side.black).last;
       final game = SourceGame.of(read.tags, tree, gameIdIn(scholarsMate));
       final puzzle = minedFrom(
@@ -131,7 +131,7 @@ void main() {
     });
   });
 
-  group('game ids are the old app\'s', () {
+  group('game ids are the ones existing sets file games under', () {
     test('from the address, the GameId header or neither', () {
       expect(gameIdIn(scholarsMate), 'lichess_AbCd1234');
       expect(gameIdIn(quietChesscomGame), 'chesscom_111');
@@ -162,7 +162,7 @@ void main() {
   });
 
   group('the analysed-games line', () {
-    test('reads the line the old app wrote', () {
+    test('reads the line an existing set carries', () {
       expect(analyzedIn(tacticsSet), {'lichess_abc'});
       expect(analyzedIn('[Event "x"]'), isEmpty);
       expect(

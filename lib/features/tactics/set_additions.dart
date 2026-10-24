@@ -51,18 +51,12 @@ final class NotAdded extends Addition {
 /// publication, so a concurrent open waits for the resulting file.
 final class SetAdditions {
   SetAdditions({
-    required PgnDocumentStore documents,
-    required DocumentSession session,
-    required DocumentSaver saver,
-    required TacticsSet set,
-    required Future<Set<String>?> Function() older,
+    required this._documents,
+    required this._session,
+    required this._saver,
+    required this._set,
     PendingWrites? pendingWrites,
-  }) : pendingWrites = pendingWrites ?? PendingWrites(),
-       _documents = documents,
-       _session = session,
-       _saver = saver,
-       _set = set,
-       _older = older;
+  }) : pendingWrites = pendingWrites ?? PendingWrites();
 
   final PendingWrites pendingWrites;
   final _commands = <String, _MinedCheckpoint>{};
@@ -71,24 +65,16 @@ final class SetAdditions {
   final DocumentSaver _saver;
   final TacticsSet _set;
 
-  /// The ids the old app kept apart from the set, still counted as done;
-  /// null when its file is there and could not be read.
-  final Future<Set<String>?> Function() _older;
-
   /// How many times a write that lost a race with another writer is tried.
   static const _attempts = 3;
 
-  /// The games already reviewed, by either app; null when the set or the
-  /// old app's list cannot be read, which is no answer: mining then would
-  /// mine again what was mined before.
+  /// The games already reviewed; null when the set cannot be read, which is
+  /// no answer: mining then would mine again what was mined before.
   Future<Set<String>?> analyzed() async {
-    final older = await _older();
-    if (older == null) return null;
     return switch (await _documents.open(_set.ref)) {
-      Absent() => older,
+      Absent() => const {},
       Opened(:final text) => _idsIn(
         (await readChapter(name: _set.ref.name, text: text)).preamble,
-        older,
       ),
       Unreadable(:final detail) => _unreadable(detail),
     };
@@ -155,10 +141,9 @@ final class SetAdditions {
   }
 
   Future<Addition> _add(_MinedCheckpoint command) async {
-    final older = await _older() ?? const <String>{};
-    if (_set.isOpen) return _addInSession(command, older);
+    if (_set.isOpen) return _addInSession(command);
     for (var attempt = 1; attempt <= _attempts; attempt++) {
-      final written = await _addOnDisk(command, older);
+      final written = await _addOnDisk(command);
       if (written != null) {
         if (written is Added) await _set.load();
         return written;
@@ -167,18 +152,14 @@ final class SetAdditions {
     return const NotAdded('the set kept changing while it was written');
   }
 
-  Future<Addition> _addInSession(
-    _MinedCheckpoint command,
-    Set<String> older,
-  ) async {
+  Future<Addition> _addInSession(_MinedCheckpoint command) async {
     if (command.applied &&
-        !(_idsIn(_session.chapter!.preamble, const {})?.contains(command.id) ??
-            false)) {
+        !(_idsIn(_session.chapter!.preamble)?.contains(command.id) ?? false)) {
       command.applied = false;
     }
     if (!command.applied) {
       final refused = _session.apply((set) {
-        final edit = _edit(set, command, older);
+        final edit = _edit(set, command);
         if (edit is ChapterEdited) {
           command.remember(set, edit.chapter);
         }
@@ -192,11 +173,11 @@ final class SetAdditions {
     // an unknown save acknowledgement must not discard unrelated editor words.
     if (!_saver.settled) return const NotAdded('the set could not be saved');
     final read = await _documents.open(_set.ref);
-    if (read is! Opened)
+    if (read is! Opened) {
       return const NotAdded('the mined game could not be read');
+    }
     final persisted = await readChapter(name: _set.ref.name, text: read.text);
-    if (!(_idsIn(persisted.preamble, const {})?.contains(command.id) ??
-            false) ||
+    if (!(_idsIn(persisted.preamble)?.contains(command.id) ?? false) ||
         !command.matches(persisted)) {
       return const NotAdded(
         'the mined puzzles were changed or removed before their checkpoint was confirmed',
@@ -207,15 +188,12 @@ final class SetAdditions {
 
   /// One attempt; null when the file changed before publication. Navigation
   /// cannot adopt an old read while this command owns the access barrier.
-  Future<Addition?> _addOnDisk(
-    _MinedCheckpoint command,
-    Set<String> older,
-  ) async {
+  Future<Addition?> _addOnDisk(_MinedCheckpoint command) async {
     final ref = _set.ref;
     switch (await _documents.open(ref)) {
       case Absent():
         final set = parseChapter(name: ref.name, text: '');
-        final edit = _edit(set, command, older);
+        final edit = _edit(set, command);
         if (edit is! ChapterEdited) return _notEdited(edit);
         command.remember(set, edit.chapter);
         return switch (await _documents.create(ref, command.text!)) {
@@ -230,10 +208,11 @@ final class SetAdditions {
           return Added(command.added!);
         }
         final set = await readChapter(name: ref.name, text: text);
-        if (_set.isOpen) return _addInSession(command, older);
-        final done = _idsIn(set.preamble, const {});
-        if (done == null)
+        if (_set.isOpen) return _addInSession(command);
+        final done = _idsIn(set.preamble);
+        if (done == null) {
           return const NotAdded('the analyzed-games line is unreadable');
+        }
         if (isAnalyzed(done, command.id)) {
           // The file moved on since this checkpoint landed unconfirmed; its
           // own puzzles still in the set confirm it, as in the session.
@@ -244,7 +223,7 @@ final class SetAdditions {
                   'the set changed after an unconfirmed checkpoint',
                 );
         }
-        final edit = _edit(set, command, older);
+        final edit = _edit(set, command);
         if (edit is! ChapterEdited) return _notEdited(edit);
         command.remember(set, edit.chapter);
         return switch (await _documents.save(
@@ -262,19 +241,11 @@ final class SetAdditions {
     }
   }
 
-  static ChapterEdit _edit(
-    Chapter set,
-    _MinedCheckpoint command,
-    Set<String> older,
-  ) {
+  static ChapterEdit _edit(Chapter set, _MinedCheckpoint command) {
     final gameId = command.id;
     final Set<String> done;
     try {
-      done = {
-        ...analyzedIn(set.preamble),
-        ...older,
-        if (gameId.isNotEmpty) gameId,
-      };
+      done = {...analyzedIn(set.preamble), if (gameId.isNotEmpty) gameId};
     } on FormatException catch (error) {
       return ChapterEditRefused('its analysed-games line: ${error.message}');
     }
@@ -292,9 +263,9 @@ final class SetAdditions {
     _ => const Added(0),
   };
 
-  static Set<String>? _idsIn(String preamble, Set<String> older) {
+  static Set<String>? _idsIn(String preamble) {
     try {
-      return {...analyzedIn(preamble), ...older};
+      return analyzedIn(preamble);
     } on FormatException catch (error) {
       return _unreadable(error.message);
     }

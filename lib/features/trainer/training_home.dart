@@ -12,6 +12,7 @@ import '../../ui/relative_time.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
 import 'trainer.dart';
+import 'trainer_state.dart';
 
 /// The selected scope's training desk, inside the shared Train pane.
 class TrainingHome extends StatefulWidget {
@@ -238,12 +239,13 @@ class _TrainingHomeState extends State<TrainingHome> {
       selection.pauseScope(false, chapter: selection.chapter);
     } else if (selection.line case final key?) {
       final line = widget.ready.lineOf(key);
-      if (line != null)
+      if (line != null) {
         unawaited(
           trainer.changeProgress(
             widget.ready.progress.setExcluded(line, excluded: false),
           ),
         );
+      }
     }
   }
 
@@ -295,7 +297,7 @@ class _TrainingHomeState extends State<TrainingHome> {
     final line = selection.line == null
         ? lines.firstOrNull
         : widget.ready.lineOf(selection.line!);
-    if (line == null)
+    if (line == null) {
       return Text(
         selection.choosing
             ? 'Select lines in the outline to learn or review.'
@@ -304,6 +306,7 @@ class _TrainingHomeState extends State<TrainingHome> {
             : 'No new lines in this scope. Review learned lines or choose another chapter.',
         style: Theme.of(context).textTheme.bodySmall,
       );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -395,10 +398,11 @@ class _TrainingHomeState extends State<TrainingHome> {
         subtitle: Text(relativeTime(mistake.at.toLocal())),
         onTap: () {
           final line = widget.ready.lineOf(mistake.key);
-          if (line != null)
+          if (line != null) {
             widget.onRead(
               widget.ready.toRead(line, ReadIn.board, ply: mistake.ply),
             );
+          }
         },
       ),
   ];

@@ -14,12 +14,13 @@ import 'package:chess_auto_prep/chess/training/training_line.dart';
 import 'package:chess_auto_prep/features/trainer/lesson.dart';
 import 'package:chess_auto_prep/features/trainer/progress.dart';
 import 'package:chess_auto_prep/features/trainer/trainer.dart';
+import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/features/trainer/training_scope.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/storage/training_store.dart';
+import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:chess_auto_prep/workspace/engine_analysis.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:fake_async/fake_async.dart';
@@ -142,9 +143,11 @@ void main() {
         trainer.learn();
         final lesson = trainer.lesson!;
         expect(lesson.left, 0);
-        settings.update(
-          settings.value.copyWith(
-            training: const TrainingOptions(learnLimit: 0, replyMillis: 200),
+        unawaited(
+          settings.update(
+            settings.value.copyWith(
+              training: const TrainingOptions(learnLimit: 0, replyMillis: 200),
+            ),
           ),
         );
         lesson.next();
@@ -165,7 +168,9 @@ void main() {
           reason: 'new sitting takes updated limit',
         );
         trainer.leave();
-        readyState(trainer).progress.setExcluded(lines.first, excluded: true);
+        unawaited(
+          readyState(trainer).progress.setExcluded(lines.first, excluded: true),
+        );
         async.flushMicrotasks();
         trainer.trainLine(lines.first);
         expect(trainer.lesson, isNull);
@@ -185,14 +190,14 @@ void main() {
       final shown = lesson.drill.shown;
       final other = chapterRef('Other', 'Other');
       fixture.store.documents[other] = Opened(_other, scriptedRevision(_other));
-      fixture.session.open(other);
+      unawaited(fixture.session.open(other));
       async.flushMicrotasks();
       expect(trainer.lesson, same(lesson));
       expect(lesson.suspended, isTrue);
       expect(trainer.board.value, isNull);
       async.elapse(const Duration(seconds: 20));
       expect(lesson.drill.shown, shown);
-      fixture.session.open(fixture.ref);
+      unawaited(fixture.session.open(fixture.ref));
       async.flushMicrotasks();
       expect(trainer.lesson, same(lesson));
       trainer.resume();
@@ -200,10 +205,10 @@ void main() {
       async.elapse(const Duration(seconds: 2));
       expect(lesson.drill.shown, greaterThan(shown));
       trainer.suspend();
-      fixture.session.open(other);
+      unawaited(fixture.session.open(other));
       async.flushMicrotasks();
       fixture.externalEdit(_other);
-      fixture.session.open(fixture.ref);
+      unawaited(fixture.session.open(fixture.ref));
       async.flushMicrotasks();
       expect(
         trainer.lesson,
@@ -493,7 +498,9 @@ void main() {
       final trainer = ready(async);
       final progress = readyState(trainer).progress;
       files.nextWrite = const ProgressConflict();
-      progress.setExcluded(readyState(trainer).lines.first, excluded: true);
+      unawaited(
+        progress.setExcluded(readyState(trainer).lines.first, excluded: true),
+      );
       async.flushMicrotasks();
       expect(progress.stale, isTrue);
       trainer.learn();
@@ -534,13 +541,13 @@ void main() {
     fakeAsync((async) {
       final trainer = ready(async);
       final state = readyState(trainer);
-      state.progress.mark(state.lines, known: true);
+      unawaited(state.progress.mark(state.lines, known: true));
       async.flushMicrotasks();
       expect(files.reviews.values.map((r) => r.intervalDays), [1, 1.5]);
       expect(files.history.map((h) => h.kind).toSet(), {HistoryKind.marked});
       expect(trainer.untrainedCount, 0);
 
-      state.progress.setExcluded(state.lines.first, excluded: true);
+      unawaited(state.progress.setExcluded(state.lines.first, excluded: true));
       async.flushMicrotasks();
       expect(files.reviews[state.lines.first.key]!.excluded, isTrue);
     });
@@ -630,7 +637,7 @@ void main() {
     fakeAsync((async) {
       final trainer = ready(async);
       final before = readyState(trainer);
-      fixture.session.toStart();
+      fixture.session.cursor.toStart();
       fixture.session.playMove('d2d4');
       async.flushMicrotasks();
       expect(files.reads, 1);
@@ -692,7 +699,7 @@ void main() {
 1. e4 e5 *
 ''';
       fixture.externalEdit(stub);
-      fixture.session.open(fixture.ref);
+      unawaited(fixture.session.open(fixture.ref));
       async.flushMicrotasks();
       final trainer = ready(async)..learn();
       expect(trainer.lesson!.left, 0);

@@ -84,12 +84,7 @@ Future<void> _sleep(Duration d) => Future<void>.delayed(d);
 /// Lichess's game export: one request, the newest games first, standard
 /// chess only (the variants are left out by speed).
 final class LichessGamesApi implements RangedGames {
-  LichessGamesApi(
-    this._client, {
-    required Future<String?> Function() token,
-    Wait wait = _sleep,
-  }) : _token = token,
-       _wait = wait;
+  LichessGamesApi(this._client, {required this._token, this._wait = _sleep});
 
   final http.Client _client;
   final Future<String?> Function() _token;
@@ -246,7 +241,7 @@ final class LichessGamesApi implements RangedGames {
 /// Chess.com's monthly archives: the list of months, then each month's PGN
 /// from the newest, until there are enough games.
 final class ChesscomGamesApi implements RangedGames {
-  ChesscomGamesApi(this._client, {Wait wait = _sleep}) : _wait = wait;
+  ChesscomGamesApi(this._client, {this._wait = _sleep});
 
   final http.Client _client;
   final Wait _wait;

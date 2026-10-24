@@ -95,7 +95,7 @@ void main() {
   });
 
   test('keeping a tree removes all but the newest earlier runs, and nothing '
-      'that is not a v2 run', () async {
+      'that is not one of the app\'s own `v2-` runs', () async {
     const fen = '4k3/8/8/8/8/8/4P3/4K3 w - - 0 1';
     const kept = GenerationTrees.keptRuns;
     final legacy = File(

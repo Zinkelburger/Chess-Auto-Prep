@@ -105,12 +105,10 @@ final class TreeNothing extends TreeState {
 /// moving in the file or leaving the tab gives the board back to the file.
 final class RepertoireTree extends ChangeNotifier {
   RepertoireTree({
-    required DocumentSession session,
-    required RepertoireShelf shelf,
-    required Books books,
-  }) : _session = session,
-       _shelf = shelf,
-       _books = books {
+    required this._session,
+    required this._shelf,
+    required this._books,
+  }) {
     _session.anyChange.addListener(_followTheBoard);
     _books.addListener(_refresh);
   }
@@ -150,7 +148,7 @@ final class RepertoireTree extends ChangeNotifier {
   List<MoveNode> get offFile => List.unmodifiable(_off);
 
   /// The position the tree is about: the file's, or past it.
-  Fen get fen => _off.isEmpty ? _session.fen : _off.last.fen;
+  Fen get fen => _off.isEmpty ? _session.cursor.fen : _off.last.fen;
 
   /// A move made on the board or clicked in the tree: a step in the file
   /// when the file plays it here, else a move on the free board. The
@@ -160,10 +158,10 @@ final class RepertoireTree extends ChangeNotifier {
     if (_off.isEmpty) {
       final tree = _session.tree;
       if (tree == null) return;
-      final at = _session.cursor;
+      final at = _session.cursor.value;
       final siblings = tree.nodeAt(at)?.children ?? tree.children;
-      final index = indexOfReply(_session.fen, siblings, uci);
-      if (index >= 0) return _session.goTo(at.child(index));
+      final index = indexOfReply(_session.cursor.fen, siblings, uci);
+      if (index >= 0) return _session.cursor.goTo(at.child(index));
     }
     final move = Move.parse(uci);
     final node = move == null ? null : moveNode(fen, move);
@@ -175,7 +173,7 @@ final class RepertoireTree extends ChangeNotifier {
   /// Takes back the last move off the file, or steps back in the file when
   /// there is none: what ← does.
   void back() {
-    if (_off.isEmpty) return _session.back();
+    if (_off.isEmpty) return _session.cursor.back();
     _off.removeLast();
     _offChanged();
   }
@@ -239,7 +237,7 @@ final class RepertoireTree extends ChangeNotifier {
 
   void _followTheBoard() {
     if (_disposed || _watching == 0) return;
-    final board = (tree: _session.tree, at: _session.cursor, side: side);
+    final board = (tree: _session.tree, at: _session.cursor.value, side: side);
     final seen = _board;
     if (seen != null &&
         identical(seen.tree, board.tree) &&
@@ -327,7 +325,8 @@ final class RepertoireTree extends ChangeNotifier {
       return;
     }
     final tree = _session.tree;
-    final siblings = tree?.nodeAt(_session.cursor)?.children ?? tree?.children;
+    final siblings =
+        tree?.nodeAt(_session.cursor.value)?.children ?? tree?.children;
     final rows = [
       for (final seen in merged.values)
         _row(

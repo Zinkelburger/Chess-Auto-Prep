@@ -139,24 +139,6 @@ void main() {
     expect(texts(onDisk(after.chapter)), texts(after.chapter));
   });
 
-  test('a line whose id header the old app does not read arrives as it is', () {
-    // The old app ends the header block at the bare backslash, so neither
-    // app trains the line under its [LineID], and no header both apps read
-    // can go where that one is.
-    final source = oneGame(
-      '[Event "Moved"]\n'
-      '[Annotator "c:\\games"]\n'
-      '[LineID "line_MS4gZDQgZDUgMi4gYzYy"]\n'
-      '\n'
-      '1. d4 Nf6 2. c4 *\n',
-    ).lines.single;
-
-    final after = edited(linesAddedTo(white(), lines: [source]));
-
-    expect(after.chapter.lines[3].text, source.text);
-    expect(texts(after.chapter).take(3), texts(white()));
-  });
-
   test('an empty chapter keeps its heading and takes the lines under it', () {
     final source = white();
 

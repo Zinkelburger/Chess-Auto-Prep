@@ -38,8 +38,8 @@ void main() {
     expect(readHeading(whiteChapter).rootMoves, ['d4', 'd5', 'c4']);
   });
 
-  test('a new chapter for a position writes the root line the old app '
-      'writes, and reads it back', () {
+  test('a new chapter for a position writes the `// Root:` line existing '
+      'chapters carry, and reads it back', () {
     final text = newChapterText(
       name: 'Gambit',
       side: Side.white,

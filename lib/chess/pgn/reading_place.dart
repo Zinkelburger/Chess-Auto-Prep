@@ -10,9 +10,10 @@ import 'game_order.dart';
 import 'game_text.dart';
 import 'game_tree.dart';
 
-/// Compatible with the old per-file session. v2 additionally remembers a
+/// Where a file is being read. `gameIndex`, `gameKey`, `ply` and `sort` are
+/// the keys reading places already saved carry; the `v2…` keys add a
 /// variation's path/FEN, the filter and whose side the games are shown
-/// from; none of them is a source-PGN edit.
+/// from. None of them is a source-PGN edit.
 final class ReadingPlace {
   const ReadingPlace({
     required this.game,
@@ -45,21 +46,20 @@ final class ReadingPlace {
           {'field': r.field, 'rule': r.rule.name, 'value': r.value},
       ],
     },
-    if (switch (perspective) {
-          FollowPlayer(:final name) => name,
-          FollowNobody() => '',
-          FollowCollectionPlayer() => null,
-        }
-        case final follow?)
-      'v2Follow': follow,
+    'v2Follow': ?switch (perspective) {
+      FollowPlayer(:final name) => name,
+      FollowNobody() => '',
+      FollowCollectionPlayer() => null,
+    },
   };
   static ReadingPlace? decode(String? raw) {
     try {
       final data = jsonDecode(raw ?? '');
       if (data is! Map<String, Object?> ||
           data['gameIndex'] is! int ||
-          data['gameKey'] is! String)
+          data['gameKey'] is! String) {
         return null;
+      }
       final indexes = data['v2Path'];
       final ply = (data['ply'] is int ? data['ply'] as int : 0).clamp(0, 10000);
       final path =
@@ -87,23 +87,28 @@ final class ReadingPlace {
   }
 
   int locate(List<ChapterLine> games) {
-    if (game >= 0 && game < games.length && readingGameKey(games[game]) == key)
+    if (game >= 0 &&
+        game < games.length &&
+        readingGameKey(games[game]) == key) {
       return game;
+    }
     return games.indexWhere((g) => readingGameKey(g) == key);
   }
 }
 
 GameFilter _filter(Object? data) {
-  if (data is! Map<String, Object?> || data['rules'] is! List)
+  if (data is! Map<String, Object?> || data['rules'] is! List) {
     return GameFilter.none;
+  }
   final rules = <HeaderRule>[];
   for (final raw in (data['rules'] as List).take(100)) {
     if (raw is! Map<String, Object?> ||
         raw['field'] is! String ||
-        raw['value'] is! String)
+        raw['value'] is! String) {
       continue;
+    }
     final rule = FilterRule.values.asNameMap()[raw['rule']];
-    if (rule != null)
+    if (rule != null) {
       rules.add(
         HeaderRule(
           field: raw['field'] as String,
@@ -111,6 +116,7 @@ GameFilter _filter(Object? data) {
           rule: rule,
         ),
       );
+    }
   }
   final position = data['position'] is String
       ? Fen(data['position'] as String)
@@ -137,15 +143,17 @@ String readingGameKey(ChapterLine line) {
     if (host == 'lichess.org' &&
         RegExp(
           r'^/[a-zA-Z0-9]{8}([a-zA-Z0-9]{4})?(/(white|black))?$',
-        ).hasMatch(url.path))
+        ).hasMatch(url.path)) {
       return 'https://lichess.org/${url.path.substring(1, 9)}';
+    }
     if (host == 'chess.com' &&
-        RegExp(r'^/game/(live|daily)/[0-9]+/?$').hasMatch(url.path))
+        RegExp(r'^/game/(live|daily)/[0-9]+/?$').hasMatch(url.path)) {
       return 'https://www.chess.com${url.path.replaceFirst(RegExp(r'/$'), '')}';
+    }
   }
-  // The old app hashes each move as the file spelled it, reading only `0-0`
-  // as `O-O` and every null move as `--`, so a reading place saved by one
-  // app is found by the other.
+  // Each move is hashed as the file spelled it, reading only `0-0` as `O-O`
+  // and every null move as `--`, so reading places already saved under this
+  // key are still found.
   final moves = <String>[];
   var children = line.tree?.children ?? const <MoveNode>[];
   while (children.isNotEmpty) {

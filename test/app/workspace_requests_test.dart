@@ -94,12 +94,12 @@ void main() {
         isA<RequestDone>(),
       );
       expect(w.session.source, kid);
-      expect(w.session.cursor, NodePath.of([0, 1, 0]));
+      expect(w.session.cursor.value, NodePath.of([0, 1, 0]));
     });
 
     test('goes as far along the moves as the chapter still does', () async {
       await w.requests.openAt(kid, ['c5', 'Nc3', 'e5']);
-      expect(w.session.cursor, NodePath.of([0, 1]));
+      expect(w.session.cursor.value, NodePath.of([0, 1]));
     });
 
     test('a chapter that cannot open goes nowhere', () async {
@@ -329,14 +329,14 @@ void main() {
       'is kept as a file and opened in the viewer at the explorer ply',
       () async {
         await w.requests.open(kid);
-        w.session.forward();
+        w.session.cursor.forward();
         final ply = w.explorer.ply;
         expect(ply, greaterThan(0));
         expect(await openListed(), isA<RequestDone>());
         expect(w.requests.mode, Mode.pgnViewer);
         expect(w.session.source?.path, contains('/explorer games/'));
         expect(w.session.game, 0);
-        expect(w.session.cursor, NodePath.of(List.filled(ply, 0)));
+        expect(w.session.cursor.value, NodePath.of(List.filled(ply, 0)));
         expect(w.viewer.file, w.session.source);
       },
     );
@@ -396,8 +396,8 @@ void main() {
         scriptedRevision(transposed),
       );
       await w.requests.openFile(games);
-      w.session.goTo(NodePath.of(const [0, 0, 0, 0]));
-      final shared = w.session.fen;
+      w.session.cursor.goTo(NodePath.of(const [0, 0, 0, 0]));
+      final shared = w.session.cursor.fen;
       final result = await w.requests.openExplorerGame(
         const ExplorerGame(id: '1', white: '', black: '', result: '0-1'),
         source: ExplorerSource.thisFile,
@@ -406,9 +406,9 @@ void main() {
       expect(result, isA<RequestDone>());
       expect(w.session.source, games);
       expect(w.session.game, 1);
-      expect(w.session.cursor, NodePath.of(const [0, 0, 0, 0]));
-      expect(w.session.fen.position, shared.position);
-      expect(w.session.currentMove?.san, 'Nf6');
+      expect(w.session.cursor.value, NodePath.of(const [0, 0, 0, 0]));
+      expect(w.session.cursor.fen.position, shared.position);
+      expect(w.session.cursor.currentMove?.san, 'Nf6');
       expect(w.store.creates, isEmpty);
     });
   });
@@ -418,7 +418,7 @@ void main() {
       expect(w.session.isScratch, isTrue);
       input.clipboardText = '1.e4 c5 2.Nf3';
       expect(await w.requests.pasteOntoBoard(), isA<RequestDone>());
-      expect(w.session.currentMove?.san, 'Nf3');
+      expect(w.session.cursor.currentMove?.san, 'Nf3');
       expect(w.store.creates, isEmpty);
     });
 
@@ -433,19 +433,19 @@ void main() {
     test('a new board from a chapter keeps its line and side', () async {
       await w.requests.open(kid);
       w.session
-        ..forward()
-        ..forward();
+        ..cursor.forward()
+        ..cursor.forward();
       expect(await w.requests.newAnalysisBoard(), isA<RequestDone>());
       expect(w.session.isScratch, isTrue);
       expect(w.session.orientation, Side.black);
-      expect(w.session.currentMove?.san, 'Nf3');
+      expect(w.session.cursor.currentMove?.san, 'Nf3');
     });
 
     test('is gone back to as it was left', () async {
       w.session.playMove('d2d4');
       await w.requests.open(kid);
       expect(await w.requests.analysisBoard(), isA<RequestDone>());
-      expect(w.session.currentMove?.san, 'd4');
+      expect(w.session.cursor.currentMove?.san, 'd4');
     });
 
     test(
@@ -479,7 +479,11 @@ void main() {
         expect(w.session.chapter!.side, Side.white);
         expect(w.session.tree!.children.single.san, 'e4');
         await w.requests.analysisBoard();
-        expect(w.session.currentMove?.san, 'e5', reason: 'the board is kept');
+        expect(
+          w.session.cursor.currentMove?.san,
+          'e5',
+          reason: 'the board is kept',
+        );
       },
     );
 

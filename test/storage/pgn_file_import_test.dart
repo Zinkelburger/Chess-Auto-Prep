@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/study/studies.dart';
+import 'package:chess_auto_prep/features/study/studies_state.dart';
 import 'package:chess_auto_prep/net/lichess_studies.dart';
 import 'package:chess_auto_prep/storage/pgn_file_import.dart';
 import 'package:chess_auto_prep/storage/pgn_file_store.dart';
@@ -10,9 +11,8 @@ import 'package:chess_auto_prep/workspace/document_saver.dart';
 import 'package:chess_auto_prep/workspace/document_session.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqlite3/sqlite3.dart';
 
-import '../support/lock_path.dart';
+import '../support/other_copy_lock.dart';
 import '../support/study_fixture.dart' show ScriptedLichess;
 import '../support/viewer_fixture.dart' show ScriptedPicker;
 
@@ -87,11 +87,9 @@ void main() {
     await source.writeAsString('1. e4 *\n');
     final into = Directory(p.join(documents.path, 'pgn_collections'));
     await into.create();
-    // A save of a file already in the folder, by this app or the old one:
+    // A save of a file already in the folder, by another copy of the app:
     // it sweeps staged copies before writing its own.
-    final other = sqlite3.open(await lockPathOf(into));
-    other.execute('PRAGMA busy_timeout = 0');
-    other.execute('BEGIN IMMEDIATE');
+    final release = await holdLockElsewhere(into);
     var done = false;
     final copied = import
         .insideDocuments(source.path)
@@ -99,9 +97,7 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 300));
     expect(done, isFalse, reason: 'the other writer still holds the folder');
     expect(await into.list().toList(), isEmpty);
-    other
-      ..execute('ROLLBACK')
-      ..close();
+    await release();
     final result = await copied as FileToOpen;
     expect(await File(result.path).readAsString(), '1. e4 *\n');
   });

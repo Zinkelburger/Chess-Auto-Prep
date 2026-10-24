@@ -1,9 +1,10 @@
 /// What the session answers when it is asked to open a document, to write
-/// one somewhere else, or to make an edit it cannot make.
+/// one somewhere else, to take an edit back, or to make an edit it cannot
+/// make.
 ///
 /// Typed, because every one of these is something the screen has to say: an
 /// open that failed, an open a later click overtook, a copy whose name was
-/// taken, an edit refused. The widget writes the sentences.
+/// taken, an undo refused, an edit refused. The widget writes the sentences.
 library;
 
 import '../chess/pgn/comment_edits.dart';
@@ -54,6 +55,44 @@ final class CopyFailed extends CopyResult {
 
   final String detail;
 }
+
+sealed class UndoResult {
+  const UndoResult();
+}
+
+/// The file is back at [text]; the caller reads its document from it again.
+final class Restored extends UndoResult {
+  const Restored(this.text);
+
+  final String text;
+}
+
+/// Nothing was undone, and the history is as it was. [reason] is a sentence
+/// for the user when there is more to say than "not now".
+final class UndoRefused extends UndoResult {
+  const UndoRefused([this.reason]);
+
+  final String? reason;
+}
+
+/// An undo asked for a version this store never kept. The file was not
+/// touched, so the document is no less saved than it was.
+const undoNotKept = UndoRefused(
+  'Could not go back: that version is not among the ones kept for this file.',
+);
+
+/// Nothing goes back while the chapter on screen is behind its file: the
+/// versions kept for it are older than what the file now holds.
+const undoBehind = UndoRefused(
+  'The chapter changed after it was shown. Reload it first.',
+);
+
+/// Nothing goes back while a stopped save is waiting to be dealt with: the
+/// file holds a version the words on screen were never written over.
+const undoFrozen = UndoRefused(
+  'The last save was stopped, so there is nothing to take back yet. Save a '
+  'copy or reload first.',
+);
 
 /// Why an edit to the open document did not happen.
 ///

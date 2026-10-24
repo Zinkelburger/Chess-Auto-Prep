@@ -5,7 +5,7 @@ import 'package:chess_auto_prep/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/chess/pgn/study.dart';
 import 'package:chess_auto_prep/chess/pgn/study_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart' show lineTree;
-import 'package:chess_auto_prep/features/study/studies.dart';
+import 'package:chess_auto_prep/features/study/studies_state.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/workspace/study_choice.dart';
@@ -47,7 +47,8 @@ void main() {
       }
       final added = edited.lines[2];
       expect(tagValue(added.tags, 'ChapterName'), 'Carlsen – Nakamura');
-      expect(tagValue(added.tags, 'Event'), 'Endgames: Carlsen – Nakamura');
+      // The game's own event stays, as Lichess keeps it.
+      expect(tagValue(added.tags, 'Event'), 'Tata Steel');
       expect(tagValue(added.tags, 'White'), 'Carlsen');
       expect(tagValue(added.tags, 'Orientation'), 'black');
       expect(added.text, endsWith('1. e4 c5 0-1'));
@@ -102,7 +103,7 @@ void main() {
       ]);
       expect((result as StudyDone).opened, studyRef('Prep'));
       final made = study.store.documents[studyRef('Prep')]! as Opened;
-      expect(made.text, startsWith('[Event "Prep: Carlsen – Nakamura"]'));
+      expect(made.text, startsWith('[Event "Tata Steel"]'));
       expect(await readChapter(name: 'Prep', text: made.text), isNotNull);
     });
 

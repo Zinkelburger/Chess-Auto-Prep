@@ -2,7 +2,6 @@ import 'package:dartchess/dartchess.dart' show Position;
 
 import '../chess/explorer_choice.dart';
 import '../chess/fen.dart';
-import '../chess/generation/expectimax_options.dart';
 import '../chess/generation/mainline_book.dart' show PlayedMove;
 import '../chess/generation/played_policy.dart';
 import '../chess/generation/sources.dart';
@@ -71,10 +70,10 @@ typedef PlayedAt = Future<PlayedLookup> Function(Fen fen);
 final class DatabaseOpponent implements OpponentPolicy {
   DatabaseOpponent({
     required this.name,
-    required PlayedAt played,
+    required this._played,
     this.fallback,
     this.fallbackUnder = 1,
-  }) : _played = played;
+  });
 
   /// What the database is called, for the sentence said when it is empty.
   final String name;

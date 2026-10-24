@@ -256,7 +256,7 @@ void main() {
     final twoHoursAgo = DateTime.now().subtract(const Duration(hours: 2));
     final stale = File(p.join(app.path, 'stockfish-linux.12345.part'));
     final fresh = File(p.join(app.path, 'stockfish-linux.99999.part'));
-    // The folder is shared with other data and with v1.
+    // The folder is shared with other data.
     final other = File(p.join(app.path, 'other.part'));
     for (final file in [stale, fresh, other]) {
       await file.writeAsString('half');

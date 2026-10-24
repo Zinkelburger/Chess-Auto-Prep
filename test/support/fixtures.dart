@@ -1,4 +1,4 @@
-/// Chapter files in the on-disk format, modelled on what the old app writes.
+/// Chapter files in the on-disk format, modelled on existing user files.
 ///
 /// Every one of them must survive `writeChapter(parseChapter(x)) == x`, so
 /// they carry the parts a naive round trip loses: unmodelled tags, machine

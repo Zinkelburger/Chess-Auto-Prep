@@ -16,6 +16,7 @@ import '../../storage/chapter_files.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/document_repository.dart';
 import '../../storage/training_store.dart';
+import '../../storage/training_progress.dart';
 import '../../storage/pending_writes.dart';
 import '../../workspace/board_claim.dart';
 import '../../workspace/books.dart';
@@ -25,88 +26,8 @@ import '../../workspace/engine_analysis.dart';
 import 'lesson.dart';
 import 'progress.dart';
 import 'training_scope.dart';
+import 'trainer_state.dart';
 import 'training_selection.dart';
-
-/// How much the trainer takes in: the chapter on the board, every chapter
-/// of its repertoire, or every chapter of the book in use.
-enum TrainScope { chapter, repertoire, book, studyChapter }
-
-/// Where a line sent to be read goes: the board alone, the tab staying
-/// where it is; the Moves tab; or the builder.
-enum ReadIn { board, moves, builder }
-
-/// A line sent to be read: its chapter, the moves up to the position to
-/// show, and where.
-typedef LineToRead = ({
-  ChapterRef ref,
-  int? game,
-  List<String> sans,
-  ReadIn place,
-});
-
-/// Why there is nothing to train.
-enum NothingToTrain { noChapter, studyChapter, noBook, emptyBook }
-
-sealed class TrainerState {
-  const TrainerState();
-}
-
-/// Nothing has asked for the trainer since the chapter changed.
-final class TrainerIdle extends TrainerState {
-  const TrainerIdle();
-}
-
-final class TrainerEmpty extends TrainerState {
-  const TrainerEmpty(this.why);
-
-  final NothingToTrain why;
-}
-
-final class TrainerLoading extends TrainerState {
-  const TrainerLoading();
-}
-
-/// The progress files could not be read; nothing is trained until they can.
-final class TrainerFailed extends TrainerState {
-  const TrainerFailed(this.failure);
-
-  final ProgressRead failure;
-}
-
-final class TrainerReady extends TrainerState {
-  const TrainerReady({
-    required this.chapters,
-    required this.progress,
-    this.study = false,
-  });
-
-  /// A study stays a file of separate games when a line is opened to read.
-  final bool study;
-
-  /// The scope's chapters in the folder's order, each with its lines.
-  final List<ChapterLines> chapters;
-  final TrainingProgress progress;
-
-  List<TrainingLine> get lines => [
-    for (final chapter in chapters) ...chapter.lines,
-  ];
-
-  /// The line [key] names, if the scope has it.
-  TrainingLine? lineOf(LineKey key) =>
-      lines.where((line) => line.key == key).firstOrNull;
-
-  /// [line] as far as [ply] — the whole of it when null — to be read in
-  /// [place].
-  LineToRead toRead(TrainingLine line, ReadIn place, {int? ply}) => (
-    // By the line, not its file: one file can hold several chapters.
-    ref: chapters.firstWhere((c) => c.lines.any((l) => l.key == line.key)).ref,
-    game: study ? line.game : null,
-    sans: [
-      for (final move in line.moves.take(ply ?? line.moves.length)) move.san,
-    ],
-    place: place,
-  );
-}
 
 /// How many new lines one Learn sitting takes: enough to learn in one go,
 /// few enough to remember tomorrow.
@@ -129,24 +50,18 @@ const learnSitting = 10;
 /// the progress writes against.
 class Trainer extends ChangeNotifier {
   Trainer({
-    required DocumentSession session,
-    required ScopeReader chapters,
-    required ProgressFiles files,
-    required EngineAnalysis analysis,
-    required TrainerTime time,
-    required Books books,
+    required this._session,
+    required this._chapters,
+    required this._files,
+    required this._analysis,
+    required this._time,
+    required this._books,
     RepertoireCatalog? catalog,
     PendingWrites? pendingWrites,
     this.settings,
   }) : selection = TrainingSelection(catalog, settings),
        pendingWrites = pendingWrites ?? PendingWrites(),
-       _catalog = catalog,
-       _books = books,
-       _session = session,
-       _chapters = chapters,
-       _files = files,
-       _analysis = analysis,
-       _time = time {
+       _catalog = catalog {
     selection.addListener(_selectionChanged);
     settings?.addListener(_settingsChanged);
     _session.addListener(_follow);
@@ -333,8 +248,9 @@ class Trainer extends ChangeNotifier {
         _session.source?.path == _read?.ref?.path;
     if (!returning &&
         revision == _savedRevision &&
-        revision.nativeIdentity == _savedRevision?.nativeIdentity)
+        revision.nativeIdentity == _savedRevision?.nativeIdentity) {
       return;
+    }
     _savedRevision = revision;
     final path = _session.source?.path;
     if (_read?.ref?.path != path) return;
@@ -349,8 +265,9 @@ class Trainer extends ChangeNotifier {
           .firstOrNull
           ?.revision;
       if (original == revision &&
-          original?.nativeIdentity == revision.nativeIdentity)
+          original?.nativeIdentity == revision.nativeIdentity) {
         return;
+      }
     }
     if (path != null &&
         state is TrainerReady &&
@@ -429,9 +346,13 @@ class Trainer extends ChangeNotifier {
       !selection.active && _session.game != null ? _session.chapter : null;
   int? get studyChapter => _session.game;
   String? setStudySides(Chapter expected, Map<int, Side> sides) {
-    if (!identical(expected, studyDocument))
+    if (!identical(expected, studyDocument)) {
       return 'The study changed. Choose the sides again.';
-    return _session.apply((chapter) => setStudyTrainingSides(chapter, sides));
+    }
+    return _session.apply(
+      (chapter) => setStudyTrainingSides(chapter, sides),
+      writes: true,
+    );
   }
 
   Lesson? get lesson => _lesson;
@@ -584,10 +505,11 @@ class Trainer extends ChangeNotifier {
     _lesson = null;
     final retained = _retained;
     _retained = false;
-    if (retained)
+    if (retained) {
       scheduleMicrotask(() {
         if (!_disposed && _lesson == null) _follow();
       });
+    }
     board.value = null;
     _analysis.resume(this);
     notifyListeners();
@@ -640,8 +562,9 @@ class Trainer extends ChangeNotifier {
       if (state is TrainerReady &&
           _session.source != null &&
           state.chapters.any((c) => c.ref == _session.source) &&
-          !identical(_session.chapter, _read?.chapter))
+          !identical(_session.chapter, _read?.chapter)) {
         _relined();
+      }
       return;
     }
     final read = _read;
@@ -836,7 +759,7 @@ class Trainer extends ChangeNotifier {
           (previous != null &&
               (previous != revision ||
                   previous.nativeIdentity != revision.nativeIdentity))) {
-        if (load == _loads)
+        if (load == _loads) {
           _become(
             const TrainerFailed(
               ProgressFailed(
@@ -844,6 +767,7 @@ class Trainer extends ChangeNotifier {
               ),
             ),
           );
+        }
         return;
       }
       observed[chapter.ref.path] = revision;

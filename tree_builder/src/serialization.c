@@ -447,11 +447,13 @@ static TreeNode* cjson_to_node(cJSON *obj, TreeNode *parent,
     }
     
     /* Parse expectimax value (v3) or legacy accumulated_eca (v2).
-       Legacy values are ignored since generate_repertoire recomputes. */
+       Legacy values are ignored since generate_repertoire recomputes.
+       local_cpl is display-only; a tree without it reads as 0. */
     cJSON *lcpl = cJSON_GetObjectItem(obj, "local_cpl");
     cJSON *emx = cJSON_GetObjectItem(obj, "expectimax_value");
-    if (lcpl && emx) {
-        node_set_expectimax(node, lcpl->valuedouble, emx->valuedouble);
+    if (emx) {
+        node_set_expectimax(node, lcpl ? lcpl->valuedouble : 0.0,
+                            emx->valuedouble);
     } else {
         cJSON *aeca = cJSON_GetObjectItem(obj, "accumulated_eca");
         if (lcpl && aeca) {

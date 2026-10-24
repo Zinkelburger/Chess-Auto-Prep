@@ -492,7 +492,7 @@ void main() {
       final loading = fill.resume(request, orAfresh: true);
       await reading.future;
       fixture.session.playMove('e2e4');
-      fixture.session.back();
+      fixture.session.cursor.back();
       gate.complete();
       expect(await loading, isNotNull);
       expect(evaluator.asked, isEmpty);

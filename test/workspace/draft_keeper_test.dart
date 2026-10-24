@@ -78,11 +78,14 @@ void main() {
     final first = _Run(store, drafts);
     await first.session.open(ref, game: 1);
     first.session
-      ..goTo(NodePath.of(const [0, 0, 0, 0]))
+      ..cursor.goTo(NodePath.of(const [0, 0, 0, 0]))
       ..playMove('b1c3');
     expect(first.session.hasHeldEdits, isTrue);
-    await until(() => Directory('${support.path}/viewer-drafts').existsSync());
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    // The checkpoint is on disk before the process dies. Its folder appears
+    // before the file in it, and the write takes as long as the disk does:
+    // wait for the file, then for the keeper's turn to end.
+    await until(() => _checkpoints(support).isNotEmpty);
+    await first.keeper.settle();
     first.kill();
     expect(onDisk(), threeGameFile, reason: 'nothing reached the file');
 
@@ -168,6 +171,17 @@ void main() {
     String fileText(ChapterRef ref) => File(ref.path).readAsStringSync();
     List<File> draftFiles() => _checkpoints(disk.support);
 
+    /// The one checkpoint's text, or null while there is not exactly one. A
+    /// poll runs while the keeper sets a checkpoint aside: the file listed
+    /// may be gone by the time it is read.
+    String? checkpointText() {
+      try {
+        return draftFiles().singleOrNull?.readAsStringSync();
+      } on PathNotFoundException {
+        return null;
+      }
+    }
+
     List<File> quarantined() {
       final folder = Directory(p.join(disk.support.path, quarantineFolder));
       return folder.existsSync()
@@ -229,21 +243,14 @@ void main() {
       expect(app.said.last.$1, isNot(contains('earlier session')));
       // Stepping to another game of the file keeps it.
       await app.session.open(games, game: 1);
-      await pumpEventQueue();
-      await Future<void>.delayed(const Duration(milliseconds: 30));
+      await app.keeper.settle();
       expect(draftFiles(), hasLength(1));
       expect(draftFiles().single.readAsStringSync(), contains('Parked note'));
 
       // New edits set it aside whole before they take its place.
       await until(() => app.offer != null);
       app.session.setComment(NodePath.of(const [0]), 'Fresh note');
-      await until(
-        () =>
-            draftFiles().singleOrNull?.readAsStringSync().contains(
-              'Fresh note',
-            ) ??
-            false,
-      );
+      await until(() => checkpointText()?.contains('Fresh note') ?? false);
       expect(draftFiles().single.readAsStringSync(), isNot(contains('Parked')));
       expect(quarantined().single.readAsStringSync(), contains('Parked note'));
       app.kill();

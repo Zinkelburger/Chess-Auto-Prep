@@ -12,10 +12,9 @@ enum PuzzleOrder {
   final String label;
 }
 
-/// Which puzzles a session plays and in what order: the old app's practice
-/// queue, kept between launches. The defaults are its defaults — blunders,
-/// mistakes and custom puzzles from the last fortnight of games, newest
-/// first, one-star puzzles hidden.
+/// Which puzzles a session plays and in what order: the practice queue, kept
+/// between launches. The defaults are blunders, mistakes and custom puzzles
+/// from the last fortnight of games, newest first, one-star puzzles hidden.
 final class PuzzleFilter {
   const PuzzleFilter({
     this.order = PuzzleOrder.newest,

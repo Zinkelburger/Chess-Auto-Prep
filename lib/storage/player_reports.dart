@@ -15,8 +15,9 @@ final class PlayerReports {
   final Directory? folder;
   final _memory = <String, Map<String, Object?>>{};
   String _path(String key) {
-    if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(key))
+    if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(key)) {
       throw const FormatException('Invalid report key.');
+    }
     return p.join(folder!.path, '$key.json');
   }
 

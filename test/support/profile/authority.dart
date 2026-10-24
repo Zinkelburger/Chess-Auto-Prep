@@ -1,4 +1,4 @@
-// The Authority table of docs/ARCHITECTURE_RENEWAL.md as code: which bytes
+// The Authority table of docs/ARCHITECTURE.md as code: which bytes
 // under a profile are the system of record and which may be discarded. The
 // contracts project a profile onto its authoritative paths, so a store that
 // writes somewhere new has to say here what that path is. An unclassified
@@ -89,10 +89,7 @@ const _trainingFiles = {reviewsFile, streaksFile, historyFile, attemptsFile};
 const _journalFolders = {
   'compound-writes',
   'relocation-writes',
-  'training-writes',
   'backup-moves',
-  'unfinished-moves',
-  'repertoire-mutations',
 };
 
 /// A staged copy (`.<name>.v2-tmp`) or anything in an import's staging
@@ -111,10 +108,7 @@ Authority? _support(List<String> parts, String name) {
   if (top == 'recovery-quarantine') return Authority.recovery;
   if (_journalFolders.contains(top)) return Authority.journal;
   if (parts.length == 1 && sqliteManaged('Support/$name')) {
-    // The user's games; every other database is an index or a cache.
-    return name.startsWith('app_games.db')
-        ? Authority.authoritative
-        : Authority.derived;
+    return Authority.derived;
   }
   if (top == 'bughouse' || top == 'player-reports') return Authority.derived;
   return null;
@@ -127,15 +121,12 @@ Authority? _documents(
 }) {
   if (parts.first == '.cap-reference-history') return Authority.recovery;
   if (parts.contains('.cap-pgn-history')) return Authority.recovery;
-  if (parts.contains('.cap-repertoire-publications')) return Authority.journal;
   if (parts.contains('.cap-generation')) return Authority.derived;
   if (parts.first == 'games_library') return Authority.derived;
   if (name == 'games.bpgn') return Authority.derived;
   if (name == '.v2-pending.json') return Authority.journal;
   if (parts.length == 1) {
     if (_trainingFiles.contains(name)) return Authority.authoritative;
-    if (name.endsWith('.pre-csv-v2.bak')) return Authority.kept;
-    if (name == 'analyzed_games.txt') return Authority.authoritative;
   }
   if (p.posix.extension(name).toLowerCase() == '.pgn') {
     return Authority.authoritative;

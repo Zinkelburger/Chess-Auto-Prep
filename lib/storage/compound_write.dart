@@ -13,6 +13,7 @@ import 'document_ref.dart';
 import 'line_progress.dart';
 import 'operation_id.dart';
 import 'operation_journal.dart';
+import 'operation_participants.dart';
 import 'recovery_files.dart';
 import 'recovery_ledger.dart';
 import 'training_rows.dart';
@@ -332,7 +333,7 @@ final class CompoundWrites {
 }
 
 final class _Note implements Recorded {
-  _Note(this.command, {this.live = true, this.recorded = false});
+  _Note(this.command, {this.recorded = false});
   final CompoundCommit command;
 
   /// Read back from its record rather than just planned: a PGN the edit
@@ -341,11 +342,6 @@ final class _Note implements Recorded {
 
   @override
   String get id => command.id;
-
-  /// Earlier builds kept finished and abandoned records too; only a record
-  /// that reached `committing` still has anything to publish.
-  @override
-  final bool live;
 
   @override
   Map<String, Object?> get json => command.secondary != null
@@ -406,7 +402,7 @@ _Note _decode(String id, Object? json) {
     throw RecoveryRequired('Unsupported compound schema in $id.');
   }
   final state = json['state'];
-  if (!_states.contains(state)) {
+  if (state != _committing) {
     throw RecoveryRequired('Unsupported compound state in $id.');
   }
   return _Note(
@@ -418,7 +414,6 @@ _Note _decode(String id, Object? json) {
       booksBefore: json['booksBefore'] as String?,
       booksAfter: json['booksAfter'] as String?,
     ),
-    live: state == 'committing',
     recorded: true,
   );
 }
@@ -455,7 +450,7 @@ _Note _decodePair(String id, Map<String, Object?> json) {
   }
 
   final state = json['state'];
-  if (!_states.contains(state)) {
+  if (state != _committing) {
     throw RecoveryRequired('Unsupported compound state in $id.');
   }
   return _Note(
@@ -465,12 +460,12 @@ _Note _decodePair(String id, Map<String, Object?> json) {
       primary: document(entries[0]),
       secondary: document(entries[1]),
     ),
-    live: state == 'committing',
     recorded: true,
   );
 }
 
-const _states = {'prepared', 'committing', 'complete', 'cancelled'};
+/// The one state a record is written in: an edit still to be published.
+const _committing = 'committing';
 
 bool _same(CompoundCommit a, CompoundCommit b) =>
     a.id == b.id &&

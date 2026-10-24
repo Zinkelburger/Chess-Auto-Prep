@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../chess/fen.dart';
+import '../chess/pgn/chapter.dart';
+import '../chess/pgn/chapter_edit.dart';
 import '../chess/pgn/game_review.dart';
 import '../chess/pgn/game_tree.dart';
 import '../diagnostics/log.dart';
@@ -25,9 +27,9 @@ import 'engine_jobs.dart';
 final class GameReview extends ChangeNotifier {
   GameReview({
     required this.session,
-    required EngineJobs jobs,
+    required this._jobs,
     required this.launch,
-  }) : _jobs = jobs {
+  }) {
     session.anyChange.addListener(_follow);
   }
   final DocumentSession session;
@@ -81,8 +83,9 @@ final class GameReview extends ChangeNotifier {
   int get positions => session.tree == null ? 0 : _mainline.length + 1;
 
   List<ReviewValue?> get values {
-    if (running && identical(session.chapter, _chapter))
+    if (running && identical(session.chapter, _chapter)) {
       return List.unmodifiable(_values);
+    }
     final tree = session.tree;
     if (tree == null) return const [];
     final List<ReviewValue?> stored = [
@@ -214,6 +217,127 @@ final class GameReview extends ChangeNotifier {
     }
   }
 
+  /// While every game of the file is being reviewed: which one of how many.
+  ({int game, int of})? batch;
+
+  /// The games of the open file a review of them all would cover: each one
+  /// read whole, with moves, that carries no review yet.
+  List<int> get unreviewedGames {
+    final chapter = session.chapter;
+    if (chapter == null || chapter.lines.length < 2) return const [];
+    return [
+      for (final (index, line) in chapter.lines.indexed)
+        if (line.isWhole &&
+            line.tree != null &&
+            line.tree!.children.isNotEmpty &&
+            !hasReview(line.tree!))
+          index,
+    ];
+  }
+
+  /// Whether every game can be reviewed now: the review writes into each,
+  /// so the file must take edits and the switch must be on.
+  bool get canReviewAll =>
+      !running &&
+      annotate &&
+      session.readOnly == null &&
+      session.shownTo == null &&
+      unreviewedGames.isNotEmpty;
+
+  /// Reviews every game of the open file that has no review, one after
+  /// another, writing each into its game as it ends: one undoable edit per
+  /// game. Moving between the games goes on while it runs; another file, an
+  /// edit to a game's main line or Stop ends it, keeping what was written.
+  Future<void> startAll() async {
+    if (_disposed || running) return;
+    session.snapshot();
+    final source = session.source;
+    final chapter = session.chapter;
+    if (source == null || chapter == null) return;
+    final games = [
+      for (final index in unreviewedGames)
+        (index: index, fens: _mainlineFens(chapter.lines[index].tree!)),
+    ];
+    if (games.isEmpty) return;
+    if (!_jobs.take(this, 'Reviewing the games', kind: EngineJobKind.review)) {
+      problem = _jobs.blockingMessage;
+      notifyListeners();
+      return;
+    }
+    final ticket = ++_ticket;
+    final requestedDepth = depth;
+    running = true;
+    problem = null;
+    // Not one game's review: moving to another game does not end it.
+    _chapter = null;
+    bool current() =>
+        !_disposed && ticket == _ticket && session.source == source;
+    try {
+      final started = await launch();
+      if (started case StartFailed(:final reason)) throw EngineFailure(reason);
+      final engine = _engine = (started as Started).engine;
+      for (final (number, game) in games.indexed) {
+        if (!current()) return;
+        batch = (game: number + 1, of: games.length);
+        completed = 0;
+        total = game.fens.length;
+        notifyListeners();
+        final values = <ReviewValue>[];
+        for (final fen in game.fens) {
+          if (!current()) return;
+          values.add(await _evaluate(engine, fen, requestedDepth));
+          completed++;
+          notifyListeners();
+        }
+        if (!current()) return;
+        _applying = true;
+        try {
+          problem = session.apply(
+            (now) => _sameMainline(now, game.index, game.fens)
+                ? annotateGame(now, values, game: game.index)
+                : const ChapterUnchanged(),
+          );
+        } finally {
+          _applying = false;
+        }
+      }
+    } on Object catch (error) {
+      if (current()) {
+        log.w('review every game', error);
+        problem = 'The review of the games could not finish: $error';
+      }
+    } finally {
+      batch = null;
+      _search = null;
+      final engine = _engine;
+      _engine = null;
+      try {
+        await engine?.quit();
+      } on Object catch (error) {
+        log.w('close game review engine', error);
+      }
+      running = false;
+      _jobs.release(this);
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  /// Whether game [index] of [chapter] still has the main line [fens] were
+  /// read from: a review of positions the game no longer reaches is not
+  /// written into it.
+  static bool _sameMainline(Chapter chapter, int index, List<Fen> fens) {
+    final tree = index < chapter.lines.length
+        ? chapter.lines[index].tree
+        : null;
+    if (tree == null) return false;
+    final now = _mainlineFens(tree);
+    if (now.length != fens.length) return false;
+    for (var ply = 0; ply < now.length; ply++) {
+      if (now[ply].position != fens[ply].position) return false;
+    }
+    return true;
+  }
+
   /// The start, then the position after each move of [tree]'s main line.
   static List<Fen> _mainlineFens(GameTree tree) {
     final positions = <Fen>[tree.rootFen];
@@ -247,7 +371,7 @@ final class GameReview extends ChangeNotifier {
     return ReviewValue(packedCp(white).cp, eval, verdict.pv);
   }
 
-  void goTo(int ply) => session.goTo(NodePath.of(List.filled(ply, 0)));
+  void goTo(int ply) => session.cursor.goTo(NodePath.of(List.filled(ply, 0)));
 
   @override
   void dispose() {

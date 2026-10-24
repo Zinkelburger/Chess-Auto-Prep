@@ -82,11 +82,11 @@ void main() {
           modified: DateTime.now(),
           chapters: [
             main,
-            ChapterRef(
+            const ChapterRef(
               repertoire: 'KID',
               name: 'Gambit',
               path: '/repertoires/KID/Gambit.pgn',
-              heading: const ChapterHeading(
+              heading: ChapterHeading(
                 rootMoves: ['e4', 'e5', 'f4'],
                 draft: true,
               ),
@@ -270,12 +270,12 @@ void main() {
     tester,
   ) async {
     await show(tester);
-    fixture.session.goTo(outline.lines.first.at);
+    fixture.session.cursor.goTo(outline.lines.first.at);
     await tester.tap(find.byTooltip('At this position'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Nf6'), findsNothing);
     expect(find.textContaining('d5'), findsOneWidget);
-    fixture.session.toStart();
+    fixture.session.cursor.toStart();
     await tester.pumpAndSettle();
     expect(find.textContaining('Nf6'), findsOneWidget);
     expect(find.textContaining('d5'), findsOneWidget);
@@ -355,7 +355,7 @@ void main() {
     await tester.tap(find.text('Indian'));
     await tester.pump();
 
-    expect(fixture.session.currentMove!.san, 'Nf6');
+    expect(fixture.session.cursor.currentMove!.san, 'Nf6');
   });
 
   testWidgets('renaming a line from its menu writes the new name', (

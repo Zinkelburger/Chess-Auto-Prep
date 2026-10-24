@@ -1,8 +1,8 @@
 // Laws of the records a restart reads back: a relocation
 // journal record decodes to exactly what was encoded, and one of a version
 // this build does not know, or with a field it does not know, is refused
-// rather than obeyed. A tournament this app saves is read by the old app's
-// TimeControl with the same time-control fields.
+// rather than obeyed. A tournament this app saves keeps the time-control
+// fields existing tournament files carry.
 import 'dart:convert';
 import 'dart:io';
 
@@ -11,6 +11,7 @@ import 'package:chess_auto_prep/chess/tournament/result.dart';
 import 'package:chess_auto_prep/storage/backup_relocation.dart';
 import 'package:chess_auto_prep/storage/backups.dart';
 import 'package:chess_auto_prep/storage/book_references.dart';
+import 'package:chess_auto_prep/storage/csv_records.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/recovery_files.dart';
 import 'package:chess_auto_prep/storage/relocation_record.dart';
@@ -38,8 +39,8 @@ void main() {
 // Relocation journal records
 // ---------------------------------------------------------------------------
 
-/// A record as a move or a delete journals it, and the phase it is in.
-typedef _Journaled = ({FileRelocationRecord record, RelocationState phase});
+/// A record as a move or a delete journals it.
+typedef _Journaled = ({FileRelocationRecord record});
 
 final Generator<_Journaled> _records = Generator((rand) {
   final delete = rand.chance(30);
@@ -89,7 +90,6 @@ final Generator<_Journaled> _records = Generator((rand) {
         documentPath: to,
       ),
     ),
-    phase: rand.pick(RelocationState.values),
   );
 });
 
@@ -103,8 +103,9 @@ TrainingRepointPlan _training(Rand rand, String from, String to) {
   final before = {
     reviewsFile: file(reviews.unclosedLine == null ? reviews.text : ''),
     streaksFile: file(
-      '$streaksHeader\n${csvSources.first},line_1,2,1,0\n'
-      '${csvSources.last},line_1,0,3,1\n',
+      '$streaksHeader\n'
+      '${encodeCsvRecord([from, 'line_1', '2', '1', '0'])}\n'
+      '${encodeCsvRecord([csvSources.last, 'line_1', '0', '3', '1'])}\n',
     ),
     historyFile: file('$historyHeader\n'),
     attemptsFile: file(
@@ -160,11 +161,10 @@ void _journalLaws() {
     'passes its checks',
     _records,
     (journaled) {
-      final (:record, :phase) = journaled;
-      final text = jsonEncode(record.toJson(phase));
+      final (:record) = journaled;
+      final text = jsonEncode(record.toJson());
       final decoded = _decode(jsonDecode(text), record.id);
-      expect(jsonEncode(decoded.toJson(phase)), text);
-      expect(decoded.state, phase);
+      expect(jsonEncode(decoded.toJson()), text);
       decoded.validate(documents: _documents, support: _support);
     },
     runs: 60,
@@ -175,8 +175,8 @@ void _journalLaws() {
     'does not know, is refused',
     _records,
     (journaled) {
-      final (:record, :phase) = journaled;
-      final json = record.toJson(phase);
+      final (:record) = journaled;
+      final json = record.toJson();
       final rand = Rand(record.id.length);
       for (final version in const [0, 2, 3, 99, '1', 1.5, null]) {
         expect(
@@ -220,8 +220,8 @@ void _journalLaws() {
 // ---------------------------------------------------------------------------
 
 /// Time controls as this app saves them: a preset, or the setup dialog's
-/// fields, any of which may be left at its default. The dialog saves sudden
-/// death without `movesPerSession`, and a period only when it is positive.
+/// fields, any of which may be left at its default; a period of 0 is sudden
+/// death.
 final Generator<Map<String, Object?>> _times = Generator((rand) {
   if (rand.chance(40)) return rand.pick(tournamentTimePresets).time;
   final kind = rand.pick(const [
@@ -238,7 +238,7 @@ final Generator<Map<String, Object?>> _times = Generator((rand) {
       'incremental' => {
         ...maybe('baseMs', 1, 3600000),
         ...maybe('incrementMs', 0, 60000),
-        ...maybe('movesPerSession', 1, 1000),
+        ...maybe('movesPerSession', 0, 1000),
       },
       'fixedDepth' => maybe('depth', 1, 128),
       'fixedNodes' => maybe('nodes', 1, 2000000000),
@@ -295,8 +295,4 @@ Future<void> _checkTournament(
     jsonDecode(await saved.readAsString()) as Map<String, Object?>,
   );
   expect(reopened.config.json, tournament.config.json);
-  expect(
-    reopened.config.timeNumber('movesPerSession', 0),
-    greaterThanOrEqualTo(0),
-  );
 }

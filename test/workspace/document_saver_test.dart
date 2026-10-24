@@ -5,6 +5,8 @@ import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/workspace/document_saver.dart';
+import 'package:chess_auto_prep/workspace/save_queue.dart';
+import 'package:chess_auto_prep/workspace/undo_history.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -68,7 +70,7 @@ void main() {
           return landing.future;
         });
         var flushed = false;
-        clock.flush().then((_) => flushed = true);
+        unawaited(clock.flush().then((_) => flushed = true));
         async.flushMicrotasks();
         expect(started, isTrue, reason: 'the wait was cut short');
         expect(flushed, isFalse, reason: 'the write is still going');
@@ -84,7 +86,7 @@ void main() {
         final undo = Completer<void>();
         clock.waitsFor(undo.future);
         var flushed = false;
-        clock.flush().then((_) => flushed = true);
+        unawaited(clock.flush().then((_) => flushed = true));
         async.flushMicrotasks();
         expect(flushed, isFalse);
         undo.complete();
@@ -99,7 +101,7 @@ void main() {
         clock.edited(() async => throw StateError('disk'));
         async.flushMicrotasks();
         var flushed = false;
-        clock.flush().then((_) => flushed = true);
+        unawaited(clock.flush().then((_) => flushed = true));
         async.flushMicrotasks();
         expect(flushed, isTrue);
       });
@@ -194,7 +196,7 @@ void main() {
         ..keep(saved('A', 'B'), games({0}))
         ..keep(saved('B', 'C'), games({1}));
       final restored = Receipt(
-        committed: Revision('B-again'),
+        committed: const Revision('B-again'),
         before: 'C',
         beforeRevision: scriptedRevision('C'),
       );
@@ -202,7 +204,7 @@ void main() {
       final next = history.newest!;
       expect(next.receipt.before, 'A');
       expect(next.receipt.beforeRevision, scriptedRevision('A'));
-      expect(next.receipt.committed, Revision('B-again'));
+      expect(next.receipt.committed, const Revision('B-again'));
       expect(rewrittenBy(next.scope), {
         0,
       }, reason: 'what the save changed is what it always was');

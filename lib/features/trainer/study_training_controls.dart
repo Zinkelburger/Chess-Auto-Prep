@@ -6,6 +6,7 @@ import '../../chess/pgn/study.dart';
 import '../../ui/status_bar.dart';
 import '../../ui/theme.dart';
 import 'trainer.dart';
+import 'trainer_state.dart';
 
 /// Study scope and practice identity remain available before training is ready.
 class StudyTrainingControls extends StatelessWidget {

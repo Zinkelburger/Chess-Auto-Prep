@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import '../chess/bughouse/hivemind.dart';
-import '../chess/bughouse/expectimax.dart';
 import '../chess/bughouse/table.dart';
 import '../diagnostics/log.dart';
 import 'engine.dart';
@@ -14,7 +13,8 @@ sealed class HivemindBudget {
 
   String get go;
 
-  /// How long to wait for `bestmove` before the engine is taken for wedged.
+  /// How long the engine may say nothing before it is taken for wedged:
+  /// every `info` line it prints starts the wait again.
   Duration get patience;
 }
 
@@ -94,14 +94,27 @@ final class HivemindStartFailed extends HivemindStart {
   final String reason;
 }
 
-/// Hivemind as the lab and the matches use it; a scripted engine in tests.
+/// The lines a search has so far, rank 1 first as [rankedLines] orders
+/// them; their `nodes` is the size of the search when they were printed.
+typedef HivemindLines = void Function(List<JointLine> lines);
+
+/// Hivemind as the Bughouse mode uses it; a scripted engine in tests.
 abstract interface class Hivemind {
   /// Identity of the actual binary/network and effective startup options.
   Map<String, Object?> get provenance;
 
-  /// Searches [question]. Questions are answered one at a time, in the
-  /// order asked.
-  Future<HivemindAnswer> search(HivemindQuestion question);
+  /// Whether the engine prints its lines while it searches. A build
+  /// without it (an unpatched engine) says nothing until `bestmove`, so
+  /// [search] never calls its `onLines`.
+  bool get streams;
+
+  /// Searches [question], handing [onLines] each block of lines the engine
+  /// prints along the way (a few times a second when it [streams]).
+  /// Questions are answered one at a time, in the order asked.
+  Future<HivemindAnswer> search(
+    HivemindQuestion question, {
+    HivemindLines? onLines,
+  });
 
   /// Cuts the search now running short; its answer still arrives, with
   /// what it found so far.
@@ -112,16 +125,6 @@ abstract interface class Hivemind {
   Future<void> quit();
 }
 
-/// Static, two-seat calibrated Q for A + B, with the clock input fixed off.
-abstract interface class HivemindValue {
-  Future<double> evaluate(TablePosition position);
-  Future<BughouseEvaluation> inspect(
-    TablePosition position,
-    BoardNumber board,
-    int nodes,
-  );
-}
-
 /// The conversation with one Hivemind process. It speaks UCI with three
 /// differences, all read here: `position fen <board 1>|<board 2>`, moves
 /// with a board digit inside a joint action — `bestmove (d2d4,pass)` — and
@@ -130,7 +133,12 @@ abstract interface class HivemindValue {
 /// After `bestmove` the engine goes on thinking in the background, so every
 /// search is followed by a `stop`, or the next one would share the cores
 /// with it.
-final class HivemindProcess implements Hivemind, HivemindValue, EngineProcess {
+///
+/// A build that offers the option `ReportIntervalMs` can print its whole
+/// MultiPV block while it searches. The handshake sets it to
+/// [reportIntervalMs], since upstream leaves it off by default, and [streams]
+/// reads the blocks.
+final class HivemindProcess implements Hivemind, EngineProcess {
   HivemindProcess._(this._process) {
     _process.lines.listen(_onLine, onDone: _onExit);
   }
@@ -150,6 +158,9 @@ final class HivemindProcess implements Hivemind, HivemindValue, EngineProcess {
     try {
       engine._send('uci');
       await engine._expect('uciok').timeout(patience);
+      if (engine._streams) {
+        engine._send('setoption name ReportIntervalMs value $reportIntervalMs');
+      }
       for (final MapEntry(:key, :value) in options.entries) {
         engine._send('setoption name $key value $value');
       }
@@ -164,9 +175,16 @@ final class HivemindProcess implements Hivemind, HivemindValue, EngineProcess {
     }
   }
 
+  /// How often, in milliseconds, a streaming engine prints its lines.
+  static const reportIntervalMs = 250;
+
   final _provenance = <String, Object?>{};
   @override
   Map<String, Object?> get provenance => Map.unmodifiable(_provenance);
+
+  bool _streams = false;
+  @override
+  bool get streams => _streams;
 
   final UciProcess _process;
   final _exited = Completer<EngineExit>();
@@ -190,119 +208,33 @@ final class HivemindProcess implements Hivemind, HivemindValue, EngineProcess {
   Future<EngineExit> get exited => _exited.future;
 
   @override
-  Future<HivemindAnswer> search(HivemindQuestion question) {
-    final answer = _queue.then((_) => _search(question));
+  Future<HivemindAnswer> search(
+    HivemindQuestion question, {
+    HivemindLines? onLines,
+  }) {
+    final answer = _queue.then((_) => _search(question, onLines));
     _queue = answer.then((_) {});
     return answer;
   }
 
-  double? _policyValue;
-  double _seatOffset = 0;
-
-  @override
-  Future<double> evaluate(TablePosition position) {
-    final answer = _queue.then((_) => _evaluate(position));
-    _queue = answer.then((_) {}, onError: (Object _) {});
-    return answer;
-  }
-
-  @override
-  Future<BughouseEvaluation> inspect(
-    TablePosition position,
-    BoardNumber board,
-    int nodes,
-  ) {
-    final answer = _queue.then((_) => _inspect(position, board, nodes));
-    _queue = answer.then((_) {}, onError: (Object _) {});
-    return answer;
-  }
-
-  Future<BughouseEvaluation> _inspect(
-    TablePosition position,
-    BoardNumber board,
-    int nodes,
+  Future<HivemindAnswer> _search(
+    HivemindQuestion question,
+    HivemindLines? onLines,
   ) async {
-    // The other team may have neither board on move. Static two-seat values
-    // still measure this position's clock offset; search supplies its strength.
-    await _evaluate(position);
-    final team = position.mover(board).team;
-    final answer = await _search((
-      position: position,
-      team: team,
-      maySit: false,
-      mustMove: board == BoardNumber.one ? MustMove.one : MustMove.two,
-      lines: 1,
-      budget: NodeBudget(nodes),
-    ));
-    if (answer is HivemindFailed) throw EngineFailure(answer.reason);
-    final found = answer as HivemindSearched;
-    final top = found.top;
-    if (top == null || (top.q == null && top.mate == null)) {
-      throw const EngineFailure('Hivemind returned no searched evaluation.');
-    }
-    final raw = top.mate == null
-        ? (top.q! - _seatOffset).clamp(-1.0, 1.0)
-        : (top.mate! > 0 ? 1.0 : -1.0);
-    final candidate = found.best?.on(board);
-    final best = candidate == null
-        ? null
-        : position.play(board, candidate)?.move.uci;
-    if (best == null && position.legalMoves(board).isNotEmpty) {
-      throw const EngineFailure(
-        'Hivemind did not choose a move on the selected board.',
-      );
-    }
-    return (
-      value: team == Team.ab ? raw : -raw,
-      best: best,
-      nodes: top.nodes,
-      depth: top.depth,
-    );
-  }
-
-  Future<double> _evaluate(TablePosition position) async {
-    if (_exited.isCompleted) throw const EngineFailure(_gone);
-    try {
-      final values = <double>[];
-      for (final team in Team.values) {
-        _send('stop');
-        _send('setoption name Team value ${engineTeam(team)}');
-        _send('setoption name TimeAdvantage value false');
-        _send('position fen ${position.dualFen}');
-        _policyValue = null;
-        _send('policy');
-        await _ready(const Duration(seconds: 30));
-        final value = _policyValue;
-        if (value == null || !value.isFinite || value.abs() > 1.00001) {
-          throw const EngineFailure(
-            'Hivemind did not return a position value.',
-          );
-        }
-        values.add(value);
-      }
-      _seatOffset = (values[0] + values[1]) / 2;
-      return (values[0] - values[1]) / 2;
-    } on TimeoutException {
-      await _process.kill();
-      throw const EngineFailure('Hivemind stopped answering.');
-    } finally {
-      _configured = null;
-    }
-  }
-
-  Future<HivemindAnswer> _search(HivemindQuestion question) async {
     if (_exited.isCompleted) return const HivemindFailed(_gone);
     _searching = true;
     _cut = false;
     try {
       await _configure(question);
       _send('position fen ${question.position.dualFen}');
-      final collecting = _collecting = _Collecting();
+      final collecting = _collecting = _Collecting(
+        wanted: question.lines,
+        patience: question.budget.patience,
+        onLines: onLines,
+      );
       _send(question.budget.go);
       if (_cut) _send('stop');
-      final answer = await collecting.done.future.timeout(
-        question.budget.patience,
-      );
+      final answer = await collecting.done.future;
       _send('stop');
       return answer;
     } on TimeoutException {
@@ -314,6 +246,7 @@ final class HivemindProcess implements Hivemind, HivemindValue, EngineProcess {
       log.e('search on the bughouse engine', error);
       return HivemindFailed(error.message);
     } finally {
+      _collecting?.dispose();
       _collecting = null;
       _searching = false;
     }
@@ -378,11 +311,11 @@ final class HivemindProcess implements Hivemind, HivemindValue, EngineProcess {
   void _onLine(String raw) {
     if (raw.startsWith('id name ')) {
       _provenance['engine_name'] = raw.substring(8).trim();
+    } else if (raw.startsWith('option name ReportIntervalMs ')) {
+      _streams = true;
+      _provenance['streams'] = true;
     }
     final line = raw.trim();
-    if (line.startsWith('Value: ')) {
-      _policyValue = double.tryParse(line.substring(7).trim());
-    }
     final awaited = _awaited;
     if (awaited != null && line == awaited.token) {
       _awaited = null;
@@ -407,19 +340,56 @@ final class HivemindProcess implements Hivemind, HivemindValue, EngineProcess {
 
 const _gone = 'The bughouse engine stopped.';
 
-/// The `info` lines of one search, the latest of each rank kept.
+/// The `info` lines of one search. The engine prints a block of up to
+/// [wanted] ranks at a time, rank 1 first; each rank 1 starts a new block,
+/// and a block is handed on when its last rank arrives or the next block
+/// starts. The answer holds the last block, which the engine prints just
+/// before `bestmove`.
 final class _Collecting {
-  final done = Completer<HivemindAnswer>();
-  final _byRank = <int, JointLine>{};
+  _Collecting({required this.wanted, required this.patience, this.onLines}) {
+    _watch();
+  }
 
-  void add(JointLine line) => _byRank[line.rank] = line;
+  final int wanted;
+
+  /// How long the engine may print nothing before it is taken for wedged.
+  final Duration patience;
+  final HivemindLines? onLines;
+  final done = Completer<HivemindAnswer>();
+  var _block = <int, JointLine>{};
+  bool _handed = false;
+  Timer? _watchdog;
+
+  void add(JointLine line) {
+    _watch();
+    if (line.rank == 1) {
+      _hand();
+      _block = {};
+      _handed = false;
+    }
+    _block[line.rank] = line;
+    if (line.rank >= wanted) _hand();
+  }
+
+  void _hand() {
+    if (_handed || _block.isEmpty) return;
+    _handed = true;
+    onLines?.call(rankedLines(_block.values));
+  }
+
+  void _watch() {
+    _watchdog?.cancel();
+    _watchdog = Timer(patience, () {
+      if (!done.isCompleted) done.completeError(TimeoutException(null));
+    });
+  }
 
   void finish(String bestmove) {
     if (done.isCompleted) return;
     done.complete(
       HivemindSearched(
         best: parseBestMove(bestmove),
-        lines: rankedLines(_byRank.values),
+        lines: rankedLines(_block.values),
       ),
     );
   }
@@ -427,6 +397,8 @@ final class _Collecting {
   void fail(EngineFailure failure) {
     if (!done.isCompleted) done.completeError(failure);
   }
+
+  void dispose() => _watchdog?.cancel();
 }
 
 /// `bestmove (d2d4,pass) ponder (d7d5,d2d4)` → the chosen action; null for
@@ -438,7 +410,9 @@ JointMove? parseBestMove(String line) {
 
 /// One search `info` line, or null when it carries nothing to read: an
 /// `info string`, or the root's first line before any node was evaluated,
-/// which prints the unvisited prior as a huge negative score.
+/// which prints the unvisited prior as a huge negative score. A mate the
+/// engine's root scan decides is also printed at one node, as the only
+/// line before `bestmove`, and is kept.
 JointLine? parseHivemindInfo(String line) {
   if (!line.startsWith('info ') || !line.contains(' depth ')) return null;
   final tokens = line.split(RegExp(r'\s+'));
@@ -450,11 +424,11 @@ JointLine? parseHivemindInfo(String line) {
   }
 
   final nodes = number('nodes');
-  if (nodes <= 1) return null;
   final score = tokens.indexOf('score');
   final kind = score < 0 || score + 2 >= tokens.length
       ? null
       : tokens[score + 1];
+  if (nodes <= 1 && kind != 'mate') return null;
   final value = kind == null ? null : int.tryParse(tokens[score + 2]);
   final pv = tokens.indexOf('pv');
   return JointLine(
@@ -468,18 +442,4 @@ JointLine? parseHivemindInfo(String line) {
         for (final token in tokens.skip(pv + 1)) ?JointMove.parse(token),
     ],
   );
-}
-
-/// Rank 1 first — the line `bestmove` follows, the engine's own choice —
-/// then the rest by score for the searched team. The engine ranks MultiPV
-/// by visits, and a measured block scored ranks 1–5 +0.08, −0.61, −0.38,
-/// −0.46, −0.53, so its own order beside the numbers reads as a mistake.
-List<JointLine> rankedLines(Iterable<JointLine> lines) {
-  final byRank = lines.toList()..sort((a, b) => a.rank.compareTo(b.rank));
-  if (byRank.length < 2) return byRank;
-  double strength(JointLine line) =>
-      TableScore(score: line.q, mate: line.mate).strength;
-  final rest = byRank.sublist(1)
-    ..sort((a, b) => strength(b).compareTo(strength(a)));
-  return [byRank.first, ...rest];
 }

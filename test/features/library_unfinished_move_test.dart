@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/features/library/file_changes.dart';
 import 'package:chess_auto_prep/features/library/library.dart';
 import 'package:chess_auto_prep/features/library/library_state.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/chapter_directory.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/file_lock.dart';
 import 'package:chess_auto_prep/storage/file_relocation.dart';

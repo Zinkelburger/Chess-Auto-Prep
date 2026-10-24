@@ -37,6 +37,10 @@ void main() {
   test(
     'a pathological regex cannot block the caller or exceed its deadline',
     () async {
+      // Set before the run's deadline is: two real timers set apart could
+      // swap order on a machine that stalls between them.
+      var responsive = false;
+      Timer(const Duration(milliseconds: 20), () => responsive = true);
       final run = FilterRun.start(
         [
           [PgnTag('Event', '${List.filled(32, 'a').join()}!')],
@@ -54,8 +58,6 @@ void main() {
       );
       addTearDown(run.cancel);
       final ended = expectLater(run.result, throwsA(isA<TimeoutException>()));
-      var responsive = false;
-      Timer(const Duration(milliseconds: 20), () => responsive = true);
       await ended;
       expect(responsive, isTrue, reason: 'the caller keeps processing events');
     },

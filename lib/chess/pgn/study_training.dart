@@ -45,8 +45,9 @@ ChapterEdit setStudyTrainingSides(Chapter chapter, Map<int, Side> sides) {
       separator: line.separator,
     );
     final result = rewritten(next, line.tree!);
-    if (result case LineRefused(:final reason))
+    if (result case LineRefused(:final reason)) {
       return ChapterEditRefused(reason);
+    }
     lines[index] = (result as LineRewritten).line;
     changed.add(index);
   }

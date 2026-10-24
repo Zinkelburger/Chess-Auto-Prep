@@ -83,9 +83,16 @@ final class ScriptedPicker implements PgnFilePicker {
   /// The folder each dialog was asked to start in.
   final startedIn = <String?>[];
 
+  /// The files each dialog was asked to offer.
+  final offered = <List<String>>[];
+
   @override
-  Future<String?> pickPgn({String? startIn}) async {
+  Future<String?> pickPgn({
+    String? startIn,
+    List<String> extensions = pgnExtensions,
+  }) async {
     startedIn.add(startIn);
+    offered.add(extensions);
     return answer;
   }
 }

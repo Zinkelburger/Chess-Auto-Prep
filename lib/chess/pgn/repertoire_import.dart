@@ -113,7 +113,6 @@ ImportRead readImport(String text, {required DateTime created}) {
         text: _chapterText(
           title: group.title,
           side: side,
-          course: group.course,
           created: created,
           games: written.text,
         ),
@@ -156,12 +155,10 @@ String courseText(ImportedChapters read, {required DateTime created}) {
 ChapterLine _pinned(ChapterLine line, String? id) =>
     id == null || line.lineId == id ? line : withIdHeader(line, id) ?? line;
 
-/// The `//` heading the old app writes, then the games. `// Chapter:` names
-/// the course chapter a file is, which the old app's readers group by.
+/// The `//` heading every chapter file carries, then the games.
 String _chapterText({
   required String title,
   required Side? side,
-  required bool course,
   required DateTime created,
   required String games,
 }) {
@@ -169,7 +166,6 @@ String _chapterText({
   if (side != null) {
     heading.write('// Color: ${side == Side.white ? 'White' : 'Black'}\n');
   }
-  if (course) heading.write('// Chapter: $title\n');
   heading.write('// Created on ${created.toString().split('.').first}\n\n');
   return '$heading$games';
 }
@@ -197,12 +193,9 @@ final class _Game {
 // ---------------------------------------------------------------------------
 
 final class _Group {
-  _Group(this.title, {required this.course}) : games = [];
+  _Group(this.title) : games = [];
 
   final String title;
-
-  /// Whether the title is a course chapter's, which the heading records.
-  final bool course;
 
   final List<_Game> games;
 
@@ -235,10 +228,7 @@ _Grouping _grouping(List<_Game> games) {
   final grouping = groupChapters([for (final game in games) game.read.tags]);
   final groups = <String, _Group>{};
   for (final (index, title) in grouping.titles.indexed) {
-    groups
-        .putIfAbsent(title, () => _Group(title, course: grouping.hasChapters))
-        .games
-        .add(games[index]);
+    groups.putIfAbsent(title, () => _Group(title)).games.add(games[index]);
   }
   return _Grouping(
     groups.values.toList(),
@@ -257,10 +247,6 @@ _Grouping _grouping(List<_Game> games) {
 /// bracket at the opponent's move is coverage, one at ours is the author
 /// naming a move they do not recommend.
 const branchPliesHeader = 'BranchPlies';
-
-/// The headers a line's id may be spelled in, none of which a sideline may
-/// share with the game it came from.
-const _idHeaders = {'LineID', 'LineId', 'Id', 'Line', 'Guid'};
 
 /// [game]'s root-to-leaf paths as games of their own, in reading order: the
 /// main line first, then each sideline where it branches, the way the
@@ -377,7 +363,8 @@ List<PgnHeader> _sidelineTags(
       tags.add(header);
       continue;
     }
-    if (_idHeaders.contains(header.key)) continue;
+    // A sideline may not share the game's id.
+    if (header.key == 'LineID') continue;
     final value = header.value.trim();
     if (suffixed.contains(header.key) && !isPlaceholderTitle(value)) {
       tags.add(PgnTag(header.key, '$value — $label', trailer: header.trailer));

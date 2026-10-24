@@ -15,8 +15,9 @@ final class DocumentAccess {
     path = p.normalize(path);
     var latest = _versions[path] ?? 0;
     for (final entry in _folderVersions.entries) {
-      if (_covers(entry.key, path) && entry.value > latest)
+      if (_covers(entry.key, path) && entry.value > latest) {
         latest = entry.value;
+      }
     }
     return latest;
   }

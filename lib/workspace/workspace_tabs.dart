@@ -69,7 +69,9 @@ PaneTabs<WorkspaceTab> readingTabs() => PaneTabs(
   open: const [WorkspaceTab.moves, WorkspaceTab.explorer, WorkspaceTab.review],
 );
 
-/// Study keeps its quiz entry beside the reading tools.
+/// Study: the viewer's reading tools and Train. A chapter opens as a file
+/// does in the viewer, on its moves alone; Train and the review open under
+/// them when asked for.
 PaneTabs<WorkspaceTab> studyTabs() => PaneTabs(
   [
     WorkspaceTab.moves.tab,
@@ -77,14 +79,15 @@ PaneTabs<WorkspaceTab> studyTabs() => PaneTabs(
     WorkspaceTab.explorer.tab,
     WorkspaceTab.analysis.tab,
     WorkspaceTab.review.tab,
+    WorkspaceTab.solitaire.tab,
+    const PaneTab(WorkspaceTab.book, 'My books'),
   ],
-  open: const [WorkspaceTab.moves, WorkspaceTab.train],
+  open: const [WorkspaceTab.moves],
 );
 
-/// The PGN Viewer's tabs. A file opens as a book does, on its moves alone;
-/// the explorer, the engine's review, Solitaire, what the user's books say
-/// about the game and the filter over the file's games are opened when
-/// wanted.
+/// The PGN Viewer's tabs: Study's reading tools and the filter over the
+/// file's games. A file opens as a book does, on its moves alone; the rest
+/// are opened when wanted.
 PaneTabs<WorkspaceTab> viewerTabs() => PaneTabs(
   [
     WorkspaceTab.moves.tab,

@@ -412,8 +412,9 @@ class _TabSlot<K extends Object> extends StatelessWidget {
       canRequestFocus: false,
       skipTraversal: true,
       onKeyEvent: (node, event) {
-        if (onContextMenu == null || !AppKey.tabMenu.accepts(event))
+        if (onContextMenu == null || !AppKey.tabMenu.accepts(event)) {
           return KeyEventResult.ignored;
+        }
         final box = context.findRenderObject() as RenderBox;
         onContextMenu!(tab.id, box.localToGlobal(Offset(0, box.size.height)));
         return KeyEventResult.handled;

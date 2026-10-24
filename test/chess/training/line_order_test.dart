@@ -13,11 +13,12 @@ const _chapter = '''
 1. e4 e5 2. Nf3 *
 
 [Event "New"]
-[CumProb "41.5%"]
+[CumProb "0.415"]
 
 1. e4 c5 2. Nf3 *
 
 [Event "Due"]
+[CumProb "12.5%"]
 
 1. e4 e6 2. d4 *
 
@@ -56,10 +57,11 @@ void main() {
       line.name,
   ];
 
-  test('a generated line says how likely it is, in either spelling', () {
+  test('a generated line says how likely it is; other spellings say '
+      'nothing', () {
     expect(
       [for (final l in lines) l.likelihood],
-      [0.2, 0.415, null, 0.3, null],
+      [0.2, 0.415, null, null, null],
     );
   });
 
@@ -86,9 +88,9 @@ void main() {
   test('the likeliest first, lines that do not say last in file order', () {
     expect(names(LineOrder.likely), [
       'New',
-      'Old header',
       'Learned',
       'Due',
+      'Old header',
       'A game',
     ]);
   });

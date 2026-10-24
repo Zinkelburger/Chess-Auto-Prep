@@ -78,8 +78,7 @@ final class Book {
       },
       chapters: {
         if (chapters is List)
-          for (final chapter in chapters)
-            if (BookChapter.fromJson(chapter) case final read?) read,
+          for (final chapter in chapters) ?BookChapter.fromJson(chapter),
       },
     );
   }
@@ -154,8 +153,7 @@ final class BookList {
       throw const FormatException('not a list of books');
     }
     final books = [
-      for (final book in json['books']! as List)
-        if (Book.fromJson(book) case final read?) read,
+      for (final book in json['books']! as List) ?Book.fromJson(book),
     ];
     final active = json['active'];
     return BookList(

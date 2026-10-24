@@ -35,7 +35,7 @@ BoardBoxes boxesOf(TablePosition position, BoardNumber board) =>
     _splitBoxes(position.board(board).fen);
 
 /// A pasted `<board 1>|<board 2>`, or a single FEN for board 1 with board 2
-/// at the start, as the MCP server and the old app read one.
+/// at the start, as the MCP server reads one.
 SetupRead readDualFen(String text) {
   final parts = text.trim().split('|');
   if (parts.length > 2 || parts.first.trim().isEmpty) {

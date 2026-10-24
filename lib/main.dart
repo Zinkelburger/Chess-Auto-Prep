@@ -1,4 +1,4 @@
-// The v2 entry point: `flutter run -t lib/main.dart`.
+// The app's entry point: `flutter run -t lib/main.dart`.
 //
 // `debug/` supplies the optional headless driver and packaged-app checks.
 import 'dart:io';
@@ -35,7 +35,7 @@ Future<void> main(List<String> args) async {
     await runBughouseSelfTest(support: support, reportPath: report);
   }
   runApp(
-    ChessAutoPrepV2(
+    ChessAutoPrep(
       documents: documents,
       support: support,
       logFolder: logFolder,

@@ -1,47 +1,13 @@
 # Static Hivemind build
 
-> October 2026: the website's Bughouse Lab, BughouseDB and Bughouse Single
-> Board pages were folded into one `/bughouse` page: one board with the
-> partner board held still (`bh_frozen_search`), run on the GPU through
-> WebGPU in batches, or on CPU threads (see the frontend README). The Lab
-> page described below, and its browser check, no longer exist on the site.
-
-`/bughouse` runs **entirely in the visitor's browser**. Cloudflare Pages only
-serves static files. The API stores completed position evaluations; it runs no engine. No account
-is needed. Analyze shares the position and raw results with BughouseDB.
-The server validates moves and derives the displayed evaluation. A failed
-upload leaves the result available and can be retried without searching again.
-
-The page supports both boards, captures sent to the partner's reserve, legal
-drops (click or drag), promotions, board flipping, a move list and step
-buttons per board (each board steps back and forth on its own), a FEN and
-reserve boxes per board, joint Hivemind recommendations, clock-advantage and
-required-board settings, and Stop. The Lab saves the accepted line, both
-history cursors and analysis settings in local storage. Refresh restores the
-line; Copy link includes the complete line and settings in a URL fragment
-(the fragment is not sent to the server). New game has an Undo action.
-
-**Copy moves** (the overlapping-squares icon) and **Download** export the
-currently played prefix as FICS-style BPGN: e.g. `1A. e4 1a. d5 2A. exd5
-1B. e4 1b. P@e6`. Board letters are A/B (boards 1/2), uppercase for White and
-lowercase for Black; these are not the player-seat names. Interleaving is
-preserved, including drops and underpromotions. Custom starts include
-`SetUp` and a dual `FEN` tag. Download uses `.bpgn`; a plain single-board PGN
-would lose the capture/drop dependencies. Copy link also retains forward
-moves beyond the displayed cursors. If clipboard access fails, a selectable
-text dialog provides a manual copy fallback.
-
-Setup fields are behind Edit position. SAN/UCI move entry provides keyboard
-access to both boards, including promotions (`a8=N`, `a7a8n`) and drops
-(`N@f3`). Moving a pawn to the final rank opens all four promotion choices;
-Cancel and Escape leave the accepted position and history unchanged. The
-board announces its pieces/turn through its accessible description and
-highlights check. Invalid per-board navigation rolls back atomically.
-
-It is an analysis tool, not a four-player
-online game with live clocks. The boards, move lists and setup boxes are
-shared with `/bughousedb` (`src/bughouse/boards.ts`,
-`src/components/BughouseBoards.astro`, `src/styles/bughouse-board.css`).
+This folder builds Hivemind, the bughouse engine, to run **entirely in a
+visitor's browser**: a WebAssembly build of the engine with its network on
+ONNX Runtime Web, on the GPU through WebGPU or on CPU threads, searching one
+board with the partner board held still. No page of the website loads it:
+the site's `/bughouse` board runs Lichess's crazyhouse Fairy-Stockfish (see
+the [frontend guide](../../python/twic-position-finder/frontend/README.md#bughouse-board)).
+`prepare_assets.py` runs on every frontend build, because the ONNX Runtime it
+copies also serves the Expectimax tab's Maia.
 
 ## Deploy on Cloudflare Pages
 
@@ -55,28 +21,33 @@ Use the existing Chess Auto Prep Pages project:
 | Build environment | Node 22.12+ and Python 3.11+ (standard Pages build environment) |
 | Bughouse environment variables / bindings | None |
 
-The `prebuild` step first runs the state regressions and Astro type check, then downloads the existing checksum-pinned Hivemind network,
-splits its gzip bytes into two files smaller than 25 MiB, and copies the ONNX
-Runtime Web files from the pinned npm dependency. The compressed network is
-about 32 MB; with ONNX Runtime's WebGPU build (about 22 MB, listed in
-`model.json` as `runtime`) the first download is about 55 MB. The browser
-downloads both itself, showing progress, verifies every part and the
-uncompressed model against `model.json`, and keeps them in Cache Storage when
-it is available. The page is cross-origin isolated so the CPU fallback can
-use threads; see the frontend README.
+The `prebuild` step runs the puzzle, prep and analysis tests and the Astro
+type check, then `prepare_assets.py` and `tools/prepare_prep_web.py`.
+`prepare_assets.py` checks the committed engine against
+`public/bughouse-engine/build.json` (a stale binary fails the build),
+downloads the checksum-pinned Hivemind network (`tools/assets.lock.json`)
+unless `assets/bughouse/hivemind.onnx.gz` already matches, splits its gzip
+bytes into 16 MiB parts and copies ONNX Runtime Web from the pinned npm
+dependency: the WebGPU (`.jsep`) build for Hivemind and the plain build for
+the Expectimax tab's Maia. It writes `model.json` with every part's checksum,
+the runtime's and the uncompressed model's, and copies the Hivemind, ONNX
+Runtime and app licences beside them. The build fails if any engine asset is
+at or above Pages' 25 MiB file limit.
 
-The small compiled Hivemind module and its source archive are committed. Pages does **not** compile
-C++, install Emscripten, run Python after deployment, or start an engine
-process. Python is only a static asset preparation step during the build.
-The build fails if any engine asset is at or above Pages' 25 MiB file limit.
+The compressed network is about 32 MB; with the WebGPU runtime (about 22 MB)
+the first download is about 55 MB. The page downloads both itself, verifies
+them against `model.json` and keeps them in Cache Storage.
 
-Once deployed, use `https://chessautoprep.com/bughouse/`. Andrewbernal.com can
-link there. To host this under a separate subdomain instead, the exact same
-`dist/` output can be uploaded to a second Pages project with that custom
-domain; visit its `/bughouse/` path. Do not copy these files over the personal
-website's existing root: the build includes the other Chess Auto Prep pages.
-The Bughouse feature is static even though the unrelated TWIC alerts feature
-still uses its existing API.
+The small compiled Hivemind module and its source archive are committed. Pages
+does **not** compile C++, install Emscripten, run Python after deployment, or
+start an engine process. Python is only a static asset preparation step during
+the build.
+
+Once deployed, use `https://chessautoprep.com/bughouse/`. To host it under a
+separate subdomain instead, upload the same `dist/` output to a second Pages
+project with that custom domain and visit its `/bughouse/` path. Do not copy
+these files over another website's root: the build includes the other Chess
+Auto Prep pages.
 
 Local build/preview:
 
@@ -87,99 +58,59 @@ npm run build
 npm run preview
 ```
 
-After engine assets have loaded, an open page can continue moving and
-analysing with networking disabled. This is not a promise that a closed page
-can be reopened offline: there is no page-caching service worker.
-
 ## Engine port
 
 `CMakeLists.txt` compiles the pinned Hivemind source revision
 `5508ba9daf4164e48a8a8a9b39e101efdc60e97a`, with `patches/*.patch` applied
 in name order, plus three browser adapters. `patches/frozen-board.patch` adds
-`g_frozenBoardB` for Bughouse Single Board: board B gets no moves, a check on
-A that a drop could block lets the checked side drop the blocker it waits for
-(a pawn, or a knight where a pawn cannot stand), nobody's sit plane is set,
-and `g_frozenValueOffset` is subtracted from every network value. With the
-flag off (the Lab, BughouseDB) searches are unchanged. The adapters:
+`g_frozenBoardB`: board B gets no moves, a check on A that a drop could block
+lets the checked side drop the blocker it waits for (a pawn, or a knight where
+a pawn cannot stand), nobody sits (nothing would arrive), the sit plane says
+which team is up on the clock as Hivemind's `TimeAdvantage` gives it
+(`g_frozenRootMaySit`: the root team's, the other team the opposite), and
+`g_frozenValueOffset` is subtracted from every network value. With the flag off searches are unchanged.
 
-* `bridge.cc`: validated position/SAN/UCI interface and bounded MCTS searches.
-  It uses the existing `Board`, `SearchThread` and `Node` implementations.
-  `bh_search` remains available for explicit time-bounded callers.
-  `bh_search_nodes(fen, team, timeAdvantage, required, nodes, millisCap)`
-  stops at a node budget (up to 100,000) or time cap (up to 120 s) and adds
-  a `pv` in the native UCI format (`"(d2d4,pass)"`). Its `q` is the value
-  native Hivemind turns into `score cp` (180·tan(1.56·q)): the best root
-  child's Q from the searched team's side, or the root's proof once solved.
-  It also lists `moves`: each board's moves among the root's expanded joint
-  actions, with that board's policy prior and their summed visits, most
-  visited first. BughouseDB's in-browser analysis scores only each board's
-  first four. The worker exposes it as the `search` action.
-* `bh_frozen_search(fen, nodes, millisCap,
-  lines, reportMs, batch, keep)` searches one board's FEN (hands in brackets) for the side
-  to move. Board B is the starting position held still, the opponent's colour
-  to move there, with every piece missing from A in the pocket of whoever
-  captured it (bughouse conserves pieces; without them the network barely
-  notices a missing queen). Two static inferences first measure the
-  network's shared offset (both seats with no sit plane rate themselves about
-  −0.5); the search subtracts it, so q is a winning chance from the side to
-  move and the start position reads about 0. It reports to
-  `Module.onFrozenReport` every `reportMs` and returns up to five lines with
-  board A's moves only. `batch` leaves are evaluated together (32 on a GPU,
-  1 on the CPU). With `keep`, the search keeps its tree, and a later `keep`
-  search of the same FEN carries on from it: node count and depth continue,
-  and `resumed_nodes` says how many came from before. The page's analysis
-  keeps; the sit panel's rows do not.
+* `bridge.cc`: the validated position interface and the searches, over the
+  engine's own `Board`, `SearchThread` and `Node`.
+  `bh_frozen_search(fen, whiteMaySit, nodes, millisCap, lines, reportMs, batch, keep)` is
+  the one-board search. It searches one board's FEN (hands in brackets) for
+  the side to move. Board B is the starting position held still, the
+  opponent's colour to move there, with every piece missing from A in the
+  pocket of whoever captured it (bughouse conserves pieces; without them the
+  network barely notices a missing queen). Two static inferences first
+  measure the two seats' shared offset under one clock (`whiteMaySit`: White
+  up on the clock, else Black); the search subtracts it, so q is a winning
+  chance from the side to move with the clock's worth in it (a level opening
+  is clearly winning for the side up on the clock). It stops at
+  the node budget (up to 1,000,000), the time cap, a solved root or Stop,
+  reports to `Module.onFrozenReport` every `reportMs` and returns up to five
+  lines with board A's moves only. `batch` (1 to 64) leaves are evaluated
+  together: 32 on a GPU, 1 on the CPU. With `keep`, the search keeps its
+  tree, and a later `keep` search of the same FEN and clock carries on from it: node
+  count and depth continue, and `resumed_nodes` says how many came from
+  before.
+  The module also exports `bh_position` (both boards' FENs and legal moves
+  after a move list; `test_rules.py` uses it) and the two-board searches
+  `bh_search`, `bh_search_nodes` and `bh_values`, which the page does not call.
 * `engine_web.cc`: replaces native ONNX Runtime with an Asyncify call to
-  ONNX Runtime Web, keeping the existing plane encoder and neural outputs.
+  ONNX Runtime Web, keeping the engine's plane encoder and neural outputs.
 * `thread_web.cc`: supplies Fairy-Stockfish's thread-local counters without
   starting an OS thread. The browser worker already isolates the engine.
 
-The frontend's `engine.worker.ts` loads the module, prepares the model, feeds
-74×8×8 input tensors to the same network, and copies value, policy, WDL and
-moves-left outputs back to the C++ search. It yields between evaluations so
-Stop can be processed. Engine inference requests are local worker messages. Shared evaluations use
-GET/POST `/api/bughousedb/evaluation` and one-time upload tickets.
-
-The web search uses batch size one and one worker. It
-shares the engine's MCTS and terminal logic, but does not run the desktop
-agent's separate root mate-search helper, background pondering or shared
-transposition table. Results and speed can differ from the native app;
-search strength depends on the node allowance and the time cap.
-The UI defaults to 800 nodes per team (3,000 and 8,000 are optional), with a
-two-minute safety cap per search. The shared API rejects an unfinished node
-budget unless the engine returned a mate proof. Old time-budget settings
-migrate to 800 nodes while retaining the played line.
-Stop finishes the current inference rather than terminating the worker and
-throwing away the loaded model. The same worker and inference session survive
-moves, setup changes, New game, repeated searches and Stop. A bounded cache
-keeps the last 32 completed analyses for the exact position/settings/budget;
-returning to one does not search or download again. Suggestions appear after
-the first search while the second calibrates the score; stopping at that point
-keeps the suggestions. The UI labels nodes **per team** and explains the time cap. When a move leaves
-the selected team with no legal move, the Lab selects the other team.
-
-A full page reload necessarily recreates worker memory and the inference
-session, but verified model chunks are read from Cache Storage when available.
-Private mode, storage eviction or quota limits can require another download.
-Stop aborts an active manifest/model transfer, completed chunks remain cached,
-and transfers have timeouts. Inference tensors are disposed even on errors.
-Long played lines are replayed in batches within the WASM parser's 256-move
-limit.
-
-Advantage is `(q_ours - q_theirs) / 2`, using two searches at the same budget.
-When the other team has no legal turn on either board, `bh_values` evaluates
-both static seats and the score is `clamp(q_ours - (v_ours + v_theirs) / 2, -1, 1)`,
-matching native static-offset calibration. This fallback needs two extra
-inferences, not another search. The API checks that the other team cannot move
-before accepting it; saved results retain their calibration source and shortlist. Raw Hivemind values are not
-Stockfish pawn scores or measured win probabilities. With no live clocks,
-having no legal move does not automatically declare the match over: a
-partner may still deliver a rescue piece.
+The frontend's `src/analysis/hivemind.worker.ts` loads the module, prepares
+the model, feeds 74×8×8 input tensors to the network, and copies value,
+policy, WDL and moves-left outputs back to the C++ search. It yields between
+evaluations so Stop can be processed. The web search shares the engine's MCTS
+and terminal logic but not the desktop agent's separate root mate-search
+helper, background pondering or shared transposition table, so results and
+speed can differ from the native engine. Raw Hivemind values are not
+Stockfish pawn scores or measured win probabilities.
 
 ## Rebuild the WebAssembly module
 
-This is only needed when changing the C++ bridge or pinned engine source.
-Install/activate Emscripten SDK **4.0.15**, then from the repository root:
+This is only needed when changing the C++ bridge, the patches or the pinned
+engine source. Install/activate Emscripten SDK **4.0.15**, then from the
+repository root:
 
 ```sh
 scripts/ci.sh with -- python3 tools/bughouse_web/build.py --emsdk /path/to/emsdk
@@ -191,48 +122,31 @@ exports it to `build/bughouse-web-patched/` and applies `patches/*.patch`.
 revision; it never edits that checkout. `public/bughouse-engine/build.json`
 records the source revision, compiler version, bridge hashes and output
 hashes. The normal site build verifies these hashes and rejects stale binaries.
-Commit the `.mjs`, `.wasm`, source archive and build metadata together with bridge
-changes. Model and ONNX runtime assets are ignored and recreated by
+Commit the `.mjs`, `.wasm`, source archive and build metadata together with
+bridge changes. Model and ONNX runtime assets are ignored and recreated by
 `prepare_assets.py` during `npm run build` or `npm run dev`.
 
-Hivemind notices, ONNX Runtime notices and the app license are copied into
-the published engine directory. Upstream Fairy-Stockfish code is GPL-3.0;
-the app is AGPL-3.0. The page links to `hivemind-source.tar.gz`, containing the
-exact engine source, browser adapters, licenses and compilation instructions.
+Upstream Fairy-Stockfish code is GPL-3.0; the app is AGPL-3.0. The published
+engine directory carries `hivemind-source.tar.gz`, containing the exact engine
+source, browser adapters, licences and compilation instructions, beside the
+Hivemind, ONNX Runtime and app licences.
 
 ## Verification
 
 ```sh
 scripts/ci.sh with -- python3 tools/bughouse_web/test_rules.py
-scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend exec -- \
-  astro check --root python/twic-position-finder/frontend
-scripts/ci.sh analyze lint
+scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test:analysis
+scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run build
+scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test:bughouse:browser
 ```
 
-The rules check compares 251 two-board positions against the existing
-python-chess bughouse model, including en passant, castling, every promotion,
-promoted captures and invalid input recovery. It needs the development
-`python-chess` dependency, already used by the bughouse MCP server.
-
-The browser check uses a temporary FastAPI/SQLite book plus a static file server, Chrome via the
-existing `puppeteer-core` dependency (`CHROME_BIN` selects the executable),
-and the real WASM engine/neural model. It tests moves, cross-board capture
-and drops, per-board stepping, promotion, invalid input, real recommendations/play,
-download failure/retry, cancellation/recovery, phone layout and analysis with all networking off.
-Shared API checks must use an isolated database, never the public book. The server and
-browser are closed afterward. Screenshots go to ignored
-`build/bughouse-web/` for visual inspection.
-
-The focused state tests cover independent rollback snapshots, BPGN chronology,
-custom-start/promotion exports, saved-link validation, reserve limits and
-worker reuse. The browser check covers both colours and all four promotions,
-Cancel/Escape, promoted captures, repeated rejected undo, copying/downloading,
-link and refresh restoration, download cancellation, cached repeated analyses,
-Stop/recovery and new-position offline inference. It also reloads the page to
-check that the model chunks are reused and checks a phone-sized layout.
-Physical iOS/Android testing remains separate from desktop Chrome's viewport
-checks. Run these checks on the current revision rather than treating an old
-successful run as a release gate.
+The rules check compares 251 two-board positions from the compiled module
+against the python-chess bughouse model, including cross-board captures,
+drops, en passant, castling, every promotion and promoted captures, and checks
+that invalid input is rejected without corrupting the reusable module. It
+needs the development `python-chess` dependency, already used by the bughouse
+MCP server. The browser check is described in the
+[frontend guide](../../python/twic-position-finder/frontend/README.md#checks).
 
 References: [Pages asset limits](https://developers.cloudflare.com/pages/platform/limits/),
 [Emscripten Asyncify](https://emscripten.org/docs/porting/asyncify.html),

@@ -7,7 +7,7 @@ import '../../chess/training/schedule.dart';
 import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
 import '../../chess/training/training_options.dart';
-import '../../storage/training_store.dart';
+import '../../storage/training_progress.dart';
 import '../../workspace/board_claim.dart';
 import 'progress.dart';
 
@@ -338,8 +338,9 @@ class Lesson extends ChangeNotifier {
     _rated.add(line.key);
     _tally = (lines: _rated.length, right: _tally.right, wrong: _tally.wrong);
     if (rating == Rating.again &&
-        (kind == SittingKind.learn || kind == SittingKind.review))
+        (kind == SittingKind.learn || kind == SittingKind.review)) {
       _left.add(line);
+    }
     if (_suspended) {
       _advanceOnResume = true;
     } else {

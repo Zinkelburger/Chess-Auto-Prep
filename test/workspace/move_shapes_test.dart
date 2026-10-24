@@ -20,11 +20,11 @@ void main() {
       'words and the evaluation, and saved', () async {
     final session = fixture.session;
     // 1... c5 {The Sicilian [%eval 0.30]}
-    session.goTo(NodePath.of(const [0]));
+    session.cursor.goTo(NodePath.of(const [0]));
     expect(drawsIntoComment(session, editing: false), isTrue);
     drawIntoComment(session, _arrow);
     expect(
-      session.commentAt(session.cursor),
+      session.commentAt(session.cursor.value),
       'The Sicilian [%eval 0.30] [%cal Gg1f3]',
     );
     expect(shapesOnBoard(session), [_arrow]);
@@ -35,13 +35,16 @@ void main() {
     );
 
     drawIntoComment(session, _arrow);
-    expect(session.commentAt(session.cursor), 'The Sicilian [%eval 0.30]');
+    expect(
+      session.commentAt(session.cursor.value),
+      'The Sicilian [%eval 0.30]',
+    );
     expect(shapesOnBoard(session), isEmpty);
   });
 
   test('clearing takes every shape out of the comment and keeps the words', () {
     final session = fixture.session;
-    session.goTo(NodePath.of(const [0]));
+    session.cursor.goTo(NodePath.of(const [0]));
     drawIntoComment(session, _arrow);
     drawIntoComment(
       session,
@@ -49,27 +52,30 @@ void main() {
     );
     expect(shapesOnBoard(session), hasLength(2));
     clearCommentShapes(session);
-    expect(session.commentAt(session.cursor), 'The Sicilian [%eval 0.30]');
+    expect(
+      session.commentAt(session.cursor.value),
+      'The Sicilian [%eval 0.30]',
+    );
     expect(shapesOnBoard(session), isEmpty);
   });
 
   test('the threat is drawn in red only on the position it is for', () {
     final session = fixture.session;
-    final threat = (fen: session.boardFen, uci: 'g1f3');
+    final threat = (fen: session.cursor.boardFen, uci: 'g1f3');
     expect(
       threatOnBoard(session, threat),
       const BoardShape(Square.g1, Square.f3, ShapeColour.red),
     );
-    session.forward();
+    session.cursor.forward();
     expect(threatOnBoard(session, threat), isNull);
   });
 
   test('the threat is not drawn while the rest of the game is hidden', () {
     final session = fixture.session;
-    final threat = (fen: session.boardFen, uci: 'g1f3');
+    final threat = (fen: session.cursor.boardFen, uci: 'g1f3');
     // A solitaire game or a puzzle shows the game only as far as the move
     // under the cursor: the threat would point at the answer.
-    session.showOnlyTo(session.cursor);
+    session.showOnlyTo(session.cursor.value);
     expect(threatOnBoard(session, threat), isNull);
     session.showOnlyTo(null);
     expect(threatOnBoard(session, threat), isNotNull);
@@ -79,16 +85,16 @@ void main() {
     'shapes stay on the board where the document does not take them',
     () async {
       final session = fixture.session;
-      session.goTo(NodePath.of(const [0]));
+      session.cursor.goTo(NodePath.of(const [0]));
       // The viewer holds its edits: only while its editing is open.
       session.holdsEdits = true;
       expect(drawsIntoComment(session, editing: false), isFalse);
       expect(drawsIntoComment(session, editing: true), isTrue);
       session.holdsEdits = false;
       // A line read out of a comment is not the move's position.
-      session.showCommentLine(
-        session.cursor,
-        pvMoves(session.fen, const ['f2f4']),
+      session.cursor.showCommentLine(
+        session.cursor.value,
+        pvMoves(session.cursor.fen, const ['f2f4']),
         0,
       );
       expect(drawsIntoComment(session, editing: false), isFalse);

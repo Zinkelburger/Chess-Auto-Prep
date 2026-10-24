@@ -70,7 +70,6 @@ void main() {
           session: session,
           saver: saver,
           set: set,
-          older: () async => {},
         );
         if (open) await session.open(ref, game: 0);
         const id = 'lichess_AbCd1234';
@@ -167,7 +166,6 @@ void main() {
           session: session,
           saver: saver,
           set: set,
-          older: () async => {},
         );
         const id = 'lichess_AbCd1234';
         expect(await additions.add(id, [minedScholarsMate()]), isA<NotAdded>());

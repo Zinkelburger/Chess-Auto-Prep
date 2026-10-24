@@ -6,15 +6,17 @@ import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/training/schedule.dart';
 import 'package:chess_auto_prep/features/library/library_state.dart';
 import 'package:chess_auto_prep/features/trainer/trainer.dart';
+import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/storage/atomic_write.dart';
 import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart' as storage;
 import 'package:chess_auto_prep/storage/pgn_file_store.dart';
 import 'package:chess_auto_prep/storage/file_relocation.dart';
-import 'package:chess_auto_prep/workspace/document_saver.dart';
+import 'package:chess_auto_prep/workspace/session_results.dart';
 import 'package:chess_auto_prep/storage/training_rows.dart';
 import 'package:chess_auto_prep/storage/training_store.dart';
+import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:chess_auto_prep/workspace/gap_walk.dart';
 import 'package:chess_auto_prep/workspace/replies.dart';
 import 'package:flutter/foundation.dart';
@@ -109,7 +111,7 @@ void main() {
         expect(await parts.env.pendingWrites.settle(), isNull);
         final attempts = File(p.join(disk.documents.path, attemptsFile));
         expect(await attempts.readAsLines(), hasLength(1));
-        parts.session.goTo(NodePath.of([0]));
+        parts.session.cursor.goTo(NodePath.of([0]));
         await _until(
           parts.workspace.gaps,
           () => parts.workspace.gaps.currentWalk != null,

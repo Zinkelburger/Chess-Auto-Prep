@@ -5,7 +5,9 @@ import 'package:chess_auto_prep/storage/player_files.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:chess_auto_prep/features/study/studies.dart';
 import 'package:chess_auto_prep/net/lichess_studies.dart';
+import 'package:chess_auto_prep/net/lichess_study_writes.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/deleted_chapters.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/study_files.dart';
 import 'package:chess_auto_prep/workspace/document_saver.dart';
@@ -141,6 +143,7 @@ Future<StudyFixture> openStudy(
   PlayerStore? linkedPlayers,
   PendingWrites? pending,
   StudyFetch fetch = const StudyNotFetched(StudyFetchProblem.unreachable),
+  LichessStudyWriter? lichessWriter,
 }) async {
   final ref = studyRef(name);
   final store = ScriptedDocumentStore()
@@ -160,6 +163,8 @@ Future<StudyFixture> openStudy(
     session: session,
     saver: saver,
     lichess: lichess,
+    lichessWriter: lichessWriter,
+    openPage: (_) async => true,
     root: studiesRoot,
   );
   await studies.refresh();

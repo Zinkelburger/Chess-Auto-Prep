@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/ui/status_bar.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/move_tree_view.dart';
@@ -46,10 +47,16 @@ void main() {
         null,
       ),
     );
+    final said = <(String, bool)>[];
     solitaire.start();
     await tester.pumpWidget(
       MaterialApp(
         theme: darkTheme(),
+        builder: (context, child) => StatusScope(
+          say: (sentence, {action, problem = true}) =>
+              said.add((sentence, problem)),
+          child: child!,
+        ),
         home: Scaffold(
           body: Column(
             children: [
@@ -91,10 +98,12 @@ void main() {
     expect(copied, contains('Mistake'));
     expect(copied, contains('Hint used'));
     expect(copied, contains('Secret answer'));
+    expect(said, [('Session PGN copied.', false)]);
+    expect(find.byType(SnackBar), findsNothing);
     await tester.ensureVisible(find.text('1. g4'));
     await tester.tap(find.text('1. g4'));
     await tester.pumpAndSettle();
-    expect(fixture.session.boardFen, solitaire.record!.children[1].fen);
+    expect(fixture.session.cursor.boardFen, solitaire.record!.children[1].fen);
     await tester.longPress(find.text('1. g4'));
     await tester.pumpAndSettle();
     expect(find.text('Delete from here'), findsNothing);

@@ -248,9 +248,7 @@ class _StudyChapterListState extends State<StudyChapterList> {
                   itemCount: chapters.length,
                   itemExtent: listRowHeight,
                   itemBuilder: (_, index) => row(index),
-                  onReorder: (from, to) {
-                    widget.onReorder(from, to > from ? to - 1 : to);
-                  },
+                  onReorderItem: (from, to) => widget.onReorder(from, to),
                 )
               : ListView.builder(
                   controller: _scroll,

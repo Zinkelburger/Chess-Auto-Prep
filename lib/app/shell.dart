@@ -1,4 +1,3 @@
-import '../chess/pgn/tree_edit.dart' show pathOfSans;
 import '../features/pgn_viewer/export_dialog.dart';
 import '../features/tournaments/tournament_run.dart';
 import '../features/databases/database_library.dart';
@@ -7,7 +6,6 @@ import 'dart:async';
 import 'package:flutter/gestures.dart'
     show kBackMouseButton, kForwardMouseButton;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:multi_split_view/multi_split_view.dart';
 
 import '../features/books/books_screen.dart' show newBook;
@@ -17,7 +15,6 @@ import '../features/settings/setting_rows.dart';
 import '../features/settings/settings_dialog.dart';
 import '../features/tactics/my_games_block.dart';
 import '../features/trainer/train_pane.dart';
-import '../features/trainer/trainer.dart';
 import '../features/trainer/training_outline.dart';
 import '../ui/app_action.dart';
 import '../ui/app_keys.dart';
@@ -30,7 +27,6 @@ import '../ui/pane_tabs.dart';
 import '../ui/navigation_pages.dart';
 import '../ui/theme.dart';
 import '../workspace/board_claim.dart';
-import '../workspace/engine_jobs.dart';
 import '../workspace/document_actions.dart';
 import '../workspace/book_chip.dart';
 import '../workspace/copy_name_dialog.dart';
@@ -41,15 +37,20 @@ import '../workspace/workspace.dart';
 import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_tabs.dart';
 import '../workspace/workspace_view.dart';
+import '../workspace/workspace_hooks.dart';
 import 'board_doors.dart';
+import 'document_views.dart';
 import 'full_screen.dart';
+import 'job_door.dart';
 import 'layout_memory.dart';
 import 'search_door.dart';
 import 'mode_view.dart';
 import 'mode.dart';
+import 'save_held.dart';
 import 'training_visibility.dart';
 import 'player_wiring.dart';
 import 'top_bar.dart';
+import 'train_doors.dart';
 import 'workspace_requests.dart';
 
 /// The window: a top bar with the mode menu and the Actions menu, the
@@ -99,8 +100,11 @@ class Shell extends StatefulWidget {
 }
 
 class _ShellState extends State<Shell> with ListeningState<Shell> {
-  /// Whether the edit strip is open. The strip's own Done closes it.
+  /// Whether the edit strip is open: `Read | Edit` in the viewer and
+  /// Study, Ctrl+E and the strip's own Done elsewhere. Each mode keeps its
+  /// own, in [_editingIn] while another is on screen.
   final _editing = ValueNotifier(false);
+  final _editingIn = <Mode, bool>{};
 
   /// The words and the focus of the move field under the board, which `/`
   /// and a lesson reach as well as the field.
@@ -124,7 +128,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     labs: widget.labs,
     players: widget.players,
     databases: widget.databases,
+    editing: _editing,
     tournaments: widget.tournaments,
+    lichessLogin: widget.onExplorerLogin,
   );
 
   late final _layoutMemory = LayoutMemory(_ws.settings, {
@@ -168,9 +174,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         previous.tabs.show(WorkspaceTab.moves);
       }
       previous.left();
+      _editingIn[left] = _editing.value;
     }
     _ws.inspection?.hide();
     _shown = mode;
+    _editing.value = _editingIn[mode] ?? _views[mode]!.startsEditing;
     _selectLayout();
     if (mode == Mode.trainer && _train.lines.lesson == null) {
       _train.lines.selection.enter(_ws.session.source);
@@ -183,42 +191,17 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     _arrange();
   }
 
-  Mode? _jobMode;
-  EngineJobKind? _jobKind;
+  /// The engine job named in the top bar, and the way back to it.
+  late final _job = JobDoor(
+    jobs: _ws.jobs,
+    requests: _requests,
+    views: _views,
+    tournaments: widget.tournaments,
+  );
 
   void _jobChanged() {
-    final kind = _ws.jobs?.activeKind;
-    if (kind != _jobKind) {
-      _jobKind = kind;
-      _jobMode = kind == null ? null : _requests.mode;
-    }
+    _job.changed();
     if (mounted) setState(() {});
-  }
-
-  void _showJob() {
-    final kind = _ws.jobs?.activeKind;
-    if (kind == null) return;
-    if (kind == EngineJobKind.tournament) {
-      _requests.switchTo(Mode.engineTournament);
-      final run = widget.tournaments;
-      final active = run?.history
-          .where((t) => t.id == run.activeId)
-          .firstOrNull;
-      if (active != null) run!.select(active);
-      return;
-    }
-    final tab = switch (kind) {
-      EngineJobKind.search || EngineJobKind.makingLines => WorkspaceTab.search,
-      EngineJobKind.audit => WorkspaceTab.audit,
-      EngineJobKind.solitaire => WorkspaceTab.solitaire,
-      _ => WorkspaceTab.review,
-    };
-    var mode = _jobMode ?? Mode.repertoires;
-    if (!_views[mode]!.layout.pane(0).tabs.any((t) => t.id == tab)) {
-      mode = Mode.repertoires;
-    }
-    _requests.switchTo(mode);
-    _views[mode]!.layout.reveal(tab);
   }
 
   /// The reading card's tabs of the mode on screen.
@@ -245,8 +228,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     final tabs = _tabs;
     final shown = await _ws.inspection?.show() ?? false;
     if (!mounted) return;
-    if (!shown && tabs.selected == WorkspaceTab.analysis)
+    if (!shown && tabs.selected == WorkspaceTab.analysis) {
       tabs.show(WorkspaceTab.moves);
+    }
     setState(() {});
   }
 
@@ -334,13 +318,26 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     if (_shown == Mode.trainer) {
       _train.lines.selection.enter(_ws.session.source);
     }
+    // The mode the window opens on is entered as one switched to is: its
+    // side of `Read | Edit` decides what a move on the board does.
+    if (_view.editSwitch) {
+      _editing.value = _view.startsEditing;
+      _view.entered();
+    }
+    _editing.addListener(_editingChanged);
     _requests.addListener(_modeMayHaveChanged);
     _ws.inspection?.addListener(_analysisChanged);
     _ws.jobs?.addListener(_jobChanged);
   }
 
+  /// Reading quiets the board and editing gives it its tools back.
+  void _editingChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    _editing.removeListener(_editingChanged);
     _requests.removeListener(_modeMayHaveChanged);
     _ws.jobs?.removeListener(_jobChanged);
     _ws.inspection?.removeListener(_analysisChanged);
@@ -400,16 +397,13 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     requests: _requests,
   );
 
-  /// A line the Train tab sent to be read: its chapter on the board at the
-  /// position, in the builder when it asked for it, and the Moves tab up
-  /// unless only the board was to move.
-  Future<void> _readLine(LineToRead line) async {
-    final result = line.place == ReadIn.builder
-        ? await _requests.readInBuilder(line.ref, line.sans, game: line.game)
-        : await _requests.openAt(line.ref, line.sans, game: line.game);
-    if (!mounted || result is! RequestDone) return;
-    if (line.place != ReadIn.board) _view.show(WorkspaceTab.moves);
-  }
+  late final _trainDoors = TrainDoors(
+    requests: _requests,
+    workspace: _ws,
+    trainer: _train.lines,
+    view: () => _view,
+    mounted: () => mounted,
+  );
 
   /// While the explorer's Book is up the board is its free board; otherwise a
   /// move on the board is the puzzle's, or the document's.
@@ -431,11 +425,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         WorkspaceTab.train => TrainPane(
           trainer: _train.lines,
           onStudy: _requests.mode == Mode.trainer
-              ? () => unawaited(_studyLesson())
+              ? () => unawaited(_trainDoors.studyLesson())
               : null,
           onImport: _requests.mode == Mode.study
               ? null
-              : () => unawaited(_importTrainingCourse()),
+              : () => unawaited(_trainDoors.importCourse()),
           onSettings: () => unawaited(
             showSettingsDialog(
               context,
@@ -447,51 +441,12 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
             ),
           ),
           moves: _moves,
-          onRead: (line) => unawaited(_readLine(line)),
+          onRead: (line) => unawaited(_trainDoors.readLine(line)),
           offerBuilder: _view.offersBuilder,
           bookChip: BookChip(books: _ws.books, onEdit: _requests.editBooks),
         ),
         _ => null,
       };
-
-  Future<void> _importTrainingCourse() async {
-    final result = await _requests.importFile();
-    if (!mounted || result is! RequestDone) return;
-    if (_requests.mode == Mode.trainer) {
-      final source = _ws.session.source;
-      final selection = _train.lines.selection;
-      final folder = selection.repertoires
-          .where((r) => r.chapters.any((c) => c.path == source?.path))
-          .firstOrNull;
-      if (folder != null) selection.choose(folder);
-    } else {
-      _train.lines.setScope(TrainScope.chapter);
-    }
-    _view.show(WorkspaceTab.train);
-  }
-
-  Future<void> _studyLesson() async {
-    final trainer = _train.lines;
-    final lesson = trainer.lesson;
-    if (lesson == null || lesson.suspended) return;
-    final line = lesson.line;
-    final shown = lesson.drill.shown;
-    trainer.suspend();
-    final result = await _requests.openLine(
-      root: line.start,
-      sans: line.moves.map((m) => m.san).toList(),
-      ply: shown,
-      side: line.side,
-    );
-    if (!mounted || trainer.lesson != lesson) return;
-    if (result is! RequestDone) {
-      trainer.resume();
-      return;
-    }
-    if (!_view.layout.isOpen(WorkspaceTab.analysis))
-      _view.layout.reveal(WorkspaceTab.analysis);
-    if (_requests.mode == Mode.trainer) unawaited(_ws.analysis.enable());
-  }
 
   /// Space shows the answer while a puzzle is on the board; otherwise it
   /// is the mode's: the viewer's autoplay.
@@ -513,7 +468,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     if (_listShown &&
         _positionsShown &&
         (!_compactNavigation || !_outlineShown || _navigationPage == 0)) {
-      if (_ws.finds.step(by) case final next?) _openFind(next);
+      if (_ws.finds.step(by) case final next?) _doors.openFind(next);
       return;
     }
     if (_view.walk(by)) return;
@@ -547,35 +502,6 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   void _showPositions() {
     if (_listShown && _positionsShown) return;
     _togglePositions();
-  }
-
-  /// A find's position in the open chapter when the chapter plays its line
-  /// that far, else its line on an analysis board at its position.
-  void _openFind(KeptFind kept) {
-    _ws.finds.select(kept.id);
-    final session = _ws.session;
-    final tree = session.tree;
-    if (!_inspecting &&
-        session.source != null &&
-        tree != null &&
-        tree.rootFen.position == kept.rootFen.position) {
-      final path = pathOfSans(
-        tree,
-        kept.find.sans.take(kept.find.ply).toList(),
-      );
-      if (path != null) {
-        session.goTo(path);
-        return;
-      }
-    }
-    unawaited(
-      _requests.openLine(
-        root: kept.rootFen,
-        sans: kept.find.sans,
-        ply: kept.find.ply,
-        side: kept.side,
-      ),
-    );
   }
 
   /// A trap's line trained in the builder, put in the draft first when no
@@ -812,7 +738,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         mode: _requests.mode,
         onMode: _requests.switchTo,
         activity: _ws.jobs?.activeKind?.label,
-        onActivity: _showJob,
+        onActivity: _job.show,
         backTo: _requests.backTo?.label,
         forwardTo: _requests.forwardTo?.label,
         onBack: _back,
@@ -853,6 +779,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
               extra: _windowKeys,
               leave: _leave,
               save: _inspecting ? null : _saveHeld,
+              escapeEndsEditing: _inspecting || !_view.editSwitch,
               child: Column(
                 children: [
                   PaneTabStrip(
@@ -893,7 +820,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         ? FindsPanel(
             finds: _ws.finds,
             session: _ws.session,
-            onOpen: _openFind,
+            onOpen: _doors.openFind,
             onTrain: _trainFind,
             trailing: trailing,
           )
@@ -901,8 +828,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         ? TrainingOutline(
             trainer: _train.lines,
             trailing: trailing,
-            onRead: (line) => unawaited(_readLine(line)),
-            onImport: () => unawaited(_importTrainingCourse()),
+            onRead: (line) => unawaited(_trainDoors.readLine(line)),
+            onImport: () => unawaited(_trainDoors.importCourse()),
           )
         : _view.list(trailing),
   );
@@ -938,10 +865,12 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       moves: _moves,
       hooks: WorkspaceHooks(
         builder: _view is RepertoiresView,
-        onAnnotate: !_inspecting && _view is StudyView
+        onAnnotate: !_inspecting && _view.editSwitch
             ? () => _editing.value = true
             : null,
-        noteEditing: _view is RepertoiresView || _view is ViewerView,
+        editSwitch: !_inspecting && _view.editSwitch,
+        studyTools: !_inspecting && _view.studyTools,
+        noteEditing: _view is RepertoiresView,
         header: _view.header,
         underHeading: _inspecting ? null : _view.underHeading,
         quietBoard: _view.quietBoard,
@@ -955,7 +884,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         lesson: _inspecting ? null : _train.lines.board,
         trainingTools: _requests.mode == Mode.trainer,
         onStudyLesson: _requests.mode == Mode.trainer
-            ? () => unawaited(_studyLesson())
+            ? () => unawaited(_trainDoors.studyLesson())
             : null,
         onBoardMove: _inspecting ? null : _boardMove,
         onEngineMove: _inspecting ? null : _engineMove,

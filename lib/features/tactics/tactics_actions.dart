@@ -48,7 +48,7 @@ List<AppAction> tacticsActions({
       'Copy FEN',
       open
           ? () => unawaited(
-              Clipboard.setData(ClipboardData(text: session.fen.value)),
+              Clipboard.setData(ClipboardData(text: session.cursor.fen.value)),
             )
           : null,
       group: 'Board',
@@ -82,7 +82,7 @@ List<AppAction> myGamesActions(
 /// What can be done to the puzzle on the board, while one is.
 List<AppAction> puzzleActions(PuzzleTrainer trainer) {
   final up = trainer.up;
-  if (up == null)
+  if (up == null) {
     return trainer.run == null
         ? const []
         : [
@@ -93,6 +93,7 @@ List<AppAction> puzzleActions(PuzzleTrainer trainer) {
             ),
             AppAction('End session', trainer.end, group: 'Tactics'),
           ];
+  }
   return [
     AppAction(
       'Show solution',

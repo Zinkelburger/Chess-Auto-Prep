@@ -58,7 +58,7 @@ studies, Chessbook) do not offer in one place:
   cached, so the app keeps working offline.
 - Modes, by their exact names: Repertoire builder, Opening books, PGN Viewer,
   Repertoire trainer, Study, Tactics, My games, Player analysis, Players &
-  prep, Databases, Engine tournament, and Bughouse lab (shown only when its
+  prep, Databases, Engine tournament, and Bughouse (shown only when its
   engine assets are present).
 - Heavy work (generation, game review, engine matches) runs for minutes to
   hours on the player's own CPU while they keep using the app.
@@ -72,10 +72,8 @@ studies, Chessbook) do not offer in one place:
   already uses for that kind of work; a new mode needs a strong reason.
 - Dark theme only. There is no light or system theme and no appearance setting.
 - Search values are precomputed and stored. The app shows a stored value or
-  says the position is not in the tree. The Bughouse lab also has an explicit
-  local Expectimax action: it searches the selected board with CrazyAra policy
-  probabilities and Hivemind evaluations, saves both colour values together,
-  and automatically shows compatible saved results on later visits.
+  says the position is not in the tree. Bughouse is a live analysis board:
+  its engine runs only behind its switch and nothing it finds is stored.
 - Saving follows the Obsidian model: debounced, one write per burst, backup
   then atomic replace. A problem affects only the item involved; data that
   cannot be read is quarantined and logged, never deleted, and never blocks
@@ -109,11 +107,11 @@ studies, Chessbook) do not offer in one place:
 
 - The running app, driven headless with disposable data:
   `python3 scripts/app_driver.py start`.
-- Component and data-flow reference: `docs/COMPONENT_MAP.md`. Per-mode specs
-  and screenshots: `docs/v2/features/`.
+- Component and data-flow reference: `docs/COMPONENT_MAP.md`. Per-mode specs:
+  `docs/features/`.
 - Algorithm detail for the generator: `docs/ALGORITHM.md`.
 - Theme tokens and shared controls: `lib/ui/theme.dart`, `lib/ui/`.
-- Wireframe pages the owner liked: `docs/design/`.
+- The wireframe style the owner likes for design pages: `docs/design/wireframe-style.css`.
 - Absent, and not to be fabricated: user counts, testimonials, benchmarks
   against other products, pricing, and any claim about playing-strength gains.
 

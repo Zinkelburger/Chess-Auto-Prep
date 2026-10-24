@@ -31,8 +31,7 @@ final class StockfishMissing extends StockfishLocation {
 /// the engine gzipped as an asset, with its checksums in
 /// `tools/assets.lock.json`. The first run writes it to the support folder
 /// beside a stamp naming the release, so a new release replaces it and an
-/// unchanged one costs one stat. The old app keeps the same file and
-/// stamp, so both apps share one copy.
+/// unchanged one costs one stat.
 ///
 /// Nothing here throws: a damaged lock file, an unreadable stamp, a corrupt
 /// asset or a support folder that cannot be written come back as
@@ -206,9 +205,9 @@ final class StockfishInstall {
   }
 
   /// Removes a half-written engine an install that was killed left behind:
-  /// one an hour old is no install still running. The support folder is
-  /// shared with other data and with the old app, so only this binary's
-  /// parts are touched, and a sweep that fails never fails the install.
+  /// one an hour old is no install still running. The support folder holds
+  /// other data too, so only this binary's parts are touched, and a sweep
+  /// that fails never fails the install.
   Future<void> _sweepLeftovers() async {
     final own = '$_binaryName.$pid.part';
     final ours = RegExp('^${RegExp.escape(_binaryName)}\\.\\d+\\.part\$');

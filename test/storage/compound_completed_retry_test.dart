@@ -49,7 +49,7 @@ void main() {
                 Book(
                   id: 'one',
                   name: 'Prep',
-                  chapters: {BookChapter('Course/Course.pgn', 'A')},
+                  chapters: {const BookChapter('Course/Course.pgn', 'A')},
                 ),
               ],
             ).encode(),

@@ -239,8 +239,9 @@ String _setAside(String path, DateTime now) {
   // A rename replaces its target, so a name any earlier copy or its
   // sidecars hold is never reused.
   var copy = '$path.unreadable-$stamp';
-  for (var n = 2; suffixes.any((s) => File('$copy$s').existsSync()); n++)
+  for (var n = 2; suffixes.any((s) => File('$copy$s').existsSync()); n++) {
     copy = '$path.unreadable-$stamp-$n';
+  }
   for (final suffix in suffixes) {
     final file = File('$path$suffix');
     if (file.existsSync()) file.renameSync('$copy$suffix');
@@ -357,8 +358,9 @@ List<String> _unzip(Uint8List zip) {
       if (file.isFile && file.name.toLowerCase().endsWith('.pgn'))
         _decode(file.content),
   ];
-  if (texts.isEmpty)
+  if (texts.isEmpty) {
     throw const FormatException('TWIC archive contains no PGN.');
+  }
   return texts;
 }
 
@@ -656,7 +658,7 @@ const _importsTable =
     'CREATE TABLE IF NOT EXISTS imports '
     '(fingerprint TEXT PRIMARY KEY, games INTEGER NOT NULL)';
 
-/// Version 4, as the older app created it.
+/// Version 4, the schema existing databases have.
 const _schema = '''
 CREATE TABLE games (
  id INTEGER PRIMARY KEY, twic INTEGER,

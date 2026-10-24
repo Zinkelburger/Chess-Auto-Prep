@@ -8,12 +8,9 @@ import 'package:path/path.dart' as p;
 
 import '../../diagnostics/log.dart';
 import '../../chess/pgn/game_text.dart';
-import '../../chess/pgn/games_written.dart';
 import '../../chess/tactics/game_ids.dart';
 import '../../net/recent_games.dart';
 import '../../storage/document_ref.dart';
-import '../../storage/edit_scope.dart';
-import '../../storage/game_store.dart';
 import '../../storage/my_games_files.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/pgn_document_store.dart';
@@ -32,22 +29,14 @@ enum PlayerList { openings, games, weaknesses }
 final class PlayerAnalysis extends ChangeNotifier {
   PlayerAnalysis({
     required this.documents,
-    required this.archive,
     required this.cache,
     required this.sites,
     required this.pending,
-    required this.archiveCopies,
   });
   final PgnDocumentStore documents;
-  final GameStore archive;
   final GamesCache cache;
   final List<RecentGames> sites;
   final PendingWrites pending;
-
-  /// Where a player's games from the old app's database are copied to be
-  /// read and opened like any other file: one derived file per player,
-  /// beside the downloads, never among the user's collections.
-  final String archiveCopies;
   Player? player;
   PlayerCorpus? corpus;
   Side side = Side.white;
@@ -66,8 +55,9 @@ final class PlayerAnalysis extends ChangeNotifier {
 
   Future<void> retry() async {
     final current = player;
-    if (current != null && !busy)
+    if (current != null && !busy) {
       await select(current, download: _retryDownload);
+    }
   }
 
   List<String> warnings = const [];
@@ -104,13 +94,15 @@ final class PlayerAnalysis extends ChangeNotifier {
   }
 
   bool includes(AnalyzedGame game) {
-    if (game.side != side || !game.search.contains(query.toLowerCase()))
+    if (game.side != side || !game.search.contains(query.toLowerCase())) {
       return false;
+    }
     if (recentDays != null) {
       final date = DateTime.tryParse(game.date.replaceAll('.', '-'));
       if (date == null ||
-          date.isBefore(DateTime.now().subtract(Duration(days: recentDays!))))
+          date.isBefore(DateTime.now().subtract(Duration(days: recentDays!)))) {
         return false;
+      }
     }
     if (speeds.isNotEmpty &&
         !speeds.contains(
@@ -118,8 +110,9 @@ final class PlayerAnalysis extends ChangeNotifier {
             for (final key in const ['TimeControl', 'Site', 'Link'])
               key: game.tag(key),
           }),
-        ))
+        )) {
       return false;
+    }
     return true;
   }
 
@@ -207,8 +200,9 @@ final class PlayerAnalysis extends ChangeNotifier {
       final result = await analyzePlayerGames(next, games);
       final fetched = await _stalestDownload(next);
       if (!_current(ticket)) return;
-      if (!await _validate(revisions, ticket))
+      if (!await _validate(revisions, ticket)) {
         throw StateError('Games changed while being read. Reload this player.');
+      }
       corpus = result;
       evals.clear();
       _revisions
@@ -217,8 +211,9 @@ final class PlayerAnalysis extends ChangeNotifier {
       warnings = notes;
       if (!same &&
           !result.games.any((g) => g.side == side) &&
-          result.games.isNotEmpty)
+          result.games.isNotEmpty) {
         side = result.games.first.side;
+      }
       status = result.games.isEmpty
           ? 'No matching games. Add an account or PGN file, and check the player’s name and aliases.'
           : [
@@ -295,10 +290,11 @@ final class PlayerAnalysis extends ChangeNotifier {
         final keeping = cache.keep(site, username, games, DateTime.now());
         pending.watch(this, keeping);
         final kept = await keeping;
-        if (kept is GamesNotKept)
+        if (kept is GamesNotKept) {
           notes.add(
             '${site.label}: could not save downloaded games. ${kept.detail}',
           );
+        }
       case GamesNotFetched(:final problem):
         notes.add(
           '${site.label}: ${switch (problem) {
@@ -319,29 +315,6 @@ final class PlayerAnalysis extends ChangeNotifier {
     for (final account in next.accounts) {
       paths.add(cache.refFor(account.site, account.username).path);
     }
-    final names = <String>{
-      for (final account in next.accounts)
-        ...GameCollections.analysis(account.site, account.username),
-      for (final key in next.strings('game_sets')) 'analysis:$key',
-    };
-    if (names.isNotEmpty) {
-      final archived = await archive.read(names);
-      if (!_current(ticket)) return (<PlayerGame>[], <DocumentRef, Revision>{});
-      if (archived is StoredGamesUnreadable)
-        notes.add('Older saved games could not be read. ${archived.detail}');
-      if (archived is StoredGamesFound && archived.games.isNotEmpty) {
-        final ref = _archiveCopyOf(next);
-        // The downloads and linked files are still read without it.
-        final problem = await _copy(ref, [
-          for (final g in archived.games) g.pgn,
-        ]);
-        if (problem == null) {
-          paths.add(ref.path);
-        } else {
-          notes.add('Older saved games could not be shown. $problem');
-        }
-      }
-    }
     final games = <PlayerGame>[];
     final revisions = <DocumentRef, Revision>{};
     for (final path in paths) {
@@ -356,62 +329,15 @@ final class PlayerAnalysis extends ChangeNotifier {
         case Unreadable(:final detail):
           notes.add('${p.basename(path)}: $detail');
         case Absent():
-          if (next.files.contains(path))
+          if (next.files.contains(path)) {
             notes.add('${p.basename(path)} is missing. Link the file again.');
+          }
       }
     }
-    if (paths.isNotEmpty && revisions.isEmpty && notes.isNotEmpty)
+    if (paths.isNotEmpty && revisions.isEmpty && notes.isNotEmpty) {
       throw StateError(notes.join('\n'));
-    return (games, revisions);
-  }
-
-  /// [player]'s one copy of their games in the old app's database. Games
-  /// are only ever added to it, so what the user keeps there survives.
-  DocumentRef _archiveCopyOf(Player player) {
-    final id = sha256.convert(utf8.encode(player.id)).toString();
-    return DocumentRef(
-      p.join(archiveCopies, 'player-archive-${id.substring(0, 16)}.pgn'),
-    );
-  }
-
-  /// Appends the [games] that [ref] does not have yet; why not, or null.
-  /// A game is matched by its site id, or else by its exact text.
-  Future<String?> _copy(DocumentRef ref, List<String> games) async {
-    try {
-      switch (await documents.open(ref)) {
-        case Opened(readOnly: null, :final text, :final revision):
-          final fresh = await freshGamesOf(text, games);
-          if (fresh.isEmpty) return null;
-          final base = text.trimRight();
-          final joined = fresh.join('\n\n');
-          return switch (await documents.save(
-            ref,
-            base.isEmpty ? '$joined\n' : '$base\n\n$joined\n',
-            expected: revision,
-            scope: GamesEdited(GamesWritten(appended: fresh.length)),
-          )) {
-            Saved() => null,
-            Conflict() => 'the copy changed while it was written',
-            SaveDidNotLand(:final detail) => detail,
-          };
-        case Opened(:final readOnly?):
-          return readOnly;
-        case Absent():
-          final fresh = await freshGamesOf('', games);
-          return switch (await documents.create(
-            ref,
-            '${fresh.join('\n\n')}\n',
-          )) {
-            Created() => null,
-            Collision() => 'the copy appeared while it was written',
-            IoFailure(:final detail) => detail,
-          };
-        case Unreadable(:final detail):
-          return detail;
-      }
-    } on Object catch (error) {
-      return '$error';
     }
+    return (games, revisions);
   }
 
   Future<bool> _validate(
@@ -420,8 +346,9 @@ final class PlayerAnalysis extends ChangeNotifier {
   ) async {
     for (final e in revisions.entries) {
       final read = await documents.open(e.key);
-      if (!_current(ticket) || read is! Opened || read.revision != e.value)
+      if (!_current(ticket) || read is! Opened || read.revision != e.value) {
         return false;
+      }
     }
     return _current(ticket);
   }
@@ -446,8 +373,9 @@ final class PlayerAnalysis extends ChangeNotifier {
     final revisions = Map.of(_revisions);
     for (final e in revisions.entries) {
       final read = await documents.open(e.key);
-      if (!_current(ticket) || read is! Opened || read.revision != e.value)
+      if (!_current(ticket) || read is! Opened || read.revision != e.value) {
         return false;
+      }
     }
     return _current(ticket);
   }

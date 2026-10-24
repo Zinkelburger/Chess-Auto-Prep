@@ -162,7 +162,7 @@ final class Replies extends ChangeNotifier {
     }
     final s = _settings.value;
     final wanted = (
-      fen: _session.fen,
+      fen: _session.cursor.fen,
       elo: s.opponentElo,
       onceIn: s.coverOnceIn,
       walk: _gaps.currentWalk,
@@ -190,7 +190,7 @@ final class Replies extends ChangeNotifier {
 
   RepliesShown _rowsOf(Fen fen, Map<String, double> shares) {
     final tree = _session.tree!;
-    final cursor = _session.cursor;
+    final cursor = _session.cursor.value;
     final siblings = tree.nodeAt(cursor)?.children ?? tree.children;
     final ourMove = fen.whiteToMove == (_session.chapter!.side == Side.white);
     final walk = _gaps.currentWalk;

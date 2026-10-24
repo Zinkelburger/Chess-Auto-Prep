@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/features/library/library_state.dart';
-import 'package:chess_auto_prep/features/trainer/trainer.dart';
+import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
@@ -184,7 +184,7 @@ void main() {
       () async {
         final (app, clubBook) = await start(['Najdorf']);
         await app.session.open(najdorf);
-        app.session.toEnd();
+        app.session.cursor.toEnd();
         app.session.playMove('g1f3');
         app.session.playMove('d7d6');
         await app.saver.flush();

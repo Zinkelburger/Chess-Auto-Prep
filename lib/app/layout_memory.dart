@@ -31,8 +31,9 @@ final class LayoutMemory {
     _layout = layout;
     _restoring = true;
     final saved = settings.value.workspaceLayouts[key];
-    if (saved == null || !layout.restore(saved))
+    if (saved == null || !layout.restore(saved)) {
       layout.restore(_defaults[mode]!);
+    }
     _restoring = false;
     layout.addListener(_changed);
   }

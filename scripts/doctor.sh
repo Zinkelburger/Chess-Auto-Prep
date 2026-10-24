@@ -45,7 +45,7 @@ if [[ -x "$flutter_bin" ]]; then
   ok "flutter $ver ($flutter_bin)"
   pinned=$(python3 -c 'import json; print(json.load(open(".fvmrc"))["flutter"])' 2>/dev/null)
   if [[ -n "$pinned" && -n "$ver" && "$ver" != "?" && "$ver" != "$pinned" ]]; then
-    note "CI pins Flutter $pinned but this machine has $ver — \`dart format\` output can differ from CI's"
+    bad "Flutter $ver at $froot, but .fvmrc pins $pinned; scripts/ci.sh refuses it. Fix: git -C $froot checkout $pinned (then run flutter once), or bump .fvmrc after checking the new SDK"
   fi
 else
   bad "flutter not found (tried \$FLUTTER, ~/sdk/flutter/bin/flutter, PATH)"
@@ -297,8 +297,7 @@ grep -q 'scripts/hooks/flutter_gate.sh' .claude/settings.json 2>/dev/null \
 # not just in somebody's working tree — or the driver hangs waiting for
 # extensions that were never registered.
 # Drain git's output: grep -q can cause SIGPIPE and a false failure with pipefail.
-# Check the entry the driver builds by default: v2's while it sits beside the
-# old app's main.dart, lib/main.dart once v2 has replaced it.
+# Check the entry the driver builds by default.
 entry=lib/main.dart
 if ! git show "HEAD:$entry" 2>/dev/null | grep installAgentDriver >/dev/null; then
   bad "HEAD's $entry does not call installAgentDriver() — \`driver.py start --worktree\` will build an app the driver cannot talk to"

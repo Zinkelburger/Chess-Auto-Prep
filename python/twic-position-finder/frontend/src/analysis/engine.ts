@@ -1,29 +1,39 @@
 /**
- * Hivemind, the bughouse engine, searching one board: the partner board is
- * held still behind it (tools/bughouse_web/patches/frozen-board.patch), so
- * every capture leaves for the partner and nothing arrives unless a hand is
- * edited. The search runs in one browser worker (hivemind.worker.ts), on the
- * GPU when the browser offers WebGPU and on the CPU otherwise.
+ * Fairy-Stockfish 14 with Lichess's crazyhouse NNUE, the engine behind
+ * lichess.org/analysis/crazyhouse, from @lichess-org/stockfish-web. It plays
+ * crazyhouse: a capture goes to the capturer's hand, and the hands are
+ * whatever the page set, so a piece added with + is searched as if the
+ * partner had sent it.
  *
- * One worker serves two kinds of search. The analysis of the shown position
- * comes first: it reports a few times a second and stops at its time limit,
- * as Lichess's engine does. Background evaluations (the sit panel's rows) run
- * after it, one at a time. A new position stops whatever is running. With
- * infinite analysis, the position's search carries on without a limit once
- * the background evaluations are done: the worker keeps the analysis's tree,
- * so it goes on from where it stopped.
+ * The module runs on this page's main thread and searches in its own pthread
+ * workers, so the page must be cross-origin isolated (COOP/COEP in
+ * public/_headers and the dev server). The net (about 30 MB gzipped) comes in
+ * parts prepared by tools/prepare_crazyhouse_web.py and is kept in the Cache
+ * API, so it downloads once; on a phone or a data-saving connection the
+ * engine waits for the player before that download. Positions are always
+ * sent as a bare FEN: a hand edited between moves has no move list that
+ * leads to it.
  *
- * A search that stops answering, or a worker that crashes, is stopped and
- * reported, and the next search starts a new worker (on the CPU after a hang).
- * On a phone or a data-saving connection the engine waits for the player
- * before its first download. Changing where the network runs (GPU or CPU) or
- * the CPU threads starts a new worker, which carries on with the same work.
- *
- * Hivemind's value is a winning chance from the side to move. Lines carry it
- * as Lichess's centipawns for that chance, from White's side, so the panel,
- * the arrows and the move marks read them as they would read Stockfish's.
+ * One engine serves two kinds of search. The analysis of the shown position
+ * comes first and stops at its time limit, as Lichess's does. Background
+ * evaluations (the sit panel's rows) run after it, one at a time. A new
+ * position stops whatever is running. With infinite analysis, the position
+ * is searched again without a limit once the background evaluations are
+ * done; the hash table keeps what the first search found.
  */
-import type { Backend, WorkerReply, WorkerRequest } from './hivemind.worker';
+import type StockfishWeb from '@lichess-org/stockfish-web';
+
+const DIRECTORY = '/crazyhouse-engine/';
+const CACHE = 'crazyhouse-nnue-v1';
+/** Set once the engine has loaded in this browser: its net is then in the cache. */
+const LOADED_KEY = 'crazyhouse-engine-loaded';
+/** The first download: the gzipped net and the engine's WebAssembly. */
+const DOWNLOAD_MB = 30;
+/** Lichess sizes the hash by the device's memory; a phone gets less. */
+const HASH_MB = ((navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8) >= 8 ? 256 : 64;
+
+interface Chunk { file: string; bytes: number; sha256: string }
+interface Manifest { name: string; sha256: string; chunks: Chunk[] }
 
 /** One principal variation, scored from White's side. */
 export interface EngineLine {
@@ -47,7 +57,7 @@ export interface EngineResult {
   complete: boolean;
   /** The search's time limit. */
   budget: number;
-  /** "1,234 positions · 380/s", under the engine name. */
+  /** "Depth 21 · 1.4 Mn/s", under the engine name. */
   info: string;
 }
 
@@ -56,7 +66,7 @@ export interface SearchSettings {
   infinite: boolean;
   /** Search time; infinite analysis carries on after it. */
   searchMs: number;
-  /** Stop after this many positions instead of the time limit (practice). */
+  /** Stop after this many nodes instead of the time limit (practice). */
   nodes?: number;
 }
 
@@ -66,63 +76,74 @@ export type EngineStatus =
   | { kind: 'ask'; megabytes: number }
   /** `fraction` of the download, while downloading. */
   | { kind: 'loading'; text: string; fraction?: number }
-  /** `error`: the last analysis of `fen` failed; the engine still runs. */
-  | { kind: 'ready'; gpu: boolean; threads: number; error?: { fen: string; text: string } }
+  | { kind: 'ready'; threads: number }
   | { kind: 'failed'; text: string };
 
-/** Where the network runs and on how many CPU threads. */
-export interface Hardware { gpu: boolean; threads: number }
-const INFINITE_MS = 3_600_000;
-const REPORT_MS = 400;
-const MAX_NODES = 1_000_000;
-/** A search silent this long past its time limit has hung (a lost GPU device, a stuck inference). */
-const HANG_MS = 30_000;
-/** Tests can force the CPU path: localStorage `bughouse-engine-backend` = `cpu`. */
-const BACKEND_KEY = 'bughouse-engine-backend';
-/** Set once the engine has loaded in this browser: its files are then in the cache. */
-const LOADED_KEY = 'bughouse-engine-loaded';
-/** The first download: the network and ONNX Runtime's WebGPU build. */
-export const DOWNLOAD_MB = 55;
-
-/** A frozen-board search report from the worker; values from the side to move, mate in plies. */
-export interface FrozenSearch {
-  q: number; mate: number | null; nodes: number; depth: number; elapsed_ms: number; done: boolean;
-  /** Nodes a resumed search had before this one started. */
-  resumed_nodes?: number;
-  lines: { q: number; mate: number | null; visits: number; pv: string[] }[];
+export function crossOriginReady(): boolean {
+  return typeof SharedArrayBuffer !== 'undefined' && globalThis.crossOriginIsolated === true;
 }
 
-/** Lichess's centipawns for a winning chance (the inverse of lila's winningChances). */
-export function centipawns(q: number): number {
-  const w = Math.max(-0.999, Math.min(0.999, q));
-  return Math.round(Math.log((1 + w) / (1 - w)) / 0.00368208);
+async function sha256(buffer: ArrayBuffer): Promise<string> {
+  return [...new Uint8Array(await crypto.subtle.digest('SHA-256', buffer))].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-/** Mate in moves from a mate in plies, with the sign of who mates. */
-export function mateMoves(plies: number): number {
-  return Math.sign(plies) * Math.max(1, Math.ceil(Math.abs(plies) / 2));
+/** The largest shared memory the browser grants, shrinking the maximum as lila does. */
+function sharedMemory(lo = 1024, hi = 32768): WebAssembly.Memory {
+  let shrink = 4;
+  for (;;) {
+    try {
+      return new WebAssembly.Memory({ shared: true, initial: lo, maximum: hi });
+    } catch (e) {
+      if (hi <= lo || !(e instanceof RangeError)) throw e;
+      hi = Math.max(lo, Math.ceil(hi - hi / shrink));
+      shrink = shrink === 4 ? 3 : 4;
+    }
+  }
 }
 
-/** One search report as an engine result, scored from White's side. */
-export function toResult(fen: string, report: FrozenSearch, done: boolean, complete = done, budget = 0): EngineResult {
-  const sign = fen.split(' ')[1] === 'b' ? -1 : 1;
-  const lines: EngineLine[] = report.lines.map((line, i) => ({
-    multipv: i + 1,
-    depth: report.depth,
-    pv: line.pv,
-    ...(line.mate !== null ? { mate: sign * mateMoves(line.mate) } : { cp: sign * centipawns(line.q) }),
-  }));
-  const seconds = report.elapsed_ms / 1000;
-  const rate = seconds > 0.2 ? Math.round((report.nodes - (report.resumed_nodes ?? 0)) / seconds) : 0;
-  return {
-    fen, depth: report.depth, nodes: report.nodes, millis: report.elapsed_ms, lines, done, complete, budget,
-    info: `${report.nodes.toLocaleString()} positions${rate ? ` · ${rate.toLocaleString()}/s` : ''}`,
-  };
+const DOWNLOAD_FAILED = 'The engine download failed. Check your connection and try again.';
+
+/** A fetch whose network errors read as a failed download. */
+async function download(url: string): Promise<Response> {
+  const response = await fetch(url).catch(() => null);
+  if (!response?.ok || !response.body) throw new Error(DOWNLOAD_FAILED);
+  return response;
+}
+
+async function fetchChunk(chunk: Chunk, cache: Cache | null, progress: (bytes: number) => void): Promise<ArrayBuffer> {
+  const url = DIRECTORY + chunk.file;
+  const kept = await cache?.match(url).catch(() => undefined);
+  if (kept) {
+    const buffer = await kept.arrayBuffer();
+    if (buffer.byteLength === chunk.bytes && await sha256(buffer) === chunk.sha256) { progress(chunk.bytes); return buffer; }
+    await cache?.delete(url).catch(() => undefined);
+  }
+  const reader = (await download(url)).body!.getReader();
+  const parts: Uint8Array[] = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value);
+    received += value.byteLength;
+    progress(received);
+  }
+  const buffer = await new Blob(parts as BlobPart[]).arrayBuffer();
+  if (buffer.byteLength !== chunk.bytes || await sha256(buffer) !== chunk.sha256)
+    throw new Error('The engine download was incomplete. Try again.');
+  try { await cache?.put(url, new Response(buffer)); } catch { /* Private mode or quota: run from memory. */ }
+  return buffer;
+}
+
+function speed(nps: number): string {
+  return nps >= 1e6 ? `${(nps / 1e6).toFixed(1)} Mn/s` : `${Math.round(nps / 1000)} kn/s`;
 }
 
 interface Job {
   fen: string;
-  nodes: number;
+  /** Stop after this many nodes (practice, background evaluations). */
+  nodes?: number;
+  /** The time limit; 0 searches until stopped. */
   millis: number;
   lines: number;
   /** The shown position's analysis; otherwise a background evaluation. */
@@ -136,32 +157,37 @@ interface Job {
   settle?: (result: EngineResult | null) => void;
 }
 
+interface Running {
+  job: Job;
+  started: number;
+  lines: Map<number, EngineLine>;
+  nodes: number;
+  nps: number;
+  /**
+   * `superseded`: stopped for other work; `dropped`: its evaluation was
+   * cancelled; `paused`: the unlimited search gave way to an evaluation and
+   * carries on after it; `requeue`: stopped to change the threads, and runs
+   * again.
+   */
+  superseded: boolean;
+  dropped: boolean;
+  paused?: boolean;
+  requeue?: boolean;
+}
+
 export class Engine {
-  private worker: Worker | null = null;
+  private module: StockfishWeb | null = null;
   private loading: Promise<void> | null = null;
   private status: EngineStatus = { kind: 'off' };
-  private backend: Backend | null = null;
   private main: Job | null = null;
   private background: Job[] = [];
   /** Infinite analysis's unlimited search, waiting for the background evaluations. */
   private continuation: Job | null = null;
-  /**
-   * `superseded`: stopped for other work; `dropped`: its evaluation was
-   * cancelled; `paused`: the unlimited search gave way to an evaluation and
-   * carries on after it.
-   */
-  private running: { job: Job; id: number; superseded: boolean; dropped: boolean; paused?: boolean } | null = null;
-  private serial = 0;
-  private watchdog = 0;
-  /** After a hang the next worker runs on the CPU. */
-  private preferCpu = false;
+  private running: Running | null = null;
+  private sent = new Map<string, string>();
   /** The player agreed to the first download (or it is not asked for). */
   private allowed = false;
-  private hardware: Hardware = { gpu: true, threads: 1 };
-  /** The hardware the current worker was started with. */
-  private started: Hardware | null = null;
-  /** Whether the browser offers WebGPU; null until a worker has loaded. */
-  private webgpu: boolean | null = null;
+  private threads = 1;
 
   constructor(
     private readonly onStatus: (status: EngineStatus) => void,
@@ -175,39 +201,18 @@ export class Engine {
     this.onStatus(status);
   }
 
-  get gpu(): boolean { return this.backend?.kind === 'gpu'; }
-  get gpuAvailable(): boolean | null { return this.webgpu; }
-
-  /** Sets where the network runs; a worker started otherwise is replaced. */
-  configure(hardware: Hardware) {
-    this.hardware = { ...hardware };
-    const started = this.started;
-    if (!started || (started.gpu === hardware.gpu && started.threads === hardware.threads)) return;
-    // Threads matter only to a worker on the CPU.
-    if (started.gpu && hardware.gpu && this.backend?.kind === 'gpu') { this.started = { ...hardware }; return; }
-    this.restart();
-  }
-
-  /** Replaces the worker; the running search is queued again for the new one. */
-  private restart() {
-    clearTimeout(this.watchdog);
-    this.worker?.terminate();
-    this.worker = null;
-    this.loading = null;
-    this.backend = null;
-    this.started = null;
+  /** Sets the search threads; a running search starts again with them. */
+  configure(threads: number) {
+    this.threads = threads;
+    if (this.status.kind === 'ready' && this.status.threads !== threads) this.setStatus({ kind: 'ready', threads });
     const running = this.running;
-    this.running = null;
-    if (running && !running.superseded) {
-      const { job } = running;
-      if (job.continued) this.continuation ??= job;
-      else if (job.main) this.main ??= job;
-      else if (!running.dropped) this.background.unshift(job);
+    if (running && !running.superseded && this.sent.get('Threads') !== String(threads)) {
+      running.requeue = true;
+      this.supersede();
     }
-    void this.load().catch(() => undefined);
   }
 
-  /** Whether the first download waits for the player: a phone, a tablet or a data-saving connection, before the files are cached. */
+  /** Whether the first download waits for the player: a phone, a tablet or a data-saving connection, before the net is cached. */
   private mustAsk(): boolean {
     if (this.allowed) return false;
     try { if (localStorage.getItem(LOADED_KEY)) return false; } catch { /* Ask. */ }
@@ -221,66 +226,62 @@ export class Engine {
     void this.load().catch(() => undefined);
   }
 
-  /** Starts the worker and loads the network; later calls share the same start. */
+  /** Downloads (once) and starts the engine; later calls share the same start. */
   load(): Promise<void> {
     if (!this.loading && this.mustAsk()) {
       if (this.status.kind !== 'ask') this.setStatus({ kind: 'ask', megabytes: DOWNLOAD_MB });
       return Promise.reject(new Error('waiting for the player'));
     }
-    this.loading ??= new Promise<void>((resolve, reject) => {
-      this.setStatus({ kind: 'loading', text: 'Starting Hivemind…' });
-      const worker = new Worker(new URL('./hivemind.worker.ts', import.meta.url), { type: 'module' });
-      this.worker = worker;
-      worker.onmessage = ({ data }: MessageEvent<WorkerReply>) => {
-        if (worker !== this.worker) return;
-        if (data.type === 'progress') {
-          if (!this.backend) this.setStatus({ kind: 'loading', text: data.text, fraction: data.total ? (data.done ?? 0) / data.total : undefined });
-          return;
-        }
-        if (data.type === 'ready') {
-          // Again after a GPU failure: the worker carries on on the CPU.
-          this.backend = data.backend;
-          this.webgpu = data.backend.gpuAvailable;
-          const gpu = data.backend.kind === 'gpu';
-          this.setStatus({ kind: 'ready', gpu, threads: data.backend.threads });
-          try { localStorage.setItem(LOADED_KEY, '1'); } catch { /* Asked again next visit. */ }
-          resolve();
-          this.next();
-          return;
-        }
-        if (data.type === 'failed' && data.id === undefined) {
-          this.reset(data.error);
-          reject(new Error(data.error));
-          return;
-        }
-        this.reply(data);
-      };
-      worker.onerror = (event) => {
-        event.preventDefault();
-        if (worker !== this.worker) return;
-        this.reset('The engine stopped.');
-        reject(new Error('worker error'));
-      };
-      let prefer: 'auto' | 'cpu' = this.preferCpu || !this.hardware.gpu ? 'cpu' : 'auto';
-      try { if (localStorage.getItem(BACKEND_KEY) === 'cpu') prefer = 'cpu'; } catch { /* Auto. */ }
-      this.started = { ...this.hardware };
-      this.post({ type: 'load', prefer, threads: this.hardware.threads });
+    this.loading ??= this.boot().catch((e: unknown) => {
+      this.loading = null;
+      this.setStatus({ kind: 'failed', text: e instanceof Error ? e.message : String(e) });
+      throw e;
     });
     this.loading.catch(() => undefined);
     return this.loading;
   }
 
-  /**
-   * Drops the worker after a failure: the running search is lost (a
-   * background one answers null), and the next load starts a new worker.
-   */
+  private async boot() {
+    if (!crossOriginReady()) throw new Error('This browser blocks the shared memory the engine needs. Reload the page, or try another browser.');
+    this.setStatus({ kind: 'loading', text: 'Loading Fairy-Stockfish…' });
+    const manifest: Manifest = await (await download(DIRECTORY + 'net.json')).json();
+    let cache: Cache | null = null;
+    try { cache = await caches.open(CACHE); } catch { /* Optional download cache. */ }
+    const total = manifest.chunks.reduce((sum, c) => sum + c.bytes, 0);
+    const done: number[] = manifest.chunks.map(() => 0);
+    const buffers = await Promise.all(manifest.chunks.map((chunk, i) => fetchChunk(chunk, cache, (bytes) => {
+      done[i] = bytes;
+      const got = done.reduce((a, b) => a + b, 0);
+      if (got < total) this.setStatus({ kind: 'loading', text: `Downloading the crazyhouse net · ${Math.round(got / 1e6)} of ${Math.round(total / 1e6)} MB, once`, fraction: got / total });
+    })));
+    this.setStatus({ kind: 'loading', text: 'Starting Fairy-Stockfish…' });
+    const net = new Uint8Array(await new Response(new Blob(buffers).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+    if (await sha256(net.buffer as ArrayBuffer) !== manifest.sha256) {
+      for (const c of manifest.chunks) await cache?.delete(DIRECTORY + c.file).catch(() => undefined);
+      throw new Error('The engine net did not check out. Try again to download it again.');
+    }
+    const scriptUrl = new URL(DIRECTORY + 'fsf_14.js', location.href).href;
+    const makeModule = await import(/* @vite-ignore */ scriptUrl);
+    const module: StockfishWeb = await makeModule.default({
+      wasmMemory: sharedMemory(),
+      locateFile: (file: string) => new URL(DIRECTORY + file, location.href).href,
+      mainScriptUrlOrBlob: scriptUrl,
+    });
+    module.onError = (msg: string) => this.reset(msg.startsWith('BAD_NNUE') ? 'The engine net did not load. Try again.' : msg);
+    module.listen = (line: string) => this.received(line);
+    module.uci('setoption name UCI_Variant value crazyhouse');
+    module.setNnueBuffer(net, 0);
+    this.module = module;
+    this.sent = new Map();
+    try { localStorage.setItem(LOADED_KEY, '1'); } catch { /* Asked again next visit. */ }
+    this.setStatus({ kind: 'ready', threads: this.threads });
+    this.next();
+  }
+
+  /** Drops the engine after an error: the running search is lost, and the next load starts a new one. */
   private reset(text: string) {
-    clearTimeout(this.watchdog);
-    this.worker?.terminate();
-    this.worker = null;
+    this.module = null;
     this.loading = null;
-    this.backend = null;
-    this.started = null;
     const running = this.running;
     this.running = null;
     if (running && !running.job.main && !running.dropped) running.job.settle?.(null);
@@ -292,8 +293,8 @@ export class Engine {
   analyse(fen: string, settings: SearchSettings) {
     this.main = {
       fen, main: true, lines: settings.multiPv,
-      nodes: settings.nodes ?? MAX_NODES,
-      millis: settings.nodes ? 120_000 : settings.searchMs,
+      nodes: settings.nodes,
+      millis: settings.nodes ? 0 : settings.searchMs,
       infinite: settings.infinite && !settings.nodes,
       short: !!settings.nodes,
     };
@@ -309,12 +310,12 @@ export class Engine {
     if (this.running?.job.main) { this.running.paused = false; this.supersede(); }
   }
 
-  /** Searches `fen` for `nodes` positions once the analysis is done; null when cancelled or failed. */
+  /** Searches `fen` for `nodes` nodes once the analysis is done; null when cancelled or failed. */
   evaluate(fen: string, nodes: number): Promise<EngineResult | null> {
     return new Promise((settle) => {
-      this.background.push({ fen, nodes, millis: 120_000, lines: 1, main: false, settle });
+      this.background.push({ fen, nodes, millis: 0, lines: 1, main: false, settle });
       if (!this.running) this.next();
-      // The unlimited search gives way, and carries on from its tree afterwards.
+      // The unlimited search gives way, and carries on afterwards.
       else if (this.running.job.continued && !this.running.superseded) { this.running.paused = true; this.supersede(); }
     });
   }
@@ -330,72 +331,98 @@ export class Engine {
     }
   }
 
-  private post(message: WorkerRequest) { this.worker?.postMessage(message); }
-
-  /** Stops the running search; its answer is then dropped and the next job starts. */
+  /** Stops the running search; the next job starts on its `bestmove`. */
   private supersede() {
     if (!this.running || this.running.superseded) return;
     this.running.superseded = true;
-    this.post({ type: 'cancel' });
+    this.module?.uci('stop');
+  }
+
+  private setOption(name: string, value: string) {
+    if (this.sent.get(name) === value) return;
+    this.sent.set(name, value);
+    this.module!.uci(`setoption name ${name} value ${value}`);
   }
 
   private next() {
-    if (this.running || !this.backend) return;
+    if (this.running || !this.module) return;
     const job = this.main ?? this.background.shift() ?? this.continuation;
     if (!job) return;
     if (job === this.main) this.main = null;
     if (job === this.continuation) this.continuation = null;
-    const id = ++this.serial;
-    this.running = { job, id, superseded: false, dropped: false };
-    this.post({ type: 'search', id, fen: job.fen, nodes: job.nodes, millis: job.millis, lines: job.lines, reportMs: job.main ? REPORT_MS : 0, keep: job.main });
-    // The analysis reports a few times a second; a background search answers once, at its end.
-    this.guard(job.main ? REPORT_MS : job.millis);
+    this.running = { job, started: performance.now(), lines: new Map(), nodes: 0, nps: 0, superseded: false, dropped: false };
+    this.setOption('Threads', String(this.threads));
+    this.setOption('Hash', String(HASH_MB));
+    this.setOption('MultiPV', String(job.lines));
+    this.setOption('UCI_AnalyseMode', 'true');
+    this.module.uci(`position fen ${job.fen}`);
+    this.module.uci(job.nodes ? `go nodes ${job.nodes}` : job.millis ? `go movetime ${job.millis}` : 'go infinite');
   }
 
-  /** Restarts the hang timer: a search silent for `millis` and HANG_MS more has hung. */
-  private guard(millis: number) {
-    clearTimeout(this.watchdog);
-    this.watchdog = window.setTimeout(() => {
-      this.preferCpu = true;
-      this.reset('The engine stopped answering.');
-    }, millis + HANG_MS);
-  }
-
-  private reply(data: WorkerReply) {
+  private received(line: string) {
     const running = this.running;
-    if (!running || !('id' in data) || data.id !== running.id) return;
-    const { job } = running;
-    if (data.type === 'report') {
-      if (job.main) this.guard(REPORT_MS);
-      const report = data.data as FrozenSearch;
-      if (job.main && !running.superseded && report.lines?.length) this.onResult(toResult(job.fen, report, false));
-      return;
+    if (line.startsWith('bestmove')) { if (running) this.finish(running); return; }
+    if (!running || running.superseded || !line.startsWith('info ') || !line.includes(' pv ')) return;
+    const parts = line.split(' ');
+    let depth = 0, multipv = 1, cp: number | undefined, mate: number | undefined, bound = false, nps = 0, nodes = 0;
+    let i = 1;
+    for (; i < parts.length; i++) {
+      const key = parts[i];
+      if (key === 'depth') depth = Number(parts[++i]);
+      else if (key === 'multipv') multipv = Number(parts[++i]);
+      else if (key === 'nps') nps = Number(parts[++i]);
+      else if (key === 'nodes') nodes = Number(parts[++i]);
+      else if (key === 'score') {
+        const kind = parts[++i], value = Number(parts[++i]);
+        if (kind === 'cp') cp = value; else mate = value;
+        if (parts[i + 1] === 'lowerbound' || parts[i + 1] === 'upperbound') { bound = true; i++; }
+      } else if (key === 'pv') break;
+      else if (key === 'string') return;
     }
-    clearTimeout(this.watchdog);
-    this.running = null;
-    if (data.type === 'done') {
-      const final = data.data as FrozenSearch;
-      const done = !running.superseded;
-      const result = final.lines.length ? toResult(job.fen, final, done, done && !job.short, job.millis) : null;
-      if (job.main) {
-        if (result && !running.superseded) this.onResult(result);
-        if (job.infinite && !running.superseded && !this.main)
-          this.continuation = { ...job, millis: INFINITE_MS, infinite: false, continued: true };
-        if (running.paused && !this.main) this.continuation = job;
-        this.clearError(job.fen);
-      } else if (running.dropped) { /* Settled when it was cancelled. */ }
-      else if (running.superseded) this.background.unshift(job); // stopped for the analysis: run it again later
-      else job.settle?.(result);
-    } else if (data.type === 'failed') {
-      // One position failing leaves the engine running: the next search may well succeed.
-      if (job.main && !running.superseded && this.status.kind === 'ready')
-        this.setStatus({ ...this.status, error: { fen: job.fen, text: data.error } });
-      if (!job.main && !running.dropped) job.settle?.(null);
+    // Only the first line's bounds are noise; later lines may only ever have bounds.
+    if (bound && multipv === 1) return;
+    const pv = parts.slice(i + 1).filter(Boolean);
+    if (!pv.length) return;
+    const sign = running.job.fen.split(' ')[1] === 'b' ? -1 : 1;
+    if (multipv === 1) running.lines = new Map([...running.lines].filter(([, l]) => l.depth >= depth - 1));
+    running.lines.set(multipv, { multipv, depth, pv, cp: cp === undefined ? undefined : cp * sign, mate: mate === undefined ? undefined : mate * sign });
+    if (nps) running.nps = nps;
+    if (nodes) running.nodes = nodes;
+    if (running.job.main) {
+      const result = this.result(running, false);
+      if (result) this.onResult(result);
     }
-    this.next();
   }
 
-  private clearError(fen: string) {
-    if (this.status.kind === 'ready' && this.status.error?.fen === fen) this.setStatus({ kind: 'ready', gpu: this.status.gpu, threads: this.status.threads });
+  private result(running: Running, done: boolean): EngineResult | null {
+    const { job } = running;
+    const lines = [...running.lines.values()].sort((a, b) => a.multipv - b.multipv).slice(0, job.lines);
+    if (!lines.length) return null;
+    const depth = lines[0].depth;
+    return {
+      fen: job.fen, depth, nodes: running.nodes, millis: performance.now() - running.started, lines, done,
+      complete: done && !job.short, budget: job.millis,
+      info: `Depth ${depth}${job.continued ? '/∞' : ''} · ${speed(running.nps)}`,
+    };
+  }
+
+  private finish(running: Running) {
+    this.running = null;
+    const { job } = running;
+    if (running.requeue) {
+      if (job.continued) this.continuation ??= job;
+      else if (job.main) this.main ??= job;
+      else if (!running.dropped) this.background.unshift(job);
+    } else if (job.main) {
+      if (!running.superseded) {
+        const result = this.result(running, true);
+        if (result) this.onResult(result);
+        if (job.infinite && !this.main) this.continuation = { ...job, millis: 0, infinite: false, continued: true };
+      }
+      if (running.paused && !this.main) this.continuation = job;
+    } else if (running.dropped) { /* Settled when it was cancelled. */ }
+    else if (running.superseded) this.background.unshift(job); // stopped for the analysis: run it again later
+    else job.settle?.(this.result(running, true));
+    this.next();
   }
 }

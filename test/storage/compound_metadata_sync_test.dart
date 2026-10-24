@@ -5,7 +5,7 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/storage/compound_commit.dart';
 import 'package:chess_auto_prep/storage/compound_write.dart';
-import 'package:chess_auto_prep/storage/operation_journal.dart';
+import 'package:chess_auto_prep/storage/operation_participants.dart';
 import 'package:document_file_io/document_file_io.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -33,8 +33,9 @@ void main() {
         support: support,
         synchronize: (path) async {
           flushed.add(path);
-          if (path == root.path && fail)
+          if (path == root.path && fail) {
             throw FileSystemException('injected ancestor flush failure', path);
+          }
           await syncDirectory(path);
         },
       );

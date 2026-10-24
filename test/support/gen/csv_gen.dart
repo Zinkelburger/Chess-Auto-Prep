@@ -2,7 +2,7 @@
 /// records a reader must find in it, where each starts, and whether a
 /// quoted field is left open.
 ///
-/// Rows come in the spellings the two apps have written over the years:
+/// Rows come in the spellings existing files hold:
 /// canonical, quoted more than they need to be, and the unquoted rows from
 /// before the quoting migration, whose chapter path may hold a comma. Review
 /// rows come 8, 10 and 11 columns wide. Around them sit blank lines, lines
@@ -48,10 +48,6 @@ enum RowSpelling {
 
   /// Every field quoted, as a spreadsheet may save it.
   quoted,
-
-  /// Fields joined with commas and never quoted, as writers before the
-  /// quoting migration did; a comma in the path spills into later cells.
-  legacy,
 }
 
 /// A record as the file holds it and as the reader must find it.
@@ -139,7 +135,7 @@ GeneratedCsv csvOf(
 }
 
 /// [cells] as one record spelled [spelling], and the fields a CSV reader
-/// finds in it — for a legacy row, the path split at its commas.
+/// finds in it.
 ({String source, List<String> fields}) spelledRow(
   List<String> cells,
   RowSpelling spelling,
@@ -149,18 +145,7 @@ GeneratedCsv csvOf(
     source: cells.map((c) => '"${c.replaceAll('"', '""')}"').join(','),
     fields: cells,
   ),
-  RowSpelling.legacy => (
-    source: cells.join(','),
-    fields: cells.join(',').split(','),
-  ),
 };
-
-/// Whether [cells] can be written unquoted and read back: only the path, the
-/// first cell, may hold a comma, and nothing may hold a newline or open with
-/// a quote.
-bool legacyWritable(List<String> cells) =>
-    cells.every((c) => !c.contains('\n') && !c.startsWith('"')) &&
-    cells.skip(1).every((c) => !c.contains(','));
 
 /// A time as the files write it, or null.
 DateTime? csvTime(Rand rand) => rand.chance(25)
@@ -191,29 +176,6 @@ Review csvReview(Rand rand, {LineKey? key}) => Review(
 String _lineId(Rand rand) =>
     rand.pick(const ['line_1', 'line_2', 'a1b2c3d4', 'Line With Space']);
 
-/// [review]'s cells cut to the [width] an older version wrote: 8 without
-/// the counts and the exclusion, 10 without the exclusion.
-List<String> reviewCells(Review review, int width) =>
-    encodeReview(review).take(width).toList();
-
-/// The review a row of [width] columns holding [review] reads as: the
-/// columns it has not got take their defaults.
-Review reviewAtWidth(Review review, int width) {
-  final written = asWritten(review);
-  return Review(
-    key: written.key,
-    lineName: written.lineName,
-    ease: written.ease,
-    intervalDays: written.intervalDays,
-    due: written.due,
-    lastRating: written.lastRating,
-    lastReviewed: written.lastReviewed,
-    passes: width > 8 ? written.passes : 0,
-    fails: width > 9 ? written.fails : 0,
-    excluded: width > 10 && written.excluded,
-  );
-}
-
 /// A streak of any move.
 MoveStreak csvStreak(Rand rand, {LineKey? key, int? ply}) => MoveStreak(
   key: key ?? (source: rand.pick(csvSources), id: _lineId(rand)),
@@ -242,8 +204,7 @@ MoveStreak csvStreak(Rand rand, {LineKey? key, int? ply}) => MoveStreak(
 /// line that opens a quote and never closes it.
 final Generator<GeneratedCsv> reviewCsvs = Generator(
   (rand) {
-    final width = rand.pick(const [11, 11, 10, 8]);
-    final header = reviewsHeader.split(',').take(width).toList();
+    final header = reviewsHeader.split(',');
     final rows = [
       (source: header.join(','), fields: header),
       for (var i = rand.between(0, 8); i > 0; i--)
@@ -265,20 +226,15 @@ final Generator<GeneratedCsv> reviewCsvs = Generator(
 );
 
 ({String source, List<String> fields}) _reviewRow(Rand rand) {
-  final width = rand.pick(const [11, 11, 10, 8]);
-  final cells = reviewCells(csvReview(rand), width);
-  var spelling = rand.pick(RowSpelling.values);
-  if (spelling == RowSpelling.legacy && !legacyWritable(cells)) {
-    spelling = RowSpelling.canonical;
-  }
-  return spelledRow(cells, spelling);
+  final cells = encodeReview(csvReview(rand));
+  return spelledRow(cells, rand.pick(RowSpelling.values));
 }
 
 /// A line of the answer log, and the answer it holds: null for a line that
 /// is not one this app can show.
 typedef AttemptLine = ({String line, Attempt? truth});
 
-/// Any line of the answer log: an answer as either app writes it, one with
+/// Any line of the answer log: an answer as the files hold it, one with
 /// fields a newer build added, or one that is not an answer at all.
 final Generator<AttemptLine> attemptLines = Generator((rand) {
   final attempt = _attempt(rand);

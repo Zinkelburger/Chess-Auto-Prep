@@ -116,7 +116,8 @@ void showBookMoment(
   DocumentSession session,
   BookVerdict verdict,
   PlayedGame game,
-) => session.goTo(NodePath.of(List.filled(bookMoment(verdict, game), 0)));
+) =>
+    session.cursor.goTo(NodePath.of(List.filled(bookMoment(verdict, game), 0)));
 
 /// The line under a game's heading when it left the book: the verdict and
 /// `Show my line`, which opens My books at the moment. Nothing when the

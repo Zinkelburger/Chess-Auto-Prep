@@ -5,13 +5,10 @@ import 'package:collection/collection.dart';
 import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
-import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 import 'document_probe.dart';
 import 'document_ref.dart';
-import 'journal_records.dart';
 import 'recovery_files.dart';
-import 'recovery_quarantine.dart';
 import 'training_payload.dart';
 import 'training_rows.dart';
 
@@ -75,7 +72,6 @@ final class TrainingWriter {
         continue;
       }
       final bytes = after[name]!;
-      await _keepFirstVersion(name, before[name]);
       final path = p.join(documents.path, name);
       await discardLeftoverStage(path);
       attempted[name] = bytes;
@@ -128,19 +124,6 @@ final class TrainingWriter {
     }
     return observed.bytes;
   }
-
-  /// The first write to a file keeps a `<file>.pre-csv-v2.bak` copy of it, as
-  /// the old app does before it rewrites a file in the newer format.
-  Future<void> _keepFirstVersion(String name, Uint8List? before) async {
-    if (before == null || name == attemptsFile) return;
-    final path = p.join(documents.path, '$name.pre-csv-v2.bak');
-    if (await FileSystemEntity.type(path, followLinks: false) !=
-        FileSystemEntityType.notFound) {
-      return;
-    }
-    await discardLeftoverStage(path);
-    await createFileExclusively(path, before);
-  }
 }
 
 /// A chapter a training change names cannot be read right now: a permission
@@ -159,51 +142,3 @@ const _steps = [
   TrainingWriteStep.history,
   TrainingWriteStep.attempts,
 ];
-
-/// Earlier builds queued every training change in `Support/training-writes/`
-/// before writing it. Finished records there are only receipts and are
-/// removed; one that never finished holds the answer it was saving, so it is
-/// set aside ([quarantine]) with a line in the log rather than replayed onto
-/// files that may have moved on since.
-final class TrainingQueueMigration {
-  TrainingQueueMigration({
-    required Directory documents,
-    required Directory support,
-  }) : documents = canonicalRecoveryRoot(documents),
-       support = canonicalRecoveryRoot(support);
-
-  /// The folder under Support the old queue is in.
-  static const journal = 'training-writes';
-
-  final Directory documents;
-  final Directory support;
-  Directory get _folder => Directory(p.join(support.path, journal));
-
-  Future<void> recover() async {
-    if (await FileSystemEntity.type(_folder.path, followLinks: false) ==
-        FileSystemEntityType.notFound) {
-      return;
-    }
-    final records = await readJournal(
-      _folder,
-      decode: (value, id) =>
-          value is Map<String, Object?> && value['state'] == 'complete',
-    );
-    for (final (file, complete) in records) {
-      if (complete) {
-        await file.delete();
-      } else {
-        await quarantine(
-          support,
-          file,
-          'an unfinished training change from an earlier build',
-        );
-      }
-    }
-    try {
-      await _folder.delete();
-    } on FileSystemException catch (error) {
-      log.w('remove the old training queue ${_folder.path}', error);
-    }
-  }
-}

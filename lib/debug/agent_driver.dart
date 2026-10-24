@@ -390,6 +390,9 @@ Future<developer.ServiceExtensionResponse> _drag(
   final from = r.point!;
   final dx = double.tryParse(params['dx'] ?? '0') ?? 0;
   final dy = double.tryParse(params['dy'] ?? '0') ?? 0;
+  final buttons = params['button'] == 'secondary'
+      ? kSecondaryMouseButton
+      : kPrimaryMouseButton;
   final binding = GestureBinding.instance;
   final pointer = _pointerId++;
   binding.handlePointerEvent(
@@ -406,7 +409,7 @@ Future<developer.ServiceExtensionResponse> _drag(
       kind: PointerDeviceKind.mouse,
       device: _syntheticMouse,
       pointer: pointer,
-      buttons: kPrimaryMouseButton,
+      buttons: buttons,
     ),
   );
   const steps = 8;
@@ -420,7 +423,7 @@ Future<developer.ServiceExtensionResponse> _drag(
         kind: PointerDeviceKind.mouse,
         device: _syntheticMouse,
         pointer: pointer,
-        buttons: kPrimaryMouseButton,
+        buttons: buttons,
       ),
     );
     at = next;

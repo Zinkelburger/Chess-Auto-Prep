@@ -189,7 +189,7 @@ void main() {
     await audit.start();
     final reply = audit.findings.whereType<StrongReply>().single;
     audit.goTo(reply);
-    expect(fixture.session.fen, after('e2e4'));
+    expect(fixture.session.cursor.fen, after('e2e4'));
     fixture.session.playMove('e7e6');
     expect(audit.findings.map((f) => f.san), ['Nc3']);
   });

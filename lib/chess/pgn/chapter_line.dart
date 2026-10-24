@@ -102,15 +102,14 @@ final class ChapterLine {
   bool get isWhole => tree != null && issues.isEmpty;
 
   /// The identity every later lookup uses — training progress, rename,
-  /// delete. Files in the wild spell it five ways; whichever one a file has
-  /// is the line's id ([idHeaderAt]).
+  /// delete: the game's `[LineID]` ([idHeaderAt]).
   String? get lineId {
     final at = idHeaderAt(tags);
     return at < 0 ? null : (tags[at] as PgnTag).value.trim();
   }
 
   /// What a list calls the line at [index] of its file: its `Event`, where
-  /// both apps write a line's name, else its place in the file.
+  /// a line's name is written, else its place in the file.
   String nameAt(int index) {
     final event = tagValue(tags, 'Event')?.trim();
     return event == null || event.isEmpty ? 'Line ${index + 1}' : event;
@@ -133,18 +132,12 @@ _Moves _movesOf(GameRead read) => (
   issues: read.issues,
 );
 
-/// Where in [tags] the header a game's id comes from is, or -1 for none.
-///
-/// The keys are tried in the order files in the wild are known to use them,
-/// and under each the last tag wins, as it does in the old app, which reads
-/// a game's headers into a map: both apps key one set of progress files by
-/// this id. A key whose last tag is blank gives way to the next key.
+/// Where in [tags] the `[LineID]` a game's id comes from is, or -1 for none
+/// or a blank one. Of two, the last wins, as it does when a game's headers
+/// are read into a map.
 int idHeaderAt(List<PgnHeader> tags) {
-  for (final key in const ['LineID', 'LineId', 'Id', 'Line', 'Guid']) {
-    final at = tags.lastIndexWhere((tag) => tag is PgnTag && tag.key == key);
-    if (at >= 0 && (tags[at] as PgnTag).value.trim().isNotEmpty) return at;
-  }
-  return -1;
+  final at = tags.lastIndexWhere((tag) => tag is PgnTag && tag.key == 'LineID');
+  return at >= 0 && (tags[at] as PgnTag).value.trim().isNotEmpty ? at : -1;
 }
 
 /// Whether [a] and [b] are the same games, one for one: what a chapter

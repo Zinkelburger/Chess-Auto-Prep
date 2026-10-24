@@ -17,11 +17,10 @@ import 'file_lock.dart';
 import 'pgn_document_store.dart';
 import 'recovery_files.dart';
 
-/// The files the review of the user's games shares with the old app.
+/// The files the review of the user's games reads and writes.
 
 /// How many of an account's newest saved games the book check reads, and
-/// how many a download asks for while fewer than that are saved: the old
-/// app's `Games per site to check against my repertoires`.
+/// how many a download asks for while fewer than that are saved.
 const bookCheckWindow = 200;
 
 /// A saved game and where it is in its file, counting from zero.
@@ -368,7 +367,7 @@ final class GamesCache {
     }
   }
 
-  /// The old app's `.fetched` note: milliseconds since the epoch.
+  /// The `.fetched` note beside a games file: milliseconds since the epoch.
   Future<void> _stamp(DocumentRef ref, DateTime when) =>
       withDirectoryLock(Directory(p.dirname(ref.path)), () async {
         final path = '${ref.path}.fetched';
@@ -451,23 +450,4 @@ List<String> _freshIn(String text, List<String> downloaded) {
 (String, String) _identityOf(String game) {
   final id = gameIdIn(game);
   return id.isEmpty ? ('text', game.trim()) : ('id', id);
-}
-
-/// The ids of games the old app reviewed before its sets carried their own
-/// analysed-games line: `Documents/analyzed_games.txt`, one per line. It
-/// goes on reading them beside the line, so both apps count them as done.
-/// A missing file is none; null when the file is there and cannot be read,
-/// which is no answer: every game it names would be mined again.
-Future<Set<String>?> readOlderAnalyzed(Directory documents) async {
-  final file = File(p.join(documents.path, 'analyzed_games.txt'));
-  try {
-    if (!await file.exists()) return {};
-    return {
-      for (final id in const LineSplitter().convert(await file.readAsString()))
-        if (id.trim().isNotEmpty) id.trim(),
-    };
-  } on Object catch (error) {
-    log.w('read ${file.path}', error);
-    return null;
-  }
 }

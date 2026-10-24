@@ -518,7 +518,7 @@ void main() {
     expect(find.text('e3'), findsOneWidget);
     await tester.tap(find.text('e4'));
     await tester.pumpAndSettle();
-    expect(fixture.session.currentMove?.san, 'e4');
+    expect(fixture.session.cursor.currentMove?.san, 'e4');
     expect(find.text('Their reply'), findsOneWidget);
     expect(find.text('Played'), findsOneWidget);
     expect(find.text('Kd8'), findsOneWidget);

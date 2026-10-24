@@ -124,10 +124,7 @@ final class FindsStore {
     final db = _db;
     if (db == null) return const [];
     try {
-      return [
-        for (final row in db.select('SELECT * FROM finds'))
-          if (_read(row) case final kept?) kept,
-      ];
+      return [for (final row in db.select('SELECT * FROM finds')) ?_read(row)];
     } on Object catch (error) {
       log.w('read the finds', error);
       return const [];

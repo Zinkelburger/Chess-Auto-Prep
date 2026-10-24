@@ -7,10 +7,10 @@
  * of a piece no longer in hand) is cut. The tree never checks material counts: any hand chessops accepts
  * is allowed (no kings, at most 64 pieces), capped per piece.
  *
- * Bughouse rules for one board, as the engine plays them with its partner board held still:
- * a capture leaves the board for the partner instead of going to the
- * capturer's hand, and pieces arrive only through a hand edit. Positions are
- * kept in chessops' crazyhouse form, which reads and writes hands in FENs.
+ * Crazyhouse rules, as the engine plays them: a capture goes to the
+ * capturer's hand, and anything else a partner would send arrives through a
+ * hand edit. Positions are kept in chessops' crazyhouse form, which reads and
+ * writes hands in FENs.
  */
 import { makeFen, parseFen, INITIAL_FEN } from 'chessops/fen';
 import { makeSan as chessopsSan, parseSan } from 'chessops/san';
@@ -20,6 +20,7 @@ import { makeSquare, makeUci, parseUci } from 'chessops/util';
 import { normalizeMove } from 'chessops/chess';
 import { chessgroundDests } from 'chessops/compat';
 import type { Color, Move, Role, SquareName } from 'chessops/types';
+import { VariationTree, newId, plyOf, type LineMove, type VariationNode } from './variation-tree';
 
 export const START_FEN = INITIAL_FEN.replace(' w ', '[] w ');
 /** The most of one piece a hand holds (a full board's worth of pawns and then some). */
@@ -27,35 +28,17 @@ export const MAX_IN_HAND = 16;
 export const HAND_ROLES: Role[] = ['pawn', 'knight', 'bishop', 'rook', 'queen'];
 const LETTER: Record<Role, string> = { pawn: 'p', knight: 'n', bishop: 'b', rook: 'r', queen: 'q', king: 'k' };
 
-/** Plays a legal move by bughouse rules: chessops banks a capture in the mover's hand, but it goes to the partner. */
-function playMove(pos: Crazyhouse, move: Move) {
-  const turn = pos.turn;
-  const hand = pos.pockets![turn].clone();
-  pos.play(move);
-  if ('role' in move) hand[move.role]--;
-  pos.pockets![turn] = hand;
-}
-
 /** Checkmate or stalemate; null while play goes on. */
 export function outcomeOf(fen: string): 'Checkmate' | 'Stalemate' | null {
   const pos = positionOf(fen);
   return pos.isCheckmate() ? 'Checkmate' : pos.isStalemate() ? 'Stalemate' : null;
 }
 
-export interface TreeNode {
-  id: string;
-  ply: number;
+export interface TreeNode extends VariationNode {
   /** The move from the parent, as UCI (`e2e4`, `N@f3`); empty at the root. */
   uci: string;
-  san: string;
-  fen: string;
   /** The hand edit made at this position, if any. */
   hand?: HandDelta;
-  /** A first child shown as a variation, as Lichess's "Force variation". */
-  forceVariation?: boolean;
-  /** The variations after this position are folded away. */
-  collapsed?: boolean;
-  children: TreeNode[];
 }
 
 /** A tree as kept in the browser between visits: moves, hand edits and folds, replayed on load. */
@@ -195,8 +178,6 @@ export function readMove(pos: Crazyhouse, uci: string): Move | undefined {
   return pos.isLegal(move) ? move : undefined;
 }
 
-export interface LineMove { uci: string; san: string; fen: string }
-
 /** UCI moves played from a position, with SAN and the position after each, stopping at the first that is not legal. */
 export function playLine(fen: string, ucis: string[], limit = ucis.length): LineMove[] {
   const pos = positionOf(fen);
@@ -205,7 +186,7 @@ export function playLine(fen: string, ucis: string[], limit = ucis.length): Line
     const move = readMove(pos, uci);
     if (!move) break;
     const san = makeSan(pos, move);
-    playMove(pos, move);
+    pos.play(move);
     out.push({ uci, san, fen: fenOf(pos) });
   }
   return out;
@@ -224,95 +205,13 @@ export function threatFen(fen: string): string {
   return fields.join(' ');
 }
 
-let nextId = 0;
-const newId = () => `n${++nextId}`;
-
-export class Tree {
-  root: TreeNode;
+export class Tree extends VariationTree<TreeNode> {
   /** The position as loaded, so an edit of the root hand can be shown. */
   loadedFen: string;
-  private parents = new Map<string, TreeNode | null>();
-  private byId = new Map<string, TreeNode>();
 
   constructor(fen = START_FEN) {
+    super({ id: newId(), ply: plyOf(fen), uci: '', san: '', fen, children: [] });
     this.loadedFen = fen;
-    this.root = { id: newId(), ply: plyOf(fen), uci: '', san: '', fen, children: [] };
-    this.index(this.root, null);
-  }
-
-  private index(node: TreeNode, parent: TreeNode | null) {
-    this.byId.set(node.id, node);
-    this.parents.set(node.id, parent);
-    for (const child of node.children) this.index(child, node);
-  }
-
-  private unindex(node: TreeNode) {
-    this.byId.delete(node.id);
-    this.parents.delete(node.id);
-    for (const child of node.children) this.unindex(child);
-  }
-
-  get(id: string): TreeNode | undefined { return this.byId.get(id); }
-  parent(id: string): TreeNode | null { return this.parents.get(id) ?? null; }
-
-  /** The nodes from the root to this one. */
-  path(id: string): TreeNode[] {
-    const out: TreeNode[] = [];
-    for (let n: TreeNode | null | undefined = this.get(id); n; n = this.parent(n.id)) out.unshift(n);
-    return out;
-  }
-
-  /** The node and its first children to the end of its line. */
-  lineEnd(id: string): TreeNode {
-    let node = this.get(id)!;
-    while (node.children.length) node = node.children[0];
-    return node;
-  }
-
-  /** On the main line: every move is its parent's first child, and none is a forced variation. */
-  isMainline(id: string): boolean {
-    return this.path(id).every((n, i, all) => i === 0 || (all[i - 1].children[0] === n && !n.forceVariation));
-  }
-
-  /** The child that continues the main line from here, if any (a forced variation does not). */
-  mainChild(node: TreeNode): TreeNode | undefined {
-    const first = node.children[0];
-    return first && !first.forceVariation ? first : undefined;
-  }
-
-  /** The nearest position before this one where the line forks, as Lichess's shift+←. */
-  previousBranch(id: string): TreeNode {
-    let node = this.parent(id);
-    if (!node) return this.get(id)!;
-    while (node.children.length < 2) {
-      const up = this.parent(node.id);
-      if (!up) break;
-      node = up;
-    }
-    return node;
-  }
-
-  /** The next position along `choice` (then first moves) where the line forks; the line's end when none. */
-  nextBranch(id: string, choice = 0): TreeNode {
-    const from = this.get(id)!;
-    let node = from.children[choice] ?? from.children[0];
-    if (!node) return from;
-    while (node.children.length === 1) node = node.children[0];
-    return node;
-  }
-
-  /** The first move of the next or previous sibling line at the nearest fork, as Lichess's shift+↑/↓. */
-  stepLine(id: string, which: 'next' | 'prev'): TreeNode {
-    let child = this.get(id)!;
-    let parent = this.parent(id);
-    while (parent && parent.children.length < 2 && !this.isMainline(parent.id)) {
-      child = parent;
-      parent = this.parent(parent.id);
-    }
-    if (!parent) return this.get(id)!;
-    const kids = parent.children, i = kids.indexOf(child);
-    const to = which === 'next' ? kids[i + 1] ?? kids[0] : kids[i - 1] ?? kids[kids.length - 1];
-    return to ?? this.get(id)!;
   }
 
   /** The position this node's move produced, before any edit of its hand. */
@@ -321,7 +220,7 @@ export class Tree {
     const parent = this.parent(id);
     if (!parent) return this.loadedFen;
     const pos = positionOf(parent.fen);
-    playMove(pos, parseUci(node.uci)!);
+    pos.play(parseUci(node.uci)!);
     return fenOf(pos);
   }
 
@@ -334,10 +233,9 @@ export class Tree {
     const existing = parent.children.find((c) => c.uci === makeUci(move));
     if (existing) return existing;
     const san = makeSan(pos, move);
-    playMove(pos, move);
+    pos.play(move);
     const child: TreeNode = { id: newId(), ply: parent.ply + 1, uci: makeUci(move), san, fen: fenOf(pos), children: [] };
-    parent.children.push(child);
-    this.index(child, parent);
+    this.attach(parent, child);
     return child;
   }
 
@@ -359,59 +257,12 @@ export class Tree {
       const move = parseUci(child.uci);
       if (!move || !readMove(pos, child.uci)) { this.unindex(child); continue; }
       child.san = makeSan(pos, move);
-      playMove(pos, move);
+      pos.play(move);
       child.fen = applyDelta(fenOf(pos), child.hand);
       kept.push(child);
       this.replay(child);
     }
     node.children = kept;
-  }
-
-  delete(id: string): TreeNode | null {
-    const parent = this.parent(id);
-    if (!parent) return null;
-    const node = this.get(id)!;
-    parent.children = parent.children.filter((c) => c !== node);
-    this.unindex(node);
-    return parent;
-  }
-
-  /**
-   * Lichess's "Promote variation" (one fork up) and "Make main line" (every
-   * fork to the root). A forced variation on the way counts as one step.
-   */
-  promote(id: string, toMainline: boolean) {
-    const nodes = this.path(id);
-    for (let i = nodes.length - 1; i > 0; i--) {
-      const node = nodes[i], parent = nodes[i - 1];
-      if (parent.children[0] !== node) {
-        parent.children = [node, ...parent.children.filter((c) => c !== node)];
-        if (!toMainline) return;
-      } else if (node.forceVariation) {
-        delete node.forceVariation;
-        if (!toMainline) return;
-      }
-    }
-  }
-
-  /** Shows a main-line move as a variation, or back. */
-  setForceVariation(id: string, on: boolean) {
-    const node = this.get(id)!;
-    if (on) node.forceVariation = true; else delete node.forceVariation;
-  }
-
-  /** Whether any variation can be folded (`collapsed` false) or unfolded (true). */
-  someCollapsible(collapsed: boolean): boolean {
-    const walk = (n: TreeNode): boolean => (n.children.length > 1 && !!n.collapsed === collapsed) || n.children.some(walk);
-    return walk(this.root);
-  }
-
-  setCollapsedAll(collapsed: boolean) {
-    const walk = (n: TreeNode) => {
-      if (n.children.length > 1) { if (collapsed) n.collapsed = true; else delete n.collapsed; }
-      n.children.forEach(walk);
-    };
-    walk(this.root);
   }
 
   /**
@@ -451,10 +302,7 @@ export class Tree {
       ...(n.collapsed ? { c: true as const } : {}),
       children: n.children.map(write),
     });
-    const current: number[] = [];
-    const nodes = this.path(currentId);
-    for (let i = 1; i < nodes.length; i++) current.push(nodes[i - 1].children.indexOf(nodes[i]));
-    return { loadedFen: this.loadedFen, root: write(this.root), current };
+    return { loadedFen: this.loadedFen, root: write(this.root), current: this.indexPath(currentId) };
   }
 
   /** A saved tree replayed move by move; moves that no longer play are dropped. */
@@ -474,17 +322,11 @@ export class Tree {
       }
     };
     try { apply(tree.root, saved.root); } catch { return null; }
-    let current = tree.root;
-    for (const i of saved.current ?? []) {
-      const next = current.children[i];
-      if (!next) break;
-      current = next;
-    }
-    return { tree, current };
+    return { tree, current: tree.follow(saved.current ?? []) };
   }
 
   private headers(): string[] {
-    const headers = ['[Event "Bughouse analysis"]', '[Site "https://chessautoprep.com/bughouse"]', '[Variant "Bughouse"]'];
+    const headers = ['[Event "Bughouse analysis"]', '[Site "https://chessautoprep.com/bughouse"]', '[Variant "Crazyhouse"]'];
     if (this.root.fen !== START_FEN) headers.push(`[FEN "${this.root.fen}"]`, '[SetUp "1"]');
     return headers;
   }
@@ -560,11 +402,5 @@ function applyEditComment(tree: Tree, node: TreeNode, comment: string) {
     for (let i = 0; i < (Number(count) || 1); i++)
       tree.adjustHand(node.id, color, roles[letter.toLowerCase()], sign === '+' ? 1 : -1);
   }
-}
-
-function plyOf(fen: string): number {
-  const parts = fen.trim().split(/\s+/);
-  const full = Number(parts[5] ?? 1) || 1;
-  return (full - 1) * 2 + (parts[1] === 'b' ? 1 : 0);
 }
 

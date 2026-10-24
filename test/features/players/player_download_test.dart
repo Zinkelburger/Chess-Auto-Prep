@@ -49,7 +49,7 @@ void main() {
     final api = ChesscomGamesApi(
       MockClient((request) async {
         asked.add(request.url.path);
-        if (request.url.path.endsWith('archives'))
+        if (request.url.path.endsWith('archives')) {
           return http.Response(
             jsonEncode({
               'archives': [
@@ -59,6 +59,7 @@ void main() {
             }),
             200,
           );
+        }
         return http.Response(
           request.url.path.contains('/09/')
               ? _game('60+0', 20)

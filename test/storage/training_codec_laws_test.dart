@@ -1,7 +1,7 @@
 // Laws of the training files over generated text: the records a reader
 // finds are the text cut into pieces, nothing added and nothing lost; a row
-// as written reads back as itself, with the same values, and the
-// old app's rows of every width read as what they hold; an answer line is
+// as written reads back as itself, with the same values, however it is
+// quoted; an answer line is
 // read or passed over, never thrown on; and a write through the store
 // changes only the rows it names, down to the byte.
 import 'dart:convert';
@@ -11,6 +11,7 @@ import 'package:chess_auto_prep/chess/training/schedule.dart';
 import 'package:chess_auto_prep/storage/csv_records.dart';
 import 'package:chess_auto_prep/storage/training_rows.dart';
 import 'package:chess_auto_prep/storage/training_store.dart';
+import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -72,21 +73,12 @@ String _joined(List<CsvRecord> records) =>
 
 const Generator<Review> _reviews = Generator(csvReview);
 
-/// A review as the old app writes it, [width] columns wide, spelled one of
-/// the ways a file holds it.
-typedef _OldRow = ({Review review, int width, RowSpelling spelling});
+/// A review spelled one of the ways a file holds it.
+typedef _Row = ({Review review, RowSpelling spelling});
 
-final Generator<_OldRow> _oldRows = Generator((rand) {
-  final review = csvReview(rand);
-  final width = rand.pick(const [8, 10, 11]);
-  final cells = reviewCells(review, width);
-  final spellings = [
-    RowSpelling.canonical,
-    RowSpelling.quoted,
-    if (legacyWritable(cells)) RowSpelling.legacy,
-  ];
-  return (review: review, width: width, spelling: rand.pick(spellings));
-});
+final Generator<_Row> _rows = Generator(
+  (rand) => (review: csvReview(rand), spelling: rand.pick(RowSpelling.values)),
+);
 
 void _rowLaws() {
   forAll(
@@ -105,24 +97,16 @@ void _rowLaws() {
     },
   );
 
-  forAll(
-    'the old app\'s rows of 8, 10 and 11 columns read as what they hold',
-    _oldRows,
-    (old) {
-      final cells = reviewCells(old.review, old.width);
-      final row = switch (old.spelling) {
-        RowSpelling.canonical => encodeCsvRecord(cells),
-        _ => spelledRow(cells, old.spelling).source,
-      };
-      final header = reviewsHeader.split(',').take(old.width).join(',');
-      final records = (readCsvRecords('$header\n$row\n') as CsvParsed).records;
-      final record = records[1];
-      final width = rowWidth(reviewsFile, record, headerWidth(records));
-      final read = decodeReview(dataCells(record, width)!);
-      final truth = reviewAtWidth(old.review, old.width);
-      expect(encodeReview(read!), encodeReview(truth));
-    },
-  );
+  forAll('a review row reads as what it holds, however it is quoted', _rows, (
+    row,
+  ) {
+    final cells = encodeReview(row.review);
+    final text = spelledRow(cells, row.spelling).source;
+    final records =
+        (readCsvRecords('$reviewsHeader\n$text\n') as CsvParsed).records;
+    final read = decodeReview(dataCells(records[1])!);
+    expect(encodeReview(read!), encodeReview(asWritten(row.review)));
+  });
 
   forAll(
     'an answer line is read, with fields it does not know passed over, '
@@ -178,12 +162,9 @@ final class _Frame {
 final Generator<_Frame> _frames = Generator((rand) {
   final (reviews, reviewAt) = _file(
     rand,
-    reviewsHeader.split(',').take(rand.pick(const [11, 11, 10, 8])).toList(),
-    () {
-      final width = rand.pick(const [11, 10, 8]);
-      return reviewCells(csvReview(rand), width);
-    },
-    reviewCells(csvReview(rand, key: (source: _chapter, id: _line)), 11),
+    reviewsHeader.split(','),
+    () => encodeReview(csvReview(rand)),
+    encodeReview(csvReview(rand, key: (source: _chapter, id: _line))),
   );
   final (streaks, streakAt) = _file(
     rand,
@@ -211,12 +192,8 @@ final Generator<_Frame> _frames = Generator((rand) {
   List<String> Function() other,
   List<String> mine,
 ) {
-  String spelled(List<String> cells) {
-    final spelling = rand.pick(RowSpelling.values);
-    return spelling == RowSpelling.legacy && !legacyWritable(cells)
-        ? encodeCsvRecord(cells)
-        : spelledRow(cells, spelling).source;
-  }
+  String spelled(List<String> cells) =>
+      spelledRow(cells, rand.pick(RowSpelling.values)).source;
 
   final rows = [
     for (var i = rand.between(0, 6); i > 0; i--)

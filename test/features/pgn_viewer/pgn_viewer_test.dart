@@ -78,7 +78,7 @@ void main() {
     final session = fixture.session;
     session.nextGame();
     expect(viewer.current, 1);
-    expect(session.cursor.isRoot, isTrue);
+    expect(session.cursor.value.isRoot, isTrue);
     expect(session.tree?.children.single.san, 'd4');
     session.nextGame();
     session.nextGame();
@@ -237,7 +237,7 @@ void main() {
       fixture = await viewerOver(threeGameFile);
       await fixture.open();
       fixture.viewer.showGame(2);
-      fixture.session.forward();
+      fixture.session.cursor.forward();
       fixture.session.playMove('e7e5');
       await fixture.saver.flush();
       expect(fixture.onDisk, contains('1. c4 e5 *'));

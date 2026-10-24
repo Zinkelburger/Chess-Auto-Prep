@@ -48,12 +48,12 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(276, 600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    fixture.session.goTo(sicilian);
+    fixture.session.cursor.goTo(sicilian);
     await tester.pumpWidget(strip(fixture));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Black is winning'));
     await tester.pumpAndSettle();
-    expect(fixture.session.currentMove!.nags, contains(19));
+    expect(fixture.session.cursor.currentMove!.nags, contains(19));
     expect(tester.takeException(), isNull);
   });
 
@@ -102,18 +102,18 @@ void main() {
   testWidgets('a glyph goes on the move on the board and comes off again', (
     tester,
   ) async {
-    fixture.session.goTo(sicilian);
+    fixture.session.cursor.goTo(sicilian);
     await pump(tester);
     await tester.tap(find.text('!'));
     await tester.pumpAndSettle();
-    expect(fixture.session.currentMove?.nags, [1]);
+    expect(fixture.session.cursor.currentMove?.nags, [1]);
     expect(fixture.onDisk, contains(r'c5 $1'));
     await tester.tap(find.text('?!'));
     await tester.pumpAndSettle();
-    expect(fixture.session.currentMove?.nags, [6]);
+    expect(fixture.session.cursor.currentMove?.nags, [6]);
     await tester.tap(find.text('?!'));
     await tester.pumpAndSettle();
-    expect(fixture.session.currentMove?.nags, isEmpty);
+    expect(fixture.session.cursor.currentMove?.nags, isEmpty);
     expect(fixture.onDisk, blackChapter);
   });
 
@@ -336,7 +336,10 @@ void main() {
     fixture.session.setComment(NodePath.of([0]), 'mine');
     await tester.pumpAndSettle();
     expect(
-      find.textContaining('Edit it in the old app.'),
+      find.text(
+        'That line could not be read in full, so it is left as it is. '
+        'The file is unchanged.',
+      ),
       findsOneWidget,
       reason: 'an edit that quietly does nothing reads as a lost one',
     );

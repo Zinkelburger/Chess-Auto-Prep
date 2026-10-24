@@ -11,11 +11,11 @@ import 'puzzle.dart';
 /// from one set [Chapter] to the next, each rewriting the one game it is
 /// about and declaring that it did.
 ///
-/// The headers are the old app's, in its order, so both apps read what the
-/// other wrote: `ReviewCount`, `SuccessCount`, `LastReviewed` (local ISO
-/// time), `TimeToSolve` (seconds of the last attempt), `HintsUsed` and
-/// `StarRating`. A header the game already has is changed where it stands;
-/// a new one goes where the old app puts it, before the long ones.
+/// The headers are the set format's, in its order, as existing set files carry
+/// them: `ReviewCount`, `SuccessCount`, `LastReviewed` (local ISO time),
+/// `TimeToSolve` (seconds of the last attempt), `HintsUsed` and `StarRating`. A
+/// header the game already has is changed where it stands; a new one goes in
+/// that order, before the long ones.
 
 /// The puzzle at [index], which must still be the one at [fen], with one
 /// more attempt: solved or not, taking [seconds], made at [now].
@@ -147,7 +147,7 @@ List<PgnHeader> _set(List<PgnHeader> tags, String key, String? value) {
   return [...tags]..insert(_placeFor(tags, key), PgnTag(key, value));
 }
 
-/// Before the first header that comes after [key] in the old app's order,
+/// Before the first header that comes after [key] in the set format's order,
 /// or after the last header when none does.
 int _placeFor(List<PgnHeader> tags, String key) {
   final later = {..._statsOrder.skip(_statsOrder.indexOf(key) + 1), ..._after};

@@ -1,4 +1,4 @@
-# Will the v2 app install and run its bughouse engine on Windows 10 and 11?
+# Will the app install and run its bughouse engine on Windows 10 and 11?
 #
 # Runs only when someone pushes the `windows-check` branch on purpose; it
 # publishes nothing. The release's own Windows build makes the setup and the
@@ -9,7 +9,7 @@
 #   native   The shipped engine against a deliberately old ONNX Runtime, a
 #            missing and a corrupt private runtime, then a real search from a
 #            Unicode path with an old `onnxruntime.dll` beside it.
-#   first    The v2 app's own install path inside a built desktop app: a fresh
+#   first    The app's own install path inside a built desktop app: a fresh
 #            profile with spaces and non-ASCII letters, a real search, a
 #            damaged network repaired on the next start.
 #   clean    The machine's Visual C++ runtime uninstalled, as on a PC that
@@ -28,7 +28,7 @@ on:
     branches: [windows-check]
 
 jobs:
-  v2-contracts:
+  desktop-contracts:
     uses: ./.github/workflows/desktop-contracts.yml
 
   build:
@@ -82,9 +82,9 @@ jobs:
           New-ItemProperty -Path HKCU:\Software\ChessAutoPrep `
             -Name FileAssociationChoice -Value no -PropertyType String -Force | Out-Null
 
-      - name: first — v2 install, search and repair in a built app
+      - name: first — install, search and repair in a built app
         timeout-minutes: 30
-        run: flutter test integration_test/v2_bughouse_first_run_test.dart -d windows
+        run: flutter test integration_test/bughouse_first_run_test.dart -d windows
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:

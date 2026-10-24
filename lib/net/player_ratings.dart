@@ -12,8 +12,9 @@ final class PlayerRatings {
   final http.Client client;
   DateTime? _last;
   Future<PlayerRating> lookup(String id) async {
-    if (!RegExp(r'^\d{7,9}$').hasMatch(id))
+    if (!RegExp(r'^\d{7,9}$').hasMatch(id)) {
       throw const FormatException('A US Chess ID is 7 to 9 digits.');
+    }
     final last = _last;
     if (last != null) {
       final wait =
@@ -27,12 +28,14 @@ final class PlayerRatings {
           headers: {'User-Agent': appUserAgent},
         )
         .timeout(const Duration(seconds: 20));
-    if (response.statusCode == 404)
+    if (response.statusCode == 404) {
       throw const FormatException('US Chess has no member with that ID.');
-    if (response.statusCode != 200)
+    }
+    if (response.statusCode != 200) {
       throw StateError(
         'US Chess answered HTTP ${response.statusCode}. Try again later.',
       );
+    }
     final data = jsonDecode(response.body) as Map;
     final name = '${data['firstName'] ?? ''} ${data['lastName'] ?? ''}'.trim();
     final ratings = data['ratings'] as List? ?? const [];

@@ -15,6 +15,7 @@ import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/pgn_file_store.dart';
 import 'package:chess_auto_prep/storage/training_rows.dart';
 import 'package:chess_auto_prep/storage/training_store.dart';
+import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -114,8 +115,6 @@ void main() {
       key = (source: source, id: 'line');
     });
 
-    Review review(int passes) =>
-        Review(key: key, lineName: 'Line', lastRating: 'good', passes: passes);
     Attempt answer(String played) => Attempt(
       key: key,
       ply: 0,
@@ -129,28 +128,6 @@ void main() {
     File file(String name) => File(p.join(fixture.documents.path, name));
     TrainingStore training() =>
         TrainingStore(fixture.documents, support: fixture.support);
-
-    test('an old training queue does not block reading or writing', () async {
-      await leave('training-writes', 'done.json', '{"state":"complete"}');
-      await leave('training-writes', 'queued.json', '{"state":"queued"}');
-      final store = training();
-      final loaded = await store.read({source}) as ProgressLoaded;
-      expect(
-        await store.write(
-          reviews: [(before: null, after: review(1))],
-          operation: ProgressOperation(sources: loaded.sources),
-        ),
-        isA<ProgressWritten>(),
-      );
-      expect(await file(reviewsFile).readAsString(), contains(source));
-      expect(
-        await Directory(
-          p.join(fixture.support.path, 'training-writes'),
-        ).exists(),
-        isFalse,
-      );
-      expect(await setAside(), ['training-writes-queued.json']);
-    });
 
     test(
       'an autosave between accepting and writing keeps the answer',
@@ -234,7 +211,7 @@ void main() {
   });
 
   test(
-    'another reader sees the whole PGN while a v2 edit is unfinished',
+    'another reader sees the whole PGN while an edit is unfinished',
     () async {
       await leave(
         'compound-writes',

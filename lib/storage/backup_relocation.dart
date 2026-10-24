@@ -9,7 +9,7 @@ import 'atomic_write.dart';
 import 'backups.dart';
 import 'journal_records.dart';
 import 'operation_id.dart';
-import 'operation_journal.dart';
+import 'operation_participants.dart';
 import 'recovery_files.dart';
 
 /// Which kept-version folder follows a document when it moves, recorded in
@@ -78,12 +78,10 @@ final class BackupRelocation {
   BackupRelocation(
     this.root, {
     required this.documents,
-    Future<void> Function(String from, String to) move = movePathNoReplace,
-    Future<void> Function(String) synchronize = syncDirectory,
+    this._move = movePathNoReplace,
+    this._synchronize = syncDirectory,
     bool? windows,
-  }) : _move = move,
-       _synchronize = synchronize,
-       _windows = windows ?? Platform.isWindows;
+  }) : _windows = windows ?? Platform.isWindows;
 
   final Directory root;
 

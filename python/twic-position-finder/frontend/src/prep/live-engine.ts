@@ -19,8 +19,11 @@ export interface EngineResult {
   info: string;
 }
 
+/** The panel's line while Stockfish starts. */
+export const STARTING = 'Starting Stockfish…';
+
 export type EngineStatus =
-  | { kind: 'loading' }
+  | { kind: 'loading'; text: string }
   | { kind: 'ready' }
   | { kind: 'failed'; text: string };
 
@@ -36,7 +39,7 @@ function info(depth: number, nps: number, infinite: boolean): string {
 export class LiveEngine {
   private engine: Stockfish | null = null;
   private token = 0;
-  private status: EngineStatus = { kind: 'loading' };
+  private status: EngineStatus = { kind: 'loading', text: STARTING };
 
   constructor(private readonly onStatus: (s: EngineStatus) => void, private readonly onResult: (r: EngineResult) => void) {}
 
@@ -44,7 +47,7 @@ export class LiveEngine {
     if (this.engine) return this.engine;
     const engine = new Stockfish(64);
     this.engine = engine;
-    this.setStatus({ kind: 'loading' });
+    this.setStatus({ kind: 'loading', text: STARTING });
     engine.started().then(
       () => { if (this.engine === engine) this.setStatus({ kind: 'ready' }); },
       (e: Error) => { if (this.engine === engine) { this.engine = null; this.setStatus({ kind: 'failed', text: e.message }); } },

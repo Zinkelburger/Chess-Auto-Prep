@@ -16,8 +16,8 @@ final class SearchEvaluator implements PositionEvaluator {
     required this.source,
     required this.fallback,
     required this.minDepth,
-    required RemoteRun run,
-  }) : _run = run;
+    required this._run,
+  });
   final EvaluationSource source;
   final PositionEvaluator fallback;
   final int minDepth;

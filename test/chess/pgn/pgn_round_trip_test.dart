@@ -29,7 +29,7 @@ const _dialects = [
 const _fixtures = [..._dialects, 'malformed.pgn'];
 
 String fixture(String name) =>
-    File('test/fixtures/v2_pgn/$name').readAsStringSync();
+    File('test/fixtures/pgn/$name').readAsStringSync();
 
 /// One game per part of the grammar, each holding the part its key names.
 const _games = {
@@ -86,7 +86,7 @@ const _normalised = {
 void main() {
   test('the fixture folder holds exactly the files the tests name', () {
     final found = Directory(
-      'test/fixtures/v2_pgn',
+      'test/fixtures/pgn',
     ).listSync().map((entry) => entry.uri.pathSegments.last).toList();
     expect(found..sort(), [..._fixtures]..sort());
   });
@@ -166,7 +166,7 @@ void main() {
 
   test('a comment holding a closing brace cannot be written and says so', () {
     // No PGN reader gives `}` a meaning other than "the comment ends here",
-    // and neither the old app nor Lichess escapes it — both strip braces
+    // and Lichess does not escape it — it strips braces
     // instead. So a `}` the user types is text the writer cannot say, and
     // the gate refuses rather than quietly dropping it.
     const game = '1. e4 *';

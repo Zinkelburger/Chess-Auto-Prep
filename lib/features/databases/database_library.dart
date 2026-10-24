@@ -84,8 +84,9 @@ final class DatabaseLibrary extends ChangeNotifier {
       await _readLatest();
     } finally {
       _reading = false;
-      if (activity == DatabaseActivity.reading)
+      if (activity == DatabaseActivity.reading) {
         activity = DatabaseActivity.idle;
+      }
       _notify();
     }
   }
@@ -151,8 +152,9 @@ final class DatabaseLibrary extends ChangeNotifier {
 
   Future<void> importFile() async {
     final database = path;
-    if (database == null || activity != DatabaseActivity.idle || _disposed)
+    if (database == null || activity != DatabaseActivity.idle || _disposed) {
       return;
+    }
     if (busy) {
       message = removing != null
           ? 'Wait for the deletion to finish.'

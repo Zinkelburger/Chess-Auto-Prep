@@ -1,15 +1,14 @@
 import 'dart:io';
 
-import 'package:chess_auto_prep/chess/pgn/chapter.dart';
-import 'package:chess_auto_prep/chess/pgn/line_id_pins.dart';
 import 'package:chess_auto_prep/features/library/library.dart';
 import 'package:chess_auto_prep/features/library/library_state.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/deleted_chapters.dart';
+import 'package:chess_auto_prep/storage/chapter_directory.dart';
 import 'package:chess_auto_prep/storage/pgn_file_store.dart';
 import 'package:chess_auto_prep/workspace/document_saver.dart';
 import 'package:chess_auto_prep/workspace/document_session.dart';
 import 'package:chess_auto_prep/workspace/session_results.dart';
-import 'package:csv/csv.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -72,65 +71,8 @@ void main() {
     await support.delete(recursive: true);
   });
 
-  for (final section in [false, true]) {
-    test('moving an unpinnable line preserves actual training identities '
-        '${section ? 'across course sections' : 'across files'}', () async {
-      await library.createRepertoire('Source', Side.white);
-      await library.createRepertoire('Target', Side.white);
-      const source = 'repertoires/Source/Main.pgn';
-      const target = 'repertoires/Target/Main.pgn';
-      final stamp = section ? '[ChapterName "Moving"]\n' : '';
-      final keepStamp = section ? '[ChapterName "Keep"]\n' : '';
-      File(at(source)).writeAsStringSync(
-        '[Event "c:\\games"]\n[LineID "x"]\n$stamp\n1. d4 Nf6 *\n\n'
-        '[Event "Keep me"]\n[LineID "x"]\n$keepStamp\n1. e4 e5 *\n',
-      );
-      File(at(target)).writeAsStringSync(
-        '// Target\n// Color: White\n\n'
-        '[Event "Already here"]\n[LineID "existing"]\n'
-        '${section ? '[ChapterName "Destination"]\n' : ''}'
-        '\n1. c4 e5 *\n',
-      );
-      await library.refresh();
-      await session.open(chapter('Source', section ? 'Moving' : 'Main'));
-      final before = session.chapter!;
-      final movingId = (before.lineIds ?? trainedIdsOf(before)).first!;
-      expect(movingId, isNot('x'));
-      File(at('repertoire_reviews.csv')).writeAsStringSync(
-        '$reviewsHeader\n${review(source, movingId)}\n'
-        '${review(source, 'x')}\n${review(target, 'existing')}\n',
-      );
-
-      expect(
-        await library.moveLines(
-          games: {0},
-          to: chapter('Target', section ? 'Destination' : 'Main'),
-        ),
-        isA<LibraryDone>(),
-      );
-      await saver.flush();
-      final there = await readChapter(
-        name: 'Main.pgn',
-        text: File(at(target)).readAsStringSync(),
-      );
-      final movedId = trainedIdsOf(there).last!;
-      expect(movedId, isNot(movingId), reason: 'the file position changed');
-      expect(there.lines.last.text, contains('[LineID "x"]'));
-      final csv = Csv(autoDetect: false, lineDelimiter: '\n');
-      final rows = csv.decode(reviews());
-      expect(
-        rows.skip(1),
-        unorderedEquals([
-          csv.decode(review(source, 'x')).single,
-          csv.decode(review(target, 'existing')).single,
-          csv.decode(review(target, movedId)).single,
-        ]),
-      );
-    });
-  }
-
   test('a damaged recovery note does not stop an import', () async {
-    final note = File(p.join(support.path, 'unfinished-moves', 'bad.json'));
+    final note = File(p.join(support.path, 'relocation-writes', 'bad.json'));
     await note.parent.create(recursive: true);
     await note.writeAsString('{');
     final result = await library.importText(

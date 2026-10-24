@@ -77,7 +77,7 @@ class _OutlinePanelState extends State<OutlinePanel> {
       context,
       fromBoard: chapter == null
           ? null
-          : rootMovesFromBoard(chapter, widget.session.cursor),
+          : rootMovesFromBoard(chapter, widget.session.cursor.value),
     );
     if (wanted == null || !mounted) return;
     await announce(
@@ -133,7 +133,7 @@ class _OutlinePanelState extends State<OutlinePanel> {
       } else {
         _selected = {};
         _anchor = line.game;
-        widget.session.goTo(line.at);
+        widget.session.cursor.goTo(line.at);
       }
     });
   }
@@ -484,8 +484,8 @@ class _Toolbar extends StatelessWidget {
   }
 }
 
-/// One chapter of the outline. The one on the board is bold and accented, as
-/// the old app's is, because it is where every other panel is pointing.
+/// One chapter of the outline. The one on the board is bold and accented,
+/// because it is where every other panel is pointing.
 ///
 /// A chapter that starts after some moves prints them under its name, so a
 /// chapter set up for one opening says which. A draft — proposed lines

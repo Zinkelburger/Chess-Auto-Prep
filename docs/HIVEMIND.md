@@ -1,8 +1,10 @@
 # Hivemind, end to end
 
-The bughouse engine behind Bughouse Lab, the `bughouse` MCP server and every
-engine match, and the website's `/bughouse` board (one board, the partner board
-held still, on the GPU through WebGPU). This document
+The bughouse engine behind the app's Bughouse mode and the `bughouse` MCP
+server. `tools/bughouse_web/` also builds it for the browser (one board, the
+partner board held still, on the GPU through WebGPU), but no website page
+loads that build: the site's `/bughouse` board runs Lichess's crazyhouse
+Fairy-Stockfish. This document
 is the one place that explains *how it works* rather than how to call it:
 what the network sees, what the search does with it, and — the question that
 sends everyone here — **why the evaluation sits near 0.00 when one side is
@@ -11,8 +13,8 @@ numbers are in [Why everything reads 0.00](#why-everything-reads-000).
 
 Calling the thing is documented elsewhere: [`bughouse-mcp`
 skill](../.agents/skills/bughouse-mcp/SKILL.md) for the MCP tools,
-[Bughouse matches](BUGHOUSE_MATCHES.md) for engine-vs-engine games,
-[Component map](COMPONENT_MAP.md) for the Flutter surfaces.
+[Bughouse](features/bughouse.md) for the desktop mode, [Component map](COMPONENT_MAP.md) for the Flutter
+surfaces.
 
 ## What it is
 
@@ -37,16 +39,16 @@ resemblance:
 
 | | |
 |---|---|
-| Upstream | `github.com/Zinkelburger/hivemind`, pinned at `5508ba9daf4164e48a8a8a9b39e101efdc60e97a` |
+| Upstream | `github.com/Zinkelburger/hivemind` (the owner's fork of aminwoo/hivemind), branch `portable-desktop-builds`. The desktop engines are release `engine-v0.2.0`, revision `0b025880cf6b2fe3175e210e224c0764a9b4838e`; the web build stays on `5508ba9daf4164e48a8a8a9b39e101efdc60e97a` with its own patches |
 | Language | C++23, CMake + Ninja; embeds a stripped Fairy-Stockfish for move generation |
 | Licence | Hivemind MIT; the bundled Fairy-Stockfish is GPL-3.0 |
 | Backends | `tensorrt` (FP16, default upstream) or `onnxruntime` (FP32, portable) — **we ship ORT** |
 | Corresponding source, vendored | `tools/bughouse_windows/hivemind-source.tar.gz` and `python/twic-position-finder/frontend/public/bughouse-engine/hivemind-source.tar.gz` |
 
-There is no Hivemind checkout on this machine. When you need to read the
-engine's own code, unpack one of those two tarballs; when you need to
-*change* it, clone upstream at that revision and rebuild with
-`--hivemind <checkout>` (see [Rebuilding](#rebuilding-and-repackaging)).
+The repository holds no Hivemind checkout. When you need to read the
+engine's own code, unpack one of those two tarballs (the Windows one is the
+desktop revision); when you need to *change* it, commit to the fork and
+release it (see [Rebuilding](#rebuilding-and-repackaging)).
 
 ## The path a position takes
 
@@ -73,10 +75,9 @@ engine's own code, unpack one of those two tarballs; when you need to
   bestmove (d2d4,pass) ponder (d7d5,d2d4)
   info depth 12 score cp -230 nodes 1500 nps 350 … pv (d2d4,pass) …
         │
-        ├── Bughouse Lab            lib/features/bughouse/
+        ├── Bughouse mode           lib/features/bughouse/
         ├── bughouse MCP server     tools/mcp/bughouse/
-        ├── the browser (WASM)      python/twic-position-finder/frontend/
-        └── engine matches          BUGHOUSE_MATCHES.md
+        └── the browser (WASM)      python/twic-position-finder/frontend/
 ```
 
 ## What the network sees
@@ -132,9 +133,8 @@ not representable — `get_fast_policy_index` returns −1 and the prior becomes
 The ORT backend also *looks* for `jointfactors_a` / `jointfactors_b` heads —
 a low-rank factorisation of the joint action distribution. **The shipped
 network does not have them**, so `jointFactorRank == 0` and the search treats
-the two boards' policies as independent when it forms joint priors. That is a
-real modelling gap and a clear place to improve the engine; see [Where to
-push](#where-to-push).
+the two boards' policies as independent when it forms joint priors; see
+[Limits of the shipped network](#limits-of-the-shipped-network).
 
 ### The shipped network, by the numbers
 
@@ -166,7 +166,7 @@ Five SE tensors carrying 27% of the network is worth a look on its own. A
 squeeze-excite gate is normally a pair of tiny bottleneck matrices; a
 `[384, 384, 5]` conv inside one, in 5 of 16 blocks, is either a deliberate
 wide channel-mixer or an export artifact. Either way it is the single biggest
-per-tensor lever on download size, and the first thing to ask upstream about.
+tensor group in the download.
 
 ## What the search does
 
@@ -221,10 +221,19 @@ the true advantage is 0 by construction), our team white on A.
 
 The number in `info … score cp` is `180·tan(1.56·Q)` of an MCTS Q that
 carries a large offset, and the offset is mostly the network reading plane 31.
-With neither team allowed to sit, a dead-equal position reads **cp −230 from
-both seats**. That is not a bug, and it is not a bias you can subtract once:
-it is the network saying *"a team that can never sit is losing"*, and how
-much it is losing by depends on the position.
+With `TimeAdvantage false`, a dead-equal position reads **cp −230 from
+both seats**. That is not a bug, and it is not a bias you can subtract once.
+`false` does not mean "neither team may sit": the search gives the team to
+play at every node the root team's flag or its opposite
+(`searchthread.cc`, `teamToPlayHasTimeAdvantage`), so exactly one team may
+sit, and `false` means the opponent may. Each seat's −230 is that seat
+losing to an opponent who can wait, and how much depends on the position.
+Two `false` searches therefore describe two different clocks; the
+calibration below cancels the clock between them rather than modelling an
+even one. The app's Bughouse mode searches one consistent case instead
+(A + B may sit, or C + D may), so its score keeps the clock's worth, and so
+does the browser build's one board (White may sit, or Black may; the frozen
+partner board lets nobody actually sit there).
 
 The `policy` UCI command prints the network's opinion with no search at all,
 which separates the network from the MCTS. Raw value, our seat, no sitting
@@ -326,27 +335,18 @@ player on earth reads as "dead equal, engine noise". It is not noise — it is
 58.8%, a real and substantial edge — the units are just six times smaller
 than the ones the display invites you to assume.
 
-### What to do about it
+### Reading the numbers
 
-Three options, cheapest first. None requires touching the engine.
-
-1. **Read `win%`, not the score.** It is already linear in `advantage`
-   (`50·(1 + advantage)`), so gains and losses read symmetrically, and 58.8%
-   is much harder to misread than +0.51. It is exposed today on
-   `BughouseEval.winLabel` and as `win_percent` from the MCP server. Caveat:
-   it is a re-centred engine estimate, **not** a calibrated probability, and
-   it is not the network's WDL.
-2. **Anchor the displayed scale on a pawn-in-hand instead of the tangent.**
-   One pawn delivered to your partner is 0.104 of Q, so `pawns ≈ 9.6 ×
-   advantage` gives knight 1.7, rook 1.5, queen 4.1 — a scale that is
-   bughouse-native, monotone, and readable by anyone. This is a display
-   change in `BughouseEval.score` / `calibration.to_score`, and it is the
-   single highest-value improvement available. It needs a proper fit across
-   more positions than the ten above before it ships.
-3. **Surface the network's own WDL.** It exists (`wdl_out`), the engine
-   already prints it under `policy`, and it is the only genuinely
-   probabilistic number in the system. Nothing in the app or the MCP server
-   reads it today.
+`win%` is linear in `advantage` (`50·(1 + advantage)`), so gains and losses
+read symmetrically, and 58.8% is much harder to misread than +0.51. The MCP
+server returns it as `win_percent` (the desktop mode does not show it). It is
+a re-centred engine estimate, **not** a calibrated probability, and it is not
+the network's WDL. One pawn delivered to your partner is 0.104 of Q, so
+`pawns ≈ 9.6 × advantage` (knight 1.7, rook 1.5, queen 4.1) reads the ten
+positions above on a bughouse-native scale; it is fitted on those ten only,
+and nothing displays it. The network's own WDL (`wdl_out`) is printed by the
+engine under `policy` and is the only genuinely probabilistic number in the
+system; neither the app nor the MCP server reads it.
 
 And two rules that hold regardless:
 
@@ -370,7 +370,9 @@ setoption name TimeAdvantage value true|false
 setoption name RequireMoveOn value none|A|B
 setoption name MultiPV value N            ← not a `go` argument
 position fen <fenA>|<fenB> [moves 1e2e4 2d7d5 …]
+setoption name ReportIntervalMs value N   ← every ranked line while searching, every N ms (0 = rank 1 per new depth)
 go [ponder] [movetime <ms>] [nodes <N>]   ← nodes wins if both; default 1000 ms
+go infinite                                ← until stop (or a solved root), then bestmove
 stop                                       ← always, to kill the permanent brain
 policy                        → Value / WDL / plies, then per-board priors (debug, not UCI)
 ```
@@ -387,6 +389,18 @@ bestmove (d2d4,pass) ponder (d7d5,d2d4)
 20 deep. Everything non-search goes through `info string …`, which both
 parsers exclude by requiring `info ` *and* ` depth `.
 
+While it searches, the engine prints the whole MultiPV block — the same
+lines as the block before `bestmove`, ranks 1 to N — every `ReportIntervalMs`,
+for node, time and infinite searches alike. Upstream leaves the option at 0,
+so the handshake sets it to 250 whenever the `uci` reply offers it. A
+periodic block leaves out root moves no visit has reached yet, except rank 1,
+the move `bestmove` would play at that moment, so early blocks can be shorter
+than `MultiPV`. Each block is one write; a reader that keeps the latest line
+per rank sees the block before `bestmove` last. The `uci` reply's `option name ReportIntervalMs` line is
+how a reader tells this engine from an older build, which prints only that
+final block in a node search and the rank-1 line on each new depth in a
+timed one. `go infinite` starts no permanent brain after its `bestmove`.
+
 Three rules the options carry that a chess engine has no place for:
 
 | Option | Rule |
@@ -398,42 +412,38 @@ Three rules the options carry that a chess engine has no place for:
 There is deliberately **no `Threads`**: `uci` never offers one, and setting it
 is swallowed without changing the reported `workers N intra-op threads N`.
 
-Two reader-side quirks worth knowing. The first `info` line of every search
-reports the root's unvisited prior, `Q = −1`, which prints as cp **−16671**;
-both parsers drop lines with `nodes <= 1` for this reason. And an illegal move
+Two reader-side quirks worth knowing. In a timed search on an older build
+the first `info` line reports the root's unvisited prior, `Q = −1`, which
+prints as cp **−16671**; both parsers drop lines with `nodes <= 1` for this
+reason. And an illegal move
 in a `position` command prints the FEN and the full legal-move list **to
 stderr** and abandons the rest of the list — so a silently wrong position is
 possible if you are not reading stderr.
 
 ## Where it runs
 
-Four consumers, one engine, sharing only files.
+Three consumers, one engine, sharing only files.
 
 | | |
 |---|---|
-| **Bughouse Lab** (desktop) | `lib/features/bughouse/` — `bughouse_engine.dart` owns the process, `bughouse_engine_protocol.dart` parses, `bughouse_eval.dart` calibrates, `bughouse_bundle.dart` unpacks the assets on first analysis |
+| **Bughouse mode** (desktop) | `lib/engines/hivemind_engine.dart` owns the process and parses its output, `lib/engines/hivemind_install.dart` installs and checks the assets before each launch, `lib/chess/bughouse/hivemind.dart` calibrates; the mode itself is `lib/features/bughouse/` |
 | **`bughouse` MCP server** | `tools/mcp/bughouse/` — `engine.py` the UCI client, `board.py` the cross-board rule, `calibration.py` the offset, `analysis.py` the three question shapes (`analyse` / `compare` / `playout`), `tools.py` the schemas |
 | **The browser** | `tools/bughouse_web/` and `frontend/src/analysis/hivemind.worker.ts` — the same C++ compiled to WASM, ORT-web for inference on WebGPU (batches of 32) or CPU threads |
-| **Engine matches** | [Bughouse matches](BUGHOUSE_MATCHES.md) — one process drives both teams |
 
 `tools/mcp/bughouse/paths.py:locate()` finds the engine in this order:
 `HIVEMIND_BIN`/`HIVEMIND_MODEL`/`HIVEMIND_LIB` → the desktop app's support
 directory → `~/.local/share/chess-prep/bughouse/` → ungzip
 `assets/bughouse/*.gz`. It never writes inside the app's directory.
 
-On this machine, only the MCP server's copy exists — the Flutter app has never
-unpacked its own:
+The desktop app installs its own copy into `<support>/bughouse/` from
+`assets/bughouse/` and checks each file against `manifest.json` (size and
+SHA-256) before every launch. The unpacked Linux files are about 3.7 MB
+(`hivemind-linux`), 54 MB (`hivemind.onnx`) and 28 MB
+(`libonnxruntime.so.1`).
 
-```
-~/.local/share/chess-prep/bughouse/
-  hivemind-linux         3,729,088     (not stripped; RPATH from a GH Actions build)
-  hivemind.onnx         54,415,625
-  libonnxruntime.so.1   28,497,752
-```
-
-`assets/bughouse/` in the checkout is empty (gitignored). Refill it with
-`python3 tools/fetch_assets.py --only bughouse`; checksums live in
-`tools/assets.lock.json`.
+The `*.gz` payloads in `assets/bughouse/` are gitignored and fetched, not
+committed. Fill them with `python3 tools/fetch_assets.py --only bughouse`;
+checksums live in `tools/assets.lock.json`.
 
 ### Budgets
 
@@ -461,26 +471,33 @@ independent mate-probe allowance. This is a small consistency study, not an Elo
 calibration. Its two-core quota and machine load produced slower timings than
 the earlier throughput figures above; use its measured settings when comparing.
 
-Bulk and default live analysis now use **800 nodes**. Existing deeper saved
-results remain available. The manual
-[overnight command](../python/twic-position-finder/frontend/README.md#shared-analysis-and-manual-overnight-population)
-builds both colour expectimax values and publishes completed tables. This
-changes the neural budget only; the native root mate allowance still follows
-the engine's existing coupling described in the study.
+Bulk analysis uses **800 nodes**. This changes the neural budget only; the
+native root mate allowance still follows the engine's existing coupling
+described in the study.
+
+The desktop mode does not pick a budget per question. Each team it shows
+gets one continuous `go nodes 30000` on its own engine process, its lines
+following every report (the first within about a second, then four a
+second), and rests there; the one-board zero search rests at 8,000. The two
+processes share the half of the machine's cores the mode takes, so each
+runs at roughly half the single-process rate until the other rests. An
+engine without `ReportIntervalMs` is asked in passes of 800, 4,000 and
+20,000 nodes on one process instead.
 
 ## The two books
 
 Two different databases, confusingly both called "the bughouse DB". They
 share one thing: the position key, FNV-1a over the canonical dual FEN
 truncated to four FEN fields per board (`tools/bughouse_db/poskey.py`,
-mirrored in `bughouse_book.dart`).
+mirrored in `TablePosition.bookKey`, `lib/chess/bughouse/table.dart`).
 
 **The FICS book** — statistics from real games. `tools/bughouse_db/fetch.py`
 scrapes `bughouse-db.org/dl/export<year>.bpgn.bz2` (2005→present, ~2.1 GB,
 kept compressed), `index.py` replays every game with `DualBoard` and
 aggregates `edge` / `node` / `meta` tables into a ~177 MB SQLite
-`bughouse_book.db`, which the **Flutter app** reads directly. Default depth is
-16 half-moves across both boards, pruned at 2 games. BPGN gotchas worth
+`bughouse_book.db`, which `python3 -m bughouse_db explore` and the Hivemind
+book's work queue read. Default depth is 16 half-moves across both boards,
+pruned at 2 games. BPGN gotchas worth
 remembering: CRLF, and **Latin-1, not UTF-8**.
 
 **The Hivemind eval book** — engine evaluations, modelled on chessdb.cn.
@@ -488,28 +505,20 @@ remembering: CRLF, and **Latin-1, not UTF-8**.
 queue that searches positions with the real engine and, via `expand_fics()`,
 follows the FICS book's *popularity* so the most-played lines get evaluated
 first. `python/twic-position-finder/bughousedb.py` is the FastAPI server
-behind `/api/bughousedb/*`. The `/bughousedb` web page, retired in October
-2026, was its **crowd-sourced front end**: a visitor's browser searched missing
-positions with the WASM engine and uploaded the result against a Turnstile-
-gated ticket. The server runs no engine and rebuilds all move text from its
-own move generation. Stored values are calibrated Q; served as
-`cp = 543.17·atanh(Q)`.
+behind `/api/bughousedb/*`, which takes the owner's pushed positions and
+browser uploads against one-time tickets; no page of the current site calls
+it. The server runs no engine and rebuilds all move text from its own move
+generation. Stored values are calibrated Q; served as `cp = 543.17·atanh(Q)`.
 
-### What exists on this machine: nothing
+### Building the books locally
 
-Both pipelines are code-complete and **no data has been generated here**:
-
-| Artifact | Path | Status |
-|---|---|---|
-| data home | `~/.local/share/chess-prep/bughouse-db/` | does not exist |
-| BPGN corpus (~2.1 GB) | `…/bughouse-db/corpus/export*.bpgn.bz2` | absent — no `*.bpgn*` anywhere on disk |
-| FICS book (~177 MB built) | `…/bughouse-db/bughouse_book.db` | absent |
-| Hivemind eval book | `…/bughouse-db/hivemind_book.db` | absent |
-| server DB | `python/twic-position-finder/bughousedb.db` | absent (lives on the deployed API) |
-
-So the deployed API holds whatever the retired `/bughousedb` page
-accumulated from visitors, and there is no local seed corpus to compare it
-against. To build one:
+Both pipelines are code-complete; whether a machine has the data is its own
+business. The files live under `$BUGHOUSE_DB_HOME`, else
+`~/.local/share/chess-prep/bughouse-db/` (`corpus/export*.bpgn.bz2`,
+`bughouse_book.db`, `hivemind_book.db`); the
+server's `bughousedb.db` lives on the deployed API. Checksummed snapshots of
+both books are kept in `data/bughouse-books/` (restore with
+`tools/bughouse_db/snapshot.py`). To build from scratch:
 
 ```
 python3 -m bughouse_db fetch          # ~2.1 GB, kept bz2
@@ -520,34 +529,30 @@ python3 -m bughouse_db.hivemind_book run --expand-fics --width 4 --max-ply 12
 python3 -m bughouse_db.hivemind_book push --url https://api.chessautoprep.com
 ```
 
-The app's Databases screen tells the user to run the first two by hand; it
-never downloads the book itself, and a machine without one is the normal case.
+Neither the app, the `bughouse` MCP server nor the website's pages read
+either book.
 
 ## The web payload
 
-**43,936,825 bytes (41.9 MiB) before a visitor gets one evaluation.** The
-breakdown, from the pinned lockfile and the npm tarball (the generated files
-are gitignored and absent locally, but every size is pinned exactly):
+No page loads this payload; `prepare_assets.py` still writes it, and its
+plain ONNX Runtime serves the Expectimax tab's Maia. Loading the browser
+build costs **about 54.7 MB (52.1 MiB) before one evaluation**, from the files
+`prepare_assets.py` writes into `public/bughouse-engine/`:
 
 | Artifact | Bytes | Share |
 |---|---:|---:|
-| `model-a18e2e9f3056-0.bin` | 16,777,216 | 38.2% |
-| `model-a18e2e9f3056-1.bin` | 14,922,652 | 34.0% |
-| `ort-wasm-simd-threaded.wasm` | 11,210,254 | 25.5% |
-| `hivemind.wasm` | 926,743 | 2.1% |
-| `hivemind.mjs` | 78,674 | 0.2% |
-| `ort-wasm-simd-threaded.mjs` | 20,856 | 0.1% |
-| `model.json` manifest | ~430 | — |
+| `model-a18e2e9f3056-0.bin` | 16,777,216 | 30.7% |
+| `model-a18e2e9f3056-1.bin` | 14,922,652 | 27.3% |
+| `ort-wasm-simd-threaded.jsep.wasm` (ONNX Runtime Web 1.22.0, WebGPU build) | 21,872,216 | 40.0% |
+| `hivemind.wasm` | 979,447 | 1.8% |
+| `hivemind.mjs` | 79,004 | 0.1% |
+| `ort-wasm-simd-threaded.jsep.mjs` | 44,677 | 0.1% |
+| `model.json` manifest | ~760 | — |
 
-The page's own code — `app.ts`, `boards.ts`, `engine.ts`, `engine.worker.ts`,
-`setup.ts`, the CSS, chessground — is **~0.2–0.5 MB, under 1% of the
-total**. Do not spend time on it. 72% of the problem is the FP32 network and
-25% is a stock ONNX Runtime build.
-
-Also: each worker holds its **own full 54 MB of FP32 weights in RAM**
-(`EnginePool` defaults to `cores / 2` workers). Only the 32 MB download is
-shared, through Cache Storage `hivemind-model-v1` with SHA-256 revalidation.
-On an 8-core laptop that is ~220 MB of weights resident.
+The page's own code is well under 1% of the total. 58% is the FP32 network
+and 40% is a stock ONNX Runtime build. One worker (`hivemind.worker.ts`)
+loads the 54 MB of FP32 weights once; the network and runtime parts are kept in
+Cache Storage `hivemind-model-v1`, verified by SHA-256 against `model.json`.
 
 ### How it is built
 
@@ -555,93 +560,33 @@ On an 8-core laptop that is ~220 MB of weights resident.
 `prebuild`/`predev`: it slices the gzipped network into 16 MiB chunks (to stay
 under Cloudflare Pages' 25 MiB per-file limit), writes `model.json`, and
 copies the ORT runtime out of `node_modules`. It copies the gzip **exactly as
-downloaded** — no recompression, no `-9`, no quantisation, no ONNX graph
-optimisation, no ORT-format conversion.
+downloaded** — no recompression, no quantisation, no ONNX graph optimisation,
+no ORT-format conversion.
 
 `tools/bughouse_web/build.py` compiles the C++ with Emscripten 4.0.15 only
-when the bridge changes. The complete optimisation story is `-O3` and
-`NDEBUG`. There is no `wasm-opt`, no `-Oz`, no `--strip-debug`, no
-`--closure 1`, no `-flto` anywhere in the build path. Meanwhile `-fexceptions`
-with `DISABLE_EXCEPTION_CATCHING=0` and `ASYNCIFY=1` both inflate
-`hivemind.wasm` substantially — Asyncify is load-bearing (the C++ search
-awaits ORT through it), exceptions may not be.
+when the bridge changes. The optimisation flags are `-O3` and `NDEBUG`; there
+is no `wasm-opt`, `-Oz`, `--strip-debug`, `--closure 1` or `-flto`.
+`-fexceptions` with `DISABLE_EXCEPTION_CATCHING=0` and `ASYNCIFY=1` both
+inflate `hivemind.wasm` — Asyncify is load-bearing (the C++ search awaits
+ORT through it). `public/_headers` gives `/bughouse-engine/*` cross-origin
+isolation headers but no caching or compression rule.
 
-### Levers, ranked by bytes
+## Limits of the shipped network
 
-| Lever | Now | After | Saved | Risk |
-|---|---:|---:|---:|---|
-| **int8 dynamic quantisation** of the 168 FP32 tensors | 31.7 MB gz | ~12–14 MB | **~18–20 MB** | strength loss — must be measured, see below |
-| **Minimal/custom ORT WASM build** — only the ~20 op types this graph uses; `--minimal_build`, ORT-format model, drop training/webgl/jsep | 11.2 MB | ~3–5 MB | **~6–8 MB** | build complexity only; no strength risk |
-| **Verify brotli on `application/wasm`** — `_headers` has no `/bughouse-engine/*` rule at all, so 12.1 MB of WASM relies on Cloudflare's defaults, unasserted | up to 12.1 MB raw | ~3.3 MB | up to ~8.8 MB (overlaps above) | none — cheapest win available |
-| **Shrink or prune the 5 `body_spatial.*.se.body.0.weight` `[384,384,5]` tensors** (27% of weights) | 14.75 MB raw | — | up to ~8 MB gz | needs upstream; possibly an export artifact |
-| **FP16 instead of FP32** | 54.4 MB raw | 27.2 MB raw | ~6–8 MB gz | ORT's WASM CPU EP casts back up, so inference gets *slower* |
-| **`-Oz` + `wasm-opt -Oz --strip-debug` + `--closure 1`; `ASYNCIFY_ONLY` to narrow the transform; drop `-fexceptions` if possible** | 1.0 MB | ~0.5–0.65 MB | ~0.35 MB | small; verify the search still runs |
-| **Hash the two WASM filenames and add `Cache-Control: immutable`** | 12.2 MB refetched/revalidated on later visits | 0 | 12.2 MB on repeat visits | none |
-
-A realistic programme: **brotli headers** (an afternoon, ~8 MB, zero risk) →
-**immutable caching on hashed WASM names** (an afternoon, fixes repeat
-visits) → **minimal ORT build** (a day, ~7 MB) → **int8 quantisation gated on
-a strength match** (the big one, ~19 MB).
-
-That last one must be *measured*, not assumed. Policy/value networks are
-often fine under int8 dynamic quantisation and occasionally fall apart, and
-Hivemind already has the harness to tell you: `engine/scripts/` has
-`run_strength_sweep.py` and the binary has a `tournament` subcommand, plus
-this repo's own [engine matches](BUGHOUSE_MATCHES.md). Quantise, then run a
-few hundred games quantised-vs-FP32 at a fixed node count before shipping it.
-If int8 costs real strength, per-channel or int8-weights-only (keeping
-activations FP32) is the usual middle ground.
-
-Done in full, 41.9 MiB → roughly **15–18 MiB**, with the network still the
-majority of it. Getting materially below that means a smaller network, which
-is an upstream training question, not a packaging one.
-
-## Where to push
-
-Ordered by what looks most valuable per unit of effort, and separated by who
-has to do the work.
-
-**In this repo, no engine changes:**
-
-1. **A readable scale.** Anchor the display on a pawn-in-hand (see [What to
-   do about it](#what-to-do-about-it)). Fit it across a few dozen positions
-   rather than the ten above.
-2. **Surface WDL.** The network's own win/draw/loss exists and nothing reads
-   it. It is the only calibrated probability in the system.
-3. **Web payload**, in the order above.
-4. **Build the books.** Both pipelines are complete and unrun here; the FICS
-   book would also give the eval work a popularity-ordered queue and give the
-   app its opening explorer.
-5. **Note in the tooling**: python-chess is a hard dependency of the
-   `bughouse` MCP server and was missing from this machine's `python3`, which
-   is why the server reported `CONNECTION_CLOSED`. `python3 -m pip install
-   --user python-chess`.
-
-**Upstream, in the engine:**
-
-6. **The missing joint-factor heads.** The ORT backend already looks for
-   `jointfactors_a` / `jointfactors_b` and the shipped network does not
-   provide them, so the search combines two *independent* per-board policies
-   into a joint prior. In bughouse the boards are emphatically not
-   independent — whether to take on A depends on what your partner needs on
-   B. Training those heads is the most interesting modelling gap visible from
-   here.
-7. **The clock is one bit.** `TimeAdvantage` is a boolean, so the network
-   cannot distinguish "ahead by two seconds" from "ahead by a minute", and it
-   cannot see the diagonal at all. Given that this bit already dominates the
-   evaluation, giving it a real-valued clock differential is likely the
-   single largest strength gain available.
-8. **The value range is badly allocated.** ~60% of the output range goes to
-   one input bit, leaving material and structure to fight over the rest. That
-   is what makes every eval look flat. Worth checking whether the self-play
-   training distribution over-represents clock-decided games.
-9. **`moves_left` is inert** — it reported ~70 plies for every position
-   tested, from the opening to a queen-up middlegame. Either it is
-   undertrained or the discount that consumes it is doing nothing.
-10. **Speed.** 350 nodes/second means a 36,000-wide root gets a few hundred
-    visits. A smaller network, int8 inference, or a larger batch would all
-    convert directly into strength here, and the TensorRT backend exists
-    upstream for anyone with the GPU.
+- **No joint-factor heads.** The ORT backend looks for `jointfactors_a` /
+  `jointfactors_b` and the shipped network does not provide them, so the
+  search combines two *independent* per-board policies into a joint prior,
+  although whether to take on A depends on what your partner needs on B.
+- **The clock is one bit.** `TimeAdvantage` is a boolean, so the network
+  cannot distinguish "ahead by two seconds" from "ahead by a minute", and it
+  cannot see the diagonal at all.
+- **The value range is lopsided.** ~60% of the output range goes to that one
+  input bit, leaving material and structure to share the rest; that is what
+  makes every evaluation look flat.
+- **`moves_left` is inert** — it reported ~70 plies for every position
+  tested, from the opening to a queen-up middlegame.
+- **Speed.** At 350 nodes/second a 36,000-wide root gets a few hundred
+  visits per search.
 
 ## Rebuilding and repackaging
 
@@ -649,7 +594,15 @@ has to do the work.
 # unpack the vendored corresponding source to read it
 tar xzf tools/bughouse_windows/hivemind-source.tar.gz
 
-# desktop: package a local engine build into assets/bughouse/
+# desktop engines: commit to the fork's portable-desktop-builds branch, then
+# push a new tag engine-vX.Y.Z; its Engine release workflow builds Linux,
+# Windows and both Macs and attaches them. Attach hivemind-network-fp32.onnx.gz
+# from the previous release by hand. Then bump BUGHOUSE_TAG and refetch:
+python3 tools/fetch_assets.py --only bughouse-linux --force    # and each platform
+# Windows ships our own cross-build of the same revision (tools/bughouse_windows)
+scripts/ci.sh with -- python3 tools/bughouse_windows/build.py --source <fork-checkout>
+
+# or package a local engine build into assets/bughouse/
 python3 tools/fetch_assets.py --only bughouse --hivemind <hivemind-checkout>
 
 # web: recompile the WASM bridge (only when bridge.cc/engine_web.cc change)
@@ -662,10 +615,15 @@ python3 tools/mcp/test_bughouse.py --engine      # adds the searches, ~1 min
 scripts/ci.sh test test/features/bughouse
 ```
 
-`bughouse_tournament_engine_test.dart` and the other engine-backed Dart tests
-run only when `HIVEMIND_BIN` / `HIVEMIND_MODEL` are set, and skip otherwise.
-The Windows build needs its `hivemind_ort.dll` loaded by absolute path — see
-`tools/bughouse_windows/README.md` and `windows_loader_check.dart`.
+python-chess is a hard dependency of the `bughouse` MCP server; without it in
+`python3` the server exits at start and the client reports
+`CONNECTION_CLOSED` (`python3 -m pip install --user python-chess`).
+
+`test/engines/hivemind_real_test.dart` drives the real engine named by
+`HIVEMIND_BIN` / `HIVEMIND_MODEL` / `HIVEMIND_LIB` (it must run when they are
+set), else the copy the app installed on a Linux machine, and skips when there
+is neither. The Windows build needs its `hivemind_ort.dll` loaded by absolute
+path — see `tools/bughouse_windows/README.md`.
 
 ## Reproducing the measurements
 

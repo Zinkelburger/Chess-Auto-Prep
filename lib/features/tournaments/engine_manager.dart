@@ -86,8 +86,9 @@ Future<void> _remove(
     message:
         'Remove ${engine.name} from the registry? Saved runs retain their engine settings.',
     confirm: 'Remove',
-  ))
+  )) {
     await run.keepEngines(run.engines.where((e) => e.id != engine.id).toList());
+  }
 }
 
 Future<void> _edit(

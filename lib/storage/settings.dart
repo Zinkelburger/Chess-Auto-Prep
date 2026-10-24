@@ -144,14 +144,6 @@ final class Settings {
         : engineCores.clamp(1, most);
   }
 
-  /// Files written before [_engineDefaultsKey] wrote every value, so the old
-  /// defaults there say nothing about a choice: one core and 128 MB read as
-  /// the new defaults. A file that has the key says what it means.
-  static const _engineDefaultsKey = 'engineDefaults';
-  static const _engineDefaultsVersion = 2;
-  static const _legacyCores = 1;
-  static const _legacyMemoryMb = 128;
-
   /// The most the engine rows accept: a table bigger than this or more
   /// lines than this is a tuning job, not a setting.
   static const maxMemoryMb = 4096;
@@ -214,16 +206,13 @@ final class Settings {
   );
 
   /// The file's text. One flat object with plain names, so a person can
-  /// read it and the old app's keys never collide with it.
+  /// read it.
   String toJson() => const JsonEncoder.withIndent('  ').convert({
     ..._extra,
     'boardCoordinates': boardCoordinates,
     'figurines': figurines,
     'tournamentFinalPositions': tournamentFinalPositions,
-    _engineDefaultsKey: _engineDefaultsVersion,
-    // Left out while automatic, so an older build reads its own default
-    // rather than a zero it would hand the engine.
-    if (engineCores != autoCores) 'engineCores': engineCores,
+    'engineCores': engineCores,
     'engineMemoryMb': engineMemoryMb,
     'analysisEngine': analysisEngine,
     'engineLines': engineLines,
@@ -246,7 +235,7 @@ final class Settings {
   });
 
   /// Reads [text]; a field that is missing or of the wrong type keeps its
-  /// default, so a file from an older version still opens. Throws
+  /// default. Throws
   /// [FormatException] when the text is not a JSON object at all.
   factory Settings.fromJson(String text) {
     final decoded = jsonDecode(text);
@@ -258,12 +247,9 @@ final class Settings {
       return value is T ? value : fallback;
     }
 
-    final legacy = decoded[_engineDefaultsKey] is! int;
-    int engine(String key, int fallback, int oldDefault) {
+    int engine(String key, int fallback) {
       final value = pick<int?>(key, null);
-      return value == null || value < 1 || (legacy && value == oldDefault)
-          ? fallback
-          : value;
+      return value == null || value < 1 ? fallback : value;
     }
 
     return Settings(
@@ -273,12 +259,8 @@ final class Settings {
         'tournamentFinalPositions',
         defaults.tournamentFinalPositions,
       ),
-      engineCores: engine('engineCores', defaults.engineCores, _legacyCores),
-      engineMemoryMb: engine(
-        'engineMemoryMb',
-        defaults.engineMemoryMb,
-        _legacyMemoryMb,
-      ),
+      engineCores: engine('engineCores', defaults.engineCores),
+      engineMemoryMb: engine('engineMemoryMb', defaults.engineMemoryMb),
       analysisEngine: pick('analysisEngine', defaults.analysisEngine),
       engineLines: pick('engineLines', defaults.engineLines),
       engineThreat: pick('engineThreat', defaults.engineThreat),
@@ -317,7 +299,6 @@ final class Settings {
     'boardCoordinates',
     'figurines',
     'tournamentFinalPositions',
-    _engineDefaultsKey,
     'engineCores',
     'engineMemoryMb',
     'analysisEngine',

@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 
 import 'package:chess_auto_prep/storage/atomic_write.dart';
-import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/deleted_chapters.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -217,17 +217,12 @@ void main() {
     final folder = fixture.backupFolder(ref);
     await folder.create(recursive: true);
     // Versions the same stamp cannot tell apart; only their names can, and
-    // the folder hands them back in whatever order it pleases. Some were
-    // kept gzipped by an earlier build, and are read all the same.
+    // the folder hands them back in whatever order it pleases.
     const names = ['66666666', '55555555', '44444444', '33333333', '22222222'];
-    for (final (index, name) in names.indexed) {
-      final bytes = utf8.encode('$name *\n');
+    for (final name in names) {
       await File(
-        p.join(
-          folder.path,
-          '20260101T000000000Z-$name${index.isEven ? '.pgn.gz' : '.pgn'}',
-        ),
-      ).writeAsBytes(index.isEven ? gzip.encode(bytes) : bytes);
+        p.join(folder.path, '20260101T000000000Z-$name.pgn'),
+      ).writeAsString('$name *\n');
     }
     await File(
       p.join(folder.path, 'index.json'),

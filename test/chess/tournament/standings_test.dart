@@ -27,7 +27,7 @@ void main() {
     expect(rows.map((r) => r.sonnebornBerger), [.75, 1.5, .75]);
     expect(() => rows.clear(), throwsUnsupportedError);
   });
-  test('rating estimates preserve legacy convention and edge semantics', () {
+  test('rating estimates keep the recorded convention and edge semantics', () {
     const score = MatchScore(60, 20, 20);
     expect(score.elo, closeTo(147.190714, 1e-5));
     expect(score.margin, closeTo(66.0230, .02));

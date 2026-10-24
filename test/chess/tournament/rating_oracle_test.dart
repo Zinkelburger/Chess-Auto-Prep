@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:chess_auto_prep/chess/tournament/standings.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Elo, margin and likelihood of superiority as the old app's crosstable
+/// Elo, margin and likelihood of superiority as a reference crosstable
 /// reported them for these records, recorded once from that code.
 const _reports = 'test/fixtures/legacy/rating_reports.json';
 

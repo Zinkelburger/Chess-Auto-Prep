@@ -103,11 +103,7 @@ final class StoreFixture {
   /// The text of each kept version, oldest first.
   List<String> keptTexts(DocumentRef ref) => [
     for (final name in keptVersions(ref))
-      utf8.decode(
-        versionBytes(
-          File(p.join(backupFolder(ref).path, name)).readAsBytesSync(),
-        ),
-      ),
+      File(p.join(backupFolder(ref).path, name)).readAsStringSync(),
   ];
 
   /// Writes the four training files and books.json, each with one row or
@@ -217,35 +213,6 @@ Future<T> withFolderFlushFailing<T>(
   return real();
 }, body);
 
-/// Leaves in [support] the four-key note an older build wrote before it
-/// renamed [from] to [to]; this build only reads and finishes them.
-Future<File> leaveMoveNote(
-  Directory support,
-  String id, {
-  required String from,
-  required String to,
-  required String identity,
-  required bool folder,
-}) async {
-  final note = File(p.join(support.path, 'unfinished-moves', '$id.json'));
-  await note.parent.create(recursive: true);
-  await note.writeAsString(
-    jsonEncode({
-      'from': from,
-      'to': to,
-      'identity': identity,
-      'folder': folder,
-    }),
-  );
-  return note;
-}
-
-/// The notes older builds left in [support] that are still to finish.
-List<FileSystemEntity> notedMoves(Directory support) {
-  final folder = Directory(p.join(support.path, 'unfinished-moves'));
-  return folder.existsSync() ? folder.listSync() : const [];
-}
-
 /// A step hook that stops its command, by throwing, the first time it
 /// reaches the step named [step]; with no step it never stops.
 Future<void> Function(T) stopOnceAt<T extends Enum>(String? step) {
@@ -300,13 +267,7 @@ final class ContentLabels {
 }
 
 /// The folders under Support whose files are journal records.
-const journalFolders = {
-  'compound-writes',
-  'relocation-writes',
-  'unfinished-moves',
-  'backup-moves',
-  'training-writes',
-};
+const journalFolders = {'compound-writes', 'relocation-writes', 'backup-moves'};
 
 /// Everything under [root], as a recovery golden records it: each file by
 /// its [labels] name (a folder as `dir`), except the journal records, the
@@ -339,7 +300,7 @@ Map<String, Object?> profileDigest(Directory root, ContentLabels labels) {
         references[name.join('/')] = label;
       case ['Support', 'backups', final id, final name]:
         if (name == 'index.json') continue;
-        final version = labels.of(versionBytes(entry.readAsBytesSync()));
+        final version = labels.of(entry.readAsBytesSync());
         (backups[labels._backups[id] ?? id] ??= []).add((name, version));
       default:
         files[path] = label;

@@ -61,16 +61,18 @@ class TwicDownload extends ChangeNotifier {
       final index = await client
           .get(Uri.https('theweekinchess.com', '/twic'))
           .timeout(const Duration(seconds: 30));
-      if (index.statusCode != 200)
+      if (index.statusCode != 200) {
         throw StateError('TWIC answered HTTP ${index.statusCode}.');
+      }
       final issues =
           RegExp(r'twic(\d+)g\.zip')
               .allMatches(index.body)
               .map((match) => int.parse(match[1]!))
               .toList()
             ..sort();
-      if (issues.isEmpty)
+      if (issues.isEmpty) {
         throw const FormatException('Could not find TWIC downloads.');
+      }
       final latest = issues.last;
       final path = this.path;
       final database = await Isolate.run(() => masterGamesIssues(path));
@@ -103,12 +105,14 @@ class TwicDownload extends ChangeNotifier {
       status = _stopping
           ? 'Stopped. Download again to resume.'
           : 'TWIC database ready.';
-      if (skipped > 0)
+      if (skipped > 0) {
         status += ' Skipped $skipped unsupported or unfinished games.';
-      if (setAside case final copy?)
+      }
+      if (setAside case final copy?) {
         status +=
             ' The database could not be read, so it was set aside as '
             '${p.basename(copy)} and a new one started.';
+      }
     } on Object catch (error) {
       log.w('download TWIC', error);
       problem =
@@ -142,8 +146,9 @@ class TwicDownload extends ChangeNotifier {
     final response = await client
         .get(Uri.https('theweekinchess.com', '/zips/twic${issue}g.zip'))
         .timeout(const Duration(seconds: 60));
-    if (response.statusCode != 200)
+    if (response.statusCode != 200) {
       throw StateError('TWIC $issue answered HTTP ${response.statusCode}.');
+    }
     if (_stopping) return null;
     status = 'Importing TWIC $issue · ${done + 1} of $weeks';
     _notify();

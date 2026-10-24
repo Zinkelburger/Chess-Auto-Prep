@@ -6,13 +6,11 @@
 /// and the log's `repertoireId`. Move the chapter and say nothing, and the
 /// user's scheduling, streaks, history and answers belong to nothing.
 ///
-/// So the store repoints them in the same operation. A row is matched the way
-/// the old app matches it, because both apps write these files: the chapter's
-/// own path, or any path inside a folder that moved. A third spelling of the
-/// same file — a different absolute prefix, left behind by a Documents folder
-/// that moved as a whole — is left alone here too; the old app never rewrote
-/// those either, and guessing which prefix is stale would be a way to lose
-/// somebody's schedule.
+/// So the store repoints them in the same operation. A row is matched by the
+/// chapter's own path, or any path inside a folder that moved. A third
+/// spelling of the same file — a different absolute prefix, left behind by a
+/// Documents folder that moved as a whole — is left alone: guessing which
+/// prefix is stale would be a way to lose somebody's schedule.
 ///
 /// Deleting is a move as well. The store quarantines a chapter rather than
 /// unlinking it, so its rows follow it into the recovery folder and come back
@@ -30,7 +28,7 @@ import 'atomic_write.dart';
 import 'csv_records.dart';
 import 'document_ref.dart';
 import 'operation_id.dart';
-import 'operation_journal.dart';
+import 'operation_participants.dart';
 import 'training_rows.dart';
 import 'recovery_files.dart';
 
@@ -144,11 +142,11 @@ final class TrainingRecords {
     return Repointed(rows);
   }
 
-  /// Keeps the bytes this rewrite is about to replace where the old app keeps
-  /// them: `.cap-reference-history/<operation>/<file>` under Documents, one
-  /// folder per relocation. A schedule is a year of the user's reviews, and
-  /// the four files are the only copy of it, so nothing replaces one of them
-  /// until what it held is somewhere else.
+  /// Keeps the bytes this rewrite is about to replace beside what earlier
+  /// relocations kept: `.cap-reference-history/<operation>/<file>` under
+  /// Documents, one folder per relocation. A schedule is a year of the user's
+  /// reviews, and the four files are the only copy of it, so nothing replaces
+  /// one of them until what it held is somewhere else.
   Future<void> _keepReplaced(TrainingRepointFile file, String operation) async {
     final kept = p.join(documents.path, _replacedFolder, operation, file.name);
     await Directory(p.dirname(kept)).create(recursive: true);
@@ -384,9 +382,9 @@ final class IoFailure extends RepointResult implements Exception {
 /// The log of answered moves: one JSON object per line, only ever appended.
 const _attempts = attemptsFile;
 
-/// Where the old app keeps what a relocation replaced, under Documents, one
-/// folder per operation. Both apps read it, so the name and the shape stay
-/// as they are.
+/// Where what a relocation replaced is kept, under Documents, one folder per
+/// operation. Existing profiles already hold copies there, so the name and
+/// the shape stay as they are.
 const _replacedFolder = '.cap-reference-history';
 
 /// What the attempt log calls the same thing.
@@ -514,15 +512,12 @@ _Plan _planRecords(
   String to,
 ) {
   final width = headerWidth(records);
-  // Without the header there is no way to tell a pre-v2 record whose path
-  // held commas from a record with the wrong number of fields.
+  // A file without its header is not one this app wrote.
   if (width == null) return _Refused(Malformed(name, 1));
   final out = StringBuffer();
   var rows = 0;
   for (final record in records) {
-    final cells = record.isBlank
-        ? null
-        : dataCells(record, rowWidth(name, record, width));
+    final cells = record.isBlank ? null : dataCells(record);
     final whole = cells != null && isWholeRow(name, cells, width);
     if (cells != null && !whole) {
       if (mayName(record.source, from)) {
@@ -559,7 +554,7 @@ String? _rewritten(
   final meant = [moved, ...cells.skip(1)];
   final text = encodeCsvRecord(meant);
   if (readCsvRecords(text) case CsvParsed(records: [final written])) {
-    final read = dataCells(written, rowWidth(name, written, width));
+    final read = dataCells(written);
     if (read != null &&
         read.length == meant.length &&
         Iterable<int>.generate(read.length).every((i) => read[i] == meant[i])) {
@@ -570,8 +565,7 @@ String? _rewritten(
 }
 
 /// Where [path] is once [from] moved to [to], or null when that move did not
-/// take it. The old app's matching rule, which this one must agree with
-/// exactly.
+/// take it. Every repoint of the training files uses this one rule.
 String? movedPath(String path, String from, String to) {
   if (p.equals(from, to)) return null;
   if (p.equals(path, from)) return to;

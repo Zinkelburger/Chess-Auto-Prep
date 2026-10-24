@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/features/pgn_viewer/auto_play.dart';
 import 'package:fake_async/fake_async.dart';
@@ -21,7 +23,7 @@ void main() {
   ) {
     fakeAsync((async) {
       late SessionFixture fixture;
-      openSession(_game).then((opened) => fixture = opened);
+      unawaited(openSession(_game).then((opened) => fixture = opened));
       async.flushMicrotasks();
       final play = AutoPlay(fixture.session);
       body(async, fixture, play);
@@ -30,7 +32,7 @@ void main() {
     });
   }
 
-  String? san(SessionFixture f) => f.session.currentMove?.san;
+  String? san(SessionFixture f) => f.session.cursor.currentMove?.san;
 
   test('plays a move a moment after the key, then one a second, and stops '
       'at the end of the line', () {
@@ -51,10 +53,10 @@ void main() {
     run((async, f, play) {
       play.toggle();
       async.elapse(AutoPlay.firstStep);
-      f.session.back();
+      f.session.cursor.back();
       expect(play.playing, isFalse);
       async.elapse(const Duration(seconds: 3));
-      expect(f.session.cursor, const NodePath.root());
+      expect(f.session.cursor.value, const NodePath.root());
     });
   });
 
@@ -70,7 +72,7 @@ void main() {
 
   test('does not start at the end of the line', () {
     run((async, f, play) {
-      f.session.toEnd();
+      f.session.cursor.toEnd();
       play.toggle();
       expect(play.playing, isFalse);
     });

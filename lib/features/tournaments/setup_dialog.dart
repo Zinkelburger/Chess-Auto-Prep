@@ -45,11 +45,12 @@ class _SetupState extends State<_Setup> {
   @override
   void initState() {
     super.initState();
-    if (_seats.isEmpty)
+    if (_seats.isEmpty) {
       _seats.addAll([
         TournamentEngine.bundled('Stockfish A'),
         TournamentEngine.bundled('Stockfish B'),
       ]);
+    }
   }
 
   @override
@@ -355,11 +356,7 @@ class _SetupState extends State<_Setup> {
       'name': _name.text.trim(),
       'startFen': _fen.text.trim(),
       'engines': _seats.map((e) => e.json).toList(),
-      // Sudden death is saved as v1 saves it, without the key: v1 reads
-      // a 0 as a 0-move period and divides by it.
-      'timeControl': {
-        ..._time,
-      }..removeWhere((k, v) => k == 'movesPerSession' && (v is! num || v <= 0)),
+      'timeControl': _time,
       'adjudication': _rules,
     });
     if (value.problem case final message?) {

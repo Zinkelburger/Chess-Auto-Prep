@@ -1,12 +1,13 @@
 # A single-board bughouse NNUE
 
-The site's `/bughouse` board can run Fairy-Stockfish as `pocketknight`: chess
-with drops, where a capture leaves the board for the partner and a drop spends
-what is in hand. It is fast — millions of positions a second, natively; hundreds
-of thousands in the browser — but its evaluation is the hand-written one, and the
-crazyhouse NNUE was rejected because it never saw material leave the game. This
-package builds the training data for an evaluation that has: an NNUE for
-pocketknight, trained on how real bughouse games turned out.
+Fairy-Stockfish's `pocketknight` variant is chess with drops, where a capture
+leaves the board for the partner and a drop spends what is in hand. It is fast
+— millions of positions a second, natively; hundreds of thousands in a browser
+build — but its evaluation is the hand-written one, and the crazyhouse NNUE
+never saw material leave the game. This package builds the training data for
+an evaluation that has: an NNUE for pocketknight, trained on how real bughouse
+games turned out. Nothing in the app or on the website loads such a net; the
+website's `/bughouse` board runs Lichess's crazyhouse net.
 
 ## What the net learns from
 
@@ -148,14 +149,14 @@ python3 -m bughouse_nnue match --net-one nets/pocketknight-lambda0.5.nnue --game
 python3 -m bughouse_nnue match --net-one A.nnue --net-two B.nnue --games 400
 ```
 
-The question the site asks is "what is the best move here", and the only
+The question an engine is asked is "what is the best move here", and the only
 test of that is play: one team's two searches run the net, the other team's
 run the hand-written eval (or another net), same fixed nodes, every archive
 opening played twice with the teams swapped. The result is a score, an Elo
 difference with a 95% interval, and a likelihood of superiority, appended to
 `nets/matches.jsonl`. 400 games at 10000 nodes is about 15 minutes on 22
 cores and resolves a 50 Elo difference. A net that does not win here is not
-worth loading on the site, whatever its validation loss says.
+worth loading, whatever its validation loss says.
 
 ```
 python3 -m bughouse_nnue evaluate --net nets/pocketknight.nnue
@@ -176,21 +177,21 @@ Fairy-Stockfish takes it with `setoption name EvalFile value <net>` and
 `Use NNUE pure`. **The file name must start with `pocketknight`**: the engine
 restricts nets to their variant by name and otherwise keeps the classical eval
 without saying so (`evaluate.cpp`, `NNUE::init`). `train.sh` and `evaluate`
-both enforce this. The site's browser build (`fsf_14.js`, lichess's
+both enforce this. Lichess's FSF 14 browser build (`fsf_14.js`, the
 stockfish-web API) takes the bytes with `setNnueBuffer(net, 0)` after
-`UCI_Variant` is set, as the old crazyhouse page did.
+`UCI_Variant` is set.
 
-## Verified without a GPU (Oct 15 2026)
+## Verified without a GPU
 
 - The trainer's own C++ data loader reads the packed sample back with the
   right side to move, outcome, score and feature count for every position,
   including the pieces in hand — once `PIECE_COUNT` is raised. The tools write
   34 (one board's starting material) but a bughouse board also holds what the
   partner sent: 22% of sample positions exceed 34 pieces counting the hands,
-  up to 50, and the loader corrupts memory past its limit. `setup` now writes
+  up to 50, and the loader corrupts memory past its limit, so `setup` writes
   `PIECE_COUNT 64` (`toolchain.MAX_PIECES`).
 - An untrained net written by the trainer's serializer (CPU PyTorch, no CUDA)
-  loads and searches in the native Fairy-Stockfish 151026 and in the site's
+  loads and searches in the native Fairy-Stockfish 151026 and in Lichess's
   FSF 14 browser build.
 
 ## Pins

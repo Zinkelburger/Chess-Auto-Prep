@@ -26,8 +26,7 @@ import '../diagnostics/log.dart';
 final class AuditStore {
   AuditStore._(this._lines, this._dismissed);
 
-  /// Opens or creates both files under [support], carrying over what an
-  /// older `audit.db` still holds of the user's dismissals. Never throws.
+  /// Opens or creates both files under [support]. Never throws.
   factory AuditStore.open(Directory support) {
     final lines = _openFile(support, 'audit.db', _createLines);
     final dismissed = _openFile(
@@ -35,45 +34,7 @@ final class AuditStore {
       'audit_dismissed.db',
       _createDismissed,
     );
-    if (lines != null && dismissed != null) _carryOver(lines, dismissed);
     return AuditStore._(lines, dismissed);
-  }
-
-  /// The first audit kept dismissals in `audit.db`, per chapter, under the
-  /// same finding keys: each is carried into `audit_dismissed.db`, where a
-  /// finding put aside in one chapter is put aside in all, and the old
-  /// table then dropped. Nothing is dropped unless every row landed; a
-  /// failure is logged and tried again the next time.
-  static void _carryOver(Database lines, Database dismissed) {
-    try {
-      final old = lines.select(
-        "SELECT name FROM sqlite_master WHERE type = 'table' "
-        "AND name = 'dismissed'",
-      );
-      if (old.isEmpty) return;
-      final findings = [
-        for (final row in lines.select(
-          'SELECT DISTINCT finding FROM dismissed',
-        ))
-          if (row.columnAt(0) case final String finding) finding,
-      ];
-      dismissed.execute('BEGIN');
-      try {
-        for (final finding in findings) {
-          dismissed.execute(
-            'INSERT OR IGNORE INTO dismissed(finding) VALUES(?)',
-            [finding],
-          );
-        }
-        dismissed.execute('COMMIT');
-      } on Object {
-        dismissed.execute('ROLLBACK');
-        rethrow;
-      }
-      lines.execute('DROP TABLE dismissed');
-    } on Object catch (error) {
-      log.w('carry over the dismissed findings', error);
-    }
   }
 
   /// A store that keeps nothing past this process: what a test wants.

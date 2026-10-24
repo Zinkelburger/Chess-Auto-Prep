@@ -45,7 +45,7 @@ void main() {
           () async => const StartFailed('no engine in this test'),
         );
         final settings = SettingsStore(
-          initial: Settings(training: TrainingOptions(rateReviews: true)),
+          initial: const Settings(training: TrainingOptions(rateReviews: true)),
         );
         final italian = (
           source: fixture.ref.path,

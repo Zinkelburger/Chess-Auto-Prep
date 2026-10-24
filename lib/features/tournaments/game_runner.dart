@@ -154,8 +154,9 @@ final class TournamentGameRunner {
     }
     _clocks[side] += config.timeNumber('incrementMs', 600);
     final period = config.timeNumber('movesPerSession', 0);
-    if (period > 0 && (_playedBySide[side] + 1) % period == 0)
+    if (period > 0 && (_playedBySide[side] + 1) % period == 0) {
       _clocks[side] += config.timeNumber('baseMs', 60000);
+    }
     return true;
   }
 
@@ -300,8 +301,9 @@ final class TournamentGameRunner {
       },
     };
     var children = <MoveNode>[];
-    for (final node in _nodes.reversed)
+    for (final node in _nodes.reversed) {
       children = [node.copyWith(children: children)];
+    }
     final tree = GameTree(
       rootFen: config.root,
       children: children,
@@ -316,13 +318,18 @@ final class TournamentGameRunner {
     );
   }
 
-  String _timeTag() => switch (config.kind) {
-    'movetime' => '*${config.timeNumber('movetimeMs', 2000) / 1000}',
-    'incremental' =>
-      '${config.timeNumber('movesPerSession', 0) > 0 ? '${config.timeNumber('movesPerSession', 0)}/' : ''}'
-          '${config.timeNumber('baseMs', 60000) / 1000}+${config.timeNumber('incrementMs', 600) / 1000}',
-    _ => '?',
-  };
+  String _timeTag() {
+    int number(String key, int fallback) => config.timeNumber(key, fallback);
+    final period = number('movesPerSession', 0);
+    return switch (config.kind) {
+      'movetime' => '*${tournamentSeconds(number('movetimeMs', 2000))}',
+      'incremental' =>
+        '${period > 0 ? '$period/' : ''}'
+            '${tournamentSeconds(number('baseMs', 60000))}'
+            '+${tournamentSeconds(number('incrementMs', 600))}',
+      _ => '?',
+    };
+  }
 }
 
 Future<void> _quit(PlayingEngine engine) async {

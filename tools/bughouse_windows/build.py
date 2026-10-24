@@ -10,6 +10,7 @@ import gzip
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -18,7 +19,7 @@ import zipfile
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-REVISION = "5508ba9daf4164e48a8a8a9b39e101efdc60e97a"
+REVISION = "0b025880cf6b2fe3175e210e224c0764a9b4838e"
 TOOLCHAIN = "llvm-mingw-20260908-ucrt-ubuntu-22.04-x86_64"
 TOOLCHAIN_SHA256 = "2258c745e3155870c80793f3e8c80b28fbde11b9ff73c4c78783635b3440b092"
 
@@ -46,7 +47,14 @@ def main():
         "git", "-C", str(args.source), "archive", REVISION, "engine", "LICENSE"])
     with tarfile.open(fileobj=io.BytesIO(archive)) as tf:
         tf.extractall(stage, filter="data")
-    subprocess.run(["git", "apply", "--unidiff-zero", str(HERE / "engine.patch")], cwd=stage, check=True)
+    # The stage is inside this repository's ignored build/ directory, where a
+    # plain `git apply` silently skips every path outside the index. Stop git
+    # looking above the stage so it patches the files.
+    env = dict(os.environ, GIT_CEILING_DIRECTORIES=str(stage.parent))
+    subprocess.run(["git", "apply", "--unidiff-zero", str(HERE / "engine.patch")],
+                   cwd=stage, env=env, check=True)
+    if "ORT_API_MANUAL_INIT" not in (stage / "engine/CMakeLists.txt").read_text():
+        raise SystemExit("engine.patch did not apply")
     shutil.copyfile(HERE / "ort_loader.h", stage / "engine/src/nn/ort_loader.h")
     shutil.copyfile(HERE / "windows_main.cc", stage / "engine/src/windows_main.cc")
     with zipfile.ZipFile(deps / "ort.zip") as zf:

@@ -9,8 +9,6 @@ import 'file_lock.dart';
 import 'file_relocation.dart';
 import 'mutation_guards.dart';
 import 'recovery_ledger.dart';
-import 'relocation_notes.dart';
-import 'training_writes.dart';
 
 /// Why a write an unfinished operation guards is refused; the next write
 /// tries again.
@@ -49,17 +47,12 @@ final class Records extends Access {
   const Records(super.paths);
 }
 
-/// The journal folders a pass finishes, the last two left by older builds.
-const _journals = [
-  CompoundWrites.journal,
-  FileRelocations.journal,
-  RelocationNotes.journal,
-  TrainingQueueMigration.journal,
-];
+/// The journal folders a pass finishes.
+const _journals = [CompoundWrites.journal, FileRelocations.journal];
 
-/// The profile-wide lock every document access and change takes, the one the
-/// old app takes too, and the place where operations a stopped process left
-/// half done are finished.
+/// The profile-wide lock every document access and change takes, in this
+/// process and any other copy of the app, and the place where operations a
+/// stopped process left half done are finished.
 ///
 /// Each access looks at the names in the journal folders, never their
 /// contents, and runs a pass over every journal when one is due
@@ -67,7 +60,7 @@ const _journals = [
 /// here has seen appears, and when an operation left unfinished is due
 /// again — at each of the next three accesses, then less often, so a
 /// lasting problem stops costing every access. A pass that could not run —
-/// a lock another app kept, a step that failed — is tried again after
+/// a lock another process kept, a step that failed — is tried again after
 /// [retryDelay], waiting longer after each lock it could not take. Each
 /// unfinished operation is finished on its own: one that cannot be is set
 /// aside and logged by its owner, and never stops the access that found it.
@@ -94,16 +87,11 @@ final class RecoveryGate {
     this.escalateAfter = const Duration(minutes: 5),
     DateTime Function() clock = DateTime.now,
   }) : _clock = clock,
-       notes = RelocationNotes(documents: documents, support: support),
        relocations = FileRelocations(
          documents: documents,
          support: support,
          testHook: relocationHook,
          clock: clock,
-       ),
-       training = TrainingQueueMigration(
-         documents: documents,
-         support: support,
        ),
        compounds = CompoundWrites(
          documents: documents,
@@ -115,10 +103,11 @@ final class RecoveryGate {
 
   final Directory documents;
   final Directory support;
-  final RelocationNotes notes;
   final CompoundWrites compounds;
   final FileRelocations relocations;
-  final TrainingQueueMigration training;
+
+  /// [documents] spelled the way recovery records name it.
+  Directory get canonicalDocuments => relocations.documents;
 
   /// What this process owes on the profile, shared by all its gates.
   final RecoveryLedger ledger;
@@ -212,7 +201,7 @@ final class RecoveryGate {
         },
         (detail) {
           log.w('take the locks to finish unfinished operations', detail);
-          // Another app holding a lock may keep it for long: wait longer
+          // Another process holding a lock may keep it for long: wait longer
           // each time rather than stalling every access on it.
           ledger.passCouldNotRun(_clock(), retryDelay, locked: true);
         },
@@ -228,8 +217,6 @@ final class RecoveryGate {
   Future<bool> _finishEach() async {
     var ran = true;
     for (final (name, step) in [
-      ('the old training queue', training.recover),
-      ('older relocation notes', notes.finishOwed),
       ('unfinished edits', compounds.recover),
       ('unfinished moves', relocations.recover),
     ]) {

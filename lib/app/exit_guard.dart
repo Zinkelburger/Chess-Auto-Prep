@@ -77,14 +77,12 @@ enum _Away {
 /// the outcome that loses nothing.
 final class ExitGuard {
   ExitGuard({
-    required DocumentSaver saver,
-    required DraftQuestion question,
-    Future<String?> Function()? saveCopy,
+    required this._saver,
+    required this._question,
+    this._saveCopy,
     this.wait = const Duration(seconds: 5),
     this.settleFeatures,
-  }) : _saver = saver,
-       _question = question,
-       _saveCopy = saveCopy;
+  });
 
   final DocumentSaver _saver;
   final Future<String?> Function()? settleFeatures;
@@ -166,7 +164,8 @@ final class ExitGuard {
     final decided = _afterTheOthers(kind, cancellation);
     _deciding[kind] = decided;
     return decided.whenComplete(() {
-      _deciding.remove(kind);
+      // The entry removed is [decided] itself, which has just completed.
+      unawaited(_deciding.remove(kind));
       if (identical(_navigationCancellation, cancellation)) {
         _navigationCancellation = null;
       }

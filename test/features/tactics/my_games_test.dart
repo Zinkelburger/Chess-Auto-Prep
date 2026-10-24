@@ -41,7 +41,6 @@ final class _Review {
     GamesFetch? chesscom,
     ReviewEngine? engine,
     Map<GameSite, Account>? accounts,
-    Future<Set<String>?> Function()? older,
     Map<String, EngineLine>? lines,
     DateTime Function() now = DateTime.now,
   }) : engine = AnsweringEngine(lines) {
@@ -63,7 +62,6 @@ final class _Review {
       session: session,
       saver: saver,
       set: set,
-      older: older ?? () async => {},
     );
     games = MyGames(
       accounts: this.accounts,
@@ -634,7 +632,7 @@ void main() {
     });
   });
 
-  test('a game either app has reviewed is never reviewed again', () async {
+  test('a game the set marks reviewed is never reviewed again', () async {
     r = _Review();
     await r.start();
     final asked = r.engine.asked.length;
@@ -645,40 +643,6 @@ void main() {
     expect(r.engine.asked, hasLength(asked));
     expect(r.setText, text);
     expect((r.games.status as MyGamesDone).reviewed, 0);
-  });
-
-  test('a Lichess game the old app filed under its bare id is not reviewed '
-      'again', () async {
-    r = _Review(accounts: {GameSite.lichess: const Account('Me')});
-    final withBare = withAnalyzed(tacticsSet, {
-      ...analyzedIn(tacticsSet),
-      'AbCd1234',
-    });
-    r.store.documents[tacticsRef] = Opened(
-      withBare,
-      scriptedRevision(withBare),
-    );
-    await r.start();
-    expect((r.games.status as MyGamesDone).reviewed, 0);
-    expect(r.engine.asked, isEmpty);
-    expect(r.setText, withBare);
-  });
-
-  test('a bare Lichess id in the old app\'s own list keeps its game from '
-      'being reviewed', () async {
-    final documents = Directory.systemTemp.createTempSync('v2-older-ids-');
-    addTearDown(() => documents.deleteSync(recursive: true));
-    File(
-      p.join(documents.path, 'analyzed_games.txt'),
-    ).writeAsStringSync('AbCd1234\n');
-    r = _Review(
-      accounts: {GameSite.lichess: const Account('Me')},
-      older: () => readOlderAnalyzed(documents),
-    );
-    await r.start();
-    expect((r.games.status as MyGamesDone).reviewed, 0);
-    expect(r.engine.asked, isEmpty);
-    expect(r.setText, tacticsSet);
   });
 
   test('pause stops after the game being reviewed; start carries on '
@@ -795,18 +759,6 @@ void main() {
       File('${ref.path}.fetched').readAsStringSync(),
       '${when.millisecondsSinceEpoch}',
     );
-  });
-
-  test('an old app\'s list of reviewed games that cannot be read stops the '
-      'review before anything is mined', () async {
-    r = _Review(older: () async => null);
-    await r.start();
-    expect(
-      (r.games.status as MyGamesFailed).problem,
-      MyGamesProblem.setUnreadable,
-    );
-    expect(r.engine.asked, isEmpty);
-    expect(r.setText, tacticsSet);
   });
 
   test(

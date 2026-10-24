@@ -72,8 +72,8 @@ void main() {
   });
 
   test('two launches during the first install share one install', () async {
-    // The lab starting its engine while a match start is still unpacking:
-    // each launch makes its own install.
+    // The Bughouse mode starting its engine while a match start is still
+    // unpacking: each launch makes its own install.
     final both = await Future.wait([
       install.locate(),
       HivemindInstall(

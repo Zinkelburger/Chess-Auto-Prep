@@ -38,8 +38,9 @@ final class FallibleTournaments implements TournamentStore {
     String pgn, {
     required String? expectedPgn,
   }) async {
-    if (fail || (failWhen?.call(after) ?? false))
+    if (fail || (failWhen?.call(after) ?? false)) {
       return const TournamentFailed('Disk unavailable');
+    }
     final result = await base.save(
       before,
       after,

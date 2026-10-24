@@ -196,8 +196,9 @@ void main() {
         documents: alias,
         support: fixture.support,
         relocationHook: (step) async {
-          if (step == FileRelocationStep.document)
+          if (step == FileRelocationStep.document) {
             throw StateError('lost acknowledgement');
+          }
         },
       );
       expect(
@@ -460,7 +461,7 @@ final _unreadable = <_Unreadable>[
   ),
 ];
 
-/// The old app killed while appending an answer for [path].
+/// A trainer killed while appending an answer for [path].
 String _tornAnswer(String path) => '{"repertoireId":${jsonEncode(path)},"li';
 
 /// The move to [to] finished, with [file] left holding [bytes] and the

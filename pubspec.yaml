@@ -16,8 +16,8 @@ dependencies:
   intl: ^0.20.2
 
   # Chess functionality
-  dartchess: ^0.13.1
-  chessground: ^10.2.0
+  dartchess: ^0.14.0
+  chessground: ^10.3.0
   multi_split_view: ^3.6.2
 
   # UI and state management
@@ -27,25 +27,25 @@ dependencies:
     path: packages/document_file_io
 
   # File handling and HTTP
-  file_picker: ^13.1.0
+  file_picker: ^13.2.0
   http: ^1.1.2
   crypto: ^3.0.6  # SHA-256 for Lichess OAuth PKCE
   path_provider: ^2.1.6
   csv: ^8.0.0
 
-  shared_preferences: ^2.5.3
+  shared_preferences: ^2.5.6
   shared_preferences_platform_interface: ^2.4.2
   onnxruntime: ^1.4.1
   ffi: ^2.1.0
 
   # Persistent eval cache (desktop: Linux / macOS / Windows).
-  sqlite3: ^3.6.0
+  sqlite3: ^3.8.0
   # TWIC master-games download (zip per weekly issue).
-  archive: ^4.2.0
+  archive: ^4.5.2
   path: ^1.9.0
-  url_launcher: ^6.3.2
+  url_launcher: ^6.3.3
   window_manager: ^0.5.2
-  package_info_plus: ^10.2.1
+  package_info_plus: ^10.2.2
   pub_semver: ^2.2.1
   desktop_drop: ^0.8.4
 

@@ -35,8 +35,9 @@ final class PgnExport {
   Future<PgnExportResult> save(String name, String text) async {
     if (name.isEmpty ||
         p.basename(name) != name ||
-        name.contains(RegExp(r'[\\/\x00-\x1f]')))
+        name.contains(RegExp(r'[\\/\x00-\x1f]'))) {
       return const PgnExportFailed('Use a file name without path separators.');
+    }
     try {
       final folder = await pickDirectory();
       if (folder == null) return const PgnExportCancelled();

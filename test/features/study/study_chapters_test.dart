@@ -65,7 +65,7 @@ void main() {
     'playing a move in a chapter: goes into that game as a variation, not a new chapter',
     () async {
       await open();
-      study.session.goTo(const NodePath.root());
+      study.session.cursor.goTo(const NodePath.root());
       study.session.playMove('d2d4');
       await pumpEventQueue();
       expect(study.studies.chapters, hasLength(2));
@@ -77,7 +77,7 @@ void main() {
   test('playing a move in a chapter: names only the game it wrote', () async {
     await open();
     study.session.playMove('e2e4');
-    study.session.goTo(const NodePath.root());
+    study.session.cursor.goTo(const NodePath.root());
     study.session.playMove('d2d4');
     await pumpEventQueue();
     final scope = study.store.requestedSaves.last.scope as GamesEdited;
@@ -118,7 +118,7 @@ void main() {
       );
       await pumpEventQueue();
       expect(study.onDisk, contains('[FEN "$fen"]'));
-      expect(study.session.fen, const Fen(fen));
+      expect(study.session.cursor.fen, const Fen(fen));
     },
   );
 

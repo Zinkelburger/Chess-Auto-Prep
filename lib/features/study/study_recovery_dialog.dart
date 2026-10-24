@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../../storage/chapter_files.dart';
+import '../../storage/deleted_chapters.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/theme.dart';
 import 'studies.dart';
+import 'studies_state.dart';
 
 Future<void> showStudyRecovery(BuildContext context, Studies studies) =>
     showDialog<void>(
@@ -55,11 +56,12 @@ class _RecoveryState extends State<_Recovery> {
         _listing = widget.studies.deleted();
       });
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(
           () => _message =
               'Could not confirm the restore. Retry restore or refresh the list.',
         );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -102,10 +104,12 @@ class _RecoveryState extends State<_Recovery> {
                     );
                   }
                   final listing = snapshot.data;
-                  if (listing is! DeletedChapters)
+                  if (listing is! DeletedChapters) {
                     return const Center(child: CircularProgressIndicator());
-                  if (listing.chapters.isEmpty)
+                  }
+                  if (listing.chapters.isEmpty) {
                     return const Center(child: Text('No deleted studies.'));
+                  }
                   return ListView.builder(
                     itemCount: listing.chapters.length,
                     itemBuilder: (context, index) {

@@ -78,7 +78,7 @@ void main() {
     expect(await read(files, threeGameFile, path: '/a.pgn'), same(a));
     expect(await read(files, threeGameFile, path: '/b.pgn'), isNot(same(b)));
 
-    final large = '$threeGameFile\n$threeGameFile\n$threeGameFile';
+    const large = '$threeGameFile\n$threeGameFile\n$threeGameFile';
     final first = await read(files, large, path: '/large.pgn');
     final again = await read(files, large, path: '/large.pgn');
     expect(again, isNot(same(first)));

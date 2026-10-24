@@ -25,8 +25,8 @@ final class PlainText extends DocumentText {
 /// U+FFFD — and a save writes UTF-8. Every untouched game holding a
 /// non-ASCII character would come out as different bytes, and the store
 /// would stop the save with a sentence about a line the user never edited.
-/// Saying so when the file opens is the honest answer; the old app converts
-/// it.
+/// Saying so when the file opens is the honest answer; Save a copy writes the
+/// text as UTF-8 to a new file, which then edits normally.
 final class ForeignText extends DocumentText {
   const ForeignText(this.text, this.detail);
 
@@ -43,17 +43,16 @@ final class NotText extends DocumentText {
   final String detail;
 }
 
-/// A gzipped chapter, which the old app writes and reads by the two magic
-/// bytes of RFC 1952 rather than by extension.
-const _compressed =
-    'this chapter is compressed; open and save it in the old app to '
-    'store it uncompressed';
+/// A gzipped chapter, known by the two magic bytes of RFC 1952 rather than
+/// by extension. Nothing in this app decompresses one, so the sentence says
+/// what is wrong and that the file is safe.
+const _compressed = 'the file is compressed, so it is left untouched';
 
 const _notText = 'the file is not text';
 
-const _notUtf8 =
-    'this file is not UTF-8; open and save it in the old app to convert it, '
-    'then edit it here';
+/// The way out — Save a copy, which writes UTF-8 — is named by the sentence
+/// around this one, so this says only what is wrong.
+const _notUtf8 = 'the file is not UTF-8, so it is left untouched';
 
 /// Control bytes per byte read at which a file stops being text. Tab, line
 /// feed and carriage return are text; a stray escape or two in a course
@@ -64,16 +63,15 @@ const _controlLimit = 0.01;
 const _sampled = 8192;
 
 /// Valid non-ASCII characters per stray byte for a file to keep its UTF-8
-/// reading. The old app's number, and both apps must read one file the same
-/// way.
+/// reading. Fixed, so a file that opened before opens the same way now.
 const _validToStrayRatio = 8;
 
-/// The text in [bytes], read as the old app reads the same files, so every
-/// PGN it opens opens here too. Whatever came in, a save writes UTF-8 back.
+/// The text in [bytes], read so every existing PGN the user has opens, in
+/// whatever encoding it was saved. Whatever came in, a save writes UTF-8 back.
 ///
 /// Bytes that are not text at all are refused rather than decoded: a
 /// gzipped chapter read as Latin-1 would open as mojibake and the first save
-/// would replace it with bytes neither app could read.
+/// would replace it with bytes nothing could read.
 ///
 /// Strict UTF-8 opens for editing, with its byte-order mark if it had one.
 /// Anything else opens to read, because writing it back would re-encode it.

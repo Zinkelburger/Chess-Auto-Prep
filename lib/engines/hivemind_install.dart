@@ -39,9 +39,7 @@ final class HivemindMissing extends HivemindLocation {
 /// keeps its name and would otherwise be trusted for ever — and Windows
 /// reports a truncated library as the same opaque `0xC000007B` it gives a
 /// 32-bit one. A file that does not match is written again from the asset,
-/// under a temporary name and checked before it replaces anything. The old
-/// app installs into the same `bughouse/` folder the same way, so both apps
-/// share one copy.
+/// under a temporary name and checked before it replaces anything.
 ///
 /// On Windows the build's private Visual C++ runtime, under
 /// `data/bughouse-runtime/` beside the app, is copied in the same checked

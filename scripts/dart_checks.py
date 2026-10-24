@@ -65,8 +65,10 @@ def run(gate, flutter, extra=()):
         actual = json.JSONDecoder().raw_decode(text, text.index('{'))[0]['frameworkVersion']
         if actual != expected:
             raise RuntimeError(
-                f'Flutter {expected} required by .fvmrc; found {actual}. '
-                'Set FLUTTER to the pinned SDK executable.'
+                f'Flutter {expected} required by .fvmrc; found {actual} at '
+                f'{Path(executable).resolve().parents[1]}. Check out the pinned '
+                f'tag there (git checkout {expected}), set FLUTTER to a pinned '
+                'SDK, or bump .fvmrc in its own commit after testing the new SDK.'
             )
         dart = str(Path(executable).resolve().with_name('dart'))
         if candidate:
@@ -77,7 +79,9 @@ def run(gate, flutter, extra=()):
         if candidate or gate == 'analyze':
             targets = ['lib', 'test', 'integration_test']
             targets.extend(p for p in ('test_driver',) if Path(p).is_dir())
-            command('analyze', [executable, 'analyze', *targets, '--no-fatal-infos'])
+            # Infos are fatal too: the tree is held at zero analyzer issues,
+            # so every enabled lint is a gate, not advice.
+            command('analyze', [executable, 'analyze', *targets, '--fatal-infos'])
         if candidate or gate == 'test':
             command('test', [executable, 'test', '--concurrency=2',
                              '--reporter', 'expanded', *extra])

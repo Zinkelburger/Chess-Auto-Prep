@@ -13,7 +13,7 @@ import 'lichess_http.dart';
 /// players' database, one request per position, and the PGN of a game
 /// either one names.
 ///
-/// The old app's policy, kept: at least 100 ms between requests, a request
+/// The request policy: at least 100 ms between requests, a request
 /// that dies on the way is tried three times, and a 429 shuts the door for
 /// a minute, then two, then four, so the position after it is answered as
 /// rate-limited at once rather than by another request Lichess would
@@ -96,12 +96,10 @@ const _siteHost = 'lichess.org';
 final class LichessExplorerApi implements LichessExplorer {
   LichessExplorerApi(
     this._client, {
-    required Future<String?> Function() token,
-    DateTime Function() now = DateTime.now,
-    Future<void> Function(Duration) wait = _sleep,
-  }) : _token = token,
-       _now = now,
-       _wait = wait;
+    required this._token,
+    this._now = DateTime.now,
+    this._wait = _sleep,
+  });
 
   final http.Client _client;
 

@@ -152,7 +152,9 @@ void main() {
       await tester.tap(find.textContaining(move), buttons: kSecondaryButton);
       await tester.pumpAndSettle();
       // Its first entry, inside the menu's own padding.
-      final entry = tester.getTopLeft(find.text('Promote variation'));
+      final entry = tester.getTopLeft(
+        find.widgetWithText(MenuItemButton, 'Promote variation'),
+      );
       expect(entry.dy - token.bottom, inInclusiveRange(0, 32), reason: move);
       expect(entry.dx - token.left, inInclusiveRange(0, 32), reason: move);
       // A click anywhere else puts it away.

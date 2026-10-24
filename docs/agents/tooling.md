@@ -11,14 +11,13 @@ does not move a checkout's `.dart_tool` and `build` outputs off RAM.
 Driver logs and screenshots also live in this disk cache; `start --worktree`
 creates its detached snapshot there and prepares dependencies through the
 bounded runner. `CHESS_PREP_DRIVER_DIR` still isolates all driver files at an
-explicit path, which must be disk-backed for new launches. Existing sessions
-keep their old outputs; `log` reads that session's recorded location.
-Small admission locks, sockets and driver state retain their existing `/tmp`
-paths so old and new runners still share the same limits. Never delete these
-locks while jobs may be running. The next job sweeps abandoned temporary
+explicit path, which must be disk-backed; `log` reads a session's recorded
+location. Small admission locks, sockets and driver state stay under `/tmp`
+so every runner shares the same limits. Never delete these locks while jobs
+may be running. The next job sweeps abandoned temporary
 directories only after their worker and service children have exited.
 App profiles persist across runs for fixtures; the driver reports the current
-profile path. Existing driver sessions retain their old profile until restarted.
+profile path.
 
 | Area | Responsibility and entrypoint |
 |---|---|
@@ -29,28 +28,23 @@ profile path. Existing driver sessions retain their old profile until restarted.
 | `tools/package_bughouse_runtime.py` | Packages and verifies the Windows build’s private VC++ DLL archives and SHA-256 manifest; used by CMake and release checks |
 | `tools/test_bughouse_engine.py` | `deps [--all]` checks bundle dependencies; `run` searches with the extracted engine. Bughouse/release CI gates Linux and Windows bundles |
 | `tools/diagnose_bughouse_windows.ps1` | Self-contained diagnostic on the failing Windows machine: published hashes, PE headers, loader resolution, mitigations and actual startup |
-| `tools/bughouse_web/` | The WASM Hivemind build behind the site's `/bughouse` board: `build.py` compiles the Emscripten bridge (`bh_frozen_search` takes a batch size for WebGPU and can keep its tree to resume); `prepare_assets.py` chunks the network and copies ONNX Runtime (WebGPU and plain builds) on every frontend build |
-| `tools/bughouse_db/` | Offline FICS opening book, plus `hivemind_book.py`, the engine-eval book the API serves (its `/bughousedb` page was retired); `python3 -m bughouse_db <command>` from `tools/`, with `fetch`, `index`, `explore`, `status` or `puzzles` (the site's Bughouse Puzzles set, mates and material-winning tactics on one board with frozen reserves; needs Fairy-Stockfish, `--engine PATH` or `$FAIRY_STOCKFISH`, run with `tools/bughouse_db/frozenhouse.ini`, never its own `bughouse` variant); test with `tools/test_bughouse_db.py` |
-| `tools/bughouse_nnue/` | Training data for a single-board bughouse NNUE (Fairy-Stockfish `pocketknight`, the site's board): `python3 -m bughouse_nnue <command>` from `tools/`, with `setup` (builds the pinned variant-nnue-tools, fetches the trainer), `extract` (replays the FICS archive two boards at a time, samples a few positions per board, labels them with the team result), `score`, `convert` (packs the trainer's `.bin`), `evaluate` (held-out outcome prediction, the gate any net must pass) and `status`. Training needs a CUDA GPU: `train.sh` and the package README. Data under `~/.local/share/chess-prep/bughouse-nnue/`; test with `tools/test_bughouse_nnue.py` |
+| `tools/bughouse_web/` | The WASM Hivemind build (no site page loads it; the site's `/bughouse` board runs Fairy-Stockfish via `tools/prepare_crazyhouse_web.py`): `build.py` compiles the Emscripten bridge (`bh_frozen_search` takes a batch size for WebGPU and can keep its tree to resume); `prepare_assets.py` chunks the network and copies ONNX Runtime (WebGPU and plain builds) on every frontend build |
+| `tools/bughouse_db/` | Offline FICS opening book, plus `hivemind_book.py`, the engine-eval book pushed to the API's `/api/bughousedb/*` (no site page calls it); `python3 -m bughouse_db <command>` from `tools/`, with `fetch`, `index`, `explore`, `status` or `puzzles` (the site's Bughouse Puzzles set, mates and material-winning tactics on one board with frozen reserves; needs Fairy-Stockfish, `--engine PATH` or `$FAIRY_STOCKFISH`, run with `tools/bughouse_db/frozenhouse.ini`, never its own `bughouse` variant); test with `tools/test_bughouse_db.py` |
+| `tools/bughouse_nnue/` | Training data for a single-board bughouse NNUE (Fairy-Stockfish `pocketknight`; nothing in the app or site loads it): `python3 -m bughouse_nnue <command>` from `tools/`, with `setup` (builds the pinned variant-nnue-tools, fetches the trainer), `extract` (replays the FICS archive two boards at a time, samples a few positions per board, labels them with the team result), `score`, `convert` (packs the trainer's `.bin`), `evaluate` (held-out outcome prediction, the gate any net must pass) and `status`. Training needs a CUDA GPU: `train.sh` and the package README. Data under `~/.local/share/chess-prep/bughouse-nnue/`; test with `tools/test_bughouse_nnue.py` |
 | `tools/lichess_broadcasts.py` | Collect over-the-board games from Lichess broadcasts into `Documents/lichess_broadcasts/<collection>/` (per-broadcast PGNs, manifest, merged PGN); `by USER`, `tour ID`, `search`, `status`. Community broadcasts are found by owner or tour id, not `search`; tests in `tools/test_lichess_broadcasts.py`. Method, APIs and the committed Massachusetts collection (`scripts/data/broadcasts/`): [docs/BROADCAST_GAMES.md](../BROADCAST_GAMES.md) |
 | `tools/chesscom_events.py` | Same collection from chess.com Events (`search`, `event <slug>`, `status`); moves come over the events websocket, spoken with a stdlib Socket.IO client. A game on both sites is kept once; tests in `tools/test_chesscom_events.py` |
 | `tools/master_import_pgn.dart` | Turn PGN files into a master-format database (`games` + `book`) with the app's importer: `MASTER_IMPORT_ARGS="out.db in.pgn" scripts/ci.sh test tools/master_import_pgn.dart`; query it with the chess-prep MCP `db` parameter |
 | `tools/run_engine_tournament.dart` | Headless engine matches; see `docs/ENGINE_TOURNAMENT.md` |
 | `tools/dart_api_test/`, `tools/experiments/` | Standalone API harnesses and research scripts; nothing here is imported by `lib/` |
-| `tools/scid_reference/` | C++ harness linking Scid's codec: the oracle for a future Scid export (the old exporter was removed) |
-| `tree_builder/` | Standalone C prototype and cdbdirect native build; see its README. The Dart generation pipeline is canonical |
+| `tools/scid_reference/` | C++ harness linking Scid's codec: the oracle for a Scid export (the app has none) |
+| `tree_builder/` | Standalone C expectimax builder that the chess-prep MCP launches, plus the cdbdirect native build; see its README. The app's own search is `lib/chess/generation/` |
 | `python/twic-position-finder/` | Separately deployed web service; follow its README |
 | (external) [Chessable-PGN-Download](https://github.com/Zinkelburger/Chessable-PGN-Download) | Browser extension that saves a Chessable course as the course-shaped PGN this app reads (chapter in `[White]`, line in `[Black]`); lives in its own repository |
 | `packaging/`, `install_linux_desktop.sh` | Release-bundle installers, built by release CI |
 
-Manual overnight population: `python3 tools/bughouse_db/overnight.py start`
-(default 800 nodes, eight cores, eight hours), with `status` and `stop` controls.
-See [the web guide](../../python/twic-position-finder/frontend/README.md#shared-analysis-and-manual-overnight-population).
-
-The app hides Bughouse Lab without the optional bughouse assets. Archive/book
-data lives under `~/.local/share/chess-prep/bughouse-db/`, not repo/assets;
-the lab reads `hivemind_book.db` and `bughouse_book.db` there read only
-(`$BUGHOUSE_DB_HOME` overrides; the headless driver points it into its profile).
+The app hides the Bughouse mode without the optional bughouse assets; it
+reads no bughouse database. Archive/book data for the tools and the website
+lives under `~/.local/share/chess-prep/bughouse-db/`, not repo/assets.
 
 The MCP server and app share files only. The server reads `master_games.db`
 and `app_games.db` read-only and writes its own runs under `~/Documents` and

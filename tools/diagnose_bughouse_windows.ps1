@@ -163,8 +163,8 @@ Write-Host ("Engine folder : " + $EngineDir)
 $engineFile = Join-Path $EngineDir 'hivemind-windows.exe'
 if (Test-Path -LiteralPath $engineFile -PathType Leaf) {
   $engineHash = (Get-FileHash -LiteralPath $engineFile -Algorithm SHA256).Hash.ToLowerInvariant()
-  if ($engineHash -eq '8906c792e21ab823090395a73330742c862fc1ebb8de6fdb871fe496eed8e1c8') {
-    $Expected['hivemind-windows.exe'] = 1787904
+  if ($engineHash -eq 'abeb4b7e8a94c1546283042d55cb127ab30045b1d693cb00176080e0a6528310') {
+    $Expected['hivemind-windows.exe'] = 1789440
     $ExpectedHash['hivemind-windows.exe'] = $engineHash
     $Expected['hivemind_ort.dll'] = $Expected['onnxruntime.dll']
     $ExpectedHash['hivemind_ort.dll'] = $ExpectedHash['onnxruntime.dll']

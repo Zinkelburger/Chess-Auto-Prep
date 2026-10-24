@@ -230,8 +230,8 @@ final class _Scan {
 
   /// A `{}` comment, kept exactly as written: comments do not nest, so the
   /// first `}` ends it and a `{` inside one is ordinary text. PGN has no
-  /// escape inside a comment and neither the old app nor Lichess invents
-  /// one — both strip braces instead — so `\}` closes the comment too.
+  /// escape inside a comment and Lichess invents none — it strips braces
+  /// instead — so `\}` closes the comment too.
   PgnToken _braceComment() {
     final start = i;
     final found = text.indexOf('}', i + 1);

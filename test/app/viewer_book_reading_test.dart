@@ -98,19 +98,28 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Ctrl+E brings the note card to write in, and takes it away '
-      'again', (tester) async {
+  testWidgets('Ctrl+E turns the card to Edit: the strip and the board\'s '
+      'tools come, and Read puts them away again', (tester) async {
     await openViewer(tester);
-    expect(find.byTooltip('Edit notes (Ctrl+E)'), findsNothing);
-    expect(find.byTooltip('Done editing (Ctrl+E)'), findsNothing);
+    SegmentedButton<bool> switchOf() => tester.widget<SegmentedButton<bool>>(
+      find.byType(SegmentedButton<bool>),
+    );
+    expect(switchOf().selected, {false});
+    expect(find.byTooltip('Good move'), findsNothing);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Done editing (Ctrl+E)'), findsWidgets);
-    await tester.tap(find.byTooltip('Done editing (Ctrl+E)').first);
+    expect(switchOf().selected, {true});
+    expect(find.byTooltip('Good move'), findsOneWidget);
+    expect(find.text('Engine').hitTestable(), findsOneWidget);
+    // The switch is the way out; the strip has no Done of its own.
+    expect(find.widgetWithText(FilledButton, 'Done'), findsNothing);
+    await tester.tap(find.text('Read'));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Done editing (Ctrl+E)'), findsNothing);
+    expect(switchOf().selected, {false});
+    expect(find.byTooltip('Good move'), findsNothing);
+    expect(find.text('Engine').hitTestable(), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

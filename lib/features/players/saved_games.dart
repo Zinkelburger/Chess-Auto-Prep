@@ -240,13 +240,11 @@ final class SavedGames extends ChangeNotifier {
   /// The downloads of [person] a delete leaves, as [_summary] lists them.
   List<KeptDownload> _keptBy(_Shared shared, Player person) => [
     for (final account in _accountsOf(person))
-      if (shared.keeps(
-            person,
-            cache.refFor(account.site, account.username).path,
-            account,
-          )
-          case final why?)
-        why,
+      ?shared.keeps(
+        person,
+        cache.refFor(account.site, account.username).path,
+        account,
+      ),
   ];
 
   /// [person]'s accounts, each file once: two spellings of one username

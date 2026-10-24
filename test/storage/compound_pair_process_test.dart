@@ -141,16 +141,18 @@ Future<_Child> _start(List<String> args) async {
       .transform(const LineSplitter())
       .listen((line) {
         diagnostics.writeln(line);
-        if (line == 'checkpoint durable' && !ready.isCompleted)
+        if (line == 'checkpoint durable' && !ready.isCompleted) {
           ready.complete();
+        }
       });
   final errors = process.stderr
       .transform(utf8.decoder)
       .listen(diagnostics.write);
   unawaited(
     process.exitCode.then((code) {
-      if (!ready.isCompleted)
+      if (!ready.isCompleted) {
         ready.completeError(StateError('Child exited $code: $diagnostics'));
+      }
     }),
   );
   final child = _Child(process, output, errors);

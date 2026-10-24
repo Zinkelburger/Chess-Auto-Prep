@@ -38,12 +38,10 @@ import 'workspace_wiring.dart';
 final class AppParts {
   AppParts(
     this.env, {
-    required DraftQuestion question,
-    required WindowInput input,
-    required Future<CopyResult?> Function(DocumentSession session) copyOnLeave,
-  }) : _question = question,
-       _input = input,
-       _copyOnLeave = copyOnLeave;
+    required this._question,
+    required this._input,
+    required this._copyOnLeave,
+  });
 
   final AppEnvironment env;
   final DraftQuestion _question;
@@ -67,8 +65,8 @@ final class AppParts {
     write: env.writeAccount,
   );
 
-  /// The user's downloaded games, one file per account, shared with the
-  /// old app: the review, the book and the explorer read them.
+  /// The user's downloaded games, one file per account: the review, the
+  /// book and the explorer read them.
   late final gamesCache = GamesCache(
     env.store,
     folder: env.folders.gamesLibrary,
@@ -174,7 +172,7 @@ final class AppParts {
   );
   TrainingModes get training => _training.modes;
 
-  /// The labs: the Bughouse lab's owners.
+  /// The labs: the Bughouse mode's owners.
   late final labs = wireLabModes(env);
   late final players = PlayerModes(
     env,
@@ -253,8 +251,7 @@ final class AppParts {
   }
 
   /// The window lost focus or was hidden: whatever the user switches to
-  /// might be the old app, opening the same file, so what waits for its
-  /// clock is written now.
+  /// might open the same file, so what waits for its clock is written now.
   void windowLeft() {
     unawaited(saver.flush());
     if (_started) unawaited(_drafts?.settle());
@@ -271,8 +268,7 @@ final class AppParts {
     training.myGames.pause();
     training.lines.leave();
     training.puzzles.suspend();
-    labs.search.close();
-    labs.matches.stop();
+    labs.engine.close();
     unawaited(account.cancel());
   }
 

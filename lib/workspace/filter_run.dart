@@ -86,8 +86,9 @@ final class FilterRun {
         if (_done.isCompleted) break;
         clock.reset();
       }
-      if (position != null)
+      if (position != null) {
         reaches?[index] = tree?.mainLineTo(position) != null;
+      }
       sans?[index] = mainLineSans(tree);
     }
     return (reaches: reaches, sans: sans);

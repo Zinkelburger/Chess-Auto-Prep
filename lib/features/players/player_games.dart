@@ -112,8 +112,9 @@ Future<PlayerCorpus> analyzePlayerGames(Player player, List<PlayerGame> games) {
       .map((s) => s.trim().toLowerCase())
       .where((s) => s.isNotEmpty)
       .toSet();
-  if (games.fold<int>(0, (n, g) => n + g.text.length) < readOffThreadFrom)
+  if (games.fold<int>(0, (n, g) => n + g.text.length) < readOffThreadFrom) {
     return Future.value(buildPlayerCorpus(names, games));
+  }
   return Isolate.run(() => buildPlayerCorpus(names, games));
 }
 
@@ -149,8 +150,9 @@ PlayerCorpus buildPlayerCorpus(Set<String> names, List<PlayerGame> sources) {
     ].join('|');
     if (!seen.add(
       id.isEmpty ? sha256.convert(utf8.encode(fallback)).toString() : id,
-    ))
+    )) {
       continue;
+    }
     final result = tagValue(read.tags, 'Result') ?? read.terminator ?? '*';
     final index = games.length;
     games.add(AnalyzedGame(source, read.tags, side, result));

@@ -1,5 +1,5 @@
 <#
-Runs a built Chess Auto Prep v2 with --self-test-bughouse and checks what it
+Runs a built Chess Auto Prep with --self-test-bughouse and checks what it
 reports: the bughouse engine installed into this user's AppData from the
 app's own bundle, started, and answered a search.
 

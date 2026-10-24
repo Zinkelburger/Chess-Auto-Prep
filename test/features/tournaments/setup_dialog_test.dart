@@ -52,8 +52,9 @@ void main() {
     expect(find.text('Use a legal starting FEN.'), findsNothing);
   });
 
-  testWidgets('sudden death is saved without movesPerSession, as v1 writes '
-      'it', (tester) async {
+  testWidgets('a preset or a previous run fills the time control', (
+    tester,
+  ) async {
     await tester.binding.setSurfaceSize(const Size(1100, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
@@ -89,10 +90,9 @@ void main() {
       return (await config)!.json['timeControl']! as Map<String, Object?>;
     }
 
-    // A run an older v2 wrote with 0, configured again.
-    final older = await started(
+    final again = await started(
       previous: TournamentConfig({
-        'name': 'Older run',
+        'name': 'Earlier run',
         'timeControl': {
           'kind': 'incremental',
           'baseMs': 60000,
@@ -101,10 +101,10 @@ void main() {
         },
       }),
     );
-    expect(older.containsKey('movesPerSession'), isFalse);
-    expect(older['baseMs'], 60000);
+    expect(again['baseMs'], 60000);
+    expect(again['movesPerSession'], 0);
     final blitz = await started(preset: 'Blitz');
-    expect(blitz.containsKey('movesPerSession'), isFalse);
+    expect(blitz['movesPerSession'], isNull);
     final classical = await started(preset: 'Classical');
     expect(classical['movesPerSession'], 40);
   });

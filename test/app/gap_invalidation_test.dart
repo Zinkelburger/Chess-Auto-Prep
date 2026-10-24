@@ -1,5 +1,5 @@
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
-import 'package:chess_auto_prep/features/trainer/trainer.dart';
+import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
@@ -52,7 +52,7 @@ void main() {
       await pumpEventQueue();
       expect(trainer.lesson, same(lesson));
       expect(workspace.gaps.currentWalk, same(walk));
-      fixture.session.goTo(NodePath.of([0]));
+      fixture.session.cursor.goTo(NodePath.of([0]));
       await pumpEventQueue();
       expect(workspace.gaps.currentWalk, same(walk));
       expect(trainer.lesson, same(lesson));
@@ -106,7 +106,7 @@ void main() {
       final workspace = fixture.parts.workspace;
       await fixture.library.refresh();
       await fixture.session.open(benkoMain);
-      fixture.session.goTo(NodePath.of([0]));
+      fixture.session.cursor.goTo(NodePath.of([0]));
       await pumpEventQueue();
 
       ReplyRow c5() => (workspace.replies.table as RepliesShown).rows

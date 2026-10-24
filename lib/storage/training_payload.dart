@@ -206,7 +206,6 @@ Uint8List _merged(
     throw TrainingUnreadable(name, parsed.line, wholeFile: true);
   }
   final records = (parsed as CsvParsed).records;
-  final width = headerWidth(records);
   final header = headerOf(name);
   final wanted = {
     for (final change in changes) _key(_cells(change.after), name): change,
@@ -216,10 +215,7 @@ Uint8List _merged(
     '${records.every((r) => r.isBlank) ? '$header\n' : ''}',
   );
   for (final record in records) {
-    final cells = dataCells(
-      record,
-      record.isBlank ? null : rowWidth(name, record, width),
-    );
+    final cells = dataCells(record);
     final readable =
         cells != null &&
         (name == reviewsFile ? decodeReview(cells) : decodeStreak(cells)) !=

@@ -35,14 +35,12 @@ import 'session_results.dart';
 /// chapter — is kept: that is where edits are held.
 final class DraftKeeper {
   DraftKeeper({
-    required DocumentSession session,
-    required DocumentSaver saver,
-    required ViewerDrafts drafts,
+    required this._session,
+    required this._saver,
+    required this._drafts,
     required this.say,
     this.delay = const Duration(seconds: 1),
-  }) : _session = session,
-       _saver = saver,
-       _drafts = drafts {
+  }) {
     _session.addListener(_changed);
     _saver.addListener(_changed);
   }

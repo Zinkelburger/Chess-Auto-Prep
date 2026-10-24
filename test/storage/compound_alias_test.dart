@@ -3,9 +3,9 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/storage/compound_commit.dart';
 import 'package:chess_auto_prep/storage/compound_write.dart';
-import 'package:chess_auto_prep/storage/operation_journal.dart';
+import 'package:chess_auto_prep/storage/file_relocation.dart';
+import 'package:chess_auto_prep/storage/operation_participants.dart';
 import 'package:chess_auto_prep/storage/recovery_files.dart';
-import 'package:chess_auto_prep/storage/relocation_notes.dart';
 import 'package:chess_auto_prep/storage/recovery_gate.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -60,7 +60,9 @@ void main() {
       final outside = await Directory(
         p.join(root.path, 'notes-outside'),
       ).create();
-      await Link(p.join(support.path, 'unfinished-moves')).create(outside.path);
+      await Link(
+        p.join(support.path, FileRelocations.journal),
+      ).create(outside.path);
       final gate = RecoveryGate(documents: documents, support: supportAlias);
       expect(await gate.run(() async => 'opened'), 'opened');
       expect(await outside.list().toList(), isEmpty);
@@ -91,26 +93,10 @@ void main() {
         documents: documentAlias,
         support: supportAlias,
       );
-      final notes = RelocationNotes(
-        documents: documentAlias,
-        support: supportAlias,
-      );
-      final left = File(p.join(support.path, 'unfinished-moves', 'x.json'));
-      await left.create(recursive: true);
-      await left.writeAsString('{');
       final outside = await Directory(p.join(root.path, 'outside')).create();
       await Link(supportAlias.path).delete();
       await Link(supportAlias.path).create(outside.path);
       await expectLater(engine.recover(), throwsA(isA<RecoveryRequired>()));
-      // The notes are read where the alias pointed when they were opened.
-      await notes.finishOwed();
-      expect(await left.exists(), isFalse);
-      expect(
-        await Directory(
-          p.join(support.path, 'recovery-quarantine'),
-        ).list(recursive: true).where((entry) => entry is File).length,
-        1,
-      );
       expect(await outside.list().toList(), isEmpty);
       expect(
         await File(p.join(support.path, 'books.json')).readAsString(),
@@ -128,8 +114,9 @@ void main() {
           documents: startAliased ? documentAlias : documents,
           support: startAliased ? supportAlias : support,
           testHook: (step) async {
-            if (step == CompoundWriteStep.document)
+            if (step == CompoundWriteStep.document) {
               throw StateError('interrupted');
+            }
           },
         );
         final firstPath = p.join(

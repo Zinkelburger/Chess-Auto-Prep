@@ -64,8 +64,9 @@ final class PlayerAnalysisView extends ModeView {
   Future<bool> _open(int index, PlayerPosition? at, {Fen? fen}) async {
     final analysis = players.analysis;
     final corpus = analysis.corpus;
-    if (corpus == null || index < 0 || index >= corpus.games.length)
+    if (corpus == null || index < 0 || index >= corpus.games.length) {
       return false;
+    }
     final game = corpus.games[index];
     fen ??= at?.fen;
     if (!await analysis.currentSources()) {
@@ -80,8 +81,9 @@ final class PlayerAnalysisView extends ModeView {
       ply: 0,
       side: game.side,
     );
-    if (result is! RequestDone || !identical(corpus, analysis.corpus))
+    if (result is! RequestDone || !identical(corpus, analysis.corpus)) {
       return false;
+    }
     if (workspace.session.persistedRevision !=
         analysis.revisionOf(game.source.file)) {
       requests.say(
@@ -91,7 +93,7 @@ final class PlayerAnalysisView extends ModeView {
     }
     if (fen != null) {
       final path = workspace.session.tree?.mainLineTo(fen);
-      if (path != null) workspace.session.goTo(path);
+      if (path != null) workspace.session.cursor.goTo(path);
     }
     return true;
   }
@@ -114,7 +116,8 @@ final class PlayerAnalysisView extends ModeView {
       analysis: players.analysis,
       session: workspace.session,
       onSave: () => unawaited(players.saveLine()),
-      onOpen: (i) => unawaited(_open(i, null, fen: workspace.session.fen)),
+      onOpen: (i) =>
+          unawaited(_open(i, null, fen: workspace.session.cursor.fen)),
       onStart: () {
         final first = players.analysis.gameIndexes.firstOrNull;
         if (first != null) unawaited(_open(first, null));
@@ -127,10 +130,11 @@ final class PlayerAnalysisView extends ModeView {
         if (!await _open(gap.game, null)) return;
         final game = players.analysis.corpus?.games[gap.game];
         if (game != null &&
-            workspace.session.source?.path == game.source.file.path)
-          workspace.session.goTo(
+            workspace.session.source?.path == game.source.file.path) {
+          workspace.session.cursor.goTo(
             NodePath.of(List.filled(leftBookMoment(gap.gap), 0)),
           );
+        }
       },
     ),
     _ => null,
@@ -228,7 +232,6 @@ final class PlayersView extends ModeView {
             onAnalyze: players.choose,
             onDeleteGames: players.deleteGames,
             onStudy: (p) => unawaited(players.openStudy(p)),
-            onSaved: () => unawaited(players.addSavedPlayers()),
             onLink: (p) => unawaited(players.linkStudy(p)),
             onLinkedStudy: (path, chapter) =>
                 unawaited(players.openLinkedStudy(path, chapter)),

@@ -9,7 +9,7 @@ import '../chess/training/schedule.dart';
 import '../diagnostics/log.dart';
 import 'compound_commit.dart';
 import 'csv_records.dart';
-import 'operation_journal.dart';
+import 'operation_participants.dart';
 import 'recovery_files.dart';
 import 'training_rows.dart';
 
@@ -158,16 +158,15 @@ List<(LineKey, LineKey?)>? _recordsBetween(
   if (readCsvRecords(before) case CsvParsed(records: final was)) {
     if (readCsvRecords(after) case CsvParsed(records: final now)) {
       if (was.length != now.length) return null;
-      final width = headerWidth(was);
       final rows = <(LineKey, LineKey?)>[];
       for (var i = 0; i < was.length; i++) {
-        final from = dataCells(was[i], rowWidth(name, was[i], width));
+        final from = dataCells(was[i]);
         final unchanged = was[i].source == now[i].source;
         if (unchanged && from != null && from.length >= 2) {
           rows.add(((source: from[0], id: from[1]), null));
         }
         if (unchanged) continue;
-        final to = dataCells(now[i], rowWidth(name, now[i], width));
+        final to = dataCells(now[i]);
         if (from == null ||
             to == null ||
             from.length < 2 ||
@@ -379,8 +378,7 @@ final class LineRows implements Reference {
     if (parsed is! CsvParsed) throw FormatException('Malformed $name.');
     final width = headerWidth(parsed.records);
     if (width == null) throw FormatException('Missing header in $name.');
-    List<String>? cells(CsvRecord record) =>
-        dataCells(record, rowWidth(name, record, width));
+    List<String>? cells(CsvRecord record) => dataCells(record);
     for (final record in parsed.records.where((_) => collides)) {
       final row = cells(record);
       if (row != null && row.length >= 2 && isWholeRow(name, row, width)) {

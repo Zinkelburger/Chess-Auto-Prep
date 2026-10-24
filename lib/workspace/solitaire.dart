@@ -29,15 +29,9 @@ typedef SolitaireMiss = ({NodePath at, String played, List<String> tried});
 /// and the cursor keys all stop at the move being guessed. Another game,
 /// another file or anything else that shows the whole game again ends it.
 final class Solitaire extends ChangeNotifier {
-  Solitaire(
-    this._session,
-    this._analysis, {
-    Future<EngineStart> Function()? launch,
-    EngineJobs? jobs,
-  }) : _launch = launch,
-       _jobs = jobs {
+  Solitaire(this._session, this._analysis, {this._launch, this._jobs}) {
     _session.addListener(_documentChanged);
-    _session.cursorListenable.addListener(_cursorChanged);
+    _session.cursor.addListener(_cursorChanged);
   }
 
   static const replyDelay = Duration(milliseconds: 400);
@@ -62,7 +56,7 @@ final class Solitaire extends ChangeNotifier {
   GameTree? _record;
 
   bool get waitingForReply => _reply != null;
-  bool get atCurrentMove => _session.cursor == _frontier;
+  bool get atCurrentMove => _session.cursor.value == _frontier;
   bool get canGuess =>
       active &&
       !finished &&
@@ -122,7 +116,7 @@ final class Solitaire extends ChangeNotifier {
     );
   }
 
-  void returnToGuess() => _session.goTo(_frontier);
+  void returnToGuess() => _session.cursor.goTo(_frontier);
 
   /// The shared reader previews an attempt on the same board without
   /// installing its tree as the user's document.
@@ -130,16 +124,20 @@ final class Solitaire extends ChangeNotifier {
     final tree = record;
     if (tree == null) return;
     if (!finished) {
-      if (_frontier.startsWith(path)) _session.goTo(path);
+      if (_frontier.startsWith(path)) _session.cursor.goTo(path);
       return;
     }
-    if (path.isRoot) return _session.goTo(path);
+    if (path.isRoot) return _session.cursor.goTo(path);
     final moves = pvMoves(
       tree.rootFen,
       tree.lineTo(path).map((node) => node.uci).toList(),
     );
     if (moves.isNotEmpty) {
-      _session.showCommentLine(const NodePath.root(), moves, moves.length - 1);
+      _session.cursor.showCommentLine(
+        const NodePath.root(),
+        moves,
+        moves.length - 1,
+      );
     }
   }
 
@@ -235,7 +233,7 @@ final class Solitaire extends ChangeNotifier {
   NodePath _started = const NodePath.root();
 
   /// Shows the move at [at]; for a finished game, whose moves are all on view.
-  void goTo(NodePath at) => _session.goTo(at);
+  void goTo(NodePath at) => _session.cursor.goTo(at);
 
   void _begin(NodePath from) {
     if (!canOffer || _session.tree?.nodeAt(from.mainChild) == null) return;
@@ -349,8 +347,9 @@ final class Solitaire extends ChangeNotifier {
         ticket != _ticket ||
         !active ||
         _expected != expected ||
-        evaluator != _evaluator)
+        evaluator != _evaluator) {
       return;
+    }
     checking = false;
     switch (verdict) {
       case SolitaireScored(
@@ -486,7 +485,7 @@ final class Solitaire extends ChangeNotifier {
   NodePath get _startPath {
     if (fromStart) return const NodePath.root();
     // Only the main line is guessed: from a sideline, its branch point.
-    var at = _session.cursor;
+    var at = _session.cursor.value;
     while (at.indexes.any((i) => i != 0)) {
       at = at.parent;
     }
@@ -517,7 +516,7 @@ final class Solitaire extends ChangeNotifier {
     hint = null;
     _moving = true;
     _session.showOnlyTo(at);
-    _session.goTo(at);
+    _session.cursor.goTo(at);
     _moving = false;
     notifyListeners();
   }
@@ -618,7 +617,7 @@ final class Solitaire extends ChangeNotifier {
     _reply?.cancel();
     unawaited(_closeEvaluator());
     _session.removeListener(_documentChanged);
-    _session.cursorListenable.removeListener(_cursorChanged);
+    _session.cursor.removeListener(_cursorChanged);
     super.dispose();
   }
 }

@@ -1,11 +1,8 @@
 import 'package:flutter/foundation.dart';
 
 import '../diagnostics/log.dart';
-import '../features/bughouse/archive_moves.dart';
 import '../features/bughouse/bughouse_lab.dart';
-import '../features/bughouse/expectimax_search.dart';
-import '../features/bughouse/matches.dart';
-import '../features/bughouse/table_search.dart';
+import '../features/bughouse/lab_engine.dart';
 import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
 import '../features/my_games/game_book.dart';
@@ -17,11 +14,14 @@ import '../features/tactics/puzzle_trainer.dart';
 import '../features/tactics/source_games.dart';
 import '../features/tactics/tactics_set.dart';
 import '../features/trainer/trainer.dart';
+import '../storage/pgn_file_import.dart';
+import '../storage/pgn_file_picker.dart';
 import '../workspace/file_filter.dart';
 import 'trap_training.dart';
 
-/// The modes `v2` has. Each one fills the left column; the workspace, the
-/// document and the draft in it are the same whichever is showing.
+/// The app's modes. Each one fills the left column beside the one
+/// workspace; the documents each has open are its own, so going to a mode
+/// brings back what it had on the board (`DocumentTabs`).
 enum Mode {
   repertoires('Repertoire builder'),
   trainer('Repertoire trainer'),
@@ -34,11 +34,28 @@ enum Mode {
   players('Players & prep'),
   databases('Databases'),
   engineTournament('Engine tournament'),
-  bughouse('Bughouse lab');
+  bughouse('Bughouse');
 
   const Mode(this.label);
 
   final String label;
+
+  /// Whether the mode shows the board and the document tabs; the rest are
+  /// a screen of their own, which leave the document where it is.
+  bool get showsBoard => !const {
+    Mode.books,
+    Mode.players,
+    Mode.databases,
+    Mode.engineTournament,
+    Mode.bughouse,
+  }.contains(this);
+
+  /// Whether this mode and [other] share their documents: the trainer
+  /// drills the builder's repertoires from the same list, so a chapter up in
+  /// one is up in the other.
+  bool sharesDocumentsWith(Mode other) => _shelf == other._shelf;
+
+  Mode get _shelf => this == Mode.trainer ? Mode.repertoires : this;
 }
 
 /// Task groups share their names and membership across navigation surfaces.
@@ -128,29 +145,26 @@ final class TrainingModes {
 }
 
 /// The owners behind the labs, the modes with a screen of their own: the
-/// Bughouse lab's table, what Hivemind and its book say about it, and the
-/// FICS archive, and the matches. [offered] says whether this build has the engine, which
-/// is what puts the lab in the mode menu at all.
+/// Bughouse mode's table and what Hivemind makes of it, and the file dialog
+/// and reader its moves are opened through. [offered] says whether this
+/// build has the engine, which is what puts the mode in the mode menu at all.
 final class LabModes {
   LabModes({
     required this.lab,
-    required this.expectimax,
-    required this.search,
-    required this.archive,
-    required this.matches,
+    required this.engine,
+    required this.picker,
+    required this.files,
   });
 
   final BughouseLab lab;
-  final BughouseExpectimaxSearch expectimax;
-  final TableSearch search;
-  final ArchiveMoves archive;
-
-  /// Hivemind against itself from the table on the boards.
-  final Matches matches;
+  final LabEngine engine;
+  final PgnFilePicker picker;
+  final PgnFileImport files;
   final offered = ValueNotifier(false);
   bool _disposed = false;
 
-  /// Asks whether the build carries the engine, and offers the lab if so.
+  /// Asks whether the build carries the engine, and offers the Bughouse
+  /// mode if so.
   Future<void> offer(Future<bool> Function() bundled) async {
     try {
       final yes = await bundled();
@@ -163,10 +177,7 @@ final class LabModes {
   void dispose() {
     _disposed = true;
     offered.dispose();
-    expectimax.dispose();
-    matches.dispose();
-    archive.dispose();
-    search.dispose();
+    engine.dispose();
     lab.dispose();
   }
 }

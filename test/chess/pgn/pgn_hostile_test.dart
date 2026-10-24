@@ -10,7 +10,7 @@ import '../../support/gen/pgn_mutations.dart';
 import '../../support/props.dart';
 
 String fixture(String name) =>
-    File('test/fixtures/v2_pgn/$name').readAsStringSync();
+    File('test/fixtures/pgn/$name').readAsStringSync();
 
 /// Two games whose braces do not balance line by line, because only the
 /// movetext can open a comment.

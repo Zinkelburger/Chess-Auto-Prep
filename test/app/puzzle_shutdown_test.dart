@@ -39,7 +39,7 @@ void main() {
           w.trainer.play('e7e5');
           if (solved) async.elapse(replyDelay);
           final up = w.trainer.up;
-          final cursor = w.session.cursor;
+          final cursor = w.session.cursor.value;
           final engines = Completer<void>();
           var stopping = false;
           AppExitResponse? response;
@@ -59,7 +59,7 @@ void main() {
           async.elapse(const Duration(seconds: 10));
           expect(response, isNull);
           expect(w.trainer.up, same(up));
-          expect(w.session.cursor, cursor);
+          expect(w.session.cursor.value, cursor);
           expect(w.session.game, 1);
           expect((w.store.documents[tacticsRef]! as Opened).text, saved);
           engines.complete();
@@ -117,10 +117,10 @@ void main() {
           async.elapse(solved ? advanceDelay : replyDelay);
           if (solved) {
             expect(w.session.game, 0);
-            expect(w.session.cursor, const NodePath.root());
+            expect(w.session.cursor.value, const NodePath.root());
           } else {
             expect(w.session.game, 1);
-            expect(w.session.cursor, NodePath.of([0, 0]));
+            expect(w.session.cursor.value, NodePath.of([0, 0]));
             expect(w.trainer.up?.finished, isTrue);
           }
           w.dispose();
@@ -147,7 +147,7 @@ void main() {
         async.elapse(replyDelay);
         expect(w.trainer.up, same(replacement));
         expect(w.session.game, 0);
-        expect(w.session.cursor, const NodePath.root());
+        expect(w.session.cursor.value, const NodePath.root());
         w.trainer.suspend();
         final trainer = w.trainer;
         w.dispose();

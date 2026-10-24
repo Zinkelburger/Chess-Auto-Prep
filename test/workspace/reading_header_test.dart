@@ -127,8 +127,8 @@ void main() {
     final height = tester.getSize(find.byType(ReadingHeader)).height;
     expect(shown(), 'C60 Ruy Lopez');
     viewed.session
-      ..forward()
-      ..forward();
+      ..cursor.forward()
+      ..cursor.forward();
     await tester.pump();
     expect(shown(), "C20 King's Pawn Game");
     viewed.session.nextGame();

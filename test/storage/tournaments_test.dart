@@ -193,17 +193,16 @@ void main() {
     );
     expect(journal['pgnAfter'], '$games\n$pgn');
   });
-  test('records left by a crash in either version recover', () async {
+  test('records left by a crash recover', () async {
     final before = initial();
     final after = before.changed({'status': 'running'});
     final record = File(p.join(root.path, 'test', '.v2-pending.json'));
     final metadata = File(p.join(root.path, 'test', 'tournament.json'));
-    Map<String, Object?> journal(int version, String? pgnBefore) => {
-      'version': version,
+    Map<String, Object?> journal(String? pgnBefore) => {
+      'version': 2,
       'before': metadata.readAsStringSync(),
       'after': jsonEncode({...after.json, 'timeLabel': after.config.timeLabel}),
-      if (version == 1) 'pgnBefore': pgnBefore,
-      if (version == 2 && pgnBefore != null)
+      if (pgnBefore != null)
         'pgnBeforeSha256': sha256.convert(utf8.encode(pgnBefore)).toString(),
       'pgnAfter': pgn,
     };
@@ -211,7 +210,7 @@ void main() {
     const earlier = '[Event "Match"]\n[Result "*"]\n\n*\n';
     await store.create(before);
     await files.put(store.games('test'), earlier);
-    await record.writeAsString(jsonEncode(journal(1, earlier)));
+    await record.writeAsString(jsonEncode(journal(earlier)));
     final done = after.changed({'status': 'completed'});
     expect(
       await store.save(after, done, '$pgn\n$pgn', expectedPgn: pgn),
@@ -225,7 +224,7 @@ void main() {
     ).list().map((e) => e.path).toList();
 
     await store.create(before);
-    await record.writeAsString(jsonEncode(journal(2, null)));
+    await record.writeAsString(jsonEncode(journal(null)));
     expect(await store.remove(after), isA<TournamentSaved<void>>());
     final trash = await Directory(
       p.join(root.path, '.trash'),
@@ -236,23 +235,21 @@ void main() {
       containsPair('status', 'running'),
     );
   });
-  for (final version in [1, 2]) {
-    test('a version $version record whose earlier PGN matches neither text '
-        'is set aside', () async {
+  test(
+    'a record whose earlier PGN matches neither text is set aside',
+    () async {
       final before = initial();
       await store.create(before);
       await files.put(store.games('test'), '1. d4 *\n');
       final record = File(p.join(root.path, 'test', '.v2-pending.json'));
       await record.writeAsString(
         jsonEncode({
-          'version': version,
+          'version': 2,
           'before': File(
             p.join(root.path, 'test', 'tournament.json'),
           ).readAsStringSync(),
           'after': jsonEncode(before.changed({'status': 'running'}).json),
-          if (version == 1) 'pgnBefore': 'other',
-          if (version == 2)
-            'pgnBeforeSha256': sha256.convert(utf8.encode('other')).toString(),
+          'pgnBeforeSha256': sha256.convert(utf8.encode('other')).toString(),
           'pgnAfter': pgn,
         }),
       );
@@ -264,8 +261,8 @@ void main() {
           .where((e) => e is File)
           .toList();
       expect(entries.any((e) => e.path.contains('quarantine')), isTrue);
-    });
-  }
+    },
+  );
   test(
     'conflicting recovery quarantines its complete record and preserves PGN',
     () async {

@@ -44,7 +44,7 @@ void main() {
     );
     await tester.tap(find.text('Show my line'));
     await tester.pumpAndSettle();
-    expect(app.parts.session.cursor.indexes, hasLength(6));
+    expect(app.parts.session.cursor.value.indexes, hasLength(6));
     expect(find.text('As Black · Test book'), findsOneWidget);
     expect(find.text('Open in builder'), findsOneWidget);
 

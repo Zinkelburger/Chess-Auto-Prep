@@ -40,7 +40,7 @@ extension type const Fen(String value) {
 const _fnvOffset = -3750763034362895579; // 0xcbf29ce484222325 as signed
 const _fnvPrime = 1099511628211;
 
-/// The key the old app's databases file a position under: 64-bit FNV-1a
+/// The key existing databases file a position under: 64-bit FNV-1a
 /// over [Fen.position], the same sum its importers and the Python tools
 /// take, so a row they wrote is found. Two roads to one position share it.
 ///
@@ -170,9 +170,11 @@ String _castlingField = '-';
 String _castling(Board board, SquareSet rights) {
   if (rights.isEmpty) return '-';
   final whiteRooks =
-      board.piecesOf(Side.white, Role.rook) & SquareSet.backrankOf(Side.white);
+      board.piecesOf(Side.white, Role.rook) &
+      const SquareSet.backrankOf(Side.white);
   final blackRooks =
-      board.piecesOf(Side.black, Role.rook) & SquareSet.backrankOf(Side.black);
+      board.piecesOf(Side.black, Role.rook) &
+      const SquareSet.backrankOf(Side.black);
   final whiteKing = board.kingOf(Side.white);
   final blackKing = board.kingOf(Side.black);
   final key = (

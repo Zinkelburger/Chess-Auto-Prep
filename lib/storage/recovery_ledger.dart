@@ -156,6 +156,10 @@ final class RecoveryLedger {
           ) ||
           _owed.values.any((owed) => !owed.next.isAfter(now)));
 
+  /// Whether the last pass ran every step and nothing is owed: every
+  /// operation a stopped process left is known to be finished.
+  bool get nothingOwed => _passed && _owed.isEmpty;
+
   /// Whether a pass that could not run is still waiting its delay. Nothing
   /// is tried meanwhile.
   bool waiting(DateTime now) {
@@ -172,7 +176,8 @@ final class RecoveryLedger {
   }
 
   /// A pass could not run, or stopped part way: the next waits [base], or
-  /// longer each time when a lock another app keeps was in the way.
+  /// longer each time when a lock another copy of the app keeps was in the
+  /// way.
   void passCouldNotRun(DateTime now, Duration base, {required bool locked}) {
     _passed = false;
     if (!locked) _lockFailures = 0;

@@ -162,37 +162,6 @@ void main() {
     },
   );
 
-  test('a finished record that cannot be removed yet guards nothing', () async {
-    final gate = fixture.store.recovery;
-    final ref = fixture.ref('repertoires/Main.pgn');
-    await fixture.put(ref, oneGame('1. e4'));
-    final canonical = await File(ref.path).resolveSymbolicLinks();
-    final folder = p.join(fixture.support.path, CompoundWrites.journal);
-    final record = File(p.join(folder, 'leftover.json'));
-    await record.parent.create(recursive: true);
-    await record.writeAsString(
-      jsonEncode({
-        'version': 1,
-        'id': 'leftover',
-        'state': 'complete',
-        'documentPath': canonical,
-        'documentBefore': oneGame('1. d4'),
-        'documentAfter': oneGame('1. e4'),
-        'booksBefore': null,
-        'booksAfter': null,
-      }),
-    );
-    // The record cannot be deleted while its folder is read-only.
-    await Process.run('chmod', ['555', folder]);
-    try {
-      expect(await save(gate, canonical), 'saved');
-      expect(ledger.owing(CompoundWrites.journal, 'leftover')?.paths, isEmpty);
-      expect(await record.exists(), isTrue);
-    } finally {
-      await Process.run('chmod', ['755', folder]);
-    }
-  }, skip: Platform.isWindows);
-
   test('an owed id another process finished is dropped', () async {
     final gate = fixture.store.recovery;
     final path = fixture.ref('repertoires/Main.pgn').path;

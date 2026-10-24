@@ -145,9 +145,9 @@ void main() {
     await w.pumpShell(tester);
     await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
-    w.session.forward();
+    w.session.cursor.forward();
     await tester.pumpAndSettle();
-    final at = w.session.cursor;
+    final at = w.session.cursor.value;
     await toMode(tester, 'My games');
     unawaited(w.requests.readInBuilder(benkoMain, const []));
     await tester.pumpAndSettle();
@@ -159,6 +159,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(w.requests.mode, Mode.repertoires);
     expect(w.session.source, kidMain);
-    expect(w.session.cursor, at);
+    expect(w.session.cursor.value, at);
   });
 }

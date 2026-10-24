@@ -22,7 +22,7 @@ void main() {
       parseChapter(name: chapter.title, text: chapter.text);
 
   String fixture(String name) =>
-      File('test/fixtures/v2_pgn/$name').readAsStringSync();
+      File('test/fixtures/pgn/$name').readAsStringSync();
 
   test(
     'a game with variations becomes one line per leaf, in reading order',
@@ -114,7 +114,7 @@ void main() {
     expect(read.chapters[0].lines, 2, reason: 'the poisoned pawn is a line');
     expect(read.chapters[1].lines, 1);
     expect(read.chapters[0].text, startsWith('// 6.Bg5 e6\n'));
-    expect(read.chapters[0].text, contains('// Chapter: 6.Bg5 e6\n'));
+    expect(read.chapters[0].text, isNot(contains('// Chapter:')));
     expect(
       read.chapters[0].text,
       contains('// Created on 2026-09-22 12:00:00\n\n[Event'),

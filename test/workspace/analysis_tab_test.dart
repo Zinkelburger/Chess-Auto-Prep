@@ -20,8 +20,8 @@ void main() {
       );
       await w.requests.openFile(ref, game: 0);
       w.session.holdsEdits = true;
-      w.session.forward();
-      final cursor = w.session.cursor;
+      w.session.cursor.forward();
+      final cursor = w.session.cursor.value;
       w.session.setComment(cursor, 'Unsaved source note');
       final filter = w.parts.documents.filter;
       filter.apply(const GameFilter(rules: [HeaderRule(value: 'Carlsen')]));
@@ -31,17 +31,17 @@ void main() {
       expect(w.requests.documents.tabs.open, docs);
       expect(w.viewer.file, ref);
       expect(filter.kept, 1);
-      expect(w.session.cursor, cursor);
-      expect(inspection.session.cursor, cursor);
+      expect(w.session.cursor.value, cursor);
+      expect(inspection.session.cursor.value, cursor);
       expect(inspection.session.commentAt(cursor), 'Unsaved source note');
       inspection.session.playMove('c7c5');
-      final scratchCursor = inspection.session.cursor;
+      final scratchCursor = inspection.session.cursor.value;
       inspection.session.setComment(scratchCursor, 'Scratch only');
       inspection.hide();
-      expect(w.session.cursor, cursor);
+      expect(w.session.cursor.value, cursor);
       expect(w.session.hasHeldEdits, isTrue);
       expect(await inspection.show(), isTrue);
-      expect(inspection.session.cursor, scratchCursor);
+      expect(inspection.session.cursor.value, scratchCursor);
       expect(inspection.session.commentAt(scratchCursor), 'Scratch only');
       await inspection.session.undo();
       expect(
@@ -55,7 +55,7 @@ void main() {
       expect(inspection.session.tree!.children.first.san, 'd4');
       w.viewer.showGame(0);
       expect(await inspection.show(), isTrue);
-      expect(inspection.session.cursor, scratchCursor);
+      expect(inspection.session.cursor.value, scratchCursor);
       expect(w.session.commentAt(NodePath.of([0])), 'Unsaved source note');
       final other = collectionRef('Other collection');
       w.store.documents[other] = Opened(
@@ -68,7 +68,7 @@ void main() {
       expect(inspection.session.tree!.children.first.san, 'd4');
       await w.requests.documents.select(ref);
       expect(await inspection.show(), isTrue);
-      expect(inspection.session.cursor, scratchCursor);
+      expect(inspection.session.cursor.value, scratchCursor);
       expect(w.session.hasHeldEdits, isTrue);
     },
   );

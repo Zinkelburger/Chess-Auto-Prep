@@ -227,11 +227,7 @@ void main() {
       expect(fresh.engineMemoryMb, Settings.defaultMemoryMb);
       expect(fresh.analysisEngine, Settings.builtInEngine);
       final text = fresh.toJson();
-      expect(
-        jsonDecode(text) as Map,
-        isNot(contains('engineCores')),
-        reason: 'automatic is not a number an older build would hand on',
-      );
+      expect(jsonDecode(text) as Map, containsPair('engineCores', 0));
       expect(Settings.fromJson(text), fresh);
     });
 
@@ -251,20 +247,12 @@ void main() {
       );
     });
 
-    test('a file from before keeps what was chosen; the old defaults it '
-        'wrote for everyone read as the new ones', () {
-      final untouched = Settings.fromJson(
+    test('a file is read as written', () {
+      final read = Settings.fromJson(
         '{"engineCores": 1, "engineMemoryMb": 128, "engineLines": 3}',
       );
-      expect(untouched.engineCores, Settings.autoCores);
-      expect(untouched.coresOn(22), 11);
-      expect(untouched.engineMemoryMb, Settings.defaultMemoryMb);
-
-      final chosen = Settings.fromJson(
-        '{"engineCores": 6, "engineMemoryMb": 1024}',
-      );
-      expect(chosen.engineCores, 6);
-      expect(chosen.engineMemoryMb, 1024);
+      expect(read.engineCores, 1);
+      expect(read.engineMemoryMb, 128);
     });
 
     test('the analysis engine round-trips', () async {
@@ -279,7 +267,7 @@ void main() {
     });
   });
 
-  test('a field an older file lacks keeps its default', () {
+  test('a missing or mistyped field keeps its default', () {
     final read = Settings.fromJson('{"engineCores": 2, "engineLines": "x"}');
     expect(read.engineCores, 2);
     expect(read.engineLines, Settings.defaults.engineLines);

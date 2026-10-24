@@ -10,6 +10,7 @@ import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
 import '../../storage/training_rows.dart' show asWritten;
 import '../../storage/training_store.dart';
+import '../../storage/training_progress.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/pending_writes.dart';
 
@@ -32,13 +33,11 @@ typedef TrainerTime = ({DateTime Function() now, double Function() jitter});
 /// answers on ([documentSaved]); training never holds a save up.
 class TrainingProgress extends ChangeNotifier {
   TrainingProgress({
-    required ProgressFiles files,
+    required this._files,
     required ProgressLoaded loaded,
-    required TrainerTime time,
+    required this._time,
     this.pendingWrites,
-  }) : _files = files,
-       _time = time,
-       _sources = Map.of(loaded.sources),
+  }) : _sources = Map.of(loaded.sources),
        _reviews = {...loaded.reviews},
        _streaks = {...loaded.streaks},
        _saved = {...loaded.streaks},
@@ -465,13 +464,20 @@ class TrainingProgress extends ChangeNotifier {
     _commands.remove(command.operation);
     _took(result, reviews: unlanded.reviews);
     if (result is ProgressWritten && _asked[command.key] == command.operation) {
-      pendingWrites?.track(
-        this,
-        Future.value(result),
-        label: 'Training progress',
-        obligation: command.key,
-        problem: (_) => null,
-      );
+      // Tracking clears the command's recorded failure; it returns the
+      // settled value it was given, so there is nothing to wait for.
+      final pending = pendingWrites;
+      if (pending != null) {
+        unawaited(
+          pending.track<ProgressWrite>(
+            this,
+            Future.value(result),
+            label: 'Training progress',
+            obligation: command.key,
+            problem: (_) => null,
+          ),
+        );
+      }
     }
     _answered(command);
     if (!_disposed) notifyListeners();
@@ -537,15 +543,18 @@ class TrainingProgress extends ChangeNotifier {
     }, onError: (Object _) {});
     final pending = pendingWrites;
     if (pending == null) return done;
-    pending.track(
-      this,
-      done,
-      label: 'Training progress',
-      obligation: this,
-      problem: (result) =>
-          _unsaved.isEmpty && (command != null || result is ProgressWritten)
-          ? null
-          : 'Some progress could not be saved.',
+    // The tracker records [done]'s failure itself; the caller awaits [done].
+    unawaited(
+      pending.track<ProgressWrite>(
+        this,
+        done,
+        label: 'Training progress',
+        obligation: this,
+        problem: (result) =>
+            _unsaved.isEmpty && (command != null || result is ProgressWritten)
+            ? null
+            : 'Some progress could not be saved.',
+      ),
     );
     if (command == null) return done;
     return pending.track(

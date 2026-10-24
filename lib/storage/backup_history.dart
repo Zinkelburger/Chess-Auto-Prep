@@ -26,7 +26,7 @@ final class BackupHistory {
   }
 
   Future<T> _read<T>(Future<T> Function() work) =>
-      recovery.run(() => withDirectoryLock(recovery.training.documents, work));
+      recovery.run(() => withDirectoryLock(recovery.canonicalDocuments, work));
 
   Future<List<BackupVersion>> versions(DocumentRef ref) =>
       _read(() => archive.versions(_id(ref)));

@@ -18,7 +18,7 @@ void main() {
 
   Future<void> incoming(List<Object?> paths) async {
     final answer = Completer<void>();
-    binding.defaultBinaryMessenger.handlePlatformMessage(
+    await binding.defaultBinaryMessenger.handlePlatformMessage(
       channel.name,
       codec.encodeMethodCall(MethodCall('open', paths)),
       (_) => answer.complete(),

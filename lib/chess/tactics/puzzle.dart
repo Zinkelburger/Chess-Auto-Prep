@@ -5,10 +5,10 @@ import '../pgn/chapter_line.dart';
 import '../pgn/comment_text.dart';
 import '../pgn/game_text.dart';
 
-/// How bad the move a puzzle was mined from was. The old app's review marks
-/// a move `?!`, `?` or `??` when it drops the mover's winning chance by 0.1,
-/// 0.2 or 0.3; a puzzle with no `MistakeType` header was written by hand or
-/// imported, and is custom.
+/// How bad the move a puzzle was mined from was. The review marks a move `?!`,
+/// `?` or `??` when it drops the mover's winning chance by 0.1, 0.2 or 0.3; a
+/// puzzle with no `MistakeType` header was written by hand or imported, and is
+/// custom.
 enum MistakeKind {
   blunder('??', 'blunder', 'blunders'),
   mistake('?', 'mistake', 'mistakes'),
@@ -32,9 +32,9 @@ enum MistakeKind {
   };
 }
 
-/// How a puzzle has gone so far, from the headers the old app writes after
-/// each attempt; its `HintsUsed` is kept in the file and not read, as this
-/// app gives no hints. Zero reviews means never tried.
+/// How a puzzle has gone so far, from the headers written after each attempt; a
+/// `HintsUsed` header is kept in the file and not read, as this app gives no
+/// hints. Zero reviews means never tried.
 final class PuzzleStats {
   const PuzzleStats({
     this.reviews = 0,

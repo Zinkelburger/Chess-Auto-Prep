@@ -101,8 +101,9 @@ void main() {
         for (final book in books(expected).cast<Map<String, Object?>>()) {
           for (final selector
               in (book['chapters'] as List).cast<Map<String, Object?>>()) {
-            if (selector['path'] == 'Course/Main.pgn')
+            if (selector['path'] == 'Course/Main.pgn') {
               selector['path'] = 'Other/Moved.pgn';
+            }
           }
         }
         (firstBook(expected)['repertoires'] as List)[1] = 'Other/Moved.pgn';
@@ -139,8 +140,9 @@ void main() {
         ];
         for (final item in selectors(expected).cast<Map<String, Object?>>()) {
           final path = item['path'] as String;
-          if (path == 'Course' || path.startsWith('Course/'))
+          if (path == 'Course' || path.startsWith('Course/')) {
             item['path'] = 'Archive/New${path.substring('Course'.length)}';
+          }
         }
         expect(
           decoded(
@@ -220,7 +222,7 @@ void main() {
       (chapter, '/Outside/Main.pgn'),
       ('/Outside/Main.pgn', chapter),
       (chapter, '/Documents/repertoires-extra/Main.pgn'),
-      ('$root', '$root/Renamed'),
+      (root, '$root/Renamed'),
       ('Course/Main.pgn', '$root/Moved.pgn'),
       (chapter, '$root/../Moved.pgn'),
       (chapter, '$root/Bad\\Name.pgn'),

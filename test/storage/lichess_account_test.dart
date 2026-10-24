@@ -32,7 +32,7 @@ void main() {
     expect(await readLichessToken(), isNull);
   });
 
-  test('an OAuth account round-trips under the old app\'s keys', () async {
+  test('an OAuth account round-trips under the existing keys', () async {
     final until = DateTime(2027, 9, 22, 12);
     expect(
       await writeLichessAccount(
@@ -77,23 +77,6 @@ void main() {
       expect(await readLichessAccount(now: DateTime(2026)), isNull);
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.containsKey('lichess_access_token'), isFalse);
-    },
-  );
-
-  test(
-    'the old app\'s account, with a refresh key, is read and cleaned',
-    () async {
-      SharedPreferences.setMockInitialValues({
-        'lichess_access_token': 'lip_shared',
-        'lichess_refresh_token': 'stale',
-        'lichess_auth_username': 'Shared',
-        'lichess_is_pat': true,
-      });
-      final read = await readLichessAccount();
-      expect(read?.username, 'Shared');
-      await writeLichessAccount(read);
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.containsKey('lichess_refresh_token'), isFalse);
     },
   );
 

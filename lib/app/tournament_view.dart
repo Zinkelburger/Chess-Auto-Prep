@@ -38,7 +38,7 @@ final class TournamentView extends ModeView {
               : TournamentsScreen(
                   run: run!,
                   settings: workspace.settings,
-                  position: workspace.session.fen,
+                  position: workspace.session.cursor.fen,
                   open: (t, g) => unawaited(_open(t, g)),
                 ),
         ),

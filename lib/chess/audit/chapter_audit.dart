@@ -24,8 +24,7 @@ import '../pgn/game_tree.dart';
 /// A mate is not a number of centipawns: missing one, or walking into one,
 /// is a mistake of its own kind and is never shown as a loss in pawns.
 
-/// A loss of this many centipawns or more is a mistake (the old app's
-/// default).
+/// A loss of this many centipawns or more is a mistake.
 const mistakeCp = 100;
 
 /// A loss of this many or more, and less than [mistakeCp], is an

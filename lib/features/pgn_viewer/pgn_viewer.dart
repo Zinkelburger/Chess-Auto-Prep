@@ -41,26 +41,20 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
     this.exporter,
     this.places,
     PendingWrites? pendingWrites,
-    required PgnFilePicker picker,
-    required PgnFileImport import,
-    required SettingsStore settings,
-    required DocumentSession session,
-    required FileFilter filter,
-    required String collections,
+    required this._picker,
+    required this._import,
+    required this._settings,
+    required this._session,
+    required this._filter,
+    required this._collections,
   }) : pendingWrites = pendingWrites ?? PendingWrites(),
-       _recentFiles = recent,
-       _picker = picker,
-       _import = import,
-       _settings = settings,
-       _session = session,
-       _filter = filter,
-       _collections = collections {
+       _recentFiles = recent {
     _session.addListener(_followTheDocument);
     _filter.addListener(_followTheFilter);
     _reading.start();
   }
 
-  /// How many files the list remembers, which is the old app's number.
+  /// How many files the list remembers.
   static const maxRecent = 10;
 
   /// How many players the follow box suggests.
@@ -99,9 +93,9 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
   String? _recentProblem;
   final _unsavedRecent = <Object, String>{};
 
-  /// Reads and writes of the recent list take turns: the list is shared
-  /// with the old app and kept by read, change, write, and two of those
-  /// overlapping would each write over what the other added.
+  /// Reads and writes of the recent list take turns: the list is kept by
+  /// read, change, write, and two of those overlapping would each write
+  /// over what the other added.
   Future<void> _recentTurn = Future.value();
   ChapterRef? _file;
   Chapter? _rowsOf;
@@ -157,11 +151,10 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
     if (file == null || _filter.busy || _filter.problem != null) return null;
     final chapter = _session.snapshot();
     if (chapter == null || gameOrder.isEmpty) return null;
-    return chapter.preamble +
-        [
-          for (final index in gameOrder) chapter.lines[index].text,
-        ].join('\n\n') +
-        '\n';
+    final games = [
+      for (final index in gameOrder) chapter.lines[index].text,
+    ].join('\n\n');
+    return '${chapter.preamble}$games\n';
   }
 
   /// The games the list shows, in its order, as chapters for a study: each
@@ -431,11 +424,13 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
     _session.showGame(index);
     final applied = _filter.applied;
     if (applied.position case final position?) {
-      if (_session.tree?.mainLineTo(position) case final path?)
-        _session.goTo(path);
+      if (_session.tree?.mainLineTo(position) case final path?) {
+        _session.cursor.goTo(path);
+      }
     } else if (applied.readsMoves) {
-      if (applied.reachIn(mainLineSans(_session.tree)) case final plies?)
-        _session.goTo(NodePath.of(List.filled(plies, 0)));
+      if (applied.reachIn(mainLineSans(_session.tree)) case final plies?) {
+        _session.cursor.goTo(NodePath.of(List.filled(plies, 0)));
+      }
     }
   }
 

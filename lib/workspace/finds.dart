@@ -53,11 +53,10 @@ final class FindsKept extends FindsRecorded {
 /// in the store. The store is read the first time the list is shown.
 final class Finds extends ChangeNotifier {
   Finds({
-    required FindsStore Function() store,
+    required this._store,
     DateTime Function()? clock,
     PendingWrites? pendingWrites,
-  }) : _store = store,
-       _pending = pendingWrites ?? PendingWrites(),
+  }) : _pending = pendingWrites ?? PendingWrites(),
        _clock = clock ?? DateTime.now;
 
   /// Opens the store; asked once, when it is first needed.
@@ -120,8 +119,9 @@ final class Finds extends ChangeNotifier {
         ? held == null
         : held != null &&
               held.length == positions.length &&
-              held.containsAll(positions))
+              held.containsAll(positions)) {
       return;
+    }
     _within = positions;
     _changed();
   }
@@ -193,8 +193,9 @@ final class Finds extends ChangeNotifier {
     required Side side,
     required int elo,
   }) {
-    if (_disposed)
+    if (_disposed) {
       return Future.value(const FindsUnsaved('The search owner is closed.'));
+    }
     final acceptedAt = _clock();
     final acceptedPrefix = List<String>.unmodifiable(prefix);
     List<Find>? lines;

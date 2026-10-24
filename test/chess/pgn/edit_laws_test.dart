@@ -144,7 +144,7 @@ void _expectUnreadKept(EditStep step) {
   }
 }
 
-const _idOrSection = {..._idKeys, 'ChapterName'};
+const _idOrSection = {'LineID', 'ChapterName'};
 
 List<String> _ownTags(ChapterLine line) => [
   for (final header in line.tags)
@@ -160,8 +160,7 @@ List<String> _ownTags(ChapterLine line) => [
 /// game with no moves had no id; once it has moves it may be known by the
 /// id they give it, but never by one a line the edit kept is trained under.
 ///
-/// A study's games are not trained by id, and a game no id header both apps
-/// read can be written into ([_unpinnable]) is not held to its id.
+/// A study's games are not trained by id.
 void _expectIdsKept(EditStep step) {
   final after = step.after;
   if (after == null || !step.trained) return;
@@ -179,7 +178,6 @@ void _expectIdsKept(EditStep step) {
       continue;
     }
     final old = was[from];
-    if (_unpinnable(before.lines[from])) continue;
     if (old == null) {
       if (id != null) expect(kept, isNot(contains(id)), reason: reason);
       continue;
@@ -192,36 +190,6 @@ void _expectIdsKept(EditStep step) {
 void _expectKeepsIds(LiteralFile file, EditSpec spec) => _expectIdsKept(
   makeEdit(shownOf(file.text, Focus.file, 0), file.text, spec),
 );
-
-/// Whether [line] can carry no id header both apps read. The old app ends a
-/// game's header block at a tag it cannot match or a line that is not a
-/// tag, and reads what follows as moves. An id header both apps read goes
-/// above that line, so a game whose `[Event` line is one, or whose id
-/// header this app reads is below one, can carry none, and the id both
-/// apps train it under moves with it.
-bool _unpinnable(ChapterLine line) =>
-    _oldAppEndsHeaderEarly(line) && withIdHeader(line, 'probe') == null;
-
-const _idKeys = {'LineID', 'LineId', 'Id', 'Line', 'Guid'};
-
-/// Whether the old app ends [line]'s header block before this app does: at
-/// a tag its pattern does not match, or at a line that is not a tag below
-/// the first tag.
-bool _oldAppEndsHeaderEarly(ChapterLine line) {
-  final tag = RegExp(
-    r'^\s*\[[A-Za-z0-9][A-Za-z0-9_+#=:-]*\s+"(?:[^"\\]|\\"|\\\\)*"\]$',
-  );
-  var started = false;
-  for (final header in line.tags) {
-    if (header is PgnTag) {
-      if (!tag.hasMatch(header.text)) return true;
-      started = true;
-    } else if (started || !header.text.startsWith('%')) {
-      return true;
-    }
-  }
-  return false;
-}
 
 // ---------------------------------------------------------------------------
 // Notes

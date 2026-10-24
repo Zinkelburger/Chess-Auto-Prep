@@ -4,7 +4,9 @@ import 'package:chess_auto_prep/net/lichess_studies.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/study/studies.dart';
+import 'package:chess_auto_prep/features/study/studies_state.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/deleted_chapters.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/recovery_gate.dart';

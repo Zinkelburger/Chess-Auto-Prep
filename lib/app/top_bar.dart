@@ -7,16 +7,15 @@ import '../ui/theme.dart';
 import 'mode.dart';
 import '../ui/app_keys.dart';
 
-/// The row over the window: the mode menu and, beside it, the Actions menu
-/// — one menu of everything that can be done now, the same shape in every
-/// mode. Both sit at the left, where the pointer already is; the settings
-/// gear sits alone at the right end, where the old app kept it (owner,
-/// 2026-09-22), and the rest of the row is empty. While the list pane is
-/// hidden, the `»` that brings it back sits before the menus, where the
-/// pane would be; shown, the pane carries its own `«` in its top right
-/// corner, so the toggle is always at the pane's edge. The window's
-/// [status] sentence takes the empty middle, so it never pushes the page
-/// down.
+/// The row over the window: the mode menu and, beside it, the Actions menu —
+/// one menu of everything that can be done now, the same shape in every mode.
+/// Both sit at the left, where the pointer already is; the settings gear sits
+/// alone at the right end (owner, 2026-09-22), and the rest of the row is
+/// empty. While the list pane is hidden, the `»` that brings it back sits
+/// before the menus, where the pane would be; shown, the pane carries its own
+/// `«` in its top right corner, so the toggle is always at the pane's edge. The
+/// window's [status] sentence takes the empty middle, so it never pushes the
+/// page down.
 class TopBar extends StatelessWidget {
   const TopBar({
     super.key,
@@ -52,7 +51,7 @@ class TopBar extends StatelessWidget {
   final VoidCallback? onBack;
   final VoidCallback? onForward;
 
-  /// Whether this build can offer [Mode] at all: the Bughouse lab needs its
+  /// Whether this build can offer [Mode] at all: the Bughouse mode needs its
   /// engine, which a build may not carry. A mode not offered is left out
   /// of the menu, not greyed.
   final bool Function(Mode mode) offered;
@@ -264,10 +263,11 @@ class _ActionsMenuState extends State<_ActionsMenu> {
     for (final group in groups.entries.where(
       (group) => !_secondary.containsKey(group.key),
     )) {
-      if (children.isNotEmpty)
+      if (children.isNotEmpty) {
         children.add(
           const Divider(height: 1, indent: Space.l, endIndent: Space.l),
         );
+      }
       children.add(
         Padding(
           padding: const EdgeInsets.fromLTRB(

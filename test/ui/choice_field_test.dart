@@ -1,7 +1,6 @@
 import 'package:chess_auto_prep/ui/choice_field.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show TextInputAction;
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -52,7 +52,8 @@ ChapterLine? _lineOnBoard(DocumentSession session) {
   final chapter = session.chapter;
   if (chapter == null || session.isScratch) return null;
   final game = chapter.game;
-  if (game == null)
+  if (game == null) {
     return chapter.lines.length == 1 ? chapter.lines.single : null;
+  }
   return game >= chapter.lines.length ? null : chapter.lines[game];
 }

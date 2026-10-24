@@ -22,7 +22,7 @@ export function winningChances(score: Score): number {
   return raw(Math.min(1000, Math.max(-1000, score.cp ?? 0)));
 }
 
-export const povChances = (color: Color, score: Score) => (color === 'white' ? 1 : -1) * winningChances(score);
+const povChances = (color: Color, score: Score) => (color === 'white' ? 1 : -1) * winningChances(score);
 
 /** How much better `a` is than `b` for `color`, from −1 to 1. */
 export const povDiff = (color: Color, a: Score, b: Score) => (povChances(color, a) - povChances(color, b)) / 2;

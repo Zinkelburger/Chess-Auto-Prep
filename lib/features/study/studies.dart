@@ -2,8 +2,6 @@ import '../../storage/player_files.dart';
 import '../../storage/pgn_file_picker.dart';
 import '../../storage/pgn_file_import.dart';
 import '../../storage/pgn_export.dart';
-import '../../storage/operation_id.dart';
-import '../../storage/relocation_notes.dart' show recoveryFolder;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
@@ -14,11 +12,16 @@ import '../../chess/pgn/study_edits.dart' as pgn show addChapters;
 import '../../storage/edit_scope.dart' show GamesRearranged;
 import '../../workspace/study_choice.dart';
 import 'study_commands.dart' show studyNameOf;
+import 'study_file_changes.dart';
 import 'study_import_source.dart';
+import 'studies_state.dart';
 import '../../diagnostics/log.dart';
 import '../../net/lichess_studies.dart';
+import '../../net/lichess_study_writes.dart';
+import 'study_sender.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/chapter_files.dart';
+import '../../storage/deleted_chapters.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/pgn_document_store.dart' as store;
 import '../../storage/study_files.dart';
@@ -39,32 +42,47 @@ import '../../workspace/document_session.dart';
 /// of them, so what the panel shows is what the disk holds.
 final class Studies extends ChangeNotifier {
   Studies({
-    required StudyFiles files,
+    required this._files,
     required store.PgnDocumentStore documents,
-    required DocumentSession session,
+    required this._session,
     this.pendingWrites,
     this.picker,
     this.importer,
     this.exporter,
     this.linkedPlayers,
-    required DocumentSaver saver,
-    required LichessStudies lichess,
-    required String root,
-  }) : _files = files,
-       _store = documents,
-       _session = session,
-       _saver = saver,
-       _lichess = lichess,
-       _root = root;
+    required this._saver,
+    required this._lichess,
+    this._lichessWriter,
+    this._openPage = _noPage,
+    required this._root,
+  }) : _store = documents;
 
   /// What a study's first chapter is called before anyone renames it.
   static const firstChapter = 'Chapter 1';
+
+  late final _changes = StudyFileChanges(
+    store: _store,
+    session: _session,
+    saver: _saver,
+    root: _root,
+    resource: this,
+    pendingWrites: pendingWrites,
+    linkedPlayers: linkedPlayers,
+  );
 
   late final imports = StudyImportSource(
     lichess: _lichess,
     picker: picker,
     importer: importer,
   );
+
+  /// Sends the open study to Lichess; null where the app cannot.
+  late final StudySender? sender = switch (_lichessWriter) {
+    final writer? => StudySender(writer, _session, openPage: _openPage),
+    null => null,
+  };
+  final LichessStudyWriter? _lichessWriter;
+  final Future<bool> Function(Uri) _openPage;
 
   final PgnFilePicker? picker;
   final PgnFileImport? importer;
@@ -144,7 +162,7 @@ final class Studies extends ChangeNotifier {
     });
   }
 
-  /// A study with one empty chapter in it, which is what the old app makes.
+  /// A study with one empty chapter in it.
   Future<StudyResult> create(String name) => _run('create the study $name', () {
     final wrong = nameProblem(name);
     if (wrong != null) return Future.value(StudyProblem(wrong));
@@ -180,7 +198,7 @@ final class Studies extends ChangeNotifier {
       case IntoStudy(:final study):
         // Held against opening it, so a read begun before the write is read
         // again rather than shown with the chapters missing.
-        return _changing(
+        return _changes.changing(
           study.path,
           () async => _session.source?.path == study.path
               ? _addOpen(study, drafts)
@@ -197,6 +215,7 @@ final class Studies extends ChangeNotifier {
     final first = chapter.lines.length;
     final refused = _session.apply(
       (open) => pgn.addChapters(open, study: studyNameOf(open), drafts: drafts),
+      writes: true,
     );
     return refused == null
         ? StudyDone(opened: study, chapter: first)
@@ -215,7 +234,7 @@ final class Studies extends ChangeNotifier {
       case store.Opened(text: final read, revision: final at):
         (text, revision) = (read, at);
       case store.Absent():
-        return _changedOnDisk;
+        return studyChangedOnDisk;
       case store.Unreadable(:final detail):
         log.w('read ${study.path} to add to it', detail);
         return StudyProblem('Could not read ${study.name}.');
@@ -235,7 +254,7 @@ final class Studies extends ChangeNotifier {
     );
     return switch (saved) {
       store.Saved() => StudyDone(opened: study, chapter: chapter.lines.length),
-      store.Conflict() => _changedOnDisk,
+      store.Conflict() => studyChangedOnDisk,
       store.SaveDidNotLand(:final detail) => StudyProblem(
         'Could not add to ${study.name}: $detail',
       ),
@@ -282,8 +301,9 @@ final class Studies extends ChangeNotifier {
   }
 
   Future<StudyResult> importPgn() async {
-    if (picker == null || importer == null)
+    if (picker == null || importer == null) {
       return const StudyProblem('File import is unavailable.');
+    }
     if (_busy || _disposed) return const StudyDone();
     final path = await picker!.pickPgn();
     if (path == null || _disposed) return const StudyDone();
@@ -301,8 +321,10 @@ final class Studies extends ChangeNotifier {
       }
       final name = p.basenameWithoutExtension(path);
       final chapter = await readChapter(name: name, text: text);
-      if (chapter.lines.isEmpty || chapter.lines.every((line) => !line.isWhole))
+      if (chapter.lines.isEmpty ||
+          chapter.lines.every((line) => !line.isWhole)) {
         return const StudyProblem('That PGN contains no readable games.');
+      }
       return _createdUnderAFreeName(name, text);
     });
   }
@@ -315,12 +337,14 @@ final class Studies extends ChangeNotifier {
     if (name != null) {
       if (nameProblem(name) case final wrong?) return StudyProblem(wrong);
     }
-    if (into == null)
+    if (into == null) {
       return _createdUnderAFreeName(name ?? data.name, data.text);
-    if (!data.complete)
+    }
+    if (!data.complete) {
       return const StudyProblem(
         'Some games could not be read completely. Import them as a new study to preserve their original text.',
       );
+    }
     return _addChapters(IntoStudy(into), [
       for (final (index, line) in data.chapter.lines.indexed)
         ChapterDraft(
@@ -340,8 +364,9 @@ final class Studies extends ChangeNotifier {
   Future<StudyResult> exportPgn(String name) async {
     if (nameProblem(name) case final wrong?) return StudyProblem(wrong);
     final chapter = open == null ? null : _session.snapshot();
-    if (chapter == null || exporter == null)
+    if (chapter == null || exporter == null) {
       return const StudyProblem('Open a study first.');
+    }
     final text = writeChapter(chapter);
     return _run('export study PGN', () async {
       await _saver.flush();
@@ -358,268 +383,45 @@ final class Studies extends ChangeNotifier {
 
   /// A rename changes the file's name, preserving all PGN bytes and tags.
   /// The original revision and operation id survive an uncertain result.
-  _StudyRename? _rename;
-  bool get canRetryRename => _rename != null;
+  bool get canRetryRename => _changes.canRetryRename;
   Future<StudyResult> rename(ChapterRef study, String name) {
-    if (nameProblem(name) case final wrong?)
+    if (nameProblem(name) case final wrong?) {
       return Future.value(StudyProblem(wrong));
-    if (!p.equals(p.dirname(study.path), _root))
+    }
+    if (!p.equals(p.dirname(study.path), _root)) {
       return Future.value(
         const StudyProblem('Only saved studies can be renamed.'),
       );
+    }
     final to = ChapterRef.at(p.join(_root, '$name.pgn'));
-    if (_rename case final pending?) {
-      return pending.from == study && pending.to == to
+    if (_changes.canRetryRename) {
+      return _changes.renames(study, to)
           ? retryRename()
           : Future.value(
               const StudyProblem('Retry the pending study rename first.'),
             );
     }
     if (to == study) return Future.value(const StudyDone());
-    return _run('rename study', () async {
-      final linkProblem = await _linked(study, doing: 'renaming');
-      if (linkProblem != null) return StudyProblem(linkProblem);
-      return _session.access.changing(
-        study.path,
-        () => _session.access.changing(
-          to.path,
-          () => _withRevision(study, (revision) async {
-            final id = newOperationId();
-            final token = Object();
-            if (_session.source == study &&
-                !_saver.beginExternal(token, revision))
-              return _changedOnDisk;
-            final pending = pendingWrites ?? PendingWrites();
-            Future<store.MoveResult> work() =>
-                _store.move(study, to, expected: revision, operationId: id);
-            final obligation = pending.accept<store.MoveResult>(
-              resource: this,
-              label: 'Rename study',
-              work: work,
-              // One the store recorded is finished by recovery, so exit
-              // does not ask about it.
-              problem: (result) =>
-                  result is store.IoFailure && result is! store.Unfinished
-                  ? result.detail
-                  : null,
-            );
-            _rename = _StudyRename(
-              study,
-              to,
-              token,
-              obligation,
-              () => pending.track(this, work(), label: 'Rename study'),
-            );
-            return _finishRename();
-          }),
-        ),
-      );
-    });
+    return _run('rename study', () => _changes.rename(study, to));
   }
 
-  /// Why [study] cannot be moved from its path — players or groups in
-  /// Players & prep name it there — or null when nothing does. [doing] is
-  /// the change being asked for, for the sentence.
-  Future<String?> _linked(ChapterRef study, {required String doing}) async {
-    final source = linkedPlayers;
-    if (source == null) return null;
-    try {
-      final data = await source.read();
-      if (data.warnings.isNotEmpty)
-        return 'The player directory needs attention before $doing a linked study.';
-      final names = [
-        for (final player in data.players)
-          if (p.equals(player.text('prep_file'), study.path)) player.name,
-        for (final group in data.groups)
-          if (group.fields['study'] == study.path) group.name,
-      ];
-      return names.isEmpty
-          ? null
-          : 'This study is linked to ${names.join(', ')} in Players & prep. Update its links before $doing it.';
-    } on Object catch (error) {
-      log.w('check study links', error);
-      return 'Could not check study links. Retry when the player directory is readable.';
-    }
-  }
-
-  Future<StudyResult> retryRename() => _run('retry study rename', () async {
-    final move = _rename;
-    if (move == null) return const StudyDone();
-    return _session.access.changing(
-      move.from.path,
-      () => _session.access.changing(
-        move.to.path,
-        () async => _session.source == move.from
-            ? await _saver.holdStill(
-                    (_) => _finishRename(),
-                    continuing: move.token,
-                  ) ??
-                  _changedOnDisk
-            : _finishRename(),
-      ),
-    );
-  });
-  Future<StudyResult> _finishRename() async {
-    final move = _rename!;
-    // A recorded rename left the obligations when the store answered
-    // Unfinished; asking again under its id follows it to where recovery
-    // carried it, and a refusal while it is still owed stays unasked at exit.
-    final result = move.pending.committed
-        ? await move.again()
-        : await move.pending.run();
-    if (result is! store.IoFailure) _rename = null;
-    switch (result) {
-      case store.Moved():
-        if (_session.source == move.from) _session.relocated(move.to);
-        _saver.resolveExternalMove(move.token);
-        return const StudyDone();
-      case store.Collision():
-        _saver.resolveExternalMove(move.token);
-        return const StudyProblem('A study with that name already exists.');
-      case store.Conflict():
-        _saver.resolveExternalMove(
-          move.token,
-          failure: _changedOnDisk.sentence,
-        );
-        return _changedOnDisk;
-      case store.IoFailure(:final detail):
-        // Edits wait until the study follows its rename: recovery may move
-        // the file at any access, recorded or not.
-        _saver.resolveExternalMove(
-          move.token,
-          failure: detail,
-          uncertain: true,
-        );
-        return StudyProblem(
-          'Rename was not confirmed: $detail. Retry rename to finish.',
-        );
-    }
-  }
+  Future<StudyResult> retryRename() =>
+      _run('retry study rename', _changes.retryRename);
 
   Future<DeletedListing> deleted() => _files.deleted();
 
-  _StudyRename? _restore;
-  bool get canRetryRestore => _restore != null;
+  bool get canRetryRestore => _changes.canRetryRestore;
   Future<StudyResult> restore(DeletedChapter deleted, {String? name}) =>
-      _run('restore study', () async {
-        final wanted = name ?? deleted.name;
-        if (nameProblem(wanted) case final wrong?) return StudyProblem(wrong);
-        if (!p.equals(deleted.folder, _root) ||
-            !p.equals(p.dirname(deleted.path), p.join(_root, recoveryFolder))) {
-          return const StudyProblem(
-            'That deleted study is outside the studies folder.',
-          );
-        }
-        final from = ChapterRef.at(deleted.path);
-        final to = ChapterRef.at(p.join(_root, '$wanted.pgn'));
-        if (_restore case final existing?) {
-          if (existing.from != from || existing.to != to)
-            return const StudyProblem('Retry the pending study restore first.');
-          return _restoreLocked();
-        }
-        return _changing(
-          from.path,
-          () => _changing(to.path, () async {
-            final read = await _store.open(from);
-            if (read is! store.Opened)
-              return const StudyProblem(
-                'That deleted study could not be read. Refresh and try again.',
-              );
-            if (read.readOnly case final reason?) return StudyProblem(reason);
-            final id = newOperationId();
-            final pending = pendingWrites ?? PendingWrites();
-            Future<store.MoveResult> work() =>
-                _store.move(from, to, expected: read.revision, operationId: id);
-            _restore = _StudyRename(
-              from,
-              to,
-              Object(),
-              pending.accept<store.MoveResult>(
-                resource: this,
-                label: 'Restore study',
-                work: work,
-                problem: (result) =>
-                    result is store.IoFailure && result is! store.Unfinished
-                    ? result.detail
-                    : null,
-              ),
-              () => pending.track(this, work(), label: 'Restore study'),
-            );
-            return _finishRestore();
-          }),
-        );
-      });
+      _run('restore study', () => _changes.restore(deleted, name: name));
 
   Future<StudyResult> retryRestore() =>
-      _run('retry study restore', _restoreLocked);
-  Future<StudyResult> _restoreLocked() async {
-    final move = _restore;
-    if (move == null) return const StudyDone();
-    return _changing(
-      move.from.path,
-      () => _changing(move.to.path, _finishRestore),
-    );
-  }
-
-  Future<StudyResult> _finishRestore() async {
-    final move = _restore!;
-    final result = move.pending.committed
-        ? await move.again()
-        : await move.pending.run();
-    if (result is! store.IoFailure) _restore = null;
-    return switch (result) {
-      store.Moved() => const StudyDone(),
-      store.Collision() => const StudyProblem(
-        'A study with that name already exists. Use Restore as to choose another name.',
-      ),
-      store.Conflict() => const StudyProblem(
-        'The deleted study changed. Refresh and try again.',
-      ),
-      store.IoFailure(:final detail) => StudyProblem(
-        'Restore was not confirmed: $detail. Retry restore to finish.',
-      ),
-    };
-  }
+      _run('retry study restore', _changes.retryRestore);
 
   /// Recoverable: the file goes to the recovery folder through the store,
   /// which is where a deleted chapter goes too. A study Players & prep
   /// links to stays, as it does for a rename.
   Future<StudyResult> delete(ChapterRef study) =>
-      _run('delete ${study.path}', () async {
-        final linkProblem = await _linked(study, doing: 'deleting');
-        if (linkProblem != null) return StudyProblem(linkProblem);
-        return _changing(
-          study.path,
-          () => _withRevision(study, (revision) async {
-            switch (await _store.delete(study, expected: revision)) {
-              case store.Deleted():
-                if (_session.source == study) _session.closed();
-                return const StudyDone();
-              case store.Conflict():
-                return const StudyProblem(
-                  'That study changed on disk while it was open. Reload it, '
-                  'then try again.',
-                );
-              case store.IoFailure(:final detail):
-                return StudyProblem('Could not delete the study: $detail');
-            }
-          }),
-        );
-      });
-
-  /// Runs [work] with opening [path] held off until it is over. Another
-  /// command already changing that file is a refusal, not a wait.
-  Future<StudyResult> _changing(
-    String path,
-    Future<StudyResult> Function() work,
-  ) async {
-    try {
-      return await _session.access.changing(path, work);
-    } on StateError catch (error) {
-      log.w('change $path', error);
-      return const StudyProblem('Another change is still running.');
-    }
-  }
+      _run('delete ${study.path}', () => _changes.delete(study));
 
   /// The whole open study as PGN, once the draft on screen has reached the
   /// file: copying a study that is a second behind is copying the wrong one.
@@ -647,7 +449,7 @@ final class Studies extends ChangeNotifier {
     for (var attempt = 1; attempt <= 100; attempt++) {
       final wanted = attempt == 1 ? name : '$name $attempt';
       final created = await _created(_asFileName(wanted), text);
-      if (created is! _StudyNameTaken) return created;
+      if (created is! StudyNameTaken) return created;
     }
     return StudyProblem('No free name was found for "$name".');
   }
@@ -670,16 +472,20 @@ final class Studies extends ChangeNotifier {
 
   Future<StudyResult> _created(String name, String text) async {
     if (nameProblem(name) case final wrong?) return StudyProblem(wrong);
-    if (_creation != null)
+    if (_creation != null) {
       return const StudyProblem('Retry the pending study save first.');
+    }
     final ref = ChapterRef.at(p.join(_root, '$name.pgn'));
     final pending = pendingWrites ?? PendingWrites();
     var uncertain = false;
     Future<store.CreateResult> write() async {
       if (uncertain) {
         final read = await _store.open(ref);
-        if (read is store.Opened && read.readOnly == null && read.text == text)
+        if (read is store.Opened &&
+            read.readOnly == null &&
+            read.text == text) {
           return store.Created(read.revision);
+        }
       }
       final result = await _store.create(ref, text);
       uncertain = result is store.IoFailure;
@@ -705,7 +511,7 @@ final class Studies extends ChangeNotifier {
     if (result is! store.IoFailure) _creation = null;
     return switch (result) {
       store.Created() => StudyDone(opened: creation.ref),
-      store.Collision() => _StudyNameTaken(
+      store.Collision() => StudyNameTaken(
         'A study named "${creation.ref.name}" already exists.',
       ),
       store.IoFailure(:final detail) => StudyProblem(
@@ -713,43 +519,6 @@ final class Studies extends ChangeNotifier {
       ),
     };
   }
-
-  /// Runs [write] against the revision [study] has now.
-  ///
-  /// The study open in the workspace is held still by its saver until
-  /// [write] is over, so an autosave cannot land between the revision and
-  /// the write that expects it. Any other is read from disk, which is also
-  /// the check that it is still there.
-  Future<StudyResult> _withRevision(
-    ChapterRef study,
-    Future<StudyResult> Function(Revision revision) write,
-  ) async {
-    if (_session.source == study) return _held(write);
-    switch (await _store.open(study)) {
-      case store.Opened(:final revision):
-        // The user may have opened the study while it was being read, and
-        // from here on its writes belong behind the saver's hold.
-        if (_session.source == study) return _held(write);
-        return write(revision);
-      case store.Absent():
-        return _changedOnDisk;
-      case store.Unreadable(:final detail):
-        log.w('read ${study.path} before changing it', detail);
-        return _changedOnDisk;
-    }
-  }
-
-  /// Runs [write] with the open study held still by its saver. When the
-  /// saver cannot hold it — nothing is open by the time its draft is
-  /// written, or another change holds it — the answer is the one for a
-  /// study gone from disk: the list is read again and the user tries again.
-  Future<StudyResult> _held(
-    Future<StudyResult> Function(Revision revision) write,
-  ) async => await _saver.holdStill(write) ?? _changedOnDisk;
-
-  static const _changedOnDisk = StudyProblem(
-    'That study changed on disk. The list has been refreshed; try again.',
-  );
 
   /// One change at a time, then the folder is listed again: a half-applied
   /// change must be visible, and the disk is the only thing that knows what
@@ -798,78 +567,15 @@ final class Studies extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    sender?.dispose();
     super.dispose();
   }
 }
 
-/// What the studies panel is showing.
-sealed class StudiesState {
-  const StudiesState();
-}
-
-/// The folder is being read for the first time.
-final class StudiesLoading extends StudiesState {
-  const StudiesLoading();
-}
-
-final class StudiesLoaded extends StudiesState {
-  const StudiesLoaded(this.studies);
-
-  /// In name order. Empty means the folder holds no studies, which is
-  /// different from not having been able to read it.
-  final List<ChapterRef> studies;
-}
-
-/// The folder is there but could not be read. The panel says so and offers
-/// to try again; it never shows an empty list instead.
-final class StudiesLoadFailed extends StudiesState {
-  const StudiesLoadFailed(this.detail);
-
-  /// The operating system's message, for the log; the panel writes the
-  /// sentence.
-  final String detail;
-}
-
-/// What became of a change to the studies folder.
-sealed class StudyResult {
-  const StudyResult();
-}
-
-/// It happened. [opened] is the study the change produced, when it produced
-/// one, so the panel can open it at once; [chapter] its first new chapter,
-/// when chapters were added.
-final class StudyDone extends StudyResult {
-  const StudyDone({this.opened, this.chapter});
-
-  final ChapterRef? opened;
-  final int? chapter;
-}
-
-/// It did not happen. [sentence] is plain English for the screen; the owner
-/// has already put the same thing in the log with the action it belongs to.
-final class StudyProblem extends StudyResult {
-  const StudyProblem(this.sentence);
-
-  final String sentence;
-}
-
-final class _StudyRename {
-  const _StudyRename(this.from, this.to, this.token, this.pending, this.again);
-  final Object token;
-  final ChapterRef from, to;
-  final PendingObligation<store.MoveResult> pending;
-
-  /// The same move under the same operation id, waited for at exit but not
-  /// asked about: for a rename the store recorded.
-  final Future<store.MoveResult> Function() again;
-}
+Future<bool> _noPage(Uri page) async => false;
 
 final class _StudyCreate {
   const _StudyCreate(this.ref, this.pending);
   final ChapterRef ref;
   final PendingObligation<store.CreateResult> pending;
-}
-
-final class _StudyNameTaken extends StudyProblem {
-  const _StudyNameTaken(super.sentence);
 }

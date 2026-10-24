@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../chess/pgn/analysis_board.dart' show analysisBoard;
+import '../chess/pgn/tree_edit.dart' show pathOfSans;
 import '../features/library/library.dart';
 import '../storage/chapter_files.dart';
+import '../storage/finds_store.dart';
 import '../ui/app_action.dart';
 import '../ui/app_keys.dart';
 import '../ui/choice_dialog.dart';
@@ -18,7 +20,9 @@ import 'workspace_requests.dart';
 /// The ways a position comes onto an analysis board from outside a file:
 /// the clipboard and the board editor. While the Analysis tab is up they
 /// fill that tab's scratch game and leave the file beside it alone;
-/// otherwise each is a new analysis board ([WorkspaceRequests.paste]).
+/// otherwise each is a new analysis board ([WorkspaceRequests.paste]). A
+/// find from the Positions comes the same way, unless the open chapter
+/// already plays its line ([openFind]).
 final class BoardDoors {
   BoardDoors({
     required this.requests,
@@ -84,7 +88,7 @@ final class BoardDoors {
     final side = session.orientation;
     final fen = await showBoardEditor(
       context,
-      initial: session.boardFen,
+      initial: session.cursor.boardFen,
       orientation: side,
     );
     if (fen == null) return;
@@ -92,6 +96,35 @@ final class BoardDoors {
       return inspection.put(analysisBoard(side: side, root: fen));
     }
     await requests.openPosition(fen, side: side);
+  }
+
+  /// A find's position in the open chapter when the chapter plays its line
+  /// that far, else its line on an analysis board at its position.
+  void openFind(KeptFind kept) {
+    workspace.finds.select(kept.id);
+    final session = workspace.session;
+    final tree = session.tree;
+    if (!inspecting() &&
+        session.source != null &&
+        tree != null &&
+        tree.rootFen.position == kept.rootFen.position) {
+      final path = pathOfSans(
+        tree,
+        kept.find.sans.take(kept.find.ply).toList(),
+      );
+      if (path != null) {
+        session.cursor.goTo(path);
+        return;
+      }
+    }
+    unawaited(
+      requests.openLine(
+        root: kept.rootFen,
+        sans: kept.find.sans,
+        ply: kept.find.ply,
+        side: kept.side,
+      ),
+    );
   }
 
   /// Paste and Set up, for the Actions menu. [paste] is false where Ctrl+V

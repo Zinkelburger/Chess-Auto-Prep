@@ -9,21 +9,34 @@ import '../diagnostics/log.dart';
 abstract interface class PgnFilePicker {
   /// The path the user chose, or null when they closed the dialog without
   /// choosing. [startIn] is the folder the dialog opens on, when there is a
-  /// better one than the desktop's default.
-  Future<String?> pickPgn({String? startIn});
+  /// better one than the desktop's default. [extensions] are the files it
+  /// offers.
+  Future<String?> pickPgn({
+    String? startIn,
+    List<String> extensions = pgnExtensions,
+  });
 }
+
+/// The files a PGN dialog offers.
+const pgnExtensions = ['pgn', 'txt'];
+
+/// The files the Bughouse mode opens: BPGN, and PGN or text holding it.
+const bpgnExtensions = ['bpgn', 'pgn', 'txt'];
 
 final class NativePgnFilePicker implements PgnFilePicker {
   const NativePgnFilePicker();
 
   @override
-  Future<String?> pickPgn({String? startIn}) async {
+  Future<String?> pickPgn({
+    String? startIn,
+    List<String> extensions = pgnExtensions,
+  }) async {
     try {
       final file = await FilePicker.pickFile(
         dialogTitle: 'Open PGN file',
         initialDirectory: startIn,
         type: FileType.custom,
-        allowedExtensions: const ['pgn', 'txt'],
+        allowedExtensions: extensions,
       );
       return file?.path;
     } on Object catch (error) {

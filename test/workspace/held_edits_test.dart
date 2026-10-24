@@ -22,7 +22,7 @@ void main() {
 
   /// 1... c5 2. Nf3 d6 3. d4 cxd4, then two moves the file does not have.
   void playTwoNewMoves() {
-    fixture.session.goTo(NodePath.of([0, 0, 0, 0, 0]));
+    fixture.session.cursor.goTo(NodePath.of([0, 0, 0, 0, 0]));
     fixture.session.playMove('f3d4');
     fixture.session.playMove('g8f6');
   }
@@ -70,7 +70,7 @@ void main() {
 
   test('a new move is shown but not written', () async {
     playTwoNewMoves();
-    expect(fixture.session.currentMove?.san, 'Nf6');
+    expect(fixture.session.cursor.currentMove?.san, 'Nf6');
     expect(fixture.session.hasHeldEdits, isTrue);
     await pumpEventQueue();
     expect(fixture.store.requestedSaves, isEmpty);
@@ -91,7 +91,7 @@ void main() {
     fixture.session.discardHeld();
     await pumpEventQueue();
     expect(fixture.session.hasHeldEdits, isFalse);
-    expect(fixture.session.currentMove?.san, 'cxd4');
+    expect(fixture.session.cursor.currentMove?.san, 'cxd4');
     expect(fixture.store.requestedSaves, isEmpty);
   });
 
@@ -100,10 +100,10 @@ void main() {
     () async {
       playTwoNewMoves();
       await fixture.session.undo();
-      expect(fixture.session.currentMove?.san, 'Nxd4');
+      expect(fixture.session.cursor.currentMove?.san, 'Nxd4');
       expect(fixture.session.hasHeldEdits, isTrue);
       await fixture.session.undo();
-      expect(fixture.session.currentMove?.san, 'cxd4');
+      expect(fixture.session.cursor.currentMove?.san, 'cxd4');
       expect(fixture.session.hasHeldEdits, isFalse);
       await pumpEventQueue();
       expect(fixture.store.requestedSaves, isEmpty);
@@ -143,7 +143,7 @@ void main() {
 
   test('without holding, a move is saved as before', () async {
     fixture.session.holdsEdits = false;
-    fixture.session.goTo(NodePath.of([0, 0, 0, 0, 0]));
+    fixture.session.cursor.goTo(NodePath.of([0, 0, 0, 0, 0]));
     fixture.session.playMove('f3d4');
     await pumpEventQueue();
     expect(fixture.session.hasHeldEdits, isFalse);
@@ -212,7 +212,7 @@ void main() {
       await tester.tap(find.text('Discard changes'));
       await tester.pumpAndSettle();
       expect(find.text('Unsaved changes'), findsNothing);
-      expect(fixture.session.currentMove?.san, 'cxd4');
+      expect(fixture.session.cursor.currentMove?.san, 'cxd4');
     });
   });
 }

@@ -133,7 +133,7 @@ void main() {
       await pumpEventQueue();
       expect(second.choice.source, ExplorerSource.lichess);
       expect(second.choice.ratings, {1600});
-      fixture.session.forward();
+      fixture.session.cursor.forward();
       await pumpEventQueue();
       expect(second.ply, explorer.ply);
       expect(second.ply, 1);
@@ -159,11 +159,11 @@ void main() {
     lichess.answer = (query) =>
         ExplorerFetched(query.fen == Fen.initial ? startAnswer : afterE4Answer);
     await start();
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     expect(explorer.state, isA<ExplorerAsking>());
     await pumpEventQueue();
     expect(shown().rows.single.san, 'e5');
-    fixture.session.back();
+    fixture.session.cursor.back();
     expect(shown().rows.first.san, 'e4', reason: 'at once');
     await pumpEventQueue();
     expect(lichess.asked, hasLength(2));
@@ -238,10 +238,10 @@ void main() {
         ? const ExplorerFetched(startAnswer)
         : const ExplorerNotFetched(ExplorerProblem.http, status: 500);
     await start();
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     await pumpEventQueue();
     expect(explorer.state, isA<ExplorerFailed>());
-    fixture.session.back();
+    fixture.session.cursor.back();
     expect(shown().rows.first.san, 'e4');
   });
 
@@ -306,17 +306,17 @@ void main() {
     };
     await start();
     for (var i = 0; i < 3; i++) {
-      fixture.session.forward();
+      fixture.session.cursor.forward();
       await pumpEventQueue();
       expect(explorer.state, isA<ExplorerNothing>());
     }
     expect(empties, 3);
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     await pumpEventQueue();
     expect(explorer.state, isA<ExplorerNothing>());
     expect(empties, 3, reason: 'not asked again on this line');
-    fixture.session.toStart();
-    fixture.session.forward();
+    fixture.session.cursor.toStart();
+    fixture.session.cursor.forward();
     await explorer.retry();
     expect(empties, 4);
   });
@@ -329,18 +329,18 @@ void main() {
         : const ExplorerFetched(ExplorerAnswer.empty);
     await start();
     for (var i = 0; i < 3; i++) {
-      fixture.session.forward();
+      fixture.session.cursor.forward();
       await pumpEventQueue();
     }
     final asked = lichess.asked.length;
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     await pumpEventQueue();
     expect(lichess.asked, hasLength(asked), reason: 'this line is left');
     // 1. d4 d5 2. c4 e6: as deep, on the other branch.
-    fixture.session.goTo(NodePath.of(const [1, 0, 0, 0]));
+    fixture.session.cursor.goTo(NodePath.of(const [1, 0, 0, 0]));
     await pumpEventQueue();
     expect(lichess.asked, hasLength(asked + 1));
-    expect(lichess.asked.last.fen, fixture.session.fen);
+    expect(lichess.asked.last.fen, fixture.session.cursor.fen);
   });
 
   test('a refresh that failed says so beside its own rows only', () async {
@@ -349,7 +349,7 @@ void main() {
     await explorer.retry();
     expect(explorer.notice, 'Could not ask Masters.');
     lichess.throwing = null;
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     await pumpEventQueue();
     expect(explorer.notice, isNull);
   });
@@ -375,11 +375,11 @@ void main() {
       await pumpEventQueue();
       held.answer(const ExplorerFetched(startAnswer));
       await pumpEventQueue();
-      fixture.session.forward();
+      fixture.session.cursor.forward();
       await pumpEventQueue();
       held.answer(const ExplorerFetched(afterE4Answer));
       await pumpEventQueue();
-      fixture.session.back();
+      fixture.session.cursor.back();
       expect(shown().rows.first.san, 'e4', reason: 'from the cache');
     }
 
@@ -387,11 +387,11 @@ void main() {
 
     test('a failure leaves the rows of the position on the board', () async {
       await startHeld();
-      fixture.session.forward();
-      fixture.session.forward();
+      fixture.session.cursor.forward();
+      fixture.session.cursor.forward();
       await pumpEventQueue();
       expect(held.waiting, 1, reason: '1. e4 e5 is being asked about');
-      fixture.session.back();
+      fixture.session.cursor.back();
       expect(shown().rows.single.san, 'e5', reason: 'from the cache');
       held.answer(failure);
       await pumpEventQueue();
@@ -405,7 +405,7 @@ void main() {
       final retrying = explorer.retry();
       await pumpEventQueue();
       expect(held.waiting, 1, reason: 'the start is being asked again');
-      fixture.session.forward();
+      fixture.session.cursor.forward();
       expect(shown().rows.single.san, 'e5', reason: 'from the cache');
       held.answer(failure);
       await retrying;
@@ -417,7 +417,7 @@ void main() {
         'asked about', () async {
       await startHeld();
       unawaited(explorer.retry());
-      fixture.session.forward();
+      fixture.session.cursor.forward();
       await pumpEventQueue();
       expect(held.waiting, 0);
       expect(shown().rows.single.san, 'e5');
@@ -430,7 +430,7 @@ void main() {
     await start();
     expect(explorer.ply, 50);
     expect(explorer.state, isA<ExplorerShown>(), reason: 'still asked');
-    fixture.session.forward();
+    fixture.session.cursor.forward();
     await pumpEventQueue();
     expect(
       (explorer.state as ExplorerNothing).sentence,
@@ -485,7 +485,7 @@ void main() {
       expect(shown().rows.first.inRepertoire, isTrue);
       expect(explorer.summary, '2 games');
       myGames.answer = afterE4Answer;
-      fixture.session.forward();
+      fixture.session.cursor.forward();
       expect(shown().rows.single.san, 'e5', reason: 'no rest');
       expect(lichess.asked, isEmpty);
       expect(book.asked, isEmpty);

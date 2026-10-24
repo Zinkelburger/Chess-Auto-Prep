@@ -2,8 +2,8 @@
 
 ## Layout and dependencies
 
-The renewal app is the only app. `lib/main.dart` boots it; production code
-lives directly under `lib/`, with matching tests under `test/`.
+`lib/main.dart` boots the app; production code lives directly under `lib/`,
+with matching tests under `test/`.
 
 - `chess/`: pure chess, PGN, generation, training and tournament values and algorithms.
 - `storage/`: files, databases, settings, revisions, locking, recovery and backups.
@@ -15,10 +15,10 @@ lives directly under `lib/`, with matching tests under `test/`.
 - `app/`: composition, cross-mode wiring, navigation, lifecycle and shutdown.
 - `diagnostics/`: logging; `debug/`: opt-in driver and packaged-app checks.
 
-`scripts/check_v2.py` enforces the dependency table, pure layers, write ownership
-and complexity limits. See [the architecture contracts](../ARCHITECTURE_RENEWAL.md).
-Do not recreate v1's services/core/models/widgets layers, dependency adapters,
-Provider container, localization generator, debt ledgers or Widgetbook.
+`scripts/check_architecture.py` enforces the dependency table, pure layers, write ownership
+and complexity limits. See [the architecture contracts](../ARCHITECTURE.md).
+Do not add parallel layers (`services/`, `models/`, `widgets/`), a dependency
+container, code generation, a localization step or debt ledgers.
 
 ## Ownership and lifecycle
 
@@ -47,5 +47,7 @@ and the existing workspace/storage owners before adding helpers.
 
 Stub HTTP and engine ports in focused tests; native engines belong in explicit
 engine/desktop checks. Format only changed Dart files. Run analyze/lint and
-relevant tests through `scripts/ci.sh`. Update affected documentation following
-[Documentation](documentation.md) when behavior, API or layout changes.
+relevant tests through `scripts/ci.sh`. Analyze stays at zero issues: infos are
+fatal, so fix a new lint (or disable the rule with a reason), never leave it.
+Update affected documentation following [Documentation](documentation.md) when
+behavior, API or layout changes.

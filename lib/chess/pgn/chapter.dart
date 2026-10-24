@@ -464,11 +464,11 @@ String preambleWithSide(String preamble, Side side) {
 /// The colour line is the only record of which side the chapter is for, so it
 /// is written before there are any moves to infer it from — when the side is
 /// known. A chapter made with none is asked about once when it opens, and
-/// the answer is written in then. The stamp is the
-/// local time the old app writes, `2026-09-19 14:07:33`, and nothing reads it
-/// back; it is there for someone looking at the file. [rootMoves] is where
-/// the chapter starts when that is not the start, written the way the old
-/// app writes it and read back by [readHeading].
+/// the answer is written in then. The stamp is local time,
+/// `2026-09-19 14:07:33`, as existing chapter files carry it, and nothing
+/// reads it back; it is there for someone looking at the file. [rootMoves]
+/// is where the chapter starts when that is not the start, written as a
+/// `// Root:` line and read back by [readHeading].
 String newChapterText({
   required String name,
   required Side? side,
@@ -492,8 +492,8 @@ String writeChapter(Chapter chapter) {
 }
 
 /// `// Color: Black` anywhere above the first game reads as Black; anything
-/// else, including no line at all, is White. The old app wrote it that way
-/// and reads it the same way.
+/// else, including no line at all, is White, which is how existing chapter
+/// files mark their side.
 ///
 /// The whole preamble is looked at, because a file can carry anything above
 /// its first game and the colour line may be below it. Nothing below the

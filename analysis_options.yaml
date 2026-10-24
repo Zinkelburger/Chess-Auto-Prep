@@ -10,11 +10,10 @@ analyzer:
     strict-casts: true
 
   errors:
-    # `scripts/ci.sh analyze` fails on any `error •` or `warning •` line, so a
-    # rule promoted here is genuinely enforced; a rule left at `info` is only
-    # advice, and this repo already carries dozens of unheeded infos. Every
-    # rule below had ZERO violations when it was promoted, so this is a
-    # ratchet against regressions, not a cleanup backlog.
+    # `scripts/ci.sh analyze` runs with --fatal-infos and the tree is held at
+    # zero issues, so every enabled lint below and in flutter_lints is a gate:
+    # an info fails it as surely as a warning. These are promoted to
+    # `warning` as well so editors flag them as correctness problems.
     always_declare_return_types: warning
     avoid_type_to_string: warning
     close_sinks: warning
@@ -51,7 +50,7 @@ linter:
     - discarded_futures
     - use_build_context_synchronously
 
-    # Correctness. All promoted to `warning` above, all at zero violations.
+    # Correctness. Promoted to `warning` above.
     - always_declare_return_types
     - avoid_type_to_string
     - close_sinks
@@ -62,7 +61,7 @@ linter:
     - throw_in_finally
     - unnecessary_statements
 
-    # Clean today, kept as advice rather than gates.
+    # Style; gated like every other enabled rule.
     - prefer_single_quotes
     - unnecessary_await_in_return
     - use_super_parameters

@@ -82,13 +82,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(w.session.game, 1);
     expect(w.session.orientation, Side.black);
-    expect(w.session.cursor.indexes, hasLength(4));
+    expect(w.session.cursor.value.indexes, hasLength(4));
     await toBookTab(tester);
     expect(find.text('Played'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
     expect(w.session.game, 0);
-    expect(w.session.cursor.indexes, hasLength(6));
+    expect(w.session.cursor.value.indexes, hasLength(6));
   });
 
   testWidgets('the arrows walk only the games the search finds', (
@@ -117,6 +117,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(w.requests.mode, Mode.repertoires);
     expect(w.session.source, kidMain);
-    expect(w.session.currentMove?.san, 'cxd4');
+    expect(w.session.cursor.currentMove?.san, 'cxd4');
   });
 }

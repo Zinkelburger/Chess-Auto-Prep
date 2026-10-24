@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:chess_auto_prep/chess/pgn/chapter_sections.dart';
 import 'package:chess_auto_prep/features/library/library_state.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/chapter_directory.dart';
 import 'package:chess_auto_prep/storage/recovery_gate.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/workspace/document_saver.dart' as saver;
@@ -77,7 +78,7 @@ void main() {
 
   test('a move played in a chapter is written into the one file', () async {
     await start(opened: sicilian);
-    fixture.session.toEnd();
+    fixture.session.cursor.toEnd();
     fixture.session.playMove('d7d5');
     await pumpEventQueue();
     final text = onDisk();

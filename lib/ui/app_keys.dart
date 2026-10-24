@@ -12,7 +12,7 @@ enum KeyPlace {
   comment('Comment box'),
   moveBox('Move box'),
   trainer('Repertoire trainer'),
-  bughouse('Bughouse lab');
+  bughouse('Bughouse');
 
   const KeyPlace(this.label);
 
@@ -208,19 +208,26 @@ enum AppKey {
   ]),
   firstMove('To the first move', KeyPlace.bughouse, [
     SingleActivator(LogicalKeyboardKey.home),
+    SingleActivator(LogicalKeyboardKey.pageUp),
   ]),
   lastMove('To the last move', KeyPlace.bughouse, [
     SingleActivator(LogicalKeyboardKey.end),
+    SingleActivator(LogicalKeyboardKey.pageDown),
+  ]),
+  flipBoards('Flip the boards', KeyPlace.bughouse, [
+    SingleActivator(LogicalKeyboardKey.keyF),
   ]),
   closePreview('Close the preview', KeyPlace.bughouse, [
     SingleActivator(LogicalKeyboardKey.escape),
   ]),
   bughouseEngine('Toggle engine', KeyPlace.bughouse, [
     SingleActivator(LogicalKeyboardKey.keyE),
+  ]),
+  playBest('Play the engine’s best move', KeyPlace.bughouse, [
+    SingleActivator(LogicalKeyboardKey.space),
   ]);
 
-  const AppKey(this.action, this.place, this.keys, {String? named})
-    : _named = named;
+  const AppKey(this.action, this.place, this.keys, {this._named});
 
   /// What the key does, as the Shortcuts list says it.
   final String action;

@@ -123,16 +123,10 @@ scripts/chesscom_titled_analysis/data/
 # Sample TWIC input -- re-fetch with python/twic-position-finder/downloader.py
 twic*.pgn
 
-# harness results: trees, sandboxes, logs (keep compare reports)
-tools/experiments/fast_vs_pure/results/*/fast/
-tools/experiments/fast_vs_pure/results/*/pure/
-tools/experiments/fast_vs_pure/results/*/*.log
-tools/experiments/fast_vs_pure/results/*/pid
-
-# benko_master harness: keep the scripts, not the runs (trees, engine copies, pids)
-tools/experiments/benko_master/run_*/
-tools/experiments/benko_master/ab_*/
-tools/experiments/benko_master/LATEST*
+# Local results of removed experiment harnesses
+tools/experiments/fast_vs_pure/
+tools/experiments/skeleton_consistency/
+tools/experiments/benko_master/
 
 # Claude Code. The agent contract — the Flutter-lock gate hook, the app-driver
 # skill, the slash commands — is TRACKED on purpose: it is what makes a fresh
@@ -164,5 +158,6 @@ packaging/windows/prerequisites/VC_redist.x64.exe
 # per-session scratch, never repository content.
 .claude/worktrees/
 
-# Generated browser Maia assets
+# Generated browser Maia assets and the bughouse board's Fairy-Stockfish
 python/twic-position-finder/frontend/public/prep-engine/
+python/twic-position-finder/frontend/public/crazyhouse-engine/

@@ -97,24 +97,16 @@ final class AuditFailed extends AuditState {
 /// new run. A dismissed finding stays dismissed wherever that move is met.
 final class ChapterAudit extends ChangeNotifier {
   ChapterAudit({
-    required DocumentSession session,
-    required EngineJobs jobs,
-    required Future<EngineStart> Function() launch,
-    required EvalCache Function() evalCache,
+    required this._session,
+    required this._jobs,
+    required this._launch,
+    required this._evalCache,
     required AuditStore Function() store,
-    required ReplyModel model,
-    required SettingsStore settings,
-    required RepertoireAnswers answers,
-    required RemoteQueue lookups,
-  }) : _session = session,
-       _jobs = jobs,
-       _launch = launch,
-       _evalCache = evalCache,
-       _storeOf = store,
-       _model = model,
-       _settings = settings,
-       _answers = answers,
-       _lookups = lookups {
+    required this._model,
+    required this._settings,
+    required this._answers,
+    required this._lookups,
+  }) : _storeOf = store {
     _session.addListener(_documentChanged);
     _jobs.addListener(_jobsChanged);
   }
@@ -202,7 +194,7 @@ final class ChapterAudit extends ChangeNotifier {
   void goTo(AuditFinding finding) {
     final tree = _session.tree;
     final path = tree == null ? null : pathOfSans(tree, finding.sans);
-    if (path != null) _session.goTo(path);
+    if (path != null) _session.cursor.goTo(path);
   }
 
   void dismiss(AuditFinding finding) {

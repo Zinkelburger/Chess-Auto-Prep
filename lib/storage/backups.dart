@@ -13,8 +13,7 @@ import 'recovery_files.dart';
 /// Every version the store replaces, kept where a mistake in Documents cannot
 /// reach it: `<support>/backups/<document id>/`, one plain copy per version
 /// named by its commit time and content hash, plus an `index.json` listing
-/// them oldest first. Earlier builds kept versions gzipped; those are still
-/// read, by their magic bytes rather than their name.
+/// them oldest first.
 ///
 /// Versions follow the document's identity rather than its name, so a rename
 /// or move made through the store carries the history with it
@@ -48,7 +47,7 @@ final class BackupArchive {
         FileSystemEntityType.file) {
       throw const FileSystemException('This version is not a regular file.');
     }
-    final bytes = versionBytes(await file.readAsBytes());
+    final bytes = await file.readAsBytes();
     if (sha256.convert(bytes).toString() != kept.hash) {
       throw const FormatException('The backup checksum does not match.');
     }
@@ -191,10 +190,7 @@ final class BackupArchive {
       for (final version in index.versions.reversed) {
         final file = File(p.join(folder.path, version.file));
         if (!await file.exists()) continue;
-        return (
-          version: version,
-          bytes: versionBytes(await file.readAsBytes()),
-        );
+        return (version: version, bytes: await file.readAsBytes());
       }
     } on Object catch (error) {
       log.w('read the newest kept version of $id', error);
@@ -350,7 +346,7 @@ final class BackupArchive {
 
   Future<BackupVersion?> _describe(File file) async {
     try {
-      final bytes = versionBytes(await file.readAsBytes());
+      final bytes = await file.readAsBytes();
       final name = p.basename(file.path);
       return BackupVersion(
         file: name,
@@ -414,18 +410,7 @@ const _indexName = 'index.json';
 /// One kept version: the bytes of the document as they were.
 const _versionSuffix = '.pgn';
 
-/// What earlier builds named a kept version, which held the same bytes
-/// gzipped.
-const _compressedSuffix = '.pgn.gz';
-
-bool _isVersion(String path) =>
-    path.endsWith(_versionSuffix) || path.endsWith(_compressedSuffix);
-
-/// The document a kept version file holds, whichever build kept it.
-List<int> versionBytes(List<int> stored) =>
-    stored.length >= 2 && stored[0] == 0x1f && stored[1] == 0x8b
-    ? gzip.decode(stored)
-    : stored;
+bool _isVersion(String path) => path.endsWith(_versionSuffix);
 
 /// What an index nobody could read is renamed to. It keeps a commit stamp so
 /// two never collide; the index is rebuilt from the version files.

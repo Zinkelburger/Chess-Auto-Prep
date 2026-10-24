@@ -1,4 +1,4 @@
-// What a profile's references resolve to, read with v2's own readers
+// What a profile's references resolve to, read with the app's own readers
 // (parseChapter, trainedIdsOf, chapterSections): training keys and book
 // selectors that name nothing, and every game the profile holds anywhere, so
 // a contract can say whether an operation orphaned a reference or lost a
@@ -8,7 +8,6 @@ import 'dart:convert';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_sections.dart';
 import 'package:chess_auto_prep/chess/pgn/line_id_pins.dart';
-import 'package:chess_auto_prep/storage/backups.dart' show versionBytes;
 import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/csv_records.dart';
 import 'package:chess_auto_prep/storage/training_rows.dart';
@@ -104,12 +103,7 @@ final class _Chapters {
   final List<String> names;
   final _parsed = <String, Chapter>{};
 
-  List<int> _bytes(String name) {
-    final stored = snapshot.bytes(name)!;
-    return snapshot.classOf(name) == Authority.kept
-        ? versionBytes(stored)
-        : stored;
-  }
+  List<int> _bytes(String name) => snapshot.bytes(name)!;
 
   String fileHash(String name) => '${sha256.convert(_bytes(name))}';
 
@@ -177,9 +171,8 @@ Iterable<(String, String)> _keysIn(String file, String text) sync* {
     return;
   }
   if (readCsvRecords(body) case CsvParsed(:final records)) {
-    final header = headerWidth(records);
     for (final record in records) {
-      final cells = dataCells(record, rowWidth(file, record, header));
+      final cells = dataCells(record);
       if (cells != null && cells.length >= 2) yield (cells[0], cells[1]);
     }
   }

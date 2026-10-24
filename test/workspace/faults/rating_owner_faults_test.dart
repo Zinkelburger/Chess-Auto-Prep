@@ -18,6 +18,7 @@ import 'package:chess_auto_prep/features/trainer/progress.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:chess_auto_prep/storage/training_rows.dart';
 import 'package:chess_auto_prep/storage/training_store.dart';
+import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/faulty_disk/owner_faults.dart';
@@ -96,7 +97,7 @@ Future<String> _landed(Profile profile) async {
       '${read.mistakes.length} mistakes; ${rows.length} history rows';
 }
 
-final _drilled = OwnerSequence<_Trainer>(
+const _drilled = OwnerSequence<_Trainer>(
   name: 'answer and rate a line',
   seed: seedStandardProfile,
   open: _open,

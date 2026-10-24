@@ -1,5 +1,5 @@
-/// When a repertoire line comes back: SM-2, as the old app schedules it, over
-/// the rows of `repertoire_reviews.csv` that both apps read and write.
+/// When a repertoire line comes back: SM-2 over the rows of
+/// `repertoire_reviews.csv`, which existing training progress is kept in.
 ///
 /// A line's row carries an *ease* — how much its interval stretches on each
 /// Good, higher is easier, 2.5 to start, kept within 1.3–3.0 — and an interval

@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
@@ -12,7 +11,9 @@ import '../storage/pgn_document_store.dart' as store;
 import '../storage/pending_writes.dart';
 import '../ui/file_names.dart';
 import 'books.dart';
+import 'save_queue.dart';
 import 'session_results.dart';
+import 'undo_history.dart';
 
 part 'save_clock.dart';
 
@@ -215,8 +216,9 @@ final class DocumentSaver extends ChangeNotifier {
         _disposed ||
         revision != expected ||
         revision?.nativeIdentity != expected.nativeIdentity ||
-        (_externalOwner != null && !identical(_externalOwner, command)))
+        (_externalOwner != null && !identical(_externalOwner, command))) {
       return false;
+    }
     _externalOwner = command;
     _set(const Saving());
     return true;
@@ -715,118 +717,7 @@ final class DocumentSaver extends ChangeNotifier {
 /// is written until it is over.
 enum _Hold { none, settling, held }
 
-/// Words waiting for the disk and the games the edits that made them wrote.
-typedef Draft = ({String text, EditScope scope});
-
-/// The one draft waiting to be written, and what it is allowed to change.
-///
-/// Only one write goes out at a time, so edits made during one collapse into
-/// a single draft of the newest words. The scope has to collapse with them:
-/// the earlier edit is in those words too, and the store checks a save
-/// against the file, not against the draft that never reached it.
-final class SaveQueue {
-  Draft? _waiting;
-
-  bool get isEmpty => _waiting == null;
-
-  /// Words the user has just typed. They are the newest there are, so they
-  /// are what gets written, under a scope covering this edit and whatever
-  /// was already waiting.
-  void typed(String text, EditScope scope) {
-    final waiting = _waiting;
-    _waiting = (
-      text: text,
-      scope: waiting == null ? scope : scopeOfBoth(waiting.scope, scope),
-    );
-  }
-
-  /// A draft the store did not take, coming back. Words typed while it was
-  /// out are newer and win, and they take this draft's scope with them: the
-  /// file still holds the version both of them were typed over. The draft
-  /// coming back is the earlier edit, and the words waiting were worked out
-  /// on what it made, so it goes first.
-  void returned(Draft draft) {
-    final waiting = _waiting;
-    _waiting = waiting == null
-        ? draft
-        : (text: waiting.text, scope: scopeOfBoth(draft.scope, waiting.scope));
-  }
-
-  /// The draft to write now, and the queue is empty again; null when nothing
-  /// is waiting.
-  Draft? take() {
-    final waiting = _waiting;
-    _waiting = null;
-    return waiting;
-  }
-
-  /// Lets go of whatever is waiting: another document was opened, or nothing
-  /// more will be written to this one until the user decides what to do.
-  void clear() => _waiting = null;
-}
-
-/// A save that can be taken back: the store's receipt for it, and the scope
-/// it was written under — which games of the version the receipt says it
-/// replaced the save changed. Kept in memory with the receipt, for as long
-/// as the receipt is.
-typedef KeptSave = ({store.Receipt receipt, EditScope scope});
-
-/// The saves of one document that can still be taken back.
-///
-/// A receipt is the store's own record of a write: the version it replaced
-/// and the version it committed. Stepping back is writing that earlier
-/// version again, so this keeps no text of its own and decides only which
-/// receipt is next and what the rest of them mean afterwards.
-final class UndoHistory {
-  /// Undo is for the mistake you just made, not a version history; the
-  /// versions themselves are kept in Support by the store.
-  static const depth = 20;
-
-  final _entries = <KeptSave>[];
-
-  bool get isEmpty => _entries.isEmpty;
-
-  /// The save the next undo takes back, or null when there is none.
-  KeptSave? get newest => _entries.lastOrNull;
-
-  /// The history of the document that was open. A new document takes none of
-  /// it: the file those receipts name is not the one being written now.
-  void clear() => _entries.clear();
-
-  /// [receipt] is the store's answer to a save made under [scope].
-  void keep(store.Receipt receipt, EditScope scope) {
-    _entries.add((receipt: receipt, scope: scope));
-    if (_entries.length > depth) _entries.removeAt(0);
-  }
-
-  /// [undone] has been taken back by writing [written].
-  ///
-  /// The entry below it holds content that is on disk again, but as the file
-  /// the undo wrote, so it is pointed at that revision; what that save
-  /// changed is what it always was. An entry whose revision was not the one
-  /// the undone save replaced is left alone: something else wrote in
-  /// between, and undoing to it would throw that away.
-  void tookBack(store.Receipt undone, store.Receipt written) {
-    _entries.removeLast();
-    final previous = _entries.lastOrNull;
-    if (previous == null ||
-        previous.receipt.committed != undone.beforeRevision) {
-      return;
-    }
-    _entries[_entries.length - 1] = (
-      receipt: store.Receipt(
-        committed: written.committed,
-        before: previous.receipt.before,
-        beforeRevision: previous.receipt.beforeRevision,
-        compound: previous.receipt.compound,
-        secondaryRef: previous.receipt.secondaryRef,
-      ),
-      scope: previous.scope,
-    );
-  }
-}
-
-// What a document's file is doing, and what an undo did to it.
+// What a document's file is doing.
 //
 // The words the workspace reads off the saver: its widgets switch on these
 // and write the sentences, and nothing here knows how a file is written.
@@ -913,41 +804,3 @@ extension WordsIn on SaveState {
   /// next edit or the next flush, and [takesWords] covers the rest.
   bool get writable => takesWords && this is! SaveFailed;
 }
-
-sealed class UndoResult {
-  const UndoResult();
-}
-
-/// The file is back at [text]; the caller reads its document from it again.
-final class Restored extends UndoResult {
-  const Restored(this.text);
-
-  final String text;
-}
-
-/// Nothing was undone, and the history is as it was. [reason] is a sentence
-/// for the user when there is more to say than "not now".
-final class UndoRefused extends UndoResult {
-  const UndoRefused([this.reason]);
-
-  final String? reason;
-}
-
-/// An undo asked for a version this store never kept. The file was not
-/// touched, so the document is no less saved than it was.
-const undoNotKept = UndoRefused(
-  'Could not go back: that version is not among the ones kept for this file.',
-);
-
-/// Nothing goes back while the chapter on screen is behind its file: the
-/// versions kept for it are older than what the file now holds.
-const undoBehind = UndoRefused(
-  'The chapter changed after it was shown. Reload it first.',
-);
-
-/// Nothing goes back while a stopped save is waiting to be dealt with: the
-/// file holds a version the words on screen were never written over.
-const undoFrozen = UndoRefused(
-  'The last save was stopped, so there is nothing to take back yet. Save a '
-  'copy or reload first.',
-);
