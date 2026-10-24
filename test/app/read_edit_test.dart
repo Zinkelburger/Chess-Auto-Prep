@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/study_files.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_store.dart';
@@ -85,6 +86,11 @@ void main() {
     w.session.playMove('b8c6');
     await tester.pumpAndSettle();
     expect(onDisk(w, ref), contains('Nc6'));
+
+    // Esc does not turn the card to Read behind the user's back.
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(editing(tester), isTrue);
 
     await tester.tap(find.text('Read'));
     await tester.pumpAndSettle();

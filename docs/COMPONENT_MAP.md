@@ -74,13 +74,26 @@ Bughouse mode is offered when its engine assets are present.
   (Ctrl+Shift+E) opens the shared `workspace/board_editor.dart` on the board's
   position and returns an analysis board the same way up. While the Analysis
   tab is up, both fill that tab's scratch game instead.
+- The viewer and Study share `_ReadingView` (`app/document_views.dart`): one
+  card with `Read | Edit` (`workspace/edit_switch.dart`, at the start of
+  `NavRow`) bound to the shell's editing notifier, which keeps a side per mode
+  (`ModeView.startsEditing`: Study). Read sets `DocumentSession.holdsEdits`;
+  turning to Edit keeps the held edits first. `DocumentSession.apply(writes:
+  true)` is for Study's own commands, written even while edits are held. Both
+  views supply Solitaire, My books, the book deviation line, `Analyze game` /
+  `Analyze all`, Play through, `Comment this move` and `Add line to study…`,
+  and open tools under the moves (`opensBeside`).
 - Viewer owns collections, selection/filter/sort and held edits; analysis tabs
   preserve their source draft. Export uses the exclusive PGN exporter. It opens
   on the moves alone (`viewerTabs`), has its own Explorer starting on `This
   file` (`Explorer.independent(starting:)`), and supplies the Filter tab
   (`ViewerFilterPane`) and the followed player's colour choice
   (`PlayerSideChoice`) through `ModeView`.
-- Viewer Solitaire uses `engines/solitaire_evaluator.dart` for depth-14,
+- `GameReview` (`workspace/game_review.dart`) reviews the game on the board
+  (`start`) or every game of the file in turn (`startAll`, written game by
+  game through `annotateGameAt`); marks come from `moveReviewMark` in
+  `chess/pgn/game_review.dart`, Lichess's winning-chance drop.
+- Solitaire (viewer and Study) uses `engines/solitaire_evaluator.dart` for depth-14,
   five-line comparisons, with a 50-centipawn tolerance and better-move badges.
   `chess/pgn/solitaire_record.dart` builds a spoiler-free progress tree and
   full annotated review; `MoveTreeView.preview` reads these without document
@@ -88,7 +101,8 @@ Bughouse mode is offered when its engine assets are present.
   [the viewer spec](features/pgn-viewer.md#actions).
 - Study uses the same document session for chapters, tags, starts, cleanup,
   quiz markers, import/export and retained retry commands. `studyTabs` and
-  `Train study` expose the shared trainer without leaving Study. The chapter
+  `Train study` expose the shared trainer without leaving Study; Train opens
+  under the moves. The chapter
   list has search, drag ordering and move-to-position; the import preview joins
   PGN files, pasted PGN and Lichess URLs with new/current-study destinations.
   `TrainingSide` separates practice choices from board orientation, with chapter

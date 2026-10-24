@@ -779,6 +779,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
               extra: _windowKeys,
               leave: _leave,
               save: _inspecting ? null : _saveHeld,
+              escapeEndsEditing: _inspecting || !_view.editSwitch,
               child: Column(
                 children: [
                   PaneTabStrip(

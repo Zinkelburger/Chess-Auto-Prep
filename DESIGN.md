@@ -275,6 +275,7 @@ active pane's a brighter grey. Dividers between panes are 1px lines with a
 
 ### Reading card (signature)
 - **Style:** Reading Black card, 8px radius, 24px inset; movetext in 16px mono at 1.7, comments in 16px prose at a 640px measure. Mistakes are marked and clickable; no per-move evaluations in the movetext.
+- **Read | Edit:** in the PGN Viewer and Study the card's foot starts with a compact `Read | Edit` segmented button, then the four move arrows. It is the only control that opens and closes editing there; the edit strip (glyphs, note) opens directly above it, so the strip has no Done of its own. Read keeps the board quiet, as a book; Edit gives it the engine row and the move field.
 
 ## Do's and Don'ts
 

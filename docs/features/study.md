@@ -83,16 +83,32 @@ and the same append command.
 
 ## Annotate and train
 
-**Annotate** above the moves opens the shared comment editor; **Ctrl+E** toggles
-it. A move's menu includes **Comment this move** and can be opened by right-click,
-Shift+F10, or the context-menu key while its move token is focused. Move-quality
-glyphs and positional evaluations are separate groups, so choosing `±` keeps
-an existing `!`. Comments retain embedded clocks, engine values and shapes.
-At a move, visible **Quiz starts here** and **Quiz ends here** toggles control
-the same `[%tstart]` / `[%tend]` tokens as the move menu.
+A chapter is read and written on the PGN Viewer's card, with its rule (see
+[pgn-viewer](pgn-viewer.md#actions), **Read and edit**): `Read | Edit` at the
+card's foot, Study opening on **Edit**, where every change autosaves, and
+**Read** holding what is done on the board until saved. A change to the
+study itself — a chapter renamed, moved, tagged, given a start or a training
+side, chapters imported, the links a send writes — is written on Read too,
+with any moves held so far. A chapter opens on its moves alone; **Train**,
+**Game review**, **Solitaire**, **My books**, **Explorer** and **Analysis**
+open under them from the card's `+` or the Actions. **Read in PGN Viewer**
+shows the chapter among the study's games in the viewer; its **Open in
+Study** comes back.
 
-**Game review** is open in Study's tab strip beside **Moves** and **Train**
-(see [pgn-viewer](pgn-viewer.md) for the review itself).
+On Edit the strip under the moves has the glyphs and the comment field;
+**Ctrl+E** turns the switch. A move's menu includes **Comment this move**
+and **Add line to study…**, and can be opened by right-click, Shift+F10, or
+the context-menu key while its move token is focused. Move-quality glyphs and
+positional evaluations are separate groups, so choosing `±` keeps an existing
+`!`. Comments retain embedded clocks, engine values and shapes. At a move,
+visible **Quiz starts here** and **Quiz ends here** toggles control the same
+`[%tstart]` / `[%tend]` tokens as the move menu.
+
+**Game review** is the viewer's (see [pgn-viewer](pgn-viewer.md)), with
+`Annotate PGN` on, so the review's marks and lines go into the chapter.
+**Analyze all chapters** (Actions, or the review's `Analyze all N
+chapters`) reviews every chapter not yet reviewed, one after another, while
+the user clicks through them.
 
 **Train study** opens the shared trainer inside Study. Choose **This chapter**
 or **Whole study**. **Training sides…** assigns each chapter's practice side,
@@ -109,8 +125,8 @@ This is line practice, not Lichess interactive-lesson authoring.
 
 ## Save and recover
 
-Edits use the shared session and autosave owner. Save state appears in the edit
-strip; failures offer the existing retry, copy or reload paths. Save and status
+Edits use the shared session and autosave owner (held on Read). Save state
+appears in the edit strip; failures offer the existing retry, copy or reload paths. Save and status
 messages expose live-region semantics. Chapter selection is exposed semantically
 as well as visually.
 
@@ -150,6 +166,8 @@ study lines goes to the same files as the repertoire trainer
 - Study practice is line practice through the shared trainer, not Lichess
   interactive-lesson authoring. Lichess collaboration, member permissions,
   chat and publication/discovery are out of scope for this local editor.
+- Study and the PGN Viewer are one card with `Read | Edit`; Study opens on
+  Edit (owner, 2026-10-24: "unify them as much as possible").
 - A study goes to and comes back from the user's own Lichess account in one
   step each way, clear and trivially usable (owner, 2026-10-24: "downloading/
   uploading a study from this program to lichess"). A new study made there is
