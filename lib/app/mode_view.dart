@@ -176,8 +176,15 @@ Map<Mode, ModeView> modeViews({
   required PlayerModes players,
   required DatabaseLibrary databases,
   TournamentRun? tournaments,
+  Future<bool> Function(BuildContext)? lichessLogin,
 }) {
-  final study = StudyView(workspace, requests, documents, training.lines);
+  final study = StudyView(
+    workspace,
+    requests,
+    documents,
+    training.lines,
+    lichessLogin: lichessLogin,
+  );
   return {
     for (final mode in Mode.values)
       mode: switch (mode) {

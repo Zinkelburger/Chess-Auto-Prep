@@ -43,6 +43,8 @@ import 'package:chess_auto_prep/workspace/session_results.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:chess_auto_prep/net/lichess_study_writes.dart';
+
 import 'fixtures.dart';
 import 'scripted_bughouse.dart';
 import 'scripted_explorer.dart';
@@ -90,7 +92,15 @@ final class WindowFixture {
     this._players,
     this.exitWait = const Duration(milliseconds: 20),
     this._maia = const NoOpinion(),
+    this.lichessWriter,
   });
+
+  /// The Lichess studies are written to; none, so no Send to Lichess,
+  /// unless the test gives one.
+  final LichessStudyWriter? lichessWriter;
+
+  /// The pages the window asked the browser for.
+  final openedPages = <Uri>[];
 
   final TournamentStore? tournaments;
 
@@ -181,6 +191,11 @@ final class WindowFixture {
       lichessStudies: ScriptedLichess(
         const StudyNotFetched(StudyFetchProblem.unreachable),
       ),
+      lichessStudyWriter: lichessWriter,
+      openPage: (page) async {
+        openedPages.add(page);
+        return true;
+      },
       lichessExplorer: lichess,
       masterBook: ScriptedBook(),
       gameSites: const [],

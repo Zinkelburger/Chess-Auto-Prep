@@ -54,6 +54,49 @@ ChapterEdit editStudyTags(
   });
 }
 
+/// [chapter] with the tag [key] set to the value [values] gives each game it
+/// names, as one edit: where Lichess keeps the chapters a study was sent as.
+/// The tag is replaced where the game has it and added after its tags where
+/// it does not; a game that cannot be written whole is left as it was.
+ChapterEdit withStudyTag(Chapter chapter, String key, Map<int, String> values) {
+  var current = chapter;
+  final written = <int>{};
+  for (final MapEntry(key: index, :value) in values.entries) {
+    if (index < current.lines.length &&
+        tagValue(current.lines[index].tags, key) == value) {
+      continue;
+    }
+    final edit = _edit(current, index, (line, tree) {
+      final ending = line.tags.firstOrNull?.trailer ?? '\n';
+      final has = line.tags.any((tag) => tag is PgnTag && tag.key == key);
+      return (
+        tags: [
+          for (final tag in line.tags)
+            if (tag is PgnTag && tag.key == key)
+              PgnTag(key, value, trailer: tag.trailer)
+            else
+              tag,
+          if (!has) PgnTag(key, value, trailer: ending),
+        ],
+        tree: tree,
+        result: line.terminator,
+      );
+    });
+    if (edit case ChapterEdited(chapter: final next)) {
+      current = next;
+      written.add(index);
+    }
+  }
+  if (written.isEmpty) return const ChapterUnchanged();
+  return ChapterEdited(
+    current,
+    GamesArranged.of(
+      GamesWritten(rewritten: written),
+      before: current.lines.length,
+    ),
+  );
+}
+
 ChapterEdit resetStudyChapter(Chapter chapter, int index, Fen root) {
   try {
     Chess.fromSetup(Setup.parseFen(root.value));

@@ -447,10 +447,14 @@ final class StudyView extends _DocumentModeView {
     Workspace workspace,
     WorkspaceRequests requests,
     this._modes,
-    this._trainer,
-  ) : super(workspace, studyTabs(), requests);
+    this._trainer, {
+    this.lichessLogin,
+  }) : super(workspace, studyTabs(), requests);
 
   final Trainer _trainer;
+
+  /// The Lichess login a send to Lichess may need.
+  final Future<bool> Function(BuildContext)? lichessLogin;
 
   @override
   bool get offersBuilder => false;
@@ -480,6 +484,7 @@ final class StudyView extends _DocumentModeView {
     onTrain: train,
     session: workspace.session,
     onOpen: (study, chapter) => unawaited(requests.open(study, game: chapter)),
+    onLichessLogin: lichessLogin,
     trailing: toggle,
   );
 

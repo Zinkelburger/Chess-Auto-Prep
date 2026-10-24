@@ -83,7 +83,8 @@ problem in the footer, and the next change writes again.
 
 **Log in to Lichess** — `Log in` → PKCE OAuth in the system browser: a local
 callback server on port 8919 (another free port when that is busy), scopes
-`preference:read study:read`, `state` checked on the way back; the browser
+`preference:read study:read study:write` (writing is for Study's `Send to
+Lichess…`), `state` checked on the way back; the browser
 tab ends on a plain `Logged in.` / `Not logged in.` page. While waiting the
 hint reads `Waiting for the browser…` with `Cancel`, or `The browser did not
 open. Copy the link and open it.` with `Copy link` and `Cancel`. Signed in:

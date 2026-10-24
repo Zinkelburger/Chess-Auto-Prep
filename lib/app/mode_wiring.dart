@@ -64,6 +64,8 @@ DocumentModes wireDocumentModes(
       session: session,
       saver: saver,
       lichess: env.lichessStudies,
+      lichessWriter: env.lichessStudyWriter,
+      openPage: env.openPage,
       root: env.folders.studies,
     ),
     viewer: PgnViewer(

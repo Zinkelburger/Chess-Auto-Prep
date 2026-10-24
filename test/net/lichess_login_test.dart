@@ -122,7 +122,7 @@ void main() {
     expect(q['response_type'], 'code');
     expect(q['client_id'], lichessClientId);
     expect(q['code_challenge_method'], 'S256');
-    expect(q['scope'], 'preference:read study:read');
+    expect(q['scope'], 'preference:read study:read study:write');
     expect(q['state'], isNotEmpty);
     final redirect = Uri.parse(q['redirect_uri']!);
     expect(redirect.host, '127.0.0.1');

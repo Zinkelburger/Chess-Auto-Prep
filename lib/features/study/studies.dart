@@ -17,6 +17,8 @@ import 'study_import_source.dart';
 import 'studies_state.dart';
 import '../../diagnostics/log.dart';
 import '../../net/lichess_studies.dart';
+import '../../net/lichess_study_writes.dart';
+import 'study_sender.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/deleted_chapters.dart';
@@ -50,6 +52,8 @@ final class Studies extends ChangeNotifier {
     this.linkedPlayers,
     required this._saver,
     required this._lichess,
+    this._lichessWriter,
+    this._openPage = _noPage,
     required this._root,
   }) : _store = documents;
 
@@ -71,6 +75,14 @@ final class Studies extends ChangeNotifier {
     picker: picker,
     importer: importer,
   );
+
+  /// Sends the open study to Lichess; null where the app cannot.
+  late final StudySender? sender = switch (_lichessWriter) {
+    final writer? => StudySender(writer, _session, openPage: _openPage),
+    null => null,
+  };
+  final LichessStudyWriter? _lichessWriter;
+  final Future<bool> Function(Uri) _openPage;
 
   final PgnFilePicker? picker;
   final PgnFileImport? importer;
@@ -554,9 +566,12 @@ final class Studies extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    sender?.dispose();
     super.dispose();
   }
 }
+
+Future<bool> _noPage(Uri page) async => false;
 
 final class _StudyCreate {
   const _StudyCreate(this.ref, this.pending);

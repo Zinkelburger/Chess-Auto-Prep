@@ -126,6 +126,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     players: widget.players,
     databases: widget.databases,
     tournaments: widget.tournaments,
+    lichessLogin: widget.onExplorerLogin,
   );
 
   late final _layoutMemory = LayoutMemory(_ws.settings, {
