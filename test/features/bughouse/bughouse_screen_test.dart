@@ -1,12 +1,12 @@
 import 'package:chess_auto_prep/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/engines/hivemind_engine.dart';
+import 'package:chess_auto_prep/features/bughouse/board_moves.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_lab.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_screen.dart';
 import 'package:chess_auto_prep/features/bughouse/lab_engine.dart';
 import 'package:chess_auto_prep/features/bughouse/lab_lines.dart';
 import 'package:chess_auto_prep/features/bughouse/pocket.dart';
-import 'package:chess_auto_prep/features/bughouse/table_boards.dart';
 import 'package:chess_auto_prep/ui/app_keys.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/board_view.dart';
@@ -366,13 +366,41 @@ void main() {
         ..play(BoardNumber.one, 'e2e4')
         ..play(BoardNumber.two, 'd2d4');
       await pump(tester);
-      await rightClick(tester, find.text('d4'));
+      await rightClick(tester, find.text('1. d4'));
       await tester.tap(find.text('Copy line PGN'));
       await tester.pumpAndSettle();
-      await rightClick(tester, find.text('d4'));
+      await rightClick(tester, find.text('1. d4'));
       await tester.tap(find.text('Copy dual FEN'));
       await tester.pumpAndSettle();
       expect(copied, ['1A. e4 1B. d4', lab.position.dualFen]);
+    });
+
+    testWidgets('a different move is a variation under the move it '
+        'replaces, and can be made the main line', (tester) async {
+      build();
+      lab
+        ..play(BoardNumber.one, 'e2e4')
+        ..play(BoardNumber.one, 'e7e5')
+        ..step(-1)
+        ..play(BoardNumber.one, 'c7c5')
+        ..play(BoardNumber.one, 'g1f3');
+      await pump(tester);
+      final e4 = tester.getRect(find.text('1. e4'));
+      final e5 = tester.getRect(find.text('e5'));
+      final c5 = tester.getRect(find.text('1... c5'));
+      // Under the line it leaves, set in from it.
+      expect(c5.top, greaterThan(e5.bottom));
+      expect(c5.left, greaterThan(e4.left));
+      // A move in the variation puts the board there.
+      await tester.tap(find.text('1... c5'));
+      await tester.pumpAndSettle();
+      expect(lab.line.current(BoardNumber.one)!.san, 'c5');
+      await rightClick(tester, find.text('2. Nf3'));
+      await tester.tap(find.text('Make main line'));
+      await tester.pumpAndSettle();
+      expect(lab.line.isMain(lab.line.at(BoardNumber.one)!), isTrue);
+      // The old main move is the variation now, numbered as one.
+      expect(find.text('1... e5'), findsOneWidget);
     });
 
     testWidgets('PgUp and PgDn go to the ends, F flips', (tester) async {

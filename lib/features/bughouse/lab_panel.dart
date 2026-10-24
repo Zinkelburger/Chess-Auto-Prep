@@ -8,10 +8,10 @@ import '../../ui/app_keys.dart';
 import '../../ui/engine_switch.dart';
 import '../../ui/theme.dart';
 import '../../workspace/board_editor.dart';
+import 'board_moves.dart';
 import 'bughouse_lab.dart';
 import 'lab_engine.dart';
 import 'lab_lines.dart';
-import 'table_boards.dart';
 
 /// The column beside the boards: how many boards, who may sit, the engine
 /// switch with its score, then the moves: with one board its best moves and

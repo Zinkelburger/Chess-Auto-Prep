@@ -34,7 +34,9 @@ panel (440–480 px) on the right.
   lila's analysis board does: the first in lila's pale blue (15/64 of a
   square wide), the others in pale grey, 12/64 wide when level with it down
   to 2/64, and none once a move is 0.2 behind (half the difference in
-  Hivemind's Q). A drop is its piece faint on the square instead. A
+  Hivemind's Q). A drop is a ring on its square in the same colour, with
+  the piece inside at 0.8 of a square (60% opaque for the first, 40% for
+  the others), as lila draws crazyhouse drops. A
   right-drag draws an arrow and a right-click a circle, green, or red with
   Shift, blue with Alt, yellow with Ctrl; a left click or a new position
   takes them away.
@@ -69,14 +71,20 @@ panel (440–480 px) on the right.
 - **Moves** — the rest of the panel. With one board, board 1's moves and
   hand edits; with two, board 1's and board 2's lists side by side, each
   under its board's name, the list of the board last used outlined in the
-  accent. Each list has `First move`, `Back`, `Forward` and `Last move`
-  under it.
+  accent. Each list reads like the workspace's move list: the main line as
+  running mono text (`1. e4 e5 2. Nf3`), each variation an indented block
+  with a rule on its left right after the move it replaces, starting with
+  its number (`2... d6 3. d4`), and the move the board is at tinted in the
+  accent. A hand edit is a token of its own in muted ink (`+2n −P`, White's
+  pieces in upper case). Each list has `First move`, `Back`, `Forward` and
+  `Last move` under it.
 
 ## Actions
 
-**Play a move or drop** — on a board, or by clicking an engine row → it joins
-that board's line after what is shown, and a capture goes to the partner's
-hand. A pawn reaching the last rank waits for the piece it becomes, on either
+**Play a move or drop** — on a board, or by clicking an engine row → it
+follows the move the board is at: the continuation already there when it is
+the same move, otherwise a new one, a variation when the board already went
+on from there. A capture goes to the partner's hand. A pawn reaching the last rank waits for the piece it becomes, on either
 board, with the workspace board's chooser (queen, knight, rook, bishop down
 the file); clicking away plays nothing. Underpromotions keep their piece in
 copied and pasted moves and in engine moves; an engine move without a piece is
@@ -84,23 +92,25 @@ a queen. With one board the partner board is not shown, so a captured piece
 leaves board 1. Refusals: `That drop is not legal.`, `It is not black's turn
 on board 2.`, `That line no longer fits the position.`
 **Add or take a hand's piece** — + or − → one more or one fewer of that piece,
-0 to 16. The edit is noted after that board's current move, as on the
-website: the moves before it stay, and its list shows the net change after
-the move in muted ink (`e4 +2n −P`, White's pieces in upper case), or on a
-`Start` row before the first move. Stepping back past the move takes the
-edit off; stepping forward puts it back. Repeated presses at one place are
-one edit. Like a different move, an edit made after stepping back replaces
-that board's later moves.
+0 to 16. The edit is a step of that board's line after the move it is at,
+as on the website: the moves before it stay, and stepping onto it puts it on,
+back off it takes it off. Presses while the board is on an edit nothing
+follows yet are one edit, and one that comes back to nothing is gone. Made
+where the board already goes on, like a different move, it starts a
+variation.
 **Edit board** — opens the shared board editor on board 1 (one board) or the
 board last clicked (two boards), without the hands → `Use this position` sets
 that board's pieces, side to move and castling, keeps both hands and starts a
 new line. A board no game can go on from: `That board cannot be played from.`
 **Step a board** — its list, its buttons, or ← → and Home / PgUp, End / PgDn
 for the board last used (always board 1 with one board); the mouse wheel over
-a board steps that board, down forward and up back. F flips the boards. Only that board moves. A refused step:
+a board steps that board, down forward and up back. Forward and End follow
+the main continuation from where the board is, as in the workspace; a
+variation is entered by clicking it. F flips the boards. Only that board
+moves. The boards replay in the order their moves were made. A refused step:
 `Can't step there: <san> on board 2 would have no piece to drop.`
 **Point at a line** — draws its move on its board alone, in the best
-move's blue (an arrow, or a faint piece for a drop), until the pointer
+move's blue (an arrow, or a ringed piece for a drop), until the pointer
 leaves. Resting on one of its moves for
 80 ms floats a 200 px board under it: the board that move is on, after it,
 with the move highlighted and both hands. A new table takes the floated board
@@ -113,11 +123,13 @@ nothing. Space plays the first row's move on the board last used, as on
 lila. The right button
 on a row offers `Copy line PGN`: the moves on the boards now followed by the
 line, as far as it plays, in the same form as a move's.
-**Move menu** — the right button on a move in a board's list: `Copy line PGN`
-(the line up to that move in the order played), `Copy FEN` (that board's
-crazyhouse FEN just after it), with two boards `Copy dual FEN`, and `Delete
-from here` (that move and the board's later moves and hand edits; the other
-board keeps its moves). A delete that would take a capture the other board
+**Move menu** — the right button on a move or hand edit in a board's list, as
+in the workspace: `Promote variation` (the variation it is in one place up),
+`Make main line` (its line the board's main line), both off when it already
+is; `Delete from here` (it and everything after it on that board, variations
+too; the other board keeps its moves); `Copy line PGN` (the line up to it as
+the boards stood when it was played, in the order played), `Copy FEN` (that
+board's crazyhouse FEN just after it) and, with two boards, `Copy dual FEN`. A delete that would take a capture the other board
 dropped is refused: `Can't delete: P@d5 on board 2 would have no piece to
 drop.` With one board the line PGN is crazyhouse, from the line's start:
 `[Variant "Crazyhouse"]`, `[SetUp "1"]` and `[FEN …]` with the hands when the
@@ -146,7 +158,7 @@ one process, the rows changing as each pass ends.
 **Actions menu** — `Toggle engine`, `New game` (start position, clock kept),
 `Flip board(s)`, `Copy dual FEN`, `Paste FEN or dual FEN` (one board's FEN
 sets board 1 and starts board 2 afresh), `Copy moves`, `Paste moves`. Moves
-are BPGN movetext in played order (`1A. e4 1B. d4 1a. e5`), after
+are each board's line without its variations, as BPGN movetext in played order (`1A. e4 1B. d4 1a. e5`), after
 `[SetUpDualFEN "…"]` for a set-up start; a hand edit is a comment where it
 was made, `{ Hands edited on board 1: +2n }`, and pastes back. A paste takes that or a FICS game,
 and is refused whole (`Not pasted: <token> does not play.`, `No bughouse
@@ -197,3 +209,5 @@ paste commands are refused here with
 - The engine behaves like Stockfish elsewhere: switched on, its score, lines
   and node count update as it searches, with no visible passes (2026-10-17).
 - No eval bar and no filler empty states (DESIGN.md).
+- Variations as in the workspace's move list, each board its own tree;
+  engine drops drawn as on lila's crazyhouse board (2026-10-24).

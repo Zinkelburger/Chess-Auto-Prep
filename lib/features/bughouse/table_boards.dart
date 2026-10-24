@@ -1,18 +1,10 @@
-import 'dart:async';
-
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../chess/bughouse/table.dart';
-import '../../chess/bughouse/table_line.dart';
 import '../../chess/pgn/board_shapes.dart';
-import '../../ui/action_context_menu.dart';
-import '../../ui/app_action.dart';
-import '../../ui/app_keys.dart';
-import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
 import '../../workspace/board_view.dart';
 import 'bughouse_lab.dart';
@@ -26,8 +18,8 @@ import 'pocket.dart';
 ///
 /// While the engine is on, each board shows its best moves as lila's
 /// analysis board does: the engine's choice a pale blue arrow, the moves
-/// close behind it thinner grey ones, a drop as its piece faint on the
-/// square. A right-drag draws an arrow and a right-click a circle, in
+/// close behind it thinner grey ones, a drop as a ring on its square with
+/// the piece inside. A right-drag draws an arrow and a right-click a circle, in
 /// lila's colours; a left click or a new position takes them away. The
 /// wheel over a board steps that board.
 ///
@@ -256,8 +248,7 @@ class _BoardColumn extends StatelessWidget {
   void _wheel(PointerSignalEvent event) {
     if (event is! PointerScrollEvent || event.scrollDelta.dy == 0) return;
     GestureBinding.instance.pointerSignalResolver.register(event, (_) {
-      final to = lab.line.upto(board) + (event.scrollDelta.dy > 0 ? 1 : -1);
-      if (to >= 0 && to <= lab.line.of(board).length) lab.go(board, to);
+      lab.stepOn(board, event.scrollDelta.dy > 0 ? 1 : -1);
     });
   }
 
@@ -275,32 +266,37 @@ class _BoardColumn extends StatelessWidget {
         _ => null,
       };
 
-  /// Drops pointed at or among the engine's best, their piece faint on the
-  /// square, the choice in the arrow's blue; and while a reserve piece is
+  /// Drops pointed at or among the engine's best as lila draws them: a ring
+  /// on the square in the arrow's colour, pale blue for the choice and grey
+  /// for the rest, with the piece inside it; and while a reserve piece is
   /// picked up, the squares it may go to.
   Set<Shape> _shapes(String? pointed, List<EngineRow> rows) {
     final position = lab.position.board(board);
-    Shape? drop(String uci, {required bool best}) => switch (Move.parse(uci)) {
-      DropMove(:final to, :final role) => PieceShape(
-        color: best ? labHintColor : null,
-        orig: to,
-        piece: Piece(color: position.turn, role: role),
-        pieceAssets: PieceSet.cburnettAssets,
-        opacity: best ? 0.5 : 0.3,
-      ),
-      _ => null,
-    };
+    List<Shape> drop(String uci, {required bool best}) =>
+        switch (Move.parse(uci)) {
+          DropMove(:final to, :final role) => [
+            Circle(color: best ? engineBestArrow : engineOtherArrow, orig: to),
+            PieceShape(
+              orig: to,
+              piece: Piece(color: position.turn, role: role),
+              pieceAssets: PieceSet.cburnettAssets,
+              opacity: best ? 0.6 : 0.4,
+              scale: 0.8,
+            ),
+          ],
+          _ => const [],
+        };
     return {
-      if (pointed != null) drop(pointed, best: true),
+      if (pointed != null) ...drop(pointed, best: true),
       for (final (i, row) in rows.indexed)
         if (row.move case final uci?
             when i == 0 || row.shift < engineArrowCutoff)
-          drop(uci, best: i == 0),
+          ...drop(uci, best: i == 0),
       if (picked case final role?)
         for (final square in position.legalDrops.squares)
           if (position.isLegal(DropMove(to: square, role: role)))
             Circle(color: labHintColor, orig: square, scale: 0.5),
-    }.nonNulls.toSet();
+    };
   }
 }
 
@@ -596,314 +592,5 @@ class _BoardState extends State<_Board> {
       _drawing = null;
       _drawn = withShapeDrawn(_drawn, drawn);
     });
-  }
-}
-
-/// A board's own moves, numbered as that board counts them, the current
-/// one marked and the ones stepped past faint, with the four step buttons.
-/// The list takes the height its parent leaves.
-class BoardMoves extends StatelessWidget {
-  const BoardMoves({super.key, required this.lab, required this.board});
-
-  final BughouseLab lab;
-  final BoardNumber board;
-
-  @override
-  Widget build(BuildContext context) {
-    final line = lab.line;
-    final upto = line.upto(board);
-    final total = line.of(board).length;
-    final scheme = Theme.of(context).colorScheme;
-    final focused = lab.focus == board && !lab.single;
-    final list = Container(
-      decoration: BoxDecoration(
-        border: Border.symmetric(
-          horizontal: BorderSide(
-            color: focused ? scheme.primary : scheme.outline,
-          ),
-        ),
-      ),
-      child: _MoveRows(lab: lab, board: board),
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(child: list),
-        const SizedBox(height: Space.xs),
-        Row(
-          children: [
-            _step(
-              Icons.first_page,
-              AppKey.firstMove.tip('First move'),
-              upto > 0,
-              0,
-            ),
-            _step(
-              Icons.chevron_left,
-              AppKey.stepBack.tip('Back'),
-              upto > 0,
-              upto - 1,
-            ),
-            _step(
-              Icons.chevron_right,
-              AppKey.stepForward.tip('Forward'),
-              upto < total,
-              upto + 1,
-            ),
-            _step(
-              Icons.last_page,
-              AppKey.lastMove.tip('Last move'),
-              upto < total,
-              total,
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _step(IconData icon, String tip, bool enabled, int to) => IconButton(
-    icon: Icon(icon, size: IconSize.action),
-    tooltip: lab.single ? tip : '$tip, ${board.label.toLowerCase()}',
-    visualDensity: VisualDensity.compact,
-    onPressed: enabled ? () => lab.go(board, to) : null,
-  );
-}
-
-/// The move list, kept scrolled so the current move is in view.
-class _MoveRows extends StatefulWidget {
-  const _MoveRows({required this.lab, required this.board});
-
-  final BughouseLab lab;
-  final BoardNumber board;
-
-  @override
-  State<_MoveRows> createState() => _MoveRowsState();
-}
-
-class _MoveRowsState extends State<_MoveRows> {
-  final _scroll = ScrollController();
-
-  BughouseLab get lab => widget.lab;
-  BoardNumber get board => widget.board;
-
-  @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  /// After the frame, the least scroll that shows the row of the current
-  /// move.
-  void _reveal(int row) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scroll.hasClients) return;
-      final position = _scroll.position;
-      final top = row * labMoveRowHeight;
-      final bottom = top + labMoveRowHeight - position.viewportDimension;
-      final offset = position.pixels.clamp(bottom, top);
-      if (offset != position.pixels) {
-        _scroll.jumpTo(offset.clamp(0, position.maxScrollExtent));
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final line = lab.line;
-    final moves = line.of(board);
-    final scheme = Theme.of(context).colorScheme;
-    final start = handChangeText(line.handChanges(board, 0));
-    if (moves.isEmpty && start.isEmpty) return const SizedBox.expand();
-    final lead = start.isEmpty ? 0 : 1;
-    final rows = _pairs(moves);
-    final upto = line.upto(board);
-    final at = rows.indexWhere(
-      (row) => [row.white, row.black].any((h) => h?.index == upto - 1),
-    );
-    _reveal(at < 0 ? 0 : at + lead);
-    return ListView.builder(
-      controller: _scroll,
-      itemExtent: labMoveRowHeight,
-      itemCount: rows.length + lead,
-      itemBuilder: (context, i) {
-        if (i < lead) {
-          return Row(
-            children: [
-              const SizedBox(width: labMoveNumberWidth),
-              Expanded(
-                child: _MoveToken(
-                  text: 'Start',
-                  edit: start,
-                  tip: 'Hands edited at the start',
-                  current: upto == 0,
-                  future: false,
-                  onTap: () => lab.go(board, 0),
-                ),
-              ),
-            ],
-          );
-        }
-        final row = rows[i - lead];
-        return Row(
-          children: [
-            SizedBox(
-              width: labMoveNumberWidth,
-              child: Text(
-                '${row.number}.',
-                style: monoText.copyWith(color: scheme.onSurfaceVariant),
-              ),
-            ),
-            for (final half in [row.white, row.black])
-              Expanded(
-                child: half == null
-                    ? const SizedBox.shrink()
-                    : _MoveToken(
-                        text: displaySan(context, half.move.san),
-                        edit: handChangeText(
-                          line.handChanges(board, half.index + 1),
-                        ),
-                        tip:
-                            'Player '
-                            '${Seat.of(board, half.move.side).letter}',
-                        current: half.index == upto - 1,
-                        future: half.index >= upto,
-                        onTap: () => lab.go(board, half.index + 1),
-                        menu: () => moveMenu(lab, half.move),
-                      ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-
-  /// The moves two to a row, White's then Black's, a row starting with
-  /// Black's move when the board began with Black to move.
-  static List<_MovePair> _pairs(List<LineMove> moves) {
-    final rows = <_MovePair>[];
-    for (final (i, move) in moves.indexed) {
-      final half = (move: move, index: i);
-      if (move.side == Side.white || rows.isEmpty || rows.last.black != null) {
-        rows.add((
-          number: move.number,
-          white: move.side == Side.white ? half : null,
-          black: move.side == Side.black ? half : null,
-        ));
-      } else {
-        final last = rows.removeLast();
-        rows.add((number: last.number, white: last.white, black: half));
-      }
-    }
-    return rows;
-  }
-}
-
-typedef _Half = ({LineMove move, int index});
-
-/// What a move in a board's list offers on the right button, as the
-/// workspace's move list does: the line up to it as PGN (crazyhouse with
-/// one board, BPGN with two), the board's FEN after it, with two boards the
-/// dual FEN, and taking it out with the board's later moves.
-List<AppAction> moveMenu(BughouseLab lab, LineMove move) {
-  final after = lab.positionAfter(move);
-  return [
-    AppAction(
-      'Copy line PGN',
-      () => _copy(lab.linePgnThrough(move)),
-      icon: Icons.content_copy,
-    ),
-    AppAction(
-      'Copy FEN',
-      after == null ? null : () => _copy(after.board(move.board).fen),
-      icon: Icons.content_copy,
-    ),
-    if (!lab.single)
-      AppAction(
-        'Copy dual FEN',
-        after == null ? null : () => _copy(after.dualFen),
-        icon: Icons.content_copy,
-      ),
-    AppAction(
-      'Delete from here',
-      () => lab.deleteFrom(move),
-      icon: Icons.delete_outline,
-    ),
-  ];
-}
-
-void _copy(String text) =>
-    unawaited(Clipboard.setData(ClipboardData(text: text)));
-typedef _MovePair = ({int number, _Half? white, _Half? black});
-
-/// A move, or the start, with the hand edit made after it in muted ink.
-class _MoveToken extends StatelessWidget {
-  const _MoveToken({
-    required this.text,
-    required this.edit,
-    required this.tip,
-    required this.current,
-    required this.future,
-    required this.onTap,
-    this.menu,
-  });
-
-  final String text;
-
-  /// The hands' change noted after the move, `+N −p`, or empty.
-  final String edit;
-  final String tip;
-  final bool current;
-  final bool future;
-  final VoidCallback onTap;
-
-  /// What the right button offers for this move; null for the start.
-  final List<AppAction> Function()? menu;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final menu = this.menu;
-    return Tooltip(
-      message: edit.isEmpty ? tip : '$tip\nHands edited after: $edit',
-      waitDuration: previewDelay,
-      child: InkWell(
-        onTap: onTap,
-        onSecondaryTapUp: menu == null
-            ? null
-            : (details) => unawaited(
-                showActionContextMenu(context, details.globalPosition, menu()),
-              ),
-        child: Container(
-          padding: moveTokenPadding,
-          color: current ? scheme.surfaceContainerHighest : null,
-          child: Text.rich(
-            TextSpan(
-              text: text,
-              children: [
-                if (edit.isNotEmpty)
-                  TextSpan(
-                    text: ' $edit',
-                    style: TextStyle(
-                      color: scheme.onSurfaceVariant,
-                      fontWeight: FontWeight.normal,
-                    ),
-                  ),
-              ],
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: monoText.copyWith(
-              color: current
-                  ? scheme.primary
-                  : future
-                  ? scheme.onSurfaceVariant
-                  : scheme.onSurface,
-              fontWeight: current ? FontWeight.w600 : null,
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }

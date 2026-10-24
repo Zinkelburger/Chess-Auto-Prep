@@ -695,11 +695,6 @@ const labSeatPadding = 8.0;
 const labTurnDot = 11.0;
 const labStepHeight = 26.0;
 
-/// A board's move list in the panel, side by side with the other board's
-/// when both are shown.
-const labMoveRowHeight = 22.0;
-const labMoveNumberWidth = 34.0;
-
 /// An engine line, and its score gutter.
 const labTableRowHeight = 28.0;
 const labScoreWidth = 60.0;
