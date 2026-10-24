@@ -14,9 +14,18 @@ import '../ui/move_notation.dart';
 /// advantage light above the middle, Black's dark below, each marked move a
 /// coloured dot. The moves themselves stay in the Moves tab, where the
 /// review writes its marks and better lines when the switch is on.
+///
+/// A file of several games has a status line under the bar: the way to
+/// review all of them, and while that runs, which one is being reviewed.
+/// [chapters] names a study's games as Study does.
 class GameReviewPane extends StatelessWidget {
-  const GameReviewPane({super.key, required this.review});
+  const GameReviewPane({
+    super.key,
+    required this.review,
+    this.chapters = false,
+  });
   final GameReview review;
+  final bool chapters;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -89,6 +98,7 @@ class GameReviewPane extends StatelessWidget {
               ),
             ],
           ),
+          ?_allLine(context),
           if (review.problem case final problem?)
             Padding(
               padding: const EdgeInsets.only(top: Space.s),
@@ -134,6 +144,44 @@ class GameReviewPane extends StatelessWidget {
       );
     },
   );
+
+  /// The status line of a file of several games, or null for one game.
+  Widget? _allLine(BuildContext context) {
+    final games = review.session.gameCount ?? 0;
+    final batch = review.batch;
+    if (batch == null && games < 2) return null;
+    final word = chapters ? 'chapter' : 'game';
+    final style = Theme.of(context).textTheme.bodySmall;
+    return SizedBox(
+      height: searchStatusHeight,
+      child: Row(
+        children: [
+          if (batch != null)
+            Expanded(
+              child: Text(
+                '${chapters ? 'Chapter' : 'Game'} ${batch.game + 1} of '
+                '${batch.games}',
+                style: style,
+                overflow: TextOverflow.ellipsis,
+              ),
+            )
+          else ...[
+            if (review.canReviewAll)
+              Tooltip(
+                message:
+                    'Review every $word not reviewed yet and write each '
+                    'review into it',
+                child: TextButton(
+                  onPressed: () => unawaited(review.startAll()),
+                  child: Text('Analyze all $games ${word}s'),
+                ),
+              ),
+            const Spacer(),
+          ],
+        ],
+      ),
+    );
+  }
 
   static List<MoveNode> _mainline(GameTree? tree) {
     final moves = <MoveNode>[];

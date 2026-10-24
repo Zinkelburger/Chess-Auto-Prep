@@ -104,8 +104,20 @@ abstract base class ModeView {
   bool get offersBuilder => true;
 
   /// Whether the Actions menu offers the game on a new analysis tab. The
-  /// viewer does not: moves played there already stay off the file.
+  /// viewer and Study do not: moves played while reading already stay off
+  /// the file.
   bool get offersNewAnalysis => true;
+
+  /// Whether the card has `Read | Edit` at its foot: the modes that read a
+  /// game and write in it.
+  bool get editSwitch => false;
+
+  /// Whether the mode opens on Edit the first time it comes on screen;
+  /// after that it keeps the side the user left it on.
+  bool get startsEditing => false;
+
+  /// Whether editing offers the quiz markers a study's training reads.
+  bool get studyTools => false;
 
   /// What a right-click on a move offers.
   MoveMenu? get moveMenu => null;
@@ -175,6 +187,7 @@ Map<Mode, ModeView> modeViews({
   required LabModes labs,
   required PlayerModes players,
   required DatabaseLibrary databases,
+  required ValueNotifier<bool> editing,
   TournamentRun? tournaments,
   Future<bool> Function(BuildContext)? lichessLogin,
 }) {
@@ -182,6 +195,7 @@ Map<Mode, ModeView> modeViews({
     workspace,
     requests,
     documents,
+    editing,
     training.lines,
     lichessLogin: lichessLogin,
   );
@@ -191,7 +205,7 @@ Map<Mode, ModeView> modeViews({
         Mode.repertoires => RepertoiresView(workspace, requests, documents),
         Mode.trainer => TrainerView(workspace, requests, documents),
         Mode.books => BooksView(workspace, requests, documents),
-        Mode.pgnViewer => ViewerView(workspace, requests, documents),
+        Mode.pgnViewer => ViewerView(workspace, requests, documents, editing),
         Mode.study => study,
         Mode.tactics => TacticsView(workspace, requests, training),
         Mode.myGames => MyGamesView(workspace, requests, training),

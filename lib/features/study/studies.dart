@@ -215,6 +215,7 @@ final class Studies extends ChangeNotifier {
     final first = chapter.lines.length;
     final refused = _session.apply(
       (open) => pgn.addChapters(open, study: studyNameOf(open), drafts: drafts),
+      writes: true,
     );
     return refused == null
         ? StudyDone(opened: study, chapter: first)

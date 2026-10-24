@@ -7,9 +7,13 @@ import 'document_session.dart';
 /// The four buttons under the moves that walk the line: start, back,
 /// forward, end. Each says its key, because each has one.
 class NavRow extends StatelessWidget {
-  const NavRow({super.key, required this.session, this.book});
+  const NavRow({super.key, required this.session, this.book, this.leading});
 
   final DocumentSession session;
+
+  /// Before the buttons, at the row's start: `Read | Edit`, where the mode
+  /// has one.
+  final Widget? leading;
 
   /// Whether the opening book shows under the moves; its button leads the
   /// row, as Lichess's does, where the layout offers it.
@@ -23,7 +27,7 @@ class NavRow extends StatelessWidget {
         listenable: session,
         builder: (context, _) {
           final open = session.chapter != null;
-          return Row(
+          final buttons = Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               if (book case final book?)
@@ -66,6 +70,17 @@ class NavRow extends StatelessWidget {
                 open,
                 session.cursor.toEnd,
               ),
+            ],
+          );
+          final leading = this.leading;
+          if (leading == null) return buttons;
+          return Row(
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(left: Space.m),
+                child: leading,
+              ),
+              Expanded(child: buttons),
             ],
           );
         },

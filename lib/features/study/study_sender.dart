@@ -191,7 +191,10 @@ final class StudySender extends ChangeNotifier {
   /// sent from while it is still the one open.
   void _record(ChapterRef source, Map<int, String> urls) {
     if (urls.isEmpty || _session.source != source) return;
-    _session.apply((now) => withStudyTag(now, chapterUrlTag, urls));
+    _session.apply(
+      (now) => withStudyTag(now, chapterUrlTag, urls),
+      writes: true,
+    );
   }
 
   static String _counted(int added, int updated) => [

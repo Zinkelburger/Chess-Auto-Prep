@@ -81,8 +81,7 @@ void main() {
     final e4 = NodePath.of([0]);
     w.session.cursor.goTo(e4);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Annotate'));
-    await tester.pumpAndSettle();
+    // Study opens on Edit: the note field is already there.
     final field = find.descendant(
       of: find.byType(CommentField),
       matching: find.byType(TextField),

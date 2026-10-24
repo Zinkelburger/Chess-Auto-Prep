@@ -16,6 +16,12 @@ import 'engine_jobs.dart';
 /// A bounded whole-game review. Navigation to another game or an edit cancels
 /// it; completed results land as one undoable edit against the exact snapshot.
 ///
+/// [startAll] reviews every game of the open file in turn instead, while the
+/// user reads on: each game's review is written into it as it finishes, one
+/// undoable edit each, unless the game's main line changed meanwhile. A game
+/// already reviewed is passed over, so a review stopped part way goes on
+/// where it left off. Only another file stops it.
+///
 /// Whether the review writes into the game is the user's choice, [annotate]:
 /// turning it off takes the review's evaluations, marks and lines back out,
 /// turning it on puts the last review back in. The graph shows either way.
@@ -46,6 +52,11 @@ final class GameReview extends ChangeNotifier {
   int depth = 14;
   final List<ReviewValue> _values = [];
 
+  /// While every game of the file is reviewed: the game being reviewed,
+  /// from 0, and how many the file has.
+  ({int game, int games})? batch;
+  String? _batchPath;
+
   /// Whether a finished review is written into the game.
   bool _annotate = true;
 
@@ -59,12 +70,7 @@ final class GameReview extends ChangeNotifier {
     final last = _last;
     final tree = session.tree;
     if (last == null || last.game != _game || tree == null) return null;
-    final fens = _mainlineFens(tree);
-    if (fens.length != last.fens.length) return null;
-    for (var ply = 0; ply < fens.length; ply++) {
-      if (fens[ply].position != last.fens[ply].position) return null;
-    }
-    return last.values;
+    return _sameLine(_mainlineFens(tree), last.fens) ? last.values : null;
   }
 
   List<MoveNode> get _mainline {
@@ -81,7 +87,11 @@ final class GameReview extends ChangeNotifier {
   int get positions => session.tree == null ? 0 : _mainline.length + 1;
 
   List<ReviewValue?> get values {
-    if (running && identical(session.chapter, _chapter)) {
+    final batch = this.batch;
+    if (running &&
+        (batch == null
+            ? identical(session.chapter, _chapter)
+            : batch.game == session.game)) {
       return List.unmodifiable(_values);
     }
     final tree = session.tree;
@@ -122,7 +132,16 @@ final class GameReview extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Whether every game of the open file can be reviewed now: a file of
+  /// more than one game that this app may write, all of it on view.
+  bool get canReviewAll =>
+      !running &&
+      session.readOnly == null &&
+      session.shownTo == null &&
+      (session.gameCount ?? 0) > 1;
+
   void _follow() {
+    if (batch != null && session.source?.path != _batchPath) stop();
     if (!_applying &&
         _chapter != null &&
         !identical(_chapter, session.chapter)) {
@@ -199,20 +218,108 @@ final class GameReview extends ChangeNotifier {
         problem = 'Game review could not finish: $error';
       }
     } finally {
-      _search = null;
-      final engine = _engine;
-      _engine = null;
-      try {
-        await engine?.quit();
-      } on Object catch (error) {
-        log.w('close game review engine', error);
-        if (!_disposed) problem = 'The review engine could not close cleanly.';
-      }
-      running = false;
-      // The engine is free again, so another job may start.
-      _jobs.release(this);
-      if (!_disposed) notifyListeners();
+      await _finish();
     }
+  }
+
+  /// The engine closed and the machine given back, whichever review ran.
+  Future<void> _finish() async {
+    _search = null;
+    final engine = _engine;
+    _engine = null;
+    try {
+      await engine?.quit();
+    } on Object catch (error) {
+      log.w('close game review engine', error);
+      if (!_disposed) problem = 'The review engine could not close cleanly.';
+    }
+    batch = null;
+    _batchPath = null;
+    running = false;
+    // The engine is free again, so another job may start.
+    _jobs.release(this);
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Reviews every game of the open file, from the first, as the class
+  /// comment says.
+  Future<void> startAll() async {
+    if (_disposed || !canReviewAll) return;
+    session.snapshot();
+    final path = session.source?.path;
+    final games = session.chapter?.lines.length ?? 0;
+    if (path == null || games == 0) return;
+    if (!_jobs.take(this, 'Reviewing every game', kind: EngineJobKind.review)) {
+      problem = _jobs.blockingMessage;
+      notifyListeners();
+      return;
+    }
+    final ticket = ++_ticket;
+    final requestedDepth = depth;
+    _batchPath = path;
+    _chapter = null;
+    running = true;
+    problem = null;
+    batch = (game: 0, games: games);
+    notifyListeners();
+    bool current() =>
+        !_disposed && ticket == _ticket && session.source?.path == path;
+    GameTree? treeOf(int game) {
+      final lines = session.chapter?.lines;
+      final line = lines == null || game >= lines.length ? null : lines[game];
+      return line != null && line.isWhole ? line.tree : null;
+    }
+
+    try {
+      final started = await launch();
+      if (started case StartFailed(:final reason)) throw EngineFailure(reason);
+      final engine = _engine = (started as Started).engine;
+      for (var game = 0; game < games; game++) {
+        if (!current()) return;
+        final tree = treeOf(game);
+        if (tree == null || hasReview(tree)) continue;
+        final positions = _mainlineFens(tree);
+        batch = (game: game, games: games);
+        completed = 0;
+        total = positions.length;
+        _values.clear();
+        notifyListeners();
+        for (final fen in positions) {
+          if (!current()) return;
+          _values.add(await _evaluate(engine, fen, requestedDepth));
+          completed++;
+          notifyListeners();
+        }
+        if (!current()) return;
+        // An edit to the game meanwhile leaves it as the user made it: the
+        // review is of moves it may no longer have.
+        final now = treeOf(game);
+        if (now == null || !_sameLine(_mainlineFens(now), positions)) continue;
+        final values = List<ReviewValue>.unmodifiable(_values);
+        _applying = true;
+        try {
+          problem = session.apply((now) => annotateGameAt(now, game, values));
+        } finally {
+          _applying = false;
+        }
+        if (problem != null) return;
+      }
+    } on Object catch (error) {
+      if (current()) {
+        log.w('review every game', error);
+        problem = 'Game review could not finish: $error';
+      }
+    } finally {
+      await _finish();
+    }
+  }
+
+  static bool _sameLine(List<Fen> a, List<Fen> b) {
+    if (a.length != b.length) return false;
+    for (var ply = 0; ply < a.length; ply++) {
+      if (a[ply].position != b[ply].position) return false;
+    }
+    return true;
   }
 
   /// The start, then the position after each move of [tree]'s main line.

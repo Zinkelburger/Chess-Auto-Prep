@@ -155,8 +155,29 @@ void main() {
     const elsewhere = ReviewValue(1017, '+10.17', ['d2d4']);
     expect(
       moveReviewMark(tree.rootFen, e4, elsewhere, after),
-      ReviewMark.blunder,
+      ReviewMark.inaccuracy,
     );
+  });
+
+  test('marks go by the winning chances lost, as Lichess marks them', () {
+    final tree = fixture.session.tree!;
+    final e4 = tree.children.first;
+    ReviewMark? mark(int before, int after) => moveReviewMark(
+      tree.rootFen,
+      e4,
+      ReviewValue(before, '', const ['d2d4']),
+      ReviewValue(after, '', const []),
+    );
+    // Two pawns from equality lose the game; from +7 the game stays won.
+    expect(mark(30, -170), ReviewMark.blunder);
+    expect(mark(700, 500), ReviewMark.inaccuracy);
+    expect(mark(900, 700), isNull);
+    expect(mark(30, -90), ReviewMark.mistake);
+    expect(mark(30, -40), ReviewMark.inaccuracy);
+    expect(mark(30, 0), isNull);
+    // A mate counts as a thousand: missing one in a won game is nothing.
+    expect(mark(9990, 1000), isNull);
+    expect(mark(200, -9990), ReviewMark.blunder);
   });
 
   test('marks read back from the file are the ones the review wrote', () {

@@ -1,3 +1,5 @@
+import 'dart:math' show exp;
+
 import 'package:dartchess/dartchess.dart' show Move;
 
 import '../fen.dart';
@@ -30,29 +32,39 @@ enum ReviewMark {
       values.where((mark) => mark.nag == nag).firstOrNull;
 }
 
-/// Conservative centipawn-loss labels; never overwrite a user's glyph.
-ReviewMark? reviewMark(int loss) => loss >= 200
+/// White's winning chances at [cp], from −1 (lost) to 1 (won), as Lichess
+/// reckons them: the centipawns are capped at ±1000, so a mate counts as
+/// a thousand.
+double winningChances(int cp) =>
+    2 / (1 + exp(-0.00368208 * cp.clamp(-1000, 1000))) - 1;
+
+/// The mark for a move that cost its side [drop] of its winning chances,
+/// on Lichess's scale: a tenth an inaccuracy, a fifth a mistake, three
+/// tenths a blunder. The same two pawns are a blunder from equality and an
+/// inaccuracy from +7 to +5, where the game stays won.
+ReviewMark? reviewMark(double drop) => drop >= 0.3
     ? ReviewMark.blunder
-    : loss >= 100
+    : drop >= 0.2
     ? ReviewMark.mistake
-    : loss >= 50
+    : drop >= 0.1
     ? ReviewMark.inaccuracy
     : null;
 
-int? reviewGlyph(int loss) => reviewMark(loss)?.nag;
-
-/// The mark a review gives [move], played from [from]: by what its side
-/// lost between [before] and [after], and none when it is the move the
-/// engine itself chose there, whatever two searches of different positions
-/// made of it. The graph, the counts and the annotations all ask this.
+/// The mark a review gives [move], played from [from]: by the winning
+/// chances its side lost between [before] and [after], and none when it is
+/// the move the engine itself chose there, whatever two searches of
+/// different positions made of it. The graph, the counts and the
+/// annotations all ask this.
 ReviewMark? moveReviewMark(
   Fen from,
   MoveNode move,
   ReviewValue before,
   ReviewValue after,
 ) {
-  final loss = (before.cp - after.cp) * (move.fen.whiteToMove ? -1 : 1);
-  final mark = reviewMark(loss);
+  final drop =
+      (winningChances(before.cp) - winningChances(after.cp)) *
+      (move.fen.whiteToMove ? -1 : 1);
+  final mark = reviewMark(drop);
   if (mark == null) return null;
   return _san(from, before.pv.firstOrNull) == move.san ? null : mark;
 }
@@ -168,10 +180,25 @@ ChapterEdit removeReview(Chapter chapter) => _rewriteGame(
 ChapterEdit annotateGame(Chapter chapter, List<ReviewValue> values) =>
     _rewriteGame(chapter, (tree) => _annotated(withoutReview(tree), values));
 
-ChapterEdit _rewriteGame(Chapter chapter, GameTree? Function(GameTree) edit) {
-  final index = chapter.game ?? 0;
+/// [annotateGame] for the game at [game] of the file, whichever is shown.
+ChapterEdit annotateGameAt(
+  Chapter chapter,
+  int game,
+  List<ReviewValue> values,
+) => _rewriteGame(
+  chapter,
+  (tree) => _annotated(withoutReview(tree), values),
+  game: game,
+);
+
+ChapterEdit _rewriteGame(
+  Chapter chapter,
+  GameTree? Function(GameTree) edit, {
+  int? game,
+}) {
+  final index = game ?? chapter.game ?? 0;
   if (index >= chapter.lines.length ||
-      (chapter.game == null && chapter.lines.length != 1)) {
+      (game == null && chapter.game == null && chapter.lines.length != 1)) {
     return const ChapterEditRefused('Open one game to review it.');
   }
   final line = chapter.lines[index];

@@ -100,8 +100,11 @@ class Shell extends StatefulWidget {
 }
 
 class _ShellState extends State<Shell> with ListeningState<Shell> {
-  /// Whether the edit strip is open. The strip's own Done closes it.
+  /// Whether the edit strip is open: `Read | Edit` in the viewer and
+  /// Study, Ctrl+E and the strip's own Done elsewhere. Each mode keeps its
+  /// own, in [_editingIn] while another is on screen.
   final _editing = ValueNotifier(false);
+  final _editingIn = <Mode, bool>{};
 
   /// The words and the focus of the move field under the board, which `/`
   /// and a lesson reach as well as the field.
@@ -125,6 +128,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     labs: widget.labs,
     players: widget.players,
     databases: widget.databases,
+    editing: _editing,
     tournaments: widget.tournaments,
     lichessLogin: widget.onExplorerLogin,
   );
@@ -170,9 +174,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         previous.tabs.show(WorkspaceTab.moves);
       }
       previous.left();
+      _editingIn[left] = _editing.value;
     }
     _ws.inspection?.hide();
     _shown = mode;
+    _editing.value = _editingIn[mode] ?? _views[mode]!.startsEditing;
     _selectLayout();
     if (mode == Mode.trainer && _train.lines.lesson == null) {
       _train.lines.selection.enter(_ws.session.source);
@@ -312,13 +318,26 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     if (_shown == Mode.trainer) {
       _train.lines.selection.enter(_ws.session.source);
     }
+    // The mode the window opens on is entered as one switched to is: its
+    // side of `Read | Edit` decides what a move on the board does.
+    if (_view.editSwitch) {
+      _editing.value = _view.startsEditing;
+      _view.entered();
+    }
+    _editing.addListener(_editingChanged);
     _requests.addListener(_modeMayHaveChanged);
     _ws.inspection?.addListener(_analysisChanged);
     _ws.jobs?.addListener(_jobChanged);
   }
 
+  /// Reading quiets the board and editing gives it its tools back.
+  void _editingChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    _editing.removeListener(_editingChanged);
     _requests.removeListener(_modeMayHaveChanged);
     _ws.jobs?.removeListener(_jobChanged);
     _ws.inspection?.removeListener(_analysisChanged);
@@ -845,10 +864,12 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       moves: _moves,
       hooks: WorkspaceHooks(
         builder: _view is RepertoiresView,
-        onAnnotate: !_inspecting && _view is StudyView
+        onAnnotate: !_inspecting && _view.editSwitch
             ? () => _editing.value = true
             : null,
-        noteEditing: _view is RepertoiresView || _view is ViewerView,
+        editSwitch: !_inspecting && _view.editSwitch,
+        studyTools: !_inspecting && _view.studyTools,
+        noteEditing: _view is RepertoiresView,
         header: _view.header,
         underHeading: _inspecting ? null : _view.underHeading,
         quietBoard: _view.quietBoard,

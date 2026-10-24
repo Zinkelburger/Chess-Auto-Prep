@@ -349,7 +349,10 @@ class Trainer extends ChangeNotifier {
     if (!identical(expected, studyDocument)) {
       return 'The study changed. Choose the sides again.';
     }
-    return _session.apply((chapter) => setStudyTrainingSides(chapter, sides));
+    return _session.apply(
+      (chapter) => setStudyTrainingSides(chapter, sides),
+      writes: true,
+    );
   }
 
   Lesson? get lesson => _lesson;
