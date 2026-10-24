@@ -128,6 +128,39 @@ void main() {
     expect(added.sentence, contains('Invalid PGN'));
   });
 
+  test(
+    'a study the account may not add to is said so, whatever the status',
+    () async {
+      final w = writer(
+        (_) => http.Response(
+          '{"chapters":[],"error":"No permission to add chapter"}',
+          200,
+        ),
+      );
+      final added = await w.api.addChapter(
+        'theirs01',
+        pgn: '1. e4 *',
+        name: 'Mine',
+        orientation: Side.white,
+      );
+      expect(
+        (added as LichessNotWritten).problem,
+        LichessWriteProblem.notFound,
+      );
+      final silent = writer((_) => http.Response('{"chapters":[]}', 200));
+      final nothing = await silent.api.addChapter(
+        'theirs01',
+        pgn: '1. e4 *',
+        name: 'Mine',
+        orientation: Side.white,
+      );
+      expect(
+        (nothing as LichessNotWritten).problem,
+        LichessWriteProblem.notFound,
+      );
+    },
+  );
+
   test('no answer at all is the connection', () async {
     final stub = MockClient((_) async => throw const SocketLike());
     final api = LichessStudyWriterApi(stub, token: () async => 'lip_token');

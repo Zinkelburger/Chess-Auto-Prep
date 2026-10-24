@@ -200,13 +200,21 @@ final class LichessStudyWriterApi implements LichessStudyWriter {
     ).convert(response.bodyBytes);
     final json = _json(body);
     if (status >= 200 && status < 300) {
-      // Lichess answers a chapter it could not read with 200 and an error.
+      // Lichess answers a chapter it could not read, or a study the user
+      // may not add to, with 200 and an error.
       final error = json?['error'];
       if (error is String && error.isNotEmpty) {
         log.w(what, 'Lichess said: $error');
-        return LichessNotWritten(LichessWriteProblem.rejected, detail: error);
+        return error.contains('permission')
+            ? const LichessNotWritten(LichessWriteProblem.notFound)
+            : LichessNotWritten(LichessWriteProblem.rejected, detail: error);
       }
-      return LichessWritten(json == null ? null : id?.call(json));
+      final made = json == null ? null : id?.call(json);
+      if (id != null && made == null) {
+        log.w(what, 'Lichess made nothing');
+        return const LichessNotWritten(LichessWriteProblem.notFound);
+      }
+      return LichessWritten(made);
     }
     log.w(what, 'HTTP $status');
     return LichessNotWritten(switch (status) {
