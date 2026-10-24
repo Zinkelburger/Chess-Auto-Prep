@@ -163,10 +163,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.descendant(
-        of: pane(1),
-        matching: find.text('Analyze all 2 chapters'),
-      ),
+      find.descendant(of: pane(1), matching: find.text('Analyze all 2 games')),
       findsOneWidget,
     );
     expect(tester.takeException(), isNull);

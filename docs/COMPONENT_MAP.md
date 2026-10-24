@@ -90,9 +90,9 @@ Bughouse mode is offered when its engine assets are present.
   (`ViewerFilterPane`) and the followed player's colour choice
   (`PlayerSideChoice`) through `ModeView`.
 - `GameReview` (`workspace/game_review.dart`) reviews the game on the board
-  (`start`) or every game of the file in turn (`startAll`, written game by
-  game through `annotateGameAt`); marks come from `moveReviewMark` in
-  `chess/pgn/game_review.dart`, Lichess's winning-chance drop.
+  (`start`) or every game of the file without a review in turn (`startAll`);
+  marks come from `moveReviewMark` in `chess/pgn/game_review.dart`, Lichess's
+  winning-chance drop and mate rules.
 - Solitaire (viewer and Study) uses `engines/solitaire_evaluator.dart` for depth-14,
   five-line comparisons, with a 50-centipawn tolerance and better-move badges.
   `chess/pgn/solitaire_record.dart` builds a spoiler-free progress tree and

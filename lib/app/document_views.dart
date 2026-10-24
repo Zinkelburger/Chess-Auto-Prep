@@ -365,7 +365,7 @@ abstract base class _ReadingView extends _DocumentModeView {
         group: 'Game',
       ),
       AppAction(
-        studyTools ? 'Analyze all chapters' : 'Analyze all games',
+        'Analyze all games',
         workspace.review?.canReviewAll == true ? _analyzeAll : null,
         icon: Icons.query_stats,
         group: 'Game',

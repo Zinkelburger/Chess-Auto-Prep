@@ -62,7 +62,8 @@ move list, engine and explorer are described in [workspace](workspace.md).
 - **Actions menu** (Ctrl+K) — Document: `Edit` / `Done editing`, `Undo`,
   `Save changes` and `Discard changes` while edits are held; Board: `Flip
   board`, `Engine on`/`off`, `Play through` / `Stop playing`; Game: `Analyze
-  game` / `Stop analysis`, `Analyze all games`, `Solitaire chess` / `Stop
+  game` / `Stop analysis`, `Analyze all games` (the review's `Analyze all N
+  games`), `Solitaire chess` / `Stop
   solitaire`, `Add game to study…`; File: `Open in Study` (a study's file),
   `Close file`, `Filter games`, `Export visible games as PGN…`, `Save
   selection to study…`; Copy: `Copy game PGN`, `Copy FEN`.
@@ -142,32 +143,30 @@ past or unreadable is moved to the recovery quarantine.
 **Game review** — `Analyze game` (Actions or the tab's button; `Stop` while
 running) → a depth-14 Stockfish pass over the main line: an evaluation graph
 (White above, Black below; ?!/?/?? dots; hover reads, click or drag goes to a
-move), per-side mark counts and `ACPL`. A move is marked by the winning
-chances it cost its side, as Lichess marks it: `2 / (1 + e^(−0.00368208·cp))
-− 1` with the centipawns capped at ±1000 (a mate counts as 1000), and a drop
-of 0.1 / 0.2 / 0.3 is an inaccuracy / mistake / blunder, so two pawns lost
-from equality is a blunder and +7 to +5 an inaccuracy. With `Annotate PGN` on
-(the default) it also writes `[%eval]` values, those glyphs (never over the
-user's own glyph), a `Mistake. Nf3 was best.` note and up to eight plies of
-the better line as a variation. Every addition is marked
-(`[%cap_review_eval]`, `[%cap_review_nag N]`, `[%cap_review_line N]`) so
-turning `Annotate PGN` off removes exactly that; an existing `[%eval]` is kept;
-a review line the user played on or wrote in becomes theirs. The review is one
-undoable edit, held on Read and written at once on Edit. Stop, an edit or
-another game cancels it and drops late results. Read-only files get the graph only
-(`This file is read-only`). The graph also reads evaluations already in the
-PGN. One rule marks a move for the graph, the counts and the annotations, and
-a move the engine itself chose is never marked; a review read back from the
-file shows the marks it wrote.
-
-**Analyze all games** — Actions, or the review's status line in a file of
-several games (`Analyze all 12 games`; Study says chapters) → each game not
-yet reviewed is reviewed in turn, from the first, while the user reads on:
-the line says `Game 3 of 12`, and each game's review is written into it as it
-finishes (annotations on, one undoable edit each, held on Read). A game whose
-main line changed while it was reviewed is left as it is; a game already
-reviewed is passed over, so a stopped run goes on where it left off. `Stop`
-or another file ends it. Not offered for a read-only file.
+move), per-side mark counts and `ACPL` (each evaluation held within ±1000
+first, as Lichess counts it). Moves are judged as Lichess judges them: by the
+winning chances the side gave away (`2 / (1 + e^(-0.00368208·cp)) − 1`), 0.1
+an inaccuracy, 0.2 a mistake, 0.3 a blunder; a forced mate appearing against
+the mover is `Checkmate is now unavoidable` and one slipping away `Lost forced
+checkmate sequence`, an inaccuracy, mistake or blunder by what was left
+(beyond ±999, ±700, else). A move the engine itself chose is never marked.
+With `Annotate PGN` on (the default) it also writes `[%eval]` values, the
+glyph (never over the user's own), a `Mistake. Nf3 was best.` note in
+Lichess's words and up to eight plies of the better line as a variation.
+Every addition is marked (`[%cap_review_eval]`, `[%cap_review_nag N]`,
+`[%cap_review_line N]`) so turning `Annotate PGN` off removes exactly that; an
+existing `[%eval]` is kept; a review line the user played on or wrote in
+becomes theirs. The review is one undoable edit, held on Read and written at
+once on Edit. Stop, an edit or another game cancels it and drops late results.
+`Analyze all N games` (a file of several games, `Annotate PGN` on, games
+without a review) reviews each such game in turn, `Game 2 of 5 · 19 / 34
+positions`, writing each into its own game as it ends (one undoable edit per
+game); moving between the games goes on while it runs, Stop or another file
+ends it, and a game whose main line changed meanwhile is left as it is.
+Read-only files get the graph only (`This file is read-only`). The graph also
+reads evaluations already in the PGN. One rule marks a move for the graph,
+the counts and the annotations; a review read back from the file shows the
+marks it wrote.
 
 **Solitaire** — `Solitaire chess` → the Solitaire tab: `Guess for` White /
 Black (default: the side at the bottom), `Start at` `Beginning` / `Current

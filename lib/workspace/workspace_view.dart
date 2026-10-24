@@ -216,10 +216,7 @@ class _Tabbed extends StatelessWidget {
     WorkspaceTab.review =>
       workspace.review == null
           ? const SizedBox.shrink()
-          : GameReviewPane(
-              review: workspace.review!,
-              chapters: hooks.studyTools,
-            ),
+          : GameReviewPane(review: workspace.review!),
     WorkspaceTab.train => _supplied(context, tab),
     WorkspaceTab.replies => RepliesPane(
       session: workspace.session,

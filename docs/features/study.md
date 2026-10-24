@@ -106,9 +106,9 @@ visible **Quiz starts here** and **Quiz ends here** toggles control the same
 
 **Game review** is the viewer's (see [pgn-viewer](pgn-viewer.md)), with
 `Annotate PGN` on, so the review's marks and lines go into the chapter.
-**Analyze all chapters** (Actions, or the review's `Analyze all N
-chapters`) reviews every chapter not yet reviewed, one after another, while
-the user clicks through them.
+**Analyze all games** (Actions, or the review's `Analyze all N games`)
+reviews every chapter without a review, one after another, while the user
+clicks through them.
 
 **Train study** opens the shared trainer inside Study. Choose **This chapter**
 or **Whole study**. **Training sides…** assigns each chapter's practice side,

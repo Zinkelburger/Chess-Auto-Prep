@@ -14,18 +14,9 @@ import '../ui/move_notation.dart';
 /// advantage light above the middle, Black's dark below, each marked move a
 /// coloured dot. The moves themselves stay in the Moves tab, where the
 /// review writes its marks and better lines when the switch is on.
-///
-/// A file of several games has a status line under the bar: the way to
-/// review all of them, and while that runs, which one is being reviewed.
-/// [chapters] names a study's games as Study does.
 class GameReviewPane extends StatelessWidget {
-  const GameReviewPane({
-    super.key,
-    required this.review,
-    this.chapters = false,
-  });
+  const GameReviewPane({super.key, required this.review});
   final GameReview review;
-  final bool chapters;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -73,9 +64,14 @@ class GameReviewPane extends StatelessWidget {
               const SizedBox(width: Space.m),
               Expanded(
                 child: Text(
-                  review.running
-                      ? '${review.completed} / ${review.total} positions'
-                      : 'Depth ${review.depth}',
+                  switch ((review.running, review.batch)) {
+                    (true, (:final game, :final of)?) =>
+                      'Game $game of $of · '
+                          '${review.completed} / ${review.total} positions',
+                    (true, null) =>
+                      '${review.completed} / ${review.total} positions',
+                    _ => 'Depth ${review.depth}',
+                  },
                   style: theme.textTheme.bodySmall,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -98,7 +94,21 @@ class GameReviewPane extends StatelessWidget {
               ),
             ],
           ),
-          ?_allLine(context),
+          if (review.canReviewAll)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Tooltip(
+                message:
+                    'Review every game of this file that has no review yet, '
+                    'one after another',
+                child: TextButton(
+                  onPressed: () => unawaited(review.startAll()),
+                  child: Text(
+                    'Analyze all ${review.unreviewedGames.length} games',
+                  ),
+                ),
+              ),
+            ),
           if (review.problem case final problem?)
             Padding(
               padding: const EdgeInsets.only(top: Space.s),
@@ -144,44 +154,6 @@ class GameReviewPane extends StatelessWidget {
       );
     },
   );
-
-  /// The status line of a file of several games, or null for one game.
-  Widget? _allLine(BuildContext context) {
-    final games = review.session.gameCount ?? 0;
-    final batch = review.batch;
-    if (batch == null && games < 2) return null;
-    final word = chapters ? 'chapter' : 'game';
-    final style = Theme.of(context).textTheme.bodySmall;
-    return SizedBox(
-      height: searchStatusHeight,
-      child: Row(
-        children: [
-          if (batch != null)
-            Expanded(
-              child: Text(
-                '${chapters ? 'Chapter' : 'Game'} ${batch.game + 1} of '
-                '${batch.games}',
-                style: style,
-                overflow: TextOverflow.ellipsis,
-              ),
-            )
-          else ...[
-            if (review.canReviewAll)
-              Tooltip(
-                message:
-                    'Review every $word not reviewed yet and write each '
-                    'review into it',
-                child: TextButton(
-                  onPressed: () => unawaited(review.startAll()),
-                  child: Text('Analyze all $games ${word}s'),
-                ),
-              ),
-            const Spacer(),
-          ],
-        ],
-      ),
-    );
-  }
 
   static List<MoveNode> _mainline(GameTree? tree) {
     final moves = <MoveNode>[];
@@ -234,11 +206,17 @@ class GameReviewPane extends StatelessWidget {
 /// Whether the move into [ply] was White's.
 bool _whiteMoved(int ply, bool rootWhite) => ply.isOdd == rootWhite;
 
+/// What the move into [ply] cost its side in centipawns, as Lichess counts
+/// it for the average: each evaluation held within ±1000 first, so a mate
+/// counts as a won position, and a move that gained counts as nothing.
 int _loss(List<ReviewValue?> values, int ply, bool rootWhite) {
   final before = ply > 0 ? values[ply - 1] : null;
   final after = values[ply];
   if (before == null || after == null) return 0;
-  return (before.cp - after.cp) * (_whiteMoved(ply, rootWhite) ? 1 : -1);
+  final lost =
+      (before.cp.clamp(-1000, 1000) - after.cp.clamp(-1000, 1000)) *
+      (_whiteMoved(ply, rootWhite) ? 1 : -1);
+  return lost < 0 ? 0 : lost;
 }
 
 Color markColor(ReviewMark mark) => switch (mark) {
@@ -529,7 +507,7 @@ class _SideSummary extends StatelessWidget {
     for (var ply = 1; ply < values.length; ply++) {
       if (_whiteMoved(ply, rootWhite) != white) continue;
       if (values[ply] == null || values[ply - 1] == null) continue;
-      total += _loss(values, ply, rootWhite).clamp(0, 1000);
+      total += _loss(values, ply, rootWhite);
       count++;
     }
     return count == 0 ? null : (total / count).round();

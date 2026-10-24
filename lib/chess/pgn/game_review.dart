@@ -1,4 +1,4 @@
-import 'dart:math' show exp;
+import 'dart:math' as math;
 
 import 'package:dartchess/dartchess.dart' show Move;
 
@@ -32,42 +32,85 @@ enum ReviewMark {
       values.where((mark) => mark.nag == nag).firstOrNull;
 }
 
-/// White's winning chances at [cp], from −1 (lost) to 1 (won), as Lichess
-/// reckons them: the centipawns are capped at ±1000, so a mate counts as
-/// a thousand.
-double winningChances(int cp) =>
-    2 / (1 + exp(-0.00368208 * cp.clamp(-1000, 1000))) - 1;
+/// A move's mark and the words Lichess puts before "X was best.".
+typedef ReviewJudgement = ({ReviewMark mark, String words});
 
-/// The mark for a move that cost its side [drop] of its winning chances,
-/// on Lichess's scale: a tenth an inaccuracy, a fifth a mistake, three
-/// tenths a blunder. The same two pawns are a blunder from equality and an
-/// inaccuracy from +7 to +5, where the game stays won.
-ReviewMark? reviewMark(double drop) => drop >= 0.3
-    ? ReviewMark.blunder
-    : drop >= 0.2
-    ? ReviewMark.mistake
-    : drop >= 0.1
-    ? ReviewMark.inaccuracy
-    : null;
+/// [cp], White's centipawns, as Lichess's winning chances for White: -1 lost,
+/// 0 even, 1 won.
+double winningChances(int cp) => 2 / (1 + math.exp(-0.00368208 * cp)) - 1;
 
-/// The mark a review gives [move], played from [from]: by the winning
-/// chances its side lost between [before] and [after], and none when it is
+/// How Lichess judges a move by the evaluations before and after it
+/// (`lila` `Advice`): by the winning chances its side gave away, 0.1 an
+/// inaccuracy, 0.2 a mistake, 0.3 a blunder; and when a forced mate appears
+/// against it or slips away, by how much was left. [whiteMoved] says whose
+/// move it was. Never overwrites a user's glyph; the caller checks.
+ReviewJudgement? judgeMove(
+  ReviewValue before,
+  ReviewValue after, {
+  required bool whiteMoved,
+}) {
+  final side = whiteMoved ? 1 : -1;
+  final wasMate = before.eval.startsWith('#');
+  final isMate = after.eval.startsWith('#');
+  if (!wasMate && !isMate) {
+    final lost = (winningChances(before.cp) - winningChances(after.cp)) * side;
+    final mark = lost >= 0.3
+        ? ReviewMark.blunder
+        : lost >= 0.2
+        ? ReviewMark.mistake
+        : lost >= 0.1
+        ? ReviewMark.inaccuracy
+        : null;
+    return mark == null ? null : (mark: mark, words: mark.label);
+  }
+  // The same evaluations from the mover's side: a mate for them is positive.
+  final was = before.cp * side, now = after.cp * side;
+  if (!wasMate && isMate && now < 0) {
+    return (
+      mark: was < -999
+          ? ReviewMark.inaccuracy
+          : was < -700
+          ? ReviewMark.mistake
+          : ReviewMark.blunder,
+      words: 'Checkmate is now unavoidable',
+    );
+  }
+  if (wasMate && was > 0 && (!isMate || now < 0)) {
+    final left = isMate ? 0 : now;
+    return (
+      mark: left > 999
+          ? ReviewMark.inaccuracy
+          : left > 700
+          ? ReviewMark.mistake
+          : ReviewMark.blunder,
+      words: 'Lost forced checkmate sequence',
+    );
+  }
+  return null;
+}
+
+/// The judgement a review gives [move], played from [from]; none when it is
 /// the move the engine itself chose there, whatever two searches of
 /// different positions made of it. The graph, the counts and the
 /// annotations all ask this.
-ReviewMark? moveReviewMark(
+ReviewJudgement? moveJudgement(
   Fen from,
   MoveNode move,
   ReviewValue before,
   ReviewValue after,
 ) {
-  final drop =
-      (winningChances(before.cp) - winningChances(after.cp)) *
-      (move.fen.whiteToMove ? -1 : 1);
-  final mark = reviewMark(drop);
-  if (mark == null) return null;
-  return _san(from, before.pv.firstOrNull) == move.san ? null : mark;
+  final judged = judgeMove(before, after, whiteMoved: !move.fen.whiteToMove);
+  if (judged == null) return null;
+  return _san(from, before.pv.firstOrNull) == move.san ? null : judged;
 }
+
+/// [moveJudgement]'s mark.
+ReviewMark? moveReviewMark(
+  Fen from,
+  MoveNode move,
+  ReviewValue before,
+  ReviewValue after,
+) => moveJudgement(from, move, before, after)?.mark;
 
 /// The mark a review wrote on [move], if it wrote one.
 ReviewMark? writtenReviewMark(MoveNode move) => ReviewMark.ofNag(
@@ -82,7 +125,10 @@ const _evalMarker = '[%cap_review_eval]';
 final _lineMarker = RegExp(r'\[%cap_review_line (\d+)\]');
 final _nagMarker = RegExp(r'\s*\[%cap_review_nag (\d+)\]');
 final _eval = RegExp(r'\s*\[%eval\s+[^\]]*\]');
-final _prose = RegExp(r'^(?:Inaccuracy|Mistake|Blunder)\. \S+ was best\.\s*');
+final _prose = RegExp(
+  r'^(?:Inaccuracy|Mistake|Blunder|Checkmate is now unavoidable|'
+  r'Lost forced checkmate sequence)\. \S+ was best\.\s*',
+);
 
 bool _marked(String? comment) =>
     comment != null &&
@@ -177,15 +223,13 @@ ChapterEdit removeReview(Chapter chapter) => _rewriteGame(
   (tree) => hasReview(tree) ? withoutReview(tree) : null,
 );
 
-ChapterEdit annotateGame(Chapter chapter, List<ReviewValue> values) =>
-    _rewriteGame(chapter, (tree) => _annotated(withoutReview(tree), values));
-
-/// [annotateGame] for the game at [game] of the file, whichever is shown.
-ChapterEdit annotateGameAt(
+/// [values] written into the game on the board, or into game [game] of
+/// the file when given: a review of every chapter writes each as it ends.
+ChapterEdit annotateGame(
   Chapter chapter,
-  int game,
-  List<ReviewValue> values,
-) => _rewriteGame(
+  List<ReviewValue> values, {
+  int? game,
+}) => _rewriteGame(
   chapter,
   (tree) => _annotated(withoutReview(tree), values),
   game: game,
@@ -254,8 +298,9 @@ GameTree _reviewMove(
 ) {
   final node = tree.nodeAt(at)!;
   final from = tree.fenAt(at.parent);
-  final mark = moveReviewMark(from, node, before, after);
-  if (mark == null) return tree;
+  final judged = moveJudgement(from, node, before, after);
+  if (judged == null) return tree;
+  final mark = judged.mark;
   final best = _san(from, before.pv.firstOrNull);
   if (!node.nags.any((n) => n >= 1 && n <= 6)) {
     tree = withNodeChanged(
@@ -264,7 +309,7 @@ GameTree _reviewMove(
       (move) => withNodeComment(
         withNags(move, [...move.nags, mark.nag]),
         _joined([
-          best == null ? null : '${mark.label}. $best was best.',
+          best == null ? null : '${judged.words}. $best was best.',
           move.comment,
           '[%cap_review_nag ${mark.nag}]',
         ]),
