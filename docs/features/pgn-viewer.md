@@ -140,7 +140,9 @@ a review line the user played on or wrote in becomes theirs. The review is one
 held, undoable edit — never written until Save. Stop, an edit or another game
 cancels it and drops late results. Read-only files get the graph only
 (`This file is read-only`). The graph also reads evaluations already in the
-PGN.
+PGN. One rule marks a move for the graph, the counts and the annotations, and
+a move the engine itself chose is never marked; a review read back from the
+file shows the marks it wrote.
 
 **Solitaire** — `Solitaire chess` → the Solitaire tab: `Guess for` White /
 Black (default: the side at the bottom), `Start at` `Beginning` / `Current

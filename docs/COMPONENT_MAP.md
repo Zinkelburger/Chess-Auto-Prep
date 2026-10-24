@@ -93,7 +93,11 @@ Bughouse mode is offered when its engine assets are present.
   PGN files, pasted PGN and Lichess URLs with new/current-study destinations.
   `TrainingSide` separates practice choices from board orientation, with chapter
   or whole-study scope. Deleted-study restoration retains uncertain moves for
-  exact retry. See [Study](features/study.md).
+  exact retry. `StudySender` (`features/study/study_sender.dart`) sends the
+  open study to Lichess through `net/lichess_study_writes.dart`, formatting
+  each chapter with `chess/pgn/study_lichess.dart` and recording the returned
+  chapter links (`ChapterURL`) through the session. See
+  [Study](features/study.md).
 - Tactics mines downloaded games into `tactics_sets/Default.pgn`, trains puzzles
   on the shared board and can inspect the source game. Text search and filters
   define both the visible puzzle list and Play's counted queue.

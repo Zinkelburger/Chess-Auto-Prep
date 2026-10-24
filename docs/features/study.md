@@ -5,11 +5,13 @@ writes lines, annotates them, and drills them as line practice. It uses the
 shared board, move tree, engine, document session and autosave system.
 
 Code: `lib/features/study/` (`Studies` owner in `studies.dart`, renames,
-restores and deletes in `study_file_changes.dart`, `StudyPanel`),
+restores and deletes in `study_file_changes.dart`, `StudyPanel`, the send to
+Lichess in `study_sender.dart` and `study_send_dialog.dart`),
 study training controls in `lib/features/trainer/study_training_controls.dart`,
-PGN rules in `lib/chess/pgn/study.dart`, `study_edits.dart` and
-`study_training.dart`, Lichess download in `lib/net/lichess_studies.dart`, the
-shared picker in `lib/workspace/study_picker.dart`.
+PGN rules in `lib/chess/pgn/study.dart`, `study_edits.dart`,
+`study_training.dart` and `study_lichess.dart`, Lichess download in
+`lib/net/lichess_studies.dart` and upload in `lib/net/lichess_study_writes.dart`,
+the shared picker in `lib/workspace/study_picker.dart`.
 
 ## Navigate and organize
 
@@ -28,9 +30,10 @@ initial position or the shared position editor. The chapter menu provides
 glyphs and shapes…**, **Clear variations…** and **Delete chapter…**. Changing a starting
 position or clearing material asks for confirmation. The last chapter cannot
 be deleted. The study menu (**Study actions**) provides **New study…**,
-**Import chapters…**, **Rename study…**, **Save study PGN as…**, **Copy study
-PGN** and **Delete study…**, plus **Retry study save** / **Retry rename** when a
-write failed.
+**Import chapters…**, **Rename study…**, **Save study PGN as…**, **Send to
+Lichess…**, **Copy study PGN** and **Delete study…**, plus **Retry study save**
+/ **Retry rename** when a write failed. **Import…** and, with a study open,
+**Send to Lichess…** sit side by side under the toolbar.
 
 ## Import and export
 
@@ -45,6 +48,28 @@ Appending adds complete games through the open document session, preserving
 unsaved edits and making the addition undoable. It selects the first appended
 chapter. Partially parsed PGN can be preserved as a new file when it contains
 at least one complete game; it cannot be appended through a lossy rewrite.
+
+**Send to Lichess…** asks one question, **New study** or **Existing study**
+(a study link; prefilled, and chosen, when the chapters' `ChapterURL` tags name
+one Lichess study), and **Send N chapters**. A new study is private, named
+after this one. Each chapter goes as its own request with its name and side:
+the tags Lichess keeps (players, ratings, titles, event, site, date, round,
+result, time control and so on, without the study's own generated `Event`),
+the starting FEN when set up, and every move, comment, glyph and shape. A
+chapter whose `ChapterURL` names the destination has its moves and tags put in
+place of Lichess's, keeping its id and place (one Lichess no longer has is
+added again); every other chapter is added, the first one into a new study
+taking the place of its empty chapter. The link of each chapter Lichess makes
+is written back as `ChapterURL`, one undoable edit, so the next send updates
+instead of duplicating. The dialog shows `Sending chapter 3 of 7…`, then
+`Sent to lichess.org/study/<id> · 2 added · 5 updated`, **Open on Lichess**,
+and a line saying Lichess keeps moves, comments, glyphs and arrows but not
+engine evaluations (its graph comes from its own computer analysis). Not
+logged in (`Log in to Lichess to send a study.`) or logged in without write
+permission (`… Log in again to give it.`) offers **Log in to Lichess**, which
+sends once the login completes. A refused chapter stops the send with Lichess's
+reason and how many went; **Send again** then goes to the study already made.
+A new study holds at most 64 chapters.
 
 **Copy study PGN** and **Copy chapter PGN** export the respective material.
 **Save study PGN as…** writes a captured snapshot to a chosen folder and never
@@ -99,6 +124,8 @@ tracking; widgets do not write files directly.
 A study is one PGN under `Documents/studies/`, with one game per chapter.
 Study metadata uses `Event`, `StudyName`, `ChapterName`, `Orientation`, and
 `FEN`/`SetUp` for custom starts. Explicit practice choices add `TrainingSide`.
+`ChapterURL` (as Lichess's export writes it) links a chapter to its Lichess
+chapter; Send to Lichess reads and writes it.
 Unchanged chapters keep their original text, while edits refuse incomplete
 content that cannot be safely rewritten. Undo and recovery use the shared
 storage system ([architecture](../ARCHITECTURE.md)). Training progress for
@@ -113,3 +140,7 @@ study lines goes to the same files as the repertoire trainer
 - Study practice is line practice through the shared trainer, not Lichess
   interactive-lesson authoring. Lichess collaboration, member permissions,
   chat and publication/discovery are out of scope for this local editor.
+- A study goes to and comes back from the user's own Lichess account in one
+  step each way, clear and trivially usable (owner, 2026-10-24: "downloading/
+  uploading a study from this program to lichess"). A new study made there is
+  private.

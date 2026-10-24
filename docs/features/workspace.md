@@ -138,8 +138,9 @@ viewer).
 **Edit a note or glyph** — Ctrl+E or Actions ▸ `Edit` opens the strip and the
 pencil on the move note. The comment field edits the prose only; machine
 tokens are re-attached after the prose on save, clearing the prose keeps them,
-and a comment left empty is removed rather than written as `{}`. Undo is
-Ctrl+Z.
+and a comment left empty is removed rather than written as `{}`. Clicking
+another move while typing goes there in one click, and the note stays on the
+move it was typed for. Undo is Ctrl+Z.
 
 **Draw shapes** — a drawing is written into the move's comment where the
 document takes edits (builder, Study, the analysis board, the viewer while
