@@ -16,7 +16,7 @@ the shared board editor `lib/workspace/board_editor.dart` and
 `Bughouse` is in the mode menu under `Data & engines`. It is listed only when
 the build carries the engine assets. Entering the mode pauses the workspace's
 Stockfish (`Paused while Bughouse is open`). The boards are on the left and the
-panel (440–480 px) on the right.
+panel on the right: 440–640 px beside board 1 alone, 440–480 px beside both.
 
 - **Boards** — `1 board` (the default) shows board 1 alone, 200–720 px.
   `2 boards` shows both boards side by side, each 200–480 px, sized to the
@@ -26,8 +26,11 @@ panel (440–480 px) on the right.
   above it and its engine rows under it.
 - **Hands** — above and below each board, as lila's crazyhouse pocket: a turn
   dot, the seat letter (two boards only), then five square-sized slots (P N
-  B R Q) with counts. A row of + sits over the slots and a row of − under
-  them: `One more knight for Black`, `One knight fewer for Black`. Only the
+  B R Q) with counts. While the pointer is over a slot, or one of its
+  controls has the keyboard's focus, the slot shows a − in its upper left
+  corner and a + in its upper right: `One knight fewer for Black`,
+  `One more knight for Black`; a − with nothing to take and a + at 16 are
+  left out. Only the
   player on move can drop: click the piece (its legal squares ringed) then a
   square, or drag it.
 - **Arrows** — while the engine is on, each board shows its best moves as
@@ -91,7 +94,8 @@ copied and pasted moves and in engine moves; an engine move without a piece is
 a queen. With one board the partner board is not shown, so a captured piece
 leaves board 1. Refusals: `That drop is not legal.`, `It is not black's turn
 on board 2.`, `That line no longer fits the position.`
-**Add or take a hand's piece** — + or − → one more or one fewer of that piece,
+**Add or take a hand's piece** — a slot's + or − (pointer over the slot) →
+one more or one fewer of that piece,
 0 to 16. The edit is a step of that board's line after the move it is at,
 as on the website: the moves before it stay, and stepping onto it puts it on,
 back off it takes it off. Presses while the board is on an edit nothing
@@ -142,13 +146,13 @@ With two boards it is the BPGN `Copy moves` writes.
 is on and the mode is on screen. Each team searched gets one continuous search
 on its own engine process; the two processes share the mode's cores. The
 score, rows and node count follow the search about four times a second, the
-first within about a second of a position, and the search rests at 100,000
+first within about a second of a position, and the search rests at 30,000
 nodes until the table changes. One board: the team on move on board 1 must
 move there unless the clock choice lets it sit, and the partner board stands as it is (the
 desktop Hivemind lacks the website's
 `tools/bughouse_web/patches/frozen-board.patch`, so its search may still weigh
 partner-board moves). The partner board is given the other team's turn, so
-that team can be searched, to 20,000 nodes, for the score's zero; until its
+that team can be searched, to 8,000 nodes, for the score's zero; until its
 first report the score is the shown team's own. Two boards: each team with a
 move is searched, and may sit as the clock choice says. A new position,
 board count or clock cuts the searches short. Finished searches are remembered for the

@@ -680,20 +680,30 @@ const labOneBoardMax = 720.0;
 const labBoardChrome = labBoardLabelHeight + 3 * labTableRowHeight + 9;
 const labBoardLabelHeight = 22.0;
 
-/// The narrowest the right-hand panel may become before the boards shrink.
+/// The narrowest the right-hand panel may become before the boards shrink,
+/// and the widest it grows beside both boards and beside board 1 alone,
+/// where its engine lines can use the room.
 const labPanelMinWidth = 440.0;
 const labPanelMaxWidth = 480.0;
+const labOneBoardPanelMaxWidth = 640.0;
 
 /// The gap between the two boards, and between the boards and the panel.
 const labBoardGap = 20.0;
 const labColumnGap = 16.0;
 
 /// A hand beside a board: the turn dot, the seat's letter with both boards,
-/// then the pocket, its pieces as large as the board's squares, with a row
-/// of + over it and of − under it, and the room around them.
+/// then the pocket, its pieces as large as the board's squares, and the
+/// room around them.
 const labSeatPadding = 8.0;
 const labTurnDot = 11.0;
-const labStepHeight = 26.0;
+
+/// The − and + in a pocket slot's upper corners while the pointer is over
+/// it: a dark chip with a white sign, about two fifths of the slot
+/// within these bounds.
+const labHandStepMin = 16.0;
+const labHandStepMax = 24.0;
+const labHandStep = Color(0xE01B1B1D);
+const labHandStepInk = Color(0xFFFFFFFF);
 
 /// An engine line, and its score gutter.
 const labTableRowHeight = 28.0;

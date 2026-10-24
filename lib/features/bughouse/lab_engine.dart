@@ -73,12 +73,15 @@ typedef EngineRow = ({
 });
 
 /// The size a search of the team shown rests at, at which the engine
-/// stops until the table changes. Its lines are reported as it goes.
-const labLiveNodes = 100000;
+/// stops until the table changes. Its lines are reported as it goes. At
+/// about 350 nodes a second this is a minute and a half, the deepest of
+/// the budgets in `docs/HIVEMIND.md`: enough to decide between the top two
+/// or three moves, where a deeper search seldom changes the choice.
+const labLiveNodes = 30000;
 
 /// The other team's search with one board only measures the score's zero,
 /// so it rests sooner and leaves the cores to the search shown.
-const labZeroNodes = 20000;
+const labZeroNodes = 8000;
 
 /// An engine that reports nothing while it searches (a build without
 /// `live-search.patch`) is asked in passes instead, deeper each time; the

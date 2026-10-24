@@ -27,7 +27,8 @@ import 'pocket.dart';
 /// team's colour is at the bottom of board 1 unless the boards are flipped.
 /// A piece moves by click or drag; a hand's piece is dragged onto a square,
 /// or clicked and then its square clicked, the squares it may go to ringed.
-/// The + above and − below each hand's piece add one or take one away.
+/// The − and + in a hand's slot, shown while the pointer is over it, take
+/// one of that piece away or add one.
 class TableBoards extends StatefulWidget {
   const TableBoards({
     super.key,
@@ -304,8 +305,8 @@ class _BoardColumn extends StatelessWidget {
 /// of a board square, in a grey well beside the turn dot and, with both
 /// boards shown, the seat's letter. Pieces held show in full with their
 /// count; empty slots stay in place, faint. Only the player on move can
-/// drop, by click then square, or drag. A + above each slot adds one of
-/// that piece and a − below takes one away.
+/// drop, by click then square, or drag. While the pointer is over a slot
+/// a − and a + in its corners take one of that piece away or add one.
 class _SeatRow extends StatelessWidget {
   const _SeatRow({
     required this.lab,
@@ -332,21 +333,6 @@ class _SeatRow extends StatelessWidget {
     final seat = Seat.of(board, side);
     final toMove = position.turn(board) == side;
     final pockets = position.board(board).pockets!;
-    Widget steps(int delta) => Row(
-      children: [
-        for (final role in reserveRoles)
-          _HandStep(
-            side: side,
-            role: role,
-            delta: delta,
-            width: square,
-            enabled: delta > 0
-                ? pockets.of(side, role) < handLimit
-                : pockets.of(side, role) > 0,
-            onPressed: () => lab.adjustHand(board, side, role, delta),
-          ),
-      ],
-    );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: labSeatPadding / 2),
       child: Row(
@@ -364,72 +350,20 @@ class _SeatRow extends StatelessWidget {
                 ),
               ),
             ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              steps(1),
-              PocketWell(
-                pockets: pockets,
-                side: side,
-                seat: seat,
-                owner: lab.single
-                    ? (side == Side.white ? 'White' : 'Black')
-                    : 'Player ${seat.letter}',
-                square: square,
-                live: toMove,
-                picked: picked,
-                onPick: onPick,
-              ),
-              steps(-1),
-            ],
+          PocketWell(
+            pockets: pockets,
+            side: side,
+            seat: seat,
+            owner: lab.single
+                ? (side == Side.white ? 'White' : 'Black')
+                : 'Player ${seat.letter}',
+            square: square,
+            live: toMove,
+            picked: picked,
+            onPick: onPick,
+            onStep: (role, by) => lab.adjustHand(board, side, role, by),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// One + or − over a hand's slot.
-class _HandStep extends StatelessWidget {
-  const _HandStep({
-    required this.side,
-    required this.role,
-    required this.delta,
-    required this.width,
-    required this.enabled,
-    required this.onPressed,
-  });
-
-  final Side side;
-  final Role role;
-  final int delta;
-  final double width;
-  final bool enabled;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final colour = side == Side.white ? 'White' : 'Black';
-    final tip = delta > 0
-        ? 'One more ${role.name} for $colour'
-        : 'One ${role.name} fewer for $colour';
-    return SizedBox(
-      width: width,
-      height: labStepHeight,
-      child: IconButton(
-        tooltip: tip,
-        onPressed: enabled ? onPressed : null,
-        icon: Icon(delta > 0 ? Icons.add : Icons.remove),
-        iconSize: IconSize.action,
-        style: IconButton.styleFrom(
-          padding: EdgeInsets.zero,
-          minimumSize: Size.zero,
-          fixedSize: Size(width, labStepHeight),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Space.xs),
-          ),
-        ),
       ),
     );
   }

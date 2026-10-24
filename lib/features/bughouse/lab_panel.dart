@@ -58,8 +58,13 @@ class _BoardsSwitch extends StatelessWidget {
 
   final BughouseLab lab;
 
+  /// The switch at the left and `Edit board` at the right, which goes
+  /// under it when the panel is too narrow for both.
   @override
-  Widget build(BuildContext context) => Row(
+  Widget build(BuildContext context) => Wrap(
+    alignment: WrapAlignment.spaceBetween,
+    spacing: Space.s,
+    runSpacing: Space.s,
     children: [
       SegmentedButton<LabBoards>(
         segments: const [
@@ -79,7 +84,6 @@ class _BoardsSwitch extends StatelessWidget {
         style: const ButtonStyle(visualDensity: VisualDensity.compact),
         onSelectionChanged: (picked) => lab.showBoards(picked.single),
       ),
-      const Spacer(),
       Tooltip(
         message: lab.single
             ? 'Place, move or remove pieces on the board'
@@ -213,7 +217,7 @@ class _EngineBar extends StatelessWidget {
     final (String status, Color colour) = switch (lines) {
       LinesStopped(:final reason) => (reason, scheme.error),
       LinesOn(nodes: final nodes?) => (
-        'Hivemind · ${_thousands(nodes)} nodes',
+        'Hivemind · ${_thousands(nodes)} ${nodes == 1 ? 'node' : 'nodes'}',
         scheme.onSurfaceVariant,
       ),
       _ => ('Hivemind', scheme.onSurfaceVariant),

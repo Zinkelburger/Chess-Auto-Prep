@@ -31,10 +31,10 @@ class BughouseScreen extends StatelessWidget {
   final Map<ShortcutActivator, VoidCallback> windowKeys;
 
   /// As large as the boards on screen can be beside the panel, and under
-  /// the height the hands (a square tall, a + and a − row) and, with two
-  /// boards, the chrome need.
+  /// the height the hands (a square tall each) and, with two boards, the
+  /// chrome need.
   static double boardSize(BoxConstraints box, LabBoards boards) {
-    const hands = 2 * (2 * labStepHeight + labSeatPadding);
+    const hands = 2 * labSeatPadding;
     final width = box.maxWidth - labPanelMinWidth - labColumnGap;
     return switch (boards) {
       LabBoards.one =>
@@ -79,8 +79,10 @@ class BughouseScreen extends StatelessWidget {
                   child: Align(
                     alignment: Alignment.topLeft,
                     child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxWidth: labPanelMaxWidth,
+                      constraints: BoxConstraints(
+                        maxWidth: lab.single
+                            ? labOneBoardPanelMaxWidth
+                            : labPanelMaxWidth,
                       ),
                       child: LabPanel(lab: lab, engine: engine),
                     ),

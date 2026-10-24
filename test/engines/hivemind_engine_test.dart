@@ -199,6 +199,18 @@ void main() {
     expect(answer.lines.any((l) => l.cp == -16671), isFalse);
   });
 
+  test('a mate the root scan decides at one node is read', () async {
+    final (engine, process) = await started();
+    process.next = [
+      'info depth 1 score mate 1 nodes 1 nps 1000 time 0 pv (d8h4,a2a3)',
+      'bestmove (d8h4,a2a3)',
+    ];
+    final answer =
+        await engine.search(question(team: Team.cd)) as HivemindSearched;
+    expect(answer.top!.mate, 1);
+    expect(answer.top!.pv.single, const JointMove('d8h4', 'a2a3'));
+  });
+
   test('a search tells the engine the team, the clock and the rule', () async {
     final (engine, process) = await started();
     process.next = startSearch;
