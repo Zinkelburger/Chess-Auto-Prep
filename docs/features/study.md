@@ -92,7 +92,9 @@ At a move, visible **Quiz starts here** and **Quiz ends here** toggles control
 the same `[%tstart]` / `[%tend]` tokens as the move menu.
 
 **Game review** is open in Study's tab strip beside **Moves** and **Train**
-(see [pgn-viewer](pgn-viewer.md) for the review itself).
+(see [pgn-viewer](pgn-viewer.md) for the review itself). `Analyze all N games`
+there reviews every chapter without a review, one after another, while the
+user clicks through the chapters.
 
 **Train study** opens the shared trainer inside Study. Choose **This chapter**
 or **Whole study**. **Training sides…** assigns each chapter's practice side,

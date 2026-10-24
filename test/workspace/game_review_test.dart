@@ -13,9 +13,13 @@ import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/workspace/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/engine_jobs.dart';
 import 'package:chess_auto_prep/workspace/game_review.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/workspace/document_saver.dart';
+import 'package:chess_auto_prep/workspace/document_session.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_engine.dart';
+import '../support/scripted_store.dart';
 import '../support/session_fixture.dart';
 
 /// [chapter] with [uci] played after the node at [at] of its one game.
@@ -155,7 +159,67 @@ void main() {
     const elsewhere = ReviewValue(1017, '+10.17', ['d2d4']);
     expect(
       moveReviewMark(tree.rootFen, e4, elsewhere, after),
+      ReviewMark.inaccuracy,
+      reason: 'still winning: Lichess calls it an inaccuracy',
+    );
+  });
+
+  test('moves are judged as Lichess judges them', () {
+    ReviewMark? white(int before, int after) => judgeMove(
+      ReviewValue(before, '${before / 100}', const []),
+      ReviewValue(after, '${after / 100}', const []),
+      whiteMoved: true,
+    )?.mark;
+    // From an equal game: winning chances given away, 0.1 / 0.2 / 0.3.
+    expect(white(0, -40), isNull);
+    expect(white(0, -100), ReviewMark.inaccuracy);
+    expect(white(0, -150), ReviewMark.mistake);
+    expect(white(0, -200), ReviewMark.blunder);
+    // A won game stays won: the same centipawns cost far less.
+    expect(white(900, 700), isNull);
+    expect(white(700, 400), ReviewMark.mistake);
+    // Black's moves are judged from Black's side.
+    expect(
+      judgeMove(
+        const ReviewValue(0, '0.00', []),
+        const ReviewValue(200, '+2.00', []),
+        whiteMoved: false,
+      )?.mark,
       ReviewMark.blunder,
+    );
+  });
+
+  test('a mate appearing or slipping away is judged by what was left', () {
+    ({ReviewMark mark, String words})? black(int before, String after) =>
+        judgeMove(
+          ReviewValue(before, '${before / 100}', const []),
+          ReviewValue(10000, after, const []),
+          whiteMoved: false,
+        );
+    // Black allows mate from +5.49: a blunder, in Lichess's words.
+    expect(black(549, '#2'), (
+      mark: ReviewMark.blunder,
+      words: 'Checkmate is now unavoidable',
+    ));
+    expect(black(800, '#2')!.mark, ReviewMark.mistake);
+    expect(black(1200, '#2')!.mark, ReviewMark.inaccuracy);
+    final lost = judgeMove(
+      const ReviewValue(10000, '#3', []),
+      const ReviewValue(300, '+3.00', []),
+      whiteMoved: true,
+    );
+    expect(lost, (
+      mark: ReviewMark.blunder,
+      words: 'Lost forced checkmate sequence',
+    ));
+    expect(
+      judgeMove(
+        const ReviewValue(10000, '#3', []),
+        const ReviewValue(10000, '#4', []),
+        whiteMoved: true,
+      ),
+      isNull,
+      reason: 'a slower mate is not marked',
     );
   });
 
@@ -299,5 +363,72 @@ void main() {
     final last = tree.nodeAt(NodePath.of([0, 0]))!;
     expect(last.comment ?? '', isNot(contains('[%eval')));
     expect(last.nags.where((n) => n == 2 || n == 4 || n == 6), isEmpty);
+  });
+
+  test('every game is reviewed in turn, each written into its own game, '
+      'and moving between them does not stop it', () async {
+    const two =
+        '[Event "A"]\n[Result "*"]\n\n1. e4 e5 *\n\n'
+        '[Event "B"]\n[Result "*"]\n\n1. d4 d5 *\n';
+    final ref = chapterRef('Study', 'Games');
+    final store = ScriptedDocumentStore()
+      ..documents[ref] = Opened(two, scriptedRevision(two));
+    final saver = DocumentSaver(store, delay: Duration.zero);
+    final session = DocumentSession(store, saver);
+    await session.open(ref, game: 0);
+    final engine = ScriptedEngine();
+    final analysis = EngineAnalysis(
+      session,
+      () async => const StartFailed('off'),
+    );
+    final jobs = EngineJobs(analysis);
+    final review = GameReview(
+      session: session,
+      jobs: jobs,
+      launch: () async => Started(engine),
+    );
+    addTearDown(() {
+      review.dispose();
+      jobs.dispose();
+      analysis.dispose();
+      session.dispose();
+      saver.dispose();
+    });
+    expect(review.unreviewedGames, [0, 1]);
+    expect(review.canReviewAll, isTrue);
+    final running = review.startAll();
+    for (var search = 0; search < 6; search++) {
+      await pumpEventQueue();
+      if (search == 1) {
+        expect(review.batch, (game: 1, of: 2));
+      }
+      if (search == 4) {
+        // The user goes to the first game while the second is reviewed.
+        session.showGame(0);
+        expect(review.batch, (game: 2, of: 2));
+      }
+      if (search == 2) session.showGame(1);
+      engine.current.emit(
+        line(
+          depth: 14,
+          // 1. e4 throws the first game away; the rest is level.
+          score: Centipawns(search == 1 ? 250 : 20),
+          pv: const ['g1f3'],
+        ),
+      );
+      engine.current.end();
+    }
+    await running;
+    expect(review.problem, isNull);
+    expect(review.running, isFalse);
+    expect(review.batch, isNull);
+    final lines = session.chapter!.lines;
+    expect(lines.every((line) => hasReview(line.tree!)), isTrue);
+    expect(
+      lines[0].tree!.children.first.nags,
+      contains(ReviewMark.blunder.nag),
+    );
+    expect(review.unreviewedGames, isEmpty);
+    expect(review.canReviewAll, isFalse);
   });
 }
