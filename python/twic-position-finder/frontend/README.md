@@ -11,6 +11,7 @@ Static Astro site deployed to Cloudflare Pages. Browser preparation tools, one s
 | `/bughouse`           | Bughouse — one bughouse board on lichess.org/analysis's layout, with + and − on every piece in both hands, lila's board editor and a sit panel; Hivemind in the browser, on the GPU through WebGPU | `src/analysis/*`, `../../../tools/bughouse_web/` |
 | `/bughouse-puzzles`   | Bughouse Puzzles — mates and tactics mined from FICS games, reserves frozen | `src/bughouse-puzzles/*`, `public/bughouse-puzzles/` |
 | `/charles-clock`      | Charles Clock — a full-screen phone clock with its own `<html>`      | `src/pages/charles-clock.astro`        |
+| `/meow-chess/`        | Meow Chess — the Meow-Chess tournament director app, a Flutter web build copied in from its own repository | `public/meow-chess/` (built), `functions/meow-chess/fetch.js` |
 
 `/dashboard` forwards to `/twic-notifications` (with the query string, so old
 login emails keep working); `/verify` and `/unsubscribe` are one-shot token
@@ -214,6 +215,30 @@ Styles: the shared trainer vocabulary (`src/styles/trainer.css`, also used by
 the Tactics Trainer), the board and pocket in `src/styles/bughouse-board.css`
 (Lichess's default brown at full brightness, lila's pocket), plus
 `src/styles/bughouse-puzzles.css`.
+
+## Meow Chess
+
+`public/meow-chess/` is the browser build of
+[Meow-Chess](https://github.com/Zinkelburger/Meow-Chess), a separate Flutter app,
+committed here as built files because Pages cannot build Flutter. **It does not
+update itself.** When Meow-Chess gains a feature or fix worth having on the
+site, rebuild and replace it from the Meow-Chess checkout:
+
+```sh
+python3 scripts/build_web.py --site ../Chess-Auto-Prep   # in Meow-Chess
+```
+
+then commit `public/meow-chess/` here. `public/meow-chess/meow-build.json`
+names the Meow-Chess commit it came from. Meow-Chess's `docs/WEB.md` describes
+what differs from the desktop app.
+
+`functions/meow-chess/fetch.js` is a Cloudflare Pages Function, the site's only
+server-side code apart from `server.py`: Pages runs every file under
+`functions/` at its path. It fetches pages for the app at
+`/meow-chess/fetch?url=…`, because US Chess, FIDE and club websites send no CORS
+headers and a page cannot read them itself. It fetches only HTTPS URLs on its
+host allowlist; add a host there when Meow-Chess learns to read a new site.
+`npx wrangler pages dev dist` runs it locally after a build.
 
 ## Smoke-testing
 
