@@ -10,3 +10,11 @@
 # that file misses may well be caught next door. Survivors are re-run against
 # the third field before being reported, otherwise the score is a lower bound
 # and it sends people to write tests that already exist.
+lib/chess/pgn/game_review.dart|test/workspace/game_review_test.dart|test/chess/pgn/edit_laws_test.dart test/app
+lib/chess/pgn/line_edits.dart|test/chess/pgn/line_edits_test.dart|test/chess/pgn test/workspace
+lib/chess/pgn/chapter_edits.dart|test/chess/pgn/chapter_edits_test.dart|test/chess/pgn test/workspace
+lib/chess/pgn/tree_merge.dart|test/chess/pgn/tree_merge_test.dart|test/chess/pgn test/workspace
+lib/chess/game_filter.dart|test/chess/game_filter_test.dart|test/chess test/features/pgn_viewer
+lib/chess/typed_move.dart|test/chess/typed_move_test.dart|test/workspace
+lib/storage/compound_write.dart|test/storage/compound_write_test.dart|test/storage
+lib/workspace/document_saver.dart|test/workspace/document_saver_test.dart|test/workspace

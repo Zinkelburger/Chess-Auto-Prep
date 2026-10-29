@@ -21,8 +21,10 @@ scripts/mutation_sweep.sh                 # every pair in mutation_targets.txt
 scripts/mutation_sweep.sh --max 30        # more mutants per file
 ```
 
-`scripts/mutation_targets.txt` lists no targets, so a sweep runs nothing until
-targets are added; see [Adding a target](#adding-a-target).
+`scripts/mutation_targets.txt` lists the core edit, review, filter and write
+modules, whose tests kill every mutant a `--max 30` sweep samples: a
+survivor there is a hole a change opened. See
+[Adding a target](#adding-a-target).
 
 Always go through `scripts/ci.sh with --`. A campaign is dozens of `flutter
 test` runs; inside one `ci.sh with` they queue for the machine-wide Flutter lock
