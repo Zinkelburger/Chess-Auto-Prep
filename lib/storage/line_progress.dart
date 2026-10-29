@@ -355,52 +355,79 @@ final class LineRows implements Reference {
     return raw;
   }
 
-  final String after;
-  if (name == attemptsFile) {
-    after = body
-        .split('\n')
-        .map((line) {
-          if (line.trim().isEmpty) return line;
-          final attempt = _attempt(line);
-          if (attempt == null) return unread(line);
-          final target = moved(attempt.key);
-          return target == null
-              ? line
-              : jsonEncode({
-                  ...attempt.json,
-                  'repertoireId': target.source,
-                  'lineId': target.id,
-                });
-        })
-        .join('\n');
-  } else {
-    final parsed = readCsvRecords(body);
-    if (parsed is! CsvParsed) throw FormatException('Malformed $name.');
-    final width = headerWidth(parsed.records);
-    if (width == null) throw FormatException('Missing header in $name.');
-    List<String>? cells(CsvRecord record) => dataCells(record);
-    for (final record in parsed.records.where((_) => collides)) {
-      final row = cells(record);
+  final after = name == attemptsFile
+      ? _remapAttempts(body, moved, unread)
+      : _remapCsv(
+          body,
+          name,
+          moved,
+          unread,
+          present: collides ? present : null,
+        );
+  return (text: '$prefix$after', kept: kept);
+}
+
+/// The attempts log, one JSON object a line, with each moved line's
+/// attempts keyed at [moved]'s place for it; [unread] answers for a line
+/// it cannot read.
+String _remapAttempts(
+  String body,
+  LineKey? Function(LineKey key) moved,
+  String Function(String raw) unread,
+) => body
+    .split('\n')
+    .map((line) {
+      if (line.trim().isEmpty) return line;
+      final attempt = _attempt(line);
+      if (attempt == null) return unread(line);
+      final target = moved(attempt.key);
+      return target == null
+          ? line
+          : jsonEncode({
+              ...attempt.json,
+              'repertoireId': target.source,
+              'lineId': target.id,
+            });
+    })
+    .join('\n');
+
+/// A CSV training file with each moved line's rows keyed at [moved]'s
+/// place for it; [unread] answers for a row it cannot read. [present], when
+/// given, is first filled with the lines that have rows, for [moved] to
+/// find collisions in.
+String _remapCsv(
+  String body,
+  String name,
+  LineKey? Function(LineKey key) moved,
+  String Function(String raw) unread, {
+  Set<LineKey>? present,
+}) {
+  final parsed = readCsvRecords(body);
+  if (parsed is! CsvParsed) throw FormatException('Malformed $name.');
+  final width = headerWidth(parsed.records);
+  if (width == null) throw FormatException('Missing header in $name.');
+  if (present != null) {
+    for (final record in parsed.records) {
+      final row = dataCells(record);
       if (row != null && row.length >= 2 && isWholeRow(name, row, width)) {
         present.add((source: row[0], id: row[1]));
       }
     }
-    final out = StringBuffer();
-    for (final record in parsed.records) {
-      final row = cells(record);
-      var text = record.source;
-      if (row != null) {
-        if (row.length < 2 || !isWholeRow(name, row, width)) {
-          unread(text);
-        } else if (moved((source: row[0], id: row[1])) case final target?) {
-          text = encodeCsvRecord([target.source, target.id, ...row.skip(2)]);
-        }
-      }
-      out
-        ..write(text)
-        ..write(record.terminator);
-    }
-    after = out.toString();
   }
-  return (text: '$prefix$after', kept: kept);
+  final out = StringBuffer();
+  for (final record in parsed.records) {
+    final row = dataCells(record);
+    var text = record.source;
+    if (row != null) {
+      if (row.length < 2 || !isWholeRow(name, row, width)) {
+        unread(text);
+      } else if (moved((source: row[0], id: row[1])) case final target?) {
+        text = encodeCsvRecord([target.source, target.id, ...row.skip(2)]);
+      }
+    }
+    out
+      ..write(text)
+      ..write(record.terminator);
+  }
+  return out.toString();
 }

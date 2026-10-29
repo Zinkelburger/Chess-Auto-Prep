@@ -163,6 +163,7 @@ final class AppEnvironment {
   /// The app on this machine: the user's Documents folder and the app's
   /// own [support] folder, the real network, Stockfish and Maia. Updates
   /// are downloaded under [cache]; without one the app does not update.
+  // long: the composition root, one call naming every part the app runs on.
   factory AppEnvironment.native({
     required Directory documents,
     required Directory support,

@@ -285,7 +285,7 @@ final class PgnFileStore implements PgnDocumentStore {
     final retried = await _retriedPair(edits, paths, id);
     if (retried != null) return retried;
     // Prepare and validate both scopes before preserving either preimage.
-    final inputs = <({DocumentEdit edit, FileFound found, String before})>[];
+    final inputs = <_PairInput>[];
     for (final edit in edits) {
       final observed = await probeDocument(edit.ref.path);
       switch (observed) {
@@ -326,32 +326,11 @@ final class PgnFileStore implements PgnDocumentStore {
     final List<CompoundTraining> training;
     try {
       training =
-          restoredTraining ??
-          (primary.movedLines.isEmpty && primary.foldedLines.isEmpty
-              ? const <CompoundTraining>[]
-              : await lineProgressPlan(
-                  recovery.compounds.documents,
-                  from: paths[0],
-                  to: paths[1],
-                  ids: primary.movedLines,
-                  folded: primary.foldedLines,
-                  alternateFrom: primary.ref.path,
-                  alternateTo: secondary.ref.path,
-                ));
+          restoredTraining ?? await _pairTraining(primary, secondary, paths);
     } on FormatException catch (error) {
       return SaveRefused(error.message);
     }
-    for (final input in inputs) {
-      if (input.before == input.edit.text) continue;
-      final failed = await keepReplacedVersion(
-        backups: _backups,
-        documents: documents,
-        ref: input.edit.ref,
-        bytes: input.found.bytes,
-        hash: input.found.revision.contentHash,
-      );
-      if (failed != null) return failed;
-    }
+    if (await _keepReplaced(inputs) case final failed?) return failed;
     final command = CompoundCommit.pair(
       id: id,
       training: training,
@@ -371,6 +350,41 @@ final class PgnFileStore implements PgnDocumentStore {
       beforeRevision: inputs.first.found.revision,
       secondaryRef: secondary.ref,
     );
+  }
+
+  /// The training rows that go with the lines [primary] moves into
+  /// [secondary]; a FormatException says why they cannot.
+  Future<List<CompoundTraining>> _pairTraining(
+    DocumentEdit primary,
+    DocumentEdit secondary,
+    List<String> paths,
+  ) async => primary.movedLines.isEmpty && primary.foldedLines.isEmpty
+      ? const []
+      : await lineProgressPlan(
+          recovery.compounds.documents,
+          from: paths[0],
+          to: paths[1],
+          ids: primary.movedLines,
+          folded: primary.foldedLines,
+          alternateFrom: primary.ref.path,
+          alternateTo: secondary.ref.path,
+        );
+
+  /// Keeps the version each changed file of a pair replaces; the failure
+  /// to, or null.
+  Future<IoFailure?> _keepReplaced(List<_PairInput> inputs) async {
+    for (final input in inputs) {
+      if (input.before == input.edit.text) continue;
+      final failed = await keepReplacedVersion(
+        backups: _backups,
+        documents: documents,
+        ref: input.edit.ref,
+        bytes: input.found.bytes,
+        hash: input.found.revision.contentHash,
+      );
+      if (failed != null) return failed;
+    }
+    return null;
   }
 
   Future<SaveResult?> _retriedPair(
@@ -840,3 +854,6 @@ const _unflushed = 'published; the folder flush failed';
 const _undeclared =
     'the whole document was replaced; the save did not say which game it '
     'changed';
+
+/// One file of a pair, read and checked before either is written.
+typedef _PairInput = ({DocumentEdit edit, FileFound found, String before});

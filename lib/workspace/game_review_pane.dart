@@ -46,77 +46,7 @@ class GameReviewPane extends StatelessWidget {
       return ListView(
         padding: const EdgeInsets.all(Space.m),
         children: [
-          Row(
-            children: [
-              FilledButton.icon(
-                onPressed: review.running
-                    ? review.stop
-                    : () => unawaited(review.start()),
-                icon: Icon(review.running ? Icons.stop : Icons.play_arrow),
-                label: Text(
-                  review.running
-                      ? 'Stop'
-                      : reviewed
-                      ? 'Analyze again'
-                      : 'Analyze game',
-                ),
-              ),
-              const SizedBox(width: Space.m),
-              Expanded(
-                child: Text(
-                  switch ((review.running, review.batch)) {
-                    (true, (:final game, :final of)?) =>
-                      'Game $game of $of · '
-                          '${review.completed} / ${review.total} positions',
-                    (true, null) =>
-                      '${review.completed} / ${review.total} positions',
-                    _ => 'Depth ${review.depth}',
-                  },
-                  style: theme.textTheme.bodySmall,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Tooltip(
-                message: review.session.readOnly != null
-                    ? 'This file is read-only'
-                    : 'Write evaluations, ?/?? marks and better lines into the game',
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('Annotate PGN', style: theme.textTheme.bodySmall),
-                    Switch(
-                      key: const ValueKey('review-annotate'),
-                      value: review.annotate && review.session.readOnly == null,
-                      onChanged: review.canAnnotate ? review.setAnnotate : null,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          if (review.canReviewAll)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Tooltip(
-                message:
-                    'Review every game of this file that has no review yet, '
-                    'one after another',
-                child: TextButton(
-                  onPressed: () => unawaited(review.startAll()),
-                  child: Text(
-                    'Analyze all ${review.unreviewedGames.length} games',
-                  ),
-                ),
-              ),
-            ),
-          if (review.problem case final problem?)
-            Padding(
-              padding: const EdgeInsets.only(top: Space.s),
-              child: Text(
-                problem,
-                style: TextStyle(color: theme.colorScheme.error),
-              ),
-            ),
+          _ReviewControls(review: review, reviewed: reviewed),
           const SizedBox(height: Space.m),
           if (!reviewed && !review.running)
             Text(
@@ -571,6 +501,98 @@ class _SideSummary extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Analyze or Stop, how far the review has got, whether it writes into
+/// the game, the file's other games to review and what went wrong.
+class _ReviewControls extends StatelessWidget {
+  const _ReviewControls({required this.review, required this.reviewed});
+
+  final GameReview review;
+
+  /// Whether the game has a review to analyze again.
+  final bool reviewed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            FilledButton.icon(
+              onPressed: review.running
+                  ? review.stop
+                  : () => unawaited(review.start()),
+              icon: Icon(review.running ? Icons.stop : Icons.play_arrow),
+              label: Text(
+                review.running
+                    ? 'Stop'
+                    : reviewed
+                    ? 'Analyze again'
+                    : 'Analyze game',
+              ),
+            ),
+            const SizedBox(width: Space.m),
+            Expanded(
+              child: Text(
+                switch ((review.running, review.batch)) {
+                  (true, (:final game, :final of)?) =>
+                    'Game $game of $of · '
+                        '${review.completed} / ${review.total} positions',
+                  (true, null) =>
+                    '${review.completed} / ${review.total} positions',
+                  _ => 'Depth ${review.depth}',
+                },
+                style: theme.textTheme.bodySmall,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Tooltip(
+              message: review.session.readOnly != null
+                  ? 'This file is read-only'
+                  : 'Write evaluations, ?/?? marks and better lines into the game',
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Annotate PGN', style: theme.textTheme.bodySmall),
+                  Switch(
+                    key: const ValueKey('review-annotate'),
+                    value: review.annotate && review.session.readOnly == null,
+                    onChanged: review.canAnnotate ? review.setAnnotate : null,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (review.canReviewAll)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Tooltip(
+              message:
+                  'Review every game of this file that has no review yet, '
+                  'one after another',
+              child: TextButton(
+                onPressed: () => unawaited(review.startAll()),
+                child: Text(
+                  'Analyze all ${review.unreviewedGames.length} games',
+                ),
+              ),
+            ),
+          ),
+        if (review.problem case final problem?)
+          Padding(
+            padding: const EdgeInsets.only(top: Space.s),
+            child: Text(
+              problem,
+              style: TextStyle(color: theme.colorScheme.error),
+            ),
+          ),
+      ],
     );
   }
 }

@@ -90,6 +90,7 @@ DocumentModes wireDocumentModes(
 /// or a new username gives the accounts a new map — which the explorer's
 /// `My games` hears too.
 final class TrainingWiring {
+  // long: one composition, each training mode built from the parts it shares.
   TrainingWiring(
     AppEnvironment env, {
     required Workspace workspace,

@@ -183,91 +183,8 @@ List<SettingGroup> settingGroups({
   void change(Settings Function(Settings now) edit) =>
       store.update(edit(store.value));
   return [
-    SettingGroup('Look', [
-      SettingRow(
-        'Board coordinates',
-        ChoiceSetting(
-          options: const [(true, 'Show'), (false, 'Hide')],
-          value: s.boardCoordinates,
-          onChanged: (on) =>
-              change((now) => now.copyWith(boardCoordinates: on)),
-        ),
-      ),
-      SettingRow(
-        'Piece notation',
-        ChoiceSetting(
-          options: const [(false, 'Letters (KQRBN)'), (true, 'Figurines')],
-          value: s.figurines,
-          onChanged: (on) => change((now) => now.copyWith(figurines: on)),
-        ),
-        // A live sample, so the choice is seen before the page is left.
-        hint:
-            '${s.figurines ? figurineSan(_sampleLine) : _sampleLine}'
-            ' · files keep the letters',
-      ),
-    ]),
-    SettingGroup('Training', [
-      for (final (label, value, update) in [
-        (
-          'New lines per sitting',
-          s.training.learnLimit,
-          (int n, Settings now) => now.training.copyWith(learnLimit: n),
-        ),
-        (
-          'Reviews per sitting',
-          s.training.reviewLimit,
-          (int n, Settings now) => now.training.copyWith(reviewLimit: n),
-        ),
-      ])
-        SettingRow(
-          label,
-          NumberSetting(
-            value: value,
-            min: 0,
-            max: 1000,
-            onChanged: (n) =>
-                change((now) => now.copyWith(training: update(n, now))),
-          ),
-          hint: '0 = all lines. Applies to the next sitting.',
-        ),
-      SettingRow(
-        'Move delay',
-        NumberSetting(
-          value: s.training.replyMillis,
-          min: 200,
-          max: 2000,
-          step: 100,
-          unit: 'ms',
-          onChanged: (n) => change(
-            (now) =>
-                now.copyWith(training: now.training.copyWith(replyMillis: n)),
-          ),
-        ),
-        hint: 'Time to see your move before the reply. Applies next sitting.',
-      ),
-      SettingRow(
-        'Replay missed moves',
-        ToggleSetting(
-          value: s.training.replayMistakes,
-          onChanged: (on) => change(
-            (now) => now.copyWith(
-              training: now.training.copyWith(replayMistakes: on),
-            ),
-          ),
-        ),
-      ),
-      SettingRow(
-        'Rate difficulty myself',
-        ToggleSetting(
-          value: s.training.rateReviews,
-          onChanged: (on) => change(
-            (now) =>
-                now.copyWith(training: now.training.copyWith(rateReviews: on)),
-          ),
-        ),
-        hint: 'Off: graded from your mistakes. On: 1–4 after each line.',
-      ),
-    ]),
+    SettingGroup('Look', _lookRows(s, change)),
+    SettingGroup('Training', _trainingRows(s, change)),
     SettingGroup('Tactics', [
       SettingRow(
         'Accept other winning moves',
@@ -279,77 +196,11 @@ List<SettingGroup> settingGroups({
         hint: 'Checks alternative answers at depth 14',
       ),
     ]),
-    SettingGroup('Engine', [
-      SettingRow(
-        EngineSettingCopy.engine,
-        TypedChoiceSetting(
-          options: [
-            (Settings.builtInEngine, EngineSettingCopy.builtIn),
-            ...analysisEngines,
-          ],
-          value: s.analysisEngine,
-          onChanged: (id) => change((now) => now.copyWith(analysisEngine: id)),
-        ),
-        hint:
-            'the engine behind the board\'s lines; add more in Engine '
-            'tournament',
-      ),
-      SettingRow(
-        EngineSettingCopy.cores,
-        NumberSetting(
-          value: s.coresOn(coresAvailable),
-          min: 1,
-          max: coresAvailable,
-          onChanged: (n) => change((now) => now.copyWith(engineCores: n)),
-        ),
-        hint: 'of $coresAvailable on this computer; half by default',
-      ),
-      SettingRow(
-        EngineSettingCopy.memory,
-        NumberSetting(
-          value: s.engineMemoryMb,
-          min: EngineSettingCopy.minMemoryMb,
-          max: Settings.maxMemoryMb,
-          step: EngineSettingCopy.memoryStep,
-          unit: 'MB',
-          onChanged: (n) => change((now) => now.copyWith(engineMemoryMb: n)),
-        ),
-      ),
-      SettingRow(
-        EngineSettingCopy.lines,
-        NumberSetting(
-          value: s.engineLines,
-          min: 1,
-          max: Settings.maxLines,
-          onChanged: (n) => change((now) => now.copyWith(engineLines: n)),
-        ),
-      ),
-    ]),
-    SettingGroup('Repertoire', [
-      SettingRow(
-        'Opponent rating',
-        NumberSetting(
-          value: s.opponentElo,
-          min: Settings.minElo,
-          max: Settings.maxElo,
-          step: 100,
-          onChanged: (n) => change((now) => now.copyWith(opponentElo: n)),
-        ),
-        hint: 'their replies are predicted for this Elo',
-      ),
-      SettingRow(
-        'Cover replies met once in',
-        NumberSetting(
-          value: s.coverOnceIn,
-          min: Settings.minCoverOnceIn,
-          max: Settings.maxCoverOnceIn,
-          step: 5,
-          unit: 'games',
-          onChanged: (n) => change((now) => now.copyWith(coverOnceIn: n)),
-        ),
-        hint: 'rarer replies are not counted as gaps',
-      ),
-    ]),
+    SettingGroup(
+      'Engine',
+      _engineRows(s, change, coresAvailable, analysisEngines),
+    ),
+    SettingGroup('Repertoire', _repertoireRows(s, change)),
     SettingGroup('Expectimax', _expectimaxRows(s, change)),
     SettingGroup('Files', [
       SettingRow(
@@ -362,50 +213,18 @@ List<SettingGroup> settingGroups({
         hint: 'into Documents/pgn_collections, so they can be edited',
       ),
     ]),
-    SettingGroup('Accounts', [
-      SettingRow(
-        'Lichess',
-        AccountSetting(account),
-        hint: account.problem ?? accountHint(account.status),
-        warn: account.problem != null,
+    SettingGroup('Accounts', _accountRows(account)),
+    SettingGroup(
+      'App',
+      _appRows(
+        version: version,
+        updates: updates,
+        openLicences: openLicences,
+        openLogFolder: openLogFolder,
+        copyDiagnostics: copyDiagnostics,
+        diagnostics: diagnostics,
       ),
-      if (account.status case SignedOut() || Checking())
-        SettingRow(
-          'Personal access token',
-          SecretSetting(load: () async => null, save: account.useToken),
-          hint: 'instead of logging in; from lichess.org/account/oauth/token',
-        ),
-    ]),
-    SettingGroup('App', [
-      if (updates != null)
-        ...updateRows(updates)
-      else
-        SettingRow('Version', ShownSetting(version ?? 'Unknown')),
-      SettingRow(
-        'Licences',
-        ActionSetting('View', openLicences),
-        hint: 'Stockfish, Hivemind, Maia, fonts and every package',
-      ),
-      if (copyDiagnostics != null)
-        SettingRow(
-          'Diagnostics',
-          ActionSetting('Copy diagnostics', copyDiagnostics),
-          hint: switch (diagnostics) {
-            DiagnosticCopyState.idle =>
-              'Version, platform and recent log for a bug report',
-            DiagnosticCopyState.copying => 'Preparing diagnostics…',
-            DiagnosticCopyState.copied => 'Diagnostics copied.',
-            DiagnosticCopyState.failed =>
-              'Could not copy diagnostics. Try again.',
-          },
-          warn: diagnostics == DiagnosticCopyState.failed,
-        ),
-      SettingRow(
-        'Log folder',
-        ActionSetting('Open', openLogFolder),
-        hint: 'app.log, for a bug report',
-      ),
-    ]),
+    ),
     SettingGroup('Shortcuts', [
       for (final key in AppKey.values)
         SettingRow(
@@ -416,6 +235,223 @@ List<SettingGroup> settingGroups({
     ]),
   ];
 }
+
+/// How a row changes the settings: an edit of the settings the store holds
+/// when the change lands.
+typedef _Change = void Function(Settings Function(Settings now) edit);
+
+List<SettingRow> _lookRows(Settings s, _Change change) => [
+  SettingRow(
+    'Board coordinates',
+    ChoiceSetting(
+      options: const [(true, 'Show'), (false, 'Hide')],
+      value: s.boardCoordinates,
+      onChanged: (on) => change((now) => now.copyWith(boardCoordinates: on)),
+    ),
+  ),
+  SettingRow(
+    'Piece notation',
+    ChoiceSetting(
+      options: const [(false, 'Letters (KQRBN)'), (true, 'Figurines')],
+      value: s.figurines,
+      onChanged: (on) => change((now) => now.copyWith(figurines: on)),
+    ),
+    // A live sample, so the choice is seen before the page is left.
+    hint:
+        '${s.figurines ? figurineSan(_sampleLine) : _sampleLine}'
+        ' · files keep the letters',
+  ),
+];
+
+List<SettingRow> _trainingRows(Settings s, _Change change) => [
+  for (final (label, value, update) in [
+    (
+      'New lines per sitting',
+      s.training.learnLimit,
+      (int n, Settings now) => now.training.copyWith(learnLimit: n),
+    ),
+    (
+      'Reviews per sitting',
+      s.training.reviewLimit,
+      (int n, Settings now) => now.training.copyWith(reviewLimit: n),
+    ),
+  ])
+    SettingRow(
+      label,
+      NumberSetting(
+        value: value,
+        min: 0,
+        max: 1000,
+        onChanged: (n) =>
+            change((now) => now.copyWith(training: update(n, now))),
+      ),
+      hint: '0 = all lines. Applies to the next sitting.',
+    ),
+  SettingRow(
+    'Move delay',
+    NumberSetting(
+      value: s.training.replyMillis,
+      min: 200,
+      max: 2000,
+      step: 100,
+      unit: 'ms',
+      onChanged: (n) => change(
+        (now) => now.copyWith(training: now.training.copyWith(replyMillis: n)),
+      ),
+    ),
+    hint: 'Time to see your move before the reply. Applies next sitting.',
+  ),
+  SettingRow(
+    'Replay missed moves',
+    ToggleSetting(
+      value: s.training.replayMistakes,
+      onChanged: (on) => change(
+        (now) =>
+            now.copyWith(training: now.training.copyWith(replayMistakes: on)),
+      ),
+    ),
+  ),
+  SettingRow(
+    'Rate difficulty myself',
+    ToggleSetting(
+      value: s.training.rateReviews,
+      onChanged: (on) => change(
+        (now) => now.copyWith(training: now.training.copyWith(rateReviews: on)),
+      ),
+    ),
+    hint: 'Off: graded from your mistakes. On: 1–4 after each line.',
+  ),
+];
+
+List<SettingRow> _engineRows(
+  Settings s,
+  _Change change,
+  int coresAvailable,
+  List<(String, String)> analysisEngines,
+) => [
+  SettingRow(
+    EngineSettingCopy.engine,
+    TypedChoiceSetting(
+      options: [
+        (Settings.builtInEngine, EngineSettingCopy.builtIn),
+        ...analysisEngines,
+      ],
+      value: s.analysisEngine,
+      onChanged: (id) => change((now) => now.copyWith(analysisEngine: id)),
+    ),
+    hint:
+        'the engine behind the board\'s lines; add more in Engine '
+        'tournament',
+  ),
+  SettingRow(
+    EngineSettingCopy.cores,
+    NumberSetting(
+      value: s.coresOn(coresAvailable),
+      min: 1,
+      max: coresAvailable,
+      onChanged: (n) => change((now) => now.copyWith(engineCores: n)),
+    ),
+    hint: 'of $coresAvailable on this computer; half by default',
+  ),
+  SettingRow(
+    EngineSettingCopy.memory,
+    NumberSetting(
+      value: s.engineMemoryMb,
+      min: EngineSettingCopy.minMemoryMb,
+      max: Settings.maxMemoryMb,
+      step: EngineSettingCopy.memoryStep,
+      unit: 'MB',
+      onChanged: (n) => change((now) => now.copyWith(engineMemoryMb: n)),
+    ),
+  ),
+  SettingRow(
+    EngineSettingCopy.lines,
+    NumberSetting(
+      value: s.engineLines,
+      min: 1,
+      max: Settings.maxLines,
+      onChanged: (n) => change((now) => now.copyWith(engineLines: n)),
+    ),
+  ),
+];
+
+List<SettingRow> _repertoireRows(Settings s, _Change change) => [
+  SettingRow(
+    'Opponent rating',
+    NumberSetting(
+      value: s.opponentElo,
+      min: Settings.minElo,
+      max: Settings.maxElo,
+      step: 100,
+      onChanged: (n) => change((now) => now.copyWith(opponentElo: n)),
+    ),
+    hint: 'their replies are predicted for this Elo',
+  ),
+  SettingRow(
+    'Cover replies met once in',
+    NumberSetting(
+      value: s.coverOnceIn,
+      min: Settings.minCoverOnceIn,
+      max: Settings.maxCoverOnceIn,
+      step: 5,
+      unit: 'games',
+      onChanged: (n) => change((now) => now.copyWith(coverOnceIn: n)),
+    ),
+    hint: 'rarer replies are not counted as gaps',
+  ),
+];
+
+List<SettingRow> _accountRows(LichessAccountState account) => [
+  SettingRow(
+    'Lichess',
+    AccountSetting(account),
+    hint: account.problem ?? accountHint(account.status),
+    warn: account.problem != null,
+  ),
+  if (account.status case SignedOut() || Checking())
+    SettingRow(
+      'Personal access token',
+      SecretSetting(load: () async => null, save: account.useToken),
+      hint: 'instead of logging in; from lichess.org/account/oauth/token',
+    ),
+];
+
+List<SettingRow> _appRows({
+  required String? version,
+  required AppUpdates? updates,
+  required VoidCallback openLicences,
+  required VoidCallback openLogFolder,
+  required VoidCallback? copyDiagnostics,
+  required DiagnosticCopyState diagnostics,
+}) => [
+  if (updates != null)
+    ...updateRows(updates)
+  else
+    SettingRow('Version', ShownSetting(version ?? 'Unknown')),
+  SettingRow(
+    'Licences',
+    ActionSetting('View', openLicences),
+    hint: 'Stockfish, Hivemind, Maia, fonts and every package',
+  ),
+  if (copyDiagnostics != null)
+    SettingRow(
+      'Diagnostics',
+      ActionSetting('Copy diagnostics', copyDiagnostics),
+      hint: switch (diagnostics) {
+        DiagnosticCopyState.idle =>
+          'Version, platform and recent log for a bug report',
+        DiagnosticCopyState.copying => 'Preparing diagnostics…',
+        DiagnosticCopyState.copied => 'Diagnostics copied.',
+        DiagnosticCopyState.failed => 'Could not copy diagnostics. Try again.',
+      },
+      warn: diagnostics == DiagnosticCopyState.failed,
+    ),
+  SettingRow(
+    'Log folder',
+    ActionSetting('Open', openLogFolder),
+    hint: 'app.log, for a bug report',
+  ),
+];
 
 const _sampleLine = '1.e4 e5 2.Nf3 Nc6 3.Bb5';
 
@@ -437,30 +473,10 @@ String _day(DateTime? when) => when == null
 
 /// The Expectimax tab's settings, as its gear shows them. The opponent's
 /// rating is the Repertoire row above: one number for both.
-List<SettingRow> _expectimaxRows(
-  Settings s,
-  void Function(Settings Function(Settings now) edit) change,
-) {
+List<SettingRow> _expectimaxRows(Settings s, _Change change) {
   final e = s.expectimax;
   void set(ExpectimaxOptions Function(ExpectimaxOptions now) edit) =>
       change((now) => now.copyWith(expectimax: edit(now.expectimax)));
-  SettingRow number(
-    (String, String) copy,
-    int value,
-    int min,
-    int max,
-    ExpectimaxOptions Function(ExpectimaxOptions now, int n) edit, {
-    String? hint,
-  }) => SettingRow(
-    copy.$1,
-    NumberSetting(
-      value: value,
-      min: min,
-      max: max,
-      onChanged: (n) => set((now) => edit(now, n)),
-    ),
-    hint: hint ?? copy.$2,
-  );
   return [
     SettingRow(
       'Method',
@@ -487,6 +503,43 @@ List<SettingRow> _expectimaxRows(
       ),
       hint: 'where the database has too few games at a position',
     ),
+    ..._expectimaxLimits(e, set),
+    SettingRow(
+      SearchSettingCopy.source.$1,
+      ChoiceSetting(
+        options: SearchSettingCopy.sources,
+        value: e.source,
+        onChanged: (source) => set((now) => now.copyWith(source: source)),
+      ),
+      hint: SearchSettingCopy.source.$2,
+    ),
+  ];
+}
+
+/// The search's numbers: where the database gives way to Maia, how deep
+/// and how wide it looks, and which replies are too rare to count.
+List<SettingRow> _expectimaxLimits(
+  ExpectimaxOptions e,
+  void Function(ExpectimaxOptions Function(ExpectimaxOptions now) edit) set,
+) {
+  SettingRow number(
+    (String, String) copy,
+    int value,
+    int min,
+    int max,
+    ExpectimaxOptions Function(ExpectimaxOptions now, int n) edit, {
+    String? hint,
+  }) => SettingRow(
+    copy.$1,
+    NumberSetting(
+      value: value,
+      min: min,
+      max: max,
+      onChanged: (n) => set((now) => edit(now, n)),
+    ),
+    hint: hint ?? copy.$2,
+  );
+  return [
     number(
       SearchSettingCopy.fallback,
       e.fallbackUnder,
@@ -531,15 +584,6 @@ List<SettingRow> _expectimaxRows(
       ExpectimaxOptions.minEvalDepth,
       ExpectimaxOptions.maxEvalDepth,
       (now, n) => now.copyWith(evalDepth: n),
-    ),
-    SettingRow(
-      SearchSettingCopy.source.$1,
-      ChoiceSetting(
-        options: SearchSettingCopy.sources,
-        value: e.source,
-        onChanged: (source) => set((now) => now.copyWith(source: source)),
-      ),
-      hint: SearchSettingCopy.source.$2,
     ),
   ];
 }

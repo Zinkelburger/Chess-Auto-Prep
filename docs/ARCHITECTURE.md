@@ -158,8 +158,11 @@ waited for but never asked about.
 5. **Interfaces only at real boundaries:** filesystem, SQLite, engine
    processes, network, clock. Algorithms are concrete pure functions.
 6. **Split by job, not size.** Caps (enforced): 1,000 lines per file, 80 per
-   function, nesting depth 3. A test's `main()` and `group(...)` bodies are
-   lists of cases and exempt; each `test(...)` body counts. `part` is allowed
+   function, nesting depth 3. A function counts whatever its shape: an `=>`
+   body such as a widget's `build`, a getter, a signature over several lines.
+   A composition root, one call naming every part it builds, says so with
+   `// long: <why>` on the line before it. A test's `main()` and `group(...)`
+   bodies are lists of cases and exempt; each `test(...)` body counts. `part` is allowed
    only for a file of complete collaborator classes, never to spread one class.
    No `dynamic`; `late` only as `late final`.
 7. **Typed results and failures.** Expected outcomes are sealed results with

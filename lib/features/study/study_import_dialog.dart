@@ -111,6 +111,83 @@ class _ImportState extends State<_Import> {
     }
   }
 
+  /// Where the chapters come from: a file, pasted PGN or a Lichess URL,
+  /// and the button that reads them.
+  List<Widget> _sourceFields() => [
+    SegmentedButton<_Source>(
+      showSelectedIcon: false,
+      selected: {_source},
+      segments: const [
+        ButtonSegment(value: _Source.file, label: Text('PGN file')),
+        ButtonSegment(value: _Source.pgn, label: Text('Paste PGN')),
+        ButtonSegment(value: _Source.url, label: Text('Lichess URL')),
+      ],
+      onSelectionChanged: _busy
+          ? null
+          : (value) => setState(() {
+              _source = value.single;
+              _input.clear();
+              _data = null;
+              _problem = null;
+            }),
+    ),
+    const SizedBox(height: Space.m),
+    if (_source != _Source.file)
+      TextField(
+        controller: _input,
+        enabled: !_busy,
+        minLines: _source == _Source.pgn ? 4 : 1,
+        maxLines: _source == _Source.pgn ? 8 : 2,
+        decoration: InputDecoration(
+          labelText: _source == _Source.pgn ? 'PGN' : 'Study or chapter URL',
+        ),
+        onChanged: (_) => setState(() {
+          _data = null;
+          _problem = null;
+        }),
+      ),
+    Align(
+      alignment: Alignment.centerLeft,
+      child: OutlinedButton(
+        onPressed: _busy ? null : _read,
+        child: Text(
+          _source == _Source.file ? 'Choose PGN file…' : 'Preview chapters',
+        ),
+      ),
+    ),
+  ];
+
+  /// What was read, and the study it goes into.
+  List<Widget> _destination(StudyImportData data) => [
+    const SizedBox(height: Space.m),
+    Text('${data.chapter.lines.length} chapters · ${data.name}'),
+    if (!data.complete)
+      const Text(
+        'Some games are incomplete. A new study preserves their original text.',
+      ),
+    const SizedBox(height: Space.m),
+    if (widget.into != null)
+      SegmentedButton<bool>(
+        showSelectedIcon: false,
+        selected: {_append},
+        segments: const [
+          ButtonSegment(value: false, label: Text('New study')),
+          ButtonSegment(value: true, label: Text('Current study')),
+        ],
+        onSelectionChanged: _busy
+            ? null
+            : (value) => setState(() => _append = value.single),
+      ),
+    if (_append)
+      Text('Add to ${widget.into!.name}')
+    else
+      TextField(
+        controller: _name,
+        enabled: !_busy,
+        decoration: const InputDecoration(labelText: 'Study name (optional)'),
+      ),
+  ];
+
   @override
   Widget build(BuildContext context) => PopScope(
     canPop: !_busy,
@@ -123,83 +200,9 @@ class _ImportState extends State<_Import> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SegmentedButton<_Source>(
-                showSelectedIcon: false,
-                selected: {_source},
-                segments: const [
-                  ButtonSegment(value: _Source.file, label: Text('PGN file')),
-                  ButtonSegment(value: _Source.pgn, label: Text('Paste PGN')),
-                  ButtonSegment(value: _Source.url, label: Text('Lichess URL')),
-                ],
-                onSelectionChanged: _busy
-                    ? null
-                    : (value) => setState(() {
-                        _source = value.single;
-                        _input.clear();
-                        _data = null;
-                        _problem = null;
-                      }),
-              ),
-              const SizedBox(height: Space.m),
-              if (_source != _Source.file)
-                TextField(
-                  controller: _input,
-                  enabled: !_busy,
-                  minLines: _source == _Source.pgn ? 4 : 1,
-                  maxLines: _source == _Source.pgn ? 8 : 2,
-                  decoration: InputDecoration(
-                    labelText: _source == _Source.pgn
-                        ? 'PGN'
-                        : 'Study or chapter URL',
-                  ),
-                  onChanged: (_) => setState(() {
-                    _data = null;
-                    _problem = null;
-                  }),
-                ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton(
-                  onPressed: _busy ? null : _read,
-                  child: Text(
-                    _source == _Source.file
-                        ? 'Choose PGN file…'
-                        : 'Preview chapters',
-                  ),
-                ),
-              ),
+              ..._sourceFields(),
               if (_busy) const LinearProgressIndicator(),
-              if (_data case final data?) ...[
-                const SizedBox(height: Space.m),
-                Text('${data.chapter.lines.length} chapters · ${data.name}'),
-                if (!data.complete)
-                  const Text(
-                    'Some games are incomplete. A new study preserves their original text.',
-                  ),
-                const SizedBox(height: Space.m),
-                if (widget.into != null)
-                  SegmentedButton<bool>(
-                    showSelectedIcon: false,
-                    selected: {_append},
-                    segments: const [
-                      ButtonSegment(value: false, label: Text('New study')),
-                      ButtonSegment(value: true, label: Text('Current study')),
-                    ],
-                    onSelectionChanged: _busy
-                        ? null
-                        : (value) => setState(() => _append = value.single),
-                  ),
-                if (_append)
-                  Text('Add to ${widget.into!.name}')
-                else
-                  TextField(
-                    controller: _name,
-                    enabled: !_busy,
-                    decoration: const InputDecoration(
-                      labelText: 'Study name (optional)',
-                    ),
-                  ),
-              ],
+              if (_data case final data?) ..._destination(data),
               if (_problem != null)
                 Padding(
                   padding: const EdgeInsets.only(top: Space.m),
