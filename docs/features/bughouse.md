@@ -161,7 +161,12 @@ report while it searches is asked in passes of 800, 4,000 and 20,000 nodes on
 one process, the rows changing as each pass ends.
 **Actions menu** — `Toggle engine`, `New game` (start position, clock kept),
 `Flip board(s)`, `Copy dual FEN`, `Paste FEN or dual FEN` (one board's FEN
-sets board 1 and starts board 2 afresh), `Copy moves`, `Paste moves`. Moves
+sets board 1 and starts board 2 afresh), `Copy moves`, `Paste moves`. A FEN
+is copied and saved as Lichess writes one, the hand a ninth rank after the
+board (`…/RNB1K2R/PNpnb w KQkq - 0 10`, a bare `/` when both hands are
+empty), and a dual FEN is two of them joined by `|`. A paste, a set-up box
+or a BPGN file takes that or the bracket form (`…/RNB1K2R[PNpnb] w …`);
+Hivemind is still sent brackets. Moves
 are each board's line without its variations, as BPGN movetext in played order (`1A. e4 1B. d4 1a. e5`), after
 `[SetUpDualFEN "…"]` for a set-up start; a hand edit is a comment where it
 was made, `{ Hands edited on board 1: +2n }`, and pastes back. A paste takes that or a FICS game,

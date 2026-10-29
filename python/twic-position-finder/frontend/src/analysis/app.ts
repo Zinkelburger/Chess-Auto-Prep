@@ -27,7 +27,7 @@ import { loadSettings, maxThreads, recommendedThreads, saveSettings, sitNodesFor
 import { SitPanel } from './sit';
 import { engineShapes, glyphShape, moveShapes, threatShapes, variationShapes } from './shapes';
 import {
-  HAND_ROLES, START_FEN, Tree, boardDests, dropSquares, fenOf, handEdit, outcomeOf, playLine, positionOf, readFen, readMove, threatFen,
+  HAND_ROLES, START_FEN, Tree, boardDests, dropSquares, fenOf, handEdit, lichessFen, outcomeOf, playLine, positionOf, readFen, readMove, threatFen,
   type SavedTree, type TreeNode,
 } from './tree';
 import { makeUci } from 'chessops/util';
@@ -685,8 +685,10 @@ export class BughouseApp {
     const parts = setupFen.split(/\s+/);
     if (!read.ok && !/^[1-8pnbrqkPNBRQK~/]+(\[[pnbrqPNBRQ]*\])?$/.test(parts[0] ?? '')) return 'That is not a FEN.';
     const d = this.draft!;
-    const board = parts[0].replace(/\[.*$/, '');
-    const hand = /\[([^\]]*)\]/.exec(parts[0])?.[1] ?? '';
+    // The hand is in brackets or, as Lichess writes it, a ninth rank.
+    const ranks = parts[0].replace(/\[.*$/, '').split('/');
+    const board = ranks.slice(0, 8).join('/');
+    const hand = /\[([^\]]*)\]/.exec(parts[0])?.[1] ?? ranks[8] ?? '';
     d.hands = Material.empty();
     for (const ch of hand) {
       const role = (({ p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen' }) as Record<string, Role>)[ch.toLowerCase()];
@@ -734,7 +736,7 @@ export class BughouseApp {
   // ── Under the board: FEN and PGN ─────────────────────────────────
   private renderUnder() {
     const fen = $<HTMLInputElement>('ch-fen');
-    if (document.activeElement !== fen) fen.value = this.mode === 'editor' ? this.draftFen() : this.current.fen;
+    if (document.activeElement !== fen) fen.value = lichessFen(this.mode === 'editor' ? this.draftFen() : this.current.fen);
     fen.removeAttribute('aria-invalid');
   }
 
@@ -781,7 +783,7 @@ export class BughouseApp {
 
   private updateUrl() {
     const url = new URL(location.href);
-    if (this.current.fen === START_FEN) url.searchParams.delete('fen'); else url.searchParams.set('fen', this.current.fen);
+    if (this.current.fen === START_FEN) url.searchParams.delete('fen'); else url.searchParams.set('fen', lichessFen(this.current.fen));
     history.replaceState(null, '', url);
   }
 

@@ -23,6 +23,17 @@ import type { Color, Move, Role, SquareName } from 'chessops/types';
 import { VariationTree, newId, plyOf, type LineMove, type VariationNode } from './variation-tree';
 
 export const START_FEN = INITIAL_FEN.replace(' w ', '[] w ');
+
+/**
+ * The FEN with its hand written as Lichess writes one: a ninth rank after the
+ * board (`…/RNB1K2R/PNpnb w …`, a bare `/` when both hands are empty), not
+ * chessops' brackets. chessops reads both, so this is the form people see,
+ * copy and link; positions inside the page keep chessops' own.
+ */
+export function lichessFen(fen: string): string {
+  return fen.replace(/^([^\s[]*)\[([^\]]*)\]/, '$1/$2');
+}
+
 /** The most of one piece a hand holds (a full board's worth of pawns and then some). */
 export const MAX_IN_HAND = 16;
 export const HAND_ROLES: Role[] = ['pawn', 'knight', 'bishop', 'rook', 'queen'];
@@ -327,7 +338,7 @@ export class Tree extends VariationTree<TreeNode> {
 
   private headers(): string[] {
     const headers = ['[Event "Bughouse analysis"]', '[Site "https://chessautoprep.com/bughouse"]', '[Variant "Crazyhouse"]'];
-    if (this.root.fen !== START_FEN) headers.push(`[FEN "${this.root.fen}"]`, '[SetUp "1"]');
+    if (this.root.fen !== START_FEN) headers.push(`[FEN "${lichessFen(this.root.fen)}"]`, '[SetUp "1"]');
     return headers;
   }
 

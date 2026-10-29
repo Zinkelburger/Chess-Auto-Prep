@@ -248,13 +248,13 @@ List<AppAction> moveMenu(BughouseLab lab, int node) {
     ),
     AppAction(
       'Copy FEN',
-      after == null ? null : () => _copy(after.board(board).fen),
+      after == null ? null : () => _copy(lichessFen(after.board(board).fen)),
       icon: Icons.content_copy,
     ),
     if (!lab.single)
       AppAction(
         'Copy dual FEN',
-        after == null ? null : () => _copy(after.dualFen),
+        after == null ? null : () => _copy(after.lichessDualFen),
         icon: Icons.content_copy,
       ),
   ];

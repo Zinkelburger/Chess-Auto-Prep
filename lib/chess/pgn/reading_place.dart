@@ -140,11 +140,12 @@ String readingGameKey(ChapterLine line) {
     final url = Uri.tryParse(tag(field)?.trim() ?? '');
     if (url == null || !['http', 'https'].contains(url.scheme)) continue;
     final host = url.host.toLowerCase().replaceFirst(RegExp(r'^www\.'), '');
-    if (host == 'lichess.org' &&
-        RegExp(
-          r'^/[a-zA-Z0-9]{8}([a-zA-Z0-9]{4})?(/(white|black))?$',
-        ).hasMatch(url.path)) {
-      return 'https://lichess.org/${url.path.substring(1, 9)}';
+    // Old /<id> and new /game/<id> game pages keep one key, the old form.
+    final lichessGame = RegExp(
+      r'^(?:/game)?/([a-zA-Z0-9]{8})([a-zA-Z0-9]{4})?(/(white|black))?$',
+    ).firstMatch(url.path);
+    if (host == 'lichess.org' && lichessGame != null) {
+      return 'https://lichess.org/${lichessGame[1]}';
     }
     if (host == 'chess.com' &&
         RegExp(r'^/game/(live|daily)/[0-9]+/?$').hasMatch(url.path)) {

@@ -75,7 +75,7 @@ final class BughouseView extends ModeView {
       AppAction(
         'Copy dual FEN',
         () => unawaited(
-          Clipboard.setData(ClipboardData(text: lab.position.dualFen)),
+          Clipboard.setData(ClipboardData(text: lab.position.lichessDualFen)),
         ),
         group: 'Position',
       ),

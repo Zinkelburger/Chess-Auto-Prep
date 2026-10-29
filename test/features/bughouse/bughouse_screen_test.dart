@@ -348,7 +348,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(copied, [
         '[Variant "Crazyhouse"]\n\n1. e4 e5 *',
-        'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR[] w KQkq - 0 2',
+        'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR/ w KQkq - 0 2',
       ]);
       await rightClick(tester, find.text('e5'));
       await tester.tap(find.text('Delete from here'));
@@ -372,7 +372,11 @@ void main() {
       await rightClick(tester, find.text('1. d4'));
       await tester.tap(find.text('Copy dual FEN'));
       await tester.pumpAndSettle();
-      expect(copied, ['1A. e4 1B. d4', lab.position.dualFen]);
+      expect(copied, [
+        '1A. e4 1B. d4',
+        'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR/ b KQkq - 0 1|'
+            'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR/ b KQkq - 0 1',
+      ]);
     });
 
     testWidgets('a different move is a variation under the move it '

@@ -36,7 +36,7 @@ String crazyhouseLinePgn(TableLine line, BoardNumber board) {
     '[Variant "Crazyhouse"]',
     if (start.fen != Crazyhouse.initial.fen) ...[
       '[SetUp "1"]',
-      '[FEN "${start.fen}"]',
+      '[FEN "${lichessFen(start.fen)}"]',
     ],
   ];
   return '${tags.join('\n')}\n\n${words.join(' ')}';

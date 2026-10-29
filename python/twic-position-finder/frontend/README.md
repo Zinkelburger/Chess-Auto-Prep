@@ -91,7 +91,10 @@ kept on its position and carried through the moves after it; the engine
 always gets a bare FEN. Hands are capped at 16 of a piece and 64 pieces in
 all (the crazyhouse net has 16 slots a piece). The tree is kept in
 `localStorage` and comes back on a plain `/bughouse` and on reload; a `?fen=`
-link opens that position unless it is the saved one.
+link opens that position unless it is the saved one. The FEN box, `?fen=`
+links and PGN write the hand as Lichess does, a ninth rank
+(`…/RNB1K2R/PNpnb w …`); they and the board editor read that or brackets,
+and positions inside the page stay in chessops' bracket form.
 
 `engine.ts` runs Fairy-Stockfish 14 with Lichess's crazyhouse NNUE, the
 engine of lichess.org/analysis/crazyhouse (`@lichess-org/stockfish-web`),

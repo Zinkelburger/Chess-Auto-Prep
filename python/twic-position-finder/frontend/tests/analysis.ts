@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {
-  MAX_IN_HAND, START_FEN, Tree, adjustHand, boardDests, dropSquares, handEdit, handLetters, playLine, readFen, sanLine, threatFen,
+  MAX_IN_HAND, START_FEN, Tree, adjustHand, boardDests, dropSquares, fenOf, handEdit, handLetters, lichessFen, playLine, readFen, sanLine, threatFen,
   outcomeOf, positionOf, readMove,
 } from '../src/analysis/tree';
 import { liveGlyph, povDiff, verdict, winningChances } from '../src/analysis/judge';
@@ -13,6 +13,15 @@ assert.ok(loaded.ok, 'three extra queens a side is a position');
 assert.equal(readFen('8/8/8/8/8/8/8/8[] w - - 0 1').ok, false, 'no kings is refused');
 assert.equal(readFen('nonsense').ok, false);
 assert.match((readFen('4k3/8/8/8/8/8/8/4K3[Kk] w - - 0 1') as { error: string }).error, /king/i);
+
+// Hands are shown as Lichess writes them, a ninth rank, and read in either form.
+const LICHESS = 'r2qkb1r/ppp2ppp/2n5/1B1Q4/3pP3/8/PPP2PPP/RNB1K2R/PNpnb w KQkq - 0 10';
+const fromLichess = readFen(LICHESS);
+assert.ok(fromLichess.ok, 'a ninth-rank hand reads');
+assert.equal(lichessFen(fenOf(fromLichess.pos)), LICHESS);
+assert.equal(lichessFen(START_FEN), 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR/ w KQkq - 0 1');
+assert.equal(lichessFen('4k3/8/8/8/8/8/8/4K3 w - - 0 1'), '4k3/8/8/8/8/8/8/4K3 w - - 0 1', 'no hand, no change');
+assert.match(Tree.fromPgn(`[FEN "${ITALIAN.replace('[QQ', '[')}"]\n\n4. d4 *`)!.pgn(), /R1BQKB1R\/ w KQkq/, 'PGN writes the Lichess form');
 
 // + and − on a hand: one at a time, never below zero, capped at 16.
 let fen = adjustHand(ITALIAN, 'black', 'pawn', 1)!;

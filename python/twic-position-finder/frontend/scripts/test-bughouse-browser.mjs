@@ -70,7 +70,7 @@ try {
 
   // + under Black's knight: the hand, the FEN and the eval follow.
   await page.click('#ch-hand-top .ch-step[data-role="knight"][data-step="more"]');
-  assert.match(await fen(page), /\[n\] w/);
+  assert.match(await fen(page), /\/n w/);
   assert.equal(await page.$eval('#ch-hand-top .zh-slot[data-role="knight"]', (el) => el.dataset.nb), '1');
   await page.waitForFunction((b) => {
     const t = document.querySelector('#ch-pearl').textContent;
@@ -85,14 +85,14 @@ try {
 
   // − takes it back; − at zero is disabled.
   await page.click('#ch-hand-top .ch-step[data-role="knight"][data-step="fewer"]');
-  assert.match(await fen(page), /\[\] w/);
+  assert.match(await fen(page), /R1BQKB1R\/ w/);
   assert.equal(await page.$eval('#ch-hand-top .ch-step[data-role="knight"][data-step="fewer"]', (el) => el.disabled), true);
 
   // Moves by clicking squares, then a drop from the hand by click-and-square.
   await click(page, 'd2'); await click(page, 'd4');
   await until(page, '#ch-fen', / b /); // d4 is on the board before Black answers
   await click(page, 'e5'); await click(page, 'd4');
-  await until(page, '#ch-fen', /\[p\] w/); // exd4: the pawn went to Black's hand, as in crazyhouse
+  await until(page, '#ch-fen', /\/p w/); // exd4: the pawn went to Black's hand, as in crazyhouse
   await page.click('#ch-hand-bottom .ch-step[data-role="knight"][data-step="more"]'); // White +N
   await page.click('#ch-hand-bottom .zh-slot[data-role="knight"]');
   await click(page, 'd5');
@@ -100,9 +100,9 @@ try {
   assert.match(await page.$eval('#ch-moves', (el) => el.textContent), /\+N/, 'the edit is marked in the moves');
   await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('ArrowLeft');
-  assert.match(await fen(page), /\[\] b/, 'back before exd4');
+  assert.match(await fen(page), /\/ b/, 'back before exd4');
   await page.keyboard.press('ArrowDown');
-  assert.match(await fen(page), /\/3N4\/.*\[p\] b/, 'last move: after N@d5');
+  assert.match(await fen(page), /\/3N4\/.*\/p b/, 'last move: after N@d5');
 
   // PGN shows the line.
   assert.match(await page.$eval('#ch-pgn', (el) => el.value), /4\. d4 exd4 \{ Hands edited: \+N \} 5\. N@d5/);
@@ -176,7 +176,7 @@ try {
   assert.equal(await page.$eval('#ch-practice', (el) => el.hidden), true);
   // Back to N@d5: Bb5 and the reply are a variation now.
   await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowRight');
-  await until(page, '#ch-fen', /\/3N4\/.*\[p\] b/);
+  await until(page, '#ch-fen', /\/3N4\/.*\/p b/);
 
   // Board editor: a white queen painted on h5 and a black pawn removed, then analysed.
   await page.click('#ch-edit');
@@ -191,7 +191,7 @@ try {
   await click(page, 'a7');
   await until(page, '#ch-fen', /^r1bqkb1r\/1ppp/); // the a7 pawn is gone
   await page.click('#ch-hand-top .ch-step[data-role="queen"][data-step="more"]'); // Black +Q in the editor
-  assert.match(await fen(page), /\[[^\]]*q[^\]]*\]/);
+  assert.match(await fen(page), /\/[A-Za-z]*q[A-Za-z]* [wb] /);
   await page.screenshot({ path: path.join(output, 'editor.png') });
   await page.click('#ch-turn button[data-turn="black"]');
   await page.click('#ch-editor-apply');
@@ -213,7 +213,7 @@ try {
   await page.screenshot({ path: path.join(output, 'sit-for-knight.png') });
   // Clicking the knight row gives White the knight; the engine then mates.
   await page.click('#bs-sit .bs-sit-row[data-role="knight"]');
-  assert.match(await fen(page), /\[N\] w/);
+  assert.match(await fen(page), /\/N w/);
   await page.waitForFunction(() => document.querySelector('#ch-pearl').textContent.startsWith('#'), { timeout: 120_000 });
 
   // A laptop screen: the move list keeps its rows and the sit panel all six.
@@ -248,7 +248,7 @@ try {
   assert.equal(await text(page, '#ch-settings .ch-setting:first-child .ch-setting-value'), '∞');
   await page.mouse.click(300, 300); // on the board: a click elsewhere closes it
   assert.equal(await page.$eval('#ch-settings', (el) => el.hidden), true, 'a click elsewhere closes the gear');
-  await page.goto(url('r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R[] w KQkq - 4 4'));
+  await page.goto(url('r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R/ w KQkq - 4 4'));
   await evaluated(page);
   await sitDone(page);
   await page.waitForFunction(() => /^Depth \d+\/∞/.test(document.querySelector('#ch-engine-info').textContent), { timeout: 60_000 });

@@ -48,7 +48,7 @@ String tableLineText(TableLine line) {
   final moves = bpgnMovetext(line);
   return line.root.dualFen == TablePosition.initial.dualFen
       ? moves
-      : '[SetUpDualFEN "${line.root.dualFen}"]\n\n$moves';
+      : '[SetUpDualFEN "${line.root.lichessDualFen}"]\n\n$moves';
 }
 
 sealed class PastedMoves {
