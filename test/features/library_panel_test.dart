@@ -162,7 +162,7 @@ void main() {
       findsOneWidget,
     );
     fixture.files.listing = Repertoires([kid]);
-    await tester.tap(find.text('Retry'));
+    await tester.tap(find.text('Try again'));
     await tester.pumpAndSettle();
     expect(find.text('KID'), findsOneWidget);
   });

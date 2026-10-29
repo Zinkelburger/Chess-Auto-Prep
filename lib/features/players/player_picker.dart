@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../../chess/players/player.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
-import 'analysis_rows.dart';
 import 'players.dart';
+import '../../ui/list_message.dart';
 
 /// The Player analysis column before anyone is chosen: the saved players to
 /// pick from, narrowed by a search, or the way to add the first one.

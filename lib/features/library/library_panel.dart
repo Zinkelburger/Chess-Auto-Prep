@@ -9,6 +9,7 @@ import 'library.dart';
 import 'library_messages.dart';
 import 'library_state.dart';
 import 'repertoire_tile.dart';
+import '../../ui/list_message.dart';
 
 /// The repertoires, searchable, each opening to its chapters. Tapping a
 /// chapter asks the host to open it in the workspace.
@@ -116,7 +117,13 @@ class _LibraryPanelState extends State<LibraryPanel> {
     final library = widget.library;
     return switch (library.state) {
       LibraryLoading() => const Center(child: CircularProgressIndicator()),
-      LibraryLoadFailed() => _Failure(onRetry: library.refresh),
+      LibraryLoadFailed() => ListMessage(
+        'Could not load repertoires. Please try again.',
+        action: OutlinedButton(
+          onPressed: library.refresh,
+          child: const Text('Try again'),
+        ),
+      ),
       LibraryLoaded() => _loaded(library),
     };
   }
@@ -150,7 +157,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
       );
     }
     if (library.visible.isEmpty) {
-      return _Message('Nothing matches "${library.query}".');
+      return ListMessage('Nothing matches "${library.query}".');
     }
     return _list(library);
   }
@@ -255,31 +262,6 @@ class _DeletedLink extends StatelessWidget {
   }
 }
 
-class _Failure extends StatelessWidget {
-  const _Failure({required this.onRetry});
-
-  final Future<void> Function() onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(Space.l),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Could not load repertoires. Please try again.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: Space.s),
-          FilledButton(onPressed: onRetry, child: const Text('Retry')),
-        ],
-      ),
-    );
-  }
-}
-
 class _Unreadable extends StatelessWidget {
   const _Unreadable({required this.folder});
 
@@ -293,20 +275,6 @@ class _Unreadable extends StatelessWidget {
         '${folder.name} could not be read: ${folder.detail}',
         style: Theme.of(context).textTheme.bodySmall,
       ),
-    );
-  }
-}
-
-class _Message extends StatelessWidget {
-  const _Message(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(Space.l),
-      child: Text(text, style: Theme.of(context).textTheme.bodySmall),
     );
   }
 }

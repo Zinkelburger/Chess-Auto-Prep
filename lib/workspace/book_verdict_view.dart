@@ -6,6 +6,7 @@ import '../chess/book/played_game.dart';
 import '../chess/pgn/move_label.dart' show continuation;
 import '../ui/move_notation.dart';
 import '../ui/theme.dart';
+import '../ui/list_message.dart';
 
 /// What the user's book says about one game, in words and as a panel: the
 /// same wherever a game is checked — My games' list and Book tab, the
@@ -72,21 +73,21 @@ class BookVerdictDetail extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: switch (verdict) {
       NoBook() => [
-        BookSentence(
+        ListMessage(
           'Your book has no ${sideName(game.side)} chapters. Add some in '
           'Books and games as ${sideName(game.side)} are compared with them.',
-          inset: false,
+          inset: 0,
         ),
       ],
       OtherOpening() => const [
-        BookSentence(
+        ListMessage(
           'This game left your books before a full move was played: another '
           'opening, not a mistake.',
-          inset: false,
+          inset: 0,
         ),
       ],
       InBookThroughout(:final place) => [
-        BookSentence('Every move is in ${place.file.name}.', inset: false),
+        ListMessage('Every move is in ${place.file.name}.', inset: 0),
         _Actions(place: place, onReadBook: onReadBook),
       ],
       final LeftBook left => [
@@ -238,19 +239,4 @@ class _Actions extends StatelessWidget {
       ],
     );
   }
-}
-
-/// A sentence in a book pane: in from the pane's edge on its own, or flush
-/// in a list that already is.
-class BookSentence extends StatelessWidget {
-  const BookSentence(this.words, {super.key, this.inset = true});
-
-  final String words;
-  final bool inset;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.all(inset ? Space.m : 0),
-    child: Text(words, style: Theme.of(context).textTheme.bodySmall),
-  );
 }

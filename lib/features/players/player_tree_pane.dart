@@ -7,8 +7,8 @@ import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
 import '../../workspace/document_session.dart';
 import '../../workspace/explorer_pane.dart' show ResultBar;
-import 'analysis_rows.dart';
 import 'player_analysis.dart';
+import '../../ui/list_message.dart';
 
 /// The Player openings tab: what the chosen player's games did from the
 /// position on the board, as the Explorer tab draws a database — a row per

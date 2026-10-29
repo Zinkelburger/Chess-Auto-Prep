@@ -8,6 +8,7 @@ import '../../workspace/document_session.dart';
 import 'book_words.dart';
 import 'game_book.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/list_message.dart';
 
 /// The Book tab: what the user's book says about the game on the board.
 /// The verdict, the move that left the book beside what the book plays
@@ -65,14 +66,14 @@ class _BookPaneState extends State<BookPane> {
         final session = widget.session;
         final checked = widget.book.find(session.source, session.game);
         if (checked == null) {
-          return BookSentence(switch (widget.book) {
+          return ListMessage(switch (widget.book) {
             GameBook(problem: _?) => 'Could not compare your games.',
             GameBook(state: BookReading()) =>
               'Reading your games and repertoires…',
             _ =>
               'Open one of your games from the list to compare it with '
                   'your book.',
-          });
+          }, inset: Space.m);
         }
         return ListView(
           padding: const EdgeInsets.all(Space.m),

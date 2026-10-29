@@ -11,6 +11,7 @@ import 'line_preview.dart';
 import 'preview_target.dart';
 import '../ui/app_keys.dart';
 import '../ui/move_notation.dart';
+import '../ui/list_message.dart';
 
 /// The explorer's Book: the active book's chapters as an opening
 /// explorer. For the position on the board, every move any of the book's
@@ -119,8 +120,8 @@ class _TreePaneState extends State<TreePane> {
   }
 
   Widget _body() => switch (widget.tree.state) {
-    TreeReading() => const _Sentence('Reading your book…'),
-    TreeNothing(:final sentence) => _Sentence(sentence),
+    TreeReading() => const ListMessage('Reading your book…', inset: Space.m),
+    TreeNothing(:final sentence) => ListMessage(sentence, inset: Space.m),
     TreeShown(:final rows) => ListView.builder(
       itemCount: rows.length + 1,
       itemBuilder: (context, index) => index == 0
@@ -191,18 +192,6 @@ class _Summary extends StatelessWidget {
       ),
     );
   }
-}
-
-class _Sentence extends StatelessWidget {
-  const _Sentence(this.words);
-
-  final String words;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(Space.m),
-    child: Text(words, style: Theme.of(context).textTheme.bodySmall),
-  );
 }
 
 class _Header extends StatelessWidget {

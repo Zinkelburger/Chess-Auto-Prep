@@ -8,6 +8,7 @@ import 'trainer.dart';
 import 'trainer_state.dart';
 import 'trainer_words.dart';
 import 'training_home.dart';
+import '../../ui/list_message.dart';
 
 /// The Train tab of the reading card: the lines of the chapter, or of its
 /// repertoire, with where each stands and the two ways in — Review what is
@@ -131,8 +132,10 @@ class _TrainPaneState extends State<TrainPane> {
       );
     }
     return switch (trainer.state) {
-      TrainerIdle() ||
-      TrainerLoading() => const _Sentence('Reading training progress…'),
+      TrainerIdle() || TrainerLoading() => const ListMessage(
+        'Reading training progress…',
+        inset: Space.m,
+      ),
       // The scope stays in reach: a book trains with nothing open.
       TrainerEmpty() when trainer.selection.active => _chooseRepertoire(
         context,
@@ -168,9 +171,13 @@ class _TrainPaneState extends State<TrainPane> {
           ],
         ),
       ),
-      TrainerFailed(:final failure) => _Failed(
-        sentence: progressProblem(failure, doing: 'read the training progress'),
-        onRetry: trainer.reload,
+      TrainerFailed(:final failure) => ListMessage(
+        progressProblem(failure, doing: 'read the training progress'),
+        inset: Space.m,
+        action: OutlinedButton(
+          onPressed: trainer.reload,
+          child: const Text('Try again'),
+        ),
       ),
       final TrainerReady ready when trainer.selection.active => TrainingHome(
         trainer: trainer,
@@ -189,36 +196,4 @@ class _TrainPaneState extends State<TrainPane> {
       ),
     };
   }
-}
-
-class _Sentence extends StatelessWidget {
-  const _Sentence(this.words);
-
-  final String words;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(Space.m),
-    child: Text(words, style: Theme.of(context).textTheme.bodySmall),
-  );
-}
-
-class _Failed extends StatelessWidget {
-  const _Failed({required this.sentence, required this.onRetry});
-
-  final String sentence;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(Space.m),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(sentence),
-        const SizedBox(height: Space.s),
-        OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
-      ],
-    ),
-  );
 }

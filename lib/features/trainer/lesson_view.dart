@@ -483,7 +483,7 @@ class _Control extends StatelessWidget {
               ),
             ),
           ),
-          TextButton(onPressed: lesson.retry, child: const Text('Retry')),
+          TextButton(onPressed: lesson.retry, child: const Text('Try again')),
         ],
       ),
       _ => const SizedBox(height: Space.xl),

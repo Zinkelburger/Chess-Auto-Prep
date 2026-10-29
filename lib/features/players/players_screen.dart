@@ -8,12 +8,12 @@ import '../../ui/confirm_dialog.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
-import 'analysis_rows.dart' show ListMessage;
 import 'group_dialog.dart';
 import 'person_row.dart';
 import 'player_dialogs.dart';
 import 'players.dart';
 import 'saved_games.dart';
+import '../../ui/list_message.dart';
 
 /// The Players & prep page: everyone the user prepares for, or the groups
 /// they are collected in for an event, as one dense list. A row has the two

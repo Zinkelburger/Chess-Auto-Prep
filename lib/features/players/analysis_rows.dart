@@ -258,27 +258,3 @@ class PlayerGameRow extends StatelessWidget {
     );
   }
 }
-
-/// Words in place of a list: why it is empty, and the one thing that fixes
-/// it when there is one.
-class ListMessage extends StatelessWidget {
-  const ListMessage(this.text, {super.key, this.action});
-
-  final String text;
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(Space.l),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(text, style: Theme.of(context).textTheme.bodyMedium),
-        if (action case final action?) ...[
-          const SizedBox(height: Space.s),
-          action,
-        ],
-      ],
-    ),
-  );
-}

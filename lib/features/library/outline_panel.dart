@@ -19,6 +19,7 @@ import 'library_state.dart';
 import 'new_chapter_dialog.dart';
 import 'outline_rows.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/list_message.dart';
 
 /// The chapters of the open repertoire and, under the open one, its lines.
 ///
@@ -326,10 +327,11 @@ class _OutlinePanelState extends State<OutlinePanel> {
     final outline = widget.outline;
     final chapters = outline.chapters;
     if (chapters.isEmpty) {
-      return OutlineMessage(
+      return ListMessage(
         outline.query.trim().isEmpty
             ? 'No chapters yet\nCreate a chapter, then add your moves.'
             : 'No chapter or line matches "${outline.query}".',
+        inset: Space.m,
       );
     }
     // A book-sized chapter has thousands of lines, so each row is built when
@@ -337,7 +339,7 @@ class _OutlinePanelState extends State<OutlinePanel> {
     final rows = [
       if (outline.searching) (_) => const LinearProgressIndicator(),
       if (outline.searchProblem case final problem?)
-        (_) => OutlineMessage(problem),
+        (_) => ListMessage(problem, inset: Space.m),
       for (final chapter in chapters) ..._chapterRows(outline, chapter),
     ];
     return ListView.builder(
@@ -384,12 +386,13 @@ class _OutlinePanelState extends State<OutlinePanel> {
     return [
       row,
       if (lines.isEmpty)
-        (_) => OutlineMessage(
+        (_) => ListMessage(
           outline.query.trim().isNotEmpty
               ? 'No lines match this search.'
               : outline.atPosition
               ? 'No line reaches this position.'
               : 'Empty — add lines to fill this chapter.',
+          inset: Space.m,
         ),
       for (final line in lines) (_) => _lineRow(line, chapter.ref),
     ];

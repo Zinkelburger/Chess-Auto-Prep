@@ -16,6 +16,7 @@ import '../../ui/theme.dart';
 import '../../workspace/file_filter.dart';
 import 'pgn_viewer.dart';
 import '../../ui/app_keys.dart';
+import '../../ui/list_message.dart';
 
 /// Opens a PGN file in the workspace with its first game on the board.
 typedef OpenPgnFile = void Function(ChapterRef file);
@@ -111,7 +112,7 @@ class _PgnViewerPanelState extends State<PgnViewerPanel>
               onBrowse: widget.onBrowse,
               trailing: widget.trailing,
             ),
-            if (_viewer.recentProblem case final problem?) _Message(problem),
+            if (_viewer.recentProblem case final problem?) ListMessage(problem),
             Expanded(
               child: file == null ? _recent(context) : _games(context, file),
             ),
@@ -124,7 +125,13 @@ class _PgnViewerPanelState extends State<PgnViewerPanel>
   Widget _recent(BuildContext context) {
     final recent = _viewer.recent;
     if (recent.isEmpty) {
-      return _Empty(onBrowse: widget.onBrowse);
+      return ListMessage(
+        'No PGN open.\nOpen a file to read its games.',
+        action: FilledButton(
+          onPressed: widget.onBrowse,
+          child: const Text('Open PGN file…'),
+        ),
+      );
     }
     return ListView(
       children: [
@@ -271,13 +278,15 @@ class _PgnViewerPanelState extends State<PgnViewerPanel>
   /// Why the list is empty, and the way back to every game when a filter
   /// emptied it.
   Widget _nothingShown() {
-    if (widget.filter.busy) return const _Message('Filtering games…');
-    if (widget.filter.problem case final problem?) return _Message(problem);
-    if (_viewer.games.isEmpty) return const _Message('No games in this file.');
-    if (_viewer.query.trim().isNotEmpty) {
-      return _Message('Nothing matches "${_viewer.query}".');
+    if (widget.filter.busy) return const ListMessage('Filtering games…');
+    if (widget.filter.problem case final problem?) return ListMessage(problem);
+    if (_viewer.games.isEmpty) {
+      return const ListMessage('No games in this file.');
     }
-    return const _Message('No games match the filter.');
+    if (_viewer.query.trim().isNotEmpty) {
+      return ListMessage('Nothing matches "${_viewer.query}".');
+    }
+    return const ListMessage('No games match the filter.');
   }
 
   Widget _gameRow(
@@ -627,47 +636,6 @@ class _RecentRow extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _Empty extends StatelessWidget {
-  const _Empty({required this.onBrowse});
-
-  final VoidCallback onBrowse;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(Space.l),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'No PGN open.\nOpen a file to read its games.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: Space.s),
-          FilledButton(
-            onPressed: onBrowse,
-            child: const Text('Open PGN file…'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Message extends StatelessWidget {
-  const _Message(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(Space.l),
-      child: Text(text, style: Theme.of(context).textTheme.bodySmall),
     );
   }
 }

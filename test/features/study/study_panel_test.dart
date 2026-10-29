@@ -85,7 +85,7 @@ void main() {
     await study.studies.refresh();
     await pump(tester);
     expect(find.textContaining('Could not read'), findsOneWidget);
-    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
   });
 
   testWidgets('chapter tag editor validates and saves a result', (

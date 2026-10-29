@@ -15,6 +15,7 @@ import 'puzzle_filters.dart';
 import 'puzzle_trainer.dart';
 import 'source_games.dart';
 import 'tactics_set.dart';
+import '../../ui/list_message.dart';
 
 /// The Tactics column: the one button that starts a sitting, the filters
 /// beside the count they change, and the puzzles they let through, which
@@ -103,12 +104,12 @@ class _TacticsPanelState extends State<TacticsPanel> {
           ),
           Expanded(
             child: switch (widget.set.state) {
-              SetLoading() => const _Message('Reading puzzles…'),
-              SetMissing() => const _Message(
+              SetLoading() => const ListMessage('Reading puzzles…'),
+              SetMissing() => const ListMessage(
                 'No puzzles yet. Get your games above: the mistakes you made '
                 'in them become puzzles here.',
               ),
-              SetUnreadable(:final detail) => _Message(
+              SetUnreadable(:final detail) => ListMessage(
                 'The puzzle set could not be read: $detail',
                 action: TextButton(
                   onPressed: () => unawaited(widget.set.load()),
@@ -195,7 +196,7 @@ class _TacticsPanelState extends State<TacticsPanel> {
       final days = filter.days;
       if (noneQueued && days != null) {
         return SliverToBoxAdapter(
-          child: _Message(
+          child: ListMessage(
             'No puzzles from the last $days days.',
             action: TextButton(
               onPressed: () =>
@@ -206,7 +207,7 @@ class _TacticsPanelState extends State<TacticsPanel> {
         );
       }
       return SliverToBoxAdapter(
-        child: _Message(
+        child: ListMessage(
           noneQueued
               ? 'Your filters rule out every puzzle you have. Open Filters '
                     'to loosen them.'
@@ -471,30 +472,4 @@ extension on _PuzzleRow {
       ),
     ],
   );
-}
-
-class _Message extends StatelessWidget {
-  const _Message(this.text, {this.action});
-
-  final String text;
-
-  /// The one thing that fixes it, under the words.
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(Space.l),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(text, style: Theme.of(context).textTheme.bodyMedium),
-          if (action case final action?) ...[
-            const SizedBox(height: Space.s),
-            action,
-          ],
-        ],
-      ),
-    );
-  }
 }

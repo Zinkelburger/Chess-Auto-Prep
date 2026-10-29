@@ -10,6 +10,7 @@ import '../../ui/theme.dart';
 import 'library.dart';
 import 'library_messages.dart';
 import 'library_state.dart';
+import '../../ui/list_message.dart';
 
 /// The chapters the user deleted under the repertoire each came from, newest
 /// first, each with `Restore`. It
@@ -97,8 +98,14 @@ class _DeletedChaptersViewState extends State<DeletedChaptersView> {
 
   Widget _body(BuildContext context) => switch (_listing) {
     null => const Center(child: CircularProgressIndicator()),
-    DeletedUnreadable() => _Unreadable(onRetry: _reload),
-    DeletedChapters(:final chapters) when chapters.isEmpty => const _Message(
+    DeletedUnreadable() => ListMessage(
+      'Could not read the deleted chapters. Please try again.',
+      action: OutlinedButton(
+        onPressed: _reload,
+        child: const Text('Try again'),
+      ),
+    ),
+    DeletedChapters(:final chapters) when chapters.isEmpty => const ListMessage(
       'Nothing deleted\nChapters you delete can be restored here.',
     ),
     DeletedChapters(:final chapters) => ListView(
@@ -224,44 +231,6 @@ class _DeletedRow extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _Unreadable extends StatelessWidget {
-  const _Unreadable({required this.onRetry});
-
-  final Future<void> Function() onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(Space.l),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Could not read the deleted chapters. Please try again.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: Space.s),
-          FilledButton(onPressed: onRetry, child: const Text('Retry')),
-        ],
-      ),
-    );
-  }
-}
-
-class _Message extends StatelessWidget {
-  const _Message(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(Space.l),
-      child: Text(text, style: Theme.of(context).textTheme.bodySmall),
     );
   }
 }

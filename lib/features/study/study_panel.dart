@@ -26,6 +26,7 @@ import 'chapter_position_dialog.dart';
 import 'study_import_dialog.dart';
 import 'study_send_dialog.dart';
 import 'study_recovery_dialog.dart';
+import '../../ui/list_message.dart';
 
 /// Opens one chapter of a study in the workspace.
 typedef OpenChapter = void Function(ChapterRef study, int chapter);
@@ -415,7 +416,13 @@ class _StudyPanelState extends State<StudyPanel> {
 
   Widget _body(BuildContext context) => switch (_studies.state) {
     StudiesLoading() => const Center(child: CircularProgressIndicator()),
-    StudiesLoadFailed() => _Failure(onRetry: _studies.refresh),
+    StudiesLoadFailed() => ListMessage(
+      'Could not read your studies folder. Please try again.',
+      action: OutlinedButton(
+        onPressed: _studies.refresh,
+        child: const Text('Try again'),
+      ),
+    ),
     StudiesLoaded() => _listed(context),
   };
 
@@ -435,12 +442,12 @@ class _StudyPanelState extends State<StudyPanel> {
       );
     }
     if (_studies.studies.isEmpty) {
-      return const _Message(
+      return const ListMessage(
         'No studies yet\nCreate one, or import a Lichess study.',
       );
     }
     if (_studies.visible.isEmpty) {
-      return _Message('Nothing matches "${_studies.query}".');
+      return ListMessage('Nothing matches "${_studies.query}".');
     }
     // Build each study row when it scrolls into view.
     final rows = <WidgetBuilder>[];
@@ -638,45 +645,6 @@ class _Toolbar extends StatelessWidget {
             ),
         ],
       ),
-    );
-  }
-}
-
-class _Failure extends StatelessWidget {
-  const _Failure({required this.onRetry});
-
-  final Future<void> Function() onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(Space.l),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Could not read your studies folder. Please try again.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: Space.s),
-          FilledButton(onPressed: onRetry, child: const Text('Retry')),
-        ],
-      ),
-    );
-  }
-}
-
-class _Message extends StatelessWidget {
-  const _Message(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(Space.l),
-      child: Text(text, style: Theme.of(context).textTheme.bodySmall),
     );
   }
 }

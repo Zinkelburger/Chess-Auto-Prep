@@ -8,6 +8,7 @@ import '../ui/theme.dart';
 import 'board_book.dart';
 import 'book_verdict_view.dart';
 import 'document_session.dart';
+import '../ui/list_message.dart';
 
 /// The My books tab: what the book in use says about the game on the board,
 /// read from the side the board is seen from — flip the board to check the
@@ -66,21 +67,21 @@ class _BoardBookPaneState extends State<BoardBookPane> {
         children: [
           ?widget.bookChip,
           switch (widget.book.state) {
-            BoardBookIdle() => const BookSentence(
+            BoardBookIdle() => const ListMessage(
               'Open a game to check it against your books.',
-              inset: false,
+              inset: 0,
             ),
-            BoardBookReading() => const BookSentence(
+            BoardBookReading() => const ListMessage(
               'Reading your repertoires…',
-              inset: false,
+              inset: 0,
             ),
-            BoardBookFailed() => const BookSentence(
+            BoardBookFailed() => const ListMessage(
               'Could not read your repertoires.',
-              inset: false,
+              inset: 0,
             ),
-            BoardBookNotSet() => const BookSentence(
+            BoardBookNotSet() => const ListMessage(
               'No book set. Pick the book to compare games with.',
-              inset: false,
+              inset: 0,
             ),
             BoardBookChecked(:final game, :final verdict, :final book) =>
               Column(

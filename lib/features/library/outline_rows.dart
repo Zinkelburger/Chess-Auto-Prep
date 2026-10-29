@@ -209,21 +209,6 @@ class LineRow extends StatelessWidget {
   }
 }
 
-/// A sentence where rows would be: nothing here yet, or nothing matching.
-class OutlineMessage extends StatelessWidget {
-  const OutlineMessage(this.text, {super.key});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(Space.m),
-      child: Text(text, style: Theme.of(context).textTheme.bodySmall),
-    );
-  }
-}
-
 /// What a drag out of the outline carries: which games of the open chapter
 /// are on the move. Dropped on a chapter they become lines of their own
 /// there; dropped on a line they fold into it as variations.

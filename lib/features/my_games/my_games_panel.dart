@@ -9,6 +9,7 @@ import '../../ui/theme.dart';
 import '../../workspace/document_session.dart';
 import 'book_words.dart';
 import 'game_book.dart';
+import '../../ui/list_message.dart';
 
 /// The two ways the column lists what the book says: game by game, or
 /// grouped by where the games left it, most often first.
@@ -107,18 +108,18 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
             child: switch (widget.book.state) {
               BookReading() when widget.book.problem != null => Column(
                 children: [
-                  const _Message('Could not compare your games.'),
+                  const ListMessage('Could not compare your games.'),
                   TextButton(
                     onPressed: () => unawaited(widget.book.retry()),
                     child: const Text('Try again'),
                   ),
                 ],
               ),
-              BookReading() => const _Message(
+              BookReading() => const ListMessage(
                 'Reading your games and repertoires…',
               ),
               BookNoAccounts() => const SizedBox.shrink(),
-              BookChecked(:final games) when games.isEmpty => const _Message(
+              BookChecked(:final games) when games.isEmpty => const ListMessage(
                 'No games saved yet. Get games above to download them.',
               ),
               final BookChecked checked => _checked(checked),
@@ -185,7 +186,7 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
         ),
         Expanded(
           child: shown.isEmpty
-              ? _Message('Nothing matches "$query".')
+              ? ListMessage('Nothing matches "$query".')
               : ListView.builder(
                   itemCount: shown.length,
                   itemExtent: puzzleRowHeight,
@@ -345,7 +346,7 @@ class _Openings extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!checked.hasBook) {
-      return const _Message(
+      return const ListMessage(
         'Choose a book above to compare openings. Your saved games are in Games.',
       );
     }
@@ -359,7 +360,7 @@ class _Openings extends StatelessWidget {
       }
     }
     if (items.isEmpty) {
-      return const _Message('None of these games left your book.');
+      return const ListMessage('None of these games left your book.');
     }
     return ListView(children: items);
   }
@@ -430,16 +431,4 @@ class _WayRow extends StatelessWidget {
       ),
     );
   }
-}
-
-class _Message extends StatelessWidget {
-  const _Message(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(Space.l),
-    child: Text(text, style: Theme.of(context).textTheme.bodyMedium),
-  );
 }
