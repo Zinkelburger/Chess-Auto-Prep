@@ -44,20 +44,22 @@ void main() {
     );
   });
 
-  test(
-    'a set-up board carries its hands in the FEN; Black starts with ...',
-    () {
-      final start = table(
-        'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR[Nn] b KQkq - 0 1',
-      );
-      final line = playedLine('1N@e5 1g1f3', TableLine(start));
-      final pgn = crazyhouseLinePgn(line, BoardNumber.one, 2);
-      expect(pgn, contains('[SetUp "1"]'));
-      expect(pgn, contains('[FEN "${start.one.fen}"]'));
-      expect(pgn, endsWith('1... N@e5 2. Nf3 *'));
-      expect(replayed(pgn), ['N@e5', 'Nf3']);
-    },
-  );
+  test('a set-up board carries its hands in the FEN; Black starts with ...', () {
+    final start = table(
+      'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR[Nn] b KQkq - 0 1',
+    );
+    final line = playedLine('1N@e5 1g1f3', TableLine(start));
+    final pgn = crazyhouseLinePgn(line, BoardNumber.one, 2);
+    expect(pgn, contains('[SetUp "1"]'));
+    expect(
+      pgn,
+      contains(
+        '[FEN "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR/Nn b KQkq - 0 1"]',
+      ),
+    );
+    expect(pgn, endsWith('1... N@e5 2. Nf3 *'));
+    expect(replayed(pgn), ['N@e5', 'Nf3']);
+  });
 
   test('a pawn drop is P@ and an underpromotion keeps its piece', () {
     final start = table('k7/4P3/8/8/8/8/8/K7[Pp] w - - 0 1');

@@ -89,6 +89,24 @@ void main() {
   });
 
   group('a dual FEN', () {
+    test('reads a hand written as Lichess writes it, a ninth rank', () {
+      const board = 'r2qkb1r/ppp2ppp/2n5/1B1Q4/3pP3/8/PPP2PPP/RNB1K2R';
+      final lichess =
+          (readDualFen('$board/PNpnb w KQkq - 0 10|$board/ w KQkq - 0 10')
+                  as SetupReady)
+              .position;
+      final brackets =
+          (readDualFen('$board[PNpnb] w KQkq - 0 10|$board[] w KQkq - 0 10')
+                  as SetupReady)
+              .position;
+      expect(lichess.dualFen, brackets.dualFen);
+      expect(boxesOf(lichess, BoardNumber.one).white, 'N P');
+      expect(
+        lichess.lichessDualFen,
+        '$board/PNpnb w KQkq - 0 10|$board/ w KQkq - 0 10',
+      );
+    });
+
     test('of one FEN is board 1, with board 2 at the start', () {
       final table =
           (readDualFen('4k3/8/8/8/8/8/8/4K3 w - - 0 1') as SetupReady).position;

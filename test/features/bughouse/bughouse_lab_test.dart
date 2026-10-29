@@ -216,7 +216,12 @@ void main() {
     expect(lab.problem, isNull);
     lab.play(BoardNumber.two, 'd2d4');
     final copied = lab.movesText;
-    expect(copied, startsWith('[SetUpDualFEN "'));
+    expect(
+      copied,
+      startsWith(
+        '[SetUpDualFEN "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR/ b',
+      ),
+    );
     lab.newGame();
     lab.pasteMoves(copied);
     expect(lab.movesText, copied);

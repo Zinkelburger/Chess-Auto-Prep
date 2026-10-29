@@ -102,6 +102,10 @@ final class TablePosition {
   /// The engine's form: two crazyhouse FENs joined by `|`.
   String get dualFen => '${one.fen}|${two.fen}';
 
+  /// The form people copy and save: [dualFen] with each hand written as
+  /// Lichess writes it, see [lichessFen].
+  String get lichessDualFen => '${lichessFen(one.fen)}|${lichessFen(two.fen)}';
+
   /// [by] more (or, negative, fewer) [role] in [side]'s hand on [board],
   /// the count kept within 0…[handLimit].
   TablePosition withHand(BoardNumber board, Side side, Role role, int by) {
@@ -236,6 +240,15 @@ String _keyFen(Crazyhouse position) {
   }
   return fields.join(' ');
 }
+
+/// [fen] with its hand written as Lichess writes one: a ninth rank after the
+/// board, White's pieces then Black's (`…/RNB1K2R/PNpnb w …`), a bare `/` when
+/// both hands are empty. The bracket form (`…/RNB1K2R[PNpnb] w …`) is what
+/// dartchess and the engines write; a FEN without a hand is unchanged.
+String lichessFen(String fen) => fen.replaceFirstMapped(
+  RegExp(r'^([^\s\[]*)\[([^\]]*)\]'),
+  (match) => '${match[1]}/${match[2]}',
+);
 
 /// Pieces a reserve can hold, in the order a tray shows them.
 const reserveRoles = [

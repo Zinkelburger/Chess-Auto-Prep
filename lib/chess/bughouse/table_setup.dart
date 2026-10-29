@@ -124,14 +124,10 @@ _BoardRead _readBoard(BoardNumber board, BoardBoxes boxes) {
 /// One board's FEN, pocket and all, split into its boxes.
 BoardBoxes _splitBoxes(String fen) {
   final fields = fen.split(RegExp(r'\s+'));
-  final placement = fields.first;
-  final open = placement.indexOf('[');
-  final close = placement.indexOf(']', open + 1);
-  if (open < 0 || close < 0) {
-    return (fen: fen, white: '', black: '');
-  }
-  final letters = placement.substring(open + 1, close).split('');
-  fields[0] = placement.substring(0, open);
+  final split = _splitHand(fields.first);
+  if (split == null) return (fen: fen, white: '', black: '');
+  final letters = split.hand.split('');
+  fields[0] = split.board;
   return (
     fen: fields.join(' '),
     white: formatReserve(letters.where(_isUpper).join()),
@@ -167,22 +163,36 @@ final class FenWrong extends FenCheck {
   final String message;
 }
 
+/// [placement] split into the board and its hand, which is written in
+/// brackets (`…/RNB1K2R[PNpnb]`) or, as Lichess writes it, as a ninth rank
+/// (`…/RNB1K2R/PNpnb`); null when the bracket is not closed.
+({String board, String hand})? _splitHand(String placement) {
+  final open = placement.indexOf('[');
+  if (open >= 0) {
+    final close = placement.indexOf(']', open + 1);
+    if (close < 0) return null;
+    return (
+      board: placement.substring(0, open),
+      hand: placement.substring(open + 1, close),
+    );
+  }
+  final ranks = placement.split('/');
+  if (ranks.length == 9) {
+    return (board: ranks.take(8).join('/'), hand: ranks.last);
+  }
+  return (board: placement, hand: '');
+}
+
 /// [text] checked for shape, with White to move and castling wherever king
 /// and rook are still at home when it does not say.
 FenCheck checkFen(String text) {
   final fields = text.trim().split(RegExp(r'\s+'));
   if (fields.first.isEmpty) return const FenWrong('Enter a FEN.');
-  var placement = fields.first;
-  var pocket = '';
-  final open = placement.indexOf('[');
-  if (open >= 0) {
-    final close = placement.indexOf(']', open);
-    if (close < 0) {
-      return const FenWrong('The reserve in brackets isn’t closed.');
-    }
-    pocket = placement.substring(open + 1, close);
-    placement = placement.substring(0, open);
+  final split = _splitHand(fields.first);
+  if (split == null) {
+    return const FenWrong('The reserve in brackets isn’t closed.');
   }
+  final (board: placement, hand: pocket) = split;
   if (_placementProblem(placement) case final problem?) {
     return FenWrong(problem);
   }
