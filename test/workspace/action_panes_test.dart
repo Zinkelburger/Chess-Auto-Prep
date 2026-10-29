@@ -303,6 +303,22 @@ void main() {
     },
   );
 
+  testWidgets('a closed pane takes its explorer with it', (tester) async {
+    final layout = await pumpPanes(tester);
+    layout.split(0, WorkspaceTab.explorer, PaneSplitDirection.right);
+    await tester.pumpAndSettle();
+    final index = layout.visible.last;
+    final gone = layout.explorer(index);
+    layout.closePane(index);
+    await tester.pumpAndSettle();
+    expect(
+      () => gone.addListener(() {}),
+      throwsFlutterError,
+      reason: 'disposed, it no longer asks about the board',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'tabs have no close button; right click closes one, and a pane with it',
     (tester) async {

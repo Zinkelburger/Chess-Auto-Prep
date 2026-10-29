@@ -92,9 +92,17 @@ final class ActionLayout extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Every change of the layout ends here: a pane that has gone takes its
+  /// explorer with it, so it stops asking about the board, and a pane added
+  /// later in its place starts with an explorer of its own.
   @override
   void notifyListeners() {
-    if (!_restoring) super.notifyListeners();
+    if (_restoring) return;
+    final shown = visible.toSet();
+    for (final index in _explorers.keys.toList()) {
+      if (!shown.contains(index)) _explorers.remove(index)!.dispose();
+    }
+    super.notifyListeners();
   }
 
   String snapshot() => jsonEncode({
