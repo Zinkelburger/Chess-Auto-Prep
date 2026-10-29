@@ -245,7 +245,11 @@ final class FillGaps extends ChangeNotifier {
     final sameDocument = next.$1 == _board?.$1 && next.$3 == _board?.$3;
     _board = next;
     final request = _activeRequest;
-    if (!_followEnabled || request == null || (!_active && !_retargeting)) {
+    // Only a search still running follows the board: one that has finished,
+    // though still saving its tree, stays as it is while the user browses.
+    if (!_followEnabled ||
+        request == null ||
+        (_state is! FillRunning && !_retargeting)) {
       return;
     }
     if (!sameDocument || _session.shownTo != null) {
