@@ -178,6 +178,9 @@ void main() {
     // A won game stays won: the same centipawns cost far less.
     expect(white(900, 700), isNull);
     expect(white(700, 400), ReviewMark.mistake);
+    // Past ±10 pawns every score counts as ten, as Lichess holds them.
+    expect(white(2000, 750), isNull);
+    expect(white(3000, 450), ReviewMark.mistake);
     // Black's moves are judged from Black's side.
     expect(
       judgeMove(

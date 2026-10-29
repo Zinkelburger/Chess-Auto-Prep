@@ -1,9 +1,7 @@
-import 'dart:math' as math;
-
 import 'package:dartchess/dartchess.dart';
 
 import '../fen.dart';
-import '../generation/eval.dart' show winProbSlope;
+import '../generation/eval.dart' show winningChances;
 import '../pgn/game_text.dart';
 import '../pgn/game_tree.dart';
 import '../pv_text.dart';
@@ -32,12 +30,6 @@ final class Verdict {
   };
 }
 
-/// Lichess's winning chance for [cp], from −1 to 1: `2 / (1 + e^(−0.00368208
-/// cp)) − 1` with the score held within ±1000 first, so a swing between two
-/// won positions (+8 to +15, +9 to a mate) is small rather than a blunder.
-double winningChance(int cp) =>
-    2 / (1 + math.exp(-winProbSlope * cp.clamp(-1000, 1000))) - 1;
-
 /// How bad a move that took the mover's winning chance down by [drop] was,
 /// or null when it lost too little to count: 0.1 is an inaccuracy, 0.2 a
 /// mistake, 0.3 a blunder.
@@ -52,7 +44,7 @@ MistakeKind? mistakeFor(double drop) => drop >= 0.3
 /// How bad the move between [before] (the mover to play) and [after] (the
 /// opponent to play) was.
 MistakeKind? judge(Verdict before, Verdict after) =>
-    mistakeFor(winningChance(before.packed) - winningChance(-after.packed));
+    mistakeFor(winningChances(before.packed) - winningChances(-after.packed));
 
 /// A score as the note writes it, from the side [before]'s mover: `+0.6`,
 /// `-2.1`, `#3`, `#-4`. The note is a stored format existing sets carry, so

@@ -1,8 +1,7 @@
-import 'dart:math' as math;
-
 import 'package:dartchess/dartchess.dart' show Move;
 
 import '../fen.dart';
+import '../generation/eval.dart' show winningChances;
 import 'chapter.dart';
 import 'chapter_edit.dart';
 import 'game_tree.dart';
@@ -34,10 +33,6 @@ enum ReviewMark {
 
 /// A move's mark and the words Lichess puts before "X was best.".
 typedef ReviewJudgement = ({ReviewMark mark, String words});
-
-/// [cp], White's centipawns, as Lichess's winning chances for White: -1 lost,
-/// 0 even, 1 won.
-double winningChances(int cp) => 2 / (1 + math.exp(-0.00368208 * cp)) - 1;
 
 /// How Lichess judges a move by the evaluations before and after it
 /// (`lila` `Advice`): by the winning chances its side gave away, 0.1 an

@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/chess/fen.dart';
+import 'package:chess_auto_prep/chess/generation/eval.dart' show winningChances;
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_edit.dart';
 import 'package:chess_auto_prep/chess/pgn/pgn_reader.dart';
@@ -24,10 +25,10 @@ void main() {
     });
 
     test('Lichess\'s curve, held within 1000 centipawns', () {
-      expect(winningChance(0), 0);
-      expect(winningChance(100), closeTo(0.1821, 1e-3));
-      expect(winningChance(1000), winningChance(5000));
-      expect(winningChance(-300), closeTo(-winningChance(300), 1e-12));
+      expect(winningChances(0), 0);
+      expect(winningChances(100), closeTo(0.1821, 1e-3));
+      expect(winningChances(1000), winningChances(5000));
+      expect(winningChances(-300), closeTo(-winningChances(300), 1e-12));
     });
 
     test('the score after the move is the opponent\'s, turned round', () {

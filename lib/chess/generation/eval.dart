@@ -14,6 +14,13 @@ const int mateSaturationCp = 9000;
 /// builder and lila, so the three agree on what a centipawn is worth.
 const double winProbSlope = 0.00368208;
 
+/// Lichess's winning chances for [cp], White's centipawns, from −1 lost
+/// through 0 even to 1 won: `2 / (1 + e^(−0.00368208 cp)) − 1` with the
+/// score held within ±1000 first, as lila does, so a swing between two won
+/// positions (+8 to +15, +20 to +7) is small rather than a blunder.
+double winningChances(int cp) =>
+    2 / (1 + math.exp(-winProbSlope * cp.clamp(-1000, 1000))) - 1;
+
 /// A fixed-depth engine score in centipawns.
 ///
 /// The type does not carry a point of view; the name of whatever holds one
