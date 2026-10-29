@@ -225,21 +225,35 @@ final class WorkspaceRequests extends ChangeNotifier {
 
   Future<RequestResult> _travel(List<Place> from, List<Place> to) async {
     if (_disposed || from.isEmpty) return const RequestDropped();
+    final ticket = _nextRequest();
+    final left = _mode;
     final place = from.removeLast();
     to.add(_here);
     _mode = place.mode;
     notifyListeners();
+    // Dropped and not overtaken, the user stayed where they were, as with
+    // an unsaved draft they chose to keep: the window and both lists are
+    // put back. A file gone since is refused, and the mode alone comes.
+    RequestResult stayed(RequestResult result) {
+      if (result is! RequestDropped || _overtaken(ticket)) return result;
+      to.removeLast();
+      from.add(place);
+      _mode = left;
+      notifyListeners();
+      return result;
+    }
+
     if (place.scratch) {
       final result = _session.isScratch
           ? const RequestDone()
-          : await analysisBoard();
+          : await _analysisBoard(ticket);
       if (!_disposed && result is RequestDone) documents.carry(place.mode);
-      return result;
+      return stayed(result);
     }
     final source = place.source;
     if (source == null) return const RequestDone();
-    final result = await _open(_nextRequest(), source, game: place.game);
-    if (_disposed || result is! RequestDone) return result;
+    final result = await _open(ticket, source, game: place.game);
+    if (_disposed || result is! RequestDone) return stayed(result);
     documents.carry(place.mode);
     _session.cursor.goTo(place.cursor);
     return result;
@@ -445,8 +459,11 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// The analysis board as it was left, in place of the file that is up,
   /// with the same question about a draft the file never took as opening
   /// another one asks.
-  Future<RequestResult> analysisBoard({KeptBoard? page}) async {
-    final ticket = _nextRequest();
+  Future<RequestResult> analysisBoard({KeptBoard? page}) =>
+      _analysisBoard(_nextRequest(), page: page);
+
+  /// [analysisBoard] for the request counted as [ticket].
+  Future<RequestResult> _analysisBoard(int ticket, {KeptBoard? page}) async {
     if (_session.isScratch && page == null) return const RequestDone();
     final leave = await _leaving.mayLeaveDocument();
     if (_overtaken(ticket) || leave is! Go) return const RequestDropped();

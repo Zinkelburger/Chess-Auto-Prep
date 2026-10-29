@@ -126,6 +126,24 @@ void main() {
     });
 
     test(
+      'staying with a frozen draft on Back keeps the mode and the history',
+      () async {
+        await w.requests.open(benko);
+        final started = w.requests.mode;
+        w.requests.switchTo(Mode.pgnViewer);
+        await pumpEventQueue();
+        await freezeKid();
+        final back = w.requests.backTo;
+        w.question.answer = DraftChoice.keepWaiting;
+        expect(await w.requests.back(), isA<RequestDropped>());
+        expect(w.requests.mode, Mode.pgnViewer, reason: 'not $started');
+        expect(w.session.source, kid);
+        expect(w.requests.backTo, same(back));
+        expect(w.requests.forwardTo, isNull);
+      },
+    );
+
+    test(
       'a copy saved on the way out is said once the chapter is open',
       () async {
         await freezeKid();
