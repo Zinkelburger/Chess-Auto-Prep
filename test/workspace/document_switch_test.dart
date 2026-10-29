@@ -74,10 +74,14 @@ void main() {
       expect(fixture.saver.state, isA<SaveFailed>());
     });
 
-    test('that the file will not take keep it up in place of the analysis '
-        'board', () async {
+    test('that an editor hands over and the file will not take keep it up '
+        'in place of the analysis board', () async {
       final fixture = await slowSession();
-      fixture.session.setComment(sicilian, 'typed before the board');
+      // Nothing was unsaved when the user was asked; the note was still in
+      // its editor.
+      fixture.session.committingEditors.addListener(
+        () => fixture.session.setComment(sicilian, 'typed before the board'),
+      );
       fixture.store.saves.add(const IoFailure('No space left on device'));
 
       expect(await fixture.session.showAnalysisBoard(), isFalse);
@@ -88,6 +92,21 @@ void main() {
         reason: 'the words are on screen, where the strip says why',
       );
       expect(fixture.saver.state, isA<SaveFailed>());
+    });
+
+    test('the user was asked about and said to leave do not keep the file '
+        'up in place of the analysis board', () async {
+      final fixture = await slowSession();
+      fixture.session.setComment(sicilian, 'typed before the board');
+      fixture.store.saves.addAll(
+        List.filled(2, const IoFailure('No space left on device')),
+      );
+      // The question on the way out flushed them and they did not land.
+      await fixture.saver.flush();
+      expect(fixture.saver.state, isA<SaveFailed>());
+
+      expect(await fixture.session.showAnalysisBoard(), isTrue);
+      expect(fixture.session.isScratch, isTrue);
     });
 
     test('into the file being opened are in what it shows', () async {

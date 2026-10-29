@@ -373,16 +373,31 @@ final class DocumentSession extends ChangeNotifier {
   /// one, or on the one up when nothing was played or edited on it. False
   /// when another document was asked for meanwhile, or the session went.
   Future<bool> showAnalysisBoard([Chapter? board]) {
-    if (board == null) return _selectAnalysis(_board);
+    if (board == null) return _selectAnalysis(_board, leftAsIs: _leftAsIs);
+    final leftAsIs = _leftAsIs;
     _editors.commit();
     final blank = isScratch && !_board.canUndo && tree!.children.isEmpty;
-    return _selectAnalysis(blank ? _board : KeptBoard(board), fresh: board);
+    return _selectAnalysis(
+      blank ? _board : KeptBoard(board),
+      fresh: board,
+      leftAsIs: leftAsIs,
+    );
   }
 
-  Future<bool> restoreAnalysisPage(KeptBoard page) => _selectAnalysis(page);
+  Future<bool> restoreAnalysisPage(KeptBoard page) =>
+      _selectAnalysis(page, leftAsIs: _leftAsIs);
+
+  /// Whether the file has words it has not taken before an editor hands its
+  /// note over: the caller asked about those first, and the user said to
+  /// leave them. A note handed over after this was not asked about.
+  bool get _leftAsIs => !_saver.settled;
 
   /// [page] up, [fresh] in it if given, once the file up is all written.
-  Future<bool> _selectAnalysis(KeptBoard page, {Chapter? fresh}) async {
+  Future<bool> _selectAnalysis(
+    KeptBoard page, {
+    Chapter? fresh,
+    required bool leftAsIs,
+  }) async {
     if (_disposed) return false;
     if (identical(page, _board) && isScratch && fresh == null) return true;
     // Before the flush, which then writes what the words make of the file.
@@ -391,9 +406,9 @@ final class DocumentSession extends ChangeNotifier {
     final file = !isScratch;
     if (file) await _switching(ticket, _saver.flush);
     if (_disposed || ticket != _opens) return false;
-    // Words the file will not take keep it up, where the screen says why,
-    // as they do when another file is asked for.
-    if (file && !_saver.settled) return false;
+    // Words nobody was asked about that the file will not take keep it up,
+    // where the screen says why, as they do when another file is asked for.
+    if (file && !leftAsIs && !_saver.settled) return false;
     _saver.closed();
     if (isScratch) {
       _board

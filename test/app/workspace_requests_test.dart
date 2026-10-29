@@ -475,6 +475,53 @@ void main() {
         expect(w.session.source, kid);
       },
     );
+
+    test('is gone back to over a frozen draft the user leaves', () async {
+      await freezeKid();
+      w.question.answer = DraftChoice.closeAnyway;
+      expect(await w.requests.analysisBoard(), isA<RequestDone>());
+      expect(w.session.isScratch, isTrue);
+      expect(w.question.asked, hasLength(1));
+    });
+
+    test('a new one comes up over a draft the disk refused once the user '
+        'leaves it', () async {
+      await w.requests.open(kid);
+      w.store.saves.addAll(
+        List.filled(3, const IoFailure('No space left on device')),
+      );
+      w.session.setComment(NodePath.of([0]), 'refused words');
+      w.question.answer = DraftChoice.closeAnyway;
+      expect(await w.requests.newEmptyAnalysis(), isA<RequestDone>());
+      expect(w.session.isScratch, isTrue);
+      expect(w.session.tree!.children, isEmpty);
+      expect(w.question.asked, hasLength(1));
+    });
+
+    for (final (name, ask) in [
+      ('as it was left', () => w.requests.analysisBoard()),
+      ('as a new one', () => w.requests.newEmptyAnalysis()),
+    ]) {
+      test('is not put up $name over a note nobody asked about that the '
+          'disk refuses', () async {
+        await w.requests.open(kid);
+        // An editor still holding its text hands it over as the board is
+        // asked for, after the question found nothing unsaved.
+        w.session.committingEditors.addListener(
+          () => w.session.setComment(NodePath.of([0]), 'in the editor'),
+        );
+        w.store.saves.addAll(
+          List.filled(3, const IoFailure('No space left on device')),
+        );
+        expect(await ask(), isA<RequestDropped>());
+        expect(w.question.asked, isEmpty);
+        expect(w.session.source, kid);
+        expect(
+          w.session.commentAt(NodePath.of([0])),
+          startsWith('in the editor'),
+        );
+      });
+    }
   });
 
   group('keeping the analysis board', () {
