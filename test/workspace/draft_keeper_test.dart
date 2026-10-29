@@ -147,6 +147,33 @@ void main() {
     run.kill();
   });
 
+  test('an edit saved as it is made takes the offer down, and the old '
+      'offer cannot put the checkpoint over it', () async {
+    final drafts = _MemoryDrafts()
+      ..kept[ref.path] = ViewerDraft(
+        path: ref.path,
+        game: 0,
+        revision: scriptedRevision(threeGameFile),
+        text: threeGameFile.replaceFirst('3. Bb5', '3. Bc4'),
+      );
+    final run = _Run(store, drafts);
+    // Editing, as Study opens: every edit is saved as it is made.
+    run.session.holdsEdits = false;
+    await run.session.open(ref, game: 0);
+    await until(() => run.offer != null);
+    final offer = run.offer!;
+    run.session.setComment(NodePath.of(const [0]), 'Typed');
+    expect(run.keeper.offered, isNull);
+    expect(run.said.last.$1, isNull, reason: 'the offer is taken down');
+    offer.onPressed();
+    await until(() => onDisk().contains('Typed'));
+    await pumpEventQueue();
+    expect(run.session.hasHeldEdits, isFalse);
+    expect(onDisk(), contains('3. Bb5'));
+    expect(run.session.tree!.mainLine.map((m) => m.san), contains('Bb5'));
+    run.kill();
+  });
+
   group('on disk', () {
     late StoreFixture disk;
     late ChapterRef games;
