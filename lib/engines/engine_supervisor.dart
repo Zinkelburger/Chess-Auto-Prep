@@ -235,7 +235,11 @@ final class EngineSupervisor {
       if (engine == null) {
         if (_disposed) return const HivemindStartFailed('The app is closing.');
         final said = process.recentErrors.join(' ');
-        final code = await process.exitCode;
+        // Killed already, but a process stuck in the kernel may never end:
+        // the exit code is worth a second, not the start's answer.
+        final code = await process.exitCode
+            .then<int?>((code) => code)
+            .timeout(const Duration(seconds: 1), onTimeout: () => null);
         log.e(
           'start the bughouse engine',
           'no uciok; exit $code; stderr: $said',
