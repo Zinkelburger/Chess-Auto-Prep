@@ -212,6 +212,8 @@ final class TournamentRun extends ChangeNotifier {
     try {
       await games.play(
         stopping: () => stopping,
+        // A save that failed starts no new games; those in flight play on.
+        holding: () => canRetry,
         afterGame: (_, _) => _checkpoint(),
         onPosition: (value) {
           live = value;
@@ -242,7 +244,7 @@ final class TournamentRun extends ChangeNotifier {
     if (canRetry || games == null) return;
     final (:records, :pgn) = games.finished;
     final after = _active!.changed({'status': 'running', 'games': records});
-    if (!await _persist(after, pgn)) stopping = true;
+    await _persist(after, pgn);
   }
 
   Future<bool> _persist(Tournament after, String pgn) {
@@ -291,16 +293,18 @@ final class TournamentRun extends ChangeNotifier {
     } else if (!{'completed', 'stopped'}.contains(_active!.status)) {
       // A replayed final save leaves nothing to do. Otherwise games already in
       // flight when a checkpoint failed are still retained in memory: commit
-      // them, then close the run as completed only if every game was played.
+      // them, then close the run as completed only if every game was played
+      // to a result: one stopped mid-game is on the list, unfinished.
       await _checkpoint();
       final games = _games;
       if (!canRetry && games != null) {
+        final records = games.finished.records;
+        final played =
+            records.length == games.config.schedule.length &&
+            records.every((game) => game['result'] != 'unfinished');
         await _persist(
           _active!.changed({
-            'status':
-                games.finished.records.length == games.config.schedule.length
-                ? 'completed'
-                : 'stopped',
+            'status': played ? 'completed' : 'stopped',
             'finishedAt': DateTime.now().toUtc().toIso8601String(),
           }),
           _pgn ?? '',

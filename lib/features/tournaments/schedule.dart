@@ -16,15 +16,20 @@ final class TournamentSchedule {
   /// Plays until every pairing has been played or [stopping] says so. After
   /// each game [afterGame] runs, one at a time in finishing order, before
   /// that game's worker starts another.
+  /// Plays the schedule [config.concurrency] games at a time. [stopping]
+  /// ends the games in flight after their current move; [holding] only
+  /// keeps new ones from starting, so the games in flight play out.
   Future<void> play({
     required bool Function() stopping,
     required Future<void> Function(Pairing pairing, PlayedGame game) afterGame,
+    bool Function()? holding,
     void Function(LiveGame position)? onPosition,
   }) async {
     final schedule = config.schedule;
     var next = 0;
+    bool held() => holding?.call() ?? false;
     Future<void> worker() async {
-      while (!stopping() && next < schedule.length) {
+      while (!stopping() && !held() && next < schedule.length) {
         final pairing = schedule[next++];
         final game = await TournamentGameRunner(
           config: config,
