@@ -57,9 +57,8 @@ class FindsPanel extends StatefulWidget {
 }
 
 class _FindsPanelState extends State<FindsPanel> {
-  final _preview = ValueNotifier<LinePreview?>(null);
+  final _preview = HoverPreview<LinePreview>();
   Side _previewSide = Side.white;
-  Timer? _settle;
 
   /// Whether only the chapter's finds are listed, while one is open.
   bool _thisChapter = true;
@@ -105,7 +104,6 @@ class _FindsPanelState extends State<FindsPanel> {
     widget.session?.removeListener(_narrow);
     final finds = widget.finds;
     WidgetsBinding.instance.addPostFrameCallback((_) => finds.within(null));
-    _settle?.cancel();
     _preview.dispose();
     super.dispose();
   }
@@ -128,23 +126,16 @@ class _FindsPanelState extends State<FindsPanel> {
   }
 
   void _hover(KeptFind kept, Offset anchor) {
-    _settle?.cancel();
-    _settle = Timer(previewDelay, () {
-      if (!mounted) return;
+    _preview.rest(() {
       final last = _lastMove(kept);
-      if (last == null) return;
+      if (last == null) return null;
       setState(() => _previewSide = kept.side);
-      _preview.value = LinePreview(
-        fen: kept.find.fen,
-        lastMove: last,
-        anchor: anchor,
-      );
+      return LinePreview(fen: kept.find.fen, lastMove: last, anchor: anchor);
     });
   }
 
   void _leave() {
-    _settle?.cancel();
-    _preview.value = null;
+    _preview.leave();
   }
 
   void _open(KeptFind kept) {

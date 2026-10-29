@@ -75,8 +75,7 @@ class SearchPane extends StatefulWidget {
 
 class _SearchPaneState extends State<SearchPane>
     with ListeningState<SearchPane> {
-  final _preview = ValueNotifier<LinePreview?>(null);
-  Timer? _settle;
+  final _preview = HoverPreview<LinePreview>();
 
   /// Whether the gear's settings are shown where the results are.
   bool _settingsOpen = false;
@@ -118,7 +117,6 @@ class _SearchPaneState extends State<SearchPane>
 
   @override
   void dispose() {
-    _settle?.cancel();
     _preview.dispose();
     super.dispose();
   }
@@ -154,16 +152,11 @@ class _SearchPaneState extends State<SearchPane>
   }
 
   void _hover(Fen after, String uci, Offset anchor) {
-    _settle?.cancel();
-    _settle = Timer(previewDelay, () {
-      if (!mounted) return;
-      _preview.value = LinePreview(fen: after, lastMove: uci, anchor: anchor);
-    });
+    _preview.rest(() => LinePreview(fen: after, lastMove: uci, anchor: anchor));
   }
 
   void _leave() {
-    _settle?.cancel();
-    _preview.value = null;
+    _preview.leave();
   }
 
   void _play(String uci) {

@@ -43,8 +43,7 @@ class TreePane extends StatefulWidget {
 }
 
 class _TreePaneState extends State<TreePane> {
-  final _preview = ValueNotifier<LinePreview?>(null);
-  Timer? _settle;
+  final _preview = HoverPreview<LinePreview>();
 
   /// A row rebuilt or gone from under the pointer never hears it leave, so
   /// the floated board goes whenever the rows do.
@@ -73,26 +72,18 @@ class _TreePaneState extends State<TreePane> {
     // marked dirty while the framework is unmounting this pane: the tab is
     // let go once the frame is done instead.
     scheduleMicrotask(widget.tree.unwatch);
-    _settle?.cancel();
     _preview.dispose();
     super.dispose();
   }
 
   void _hover(TreeRow row, Offset anchor) {
-    _settle?.cancel();
-    _settle = Timer(previewDelay, () {
-      if (!mounted) return;
-      _preview.value = LinePreview(
-        fen: row.after,
-        lastMove: row.uci,
-        anchor: anchor,
-      );
-    });
+    _preview.rest(
+      () => LinePreview(fen: row.after, lastMove: row.uci, anchor: anchor),
+    );
   }
 
   void _leave() {
-    _settle?.cancel();
-    _preview.value = null;
+    _preview.leave();
   }
 
   void _play(TreeRow row) {

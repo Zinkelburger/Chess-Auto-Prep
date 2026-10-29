@@ -90,8 +90,7 @@ class ExplorerPane extends StatefulWidget {
 
 class _ExplorerPaneState extends State<ExplorerPane>
     with ListeningState<ExplorerPane> {
-  final _preview = ValueNotifier<LinePreview?>(null);
-  Timer? _settle;
+  final _preview = HoverPreview<LinePreview>();
 
   @override
   Listenable listenableOf(ExplorerPane widget) => widget.explorer;
@@ -104,26 +103,18 @@ class _ExplorerPaneState extends State<ExplorerPane>
 
   @override
   void dispose() {
-    _settle?.cancel();
     _preview.dispose();
     super.dispose();
   }
 
   void _hover(ExplorerRow row, Offset anchor) {
-    _settle?.cancel();
-    _settle = Timer(previewDelay, () {
-      if (!mounted) return;
-      _preview.value = LinePreview(
-        fen: row.after,
-        lastMove: row.uci,
-        anchor: anchor,
-      );
-    });
+    _preview.rest(
+      () => LinePreview(fen: row.after, lastMove: row.uci, anchor: anchor),
+    );
   }
 
   void _leave() {
-    _settle?.cancel();
-    _preview.value = null;
+    _preview.leave();
   }
 
   void _play(ExplorerRow row) {

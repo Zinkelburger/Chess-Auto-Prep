@@ -65,8 +65,7 @@ class EnginePane extends StatefulWidget {
 
 class _EnginePaneState extends State<EnginePane>
     with ListeningState<EnginePane> {
-  final _preview = ValueNotifier<LinePreview?>(null);
-  Timer? _settle;
+  final _preview = HoverPreview<LinePreview>();
 
   /// The position the rows' lines are for; null while there are none.
   Fen? _linesFor;
@@ -93,27 +92,19 @@ class _EnginePaneState extends State<EnginePane>
 
   @override
   void dispose() {
-    _settle?.cancel();
     _preview.dispose();
     super.dispose();
   }
 
   /// The board appears once the pointer has rested on a move.
   void _hover(PvMove move, Offset anchor) {
-    _settle?.cancel();
-    _settle = Timer(previewDelay, () {
-      if (!mounted) return;
-      _preview.value = LinePreview(
-        fen: move.after,
-        lastMove: move.uci,
-        anchor: anchor,
-      );
-    });
+    _preview.rest(
+      () => LinePreview(fen: move.after, lastMove: move.uci, anchor: anchor),
+    );
   }
 
   void _leave() {
-    _settle?.cancel();
-    _preview.value = null;
+    _preview.leave();
   }
 
   /// Plays the line up to and including [index]. A move that does not

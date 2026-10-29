@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart' show Move, Side;
 import 'package:flutter/foundation.dart';
@@ -56,6 +58,37 @@ class LinePreviewOverlay extends StatelessWidget {
     ),
     child: child,
   );
+}
+
+/// What a floated board shows while the pointer rests on a move: set once
+/// the pointer has stayed [previewDelay] on it, cleared as it leaves. A
+/// pane hands it to a [FloatingPreview] and disposes it with itself, which
+/// also drops a rest still being timed.
+final class HoverPreview<T extends Object> extends ValueNotifier<T?> {
+  HoverPreview() : super(null);
+
+  Timer? _settle;
+
+  /// What [shown] answers goes up once the pointer has rested; a [rest] or
+  /// [leave] before then replaces it. An answer of null shows nothing.
+  void rest(T? Function() shown) {
+    _settle?.cancel();
+    _settle = Timer(previewDelay, () {
+      if (shown() case final preview?) value = preview;
+    });
+  }
+
+  /// The pointer left: the board goes, and a rest still being timed too.
+  void leave() {
+    _settle?.cancel();
+    value = null;
+  }
+
+  @override
+  void dispose() {
+    _settle?.cancel();
+    super.dispose();
+  }
 }
 
 /// Floats what [builder] makes of [preview]'s value, [size] big, over

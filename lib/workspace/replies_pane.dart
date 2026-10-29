@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../ui/theme.dart';
@@ -44,8 +42,7 @@ class RepliesPane extends StatefulWidget {
 }
 
 class _RepliesPaneState extends State<RepliesPane> {
-  final _preview = ValueNotifier<LinePreview?>(null);
-  Timer? _settle;
+  final _preview = HoverPreview<LinePreview>();
 
   /// A row rebuilt or gone from under the pointer never hears it leave, so
   /// the floated board goes whenever the table does.
@@ -67,26 +64,18 @@ class _RepliesPaneState extends State<RepliesPane> {
   @override
   void dispose() {
     widget.replies.removeListener(_leave);
-    _settle?.cancel();
     _preview.dispose();
     super.dispose();
   }
 
   void _hover(ReplyRow row, Offset anchor) {
-    _settle?.cancel();
-    _settle = Timer(previewDelay, () {
-      if (!mounted) return;
-      _preview.value = LinePreview(
-        fen: row.after,
-        lastMove: row.uci,
-        anchor: anchor,
-      );
-    });
+    _preview.rest(
+      () => LinePreview(fen: row.after, lastMove: row.uci, anchor: anchor),
+    );
   }
 
   void _leave() {
-    _settle?.cancel();
-    _preview.value = null;
+    _preview.leave();
   }
 
   void _play(ReplyRow row) {

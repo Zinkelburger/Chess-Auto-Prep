@@ -58,8 +58,7 @@ class BoardLineRows extends StatefulWidget {
 }
 
 class _BoardLineRowsState extends State<BoardLineRows> {
-  final _hovered = ValueNotifier<_Hovered?>(null);
-  Timer? _settle;
+  final _hovered = HoverPreview<_Hovered>();
 
   BughouseLab get lab => widget.lab;
   BoardNumber get board => widget.board;
@@ -77,7 +76,6 @@ class _BoardLineRowsState extends State<BoardLineRows> {
 
   @override
   void dispose() {
-    _settle?.cancel();
     _hovered.dispose();
     super.dispose();
   }
@@ -86,21 +84,18 @@ class _BoardLineRowsState extends State<BoardLineRows> {
   void _hover(PvStep step, Offset anchor) {
     final uci = step.uci;
     if (uci == null) return;
-    _settle?.cancel();
-    _settle = Timer(previewDelay, () {
-      if (!mounted) return;
-      _hovered.value = (
+    _hovered.rest(
+      () => (
         board: step.after.board(step.board),
         uci: uci,
         orientation: lab.bottom(step.board),
         anchor: anchor,
-      );
-    });
+      ),
+    );
   }
 
   void _leave() {
-    _settle?.cancel();
-    _hovered.value = null;
+    _hovered.leave();
   }
 
   void _play(List<PvStep> steps, int index) {

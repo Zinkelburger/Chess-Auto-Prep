@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
@@ -30,32 +28,23 @@ typedef ReadMoves = void Function(List<PvMove> moves, int at);
 mixin CommentPreviews<T extends StatefulWidget> on State<T> {
   DocumentSession get session;
 
-  final preview = ValueNotifier<LinePreview?>(null);
-  Timer? _settle;
+  final preview = HoverPreview<LinePreview>();
 
   @override
   void dispose() {
-    _settle?.cancel();
     preview.dispose();
     super.dispose();
   }
 
   /// The board appears once the pointer has rested on a move.
   void hoverMove(PvMove move, Offset anchor) {
-    _settle?.cancel();
-    _settle = Timer(previewDelay, () {
-      if (!mounted) return;
-      preview.value = LinePreview(
-        fen: move.after,
-        lastMove: move.uci,
-        anchor: anchor,
-      );
-    });
+    preview.rest(
+      () => LinePreview(fen: move.after, lastMove: move.uci, anchor: anchor),
+    );
   }
 
   void leaveMove() {
-    _settle?.cancel();
-    preview.value = null;
+    preview.leave();
   }
 
   /// Shows [moves], written in the comment on the move at [from], as far
