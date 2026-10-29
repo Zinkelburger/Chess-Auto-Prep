@@ -16,6 +16,7 @@ import 'package:chess_auto_prep/storage/player_files.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../support/window_fixture.dart';
@@ -80,6 +81,23 @@ void main() {
     await w.parts.players.directory.save(player);
   });
   tearDown(() => w.dispose());
+  testWidgets('Alt+Left in the search field is the field\'s, not Back', (
+    tester,
+  ) async {
+    await w.pumpShell(tester);
+    w.requests.switchTo(Mode.players);
+    await tester.pumpAndSettle();
+    expect(w.requests.backTo, isNotNull);
+    await tester.tap(find.byType(TextField).first);
+    await tester.pumpAndSettle();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    await tester.pumpAndSettle();
+    expect(w.requests.mode, Mode.players);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('directory to analysis, colour, game and retained mode context', (
     tester,
   ) async {

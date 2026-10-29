@@ -6,6 +6,7 @@ import '../features/tournaments/tournament_run.dart';
 import '../features/tournaments/tournaments_screen.dart';
 import '../storage/chapter_files.dart';
 import '../ui/app_action.dart';
+import '../ui/screen_keys.dart';
 import '../workspace/workspace.dart';
 import '../workspace/workspace_tabs.dart';
 import 'mode_view.dart';
@@ -28,21 +29,20 @@ final class TournamentView extends ModeView {
   @override
   List<AppAction> actions(ModeMenu menu) => [];
   @override
-  Widget screen(Map<ShortcutActivator, VoidCallback> windowKeys) =>
-      CallbackShortcuts(
-        bindings: windowKeys,
-        child: Focus(
-          autofocus: true,
-          child: run == null
-              ? const Center(child: Text('Tournament storage is unavailable.'))
-              : TournamentsScreen(
-                  run: run!,
-                  settings: workspace.settings,
-                  position: workspace.session.cursor.fen,
-                  open: (t, g) => unawaited(_open(t, g)),
-                ),
-        ),
-      );
+  Widget screen(Map<ShortcutActivator, VoidCallback> windowKeys) => ScreenKeys(
+    bindings: windowKeys,
+    child: Focus(
+      autofocus: true,
+      child: run == null
+          ? const Center(child: Text('Tournament storage is unavailable.'))
+          : TournamentsScreen(
+              run: run!,
+              settings: workspace.settings,
+              position: workspace.session.cursor.fen,
+              open: (t, g) => unawaited(_open(t, g)),
+            ),
+    ),
+  );
   Future<void> _open(Tournament tournament, int game) async {
     final ref = ChapterRef.at(run!.store.games(tournament.id).path);
     await requests.openFile(ref, game: game);

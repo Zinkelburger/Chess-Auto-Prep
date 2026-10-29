@@ -8,6 +8,7 @@ import '../ui/pane_tabs.dart';
 import 'document_session.dart';
 import 'engine_analysis.dart';
 import 'move_field.dart';
+import '../ui/screen_keys.dart';
 
 /// The keys of the workspace, wherever the focus is under [child]: the line
 /// (← → Home End PgUp PgDn), the games of the file (↑ ↓), the board (F), the
@@ -159,7 +160,7 @@ class _WorkspaceKeysState extends State<WorkspaceKeys> {
       (widget.save ?? _session.keepHeld)();
       return KeyEventResult.handled;
     }
-    if (_typing) return KeyEventResult.ignored;
+    if (typingInText()) return KeyEventResult.ignored;
     // Enter is the variation's only while the workspace itself has the
     // focus: a focused button, menu entry or lesson has its own use for it.
     if (AppKey.enterVariation.accepts(event)) {
@@ -181,12 +182,6 @@ class _WorkspaceKeysState extends State<WorkspaceKeys> {
       }
     }
     return KeyEventResult.ignored;
-  }
-
-  bool get _typing {
-    final focused = FocusManager.instance.primaryFocus?.context;
-    return focused != null &&
-        focused.findAncestorWidgetOfExactType<EditableText>() != null;
   }
 
   @override

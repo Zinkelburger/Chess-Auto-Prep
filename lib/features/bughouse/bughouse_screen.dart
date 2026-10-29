@@ -9,6 +9,7 @@ import 'bughouse_lab.dart';
 import 'lab_engine.dart';
 import 'lab_panel.dart';
 import 'table_boards.dart';
+import '../../ui/screen_keys.dart';
 
 /// The Bughouse mode: board 1 alone or both boards on the left, the engine
 /// and the move lists on the right. The boards take what the window leaves.
@@ -140,7 +141,7 @@ class _LabKeysState extends State<_LabKeys> {
   };
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    if (event is KeyUpEvent || _typing) return KeyEventResult.ignored;
+    if (event is KeyUpEvent || typingInText()) return KeyEventResult.ignored;
     for (final MapEntry(key: activator, value: run) in _bindings.entries) {
       if (activator.accepts(event, HardwareKeyboard.instance)) {
         run();
@@ -148,12 +149,6 @@ class _LabKeysState extends State<_LabKeys> {
       }
     }
     return KeyEventResult.ignored;
-  }
-
-  bool get _typing {
-    final focused = FocusManager.instance.primaryFocus?.context;
-    return focused != null &&
-        focused.findAncestorWidgetOfExactType<EditableText>() != null;
   }
 
   @override

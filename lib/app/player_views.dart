@@ -13,6 +13,7 @@ import '../storage/chapter_files.dart';
 import '../chess/pgn/game_tree.dart';
 import '../ui/app_action.dart';
 import '../ui/pane_tabs.dart';
+import '../ui/screen_keys.dart';
 import '../workspace/book_verdict_view.dart' show leftBookMoment;
 import '../workspace/workspace.dart';
 import '../workspace/workspace_tabs.dart';
@@ -221,26 +222,25 @@ final class PlayersView extends ModeView {
     ),
   ];
   @override
-  Widget screen(Map<ShortcutActivator, VoidCallback> windowKeys) =>
-      CallbackShortcuts(
-        bindings: windowKeys,
-        child: Focus(
-          autofocus: true,
-          child: PlayersScreen(
-            players: players.directory,
-            saved: players.saved,
-            onAnalyze: players.choose,
-            onDeleteGames: players.deleteGames,
-            onStudy: (p) => unawaited(players.openStudy(p)),
-            onLink: (p) => unawaited(players.linkStudy(p)),
-            onLinkedStudy: (path, chapter) =>
-                unawaited(players.openLinkedStudy(path, chapter)),
-            onGroupStudy: (g) => unawaited(players.openGroupStudy(g)),
-            onTrainGroup: (g) =>
-                unawaited(players.trainGroupStudy(g, onOpened: onTrainStudy)),
-            onCopy: (g) => unawaited(players.exportGroup(g, copy: true)),
-            onExport: (g) => unawaited(players.exportGroup(g)),
-          ),
-        ),
-      );
+  Widget screen(Map<ShortcutActivator, VoidCallback> windowKeys) => ScreenKeys(
+    bindings: windowKeys,
+    child: Focus(
+      autofocus: true,
+      child: PlayersScreen(
+        players: players.directory,
+        saved: players.saved,
+        onAnalyze: players.choose,
+        onDeleteGames: players.deleteGames,
+        onStudy: (p) => unawaited(players.openStudy(p)),
+        onLink: (p) => unawaited(players.linkStudy(p)),
+        onLinkedStudy: (path, chapter) =>
+            unawaited(players.openLinkedStudy(path, chapter)),
+        onGroupStudy: (g) => unawaited(players.openGroupStudy(g)),
+        onTrainGroup: (g) =>
+            unawaited(players.trainGroupStudy(g, onOpened: onTrainStudy)),
+        onCopy: (g) => unawaited(players.exportGroup(g, copy: true)),
+        onExport: (g) => unawaited(players.exportGroup(g)),
+      ),
+    ),
+  );
 }

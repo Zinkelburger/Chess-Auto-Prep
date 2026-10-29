@@ -6,6 +6,7 @@ import '../features/databases/database_library.dart';
 import '../features/databases/databases_screen.dart';
 import '../storage/master_corpus.dart';
 import '../ui/app_action.dart';
+import '../ui/screen_keys.dart';
 import '../workspace/workspace_tabs.dart';
 import '../workspace/workspace.dart';
 import 'mode.dart';
@@ -52,17 +53,16 @@ final class DatabasesView extends ModeView {
   ];
 
   @override
-  Widget screen(Map<ShortcutActivator, VoidCallback> windowKeys) =>
-      CallbackShortcuts(
-        bindings: windowKeys,
-        child: Focus(
-          autofocus: true,
-          child: DatabasesScreen(
-            library: library,
-            onOpen: (game) => unawaited(_open(game)),
-          ),
-        ),
-      );
+  Widget screen(Map<ShortcutActivator, VoidCallback> windowKeys) => ScreenKeys(
+    bindings: windowKeys,
+    child: Focus(
+      autofocus: true,
+      child: DatabasesScreen(
+        library: library,
+        onOpen: (game) => unawaited(_open(game)),
+      ),
+    ),
+  );
 
   Future<void> _open(CorpusGame game) async {
     final request = ++_request;

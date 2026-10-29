@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import '../features/books/books_screen.dart';
 import '../ui/app_action.dart';
+import '../ui/screen_keys.dart';
 import '../workspace/workspace.dart';
 import '../workspace/workspace_tabs.dart';
 import 'mode.dart';
@@ -27,22 +28,21 @@ final class BooksView extends ModeView {
   void entered() => unawaited(_modes.library.refresh());
 
   @override
-  Widget screen(Map<ShortcutActivator, VoidCallback> windowKeys) =>
-      CallbackShortcuts(
-        bindings: windowKeys,
-        child: Focus(
-          autofocus: true,
-          child: Builder(
-            builder: (context) => BooksScreen(
-              books: workspace.books,
-              onAddRepertoire: () => _requests.switchTo(Mode.repertoires),
-              catalog: _modes.library.catalog,
-              onOpenChapter: (ref) =>
-                  unawaited(_requests.readInBuilder(ref, const [])),
-            ),
-          ),
+  Widget screen(Map<ShortcutActivator, VoidCallback> windowKeys) => ScreenKeys(
+    bindings: windowKeys,
+    child: Focus(
+      autofocus: true,
+      child: Builder(
+        builder: (context) => BooksScreen(
+          books: workspace.books,
+          onAddRepertoire: () => _requests.switchTo(Mode.repertoires),
+          catalog: _modes.library.catalog,
+          onOpenChapter: (ref) =>
+              unawaited(_requests.readInBuilder(ref, const [])),
         ),
-      );
+      ),
+    ),
+  );
 
   @override
   Listenable get changes => workspace.books;
