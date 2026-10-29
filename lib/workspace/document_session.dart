@@ -90,6 +90,9 @@ final class DocumentSession extends ChangeNotifier {
 
   /// Where the reader is in the document, and a comment's line on the board.
   late final cursor = DocumentCursor._(() => tree, () => _shownTo);
+
+  /// Why the last edit did not happen; the standing refusal of a document
+  /// opened to read comes from [_readOnly], so the two cannot disagree.
   EditRefused? _refused;
   NodePath? _shownTo;
   bool _flipped = false;
@@ -134,8 +137,14 @@ final class DocumentSession extends ChangeNotifier {
 
   /// Why the last edit did not happen, or null: it would write a game whose
   /// reading could not finish, words a PGN file cannot hold, or a file this
-  /// app may not write. The next edit clears this, as does another document.
-  EditRefused? get refusedEdit => _refused;
+  /// app may not write. The next edit clears this, as does another document,
+  /// except that a document opened to read says so until it is closed.
+  EditRefused? get refusedEdit =>
+      _refused ??
+      switch (_readOnly) {
+        final reason? => NotEditable(reason),
+        null => null,
+      };
 
   /// Why this document cannot be written, or null when it can.
   String? get readOnly => _readOnly;
@@ -534,7 +543,7 @@ final class DocumentSession extends ChangeNotifier {
   }) {
     final chapter = _chapter;
     if (chapter == null || _editBlocked() != null) return;
-    final hadRefusal = _refused != null;
+    final hadRefusal = refusedEdit != null;
     switch (edit(chapter)) {
       case final edits.CommentRefused refusal:
         log.w('$what ${_source?.path}', refusalDetail(refusal));
@@ -554,7 +563,8 @@ final class DocumentSession extends ChangeNotifier {
   /// document not holding edits, or an undo still reading what it restored.
   String? _editBlocked() {
     if (_readOnly case final reason? when !_holdsEdits) {
-      _refused = NotEditable(reason);
+      // What is left is the standing refusal, which says why.
+      _refused = null;
       notifyListeners();
       return reason;
     }
@@ -567,12 +577,9 @@ final class DocumentSession extends ChangeNotifier {
     return null;
   }
 
-  /// Forgets the last refusal, except the standing one: a document opened to
-  /// read says so until it is closed.
-  void _clearRefusal() {
-    final reason = _readOnly;
-    _refused = reason == null ? null : NotEditable(reason);
-  }
+  /// Forgets the last refusal; the standing one of a document opened to
+  /// read stays ([refusedEdit]).
+  void _clearRefusal() => _refused = null;
 
   /// Puts the file back as it was before the last edit and shows what came
   /// back, on the chapter it was on. A refused undo changes nothing and says
@@ -733,7 +740,7 @@ final class DocumentSession extends ChangeNotifier {
     _file = (ref: ref, readOnly: readOnly);
     _flipped = false;
     _shownTo = null;
-    _refused = readOnly == null ? null : NotEditable(readOnly);
+    _refused = null;
     _saver.opened(ref, revision, readOnly: readOnly);
     cursor._place(const NodePath.root());
     notifyListeners();
