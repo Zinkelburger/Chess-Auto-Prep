@@ -55,6 +55,10 @@ final class TournamentRun extends ChangeNotifier {
   PendingObligation<TournamentResult<Tournament>>? _save;
   TournamentSchedule? _games;
   bool get canRetry => _save != null;
+
+  /// The last save of this run failed and waits for Retry save. Unlike
+  /// [canRetry], a save that is only under way does not count.
+  bool _saveFailed = false;
   String? get activeId => _active?.id;
 
   StreamSubscription<void>? _watch;
@@ -213,7 +217,7 @@ final class TournamentRun extends ChangeNotifier {
       await games.play(
         stopping: () => stopping,
         // A save that failed starts no new games; those in flight play on.
-        holding: () => canRetry,
+        holding: () => _saveFailed,
         afterGame: (_, _) => _checkpoint(),
         onPosition: (value) {
           live = value;
@@ -270,11 +274,13 @@ final class TournamentRun extends ChangeNotifier {
       history = [value, ...history.where((t) => t.id != value.id)];
       _pgn = _retryPgn;
       _save = null;
+      _saveFailed = false;
       problem = null;
       _notify();
       return true;
     }
     problem = (result as TournamentFailed).message;
+    _saveFailed = true;
     _notify();
     return false;
   }

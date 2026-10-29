@@ -1,24 +1,15 @@
-import '../features/pgn_viewer/export_dialog.dart';
-import '../features/tournaments/tournament_run.dart';
-import '../features/databases/database_library.dart';
 import 'dart:async';
 
-import 'package:flutter/gestures.dart'
-    show kBackMouseButton, kForwardMouseButton;
 import 'package:flutter/material.dart';
 import 'package:multi_split_view/multi_split_view.dart';
 
-import '../features/books/books_screen.dart' show newBook;
+import '../features/databases/database_library.dart';
 import '../features/library/outline_panel.dart';
 import '../features/library/pgn_drop_region.dart';
 import '../features/settings/setting_rows.dart';
-import '../features/settings/settings_dialog.dart';
-import '../features/tactics/my_games_block.dart';
+import '../features/tournaments/tournament_run.dart';
 import '../features/trainer/train_pane.dart';
 import '../features/trainer/training_outline.dart';
-import '../ui/app_action.dart';
-import '../ui/app_keys.dart';
-import '../ui/choice_dialog.dart';
 import '../ui/confirm_dialog.dart';
 import '../ui/status_bar.dart';
 import '../ui/listening_state.dart';
@@ -26,11 +17,9 @@ import '../ui/move_notation.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/navigation_pages.dart';
 import '../ui/theme.dart';
-import '../workspace/board_claim.dart';
-import '../workspace/document_actions.dart';
-import '../workspace/book_chip.dart';
-import '../workspace/copy_name_dialog.dart';
 import '../storage/finds_store.dart';
+import '../workspace/board_claim.dart';
+import '../workspace/book_chip.dart';
 import '../workspace/finds_panel.dart';
 import '../workspace/move_field.dart';
 import '../workspace/workspace.dart';
@@ -46,11 +35,13 @@ import 'layout_memory.dart';
 import 'search_door.dart';
 import 'mode_view.dart';
 import 'mode.dart';
-import 'save_held.dart';
 import 'training_visibility.dart';
 import 'player_wiring.dart';
 import 'top_bar.dart';
 import 'train_doors.dart';
+import 'window_actions.dart';
+import 'window_columns.dart';
+import 'window_keys.dart';
 import 'workspace_requests.dart';
 
 /// The window: a top bar with the mode menu and the Actions menu, the
@@ -146,17 +137,6 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         _ => null,
       }, _view.layout);
 
-  void _resetLayout() {
-    _layoutMemory.reset();
-    _navigationPage = 1;
-    _list.size = listColumnWidth;
-    _playerList.size = playerColumnWidth;
-    _outline.size = outlineColumnWidth;
-    _listShown = true;
-    _arrange();
-    setState(() {});
-  }
-
   ModeView get _view => _views[_requests.mode]!;
 
   /// The mode on screen as last seen, so the one left and the one come to
@@ -187,8 +167,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     }
     _views[mode]!.entered();
     _innerTabChanged();
-    _outlineShown = _wantsOutline;
-    _arrange();
+    _columns.arrangeForMode();
   }
 
   /// The engine job named in the top bar, and the way back to it.
@@ -258,44 +237,47 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     requests: _requests,
   );
 
-  /// The columns and their widths. The user drags the dividers; the list
-  /// column goes when hidden and the outline column comes and goes with the
-  /// chapter, and the widths of the others stay what the user made them.
-  /// The areas are the same three objects for the life of the window: the
-  /// split view keys each pane by its area, and a pane rebuilt from a new
-  /// area loses what it had open.
-  final _panes = MultiSplitViewController();
-  final _list = Area(
-    data: _Pane.list,
-    size: listColumnWidth,
-    min: paneMinWidth,
+  /// Which columns are side by side, and how wide.
+  late final _columns = WindowColumns(
+    requests: _requests,
+    workspace: _ws,
+    lesson: _train.lines.board,
   );
-  final _playerList = Area(
-    data: _Pane.list,
-    size: playerColumnWidth,
-    min: playerColumnWidth,
-  );
-  final _outline = Area(
-    data: _Pane.outline,
-    size: outlineColumnWidth,
-    min: paneMinWidth,
-  );
-  final _workspace = Area(
-    data: _Pane.workspace,
-    flex: 1,
-    min: boardPaneMinWidth,
-  );
-  bool _compactNavigation = false;
-  int _navigationPage = 1;
   final _listContentKey = GlobalKey();
   final _outlineContentKey = GlobalKey();
-  bool _outlineShown = false;
-  bool _listShown = true;
 
-  /// Whether the list column shows the Positions the searches found in
-  /// place of the mode's own list. One switch for every mode: the finds
-  /// are the same wherever they are looked at.
-  bool _positionsShown = false;
+  /// What the Actions menu and the palette offer, and the dialogs they open.
+  late final _actions = WindowActions(
+    requests: _requests,
+    workspace: _ws,
+    documents: _docs,
+    training: _train,
+    labs: widget.labs,
+    columns: _columns,
+    layoutMemory: _layoutMemory,
+    doors: _doors,
+    search: _search,
+    fullScreen: widget.fullScreen,
+    editing: _editing,
+    view: () => _view,
+    inspecting: () => _inspecting,
+    settingRows: widget.settingRows,
+    settingsAlso: widget.settingsAlso,
+  );
+
+  /// The window's keys over the workspace's, and the mouse's buttons.
+  late final _keys = WindowKeys(
+    requests: _requests,
+    workspace: _ws,
+    puzzles: _train.puzzles,
+    columns: _columns,
+    doors: _doors,
+    search: _search,
+    actions: _actions,
+    fullScreen: widget.fullScreen,
+    view: () => _view,
+    inspecting: () => _inspecting,
+  );
 
   WorkspaceRequests get _requests => widget.requests;
   Workspace get _ws => widget.workspace;
@@ -306,8 +288,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   void initState() {
     super.initState();
     _selectLayout();
-    _outlineShown = _wantsOutline;
-    _arrange();
+    _columns.arrangeForMode();
     for (final view in _views.values) {
       view.layout.addListener(_sitting.check);
       view.layout.addListener(_innerTabChanged);
@@ -324,20 +305,23 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       _editing.value = _view.startsEditing;
       _view.entered();
     }
-    _editing.addListener(_editingChanged);
+    _editing.addListener(_redraw);
+    _columns.addListener(_redraw);
     _requests.addListener(_modeMayHaveChanged);
     _ws.inspection?.addListener(_analysisChanged);
     _ws.jobs?.addListener(_jobChanged);
   }
 
-  /// Reading quiets the board and editing gives it its tools back.
-  void _editingChanged() {
+  /// Reading quiets the board and editing gives it its tools back; the
+  /// columns redraw what they hold.
+  void _redraw() {
     if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    _editing.removeListener(_editingChanged);
+    _editing.removeListener(_redraw);
+    _columns.removeListener(_redraw);
     _requests.removeListener(_modeMayHaveChanged);
     _ws.jobs?.removeListener(_jobChanged);
     _ws.inspection?.removeListener(_analysisChanged);
@@ -351,27 +335,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       view.layout.removeListener(_innerTabChanged);
       view.dispose();
     }
-    _panes.dispose();
+    _columns.dispose();
     super.dispose();
   }
-
-  void _arrange() => _panes.areas = [
-    if (_listShown) _requests.mode == Mode.playerAnalysis ? _playerList : _list,
-    if (_outlineShown && !_compactNavigation) _outline,
-    _workspace,
-  ];
-
-  /// The outline is a repertoire chapter's lines, so it is there only when
-  /// a chapter that is a whole file is open. A study chapter is one game of
-  /// its file, its chapters are already in its own left column, and the line
-  /// operations do not mean the same thing there — so it has no outline,
-  /// whichever mode the user switches to. Hide it during a lesson too: its
-  /// line previews would reveal the moves the user is being asked to recall.
-  bool get _wantsOutline =>
-      (_requests.mode == Mode.repertoires) &&
-      _ws.session.source != null &&
-      _ws.session.game == null &&
-      _train.lines.board.value == null;
 
   @override
   Listenable listenableOf(Shell widget) => Listenable.merge([
@@ -380,15 +346,12 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     widget.training.lines.selection,
   ]);
 
-  /// Puts the outline column in or takes it out when the open chapter
-  /// changes what is wanted. The other two panes are left alone, so the
-  /// list keeps its width and whatever it has open.
+  /// The open chapter decides the layout remembered for it and whether
+  /// the outline column is there.
   @override
   void changed() {
     _selectLayout();
-    if (_wantsOutline == _outlineShown) return;
-    _outlineShown = _wantsOutline;
-    _arrange();
+    _columns.followOutline();
   }
 
   late final _search = SearchDoor(
@@ -430,16 +393,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
           onImport: _requests.mode == Mode.study
               ? null
               : () => unawaited(_trainDoors.importCourse()),
-          onSettings: () => unawaited(
-            showSettingsDialog(
-              context,
-              store: _ws.settings,
-              groups: () => widget
-                  .settingRows()
-                  .where((g) => g.name == 'Training')
-                  .toList(),
-            ),
-          ),
+          onSettings: () => unawaited(_actions.trainingSettings(context)),
           moves: _moves,
           onRead: (line) => unawaited(_trainDoors.readLine(line)),
           offerBuilder: _view.offersBuilder,
@@ -447,62 +401,6 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         ),
         _ => null,
       };
-
-  /// Space shows the answer while a puzzle is on the board; otherwise it
-  /// is the mode's: the viewer's autoplay.
-  void _space() {
-    if (_inspecting) return;
-    if (_train.puzzles.up == null) return _view.space();
-    _train.puzzles.showSolution();
-  }
-
-  /// What Esc leaves once the workspace has nothing left: the mode's
-  /// sitting, then full screen.
-  bool _leave() => _view.leave() || widget.fullScreen.leave();
-
-  /// ↓ (1) / ↑ (−1) walk what is in front of the user: the mode's own list
-  /// when it has one (My games), the puzzles in a sitting, else the file's
-  /// games.
-  void _walk(int by) {
-    if (_inspecting) _tabs.show(WorkspaceTab.moves);
-    if (_listShown &&
-        _positionsShown &&
-        (!_compactNavigation || !_outlineShown || _navigationPage == 0)) {
-      if (_ws.finds.step(by) case final next?) _doors.openFind(next);
-      return;
-    }
-    if (_view.walk(by)) return;
-    final trainer = _train.puzzles;
-    if (trainer.up != null) {
-      unawaited(by > 0 ? trainer.next() : trainer.previous());
-    } else {
-      by > 0 ? _ws.session.nextGame() : _ws.session.previousGame();
-    }
-  }
-
-  void _toggleList() {
-    if (!mounted) return;
-    setState(() => _listShown = !_listShown);
-    _arrange();
-  }
-
-  /// The Positions in the list column, or the mode's own list back; the
-  /// column comes out if it was hidden.
-  void _togglePositions() {
-    if (!mounted) return;
-    setState(() {
-      _positionsShown = !_positionsShown || !_listShown;
-      _navigationPage = 0;
-      _listShown = true;
-    });
-    _arrange();
-  }
-
-  /// The Positions in the list column, whatever was there.
-  void _showPositions() {
-    if (_listShown && _positionsShown) return;
-    _togglePositions();
-  }
 
   /// A trap's line trained in the builder, put in the draft first when no
   /// chapter plays it yet and the user agrees.
@@ -529,182 +427,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     inspecting: () => mounted && _inspecting,
   );
 
-  Future<void> _analyze() async {
-    _train.puzzles.inspectAlternative();
-    _docs.autoplay.stop();
-    _tabs.add(WorkspaceTab.analysis.tab);
-  }
-
-  Future<void> _saveCopy() async {
-    final name = await showCopyNameDialog(context);
-    if (name == null || !mounted) return;
-    // A file this app may not write cannot have a copy beside it either.
-    final result = await _ws.session.saveCopy(
-      name,
-      into: _ws.session.readOnly == null ? null : _docs.viewer.collections,
-    );
-    if (!mounted) return;
-    sayCopy(_requests.say, result);
-  }
-
-  void _saveHeld() => unawaited(
-    saveHeld(
-      context,
-      session: _ws.session,
-      requests: _requests,
-      collections: _docs.viewer.collections,
-    ),
-  );
-
-  /// Everything the Actions menu offers now, in the mode on screen.
-  List<AppAction> _actions() => [
-    ..._modeActions(),
-    AppAction('Reset workspace layout', _resetLayout, group: 'Layout'),
-    AppAction(
-      'Widen board',
-      () => _view.layout.resizeBoard(_view.layout.boardFraction + 0.05),
-      group: 'Layout',
-    ),
-    AppAction(
-      'Widen reading area',
-      () => _view.layout.resizeBoard(_view.layout.boardFraction - 0.05),
-      group: 'Layout',
-    ),
-    if (_view.layout.count > 1) ...[
-      AppAction(
-        'Give this pane more room',
-        () => _view.layout.resizeActive(0.05),
-        group: 'Layout',
-      ),
-      AppAction(
-        'Give this pane less room',
-        () => _view.layout.resizeActive(-0.05),
-        group: 'Layout',
-      ),
-    ],
-    if (_view is! ViewerView)
-      AppAction(
-        _listShown && _positionsShown ? 'Back to the list' : 'Positions',
-        _togglePositions,
-        shortcut: AppKey.positions.label,
-        group: 'Panels',
-      ),
-    if (_view is! ViewerView)
-      AppAction(
-        widget.fullScreen.on ? 'Leave full screen' : 'Full screen',
-        widget.fullScreen.toggle,
-        shortcut: AppKey.fullScreen.label,
-        group: 'Window',
-      ),
-  ];
-
-  List<AppAction> _modeActions() => [
-    if (!_inspecting) ..._view.layout.actions,
-    ..._documentModeActions(),
-  ];
-
-  List<AppAction> _documentModeActions() => _inspecting
-      ? [
-          ...documentActions(
-            session: _boardWorkspace.session,
-            analysis: _boardWorkspace.analysis,
-            editing: _editing,
-            onSaveCopy: () {},
-          ),
-          ..._doors.entries(context),
-          ...tabActions(_tabs),
-        ]
-      : _view.actions((
-          editing: _editing,
-          board: () => boardActions(
-            context,
-            doors: _doors,
-            library: _docs.library,
-            onAnalyze: _view.offersNewAnalysis
-                ? () => unawaited(_analyze())
-                : null,
-          ),
-          dialogs: (
-            saveCopy: () => unawaited(_saveCopy()),
-            saveHeld: _saveHeld,
-            exportPgn: () => unawaited(
-              exportViewerPgn(context, _docs.viewer, _requests.say),
-            ),
-            search: () => unawaited(_search.search(_view.layout)),
-            accounts: () => unawaited(editAccounts(context, _train.myGames)),
-            newBook: () =>
-                unawaited(newBook(context, _ws.books, say: _requests.say)),
-          ),
-        ));
-
-  /// The same actions, typed for: a searchable list that the enter key
-  /// takes the one match of.
-  Future<void> _palette() async {
-    final actions = [
-      for (final mode in Mode.values)
-        if (mode != Mode.bughouse || widget.labs.offered.value)
-          AppAction('Go to ${mode.label}', () => _requests.switchTo(mode)),
-      for (final a in _actions())
-        if (a.run != null) a,
-    ];
-    final chosen = await showChoiceDialog<AppAction>(
-      context,
-      title: 'Actions',
-      options: actions,
-      label: (action) => action.labelWithKey,
-      hint: 'Type an action',
-      empty: 'Nothing to do yet',
-    );
-    chosen?.run?.call();
-  }
-
-  Future<void> _settings() => showSettingsDialog(
-    context,
-    store: _ws.settings,
-    groups: widget.settingRows,
-    also: widget.settingsAlso,
-  );
-
-  Map<ShortcutActivator, VoidCallback> get _windowKeys => {
-    // ← takes back a move made past the file on the explorer Book's free board
-    // before it steps back in the file.
-    if (!_inspecting) ...AppKey.back.bind(_ws.tree.back),
-    ..._screenKeys,
-    ...AppKey.toggleList.bind(_toggleList),
-    ...AppKey.positions.bind(_togglePositions),
-    ...AppKey.openFile.bind(() => unawaited(_requests.openPgnFile())),
-    ...AppKey.paste.bind(() => unawaited(_doors.paste())),
-    ...AppKey.pastePosition.bind(
-      () => unawaited(_doors.paste(positionOnly: true)),
-    ),
-    ...AppKey.setUpPosition.bind(() => unawaited(_doors.setUp(context))),
-    ...AppKey.analysisBoard.bind(() => unawaited(_analyze())),
-    ...AppKey.search.bind(() => unawaited(_search.search(_view.layout))),
-    ...AppKey.play.bind(_space),
-    ...AppKey.nextGame.bind(() => _walk(1)),
-    ...AppKey.previousGame.bind(() => _walk(-1)),
-  };
-
-  /// The window's keys a mode with a screen of its own keeps: the settings,
-  /// the actions typed for, full screen, and Alt+← and Alt+→ back to where
-  /// the last jump came from and forward again. The rest are the
-  /// workspace's, but for the paste ([BoardDoors.onScreen]).
-  Map<ShortcutActivator, VoidCallback> get _screenKeys => {
-    ...AppKey.fullScreen.bind(widget.fullScreen.toggle),
-    ...AppKey.settings.bind(() => unawaited(_settings())),
-    ...AppKey.actions.bind(() => unawaited(_palette())),
-    ...AppKey.historyBack.bind(_back),
-    ...AppKey.historyForward.bind(_forward),
-  };
-
-  void _back() => unawaited(_requests.back());
-  void _forward() => unawaited(_requests.forward());
-
-  /// The mouse's own back and forward buttons do what Alt+← and Alt+→ do.
-  void _mouseButton(PointerDownEvent event) {
-    if (event.buttons & kBackMouseButton != 0) _back();
-    if (event.buttons & kForwardMouseButton != 0) _forward();
-  }
+  void _saveHeld() => _actions.saveHeld(context);
 
   /// The mode and the status are the requests'; a change to either redraws
   /// the window, as a change of mode must.
@@ -712,7 +435,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Listener(
-        onPointerDown: _mouseButton,
+        onPointerDown: _keys.mouseButton,
         child: StatusScope(
           say: _requests.say,
           child: ListenableBuilder(
@@ -721,14 +444,19 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
                 ? PgnDropRegion(
                     library: _docs.library,
                     onOpen: (ref) => unawaited(_requests.open(ref)),
-                    child: _window(_doors.onScreen(_view.screen(_screenKeys))),
+                    child: _modeWindow(),
                   )
-                : _window(_doors.onScreen(_view.screen(_screenKeys))),
+                : _modeWindow(),
           ),
         ),
       ),
     );
   }
+
+  /// The window of the mode on screen: its own screen, keeping the
+  /// window's screen keys, or the workspace.
+  Widget _modeWindow() =>
+      _window(_doors.onScreen(_view.screen(_keys.screen(context))));
 
   /// The top bar with the status sentence in it, and under it [screen] — a
   /// mode's own — or the columns over the workspace.
@@ -741,14 +469,14 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         onActivity: _job.show,
         backTo: _requests.backTo?.label,
         forwardTo: _requests.forwardTo?.label,
-        onBack: _back,
-        onForward: _forward,
+        onBack: _keys.back,
+        onForward: _keys.forward,
         offered: (mode) => mode != Mode.bughouse || widget.labs.offered.value,
-        onSettings: () => unawaited(_settings()),
+        onSettings: () => unawaited(_actions.settings(context)),
         // A mode with a screen of its own has no list to show or hide.
-        listShown: _listShown || screen != null,
-        onToggleList: _toggleList,
-        actions: _actions,
+        listShown: _columns.listShown || screen != null,
+        onToggleList: _columns.toggleList,
+        actions: () => _actions.entries(context),
         // What the entries' enabled states read, heard only while the
         // menu is open: the bar itself shows none of it.
         actionsChange: Listenable.merge([
@@ -776,8 +504,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
               editing: _editing,
               tabs: _tabs,
               moves: _moves,
-              extra: _windowKeys,
-              leave: _leave,
+              extra: _keys.all(context),
+              leave: _keys.leave,
               save: _inspecting ? null : _saveHeld,
               escapeEndsEditing: _inspecting || !_view.editSwitch,
               child: Column(
@@ -788,7 +516,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
                     onClose: (id) => unawaited(_requests.documents.close(id)),
                     onAdd: () => unawaited(_requests.newEmptyAnalysis()),
                   ),
-                  Expanded(child: _columns()),
+                  Expanded(child: _split()),
                 ],
               ),
             ),
@@ -799,24 +527,22 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// The columns the mode puts side by side, under one set of keys: the
   /// mode's own list, the outline when a repertoire chapter is open, and the
   /// workspace filling the rest, with a divider to drag between each pair.
-  Widget _columns() => LayoutBuilder(
+  Widget _split() => LayoutBuilder(
     builder: (context, room) {
-      final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
-      final compact = room.maxWidth < navigationSideBySideMinWidth * scale;
-      if (compact != _compactNavigation) {
-        _compactNavigation = compact;
-        _arrange();
-      }
+      _columns.fit(
+        room.maxWidth,
+        MediaQuery.textScalerOf(context).scale(14) / 14,
+      );
       return MultiSplitViewTheme(
         data: paneTheme(Theme.of(context).colorScheme),
-        child: MultiSplitView(controller: _panes, builder: _pane),
+        child: MultiSplitView(controller: _columns.controller, builder: _pane),
       );
     },
   );
 
   Widget _navigationList(Widget trailing) => KeyedSubtree(
     key: _listContentKey,
-    child: _positionsShown
+    child: _columns.positionsShown
         ? FindsPanel(
             finds: _ws.finds,
             session: _ws.session,
@@ -845,18 +571,20 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   Widget _pane(BuildContext context, Area area) => switch (area.data) {
     // The mode's list or the Positions, with the `«` that hides the
     // column in its top right corner.
-    _Pane.list =>
-      _compactNavigation && _outlineShown
+    WindowPane.list =>
+      _columns.paged
           ? NavigationPages(
               list: _navigationList(const SizedBox.shrink()),
               outline: _navigationOutline(),
-              trailing: ListToggle(shown: true, onPressed: _toggleList),
-              listLabel: _positionsShown ? 'Positions' : 'Repertoires',
-              selected: _navigationPage,
-              onSelected: (page) => setState(() => _navigationPage = page),
+              trailing: ListToggle(shown: true, onPressed: _columns.toggleList),
+              listLabel: _columns.positionsShown ? 'Positions' : 'Repertoires',
+              selected: _columns.page,
+              onSelected: _columns.showPage,
             )
-          : _navigationList(ListToggle(shown: true, onPressed: _toggleList)),
-    _Pane.outline => _navigationOutline(),
+          : _navigationList(
+              ListToggle(shown: true, onPressed: _columns.toggleList),
+            ),
+    WindowPane.outline => _navigationOutline(),
     _ => WorkspaceView(
       workspace: _boardWorkspace,
       tabs: _tabs,
@@ -895,7 +623,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
           _requests.openExplorerGame(game, source: source, ply: ply),
         ),
         onOpenChapter: (ref) => unawaited(_requests.readInBuilder(ref, [])),
-        onShowPositions: _showPositions,
+        onShowPositions: _columns.showPositions,
         // The chapter a book move was found in: in the builder, at the
         // position the move leads to.
         onOpenPlace: (place) =>
@@ -905,6 +633,3 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     ),
   };
 }
-
-/// The columns of the window, left to right.
-enum _Pane { list, outline, workspace }
