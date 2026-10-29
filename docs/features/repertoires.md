@@ -139,7 +139,8 @@ chapter to make them its lines, or onto a line of the open chapter to fold
 them in as variations. `Move to chapter…` does the first by name, and also
 offers `New chapter…` (made with the open chapter's side). Picks last through
 moves, comments and the side changing, and go when another chapter opens or
-a line is deleted, put back or moved. A cross-file move
+is read again, on an undo, or when a line is deleted, put back, moved or
+reordered, even among lines whose headers are alike. A cross-file move
 writes both PGNs and the training files as one recoverable transaction,
 pinning `[LineID]` first; Ctrl+Z restores both chapters. A failed write keeps
 the move for `Retry line move` and blocks other catalog changes until it is
