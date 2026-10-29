@@ -52,9 +52,13 @@ final committed candidate, run `scripts/ci.sh preflight` in its clean checkout
 using the SDK in `.fvmrc`; the tag push runs the complete platform pipeline
 automatically. See [release checks](../../README.md#development-and-release-checks).
 
-## Publish a batch only when requested
+## Publish only when requested, always squashed
 
-Keep local main's useful history. To produce a compact published history:
+Publish only when the user asks. Every publish goes to `origin/main` as one
+squashed batch commit (plus a separate release/version commit when there is
+one), never as local main's individual commits: the owner does not want the
+development history in the published one. Keep local main's useful history.
+To publish:
 
 1. Fetch `origin`, snapshot the backed-up local main SHA and create a durable
    publication worktree/branch from current `origin/main`. Use an explicit
