@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/chess/fen.dart';
+import 'package:chess_auto_prep/chess/pgn/game_tree.dart' show NodePath;
 import 'package:chess_auto_prep/engines/maia/move_policy.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
@@ -54,6 +55,13 @@ final class ScriptedPolicy implements MovePolicy {
       _ => const MaiaFailed('no opinion'),
     };
   }
+}
+
+/// A model with the same opinion of every position.
+final class EveryPosition implements MovePolicy {
+  @override
+  Future<MaiaAnswer> policy(Fen fen, int elo) async =>
+      const MaiaPolicy({'b1c3': 0.5, 'g1f3': 0.4});
 }
 
 void main() {
@@ -155,6 +163,43 @@ void main() {
     expect(byMove()['e4']!.inRepertoire, isFalse);
     expect(byMove()['d4']!.inRepertoire, isTrue);
   });
+
+  test(
+    'a position two lines reach is marked from the line the board is on',
+    () async {
+      const transposed = '''
+// Color: White
+
+[Event "QGD"]
+[Result "*"]
+
+1. d4 (1. c4 e6 2. d4 d5 3. Nf3) 1... d5 2. c4 e6 3. Nc3 *
+''';
+      final ref = chapterRef('KID', 'QGD');
+      fixture.store.documents[ref] = Opened(
+        transposed,
+        scriptedRevision(transposed),
+      );
+      await fixture.session.open(ref);
+      final own = RepliesFixture(
+        fixture.session,
+        policy: EveryPosition(),
+        settings: settings,
+        answers: answers,
+      );
+      addTearDown(own.dispose);
+      Map<String, bool> ticks() => {
+        for (final row in (own.replies.table as RepliesShown).rows)
+          row.san: row.inRepertoire,
+      };
+      fixture.session.cursor.goTo(NodePath.of([0, 0, 0, 0]));
+      await pumpEventQueue();
+      expect(ticks(), {'Nc3': true, 'Nf3': false});
+      fixture.session.cursor.goTo(NodePath.of([1, 0, 0, 0]));
+      await pumpEventQueue();
+      expect(ticks(), {'Nc3': false, 'Nf3': true});
+    },
+  );
 
   test('the model is asked once per position and rating', () async {
     await pumpEventQueue();

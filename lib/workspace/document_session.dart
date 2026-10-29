@@ -388,8 +388,12 @@ final class DocumentSession extends ChangeNotifier {
     // Before the flush, which then writes what the words make of the file.
     _editors.commit();
     final ticket = ++_opens;
-    if (!isScratch) await _switching(ticket, _saver.flush);
+    final file = !isScratch;
+    if (file) await _switching(ticket, _saver.flush);
     if (_disposed || ticket != _opens) return false;
+    // Words the file will not take keep it up, where the screen says why,
+    // as they do when another file is asked for.
+    if (file && !_saver.settled) return false;
     _saver.closed();
     if (isScratch) {
       _board

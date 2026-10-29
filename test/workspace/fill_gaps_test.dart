@@ -448,6 +448,35 @@ void main() {
     },
   );
 
+  test('a finished search is not started again by browsing while its tree '
+      'is saved', () async {
+    final gate = Completer<void>();
+    var starts = 0;
+    final evaluator = ScriptedEvaluator();
+    final fill = fillWith(
+      evaluator,
+      tools: (_) async {
+        starts++;
+        return FillReady(
+          evaluator: evaluator,
+          policy: const ScriptedPolicy({'e8d8': 1}),
+          release: () async {},
+        );
+      },
+      keepTree: (_, _, {required runId}) => gate.future,
+    );
+    final run = fill.start(const FillRequest(elo: 2200, depthPlies: 1));
+    while (fill.state is! FillDone) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    fixture.session.playMove('e2e4');
+    gate.complete();
+    await run;
+    await pumpEventQueue(times: 100);
+    expect(starts, 1);
+    expect(fill.running, isFalse);
+  });
+
   test('manual stop during navigation prevents an automatic restart', () async {
     final evaluator = GatedEvaluator();
     var starts = 0;

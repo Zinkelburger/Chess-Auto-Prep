@@ -74,6 +74,22 @@ void main() {
       expect(fixture.saver.state, isA<SaveFailed>());
     });
 
+    test('that the file will not take keep it up in place of the analysis '
+        'board', () async {
+      final fixture = await slowSession();
+      fixture.session.setComment(sicilian, 'typed before the board');
+      fixture.store.saves.add(const IoFailure('No space left on device'));
+
+      expect(await fixture.session.showAnalysisBoard(), isFalse);
+      expect(fixture.session.source, fixture.ref);
+      expect(
+        fixture.session.commentAt(sicilian),
+        'typed before the board [%eval 0.30]',
+        reason: 'the words are on screen, where the strip says why',
+      );
+      expect(fixture.saver.state, isA<SaveFailed>());
+    });
+
     test('into the file being opened are in what it shows', () async {
       const path = '/repertoires/Course/Course.pgn';
       final open = ChapterRef.at(path, section: 'Open games');

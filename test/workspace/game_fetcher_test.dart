@@ -50,6 +50,16 @@ void main() {
     );
   });
 
+  test('a fetch that fails on the way ends, so the other rows can be '
+      'fetched', () async {
+    book.throwing = StateError('the database went away');
+    final seen = <String?>[];
+    games.addListener(() => seen.add(games.fetching));
+    final kept = await games.keep(game, source: ExplorerSource.twic, ply: 0);
+    expect((kept as GameNotKept).sentence, 'Could not fetch that game.');
+    expect(seen, [game.id, null]);
+  });
+
   test('the game being fetched is named until it arrives', () async {
     final seen = <String?>[];
     games.addListener(() => seen.add(games.fetching));

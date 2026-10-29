@@ -118,6 +118,9 @@ final class DraftKeeper {
     }
     _held = held;
     if (!held && _owns && path != null) _ended(path);
+    // An edit saved as it is made, while editing, is newer than the offered
+    // edits as much as a held one is: put back, they would undo it.
+    if (_offered != null && !_saver.settled) _withdraw();
   }
 
   /// The edits this visit held are off the board, as the session says: kept
@@ -285,9 +288,10 @@ final class DraftKeeper {
     final shown = _session.chapter;
     if (draft == null || source == null || shown == null) return;
     if (source.path != draft.path || _session.hasHeldEdits) return;
-    if (draft.revision != _saver.revision) return;
+    if (draft.revision != _saver.revision || !_saver.settled) return;
     final file = await readChapter(name: source.fileName, text: draft.text);
     if (_disposed || _offered != draft || _session.chapter != shown) return;
+    if (draft.revision != _saver.revision || !_saver.settled) return;
     if (file.lines.isEmpty) return;
     final restored = withGame(
       file,
