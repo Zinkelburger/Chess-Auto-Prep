@@ -446,9 +446,10 @@ final class Studies extends ChangeNotifier {
   /// name a hundred files already carry is a problem the user has to look
   /// at, so the collision is reported rather than numbered for ever.
   Future<StudyResult> _createdUnderAFreeName(String name, String text) async {
+    final base = _asFileName(name);
     for (var attempt = 1; attempt <= 100; attempt++) {
-      final wanted = attempt == 1 ? name : '$name $attempt';
-      final created = await _created(_asFileName(wanted), text);
+      final wanted = attempt == 1 ? base : _numbered(base, attempt);
+      final created = await _created(wanted, text);
       if (created is! StudyNameTaken) return created;
     }
     return StudyProblem('No free name was found for "$name".');
@@ -457,8 +458,24 @@ final class Studies extends ChangeNotifier {
   /// A study is its file name, so a name a file cannot take is trimmed down
   /// to one that can rather than refused: the name came from a download, not
   /// from the user, and there is nobody to ask.
-  String _asFileName(String name) =>
-      safeFileName(name, fallback: 'Imported study');
+  String _asFileName(String name) {
+    const fallback = 'Imported study';
+    return safeFileName(
+      importedName(name, fallback: fallback),
+      fallback: fallback,
+    );
+  }
+
+  /// [base], a name a file can take, with [attempt] after it: cut shorter
+  /// for the number to fit, rather than every number giving one fallback.
+  String _numbered(String base, int attempt) {
+    final stem = base.runes.toList();
+    while (true) {
+      final wanted = '${String.fromCharCodes(stem).trimRight()} $attempt';
+      if (stem.isEmpty || nameProblem(wanted) == null) return wanted;
+      stem.removeLast();
+    }
+  }
 
   /// Writes `<name>.pgn` in the studies folder and nowhere else.
   ///

@@ -627,6 +627,26 @@ void main() {
       expect(p.dirname(ref.path), studiesRoot);
     }
   });
+  test('importing: two studies with a name too long for a file are both '
+      'kept, under that name cut short and then numbered', () async {
+    final long = 'Lecture ${'x' * 150}';
+    study.lichess.answer = StudyFetched(
+      '[Event "$long: One"]\n[StudyName "$long"]\n\n1. e4 *\n',
+    );
+    for (final id in ['abcd1234', 'efgh5678']) {
+      relist();
+      expect(
+        await study.studies.importFromUrl('lichess.org/study/$id'),
+        isA<StudyDone>(),
+      );
+    }
+    final names = study.store.documents.keys
+        .map(_nameOf)
+        .where((name) => name.startsWith('Lecture xxx'))
+        .toList();
+    expect(names, hasLength(2), reason: '$names');
+    expect(names.where((name) => name.endsWith(' 2')), hasLength(1));
+  });
 }
 
 String _nameOf(DocumentRef ref) =>
