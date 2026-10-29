@@ -7,6 +7,7 @@ import '../../chess/tactics/puzzle.dart';
 import '../../chess/tactics/puzzle_run.dart';
 import '../../ui/check_row.dart';
 import '../../ui/theme.dart';
+import 'puzzle_state.dart';
 import 'puzzle_trainer.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/move_notation.dart';

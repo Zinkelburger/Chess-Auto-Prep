@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/chess/pgn/chapter_heading.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart' show NodePath;
 import 'package:chess_auto_prep/features/library/chapter_outline.dart';
 import 'package:chess_auto_prep/features/library/outline_panel.dart';
+import 'package:chess_auto_prep/features/library/outline_rows.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart'
     show IoFailure, Opened;

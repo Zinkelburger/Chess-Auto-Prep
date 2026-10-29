@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/tactics/puzzle_queue.dart';
 import 'package:chess_auto_prep/chess/tactics/puzzle_run.dart';
+import 'package:chess_auto_prep/features/tactics/puzzle_state.dart';
 import 'package:chess_auto_prep/features/tactics/puzzle_trainer.dart';
 import 'package:chess_auto_prep/features/tactics/tactics_set.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
