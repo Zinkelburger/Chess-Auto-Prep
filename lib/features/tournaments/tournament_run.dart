@@ -9,6 +9,7 @@ import '../../storage/pending_writes.dart';
 import '../../storage/tournaments.dart';
 import '../../storage/tournament_inbox.dart';
 import '../../workspace/engine_jobs.dart';
+import '../../workspace/latest.dart';
 import 'engine_check.dart';
 import 'game_runner.dart';
 import 'schedule.dart';
@@ -48,7 +49,7 @@ final class TournamentRun extends ChangeNotifier {
   bool stopping = false;
   bool registryBusy = false;
   bool _disposed = false;
-  int _reading = 0;
+  final _reads = Latest();
   String? _pgn;
   String? _retryPgn;
   bool _retryStarts = false;
@@ -104,10 +105,10 @@ final class TournamentRun extends ChangeNotifier {
   }
 
   Future<void> _readHistory() async {
-    final ticket = ++_reading;
+    final ticket = _reads.begin();
     final listed = await store.list();
     final registry = await store.engines();
-    if (_disposed || ticket != _reading) return;
+    if (ticket.overtaken) return;
     switch (listed) {
       case TournamentSaved(:final value, :final warnings):
         historyWarnings = warnings;
@@ -129,7 +130,7 @@ final class TournamentRun extends ChangeNotifier {
     if (store case TournamentNotifications signals) {
       try {
         final id = await signals.takeRequest();
-        if (_disposed || ticket != _reading || id == null) {
+        if (ticket.overtaken || id == null) {
           _notify();
           return;
         }
@@ -163,7 +164,7 @@ final class TournamentRun extends ChangeNotifier {
       return;
     }
     if (!_takeEngines()) return;
-    _reading++;
+    _reads.cancel();
     stopping = false;
     final now = DateTime.now().toUtc();
     final initial = Tournament({
@@ -402,7 +403,7 @@ final class TournamentRun extends ChangeNotifier {
     stopping = true;
     _disposed = true;
     _jobs.release(this);
-    _reading++;
+    _reads.close();
     _reload?.cancel();
     unawaited(_watch?.cancel());
     super.dispose();

@@ -23,6 +23,7 @@ import 'document_saver.dart';
 import 'document_access.dart';
 import 'document_projection.dart';
 import 'document_history.dart';
+import 'latest.dart';
 import 'parsed_files.dart';
 import 'session_results.dart';
 
@@ -96,14 +97,14 @@ final class DocumentSession extends ChangeNotifier {
   EditRefused? _refused;
   NodePath? _shownTo;
   bool _flipped = false;
-  int _opens = 0;
+  final _opens = Latest();
 
   /// Counts documents put up; a cancelled read leaves the one up, and this.
   int _document = 0;
 
   /// Pending navigation ticket. Undo waits so it cannot restore a previous
   /// file's contents under the arriving file's identity.
-  int? _opening;
+  Ticket? _opening;
 
   /// Edits wait while undo reads the version it restored.
   bool _restoring = false;
@@ -276,19 +277,19 @@ final class DocumentSession extends ChangeNotifier {
   }
 
   Future<OpenResult> _read(ChapterRef ref, int? game) {
-    final ticket = ++_opens;
+    final ticket = _opens.begin();
     return _switching(ticket, () => _opened(ref, game, ticket));
   }
 
   /// A newer navigation intent supersedes a read even if it stays here.
   void cancelOpening() {
-    _opens++;
+    _opens.cancel();
     _opening = null;
   }
 
   /// Runs [change], which puts another document up, with undo held off
   /// until it is over.
-  Future<T> _switching<T>(int ticket, Future<T> Function() change) async {
+  Future<T> _switching<T>(Ticket ticket, Future<T> Function() change) async {
     _opening = ticket;
     try {
       return await change();
@@ -297,19 +298,19 @@ final class DocumentSession extends ChangeNotifier {
     }
   }
 
-  Future<OpenResult> _opened(ChapterRef ref, int? game, int ticket) async {
+  Future<OpenResult> _opened(ChapterRef ref, int? game, Ticket ticket) async {
     // A rename, move or delete of this document may still be running, with a
     // draft behind it that belongs to the file it was typed into: it goes out
     // before this document takes the saver over, and before the read below,
     // which must not answer with text older than that write.
     await _saver.flush();
-    if (_disposed || ticket != _opens) return const OpenOvertaken();
+    if (ticket.overtaken) return const OpenOvertaken();
     await access.settled(ref.path);
-    if (_disposed || ticket != _opens) return const OpenOvertaken();
+    if (ticket.overtaken) return const OpenOvertaken();
     final version = access.versionOf(ref.path);
     final leftAsIs = !_saver.settled;
     final read = await readDocument(_store, ref, game: game, parsed: _parsed);
-    if (_disposed || ticket != _opens) return const OpenOvertaken();
+    if (ticket.overtaken) return const OpenOvertaken();
     if (access.versionOf(ref.path) != version) {
       return _opened(ref, game, ticket);
     }
@@ -329,7 +330,7 @@ final class DocumentSession extends ChangeNotifier {
       // that document up, where the screen says why.
       final into = _saver.documentPath;
       await _saver.flush();
-      if (_disposed || ticket != _opens || !_saver.settled) {
+      if (ticket.overtaken || !_saver.settled) {
         return const OpenOvertaken();
       }
       // Written into the file being opened, they are newer than the text
@@ -373,7 +374,7 @@ final class DocumentSession extends ChangeNotifier {
   void closed() {
     if (_source == null) return;
     _editors.commit();
-    _opens++;
+    _opens.cancel();
     _saver.closed();
     _showBoard();
   }
@@ -411,10 +412,10 @@ final class DocumentSession extends ChangeNotifier {
     if (identical(page, _board) && isScratch && fresh == null) return true;
     // Before the flush, which then writes what the words make of the file.
     _editors.commit();
-    final ticket = ++_opens;
+    final ticket = _opens.begin();
     final file = !isScratch;
     if (file) await _switching(ticket, _saver.flush);
-    if (_disposed || ticket != _opens) return false;
+    if (ticket.overtaken) return false;
     // Words nobody was asked about that the file will not take keep it up,
     // where the screen says why, as they do when another file is asked for.
     if (file && !leftAsIs && !_saver.settled) return false;
@@ -592,7 +593,7 @@ final class DocumentSession extends ChangeNotifier {
     if (ref == null || _opening != null || _restoring) {
       return const UndoRefused();
     }
-    final ticket = _opens;
+    final ticket = _opens.now;
     final result = await _saver.undo();
     if (result case Restored(:final text) when _stillOn(ref, ticket)) {
       await _showRestored(_source!, ticket, text);
@@ -616,14 +617,14 @@ final class DocumentSession extends ChangeNotifier {
   /// one on screen: nothing was asked for in its place — it may have been
   /// renamed — or what was asked for has not arrived, and may never when
   /// its read fails. Either way the screen must show what its file holds.
-  bool _stillOn(ChapterRef ref, int ticket) =>
-      !_disposed && (ticket == _opens || _source == ref);
+  bool _stillOn(ChapterRef ref, Ticket ticket) =>
+      !_disposed && (ticket.current || _source == ref);
 
   /// Shows [text], the version an undo put back into the file of [ref],
   /// on the chapter the user was on: the game they were looking at, found
   /// by its bytes, and a course file's chapter found by its games when the
   /// undo took back the name they were given.
-  Future<void> _showRestored(ChapterRef ref, int ticket, String text) async {
+  Future<void> _showRestored(ChapterRef ref, Ticket ticket, String text) async {
     final places = _view?.places ?? const <int>[];
     _restoring = true;
     final ({Chapter file, SectionView? view}) read;
@@ -907,12 +908,12 @@ final class DocumentSession extends ChangeNotifier {
   /// as does one the user left while the copy was written. [into] is the
   /// folder to write it in instead, for a file outside Documents.
   Future<CopyResult> saveCopy(String name, {String? into}) async {
-    final ticket = _opens;
+    final ticket = _opens.now;
     final ref = _source;
     final atGame = game;
     final written = await copyAside(name, into: into);
     if (written is! CopySaved || ref == null) return written;
-    if (_disposed || ticket != _opens || _source != ref) return written;
+    if (ticket.overtaken || _source != ref) return written;
     final frozen = _saver.state is SaveStopped || _readOnly != null;
     if (!frozen) return written;
     final path = p.join(into ?? p.dirname(ref.path), written.name);
@@ -934,6 +935,7 @@ final class DocumentSession extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _opens.close();
     cursor._dispose();
     _editors.dispose();
     super.dispose();
