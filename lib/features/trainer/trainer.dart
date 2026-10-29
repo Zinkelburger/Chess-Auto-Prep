@@ -23,6 +23,7 @@ import '../../workspace/books.dart';
 import '../../workspace/repertoire_catalog.dart';
 import '../../workspace/document_session.dart';
 import '../../workspace/engine_analysis.dart';
+import '../../workspace/latest.dart';
 import 'lesson.dart';
 import 'progress.dart';
 import 'training_scope.dart';
@@ -310,7 +311,7 @@ class Trainer extends ChangeNotifier {
 
   /// Counts loads, so an older one that finishes late is not taken for the
   /// newest when both asked for the same thing.
-  var _loads = 0;
+  final _loads = Latest();
   bool _disposed = false;
 
   /// The board while a sitting holds it; null otherwise.
@@ -661,14 +662,14 @@ class Trainer extends ChangeNotifier {
     final wanted = (ref: ref, scope: _scope, chapter: chapter);
     if (!force && _read == wanted && _state is! TrainerIdle) return;
     _read = wanted;
-    final load = ++_loads;
+    final load = _loads.begin();
     // The sitting was over the progress this replaces; it ends with it, so
     // nothing writes through a copy the files have moved past.
     final previous = _state;
     leave();
     _become(const TrainerLoading());
     if (previous is TrainerReady) await previous.progress.settle();
-    if (load != _loads) return;
+    if (load.overtaken) return;
     if (selection.active) return _loadSelected(load, chapter, ref);
     if (_scope == TrainScope.book) return _loadBook(load, chapter, ref);
     if (chapter == null || ref == null) {
@@ -686,12 +687,12 @@ class Trainer extends ChangeNotifier {
     final chapters = _scope == TrainScope.chapter || chapter.game != null
         ? [open]
         : await _chapters.repertoireOf(open);
-    if (load != _loads) return;
+    if (load.overtaken) return;
     await _loaded(load, chapters, study: chapter.game != null);
   }
 
   Future<void> _loadSelected(
-    int load,
+    Ticket load,
     Chapter? chapter,
     ChapterRef? ref,
   ) async {
@@ -710,7 +711,7 @@ class Trainer extends ChangeNotifier {
       (ref) => _catalog?.repertoireOf(ref.path) == root,
       open,
     );
-    if (_disposed || load != _loads) return;
+    if (load.overtaken) return;
     if (chapters.isEmpty) {
       return _become(const TrainerEmpty(NothingToTrain.noChapter));
     }
@@ -719,7 +720,7 @@ class Trainer extends ChangeNotifier {
 
   /// The chapters of the book in use, the one on the board as it stands
   /// when it is one of them.
-  Future<void> _loadBook(int load, Chapter? chapter, ChapterRef? ref) async {
+  Future<void> _loadBook(Ticket load, Chapter? chapter, ChapterRef? ref) async {
     final book = _books.active;
     _bookSeen = (_books.revision, _books.current);
     if (book == null) {
@@ -736,16 +737,16 @@ class Trainer extends ChangeNotifier {
       (ref) => _books.contains(book, ref),
       open,
     );
-    if (load != _loads) return;
+    if (load.overtaken) return;
     if (chapters.isEmpty) {
       return _become(const TrainerEmpty(NothingToTrain.emptyBook));
     }
     await _loaded(load, chapters);
   }
 
-  /// The progress of [chapters], read for the load counted as [load].
+  /// The progress of [chapters], read for the load [load] stands for.
   Future<void> _loaded(
-    int load,
+    Ticket load,
     List<ChapterLines> chapters, {
     bool study = false,
   }) async {
@@ -759,7 +760,7 @@ class Trainer extends ChangeNotifier {
           (previous != null &&
               (previous != revision ||
                   previous.nativeIdentity != revision.nativeIdentity))) {
-        if (load == _loads) {
+        if (load.current) {
           _become(
             const TrainerFailed(
               ProgressFailed(
@@ -775,7 +776,7 @@ class Trainer extends ChangeNotifier {
     final read = await _files.read({
       for (final c in chapters) c.ref.path,
     }, observed: observed);
-    if (load != _loads) return;
+    if (load.overtaken) return;
     _become(switch (read) {
       ProgressLoaded() => TrainerReady(
         chapters: chapters,
@@ -805,7 +806,7 @@ class Trainer extends ChangeNotifier {
     _disposed = true;
     // A load still reading is overtaken: it makes no progress to leak and
     // tells nobody.
-    _loads++;
+    _loads.close();
     selection.removeListener(_selectionChanged);
     selection.dispose();
     settings?.removeListener(_settingsChanged);

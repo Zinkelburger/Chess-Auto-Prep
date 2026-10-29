@@ -244,20 +244,20 @@ final class RepertoireAnswers {
   /// What each chapter answers, by chapter, as last read.
   final _read = <ChapterRef, _Answered>{};
 
-  /// Counts [forget]s and [forgetFile]s, so a read that was on its way
+  /// Overtaken by [forget] and [forgetFile], so a read that was on its way
   /// when the files changed is not kept as what they answer now.
-  var _generation = 0;
+  final _reads = Latest();
 
   /// Drops what was read; the next question reads the files again.
   void forget() {
-    _generation++;
+    _reads.cancel();
     _read.clear();
   }
 
   /// Drops what was read from the file at [path], every chapter of it; the
   /// other files stay as they were read.
   void forgetFile(String path) {
-    _generation++;
+    _reads.cancel();
     _read.removeWhere((chapter, _) => chapter.path == path);
   }
 
@@ -278,7 +278,7 @@ final class RepertoireAnswers {
   /// answer from [side], each naming the first chapter, in folder order,
   /// that answers it.
   Future<Map<String, String>> around(ChapterRef chapter, Side side) async {
-    final generation = _generation;
+    final ticket = _reads.now;
     final listing = await _files.list();
     if (listing is! Repertoires) return const {};
     final folder = listing.folders
@@ -299,7 +299,7 @@ final class RepertoireAnswers {
       if (answered == null) {
         final file = await (files[other.path] ??= _file(other));
         answered = file == null ? _Answered.none : _answeredIn(other, file);
-        if (file != null && generation == _generation) _read[other] = answered;
+        if (file != null && ticket.current) _read[other] = answered;
       }
       if (answered.side != side) continue;
       for (final position in answered.positions) {

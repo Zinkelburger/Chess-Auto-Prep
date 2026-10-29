@@ -10,6 +10,7 @@ import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
 import '../storage/document_ref.dart';
 import '../storage/pgn_document_store.dart';
+import 'latest.dart';
 
 /// The user's repertoire chapters on disk, each read and indexed once and
 /// again only when its file changes: what the explorer's Book and the book check
@@ -40,7 +41,7 @@ final class RepertoireShelf extends ChangeNotifier {
   bool _stale = true;
   bool _disposed = false;
   Future<_ReadResult>? _reading;
-  var _generation = 0;
+  final _reads = Latest();
   var _version = 0;
   String? _problem;
 
@@ -76,7 +77,7 @@ final class RepertoireShelf extends ChangeNotifier {
   /// The files changed on disk: they are read again the next time someone
   /// reads, and only the ones whose bytes changed are parsed again.
   void forget() {
-    _generation++;
+    _reads.cancel();
     _stale = true;
     _problem = null;
     if (!_disposed) notifyListeners();
@@ -105,15 +106,15 @@ final class RepertoireShelf extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _generation++;
+    _reads.close();
     super.dispose();
   }
 
   Future<_ReadResult> _readOnce(bool Function() gone) async {
-    final generation = _generation;
+    final ticket = _reads.now;
     try {
       final listing = await _files.list();
-      if (gone() || generation != _generation) return _ReadResult.superseded;
+      if (gone() || ticket.overtaken) return _ReadResult.superseded;
       if (listing is! Repertoires) {
         throw StateError((listing as RepertoiresUnreadable).detail);
       }
@@ -135,7 +136,7 @@ final class RepertoireShelf extends ChangeNotifier {
       final revisions = <String, Revision>{};
       for (final chapters in byFile.values) {
         await _index(chapters, indexed, revisions);
-        if (gone() || generation != _generation) return _ReadResult.superseded;
+        if (gone() || ticket.overtaken) return _ReadResult.superseded;
       }
       // A file changed while this read went on is told to [forget], which
       // reads again; there is nothing to check here first.
@@ -150,7 +151,7 @@ final class RepertoireShelf extends ChangeNotifier {
       _version++;
       return _ReadResult.committed;
     } on Object catch (error) {
-      if (gone() || generation != _generation) return _ReadResult.superseded;
+      if (gone() || ticket.overtaken) return _ReadResult.superseded;
       log.w('read the repertoire index', error);
       _problem = '$error';
       _stale = true;

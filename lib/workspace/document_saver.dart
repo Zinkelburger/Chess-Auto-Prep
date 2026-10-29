@@ -11,6 +11,7 @@ import '../storage/pgn_document_store.dart' as store;
 import '../storage/pending_writes.dart';
 import '../ui/file_names.dart';
 import 'books.dart';
+import 'latest.dart';
 import 'save_queue.dart';
 import 'session_results.dart';
 import 'undo_history.dart';
@@ -81,7 +82,7 @@ final class DocumentSaver extends ChangeNotifier {
   final _pending = SaveQueue();
   bool _writing = false;
   final _undo = UndoHistory();
-  int _opens = 0;
+  final _opens = Latest();
   bool _disposed = false;
 
   /// What a rename, move or delete of the open file is doing to the autosave.
@@ -128,7 +129,7 @@ final class DocumentSaver extends ChangeNotifier {
   /// belongs to the file it was typed into, and this cannot write it there
   /// once the target has changed.
   void opened(DocumentRef ref, Revision revision, {String? readOnly}) {
-    _opens++;
+    _opens.cancel();
     _target = (ref: ref, revision: revision);
     _lastReceipt = null;
     _trainingSourceRevision = revision;
@@ -311,7 +312,7 @@ final class DocumentSaver extends ChangeNotifier {
   /// history goes with it: the file those receipts name is not there to
   /// restore into.
   void closed() {
-    _opens++;
+    _opens.cancel();
     _target = null;
     _trainingSourceRevision = null;
     _lastReceipt = null;
@@ -346,7 +347,7 @@ final class DocumentSaver extends ChangeNotifier {
     final wasUncertain = _barrier is _OwnWrite;
     _barrier = draft.scope.references != null ? const _OwnWrite() : null;
     _set(const Saving());
-    final ticket = _opens;
+    final ticket = _opens.now;
     var result = await _put(
       target.ref,
       draft.text,
@@ -360,10 +361,10 @@ final class DocumentSaver extends ChangeNotifier {
     if (result is store.Conflict &&
         result.current == null &&
         draft.scope.references == null &&
-        ticket == _opens &&
+        ticket.current &&
         await _followed(target.ref) &&
         !_disposed &&
-        ticket == _opens) {
+        ticket.current) {
       final moved = _target!;
       result = p.equals(moved.ref.path, target.ref.path)
           ? const store.IoFailure('the file is still moving')
@@ -372,7 +373,7 @@ final class DocumentSaver extends ChangeNotifier {
     }
     _writing = false;
     if (_disposed) return;
-    if (ticket != _opens) {
+    if (ticket.overtaken) {
       // The answer is about an open nobody is on any more; a newer one may
       // have been waiting behind it.
       _catchUp(result, target.ref);
@@ -531,7 +532,7 @@ final class DocumentSaver extends ChangeNotifier {
     _writing = true;
     _barrier = compound ? const _OwnWrite() : null;
     _set(const Saving());
-    final ticket = _opens;
+    final ticket = _opens.now;
     // A version this store itself recorded, going back to the file it came
     // from: there is no edit here whose games could be named.
     final result = await _put(
@@ -542,7 +543,7 @@ final class DocumentSaver extends ChangeNotifier {
     );
     _writing = false;
     if (_disposed) return const UndoRefused();
-    if (ticket != _opens) {
+    if (ticket.overtaken) {
       // The answer is about an open nobody is on any more, and a draft of
       // the document open now may have been waiting behind it.
       _catchUp(result, target.ref);
@@ -710,6 +711,7 @@ final class DocumentSaver extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _opens.close();
     _clock.hurry();
     super.dispose();
   }
