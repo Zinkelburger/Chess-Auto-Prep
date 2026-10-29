@@ -1,6 +1,7 @@
 import 'chapter_line.dart';
 import 'game_text.dart';
 import 'game_tree.dart';
+import 'move_text.dart';
 import 'pgn_reader.dart';
 
 /// The one way a game already in a file becomes new text.
@@ -41,37 +42,71 @@ LineRewrite rewritten(ChapterLine line, GameTree tree) {
   if (!line.isWhole) {
     return const LineRefused('the game was not read whole');
   }
+  final (:tags, :separator) = _openedForMoves(line, tree);
   final text = writeGameText(
-    line.tags,
+    tags,
     tree,
     terminator: line.terminator,
-    separator: line.separator,
+    separator: separator,
   );
   final back = readGame(text);
-  final reason = _difference(back, line, tree);
+  final reason = _difference(back, tags, separator, line.terminator, tree);
   if (reason != null) return LineRefused(reason);
   return LineRewritten(
     ChapterLine(
-      tags: line.tags,
+      tags: tags,
       tree: tree,
       text: text,
       trailer: line.trailer,
       terminator: line.terminator,
-      separator: line.separator,
+      separator: separator,
     ),
   );
 }
 
-String? _difference(GameRead back, ChapterLine line, GameTree tree) {
+/// [line]'s header and the space after it, for [tree]. A game that was only
+/// its header, the file ending at its last tag, has nothing after that tag:
+/// moves given to it go on a line of their own after a blank one, as PGN
+/// has them, or another reader takes the tag line for movetext. A game that
+/// had moves keeps its spacing, moves on the tag line included.
+({List<PgnHeader> tags, String separator}) _openedForMoves(
+  ChapterLine line,
+  GameTree tree,
+) {
+  final tags = line.tags;
+  final last = tags.lastOrNull;
+  String moves(GameTree? of) =>
+      of == null ? '' : writeMoveText(of, terminator: line.terminator);
+  if (last == null ||
+      last.trailer.contains('\n') ||
+      line.separator.contains('\n') ||
+      moves(line.tree).isNotEmpty ||
+      moves(tree).isEmpty) {
+    return (tags: tags, separator: line.separator);
+  }
+  final ended = switch (last) {
+    PgnTag() => PgnTag(last.key, last.value, raw: last.raw, trailer: '\n'),
+    UnparsedHeader() => UnparsedHeader(last.text, trailer: '\n'),
+  };
+  return (tags: [...tags.take(tags.length - 1), ended], separator: '\n');
+}
+
+String? _difference(
+  GameRead back,
+  List<PgnHeader> tags,
+  String separator,
+  String? terminator,
+  GameTree tree,
+) {
   final issue = back.issues.firstOrNull;
   if (issue != null) return issue.detail;
-  if (back.terminator != line.terminator) {
+  if (back.terminator != terminator) {
     return 'the game would end differently';
   }
-  if (back.separator != line.separator) {
+  if (back.separator != separator) {
     return 'the space before the moves would change';
   }
-  final headers = _headerDifference(line.tags, back.tags);
+  final headers = _headerDifference(tags, back.tags);
   if (headers != null) return headers;
   final read = back.tree;
   if (read == null) return 'the starting position would be lost';

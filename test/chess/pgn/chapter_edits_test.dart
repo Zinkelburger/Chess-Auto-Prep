@@ -47,6 +47,25 @@ void main() {
     expect(afterLeaf.lines, hasLength(3));
   });
 
+  test('a game that was only its header gets its first move on a line of '
+      'its own', () {
+    final chapter = parseChapter(
+      name: 'Bare',
+      text: '[Event "A"]\n[Result "*"]\n\n[Event "B"]\n[Result "*"]\n',
+    );
+    final text = writeChapter(
+      (addMove(chapter, at: const NodePath.root(), uci: 'e2e4') as MoveAdded)
+          .chapter,
+    );
+    expect(text, startsWith('[Event "A"]\n[Result "*"]\n\n1. e4'));
+    expect(text, contains('[Event "B"]\n[Result "*"]'));
+    expect(
+      RegExp(r'\[Event "').allMatches(text),
+      hasLength(2),
+      reason: 'the move went into game A, not a new game',
+    );
+  });
+
   test('the games it did not touch keep their bytes and their ids', () {
     expect(afterLeaf.lines[0].text, beforeLeaf.lines[0].text);
     expect(afterLeaf.lines[2].text, beforeLeaf.lines[2].text);
