@@ -1,5 +1,5 @@
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
-import 'package:chess_auto_prep/workspace/document_session.dart';
+import 'package:chess_auto_prep/workspace/document/document_session.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';

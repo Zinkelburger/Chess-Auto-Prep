@@ -1,7 +1,7 @@
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
-import 'package:chess_auto_prep/workspace/document_actions.dart';
-import 'package:chess_auto_prep/workspace/engine_analysis.dart';
+import 'package:chess_auto_prep/workspace/document/document_actions.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 

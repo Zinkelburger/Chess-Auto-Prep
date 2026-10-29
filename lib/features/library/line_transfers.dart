@@ -10,7 +10,7 @@ import '../../storage/edit_scope.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/pgn_document_store.dart' as store;
 import '../../storage/operation_id.dart';
-import '../../workspace/document_session.dart';
+import '../../workspace/document/document_session.dart';
 import 'library_state.dart';
 
 /// One retained transaction owns preparation, publication, retries and training

@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/app/window_input.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
-import 'package:chess_auto_prep/workspace/study_picker.dart';
+import 'package:chess_auto_prep/workspace/document/study_picker.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 
 /// The window as a window test scripts it: what the clipboard holds and

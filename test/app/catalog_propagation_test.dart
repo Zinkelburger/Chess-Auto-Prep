@@ -4,7 +4,7 @@ import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/workspace/repertoire_tree.dart';
+import 'package:chess_auto_prep/workspace/book/repertoire_tree.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';

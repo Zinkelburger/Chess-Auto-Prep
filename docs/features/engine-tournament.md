@@ -11,7 +11,7 @@ engine dialogs, `TournamentRun` owner, `TournamentGameRunner`, schedule, engine
 check), plus `lib/chess/tournament/` (config, presets, schedule, results,
 standings), `lib/storage/tournaments.dart` (`FileTournaments`),
 `lib/storage/tournament_inbox.dart` (folder watch, open requests),
-`lib/engines/tournament_launch.dart`, `lib/workspace/engine_jobs.dart`,
+`lib/engines/tournament_launch.dart`, `lib/workspace/analysis/engine_jobs.dart`,
 `lib/app/tournament_view.dart`. Headless: `tools/run_engine_tournament.dart`;
 agent tools: `tools/mcp/chess_prep/engine_tournament.py`. Both run the same
 Dart code; see [Engine tournaments](../ENGINE_TOURNAMENT.md).

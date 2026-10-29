@@ -19,9 +19,9 @@ import '../net/lichess_login.dart';
 import '../storage/chapter_files.dart';
 import '../storage/pgn_document_store.dart';
 import '../storage/pgn_file_store.dart';
-import '../workspace/document_saver.dart';
-import '../workspace/document_session.dart';
-import '../workspace/session_results.dart';
+import '../workspace/document/document_saver.dart';
+import '../workspace/document/document_session.dart';
+import '../workspace/document/session_results.dart';
 
 const desktopSelfTestFlag = '--self-test-desktop';
 const desktopReportMarker = 'CAP_DESKTOP_REPORT=';

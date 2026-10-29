@@ -1,5 +1,5 @@
 import '../features/tournaments/tournament_run.dart';
-import '../workspace/engine_jobs.dart';
+import '../workspace/analysis/engine_jobs.dart';
 import '../workspace/workspace_tabs.dart';
 import 'mode.dart';
 import 'mode_view.dart';

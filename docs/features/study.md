@@ -11,7 +11,7 @@ study training controls in `lib/features/trainer/study_training_controls.dart`,
 PGN rules in `lib/chess/pgn/study.dart`, `study_edits.dart`,
 `study_training.dart` and `study_lichess.dart`, Lichess download in
 `lib/net/lichess_studies.dart` and upload in `lib/net/lichess_study_writes.dart`,
-the shared picker in `lib/workspace/study_picker.dart`.
+the shared picker in `lib/workspace/document/study_picker.dart`.
 
 ## Navigate and organize
 

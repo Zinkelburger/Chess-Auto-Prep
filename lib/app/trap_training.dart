@@ -9,8 +9,8 @@ import '../features/trainer/trainer.dart';
 import '../storage/chapter_files.dart';
 import '../storage/finds_store.dart';
 import '../storage/pgn_document_store.dart';
-import '../workspace/document_session.dart';
-import '../workspace/generated_draft.dart';
+import '../workspace/document/document_session.dart';
+import '../workspace/document/generated_draft.dart';
 import 'mode.dart';
 import 'workspace_requests.dart';
 

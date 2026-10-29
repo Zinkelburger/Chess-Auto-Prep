@@ -11,7 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/book_fixture.dart';
 import '../../support/scripted_files.dart';
 import '../../support/scripted_store.dart';
-import 'package:chess_auto_prep/workspace/repertoire_shelf.dart'
+import 'package:chess_auto_prep/workspace/book/repertoire_shelf.dart'
     show BookFileRef;
 
 void main() {

@@ -214,7 +214,7 @@ chess benchmark or a wall-clock claim.
   `search_node.dart` (backup, bounds, `compareCandidates`), `terminal.dart`,
   `eval.dart`, `sources.dart` (`likeliestReplies`), `tree_wire_v4.dart` and
   `tree_wire_v4_reader.dart`. The Search tab drives it from
-  `lib/workspace/fill_gaps.dart`, `fill_states.dart` and
+  `lib/workspace/search/fill_gaps.dart`, `fill_states.dart` and
   `search_opponents.dart`; Maia inference is `lib/engines/maia/`.
 - C: `tree_builder/src/pure_search.c` (Pure and Fast); chesslib adapter in
   `san_convert.c`; `tree.c` dispatches the default build mode to
@@ -291,7 +291,7 @@ lines; the second stops with it unless the first ran its whole depth.
 The bar's `Replies from` choice: Maia (the default), Lichess
 masters, Lichess players at the speeds and
 ratings the Explorer tab is set to, or the TWIC games on this machine
-(`DatabaseOpponent` in `workspace/search_opponents.dart`). A database answers a
+(`DatabaseOpponent` in `workspace/search/search_opponents.dart`). A database answers a
 position with each legal reply weighted by its games (`playedPolicy`); a move
 not legal there takes no weight and the two spellings of castling are one move.
 With `Fall back to Maia under N games` ticked (the default, N = 10), a position

@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../support/library_fixture.dart';
 import '../support/scripted_files.dart';
-import 'package:chess_auto_prep/workspace/chapter_commands.dart';
+import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
 
 const twoLines = '''
 // Book

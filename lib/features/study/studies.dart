@@ -10,7 +10,7 @@ import '../../chess/pgn/chapter_edit.dart';
 import '../../chess/pgn/study.dart';
 import '../../chess/pgn/study_edits.dart' as pgn show addChapters;
 import '../../storage/edit_scope.dart' show GamesRearranged;
-import '../../workspace/study_choice.dart';
+import '../../workspace/document/study_choice.dart';
 import 'study_commands.dart' show studyNameOf;
 import 'study_file_changes.dart';
 import 'study_import_source.dart';
@@ -26,8 +26,8 @@ import '../../storage/document_ref.dart';
 import '../../storage/pgn_document_store.dart' as store;
 import '../../storage/study_files.dart';
 import '../../ui/file_names.dart';
-import '../../workspace/document_saver.dart';
-import '../../workspace/document_session.dart';
+import '../../workspace/document/document_saver.dart';
+import '../../workspace/document/document_session.dart';
 import '../../workspace/latest.dart';
 
 /// The user's studies: the list of files under `Documents/studies/`, the

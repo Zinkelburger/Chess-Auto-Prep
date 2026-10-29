@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../chess/book/book_check.dart';
 import '../../ui/theme.dart';
-import '../../workspace/board_book_pane.dart' show showBookMoment;
-import '../../workspace/book_verdict_view.dart';
-import '../../workspace/document_session.dart';
+import '../../workspace/book/board_book_pane.dart' show showBookMoment;
+import '../../workspace/book/book_verdict_view.dart';
+import '../../workspace/document/document_session.dart';
 import 'book_words.dart';
 import 'game_book.dart';
 import '../../ui/move_notation.dart';

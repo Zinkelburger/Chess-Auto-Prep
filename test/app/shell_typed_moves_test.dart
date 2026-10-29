@@ -2,7 +2,7 @@ import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/features/library/library_panel.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/workspace/move_field.dart';
+import 'package:chess_auto_prep/workspace/board/move_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

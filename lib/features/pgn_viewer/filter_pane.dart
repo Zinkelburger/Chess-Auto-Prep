@@ -5,8 +5,8 @@ import '../../chess/fen.dart';
 import '../../chess/game_filter.dart';
 import '../../ui/choice_field.dart';
 import '../../ui/theme.dart';
-import '../../workspace/board_view.dart';
-import '../../workspace/file_filter.dart';
+import '../../workspace/board/board_view.dart';
+import '../../workspace/explorer/file_filter.dart';
 import 'export_dialog.dart';
 import 'pgn_viewer.dart';
 

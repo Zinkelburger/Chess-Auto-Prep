@@ -20,7 +20,7 @@ and release builds. Use [the architecture contracts](ARCHITECTURE.md),
 - [`app/workspace_requests.dart`](../lib/app/workspace_requests.dart) coordinates
   opens, mode changes and dirty-draft decisions. [`app/mode.dart`](../lib/app/mode.dart)
   defines every top-level mode.
-- [`workspace/document_session.dart`](../lib/workspace/document_session.dart)
+- [`workspace/document/document_session.dart`](../lib/workspace/document/document_session.dart)
   owns the active parsed document, edits and save state; its
   `DocumentCursor` (`session.cursor`, `document_cursor.dart`) owns where the
   reader is and a comment's line on the board. The shared
@@ -38,7 +38,7 @@ and release builds. Use [the architecture contracts](ARCHITECTURE.md),
 | [`engines/`](../lib/engines/) | Engine installation, supervised processes, UCI and finite engine jobs |
 | [`net/`](../lib/net/) | Service clients, downloads and login callbacks |
 | [`ui/`](../lib/ui/) | Shared controls, theme, shortcuts, notation and selection |
-| [`workspace/`](../lib/workspace/) | Shared document, board, analysis, explorer, tabs and tools |
+| [`workspace/`](../lib/workspace/) | Shared workspace view and panes, over `document/`, `board/`, `reading/`, `analysis/`, `review/`, `explorer/`, `book/` and `search/` |
 | [`features/`](../lib/features/) | Mode-specific owners and panels; no cross-feature imports |
 | [`app/`](../lib/app/) | Composition, cross-mode commands, lifecycle, desktop close and updates |
 | [`debug/`](../lib/debug/) | Opt-in headless control and packaged-app checks |
@@ -71,11 +71,11 @@ Bughouse mode is offered when its engine assets are present.
   blank board (nothing played or edited) is reused rather than opening another
   tab. Tactics, the trainer and the modes without a board send the board to the
   Repertoire builder; Bughouse names its own paste. `Set up position…`
-  (Ctrl+Shift+E) opens the shared `workspace/board_editor.dart` on the board's
+  (Ctrl+Shift+E) opens the shared `workspace/board/board_editor.dart` on the board's
   position and returns an analysis board the same way up. While the Analysis
   tab is up, both fill that tab's scratch game instead.
 - The viewer and Study share `_ReadingView` (`app/document_views.dart`): one
-  card with `Read | Edit` (`workspace/edit_switch.dart`, at the start of
+  card with `Read | Edit` (`workspace/reading/edit_switch.dart`, at the start of
   `NavRow`) bound to the shell's editing notifier, which keeps a side per mode
   (`ModeView.startsEditing`: Study). Read sets `DocumentSession.holdsEdits`;
   turning to Edit keeps the held edits first. `DocumentSession.apply(writes:
@@ -89,7 +89,7 @@ Bughouse mode is offered when its engine assets are present.
   file` (`Explorer.independent(starting:)`), and supplies the Filter tab
   (`ViewerFilterPane`) and the followed player's colour choice
   (`PlayerSideChoice`) through `ModeView`.
-- `GameReview` (`workspace/game_review.dart`) reviews the game on the board
+- `GameReview` (`workspace/review/game_review.dart`) reviews the game on the board
   (`start`) or every game of the file without a review in turn (`startAll`);
   marks come from `moveReviewMark` in `chess/pgn/game_review.dart`, Lichess's
   winning-chance drop and mate rules.
@@ -132,17 +132,17 @@ Bughouse mode is offered when its engine assets are present.
   Cleanup is limited to explicitly selected derived data.
 - Generation owns search trees and draft publication; Replies/gaps and Audit
   use the current workspace and chapter revision. A practical search from the
-  board (`workspace/fill_gaps.dart`) builds two trees in one run, the board's
+  board (`workspace/search/fill_gaps.dart`) builds two trees in one run, the board's
   side and the other; `FillGaps.nodeAtBoard(side:)` reads either, and
-  `workspace/search_table.dart` merges them into the Expectimax table's
+  `workspace/search/search_table.dart` merges them into the Expectimax table's
   White, Black and Engine columns. Saved-tree loading and automatic board-follow
   restarts share one start generation: navigation, a newer accepted start/resume,
   or any stop command invalidates earlier pending starts, including an away-and-back
   navigation. Exact-root results take precedence while preserving newest-first
   order. Engine depths and continuation lines share the same source/depth scope.
   Turning a finished run into a draft chapter, and retrying that draft's save,
-  is `workspace/fill_lines.dart`'s.
-- `workspace/index_build.dart` owns each opening-index build. Incremental work
+  is `workspace/search/fill_lines.dart`'s.
+- `workspace/explorer/index_build.dart` owns each opening-index build. Incremental work
   and isolate messages use the same guarded completion: success, failure and
   cancellation close the timer, receive port and worker. Progress-consumer failures
   reach the result future, and late worker handles are stopped after completion.
@@ -194,13 +194,13 @@ Bughouse mode is offered when its engine assets are present.
   of held edits confirms the named document and refuses stale dialog callbacks.
 - Settings includes accounts, engine/training controls, diagnostics, shortcuts,
   licenses and verified update downloads/install-on-close.
-  The engine pane (`workspace/engine_pane.dart`) is the switch, one status
+  The engine pane (`workspace/analysis/engine_pane.dart`) is the switch, one status
   line and 28px rows of score gutter plus moves; the status
-  (`workspace/engine_status.dart`) says depth, speed and nodes from UCI
+  (`workspace/analysis/engine_status.dart`) says depth, speed and nodes from UCI
   `info` (`EngineLine.nodes`/`nps`), then the engine's `id name`, and leaves
   out the depth a found mate runs out to. Its gear swaps the lines in place
   for typeable Lines shown, CPU cores and Memory steppers
-  (`workspace/engine_settings.dart`, wording shared with Settings ▸ Engine
+  (`workspace/analysis/engine_settings.dart`, wording shared with Settings ▸ Engine
   through `EngineSettingCopy`); both write the same settings, which the
   workspace wiring applies to the running engine. CPU cores is automatic
   until chosen (`Settings.autoCores`, resolved by `Settings.coresOn` to half
@@ -214,11 +214,11 @@ Bughouse mode is offered when its engine assets are present.
   Stockfish. Stockfish install failures give the player one plain sentence;
   the file, checksum or `tools/fetch_assets.py` hint goes to the log. The
   Expectimax tab's gear does the
-  same for the search (`workspace/search_settings.dart`): its rows and
+  same for the search (`workspace/search/search_settings.dart`): its rows and
   Settings ▸ Expectimax write `Settings.expectimax`
   (`chess/generation/expectimax_options.dart`), and every way of starting a
   search reads `FillRequest.of(settings)`. `opponentFor` in
-  `workspace/search_opponents.dart` turns the request's reply source into the
+  `workspace/search/search_opponents.dart` turns the request's reply source into the
   search's opponent: Maia, or a games database (Lichess explorer, local master
   book) with Maia behind it. Each opponent node keeps who answered it
   (`OpponentNode.repliesFrom`, saved as `v2_replies_from`), and the table's

@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../../workspace/document_session.dart';
+import '../../workspace/document/document_session.dart';
 
 /// The PGN Viewer's autoplay: the game on the board played forward along
 /// its main line, one move a second, as the old viewer's Space plays it.

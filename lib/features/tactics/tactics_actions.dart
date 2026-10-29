@@ -4,8 +4,8 @@ import 'package:flutter/services.dart';
 
 import '../../ui/app_action.dart';
 import '../../ui/pane_tabs.dart';
-import '../../workspace/document_session.dart';
-import '../../workspace/engine_analysis.dart';
+import '../../workspace/document/document_session.dart';
+import '../../workspace/analysis/engine_analysis.dart';
 import '../../workspace/workspace_tabs.dart';
 import 'my_games.dart';
 import 'puzzle_trainer.dart';

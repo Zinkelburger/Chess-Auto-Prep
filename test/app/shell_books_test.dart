@@ -6,7 +6,7 @@ import 'package:chess_auto_prep/features/library/library_panel.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:chess_auto_prep/workspace/explorer_pane.dart';
+import 'package:chess_auto_prep/workspace/explorer/explorer_pane.dart';
 import 'package:chess_auto_prep/ui/choice_field.dart';
 import 'package:flutter_test/flutter_test.dart';
 

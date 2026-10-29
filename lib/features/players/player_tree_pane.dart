@@ -5,8 +5,8 @@ import '../../chess/explorer_answer.dart';
 import '../../chess/pv_text.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
-import '../../workspace/document_session.dart';
-import '../../workspace/explorer_pane.dart' show ResultBar;
+import '../../workspace/document/document_session.dart';
+import '../../workspace/explorer/explorer_pane.dart' show ResultBar;
 import 'player_analysis.dart';
 import '../../ui/list_message.dart';
 

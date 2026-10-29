@@ -5,9 +5,9 @@ import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/workspace/gap_hunt.dart';
-import 'package:chess_auto_prep/workspace/gap_walk.dart';
-import 'package:chess_auto_prep/workspace/replies.dart';
+import 'package:chess_auto_prep/workspace/book/gap_hunt.dart';
+import 'package:chess_auto_prep/workspace/book/gap_walk.dart';
+import 'package:chess_auto_prep/workspace/book/replies.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/replies_fixture.dart';

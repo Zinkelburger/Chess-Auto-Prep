@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/chess/tournament/config.dart';
-import 'package:chess_auto_prep/workspace/engine_analysis.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/storage/my_accounts.dart';
 import 'package:chess_auto_prep/storage/settings.dart';

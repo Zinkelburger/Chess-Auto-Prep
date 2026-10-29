@@ -5,7 +5,7 @@ import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/features/trainer/lesson_view.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/workspace/move_tree_view.dart';
+import 'package:chess_auto_prep/workspace/reading/move_tree_view.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_files.dart';

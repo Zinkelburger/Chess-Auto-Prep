@@ -50,7 +50,7 @@ for method in ('pure', 'fast'):
             assert all(reply.get('total_games', 0) == 0 for reply in replies)
         print(f'{method}: real Maia policy normalized, legacy master/Lichess flags ignored.')
 
-# The app's reply cut (lib/workspace/fill_states.dart: fillReplyMass,
+# The app's reply cut (lib/workspace/search/fill_states.dart: fillReplyMass,
 # fillMaxReplies), as the chess-prep MCP passes it.
 def opponent_nodes(node, white):
     stm_white = ' w ' in node['fen']

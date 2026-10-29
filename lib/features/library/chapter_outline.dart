@@ -10,7 +10,7 @@ import '../../chess/pgn/move_label.dart';
 import '../../chess/pgn/tree_edit.dart';
 import '../../storage/chapter_files.dart';
 import '../../ui/selection.dart';
-import '../../workspace/document_session.dart';
+import '../../workspace/document/document_session.dart';
 import '../../workspace/latest.dart';
 import 'library.dart';
 

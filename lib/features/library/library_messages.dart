@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../storage/training_records.dart' as records;
 import '../../ui/status_bar.dart';
-import '../../workspace/session_results.dart';
+import '../../workspace/document/session_results.dart';
 import 'library_state.dart';
 
 /// What to tell the user about [result], or null when the change did what it

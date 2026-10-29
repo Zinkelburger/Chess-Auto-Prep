@@ -6,7 +6,7 @@ import '../../chess/book/book_check.dart';
 import '../../chess/tactics/mistake_counts.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
-import '../../workspace/document_session.dart';
+import '../../workspace/document/document_session.dart';
 import 'book_words.dart';
 import 'game_book.dart';
 import '../../ui/list_message.dart';

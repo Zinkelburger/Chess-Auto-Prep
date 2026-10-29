@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../ui/theme.dart';
-import '../../workspace/move_field.dart';
+import '../../workspace/board/move_field.dart';
 import 'lesson_view.dart';
 import 'line_list.dart';
 import 'trainer.dart';

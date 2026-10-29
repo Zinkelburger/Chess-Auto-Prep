@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../chess/game_filter.dart';
 import '../../ui/theme.dart';
-import '../../workspace/file_filter.dart';
+import '../../workspace/explorer/file_filter.dart';
 import 'pgn_viewer.dart';
 
 /// Under the explorer's `This file`: the followed player's games with

@@ -8,7 +8,7 @@ Code: `lib/features/bughouse/` (`BughouseLab` table owner, `LabEngine`, screen,
 boards, hands, engine lines and panel), plus `lib/chess/bughouse/` (table, line,
 FEN reading, BPGN, crazyhouse PGN, engine-line steps, Hivemind score scale), `lib/engines/hivemind_engine.dart`,
 `lib/engines/hivemind_install.dart`, `lib/app/bughouse_view.dart` (`BughouseView`),
-the shared board editor `lib/workspace/board_editor.dart` and
+the shared board editor `lib/workspace/board/board_editor.dart` and
 `lib/app/self_test.dart`. Engine internals: [Hivemind](../HIVEMIND.md).
 
 ## Screen

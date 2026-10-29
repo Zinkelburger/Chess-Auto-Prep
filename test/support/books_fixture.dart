@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:chess_auto_prep/storage/book_file.dart';
 import 'package:chess_auto_prep/storage/book_list.dart';
-import 'package:chess_auto_prep/workspace/books.dart';
+import 'package:chess_auto_prep/workspace/book/books.dart';
 
 /// Books over the test repertoires folder, `/repertoires`, with one book in
 /// use that has each of [repertoires] whole; none in use when it is null.

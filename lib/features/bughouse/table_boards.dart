@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import '../../chess/bughouse/table.dart';
 import '../../chess/pgn/board_shapes.dart';
 import '../../ui/theme.dart';
-import '../../workspace/board_view.dart';
+import '../../workspace/board/board_view.dart';
 import 'bughouse_lab.dart';
 import 'lab_engine.dart';
 import 'lab_lines.dart';

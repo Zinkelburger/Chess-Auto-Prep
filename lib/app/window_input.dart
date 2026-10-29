@@ -4,8 +4,8 @@ import 'package:flutter/services.dart';
 
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
-import '../workspace/side_dialog.dart';
-import '../workspace/study_picker.dart';
+import '../workspace/document/side_dialog.dart';
+import '../workspace/document/study_picker.dart';
 
 /// What the workspace's requests read from the person at the window: the
 /// answer to a question, or the text they copied. An interface because it

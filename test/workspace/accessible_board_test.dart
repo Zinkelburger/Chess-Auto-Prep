@@ -1,7 +1,7 @@
 import 'dart:ui' show SemanticsAction;
 
 import 'package:chess_auto_prep/chess/fen.dart';
-import 'package:chess_auto_prep/workspace/accessible_board.dart';
+import 'package:chess_auto_prep/workspace/board/accessible_board.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';

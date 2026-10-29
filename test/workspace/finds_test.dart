@@ -8,7 +8,7 @@ import 'package:chess_auto_prep/chess/pgn/tree_edit.dart' show positionOf;
 import 'package:chess_auto_prep/storage/finds_store.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:path/path.dart' as p;
-import 'package:chess_auto_prep/workspace/finds.dart';
+import 'package:chess_auto_prep/workspace/search/finds.dart';
 import 'package:dartchess/dartchess.dart' show Move, Side;
 import 'package:flutter_test/flutter_test.dart';
 

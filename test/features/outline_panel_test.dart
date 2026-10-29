@@ -9,7 +9,7 @@ import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart'
     show IoFailure, Opened;
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/chapter_commands.dart';
+import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

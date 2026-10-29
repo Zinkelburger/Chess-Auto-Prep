@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/board_editor.dart';
+import 'package:chess_auto_prep/workspace/board/board_editor.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/gestures.dart';

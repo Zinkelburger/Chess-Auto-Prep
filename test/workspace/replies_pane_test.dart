@@ -3,7 +3,7 @@ import 'package:chess_auto_prep/engines/maia/move_policy.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/replies_pane.dart';
+import 'package:chess_auto_prep/workspace/book/replies_pane.dart';
 import 'package:chessground/chessground.dart' show StaticChessboard;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';

@@ -14,7 +14,7 @@ import '../../storage/chapter_files.dart';
 import '../../storage/edit_scope.dart';
 import '../../storage/pgn_document_store.dart';
 import '../../storage/settings_store.dart';
-import '../../workspace/document_session.dart';
+import '../../workspace/document/document_session.dart';
 import '../../workspace/latest.dart';
 
 /// Where the set's puzzles stand.

@@ -5,10 +5,10 @@ import 'package:flutter/material.dart';
 
 import '../ui/app_action.dart';
 import '../ui/pane_tabs.dart';
-import '../workspace/document_actions.dart';
-import '../workspace/explorer.dart';
-import '../workspace/game_ordering.dart';
-import '../workspace/move_tree_view.dart' show MoveMenu;
+import '../workspace/document/document_actions.dart';
+import '../workspace/explorer/explorer.dart';
+import '../workspace/document/game_ordering.dart';
+import '../workspace/reading/move_tree_view.dart' show MoveMenu;
 import '../workspace/workspace.dart';
 import '../workspace/action_layout.dart';
 import '../workspace/workspace_tabs.dart';

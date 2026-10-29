@@ -1,7 +1,7 @@
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/features/library/library_panel.dart';
-import 'package:chess_auto_prep/workspace/comment_field.dart';
-import 'package:chess_auto_prep/workspace/move_tree_view.dart';
+import 'package:chess_auto_prep/workspace/reading/comment_field.dart';
+import 'package:chess_auto_prep/workspace/reading/move_tree_view.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';

@@ -10,9 +10,9 @@ import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/study.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/workspace/study_drafts.dart';
-import 'package:chess_auto_prep/workspace/study_choice.dart';
-import 'package:chess_auto_prep/workspace/study_picker.dart';
+import 'package:chess_auto_prep/workspace/document/study_drafts.dart';
+import 'package:chess_auto_prep/workspace/document/study_choice.dart';
+import 'package:chess_auto_prep/workspace/document/study_picker.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 

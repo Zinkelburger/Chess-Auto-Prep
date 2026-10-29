@@ -5,9 +5,9 @@ import 'package:flutter/services.dart';
 
 import '../ui/app_keys.dart';
 import '../ui/pane_tabs.dart';
-import 'document_session.dart';
-import 'engine_analysis.dart';
-import 'move_field.dart';
+import 'document/document_session.dart';
+import 'analysis/engine_analysis.dart';
+import 'board/move_field.dart';
 import '../ui/screen_keys.dart';
 
 /// The keys of the workspace, wherever the focus is under [child]: the line

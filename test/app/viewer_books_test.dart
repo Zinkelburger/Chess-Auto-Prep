@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/chess/book/book_check.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/workspace/board_book.dart';
+import 'package:chess_auto_prep/workspace/book/board_book.dart';
 import 'package:chess_auto_prep/workspace/workspace_tabs.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';

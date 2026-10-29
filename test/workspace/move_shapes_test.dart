@@ -1,7 +1,7 @@
 import 'package:chess_auto_prep/chess/pgn/board_shapes.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pv_text.dart';
-import 'package:chess_auto_prep/workspace/move_shapes.dart';
+import 'package:chess_auto_prep/workspace/board/move_shapes.dart';
 import 'package:dartchess/dartchess.dart' show Square;
 import 'package:flutter_test/flutter_test.dart';
 

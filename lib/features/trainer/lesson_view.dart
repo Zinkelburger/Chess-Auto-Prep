@@ -12,7 +12,7 @@ import '../../ui/app_action.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
-import '../../workspace/move_field.dart';
+import '../../workspace/board/move_field.dart';
 import 'lesson.dart';
 import 'trainer.dart';
 import 'trainer_state.dart';

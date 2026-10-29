@@ -9,7 +9,7 @@ import '../../chess/pgn/study_lichess.dart';
 import '../../net/lichess_studies.dart';
 import '../../storage/chapter_files.dart' show ChapterRef;
 import '../../net/lichess_study_writes.dart';
-import '../../workspace/document_session.dart';
+import '../../workspace/document/document_session.dart';
 import 'study_commands.dart' show studyNameOf;
 
 /// Sending the open study to the user's Lichess account, one send at a time.

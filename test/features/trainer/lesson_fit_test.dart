@@ -7,8 +7,8 @@ import 'package:chess_auto_prep/features/trainer/training_scope.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/engine_analysis.dart';
-import 'package:chess_auto_prep/workspace/move_field.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
+import 'package:chess_auto_prep/workspace/board/move_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

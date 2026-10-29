@@ -8,7 +8,7 @@ import '../../diagnostics/log.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/tournaments.dart';
 import '../../storage/tournament_inbox.dart';
-import '../../workspace/engine_jobs.dart';
+import '../../workspace/analysis/engine_jobs.dart';
 import '../../workspace/latest.dart';
 import 'engine_check.dart';
 import 'game_runner.dart';

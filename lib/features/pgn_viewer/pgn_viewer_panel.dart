@@ -13,7 +13,7 @@ import '../../ui/choice_field.dart';
 import '../../ui/search_field.dart';
 import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
-import '../../workspace/file_filter.dart';
+import '../../workspace/explorer/file_filter.dart';
 import 'pgn_viewer.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/list_message.dart';

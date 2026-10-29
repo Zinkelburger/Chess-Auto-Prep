@@ -15,7 +15,7 @@ the same place and the same settings:
     replacing the file atomically so the app never reads half of one;
   * **settings** — the app resumes only a tree scored at its own engine depth
     (14), with no engine-loss window, for the chapter's side and the rating
-    it is asked for (`readSearchSeed` in `lib/workspace/fill_gaps.dart`),
+    it is asked for (`readSearchSeed` in `lib/workspace/search/fill_gaps.dart`),
     so a chapter run is held to exactly those. Every run cuts the
     opponent's replies as the app does (`APP_REPLY_MASS`); the app resumes
     such a tree as it is, and cuts an older one that kept every reply;
@@ -41,11 +41,11 @@ TREE_FILE = "tree.json"
 RUN_PREFIX = "v2-"
 AGENT_RUN_PREFIX = "agent-"
 
-#: `fillEvalDepth` in lib/workspace/fill_states.dart.
+#: `fillEvalDepth` in lib/workspace/search/fill_states.dart.
 APP_EVAL_DEPTH = 14
 
 #: The app's reply cut, `fillReplyMass` and `fillMaxReplies` in
-#: lib/workspace/fill_states.dart (the Dart owner; a test checks they agree):
+#: lib/workspace/search/fill_states.dart (the Dart owner; a test checks they agree):
 #: at each opponent position keep Maia's likeliest replies until they cover
 #: 90% of its distribution, at most five, renormalized to sum to one. Every
 #: build passes it to the builder; saved trees record it as

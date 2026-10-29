@@ -4,10 +4,10 @@ import 'package:chess_auto_prep/net/lichess_explorer.dart';
 import 'package:chess_auto_prep/storage/master_book.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
-import 'package:chess_auto_prep/workspace/document_session.dart';
-import 'package:chess_auto_prep/workspace/explorer.dart';
-import 'package:chess_auto_prep/workspace/game_fetcher.dart';
-import 'package:chess_auto_prep/workspace/local_games.dart';
+import 'package:chess_auto_prep/workspace/document/document_session.dart';
+import 'package:chess_auto_prep/workspace/explorer/explorer.dart';
+import 'package:chess_auto_prep/workspace/explorer/game_fetcher.dart';
+import 'package:chess_auto_prep/workspace/explorer/local_games.dart';
 import 'package:flutter/foundation.dart';
 
 /// What the masters database says at the start: two moves and one game.

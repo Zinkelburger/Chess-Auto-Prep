@@ -17,4 +17,4 @@ lib/chess/pgn/tree_merge.dart|test/chess/pgn/tree_merge_test.dart|test/chess/pgn
 lib/chess/game_filter.dart|test/chess/game_filter_test.dart|test/chess test/features/pgn_viewer
 lib/chess/typed_move.dart|test/chess/typed_move_test.dart|test/workspace
 lib/storage/compound_write.dart|test/storage/compound_write_test.dart|test/storage
-lib/workspace/document_saver.dart|test/workspace/document_saver_test.dart|test/workspace
+lib/workspace/document/document_saver.dart|test/workspace/document_saver_test.dart|test/workspace

@@ -7,7 +7,7 @@ switching events is switching the book.
 
 Code: `lib/features/books/books_screen.dart` (the mode's screen), wired by
 `BooksView` in `lib/app/books_view.dart`; the owner `Books` in
-`lib/workspace/books.dart`, the chip in `lib/workspace/book_chip.dart`;
+`lib/workspace/book/books.dart`, the chip in `lib/workspace/book/book_chip.dart`;
 storage in `lib/storage/book_list.dart` (format), `book_file.dart` (the file)
 and `book_references.dart` (selectors rewritten by chapter moves). Back and
 Forward live in `lib/app/workspace_requests.dart`.

@@ -8,7 +8,7 @@ import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
 import '../../chess/training/training_options.dart';
 import '../../storage/training_progress.dart';
-import '../../workspace/board_claim.dart';
+import '../../workspace/board/board_claim.dart';
 import 'progress.dart';
 
 /// What a sitting was started for: the lines never trained, the lines due,

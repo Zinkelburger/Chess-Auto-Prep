@@ -1,7 +1,7 @@
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
-import 'package:chess_auto_prep/workspace/gap_walk.dart';
+import 'package:chess_auto_prep/workspace/book/gap_walk.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 

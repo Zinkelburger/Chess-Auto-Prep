@@ -3,7 +3,7 @@ import '../../storage/viewer_places.dart';
 import 'viewer_reading.dart';
 import '../../chess/pgn/game_order.dart';
 import '../../storage/pgn_export.dart';
-import '../../workspace/game_ordering.dart';
+import '../../workspace/document/game_ordering.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
@@ -22,9 +22,9 @@ import '../../storage/pgn_file_import.dart';
 import '../../storage/pgn_file_picker.dart';
 import '../../storage/recent_pgn_files.dart';
 import '../../storage/settings_store.dart';
-import '../../workspace/document_session.dart';
-import '../../workspace/file_filter.dart';
-import '../../workspace/filter_run.dart' show mainLineSans;
+import '../../workspace/document/document_session.dart';
+import '../../workspace/explorer/file_filter.dart';
+import '../../workspace/explorer/filter_run.dart' show mainLineSans;
 
 /// The PGN Viewer's own state: the files opened before, which file the
 /// viewer has open now, and the search over its games. The list shows the

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../diagnostics/log.dart';
-import '../workspace/document_saver.dart';
+import '../workspace/document/document_saver.dart';
 
 /// What the user said about words that are not on disk.
 enum DraftChoice {

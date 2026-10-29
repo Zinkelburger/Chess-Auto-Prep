@@ -10,7 +10,7 @@ import '../../chess/tournament/config.dart';
 import '../../ui/choice_field.dart';
 import '../../ui/number_field.dart';
 import '../../ui/theme.dart';
-import '../../workspace/board_editor.dart';
+import '../../workspace/board/board_editor.dart';
 
 Future<TournamentConfig?> tournamentSetup(
   BuildContext context, {

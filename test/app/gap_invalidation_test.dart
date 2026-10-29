@@ -3,8 +3,8 @@ import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/workspace/gap_walk.dart';
-import 'package:chess_auto_prep/workspace/replies.dart';
+import 'package:chess_auto_prep/workspace/book/gap_walk.dart';
+import 'package:chess_auto_prep/workspace/book/replies.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_files.dart';

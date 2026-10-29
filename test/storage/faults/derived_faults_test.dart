@@ -21,11 +21,11 @@ import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/finds_store.dart';
 import 'package:chess_auto_prep/storage/generation_trees.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
-import 'package:chess_auto_prep/workspace/engine_analysis.dart';
-import 'package:chess_auto_prep/workspace/engine_jobs.dart';
-import 'package:chess_auto_prep/workspace/fill_gaps.dart';
-import 'package:chess_auto_prep/workspace/fill_states.dart';
-import 'package:chess_auto_prep/workspace/finds.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
+import 'package:chess_auto_prep/workspace/search/fill_gaps.dart';
+import 'package:chess_auto_prep/workspace/search/fill_states.dart';
+import 'package:chess_auto_prep/workspace/search/finds.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

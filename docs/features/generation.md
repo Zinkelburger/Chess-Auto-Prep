@@ -6,7 +6,7 @@ runs it, reads the values as the board moves, and, when they want lines, has
 the best of them written into a draft chapter beside theirs. Every run also
 feeds the Positions list (traps, only moves, practical choices).
 
-Code: `lib/workspace/fill_gaps.dart` (`FillGaps`, the one run at a time),
+Code: `lib/workspace/search/fill_gaps.dart` (`FillGaps`, the one run at a time),
 `search_pane.dart`, `search_settings.dart`, `search_table.dart`,
 `fill_states.dart`, `fill_lines.dart` (a run's draft lines),
 `search_opponents.dart`, `generated_draft.dart`,

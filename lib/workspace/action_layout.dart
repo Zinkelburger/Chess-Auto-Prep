@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../ui/app_action.dart';
 import '../ui/theme.dart' show builderMovesShare;
 import '../ui/pane_tabs.dart';
-import 'explorer.dart';
+import 'explorer/explorer.dart';
 import 'workspace_tabs.dart';
 
 enum PaneSplitDirection { right, below }

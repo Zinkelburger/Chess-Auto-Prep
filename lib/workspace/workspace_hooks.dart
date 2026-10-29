@@ -5,10 +5,10 @@ import '../chess/explorer_answer.dart';
 import '../chess/explorer_choice.dart';
 import '../storage/chapter_files.dart';
 import '../ui/app_action.dart';
-import 'board_claim.dart';
-import 'game_ordering.dart';
-import 'move_tree_view.dart';
-import 'repertoire_tree.dart' show TreePlace;
+import 'board/board_claim.dart';
+import 'document/game_ordering.dart';
+import 'reading/move_tree_view.dart';
+import 'book/repertoire_tree.dart' show TreePlace;
 import 'workspace_tabs.dart';
 
 /// What the window around the workspace adds to it: the mode's own tabs

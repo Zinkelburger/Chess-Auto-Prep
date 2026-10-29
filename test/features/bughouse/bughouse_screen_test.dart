@@ -9,7 +9,7 @@ import 'package:chess_auto_prep/features/bughouse/lab_lines.dart';
 import 'package:chess_auto_prep/features/bughouse/pocket.dart';
 import 'package:chess_auto_prep/ui/app_keys.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/board_view.dart';
+import 'package:chess_auto_prep/workspace/board/board_view.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart' show Role, Side, Square;
 import 'package:flutter/gestures.dart';

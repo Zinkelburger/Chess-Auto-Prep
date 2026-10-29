@@ -9,8 +9,8 @@ import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/book_snapshot.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/workspace/books.dart';
-import 'package:chess_auto_prep/workspace/engine_analysis.dart';
+import 'package:chess_auto_prep/workspace/book/books.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/move_tree_view.dart';
-import 'package:chess_auto_prep/workspace/session_results.dart';
+import 'package:chess_auto_prep/workspace/reading/move_tree_view.dart';
+import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';

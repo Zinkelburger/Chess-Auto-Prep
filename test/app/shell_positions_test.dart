@@ -2,7 +2,7 @@ import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/generation/eval.dart';
 import 'package:chess_auto_prep/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/features/library/library_panel.dart';
-import 'package:chess_auto_prep/workspace/finds_panel.dart';
+import 'package:chess_auto_prep/workspace/search/finds_panel.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';

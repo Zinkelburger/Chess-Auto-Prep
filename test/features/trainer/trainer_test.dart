@@ -21,7 +21,7 @@ import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/training_progress.dart';
-import 'package:chess_auto_prep/workspace/engine_analysis.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,7 +31,7 @@ import '../../support/scripted_progress.dart';
 import '../../support/scripted_store.dart';
 import '../../support/session_fixture.dart';
 import 'package:chess_auto_prep/storage/book_file.dart';
-import 'package:chess_auto_prep/workspace/books.dart';
+import 'package:chess_auto_prep/workspace/book/books.dart';
 
 /// Two lines for White: the Ruy Lopez and the Italian.
 const _chapter = '''

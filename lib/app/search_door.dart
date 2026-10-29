@@ -1,6 +1,6 @@
 import '../storage/settings_store.dart';
-import '../workspace/fill_gaps.dart';
-import '../workspace/fill_states.dart';
+import '../workspace/search/fill_gaps.dart';
+import '../workspace/search/fill_states.dart';
 import '../workspace/action_layout.dart';
 import '../workspace/workspace_tabs.dart';
 import 'workspace_requests.dart';

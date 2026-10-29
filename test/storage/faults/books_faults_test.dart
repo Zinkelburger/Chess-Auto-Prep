@@ -1,4 +1,4 @@
-// books.json written through the Books owner (lib/workspace/books.dart)
+// books.json written through the Books owner (lib/workspace/book/books.dart)
 // under a fault at every effect: a repertoire put whole in a book, on a
 // books.json this build writes whole (seedWithWrittenBooks). An edit made
 // after a failed write is books_owner_faults_test.dart's. See
@@ -11,7 +11,7 @@ library;
 
 import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
-import 'package:chess_auto_prep/workspace/books.dart';
+import 'package:chess_auto_prep/workspace/book/books.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/faulty_disk/contracts.dart';

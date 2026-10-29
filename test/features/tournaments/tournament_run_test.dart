@@ -10,7 +10,7 @@ import 'package:chess_auto_prep/features/tournaments/tournament_run.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:chess_auto_prep/storage/tournaments.dart';
-import 'package:chess_auto_prep/workspace/engine_jobs.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import '../../storage/store_fixture.dart';

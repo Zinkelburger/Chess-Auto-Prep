@@ -7,7 +7,7 @@ import '../../chess/pgn/chapter_edit.dart';
 import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/study.dart';
 import '../../chess/pgn/study_edits.dart';
-import '../../workspace/document_session.dart';
+import '../../workspace/document/document_session.dart';
 
 /// The chapter operations of a study, as commands over the open document.
 ///

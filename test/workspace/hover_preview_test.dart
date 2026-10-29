@@ -2,7 +2,7 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/line_preview.dart';
+import 'package:chess_auto_prep/workspace/board/line_preview.dart';
 
 void main() {
   test('a rest shows once the pointer has stayed; a newer one replaces it', () {

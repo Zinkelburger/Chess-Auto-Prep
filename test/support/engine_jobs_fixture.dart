@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
-import 'package:chess_auto_prep/workspace/engine_analysis.dart';
-import 'package:chess_auto_prep/workspace/engine_jobs.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
 
 import 'scripted_engine.dart';
 import 'session_fixture.dart';

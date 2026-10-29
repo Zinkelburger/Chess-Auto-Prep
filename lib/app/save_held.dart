@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../workspace/copy_name_dialog.dart';
-import '../workspace/document_session.dart';
-import '../workspace/study_drafts.dart';
+import '../workspace/document/copy_name_dialog.dart';
+import '../workspace/document/document_session.dart';
+import '../workspace/document/study_drafts.dart';
 import 'workspace_requests.dart';
 
 /// Save, Ctrl+S and Save changes: the held edits into their file, or, for a

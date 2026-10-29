@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:multi_split_view/multi_split_view.dart';
 
 import '../ui/theme.dart';
-import '../workspace/board_claim.dart';
+import '../workspace/board/board_claim.dart';
 import '../workspace/workspace.dart';
 import 'mode.dart';
 import 'workspace_requests.dart';

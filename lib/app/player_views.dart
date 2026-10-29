@@ -14,7 +14,7 @@ import '../chess/pgn/game_tree.dart';
 import '../ui/app_action.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/screen_keys.dart';
-import '../workspace/book_verdict_view.dart' show leftBookMoment;
+import '../workspace/book/book_verdict_view.dart' show leftBookMoment;
 import '../workspace/workspace.dart';
 import '../workspace/workspace_tabs.dart';
 import 'mode_view.dart';

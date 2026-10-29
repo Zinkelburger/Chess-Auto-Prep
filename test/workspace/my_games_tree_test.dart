@@ -3,7 +3,7 @@ import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/storage/my_accounts.dart';
 import 'package:chess_auto_prep/storage/my_games_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/workspace/local_games.dart';
+import 'package:chess_auto_prep/workspace/explorer/local_games.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/my_games_fixture.dart';

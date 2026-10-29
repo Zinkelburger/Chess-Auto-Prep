@@ -1,7 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/board_view.dart';
+import 'package:chess_auto_prep/workspace/board/board_view.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:chess_auto_prep/chess/pgn/board_shapes.dart';

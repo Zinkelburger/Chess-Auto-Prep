@@ -11,9 +11,9 @@ copy in `book_words.dart`), composed by `MyGamesView` in
 `lib/app/training_views.dart`. It reuses the Tactics accounts block and
 download (`lib/features/tactics/my_games_block.dart`, `MyGames`, passed in by
 the shell), the pure check `lib/chess/book/book_check.dart`, the verdict panel
-`lib/workspace/book_verdict_view.dart` (shared with the PGN Viewer's `My
-books` tab), the repertoire index `lib/workspace/repertoire_shelf.dart`, the
-book chip `lib/workspace/book_chip.dart` and the games cache
+`lib/workspace/book/book_verdict_view.dart` (shared with the PGN Viewer's `My
+books` tab), the repertoire index `lib/workspace/book/repertoire_shelf.dart`, the
+book chip `lib/workspace/book/book_chip.dart` and the games cache
 `lib/storage/my_games_files.dart`.
 
 ## Screen

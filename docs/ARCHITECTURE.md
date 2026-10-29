@@ -40,7 +40,15 @@ lib/
   storage/          files, SQLite, settings, credentials, revisions, recovery, backups
   engines/          supervised UCI/Hivemind/Maia processes and finite jobs
   net/              Lichess, chess.com, ChessDB, GitHub and other clients; login sockets
-  workspace/        board, move tree, document session, engine/explorer and tool panes
+  workspace/        the one workspace: its view, keys, tabs and pane layout, over
+    document/       session, saver, drafts, undo and where board content lands
+    board/          the board, its editor, typed moves, game counter, hover previews
+    reading/        move list, comments, move note and the edit strip
+    analysis/       engine lines, engine jobs and their settings
+    review/         game review, chapter audit and solitaire
+    explorer/       opening explorer, local games and the game filter
+    book/           books, repertoire shelf and tree, replies and gap hunts
+    search/         expectimax search from the board and its positions
   features/<mode>/  one folder per mode: owners and panels
   debug/            opt-in agent driver and packaged-app self-tests (unchecked)
 test/               mirrors lib/; test/support/ holds fixtures and scripted ports
@@ -213,13 +221,13 @@ hand-written because no package keeps untouched games byte for byte.
 | `lib/chess/pgn/game_tree.dart` | Immutable values with doc comments that say why |
 | `lib/chess/pgn/pgn_reader.dart` | A pure function over a package; typed issues instead of exceptions |
 | `lib/chess/pgn/tree_merge.dart` | One algorithm, one paragraph explaining it |
-| `lib/workspace/document_session.dart`, `document_cursor.dart` | An owner; document and cursor notified apart, each by its own type |
+| `lib/workspace/document/document_session.dart`, `document_cursor.dart` | An owner; document and cursor notified apart, each by its own type |
 | `lib/features/library/library.dart` | Sealed states and results; a stale check after `await` |
-| `lib/workspace/move_tree_view.dart` | A widget built from an owner; a cursor move redraws two moves |
+| `lib/workspace/reading/move_tree_view.dart` | A widget built from an owner; a cursor move redraws two moves |
 | `lib/app/workspace_requests.dart` | Cross-mode requests: sealed results, questions behind an interface |
 | `lib/storage/chapter_files.dart`, `chapter_directory.dart` | An interface at a real boundary with sealed results, and its one adapter in its own file |
 | `lib/engines/uci_engine.dart` | A protocol over a pipe: serialised searches, so stale output cannot land |
-| `lib/workspace/engine_analysis.dart` | An owner over a background job with a 200 ms snapshot buffer |
+| `lib/workspace/analysis/engine_analysis.dart` | An owner over a background job with a 200 ms snapshot buffer |
 | `test/workspace/engine_analysis_test.dart` | Fake time, a scripted double, assertions on the owner only |
 
 ### Reviewer checklist
@@ -588,7 +596,7 @@ Regression contracts and open risks, not a feature list:
 - **Platforms.** Linux process-kill tests do not prove Windows/macOS engine
   cleanup after the app is killed, or power-loss durability anywhere.
 - **Size pressure.** No file sits at the 1,000-line cap.
-  `workspace/document_session.dart` has room since navigation moved to
+  `workspace/document/document_session.dart` has room since navigation moved to
   `DocumentCursor`; what is left (opening, edits, held edits, the analysis
   board, undo) writes the same shown document and file, so a further split
   would scatter one owner's state. Extract a collaborator only when it owns

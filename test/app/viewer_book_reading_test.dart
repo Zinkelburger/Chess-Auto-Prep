@@ -1,7 +1,7 @@
 import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/explorer_choice.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/workspace/explorer_pane.dart';
+import 'package:chess_auto_prep/workspace/explorer/explorer_pane.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
