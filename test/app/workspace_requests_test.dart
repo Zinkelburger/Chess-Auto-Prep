@@ -143,6 +143,26 @@ void main() {
       },
     );
 
+    test('the question on Back comes before the mode changes, and is asked '
+        'once', () async {
+      await w.requests.open(benko);
+      final started = w.requests.mode;
+      w.requests.switchTo(Mode.pgnViewer);
+      await pumpEventQueue();
+      await freezeKid();
+      final modes = <Mode>[];
+      w.requests.addListener(() => modes.add(w.requests.mode));
+      w.question.answer = DraftChoice.keepWaiting;
+      expect(await w.requests.back(), isA<RequestDropped>());
+      expect(modes, everyElement(Mode.pgnViewer));
+
+      w.question.answer = DraftChoice.closeAnyway;
+      expect(await w.requests.back(), isA<RequestDone>());
+      expect(w.requests.mode, started);
+      expect(w.session.source, benko);
+      expect(w.question.asked, hasLength(2), reason: 'one for each Back');
+    });
+
     test(
       'a copy saved on the way out is said once the chapter is open',
       () async {
