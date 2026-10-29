@@ -10,6 +10,8 @@ import '../chess/generation/search_config.dart';
 import '../chess/generation/search_node.dart';
 import '../chess/generation/search_result.dart';
 import '../chess/generation/tree_wire_v4.dart';
+import '../chess/pgn/chapter.dart' show Chapter;
+import '../chess/pgn/game_tree.dart' show GameTree;
 import '../chess/pgn/tree_edit.dart' show positionOf;
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
@@ -312,36 +314,14 @@ final class FillGaps extends ChangeNotifier {
     SearchNode? seed,
     SearchNode? mirrorSeed,
   }) async {
-    if (_disposed) return 'The search owner is closed.';
-    if (_active || running) return 'A search is already running.';
-    if (_jobs.heldByOther(this)) {
-      return _jobs.blockingMessage;
-    }
-    if (canRetryTree) return 'Finish saving the previous search tree first.';
-    if (_drafts.saving || _lines is LinesWriting) {
-      return 'Finish saving the accepted draft first.';
-    }
+    if (_busy() case final busy?) return busy;
     final chapter = _session.chapter;
     final tree = _session.tree;
     if (chapter == null || tree == null) return 'Nothing is on the board.';
     if (_session.shownTo != null) return 'Finish the puzzle first.';
     final root = positionOf(_session.cursor.fen);
     if (root == null) return 'The position on the board cannot be searched.';
-    final side = _session.orientation;
-    final source = _session.source;
-    final line = tree.lineTo(_session.cursor.value);
-    final drafting =
-        source != null &&
-        chapter.game == null &&
-        _session.readOnly == null &&
-        chapter.side == side;
-    final target = FillTarget(
-      rootFen: tree.rootFen,
-      cursor: _session.cursor.value,
-      sans: [for (final move in line) move.san],
-      side: side,
-      chapter: drafting ? (chapter, source) : null,
-    );
+    final target = _boardTarget(chapter, tree);
     ++_startTicket;
     _retargeting = false;
     seed ??= nodeAtBoard(request: request);
@@ -395,6 +375,39 @@ final class FillGaps extends ChangeNotifier {
     return null;
   }
 
+  /// Why a search cannot start now, whatever is on the board; null when
+  /// nothing stands in its way.
+  String? _busy() {
+    if (_disposed) return 'The search owner is closed.';
+    if (_active || running) return 'A search is already running.';
+    if (_jobs.heldByOther(this)) return _jobs.blockingMessage;
+    if (canRetryTree) return 'Finish saving the previous search tree first.';
+    if (_drafts.saving || _lines is LinesWriting) {
+      return 'Finish saving the accepted draft first.';
+    }
+    return null;
+  }
+
+  /// The line on the board as a search's target, with its chapter when the
+  /// search may draft lines into it: a repertoire the user may write, for
+  /// the side it is played from.
+  FillTarget _boardTarget(Chapter chapter, GameTree tree) {
+    final side = _session.orientation;
+    final source = _session.source;
+    final drafting =
+        source != null &&
+        chapter.game == null &&
+        _session.readOnly == null &&
+        chapter.side == side;
+    return FillTarget(
+      rootFen: tree.rootFen,
+      cursor: _session.cursor.value,
+      sans: [for (final move in tree.lineTo(_session.cursor.value)) move.san],
+      side: side,
+      chapter: drafting ? (chapter, source) : null,
+    );
+  }
+
   /// Continue the newest tree from this board whose settings match, including
   /// after restart: values of different settings are never mixed. With
   /// [orAfresh], the Expectimax button, a board with nothing to continue is
@@ -443,26 +456,8 @@ final class FillGaps extends ChangeNotifier {
     SearchNode? mirrorSeed,
   ) async {
     _answers = null;
-    final tools = await _tools(request);
-    final Future<void> Function() release;
-    switch (tools) {
-      case FillUnavailable(:final reason):
-        if (!_disposed) _failed('search ${target.label}', reason);
-        return;
-      case FillReady(release: final done):
-        release = done;
-      case BookReady():
-        release = tools.release;
-    }
-    // Disposed or cancelled while the engine was starting: dispose and
-    // cancel had nothing to release then, so this engine is let go here or
-    // its process outlives the run.
-    _release = release;
-    if (_discarded) {
-      await _released();
-      _set(const FillIdle());
-      return;
-    }
+    final tools = await _toolsFor(request, target);
+    if (tools == null) return;
     // The other side is searched beside this one, on the same engine, and
     // stops with it unless this one ran its whole depth.
     SearchResult? ended;
@@ -523,6 +518,35 @@ final class FillGaps extends ChangeNotifier {
     await _publish(target, request, tree, config, result, done, [
       if (other != null) (other, mirror!.$1, mirror.$2 is SearchComplete),
     ]);
+  }
+
+  /// The run's engine or book, kept to be released; null when there is
+  /// none, or the run was given up while it started.
+  Future<FillToolsResult?> _toolsFor(
+    FillRequest request,
+    FillTarget target,
+  ) async {
+    final tools = await _tools(request);
+    final Future<void> Function() release;
+    switch (tools) {
+      case FillUnavailable(:final reason):
+        if (!_disposed) _failed('search ${target.label}', reason);
+        return null;
+      case FillReady(release: final done):
+        release = done;
+      case BookReady():
+        release = tools.release;
+    }
+    // Disposed or cancelled while the engine was starting: dispose and
+    // cancel had nothing to release then, so this engine is let go here or
+    // its process outlives the run.
+    _release = release;
+    if (_discarded) {
+      await _released();
+      _set(const FillIdle());
+      return null;
+    }
+    return tools;
   }
 
   /// The same search for the other side, or null when it could not be made:

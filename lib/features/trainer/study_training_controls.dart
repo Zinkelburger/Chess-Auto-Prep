@@ -94,6 +94,47 @@ class _SidesState extends State<_Sides> {
     }
   });
 
+  /// One chapter with the side to train it from, or why it has none.
+  Widget _row(int index) {
+    final line = widget.document.lines[index];
+    final name = studyChapterName(
+      line,
+      index: index,
+      study: studyNameIn(widget.document.lines),
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Space.xs),
+      child: Row(
+        children: [
+          Expanded(child: Text('${index + 1}. $name')),
+          const SizedBox(width: Space.s),
+          if (!line.isWhole)
+            const Text('Unreadable chapter')
+          else
+            Semantics(
+              label: 'Training side for $name',
+              child: SegmentedButton<Side>(
+                emptySelectionAllowed: !_sides.containsKey(index),
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(value: Side.white, label: Text('White')),
+                  ButtonSegment(value: Side.black, label: Text('Black')),
+                ],
+                selected: {?_sides[index]},
+                onSelectionChanged: (value) => setState(() {
+                  if (value.isEmpty) {
+                    _sides.remove(index);
+                  } else {
+                    _sides[index] = value.single;
+                  }
+                }),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => AlertDialog(
     title: const Text('Choose training sides'),
@@ -122,51 +163,7 @@ class _SidesState extends State<_Sides> {
           Expanded(
             child: ListView.builder(
               itemCount: widget.document.lines.length,
-              itemBuilder: (context, index) {
-                final line = widget.document.lines[index];
-                final name = studyChapterName(
-                  line,
-                  index: index,
-                  study: studyNameIn(widget.document.lines),
-                );
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: Space.xs),
-                  child: Row(
-                    children: [
-                      Expanded(child: Text('${index + 1}. $name')),
-                      const SizedBox(width: Space.s),
-                      if (!line.isWhole)
-                        const Text('Unreadable chapter')
-                      else
-                        Semantics(
-                          label: 'Training side for $name',
-                          child: SegmentedButton<Side>(
-                            emptySelectionAllowed: !_sides.containsKey(index),
-                            showSelectedIcon: false,
-                            segments: const [
-                              ButtonSegment(
-                                value: Side.white,
-                                label: Text('White'),
-                              ),
-                              ButtonSegment(
-                                value: Side.black,
-                                label: Text('Black'),
-                              ),
-                            ],
-                            selected: {?_sides[index]},
-                            onSelectionChanged: (value) => setState(() {
-                              if (value.isEmpty) {
-                                _sides.remove(index);
-                              } else {
-                                _sides[index] = value.single;
-                              }
-                            }),
-                          ),
-                        ),
-                    ],
-                  ),
-                );
-              },
+              itemBuilder: (context, index) => _row(index),
             ),
           ),
         ],

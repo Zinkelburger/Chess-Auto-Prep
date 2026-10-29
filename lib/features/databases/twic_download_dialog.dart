@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'database_library.dart';
+import 'twic_download.dart';
 import '../../ui/theme.dart';
 import '../../ui/number_field.dart';
 
@@ -93,30 +94,36 @@ class _TwicDialogState extends State<_TwicDialog> {
               ],
             ),
           ),
-          actions: [
-            if (download.running)
-              TextButton(onPressed: download.stop, child: const Text('Stop'))
-            else ...[
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Close'),
-              ),
-              FilledButton(
-                onPressed: waiting
-                    ? null
-                    : () {
-                        FocusScope.of(context).unfocus();
-                        FocusManager.instance.applyFocusChangesIfNeeded();
-                        unawaited(library.downloadTwic(_weeks));
-                      },
-                child: Text(
-                  download.problem == null ? 'Download' : 'Try again',
-                ),
-              ),
-            ],
-          ],
+          actions: _actions(context, download, waiting: waiting),
         ),
       );
     },
   );
+
+  /// Stop while downloading; otherwise Close and Download, which waits for
+  /// another job on the databases to end.
+  List<Widget> _actions(
+    BuildContext context,
+    TwicDownload download, {
+    required bool waiting,
+  }) => [
+    if (download.running)
+      TextButton(onPressed: download.stop, child: const Text('Stop'))
+    else ...[
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('Close'),
+      ),
+      FilledButton(
+        onPressed: waiting
+            ? null
+            : () {
+                FocusScope.of(context).unfocus();
+                FocusManager.instance.applyFocusChangesIfNeeded();
+                unawaited(widget.library.downloadTwic(_weeks));
+              },
+        child: Text(download.problem == null ? 'Download' : 'Try again'),
+      ),
+    ],
+  ];
 }
