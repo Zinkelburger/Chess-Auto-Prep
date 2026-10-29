@@ -85,6 +85,7 @@ final class DocumentSession extends ChangeNotifier {
     _held = draft.held;
     _ended = null;
     _document++;
+    _arrangement++;
     _saver.opened(source, draft.revision, readOnly: _readOnly);
     notifyListeners();
   }
@@ -101,6 +102,15 @@ final class DocumentSession extends ChangeNotifier {
 
   /// Counts documents put up; a cancelled read leaves the one up, and this.
   int _document = 0;
+
+  /// Changes whenever a game of the chapter on screen may stand elsewhere
+  /// than it did: another document up or read again, another game of it
+  /// shown, a line deleted, moved or put in another order, an undo. An edit
+  /// that leaves every game where it was, as a move, a comment or the side
+  /// does, keeps it, so what names a line by its game can tell whether it
+  /// still names the same one.
+  int get arrangement => _arrangement;
+  int _arrangement = 0;
 
   /// Pending navigation ticket. Undo waits so it cannot restore a previous
   /// file's contents under the arriving file's identity.
@@ -435,6 +445,7 @@ final class DocumentSession extends ChangeNotifier {
     _ended = _held == null ? null : HeldEditsEnded.dropped;
     _held = null;
     _document++;
+    _arrangement++;
     _shown = (chapter: _board.chapter, view: null);
     _file = null;
     _refused = null;
@@ -455,6 +466,7 @@ final class DocumentSession extends ChangeNotifier {
     if (!_isAnotherGame(index)) return;
     final chapter = _chapter!;
     _shown = (chapter: withGame(chapter, index), view: null);
+    _arrangement++;
     _shownTo = null;
     _clearRefusal();
     cursor._place(const NodePath.root());
@@ -645,6 +657,7 @@ final class DocumentSession extends ChangeNotifier {
         : chapterAfterUndo(read.file, view, places);
     final before = _chapter?.tree;
     _shown = shown;
+    _arrangement++;
     _follow(shown.view);
     // A refusal was about the version the undo replaced.
     _clearRefusal();
@@ -698,6 +711,7 @@ final class DocumentSession extends ChangeNotifier {
 
   void _showHeld(Chapter before, ShownDocument shown) {
     _shown = shown;
+    _arrangement++;
     final source = _source;
     if (source != null && shown.view?.section != source.section) {
       _file = (
@@ -716,6 +730,7 @@ final class DocumentSession extends ChangeNotifier {
     final restored = _board.takeBack();
     if (restored == null || before == null) return const UndoRefused();
     _shown = (chapter: restored, view: null);
+    _arrangement++;
     cursor._place(samePathIn(before.tree, restored.tree, cursor.value));
     notifyListeners();
     return Restored(writeChapter(restored));
@@ -737,6 +752,7 @@ final class DocumentSession extends ChangeNotifier {
     _ended = _held == null ? null : HeldEditsEnded.dropped;
     _held = null;
     _document++;
+    _arrangement++;
     _shown = (chapter: chapter, view: view);
     _file = (ref: ref, readOnly: readOnly);
     _flipped = false;
@@ -805,6 +821,7 @@ final class DocumentSession extends ChangeNotifier {
           );
           if (reason != null) return reason;
         }
+        if (!games.keepsPlaces) _arrangement++;
         _clearRefusal();
         cursor._place(samePathIn(chapter.tree, _chapter!.tree, cursor.value));
     }
@@ -843,6 +860,7 @@ final class DocumentSession extends ChangeNotifier {
           section ?? view.section,
         );
         _land(withReferenceChanges(landed, references));
+        if (!games.keepsPlaces) _arrangement++;
         cursor._place(samePathIn(before, _chapter!.tree, cursor.value));
     }
     notifyListeners();
@@ -894,6 +912,7 @@ final class DocumentSession extends ChangeNotifier {
     if (view == null || view.section == source.section) return;
     final moved = ChapterRef.at(source.path, section: view.section);
     _file = (ref: moved, readOnly: _readOnly);
+    _arrangement++;
     // Held edits have not given the file that chapter yet: the saver goes
     // to it when they are kept.
     if (_held == null) _saver.relocated(moved);

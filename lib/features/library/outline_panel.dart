@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../chess/pgn/chapter.dart' show Chapter;
-import '../../chess/pgn/chapter_line.dart';
 import '../../storage/chapter_files.dart';
 import '../../ui/choice_dialog.dart';
 import '../../ui/status_bar.dart';
@@ -62,24 +60,19 @@ class _OutlinePanelState extends State<OutlinePanel> {
   /// with Ctrl.
   int? _anchor;
 
-  /// The chapter last looked at, and its games where [_selected] and
+  /// The session's [DocumentSession.arrangement] when [_selected] and
   /// [_anchor] were picked. A game is a place in the file, so once another
   /// chapter is open, or a line is deleted, put back or moved, the picks
   /// would name other lines: they go. A move, a comment or the side changed
-  /// gives a new chapter with every game where it was, and they stay.
-  Chapter? _seen;
-  _Places? _pickedAmong;
+  /// leaves every game where it was, and they stay.
+  int? _pickedIn;
 
   void _forgetStalePicks() {
-    final chapter = widget.session.chapter;
-    if (identical(chapter, _seen)) return;
-    _seen = chapter;
-    final now = _placesOf(widget.session.source, chapter);
-    if (!_samePlaces(_pickedAmong, now)) {
-      _selected = {};
-      _anchor = null;
-    }
-    _pickedAmong = now;
+    final arrangement = widget.session.arrangement;
+    if (arrangement == _pickedIn) return;
+    _pickedIn = arrangement;
+    _selected = {};
+    _anchor = null;
   }
 
   @override
@@ -445,31 +438,6 @@ class _OutlinePanelState extends State<OutlinePanel> {
       ],
     );
   }
-}
-
-/// Which file a chapter is, and each of its games in order by its header:
-/// what a game number names. Moves and comments are below the header, so
-/// editing them leaves a game its place; a line added goes at the end.
-typedef _Places = ({ChapterRef? source, List<String> games});
-
-_Places _placesOf(ChapterRef? source, Chapter? chapter) => (
-  source: source,
-  games: [
-    for (final line in chapter?.lines ?? const <ChapterLine>[])
-      line.tags.map((tag) => tag.text).join('\n'),
-  ],
-);
-
-/// Whether every game of [before] is still at its place in [after]: the
-/// same file, and its games first, in the same order.
-bool _samePlaces(_Places? before, _Places after) {
-  if (before == null || before.source != after.source) return false;
-  final games = before.games;
-  if (after.games.length < games.length) return false;
-  for (var i = 0; i < games.length; i++) {
-    if (games[i] != after.games[i]) return false;
-  }
-  return true;
 }
 
 class _Toolbar extends StatelessWidget {

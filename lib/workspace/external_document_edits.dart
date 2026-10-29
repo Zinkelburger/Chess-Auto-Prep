@@ -245,6 +245,9 @@ final class ExternalDocumentEdits {
             chapter: command.landing.chapter,
             view: command.landing.view,
           );
+          // Lines moved with another file: no game is taken to be where
+          // it was.
+          session._arrangement++;
           session._follow(command.landing.view);
           session._clearRefusal();
           session.cursor._place(

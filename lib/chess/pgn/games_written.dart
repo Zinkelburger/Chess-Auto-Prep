@@ -64,6 +64,17 @@ final class GamesArranged {
   /// How many games the chapter held before the edit.
   final int before;
 
+  /// Whether every game the chapter held is where it was, any new one after
+  /// them: what a move, a comment or the side changed makes, and a line
+  /// deleted, moved or put in another order does not.
+  bool get keepsPlaces {
+    if (order.length < before) return false;
+    for (var index = 0; index < before; index++) {
+      if (order[index] != index) return false;
+    }
+    return true;
+  }
+
   final bool heading;
 }
 

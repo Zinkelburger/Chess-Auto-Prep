@@ -459,6 +459,67 @@ void main() {
     expect(picked(), isEmpty);
   });
 
+  group('lines picked with Ctrl below the first, among headers all alike,', () {
+    // The first game carries the chapter's `//` block, so only the games
+    // after it have nothing in their headers to tell them apart.
+    String alike(List<String> lines) => [
+      '// Book\n// Color: White\n',
+      for (final moves in lines) '[Event "Line"]\n[Result "*"]\n\n$moves *\n',
+    ].join('\n');
+    Iterable<LineRow> rows(WidgetTester tester) =>
+        tester.widgetList<LineRow>(find.byType(LineRow));
+    Set<int> picked(WidgetTester tester) => {
+      for (final row in rows(tester))
+        if (row.selected) row.line.game,
+    };
+    Future<void> pick(WidgetTester tester, int row) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.tap(find.byType(LineRow).at(row));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('go when a deleted line is put back above them', (
+      tester,
+    ) async {
+      await show(tester, text: alike(['1. e4 e5', '1. d4 d5', '1. d4 Nf6']));
+      deleteLine(fixture.session, 1);
+      await tester.pumpAndSettle();
+      await pick(tester, 1);
+      expect(picked(tester), {1});
+
+      await fixture.session.undo();
+      await tester.pumpAndSettle();
+
+      expect(rows(tester).elementAt(1).line.moves, contains('d5'));
+      expect(
+        picked(tester),
+        isEmpty,
+        reason: 'game 1 is the line put back, and nobody picked it',
+      );
+    });
+
+    testWidgets('go when the file comes back with its lines in another '
+        'order', (tester) async {
+      await show(tester, text: alike(['1. e4 e5', '1. d4 d5', '1. d4 Nf6']));
+      await pick(tester, 1);
+      expect(picked(tester), {1});
+
+      // Another program put the last two lines the other way round; their
+      // headers say nothing of it.
+      final swapped = alike(['1. e4 e5', '1. d4 Nf6', '1. d4 d5']);
+      fixture.store.documents[main] = Opened(
+        swapped,
+        scriptedRevision(swapped),
+      );
+      await fixture.session.reloadFromDisk();
+      await tester.pumpAndSettle();
+
+      expect(rows(tester).elementAt(1).line.moves, contains('Nf6'));
+      expect(picked(tester), isEmpty, reason: 'game 1 is now the Nf6 line');
+    });
+  });
+
   testWidgets('a delete that was refused leaves the line', (tester) async {
     await show(tester);
     fixture.store.documents[main] = Opened(
