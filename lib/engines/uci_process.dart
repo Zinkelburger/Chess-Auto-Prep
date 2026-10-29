@@ -20,6 +20,16 @@ abstract interface class UciProcess {
   Future<void> kill();
 }
 
+/// What starts a child process: [Process.start], or a test's stand-in for
+/// a process the OS does not let go of.
+typedef ProcessStarter =
+    Future<Process> Function(
+      String executable,
+      List<String> arguments, {
+      String? workingDirectory,
+      Map<String, String>? environment,
+    });
+
 /// A child process joined by pipes.
 ///
 /// The pipes tie its life to ours: when this process dies, even by
@@ -48,8 +58,9 @@ final class SpawnedProcess implements UciProcess {
     String? workingDirectory,
     Map<String, String>? environment,
     EngineTranscript? transcript,
+    ProcessStarter startProcess = Process.start,
   }) async => SpawnedProcess._(
-    await Process.start(
+    await startProcess(
       executable,
       arguments,
       workingDirectory: workingDirectory,

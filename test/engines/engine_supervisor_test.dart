@@ -1,10 +1,38 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:chess_auto_prep/diagnostics/log.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/engines/hivemind_engine.dart';
+import 'package:chess_auto_prep/engines/hivemind_install.dart'
+    show HivemindFiles;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+
+/// A process SIGKILL does not end, as one stuck in the kernel on a GPU
+/// driver is: it says nothing and never exits.
+final class StuckProcess implements Process {
+  @override
+  IOSink get stdin => IOSink(_Ignored());
+  @override
+  Stream<List<int>> get stdout => const Stream.empty();
+  @override
+  Stream<List<int>> get stderr => const Stream.empty();
+  @override
+  int get pid => 0;
+  @override
+  Future<int> get exitCode => Completer<int>().future;
+  @override
+  bool kill([ProcessSignal signal = ProcessSignal.sigterm]) => true;
+}
+
+/// Takes what is written and keeps none of it.
+final class _Ignored implements StreamConsumer<List<int>> {
+  @override
+  Future<void> addStream(Stream<List<int>> stream) => stream.drain<void>();
+  @override
+  Future<void> close() async {}
+}
 
 void main() {
   final entries = <LogEntry>[];
@@ -103,4 +131,33 @@ void main() {
     expect(await fileSha256(file.path), isNot(first));
     expect(await fileSha256(p.join(dir.path, 'missing')), isNull);
   });
+
+  test('a bughouse engine that failed to start and outlives its kill still '
+      'answers that it did not start', () async {
+    final dir = await Directory.systemTemp.createTemp('v2-hivemind-');
+    addTearDown(() => dir.delete(recursive: true));
+    final HivemindFiles files = (
+      executable: p.join(dir.path, 'hivemind'),
+      model: p.join(dir.path, 'model'),
+      directory: dir.path,
+    );
+    await File(files.executable).writeAsString('');
+    await File(files.model).writeAsString('');
+    final engines = EngineSupervisor(
+      startProcess: (_, _, {workingDirectory, environment}) async =>
+          StuckProcess(),
+    );
+    // The kill waits five seconds and the exit code one more.
+    final start = await engines
+        .startHivemind(
+          files,
+          cores: 1,
+          patience: const Duration(milliseconds: 100),
+        )
+        .timeout(const Duration(seconds: 10));
+    expect(
+      (start as HivemindStartFailed).reason,
+      startsWith('The bughouse engine did not start.'),
+    );
+  }, timeout: const Timeout(Duration(seconds: 30)));
 }
