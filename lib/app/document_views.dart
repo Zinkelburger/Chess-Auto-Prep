@@ -355,7 +355,7 @@ abstract base class _ReadingView extends _DocumentModeView {
     final autoplay = _modes.autoplay;
     final open = workspace.session.chapter != null;
     return [
-      ...super.actions(menu),
+      ...super.actions(menu).where(_keeps),
       AppAction(
         workspace.review?.running == true ? 'Stop analysis' : 'Analyze game',
         !open || (_solitaire?.active == true && _solitaire?.finished == false)
@@ -386,6 +386,10 @@ abstract base class _ReadingView extends _DocumentModeView {
       _otherMode,
     ];
   }
+
+  /// Whether the menu keeps one of the document actions every mode with
+  /// a file offers.
+  bool _keeps(AppAction action) => true;
 
   void _addGame() =>
       unawaited(requests.addToStudy([?gameDraft(workspace.session)]));
@@ -463,16 +467,17 @@ final class ViewerView extends _ReadingView {
         null => null,
       }, group: 'File');
 
+  /// A file is read here, not opened or kept as a copy: its File actions
+  /// are the games list's own.
+  @override
+  bool _keeps(AppAction action) =>
+      action.group != 'File' &&
+      action.group != 'Panels' &&
+      action.label != 'Save a copy…';
+
   @override
   List<AppAction> actions(ModeMenu menu) => [
-    ...super
-        .actions(menu)
-        .where(
-          (action) =>
-              (action.group != 'File' || action.label == 'Open in Study') &&
-              action.group != 'Panels' &&
-              action.label != 'Save a copy…',
-        ),
+    ...super.actions(menu),
     AppAction(
       'Filter games',
       _modes.viewer.file == null ? null : () => show(WorkspaceTab.filter),
