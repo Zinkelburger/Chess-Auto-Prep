@@ -15,10 +15,9 @@ final class TournamentSchedule {
 
   /// Plays until every pairing has been played or [stopping] says so. After
   /// each game [afterGame] runs, one at a time in finishing order, before
-  /// that game's worker starts another.
-  /// Plays the schedule [config.concurrency] games at a time. [stopping]
-  /// ends the games in flight after their current move; [holding] only
-  /// keeps new ones from starting, so the games in flight play out.
+  /// that game's worker starts another. [stopping] ends the games in flight
+  /// after their current move; [holding] only keeps new ones from starting,
+  /// so the games in flight play out.
   Future<void> play({
     required bool Function() stopping,
     required Future<void> Function(Pairing pairing, PlayedGame game) afterGame,

@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/tournament/config.dart';
 import 'package:chess_auto_prep/chess/tournament/result.dart';
+import 'package:chess_auto_prep/engines/engine.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/engines/playing_engine.dart';
 import 'package:chess_auto_prep/features/tournaments/tournament_run.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
@@ -65,6 +68,31 @@ final class FallibleTournaments implements TournamentStore {
   ) => base.saveEngines(before, after);
   @override
   DocumentRef games(String id) => base.games(id);
+}
+
+/// Plays 1.e4 e5 from either seat, each move only once [gate] completes.
+final class GatedEngine implements PlayingEngine {
+  GatedEngine(this.gate);
+  final Future<void> gate;
+  final _exit = Completer<EngineExit>();
+  @override
+  String get name => 'Gated';
+  @override
+  Future<EngineExit> get exited => _exit.future;
+  @override
+  Future<void> quit() async {
+    if (!_exit.isCompleted) _exit.complete(EngineExit.ended);
+  }
+
+  @override
+  Search analyse(Fen fen, {required int multiPv, int? depth}) =>
+      throw UnimplementedError();
+  @override
+  PlayingSearch play(Fen root, List<String> history, MoveBudget budget) {
+    final move = history.isEmpty ? 'e2e4' : 'e7e5';
+    final search = ScriptEngine([move]).play(root, history, budget);
+    return PlayingSearch(search.analysis, gate.then((_) => search.bestMove));
+  }
 }
 
 void main() {
@@ -152,6 +180,57 @@ void main() {
       expect(saved.value.single.games.length, 1);
     },
   );
+  test('a failed checkpoint starts no new game but lets the game in flight '
+      'end with its result', () async {
+    // A-B, A-C and B-C two at a time: A-B ends at once while every move of
+    // C waits, so A-C is in flight when the checkpoint after A-B fails.
+    final cMoves = Completer<void>();
+    final names = <String>[];
+    final run = TournamentRun(
+      store: store,
+      pending: pending,
+      jobs: jobs,
+      launch: (engine, _) async {
+        names.add(engine.name);
+        return Started(
+          GatedEngine(engine.name == 'C' ? cMoves.future : Future.value()),
+        );
+      },
+    );
+    addTearDown(run.dispose);
+    store.fail = true;
+    final work = run.start(
+      config(
+        rules: {'maxMoves': 1},
+        extra: {
+          'engines': [
+            for (final name in ['A', 'B', 'C'])
+              TournamentEngine.bundled(name).json,
+          ],
+          'gamesPerPairing': 1,
+          'concurrency': 2,
+        },
+      ),
+    );
+    while (run.problem == null) {
+      await pumpEventQueue();
+    }
+    expect(run.problem, contains('Disk unavailable'));
+    expect(run.running, isTrue);
+
+    cMoves.complete();
+    await work;
+
+    expect(names, unorderedEquals(['A', 'B', 'A', 'C']));
+    store.fail = false;
+    await run.retrySave();
+    expect(run.selected!.status, 'stopped');
+    expect(run.selected!.games.map((game) => game.result), [
+      '1/2-1/2',
+      '1/2-1/2',
+    ]);
+    expect(await pending.settle(), isNull);
+  });
   test('retrying a failed final save records the run as completed', () async {
     store.failWhen = (after) => after.status == 'completed';
     await run.start(config(rules: {'maxMoves': 1}));
