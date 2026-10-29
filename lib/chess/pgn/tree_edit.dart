@@ -93,6 +93,24 @@ NodePath? pathOfSans(GameTree tree, List<String> sans) {
   return path.indexes.length == sans.length ? path : null;
 }
 
+/// Every path in [tree] whose moves are [sans], in order. A game can play
+/// one move twice — `1... e5` on the main line and again as a variation
+/// beside it — and each copy is a place those moves are.
+List<NodePath> pathsOfSans(GameTree tree, List<String> sans) {
+  var paths = [const NodePath.root()];
+  for (final san in sans) {
+    paths = [
+      for (final path in paths)
+        for (final (index, node)
+            in (path.isRoot ? tree.children : tree.nodeAt(path)!.children)
+                .indexed)
+          if (node.san == san) path.child(index),
+    ];
+    if (paths.isEmpty) break;
+  }
+  return paths;
+}
+
 /// As far along [sans] as [tree] goes: the whole way when it holds them,
 /// else the last move of theirs it has, or the root.
 NodePath pathAlong(GameTree tree, List<String> sans) {

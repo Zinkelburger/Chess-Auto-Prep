@@ -52,8 +52,8 @@ ChapterEdit movesDeleted(Chapter chapter, {required NodePath at}) {
   final written = <int>{};
   for (final (index, line) in chapter.lines.indexed) {
     final tree = chapter.treeInChapter(line);
-    final path = tree == null ? null : pathOfSans(tree, sans);
-    if (tree == null || path == null) {
+    final paths = tree == null ? const <NodePath>[] : pathsOfSans(tree, sans);
+    if (tree == null || paths.isEmpty) {
       lines.add(line);
       order.add(index);
       continue;
@@ -62,8 +62,13 @@ ChapterEdit movesDeleted(Chapter chapter, {required NodePath at}) {
     // A game whose every move was under that one stays in the file as a game
     // with no moves: its name, its id, its review state and the chapter's
     // introduction are on it, and a deletion of moves is not a reason to
-    // lose the line those belong to.
-    final cut = withChildRemoved(tree, path.parent, path.indexes.last);
+    // lose the line those belong to. A game playing the moves twice loses
+    // both copies, the merged tree showing them as one; the last goes first,
+    // so the paths before it still name their moves.
+    var cut = tree;
+    for (final path in paths.reversed) {
+      cut = withChildRemoved(cut, path.parent, path.indexes.last);
+    }
     final result = rewritten(line, cut);
     if (result case LineRefused(:final reason)) {
       return ChapterEditRefused(reason);
@@ -189,6 +194,7 @@ typedef _Branch = ({int game, NodePath at, int child});
 ChapterEdit _madeFirst(Chapter chapter, List<String> sans) {
   final prefix = sans.sublist(0, sans.length - 1);
   final branches = _branchesAt(chapter, prefix, sans.last);
+  if (branches == null) return const ChapterEditRefused(_repeatedReason);
   final playing = branches.where((branch) => branch.child >= 0).toList();
   if (branches.isEmpty || playing.isEmpty) return const ChapterUnchanged();
   final lines = [...chapter.lines];
@@ -239,16 +245,29 @@ ChapterEdit _reordered(
   );
 }
 
+const _repeatedReason =
+    'a game plays these moves twice, so which to move is not clear; '
+    'delete the repeated copy first';
+
 /// Every game of [chapter] that continues past [prefix], in file order, with
 /// where [wanted] sits among that game's moves there — `-1` when that game
-/// plays something else.
-List<_Branch> _branchesAt(Chapter chapter, List<String> prefix, String wanted) {
+/// plays something else. Null when a game plays [prefix] twice: the merged
+/// tree shows the copies as one, and which to reorder is not clear.
+List<_Branch>? _branchesAt(
+  Chapter chapter,
+  List<String> prefix,
+  String wanted,
+) {
   final branches = <_Branch>[];
+  List<MoveNode> childrenOf(GameTree tree, NodePath at) =>
+      at.isRoot ? tree.children : tree.nodeAt(at)!.children;
   for (final (index, line) in chapter.lines.indexed) {
     final tree = chapter.treeInChapter(line);
-    final at = tree == null ? null : pathOfSans(tree, prefix);
-    if (tree == null || at == null) continue;
-    final children = at.isRoot ? tree.children : tree.nodeAt(at)!.children;
+    final ats = tree == null ? const <NodePath>[] : pathsOfSans(tree, prefix);
+    if (tree == null || ats.isEmpty) continue;
+    if (ats.length > 1) return null;
+    final at = ats.single;
+    final children = childrenOf(tree, at);
     if (children.isEmpty) continue;
     branches.add((
       game: index,

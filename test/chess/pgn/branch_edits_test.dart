@@ -166,6 +166,44 @@ void main() {
     expect(movesOf(reread), movesOf(after.chapter));
   });
 
+  group('a game that plays a move twice', () {
+    // `1... e5` on the main line and again as a variation beside it: the
+    // merged tree shows one e5, with both copies' moves under it.
+    Chapter twice() => parseChapter(
+      name: 'Twice',
+      text:
+          '[Event "A"]\n[Result "*"]\n\n'
+          '1. e4 e5 (1... e5 {alt} 2. Bc4) 2. Nf3 *\n',
+    );
+
+    test('deleting a move under the second copy deletes it', () {
+      final chapter = twice();
+      final cut = edited(
+        movesDeleted(chapter, at: at(chapter, ['e4', 'e5', 'Bc4'])),
+      );
+      expect(
+        writeChapter(cut.chapter),
+        contains('1. e4 e5 (1... e5 {alt}) 2. Nf3'),
+      );
+    });
+
+    test('deleting the move takes both copies', () {
+      final chapter = twice();
+      final cut = edited(movesDeleted(chapter, at: at(chapter, ['e4', 'e5'])));
+      expect(movesOf(cut.chapter), '1. e4 *');
+    });
+
+    test('promoting under the repeated moves is refused, not guessed at', () {
+      final chapter = twice();
+      for (final edit in [variationPromoted, madeMainLine]) {
+        expect(
+          edit(chapter, at: at(chapter, ['e4', 'e5', 'Bc4'])),
+          isA<ChapterEditRefused>(),
+        );
+      }
+    });
+  });
+
   test('a line that could not be read in full refuses the edit', () {
     final before = parseChapter(name: 'Hurt', text: brokenSecondGame);
 
