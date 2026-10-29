@@ -8,6 +8,7 @@ import 'package:chess_auto_prep/storage/pgn_document_store.dart'
     show IoFailure, Opened;
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/library_fixture.dart';
@@ -393,6 +394,34 @@ void main() {
 
     expect(find.text('Indian'), findsOneWidget);
     expect(fixture.textAt(main.path), twoLines);
+  });
+
+  testWidgets('lines picked with Ctrl are forgotten once a line above them '
+      'is deleted', (tester) async {
+    await show(
+      tester,
+      text: '$twoLines\n[Event "Slav"]\n[Result "*"]\n\n1. d4 d5 2. c4 c6 *\n',
+    );
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.tap(find.text('Indian'));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    bool anyPicked() => tester
+        .widgetList<LineRow>(find.byType(LineRow))
+        .any((row) => row.selected);
+    expect(anyPicked(), isTrue);
+
+    await tester.tap(find.byTooltip('Actions').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete line'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Queen\'s'), findsNothing);
+    expect(
+      anyPicked(),
+      isFalse,
+      reason: 'game 1 is now the Slav, and nobody picked it',
+    );
   });
 
   testWidgets('a delete that was refused leaves the line', (tester) async {

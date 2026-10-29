@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../chess/pgn/chapter.dart' show Chapter;
 import '../../storage/chapter_files.dart';
 import '../../ui/choice_dialog.dart';
 import '../../ui/status_bar.dart';
@@ -59,6 +60,19 @@ class _OutlinePanelState extends State<OutlinePanel> {
   /// Where a Shift-click extends from: the last line clicked plainly or
   /// with Ctrl.
   int? _anchor;
+
+  /// The chapter [_selected] and [_anchor] were picked in. A game is a place
+  /// in the file, so once the chapter is another — another one opened, a
+  /// line deleted or put back — the picks would name other lines: they go.
+  Chapter? _pickedIn;
+
+  void _forgetStalePicks() {
+    final chapter = widget.session.chapter;
+    if (identical(chapter, _pickedIn)) return;
+    _pickedIn = chapter;
+    _selected = {};
+    _anchor = null;
+  }
 
   @override
   void dispose() {
@@ -125,6 +139,7 @@ class _OutlinePanelState extends State<OutlinePanel> {
     final keys = HardwareKeyboard.instance;
     final toggle = keys.isControlPressed || keys.isMetaPressed;
     setState(() {
+      _forgetStalePicks();
       if (keys.isShiftPressed && _anchor != null) {
         _selected = _between(_anchor!, line.game);
       } else if (toggle) {
@@ -151,6 +166,7 @@ class _OutlinePanelState extends State<OutlinePanel> {
   /// What moves when [line] is dragged or its menu is used: the selection
   /// when the line is in it, else the line alone.
   LineDrag _dragOf(OutlineLine line) {
+    _forgetStalePicks();
     final games = _selected.contains(line.game) ? {..._selected} : {line.game};
     return LineDrag(
       games,
@@ -393,7 +409,9 @@ class _OutlinePanelState extends State<OutlinePanel> {
   }) => LineRow(
     line: line,
     current: current,
-    selected: _selected.contains(line.game),
+    selected:
+        _selected.contains(line.game) &&
+        identical(widget.session.chapter, _pickedIn),
     drag: _dragOf(line),
     onTap: () => _pick(line),
     onDrop: (drag) => _move(drag, open, asSidelineOf: line.game),
