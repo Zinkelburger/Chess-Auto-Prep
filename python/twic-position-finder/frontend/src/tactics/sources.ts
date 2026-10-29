@@ -91,7 +91,7 @@ export async function fetchLichessGames(
     // `||`, not `??`: an absent Site header leaves `url` as '', which `??`
     // happily accepts — and every game would then share one cache key and
     // read back the first game's puzzles.
-    const id = /lichess\.org\/([A-Za-z0-9]{8})/.exec(url)?.[1] || url || `idx${games.length}`;
+    const id = /lichess\.org\/(?:game\/)?([A-Za-z0-9]{8})/.exec(url)?.[1] || url || `idx${games.length}`;
     if (parsed.moves.length === 0) continue;
     games.push({ source: 'lichess', id, parsed, meta: metaFromHeaders('lichess', id, url, parsed, timeClassOf(parsed.headers)) });
   }

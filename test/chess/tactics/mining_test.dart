@@ -135,6 +135,10 @@ void main() {
     test('from the address, the GameId header or neither', () {
       expect(gameIdIn(scholarsMate), 'lichess_AbCd1234');
       expect(gameIdIn(quietChesscomGame), 'chesscom_111');
+      expect(
+        gameIdIn('[Site "https://lichess.org/game/AbCd1234"]\n\n1. e4 *'),
+        'lichess_AbCd1234',
+      );
       expect(gameIdIn('[GameId "lichess_xyz"]\n\n1. e4 *'), 'lichess_xyz');
       expect(gameIdIn('[GameId "Zz12Zz12"]\n\n1. e4 *'), 'lichess_Zz12Zz12');
       expect(

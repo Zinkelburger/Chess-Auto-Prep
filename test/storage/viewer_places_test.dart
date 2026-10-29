@@ -44,6 +44,19 @@ void main() {
       expect([for (final line in chapter.lines) readingGameKey(line)], stored);
     },
   );
+  test('a Lichess game keeps its key under the /game/ address', () async {
+    final chapter = await readChapter(
+      name: '',
+      text:
+          '[Event "a"]\n[Site "https://lichess.org/AbCd1234"]\n\n1. e4 *\n\n'
+          '[Event "b"]\n[Site "https://lichess.org/game/AbCd1234/black"]\n\n'
+          '1. e4 *\n',
+    );
+    expect(
+      [for (final line in chapter.lines) readingGameKey(line)],
+      ['https://lichess.org/AbCd1234', 'https://lichess.org/AbCd1234'],
+    );
+  });
   test(
     'loads existing session schema and saves under the same per-path key',
     () async {

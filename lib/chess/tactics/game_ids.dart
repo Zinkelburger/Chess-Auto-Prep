@@ -176,8 +176,9 @@ Map<String, String> _headerValues(String gameText) {
   return values;
 }
 
+// Lichess game pages moved from /<id> to /game/<id>; both name the game.
 final _lichessPath = RegExp(
-  r'^/([a-zA-Z0-9]{8})([a-zA-Z0-9]{4})?(/(white|black))?$',
+  r'^(?:/game)?/([a-zA-Z0-9]{8})([a-zA-Z0-9]{4})?(/(white|black))?$',
 );
 final _chesscomPath = RegExp(r'^/game/(live|daily)/([0-9]+)/?$');
 

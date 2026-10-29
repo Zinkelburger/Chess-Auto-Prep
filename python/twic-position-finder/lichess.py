@@ -1,6 +1,7 @@
 """Lichess game import — POST /api/import to get analysis URLs."""
 
 import os
+import re
 import time
 
 import requests
@@ -34,6 +35,21 @@ def _read_token_file() -> str | None:
 
 _MAX_RETRIES = 3
 
+# lichess.org moved game pages from /<id> to /game/<id> (lila #22026). The
+# site still redirects the old form, but the mobile app (0.31+) only opens
+# /game/<id> links, so every link we hand out uses the new form.
+_OLD_GAME_URL = re.compile(
+    r"^https?://(?:www\.)?lichess\.org/([A-Za-z0-9]{8})([A-Za-z0-9]{4})?"
+    r"(/(?:white|black))?/?$")
+
+
+def game_url(url: str) -> str:
+    """[url] in lichess.org's /game/<id> form; other addresses unchanged."""
+    m = _OLD_GAME_URL.match(url.strip())
+    if not m:
+        return url
+    return f"{LICHESS_API_BASE}/game/{m[1]}{m[3] or ''}"
+
 
 def import_game(pgn_text: str, token: str | None = None) -> str | None:
     """Import a PGN to Lichess and return the game URL.
@@ -63,7 +79,7 @@ def import_game(pgn_text: str, token: str | None = None) -> str | None:
                 result = resp.json()
                 game_id = result.get("id")
                 if game_id:
-                    return f"{LICHESS_API_BASE}/{game_id}"
+                    return f"{LICHESS_API_BASE}/game/{game_id}"
                 return None
             elif resp.status_code == 401 and token:
                 print("  Lichess token rejected, retrying anonymously")
@@ -99,7 +115,7 @@ def import_games_batch(games: list[dict], db=None,
 
         existing_url = game.get("lichess_url")
         if existing_url:
-            results[game_id] = existing_url
+            results[game_id] = game_url(existing_url)
             continue
 
         if not pgn.strip():
@@ -133,7 +149,7 @@ def view_lichess_url(game: dict) -> str | None:
 
     existing = game.get("lichess_url")
     if existing:
-        return existing
+        return game_url(existing)
     pgn = (game.get("pgn_text") or "").strip()
     if not pgn:
         return None
