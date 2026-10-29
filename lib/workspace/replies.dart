@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../chess/fen.dart';
 import '../chess/generation/draft_lines.dart' show expectimaxIn;
-import '../chess/pgn/game_tree.dart' show GameTree;
+import '../chess/pgn/game_tree.dart' show GameTree, NodePath;
 import '../chess/pgn/move_label.dart';
 import '../chess/pgn/tree_edit.dart';
 import '../diagnostics/log.dart';
@@ -93,9 +93,12 @@ final class RepliesFailed extends RepliesState {
   final String reason;
 }
 
-/// The position, the numbers and the document a Replies table is for.
+/// The position, the numbers and the document a Replies table is for. The
+/// path is part of it: two lines may reach one position, and the ticks and
+/// gaps are the line's the board is on.
 typedef _TableKey = ({
   Fen fen,
+  NodePath path,
   int elo,
   int onceIn,
   GapWalk? walk,
@@ -163,6 +166,7 @@ final class Replies extends ChangeNotifier {
     final s = _settings.value;
     final wanted = (
       fen: _session.cursor.fen,
+      path: _session.cursor.value,
       elo: s.opponentElo,
       onceIn: s.coverOnceIn,
       walk: _gaps.currentWalk,
