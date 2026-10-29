@@ -129,6 +129,11 @@ const proseMaxWidth = 640.0;
 /// tokens, little enough that a line still reads as a line.
 const moveTokenPadding = EdgeInsets.symmetric(horizontal: 4, vertical: 1);
 
+/// The corners of a move's tint, under the pointer or for the move shown,
+/// and how strong the pointer's tint is.
+const moveTokenRadius = BorderRadius.all(Radius.circular(3));
+const moveHoverAlpha = 0.1;
+
 /// The reading column is a card: its corners, and the room between its
 /// edge and the words.
 const readingCardRadius = 8.0;

@@ -8,9 +8,9 @@ import '../../chess/bughouse/pv_steps.dart';
 import '../../chess/bughouse/table.dart';
 import '../../ui/action_context_menu.dart';
 import '../../ui/app_action.dart';
-import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
 import '../../workspace/line_preview.dart';
+import '../../workspace/preview_target.dart';
 import 'bughouse_lab.dart';
 import 'lab_engine.dart';
 import 'pocket.dart';
@@ -234,12 +234,15 @@ class _LineRow extends StatelessWidget {
           ),
         ),
       for (final (i, step) in steps.indexed)
-        _StepToken(
-          step: step,
+        // A `sit` is muted and does nothing.
+        LineMoveToken(
+          label: step.label,
+          san: step.san,
+          height: labTableRowHeight,
           strong: i == 0 && !sits,
           onHover: (anchor) => onHover(step, anchor),
           onLeave: onLeave,
-          onTap: () => onPlay(i),
+          onTap: step.uci == null ? null : () => onPlay(i),
         ),
     ];
     return MouseRegion(
@@ -274,77 +277,6 @@ class _LineRow extends StatelessWidget {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// One move of a line: what goes before it muted, the move in the text
-/// colour — bold when [strong] — a tint under the pointer. A `sit` is muted
-/// and does nothing.
-class _StepToken extends StatelessWidget {
-  const _StepToken({
-    required this.step,
-    required this.strong,
-    required this.onHover,
-    required this.onLeave,
-    required this.onTap,
-  });
-
-  final PvStep step;
-  final bool strong;
-  final ValueChanged<Offset> onHover;
-  final VoidCallback onLeave;
-  final VoidCallback onTap;
-
-  /// The bottom centre of this token on the screen, where its board hangs.
-  Offset _anchor(BuildContext context) {
-    final box = context.findRenderObject() as RenderBox;
-    return box.localToGlobal(Offset(box.size.width / 2, box.size.height));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final text = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 3),
-      // As wide as its text, or the row's loose width would be taken.
-      child: Center(
-        widthFactor: 1,
-        child: Text.rich(
-          TextSpan(
-            children: [
-              if (step.label.isNotEmpty)
-                TextSpan(
-                  text: '${step.label} ',
-                  style: TextStyle(color: scheme.onSurfaceVariant),
-                ),
-              TextSpan(text: displaySan(context, step.san)),
-            ],
-          ),
-          style: monoText.copyWith(
-            color: step.uci == null
-                ? scheme.onSurfaceVariant
-                : scheme.onSurface,
-            fontWeight: strong ? FontWeight.w600 : null,
-          ),
-        ),
-      ),
-    );
-    if (step.uci == null) {
-      return SizedBox(height: labTableRowHeight, child: text);
-    }
-    return SizedBox(
-      height: labTableRowHeight,
-      child: MouseRegion(
-        onEnter: (_) => onHover(_anchor(context)),
-        onExit: (_) => onLeave(),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(3),
-          hoverColor: scheme.primary.withValues(alpha: 0.1),
-          child: text,
         ),
       ),
     );

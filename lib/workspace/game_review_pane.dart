@@ -556,7 +556,7 @@ class _SideSummary extends StatelessWidget {
           '${plies.length == 1 ? '' : 's'}',
       child: InkWell(
         onTap: next == null ? null : () => onPly(next),
-        borderRadius: BorderRadius.circular(3),
+        borderRadius: moveTokenRadius,
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: Space.s,

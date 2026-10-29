@@ -11,6 +11,7 @@ import '../chess/generation/traps.dart'
 import '../engines/engine_line.dart' show Centipawns;
 import '../ui/move_notation.dart';
 import '../ui/theme.dart';
+import 'preview_target.dart';
 
 /// What a move is worth in the search made for one side, as White's
 /// expected score; not [searched] while that search has only the engine's
@@ -331,11 +332,6 @@ class _RowView extends StatelessWidget {
   final VoidCallback onLeave;
   final VoidCallback onTap;
 
-  Offset _anchor(BuildContext context) {
-    final box = context.findRenderObject() as RenderBox;
-    return box.localToGlobal(Offset(box.size.width / 2, box.size.height));
-  }
-
   /// The share, marked `~` where Maia stood in for the database; the
   /// tooltip says who gave it.
   Widget _shareCell(double? share, TextStyle style) {
@@ -381,45 +377,43 @@ class _RowView extends StatelessWidget {
     final ink = monoText.copyWith(color: scheme.onSurface);
     final muted = monoText.copyWith(color: scheme.onSurfaceVariant);
     final share = row.share;
-    return MouseRegion(
-      onEnter: (_) => onHover(_anchor(context)),
-      onExit: (_) => onLeave(),
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Space.m),
-          child: Row(
-            children: [
-              Expanded(child: _move(context, ink)),
-              if (played) _shareCell(share, muted),
-              for (final side in sides)
-                switch (row.valueFor(side)) {
-                  null => _Cell('–', width: searchValueWidth, style: muted),
-                  // An unexpanded move is worth only what the engine says;
-                  // the search's own value is not in yet.
-                  (searched: false, forWhite: _) => _Cell(
-                    '…',
-                    width: searchValueWidth,
-                    style: muted,
-                  ),
-                  (:final forWhite, searched: true) => _Cell(
-                    expectimaxText(forWhite),
-                    width: searchValueWidth,
-                    style: ink,
-                  ),
-                },
-              Tooltip(
-                message: engineDepth == null
-                    ? 'Depth unknown (saved or database result)'
-                    : 'Depth $engineDepth',
-                child: _Cell(
-                  _engineText(row.engineCp),
+    return PreviewTarget(
+      onHover: onHover,
+      onLeave: onLeave,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Space.m),
+        child: Row(
+          children: [
+            Expanded(child: _move(context, ink)),
+            if (played) _shareCell(share, muted),
+            for (final side in sides)
+              switch (row.valueFor(side)) {
+                null => _Cell('–', width: searchValueWidth, style: muted),
+                // An unexpanded move is worth only what the engine says;
+                // the search's own value is not in yet.
+                (searched: false, forWhite: _) => _Cell(
+                  '…',
                   width: searchValueWidth,
                   style: muted,
                 ),
+                (:final forWhite, searched: true) => _Cell(
+                  expectimaxText(forWhite),
+                  width: searchValueWidth,
+                  style: ink,
+                ),
+              },
+            Tooltip(
+              message: engineDepth == null
+                  ? 'Depth unknown (saved or database result)'
+                  : 'Depth $engineDepth',
+              child: _Cell(
+                _engineText(row.engineCp),
+                width: searchValueWidth,
+                style: muted,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

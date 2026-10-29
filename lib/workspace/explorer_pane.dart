@@ -15,6 +15,7 @@ import 'game_fetcher.dart';
 import 'book_chip.dart';
 import 'books.dart';
 import 'line_preview.dart';
+import 'preview_target.dart';
 import 'opening_names.dart';
 import 'repertoire_tree.dart';
 import 'tree_pane.dart';
@@ -394,49 +395,39 @@ class _MoveRow extends StatelessWidget {
   final VoidCallback onLeave;
   final VoidCallback onTap;
 
-  Offset _anchor(BuildContext context) {
-    final box = context.findRenderObject() as RenderBox;
-    return box.localToGlobal(Offset(box.size.width / 2, box.size.height));
-  }
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Material(
       color: Colors.transparent,
-      child: MouseRegion(
-        onEnter: (_) => onHover(_anchor(context)),
-        onExit: (_) => onLeave(),
-        child: InkWell(
-          onTap: onTap,
-          child: SizedBox(
-            height: replyRowHeight,
-            child: Row(
-              children: [
-                const SizedBox(width: Space.m),
-                SizedBox(
-                  width: explorerMoveWidth,
-                  child: _move(context, scheme),
+      child: PreviewTarget(
+        onHover: onHover,
+        onLeave: onLeave,
+        onTap: onTap,
+        child: SizedBox(
+          height: replyRowHeight,
+          child: Row(
+            children: [
+              const SizedBox(width: Space.m),
+              SizedBox(width: explorerMoveWidth, child: _move(context, scheme)),
+              SizedBox(
+                width: explorerGamesWidth,
+                child: Text(
+                  '${formatGameCount(row.games)} · ${row.share}',
+                  textAlign: TextAlign.right,
+                  style: monoText.copyWith(color: scheme.onSurfaceVariant),
                 ),
-                SizedBox(
-                  width: explorerGamesWidth,
-                  child: Text(
-                    '${formatGameCount(row.games)} · ${row.share}',
-                    textAlign: TextAlign.right,
-                    style: monoText.copyWith(color: scheme.onSurfaceVariant),
-                  ),
+              ),
+              const SizedBox(width: Space.m),
+              _BarColumn(
+                bar: ResultBar(
+                  white: row.white,
+                  draws: row.draws,
+                  black: row.black,
                 ),
-                const SizedBox(width: Space.m),
-                _BarColumn(
-                  bar: ResultBar(
-                    white: row.white,
-                    draws: row.draws,
-                    black: row.black,
-                  ),
-                  tick: _tick(scheme),
-                ),
-              ],
-            ),
+                tick: _tick(scheme),
+              ),
+            ],
           ),
         ),
       ),

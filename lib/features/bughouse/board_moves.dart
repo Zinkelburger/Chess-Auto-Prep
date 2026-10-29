@@ -333,14 +333,14 @@ class _MoveTokenState extends State<_MoveToken> {
               widget.menu(),
             ),
           ),
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: moveTokenRadius,
           child: Container(
             padding: moveTokenPadding,
             decoration: BoxDecoration(
               color: widget.selected
                   ? scheme.primary.withValues(alpha: 0.35)
                   : null,
-              borderRadius: BorderRadius.circular(3),
+              borderRadius: moveTokenRadius,
             ),
             child: Text.rich(
               TextSpan(
