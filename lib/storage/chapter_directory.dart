@@ -22,9 +22,16 @@ import 'recovery_gate.dart';
 /// One folder per repertoire, one `.pgn` per chapter, plus index files and
 /// sidecars the app ignores.
 final class ChapterDirectory implements ChapterFiles {
-  ChapterDirectory(this.root, {required this._recovery});
+  ChapterDirectory(
+    this.root, {
+    required this._recovery,
+    this._now = DateTime.now,
+  });
 
   final RecoveryGate _recovery;
+
+  /// The clock a staging folder's age is told by.
+  final DateTime Function() _now;
 
   /// The `repertoires` directory itself.
   final Directory root;
@@ -335,8 +342,12 @@ final class ChapterDirectory implements ChapterFiles {
   // A staging folder older than this run belongs to an import that never
   // completed and was never shown, so it is treated as disposable; a pasted
   // import has no other copy, and is lost as the unfinished import would be.
+  // One from the last hour may be another copy of the app's import, still
+  // between staging and placing, so it waits for a later run.
   // Only once recovery has settled: a recorded import still to be finished
   // moves its staging folder into place, so it is not left over.
+  static const _stagingInUse = Duration(hours: 1);
+
   Future<void> _sweepStaging() async {
     if (_stagingSwept || !_recovery.ledger.nothingOwed) return;
     _stagingSwept = true;
@@ -347,7 +358,11 @@ final class ChapterDirectory implements ChapterFiles {
             !p.basename(entry.path).startsWith(stagingPrefix)) {
           continue;
         }
-        if (!(await entry.stat()).modified.isBefore(_started)) continue;
+        final modified = (await entry.stat()).modified;
+        if (!modified.isBefore(_started) ||
+            _now().difference(modified) < _stagingInUse) {
+          continue;
+        }
         await _removeStaging(entry.path);
         if (!await entry.exists()) {
           log.i('removed the staging folder ${entry.path} left by an import');
