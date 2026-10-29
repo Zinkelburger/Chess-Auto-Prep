@@ -4,6 +4,7 @@ import 'package:dartchess/dartchess.dart' show Position, Side;
 import 'package:flutter/foundation.dart';
 
 import '../chess/fen.dart';
+import '../chess/generation/evaluation_source.dart';
 import '../chess/generation/mainline_book.dart';
 import '../chess/generation/search.dart';
 import '../chess/generation/search_config.dart';
@@ -135,9 +136,10 @@ final class FillGaps extends ChangeNotifier {
 
   bool get canDiscardDraft => _lines is LinesFailed && _drafts.saving;
 
-  Future<void> Function()? _release;
-  Future<void>? _releasing;
-  bool _active = false;
+  /// The run under way, from its start until its tools are handed back and
+  /// what it found is saved; null between runs. It searches while the
+  /// [state] is [FillRunning]; after that it only saves and lets go.
+  _Run? _underway;
   bool _disposed = false;
 
   FillState get state => _state;
@@ -178,7 +180,6 @@ final class FillGaps extends ChangeNotifier {
 
   int? engineDepthAt(Fen fen) => _engineDepths[fen.position];
 
-  Completer<void>? _finished;
   // One generation for every delayed start, whether it is loading a saved
   // tree or waiting for the previous root to be saved. New intent invalidates
   // both paths, even if navigation returns to the same position (ABA).
@@ -187,16 +188,27 @@ final class FillGaps extends ChangeNotifier {
   /// The engine as the run under way asks it: one for both of its sides.
   EngineAnswers? _answers;
   final _history = <FillFound>[];
-  FillRequest? _activeRequest;
+
+  /// The engine source and depth the cached scores and lines were found
+  /// at: those of the last run started.
+  (EvaluationSource, int)? _scope;
   (Object?, Fen, Side)? _board;
   (Object?, Fen, Side) get _boardNow => (
     _session.source ?? _session.analysisPage,
     _session.cursor.fen,
     _session.orientation,
   );
+  _Follow _follow = const _Still();
+
+  /// The restart the last board move began, if it began one.
   Future<String?>? _following;
-  bool _retargeting = false;
-  bool _followEnabled = false;
+
+  /// Whether the search stopped to follow the board is waiting to start at
+  /// the newest position: a later intent supersedes the restart.
+  bool get _restarting => switch (_follow) {
+    _Restarting(:final ticket) => ticket == _startTicket,
+    _ => false,
+  };
 
   /// Retain previous roots so going back can display and resume their values.
   void _remember() {
@@ -241,28 +253,24 @@ final class FillGaps extends ChangeNotifier {
   void _boardChanged() {
     final next = _boardNow;
     if (next == _board) return;
+    final follow = _follow;
+    final restarting = _restarting;
     ++_startTicket;
+    _following = null;
     final sameDocument = next.$1 == _board?.$1 && next.$3 == _board?.$3;
     _board = next;
-    final request = _activeRequest;
     // Only a search still running follows the board: one that has finished,
     // though still saving its tree, stays as it is while the user browses.
-    if (!_followEnabled ||
-        request == null ||
-        (_state is! FillRunning && !_retargeting)) {
-      return;
-    }
+    if (follow is! _Tracking || (!running && !restarting)) return;
     if (!sameDocument || _session.shownTo != null) {
       finish();
       _releaseSoon();
       return;
     }
-    if (_state case FillRunning(
-      :final stopping,
-    ) when stopping && !_retargeting) {
+    if (_state case FillRunning(:final stopping) when stopping && !restarting) {
       return;
     }
-    _following = _followBoard(request);
+    _following = _followBoard(follow.request);
     unawaited(_following);
   }
 
@@ -271,13 +279,13 @@ final class FillGaps extends ChangeNotifier {
   Future<String?> _followBoard(FillRequest request) async {
     final ticket = ++_startTicket;
     final board = _boardNow;
-    final finished = _finished?.future;
-    _retargeting = true;
+    final ended = _underway?.ended.future;
+    _follow = _Restarting(request, ticket);
     _finishCurrent();
     _releaseSoon();
-    await finished;
+    await ended;
     if (_disposed || ticket != _startTicket || board != _boardNow) return null;
-    _retargeting = false;
+    _follow = _Tracking(request);
     if (!canStart) return 'Save the previous search before continuing.';
     return start(request);
   }
@@ -293,11 +301,10 @@ final class FillGaps extends ChangeNotifier {
   bool get canStart =>
       !_disposed &&
       !_jobs.heldByOther(this) &&
-      !_active &&
+      _underway == null &&
       !_drafts.saving &&
       !canRetryTree &&
       _lines is! LinesWriting &&
-      !running &&
       _session.chapter != null &&
       _session.shownTo == null;
 
@@ -327,7 +334,6 @@ final class FillGaps extends ChangeNotifier {
     if (root == null) return 'The position on the board cannot be searched.';
     final target = _boardTarget(chapter, tree);
     ++_startTicket;
-    _retargeting = false;
     seed ??= nodeAtBoard(request: request);
     final mirror = request.method == SearchMethod.practical
         ? target.mirror
@@ -337,19 +343,17 @@ final class FillGaps extends ChangeNotifier {
           nodeAtBoard(request: request, side: mirror.side) ?? mirrorStart(seed);
     }
     _remember();
-    if (_activeRequest?.source != request.source ||
-        _activeRequest?.evalDepth != request.evalDepth) {
+    final scope = (request.source, request.evalDepth);
+    if (_scope != scope) {
       // Scores' depths and principal variations share one evaluation scope.
       // A cached score in the next run may supply neither; retaining an old
       // line would silently draft with a different source or depth.
       _engineDepths.clear();
       _bestLines.clear();
     }
-    _activeRequest = request;
-    _followEnabled = true;
-    _active = true;
-    _finished = Completer<void>();
-    _releasing = null;
+    _scope = scope;
+    _follow = _Tracking(request);
+    _underway = _Run();
     _found = seed == null
         ? null
         : FillFound(target: target, request: request, tree: seed);
@@ -383,7 +387,7 @@ final class FillGaps extends ChangeNotifier {
   /// nothing stands in its way.
   String? _busy() {
     if (_disposed) return 'The search owner is closed.';
-    if (_active || running) return 'A search is already running.';
+    if (_underway != null) return 'A search is already running.';
     if (_jobs.heldByOther(this)) return _jobs.blockingMessage;
     if (canRetryTree) return 'Finish saving the previous search tree first.';
     if (_drafts.saving || _lines is LinesWriting) {
@@ -544,7 +548,7 @@ final class FillGaps extends ChangeNotifier {
     // Disposed or cancelled while the engine was starting: dispose and
     // cancel had nothing to release then, so this engine is let go here or
     // its process outlives the run.
-    _release = release;
+    _underway!.release = release;
     if (_discarded) {
       await _released();
       _set(const FillIdle());
@@ -813,9 +817,8 @@ final class FillGaps extends ChangeNotifier {
   }
 
   void _stopFollowing() {
-    _followEnabled = false;
+    _follow = const _Still();
     ++_startTicket;
-    _retargeting = false;
   }
 
   void _finishCurrent() {
@@ -839,13 +842,7 @@ final class FillGaps extends ChangeNotifier {
 
   /// Every path awaits the same release, including a cancellation that began
   /// cleanup before the search's last engine answer arrived.
-  Future<void> _released() {
-    if (_releasing case final releasing?) return releasing;
-    final release = _release;
-    _release = null;
-    if (release == null) return Future.value();
-    return _releasing = Future<void>.sync(release);
-  }
+  Future<void> _released() => _underway?.released() ?? Future.value();
 
   void _releaseSoon() {
     unawaited(
@@ -868,8 +865,8 @@ final class FillGaps extends ChangeNotifier {
         ),
       );
     } finally {
-      _active = false;
-      _finished?.complete();
+      _underway?.ended.complete();
+      _underway = null;
       _jobs.release(this);
       if (!_disposed) notifyListeners();
     }
@@ -906,4 +903,52 @@ final class FillGaps extends ChangeNotifier {
     _releaseSoon();
     super.dispose();
   }
+}
+
+/// One run, from its start until its tools are handed back and what it
+/// found is saved.
+final class _Run {
+  /// Completes when the run is over: what a search following the board
+  /// waits for before it starts again.
+  final ended = Completer<void>();
+
+  /// Hands the run's engine or book back; null until the tools have
+  /// started.
+  Future<void> Function()? release;
+  Future<void>? _releasing;
+
+  /// The one release of the run's tools, however many paths ask for it.
+  Future<void> released() {
+    if (_releasing case final releasing?) return releasing;
+    final done = release;
+    release = null;
+    if (done == null) return Future.value();
+    return _releasing = Future<void>.sync(done);
+  }
+}
+
+/// Whether moving on the board moves the search with it.
+sealed class _Follow {
+  const _Follow();
+}
+
+/// No search follows the board: none has started, or the user stopped it.
+final class _Still extends _Follow {
+  const _Still();
+}
+
+/// The search started with [request] follows the board while it runs: a
+/// move stops it, keeps what it found and starts it at the new position.
+final class _Tracking extends _Follow {
+  const _Tracking(this.request);
+
+  final FillRequest request;
+}
+
+/// The search was stopped to follow the board and starts at the newest
+/// position once its run is over, unless an intent after [ticket] came.
+final class _Restarting extends _Tracking {
+  const _Restarting(super.request, this.ticket);
+
+  final int ticket;
 }
