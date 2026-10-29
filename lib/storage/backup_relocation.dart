@@ -274,17 +274,31 @@ final class KeptVersions implements Reference {
     final relocation = BackupRelocation(root, documents: documents);
     final retryUntil = DateTime.now().add(const Duration(seconds: 2));
     for (final move in moves) {
-      if (!following) {
-        try {
-          await relocation.carry(move, retryUntil: retryUntil);
-        } on FileSystemException {
-          rethrow;
-        } on Object catch (error) {
-          log.w('move the kept versions of ${move.documentPath}', error);
-          await owed.owe(move);
-        }
-      }
+      if (!following) await _carry(relocation, move, retryUntil);
       await moved?.call();
+    }
+  }
+
+  /// Moves [move]'s history now, or writes it down for a later recovery to
+  /// move. Neither moved nor written down, it would be left under the old
+  /// id for a new document there to inherit, so the move waits instead.
+  Future<void> _carry(
+    BackupRelocation relocation,
+    BackupMove move,
+    DateTime retryUntil,
+  ) async {
+    try {
+      await relocation.carry(move, retryUntil: retryUntil);
+    } on FileSystemException {
+      rethrow;
+    } on Object catch (error) {
+      log.w('move the kept versions of ${move.documentPath}', error);
+      if (!await owed.owe(move)) {
+        throw FileSystemException(
+          'The kept versions still to move could not be written down.',
+          move.documentPath,
+        );
+      }
     }
   }
 }
