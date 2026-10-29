@@ -40,14 +40,21 @@ final class DocumentSaver extends ChangeNotifier {
   final Books? books;
 
   // A compound publication cannot absorb another edit after an uncertain
-  // acknowledgement. Its exact draft and command id must settle first.
-  bool _committingReferences = false;
-  Object? _externalOwner;
+  // acknowledgement. Its exact draft and command id must settle first. One
+  // fact, so this saver's own write and a command from outside can never
+  // both seem to hold it.
+  _Barrier? _barrier;
   _UndoWrite? _failedUndo;
 
   /// A two-file publication must settle before another edit can change its
   /// exact input. The session checks this before changing its shown chapter.
-  bool get referencesPending => _committingReferences || _externalOwner != null;
+  bool get referencesPending => _barrier != null;
+
+  /// Whether [command], from outside, holds the barrier.
+  bool _heldBy(Object command) => switch (_barrier) {
+    _ByCommand(command: final holder) => identical(holder, command),
+    _ => false,
+  };
 
   /// An undo retry must also put its restored words back on screen. A plain
   /// [flush] cannot do that, so the session retries through its undo command.
@@ -128,8 +135,7 @@ final class DocumentSaver extends ChangeNotifier {
     _pending.clear();
     _clock.hurry();
     _undo.clear();
-    _committingReferences = false;
-    _externalOwner = null;
+    _barrier = null;
     _failedUndo = null;
     _set(readOnly == null ? const Saved() : DocumentReadOnly(readOnly));
   }
@@ -199,9 +205,7 @@ final class DocumentSaver extends ChangeNotifier {
       _hold = _Hold.held;
       final target = _target;
       final retry =
-          continuing != null &&
-          identical(_externalOwner, continuing) &&
-          _pending.isEmpty;
+          continuing != null && _heldBy(continuing) && _pending.isEmpty;
       if (_disposed || target == null || (!settled && !retry)) return null;
       return await action(target.revision);
     } finally {
@@ -216,10 +220,10 @@ final class DocumentSaver extends ChangeNotifier {
         _disposed ||
         revision != expected ||
         revision?.nativeIdentity != expected.nativeIdentity ||
-        (_externalOwner != null && !identical(_externalOwner, command))) {
+        (_barrier != null && !_heldBy(command))) {
       return false;
     }
-    _externalOwner = command;
+    _barrier = _ByCommand(command);
     _set(const Saving());
     return true;
   }
@@ -232,9 +236,9 @@ final class DocumentSaver extends ChangeNotifier {
     EditScope scope,
     void Function() show,
   ) {
-    if (!identical(_externalOwner, command) || _disposed) return;
+    if (!_heldBy(command) || _disposed) return;
     final target = _target!;
-    _externalOwner = null;
+    _barrier = null;
     _received(target.ref, receipt);
     _undo.keep(receipt, scope);
     _state = const Saved();
@@ -250,14 +254,14 @@ final class DocumentSaver extends ChangeNotifier {
     EditScope scope, {
     required bool uncertain,
   }) {
-    if (!identical(_externalOwner, command) || _disposed) return;
+    if (!_heldBy(command) || _disposed) return;
     if (result is store.Saved) {
       // Acknowledged: nothing of the command is left to retry.
-      _externalOwner = null;
+      _barrier = null;
       _set(const SaveStopped());
       return;
     }
-    if (!uncertain) _externalOwner = null;
+    if (!uncertain) _barrier = null;
     _adopt(result, _target!.ref, scope);
   }
 
@@ -267,9 +271,9 @@ final class DocumentSaver extends ChangeNotifier {
   /// predate the file and takes none until it is read again. False when
   /// [command] no longer holds this editor.
   bool releaseExternal(Object command, String detail) {
-    if (!identical(_externalOwner, command) || _disposed) return false;
+    if (!_heldBy(command) || _disposed) return false;
     log.w('follow ${_target?.ref.path}', detail);
-    _externalOwner = null;
+    _barrier = null;
     _set(DocumentFollowing(detail));
     return true;
   }
@@ -281,8 +285,8 @@ final class DocumentSaver extends ChangeNotifier {
     String? failure,
     bool uncertain = false,
   }) {
-    if (!identical(_externalOwner, command) || _disposed) return;
-    if (!uncertain) _externalOwner = null;
+    if (!_heldBy(command) || _disposed) return;
+    if (!uncertain) _barrier = null;
     _set(failure == null ? const Saved() : SaveFailed(failure));
   }
 
@@ -314,8 +318,7 @@ final class DocumentSaver extends ChangeNotifier {
     _pending.clear();
     _clock.hurry();
     _undo.clear();
-    _committingReferences = false;
-    _externalOwner = null;
+    _barrier = null;
     _failedUndo = null;
     _set(const Saved());
   }
@@ -335,11 +338,13 @@ final class DocumentSaver extends ChangeNotifier {
   Future<void> _write() async {
     var target = _target;
     if (_disposed || !_state.writable || _writing || target == null) return;
-    if (_hold == _Hold.held || _pending.isEmpty) return;
+    if (_hold == _Hold.held || _pending.isEmpty || _barrier is _ByCommand) {
+      return;
+    }
     final draft = _pending.take()!;
     _writing = true;
-    final wasUncertain = _committingReferences;
-    _committingReferences = draft.scope.references != null;
+    final wasUncertain = _barrier is _OwnWrite;
+    _barrier = draft.scope.references != null ? const _OwnWrite() : null;
     _set(const Saving());
     final ticket = _opens;
     var result = await _put(
@@ -376,7 +381,7 @@ final class DocumentSaver extends ChangeNotifier {
     }
     if (result is store.Saved ||
         (!wasUncertain && result is! store.IoFailure)) {
-      _committingReferences = false;
+      _barrier = null;
     }
     // Only a write the disk refused comes back to be tried with the next
     // edit; see [SaveStopped] and [SaveConflict] for what happens to the
@@ -501,7 +506,7 @@ final class DocumentSaver extends ChangeNotifier {
         target == null ||
         entry == null ||
         _hold != _Hold.none ||
-        _externalOwner != null ||
+        _barrier is _ByCommand ||
         _writing ||
         !_pending.isEmpty) {
       return const UndoRefused();
@@ -524,7 +529,7 @@ final class DocumentSaver extends ChangeNotifier {
     final wasUncertain = _failedUndo != null;
     final compound = scope.inverse != null;
     _writing = true;
-    _committingReferences = compound;
+    _barrier = compound ? const _OwnWrite() : null;
     _set(const Saving());
     final ticket = _opens;
     // A version this store itself recorded, going back to the file it came
@@ -547,7 +552,7 @@ final class DocumentSaver extends ChangeNotifier {
     if (result is store.IoFailure && _pending.isEmpty) _failedUndo = write;
     if (result is store.Saved ||
         (!wasUncertain && result is! store.IoFailure)) {
-      _committingReferences = false;
+      _barrier = null;
       _failedUndo = null;
     }
     if (_outOfDate(result, target)) {
@@ -716,6 +721,24 @@ final class DocumentSaver extends ChangeNotifier {
 /// second hold may begin; in [held] the change itself is running and nothing
 /// is written until it is over.
 enum _Hold { none, settling, held }
+
+/// Who keeps new edits out while a publication naming two files settles.
+sealed class _Barrier {
+  const _Barrier();
+}
+
+/// This saver's own write naming references, going out or unanswered.
+final class _OwnWrite extends _Barrier {
+  const _OwnWrite();
+}
+
+/// A command from outside, between [DocumentSaver.beginExternal] and the
+/// answer that lets it go.
+final class _ByCommand extends _Barrier {
+  const _ByCommand(this.command);
+
+  final Object command;
+}
 
 // What a document's file is doing.
 //
