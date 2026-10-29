@@ -6,6 +6,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import '../../chess/book/book_check.dart';
 import '../../chess/book/played_game.dart';
 import '../../workspace/books.dart';
+import '../../workspace/latest.dart';
 import '../../workspace/repertoire_shelf.dart';
 import 'player_analysis.dart';
 import 'player_games.dart';
@@ -24,7 +25,7 @@ final class PlayerBook extends ChangeNotifier {
   List<PlayerBookGap> gaps = const [];
   bool busy = false, _disposed = false;
   String? status;
-  int _ticket = 0;
+  final _checks = Latest();
   Object? _inputs;
   Object get _key => (
     analysis.corpus,
@@ -38,7 +39,7 @@ final class PlayerBook extends ChangeNotifier {
   void _changed() {
     if (_inputs == _key) return;
     _inputs = _key;
-    _ticket++;
+    _checks.cancel();
     gaps = const [];
     status = null;
     busy = false;
@@ -50,7 +51,7 @@ final class PlayerBook extends ChangeNotifier {
     await books.load();
     await shelf.read(gone: () => _disposed);
     if (_disposed) return;
-    final ticket = ++_ticket;
+    final ticket = _checks.begin();
     busy = true;
     status = null;
     notifyListeners();
@@ -79,14 +80,14 @@ final class PlayerBook extends ChangeNotifier {
       final corpus = analysis.corpus!;
       final indexes = analysis.gameIndexes;
       final results = await Isolate.run(() => _check(corpus, indexes, files));
-      if (_disposed || ticket != _ticket) return;
+      if (ticket.overtaken) return;
       gaps = results;
       status =
           '${indexes.length} games against your ${side.name} book · ${gaps.length} reach a gap';
     } on Object catch (e) {
-      if (!_disposed && ticket == _ticket) status = '$e';
+      if (ticket.current) status = '$e';
     } finally {
-      if (!_disposed && ticket == _ticket) {
+      if (ticket.current) {
         busy = false;
         notifyListeners();
       }
@@ -96,7 +97,7 @@ final class PlayerBook extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _ticket++;
+    _checks.close();
     analysis.removeListener(_changed);
     shelf.removeListener(_changed);
     books.removeListener(_changed);

@@ -7,6 +7,7 @@ import '../../chess/bughouse/hivemind.dart';
 import '../../chess/bughouse/table.dart';
 import '../../diagnostics/log.dart';
 import '../../engines/hivemind_engine.dart';
+import '../../workspace/latest.dart';
 import 'bughouse_lab.dart';
 
 /// What the engine switch shows.
@@ -142,8 +143,9 @@ final class LabEngine extends ChangeNotifier {
   /// What the lines were last asked for; a hover or a flip changes nothing.
   (TablePosition, LabBoards, ClockCase)? _asked;
 
-  /// Bumped by everything that makes the engine's work stale.
-  int _run = 0;
+  /// The engine's runs: everything that makes its work stale overtakes
+  /// the one under way.
+  final _runs = Latest();
 
   /// The engine processes, one per team searched at once; the first also
   /// answers the passes of an engine that cannot report as it goes.
@@ -172,7 +174,7 @@ final class LabEngine extends ChangeNotifier {
   /// the switch stays as it was for the return.
   void close() {
     _open = false;
-    _run++;
+    _runs.cancel();
     _quitAll();
   }
 
@@ -197,7 +199,7 @@ final class LabEngine extends ChangeNotifier {
     if (_on) {
       _labChanged();
     } else {
-      _run++;
+      _runs.cancel();
       _stopAll();
       _set(const LinesOff());
     }
@@ -208,18 +210,18 @@ final class LabEngine extends ChangeNotifier {
     final asked = (lab.position, lab.boards, lab.clock);
     if (asked == _asked) return;
     _asked = asked;
-    final run = ++_run;
+    final run = _runs.begin();
     _stopAll();
     _set(LinesOn(position: lab.position, boards: lab.boards));
     unawaited(_analyse(run, asked));
   }
 
   Future<void> _analyse(
-    int run,
+    Ticket run,
     (TablePosition, LabBoards, ClockCase) asked,
   ) async {
     final (position, boards, clock) = asked;
-    bool wanted() => _on && _open && run == _run && !_disposed;
+    bool wanted() => _on && _open && run.current;
     final questions = _questions(position, boards, clock);
     if (questions.isEmpty) {
       _set(LinesOn(position: position, boards: boards, thinking: false));
@@ -583,7 +585,7 @@ final class LabEngine extends ChangeNotifier {
   /// An engine could not answer: the switch goes off and says why.
   void _stopped(String reason) {
     _on = false;
-    _run++;
+    _runs.cancel();
     _quitAll();
     _set(LinesStopped(reason));
   }
@@ -597,7 +599,7 @@ final class LabEngine extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _run++;
+    _runs.close();
     lab.removeListener(_labChanged);
     if (_engines.any((engine) => engine != null)) {
       log.i('quit the bughouse engine');

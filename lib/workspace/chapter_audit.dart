@@ -26,6 +26,7 @@ import 'engine_jobs.dart';
 import 'fill_states.dart' show fillEvalDepth;
 import 'gap_hunt.dart';
 import 'gap_walk.dart';
+import 'latest.dart';
 import 'replies.dart';
 
 sealed class AuditState {
@@ -133,7 +134,7 @@ final class ChapterAudit extends ChangeNotifier {
   ChapterRef? _audited;
   var _found = <AuditFinding>[];
   var _dismissed = <String>{};
-  int _ticket = 0;
+  final _runs = Latest();
   bool _disposed = false;
 
   /// The run that holds the machine: until its engine is gone, even after
@@ -234,7 +235,7 @@ final class ChapterAudit extends ChangeNotifier {
     final chapter = _session.chapter!;
     final source = _session.source!;
     final positions = auditPositions(chapter.tree, chapter.side);
-    final ticket = ++_ticket;
+    final ticket = _runs.begin();
     _dismissed = _storeOf().dismissed();
     _audited = source;
     _found = [];
@@ -253,7 +254,7 @@ final class ChapterAudit extends ChangeNotifier {
       }
     } on Object catch (error) {
       log.w('audit ${source.path}', error);
-      if (ticket == _ticket) {
+      if (ticket.current) {
         _set(const AuditFailed('The audit could not finish. Try again.'));
       }
     } finally {
@@ -269,34 +270,33 @@ final class ChapterAudit extends ChangeNotifier {
   /// elsewhere in the repertoire, the same floor, the same model. Null when
   /// the run was overtaken on the way.
   Future<GapWalk?> _gapWalk(
-    int ticket,
+    Ticket ticket,
     Chapter chapter,
     ChapterRef source,
   ) async {
-    bool overtaken() => _disposed || ticket != _ticket;
     final elsewhere = await _answers.including(
       source,
       chapter.tree,
       chapter.side,
     );
-    if (overtaken()) return null;
+    if (ticket.overtaken) return null;
     return walkGaps(
       tree: chapter.tree,
       side: chapter.side,
       floor: 1 / _settings.value.coverOnceIn,
       shares: _model.sharesAt,
-      overtaken: overtaken,
+      overtaken: () => ticket.overtaken,
       elsewhere: elsewhere,
     );
   }
 
-  Future<void> _walk(_Run run, int ticket) async {
+  Future<void> _walk(_Run run, Ticket ticket) async {
     final positions = run.positions;
     var checked = 0;
     for (final position in positions) {
-      if (_disposed || ticket != _ticket || _stopping || run.lost) break;
+      if (ticket.overtaken || _stopping || run.lost) break;
       final judged = await _judge(run, position);
-      if (_disposed || ticket != _ticket) return;
+      if (ticket.overtaken) return;
       if (judged == null) {
         _set(AuditFailed(run.failure ?? 'The engine could not start.'));
         return;
@@ -314,7 +314,7 @@ final class ChapterAudit extends ChangeNotifier {
         ),
       );
     }
-    if (_disposed || ticket != _ticket) return;
+    if (ticket.overtaken) return;
     final dropped = run.chessDb?.dropped ?? false;
     log.i(
       'audit: $checked of ${positions.length} positions, '
@@ -467,7 +467,7 @@ final class ChapterAudit extends ChangeNotifier {
         (_audited == null && _state is AuditIdle)) {
       return;
     }
-    _ticket++;
+    _runs.cancel();
     _audited = null;
     _found = [];
     _dismissed = {};
@@ -489,7 +489,7 @@ final class ChapterAudit extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _ticket++;
+    _runs.close();
     _session.removeListener(_documentChanged);
     _jobs.removeListener(_jobsChanged);
     if (_holding case final run?) _jobs.release(run);

@@ -10,6 +10,7 @@ import '../engines/engine_line.dart';
 import '../engines/engine_supervisor.dart';
 import 'board_claim.dart';
 import 'document_session.dart';
+import 'latest.dart';
 
 sealed class EngineState {
   const EngineState();
@@ -169,7 +170,7 @@ final class EngineAnalysis extends ChangeNotifier {
 
   /// Counts the times the engine has been asked for, so a launch that lands
   /// after a [disable] or a second [enable] is dropped instead of adopted.
-  int _starts = 0;
+  final _starts = Latest();
 
   /// Whether an engine that stopped answering has already been replaced
   /// since the analysis was switched on. One that wedges twice is not going
@@ -227,10 +228,10 @@ final class EngineAnalysis extends ChangeNotifier {
   /// [failure] turns a launch failure into the sentence the pane shows, so a
   /// restart can say what it was recovering from.
   Future<void> _start(String Function(String reason) failure) async {
-    final ticket = ++_starts;
+    final ticket = _starts.begin();
     _set(const EngineStarting());
     final start = await _launch();
-    if (_disposed || ticket != _starts) {
+    if (ticket.overtaken) {
       // Turned off, or gone, while the engine was coming up.
       if (start case Started(:final engine)) unawaited(engine.quit());
       return;
@@ -247,7 +248,7 @@ final class EngineAnalysis extends ChangeNotifier {
   }
 
   Future<void> disable() async {
-    _starts++;
+    _starts.cancel();
     final engine = _engine;
     _engine = null;
     _stopFollowing();
@@ -390,6 +391,7 @@ final class EngineAnalysis extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _starts.close();
     _session.anyChange.removeListener(_follow);
     _elsewhere?.removeListener(_follow);
     _stopFollowing();

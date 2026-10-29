@@ -10,7 +10,7 @@ play.
 Code: `lib/features/library/` (the `Library` owner, `LibraryPanel`,
 `OutlinePanel`, `ChapterOutline`, line transfers, deleted chapters, version
 history, PGN drop), wired by `RepertoiresView` in `lib/app/document_views.dart` and
-the outline column in `lib/app/shell.dart`. Shared owners: `DocumentSession`
+the outline column in `lib/app/shell.dart` and `lib/app/window_columns.dart`. Shared owners: `DocumentSession`
 and `DocumentSaver` (`lib/workspace/`), the Replies tab
 (`replies.dart`, `replies_pane.dart`, `gap_hunt.dart`, `gap_walk.dart`), the
 Audit tab (`chapter_audit.dart`, `audit_pane.dart`, `lib/chess/audit/`),
@@ -137,7 +137,9 @@ workspace; a line row puts the cursor on that line's last move.
 **Move lines** — Ctrl-click / Shift-click pick lines; drag them onto another
 chapter to make them its lines, or onto a line of the open chapter to fold
 them in as variations. `Move to chapter…` does the first by name, and also
-offers `New chapter…` (made with the open chapter's side). A cross-file move
+offers `New chapter…` (made with the open chapter's side). Picks last through
+moves, comments and the side changing, and go when another chapter opens or
+a line is deleted, put back or moved. A cross-file move
 writes both PGNs and the training files as one recoverable transaction,
 pinning `[LineID]` first; Ctrl+Z restores both chapters. A failed write keeps
 the move for `Retry line move` and blocks other catalog changes until it is

@@ -11,6 +11,7 @@ import 'document_history.dart';
 import 'document_saver.dart';
 import 'document_session.dart';
 import 'engine_analysis.dart';
+import 'latest.dart';
 
 /// A scratch game inside its source collection. The source session never
 /// changes, so its game list, filters, draft and file tab remain in place.
@@ -37,7 +38,7 @@ final class CollectionAnalysis extends ChangeNotifier {
   late final EngineAnalysis engine;
   final _pages = <Object, KeptBoard>{};
   Object? _key;
-  int _generation = 0;
+  final _shows = Latest();
   bool _disposed = false;
   bool active = false;
 
@@ -53,7 +54,7 @@ final class CollectionAnalysis extends ChangeNotifier {
     if (_disposed || source.shownTo != null) return false;
     source.snapshot();
     final key = _sourceKey;
-    final ticket = ++_generation;
+    final ticket = _shows.begin();
     final cursor = source.cursor.value;
     final side = source.orientation;
     final preview = source.cursor.commentLine.value;
@@ -64,13 +65,12 @@ final class CollectionAnalysis extends ChangeNotifier {
         await readChapter(name: analysisBoardName, text: gameText(source)),
         side,
       );
-      if (_disposed || ticket != _generation || key != _sourceKey) return false;
+      if (ticket.overtaken || key != _sourceKey) return false;
       page = KeptBoard(chapter)..cursor = cursor;
       _pages[key] = page;
     }
     if (!await session.restoreAnalysisPage(page) ||
-        _disposed ||
-        ticket != _generation ||
+        ticket.overtaken ||
         key != _sourceKey) {
       return false;
     }
@@ -105,10 +105,9 @@ final class CollectionAnalysis extends ChangeNotifier {
   /// [board] as this game's scratch work, in place of what it was.
   Future<void> put(Chapter board) async {
     final key = _sourceKey;
-    final ticket = ++_generation;
+    final ticket = _shows.begin();
     if (!await session.showAnalysisBoard(board) ||
-        _disposed ||
-        ticket != _generation ||
+        ticket.overtaken ||
         key != _sourceKey) {
       return;
     }
@@ -116,7 +115,7 @@ final class CollectionAnalysis extends ChangeNotifier {
   }
 
   void hide() {
-    _generation++;
+    _shows.cancel();
     if (!active) return;
     // The same page is reused on return; capture even if no other page is shown.
     session.snapshot();
@@ -132,6 +131,7 @@ final class CollectionAnalysis extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _shows.close();
     hide();
     source.anyChange.removeListener(_followSource);
     engine.dispose();

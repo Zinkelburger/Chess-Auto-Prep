@@ -15,6 +15,7 @@ import '../../engines/engine.dart';
 import '../../engines/engine_line.dart';
 import '../../engines/engine_supervisor.dart';
 import '../../engines/fixed_depth.dart';
+import '../../workspace/latest.dart';
 import 'player_analysis.dart';
 import 'player_games.dart';
 
@@ -63,7 +64,8 @@ final class PlayerHunt extends ChangeNotifier {
   Engine? _engine;
   Search? _search;
   bool running = false, _disposed = false;
-  int _ticket = 0, done = 0, total = 0;
+  int done = 0, total = 0;
+  final _hunts = Latest();
   String? error;
   List<PlayerWeakness> findings = [];
   PlayerCorpus? _corpus;
@@ -138,13 +140,13 @@ final class PlayerHunt extends ChangeNotifier {
     _scores = {};
     done = total = 0;
     _corpus = analysis.corpus;
-    if (_corpus != null && !analysis.busy) unawaited(_restore(_ticket));
+    if (_corpus != null && !analysis.busy) unawaited(_restore(_hunts.now));
     _notify();
   }
 
-  Future<void> _restore(int ticket) async {
+  Future<void> _restore(Ticket ticket) async {
     final data = await reports.read(_reportKey);
-    if (_disposed || ticket != _ticket || data == null || running) return;
+    if (ticket.overtaken || data == null || running) return;
     try {
       final positions = {for (final p in analysis.positions) p.key: p};
       final restored = <PlayerWeakness>[];
@@ -202,7 +204,7 @@ final class PlayerHunt extends ChangeNotifier {
   Future<void> start() async {
     if (running || analysis.busy || analysis.corpus == null) return;
     _corpus = analysis.corpus;
-    final ticket = ++_ticket;
+    final ticket = _hunts.begin();
     _activeReportKey = _reportKey;
     _inputs = _inputKey;
     running = true;
@@ -217,26 +219,25 @@ final class PlayerHunt extends ChangeNotifier {
     final positions = candidates.take(limit).toList();
     total = positions.length;
     _notify();
-    bool current() => !_disposed && ticket == _ticket;
     Engine? engine;
     try {
       if (!await analysis.currentSources()) {
         throw StateError('Saved games changed. Reload the player first.');
       }
-      if (!current()) return;
+      if (ticket.overtaken) return;
       switch (await launch()) {
         case Started(engine: final started):
           engine = started;
         case StartFailed(:final reason):
           throw StateError(reason);
       }
-      if (!current()) return;
+      if (ticket.overtaken) return;
       _engine = engine;
       final scores = _scores = <String, int>{};
       for (final position in positions) {
-        if (!current()) return;
+        if (ticket.overtaken) return;
         await _evaluate(engine, position, scores, ticket);
-        if (!current()) return;
+        if (ticket.overtaken) return;
         done++;
         _notify();
       }
@@ -246,16 +247,16 @@ final class PlayerHunt extends ChangeNotifier {
           'Games changed during analysis. Reload and run again.',
         );
       }
-      if (!current()) return;
+      if (ticket.overtaken) return;
       analysis.evals.addAll(scores);
       // Kept before the listeners hear of it, in case one ends this run.
       _keep();
       analysis.changed();
     } on Object catch (e) {
-      if (current()) error = '$e';
+      if (ticket.current) error = '$e';
     } finally {
       await engine?.quit();
-      if (current()) {
+      if (ticket.current) {
         running = false;
         _engine = null;
         _search = null;
@@ -268,7 +269,7 @@ final class PlayerHunt extends ChangeNotifier {
     Engine engine,
     PlayerPosition position,
     Map<String, int> scores,
-    int ticket,
+    Ticket ticket,
   ) async {
     final ourTurn = position.fen.whiteToMove == (position.side == Side.white);
     final lines = await _lines(
@@ -277,7 +278,7 @@ final class PlayerHunt extends ChangeNotifier {
       ticket,
       multiPv: !ourTurn && practical ? 3 : 1,
     );
-    if (_disposed || ticket != _ticket) return;
+    if (ticket.overtaken) return;
     final best = lines.first;
     final score = ourTurn ? best.score : best.score.negated;
     final cp = packedCp(score).cp;
@@ -305,7 +306,7 @@ final class PlayerHunt extends ChangeNotifier {
   Future<List<EngineLine>> _lines(
     Engine engine,
     Fen fen,
-    int ticket, {
+    Ticket ticket, {
     int multiPv = 1,
   }) async {
     final search = engine.analyse(fen, multiPv: multiPv, depth: depth);
@@ -314,7 +315,7 @@ final class PlayerHunt extends ChangeNotifier {
     await for (final line in search.lines) {
       lines[line.multiPv] = line;
     }
-    if (_disposed || ticket != _ticket) return const [];
+    if (ticket.overtaken) return const [];
     final best = lines[1];
     if (best == null ||
         (best.depth < depth && best.score is! MateIn && best.pv.isNotEmpty)) {
@@ -335,7 +336,7 @@ final class PlayerHunt extends ChangeNotifier {
     Engine engine,
     PlayerPosition position,
     List<EngineLine> lines,
-    int ticket,
+    Ticket ticket,
   ) async {
     final model = this.model;
     if (!practical ||
@@ -348,7 +349,7 @@ final class PlayerHunt extends ChangeNotifier {
     final best = lines.first;
     final baseline = expectedScore(packedCp(best.score));
     for (final candidate in lines) {
-      if (_disposed || ticket != _ticket) return;
+      if (ticket.overtaken) return;
       if (packedCp(best.score).cp - packedCp(candidate.score).cp > 50) continue;
       try {
         final estimate = await practicalScore(
@@ -356,11 +357,11 @@ final class PlayerHunt extends ChangeNotifier {
           candidate: candidate,
           model: model,
           rating: rating,
-          cancelled: () => _disposed || ticket != _ticket,
+          cancelled: () => ticket.overtaken,
           evaluate: (fen) async =>
               (await _lines(engine, fen, ticket)).firstOrNull,
         );
-        if (_disposed || ticket != _ticket) return;
+        if (ticket.overtaken) return;
         if (estimate != null && estimate > baseline + .05) {
           findings.add(
             PlayerWeakness(
@@ -382,7 +383,7 @@ final class PlayerHunt extends ChangeNotifier {
   void stop() {
     if (running) _keep();
     _activeReportKey = null;
-    _ticket++;
+    _hunts.cancel();
     final search = _search, engine = _engine;
     _search = null;
     _engine = null;
@@ -395,6 +396,7 @@ final class PlayerHunt extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _hunts.close();
     analysis.removeListener(_inputsChanged);
     stop();
     super.dispose();

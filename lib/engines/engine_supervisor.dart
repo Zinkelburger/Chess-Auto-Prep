@@ -57,12 +57,18 @@ Future<String?> _unrunnable(String executable) async {
 /// Owns every engine process the app starts and ends them all on
 /// [dispose]. One per app; nothing else spawns an engine.
 final class EngineSupervisor {
-  EngineSupervisor({this.closingPatience = const Duration(seconds: 12)});
+  EngineSupervisor({
+    this.closingPatience = const Duration(seconds: 12),
+    this.startProcess = Process.start,
+  });
 
   /// How long [dispose] waits for engines to confirm exit. Longer than a
   /// quit that falls back to a kill takes at most, so the warning it logs
   /// means something really did not settle.
   final Duration closingPatience;
+
+  /// How every engine's process is started.
+  final ProcessStarter startProcess;
 
   final _running = <EngineProcess>{};
   final _handshakes = <SpawnedProcess>{};
@@ -134,6 +140,7 @@ final class EngineSupervisor {
         executable,
         arguments: arguments,
         transcript: transcript,
+        startProcess: startProcess,
       );
     } on ProcessException catch (e) {
       log.e('start $name', e.message);
@@ -215,6 +222,7 @@ final class EngineSupervisor {
         arguments: ['--model', p.basename(files.model)],
         workingDirectory: files.directory,
         environment: hivemindEnvironment(files.directory, Platform.environment),
+        startProcess: startProcess,
       );
     } on Object catch (e) {
       log.e('start the bughouse engine', '$e');

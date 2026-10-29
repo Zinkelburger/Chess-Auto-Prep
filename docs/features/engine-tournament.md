@@ -102,8 +102,8 @@ every game. Board engines are paused while it runs.
 **Stop** — games in flight end after their current move and are saved as
 unfinished (`Stopped`); the run is filed `stopped`. Unfinished games score for
 nobody.
-**Failed save** — a checkpoint that cannot be written stops new games and shows
-the error with `Retry save`, which replays the exact save; nothing else may
+**Failed save** — a checkpoint that cannot be written stops new games, lets
+games in flight play to their result, and shows the error with `Retry save`, which replays the exact save; nothing else may
 start until it succeeds.
 **Open games** — a game row, or `Browse games` (game 1), opens `games.pgn` in
 the PGN Viewer at that game, so Prev/Next walk the whole run.

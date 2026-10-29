@@ -16,6 +16,7 @@ import '../engines/solitaire_evaluator.dart';
 import 'document_session.dart';
 import 'engine_analysis.dart';
 import 'engine_jobs.dart';
+import 'latest.dart';
 import 'study_drafts.dart';
 
 /// One guess the user had to be helped with or got wrong, for the summary.
@@ -41,7 +42,7 @@ final class Solitaire extends ChangeNotifier {
   final Future<EngineStart> Function()? _launch;
   final EngineJobs? _jobs;
   SolitaireEvaluator? _evaluator;
-  int _ticket = 0;
+  final _checks = Latest();
   bool _disposed = false;
   bool preparing = false;
   bool checking = false;
@@ -258,7 +259,7 @@ final class Solitaire extends ChangeNotifier {
       }
       _evaluator = evaluator;
     }
-    _ticket++;
+    _checks.cancel();
     _sourceTree = _session.tree;
     _sourceDraft = gameDraft(_session);
     _attempts.clear();
@@ -287,7 +288,7 @@ final class Solitaire extends ChangeNotifier {
     if (!_active && !setting) return;
     _reply?.cancel();
     _reply = null;
-    _ticket++;
+    _checks.cancel();
     checking = preparing = false;
     unawaited(_closeEvaluator());
     final wasActive = _active;
@@ -339,12 +340,11 @@ final class Solitaire extends ChangeNotifier {
     NodePath expected,
     String uci,
   ) async {
-    final ticket = _ticket;
+    final ticket = _checks.now;
     final fen = _sourceTree!.fenAt(_frontier);
     final gameUci = _sourceTree!.nodeAt(expected)!.uci;
     final verdict = await evaluator.compare(fen, gameUci, uci);
-    if (_disposed ||
-        ticket != _ticket ||
+    if (ticket.overtaken ||
         !active ||
         _expected != expected ||
         evaluator != _evaluator) {
@@ -447,7 +447,7 @@ final class Solitaire extends ChangeNotifier {
   void reveal() {
     final expected = _expected;
     if (expected == null || !canReveal) return;
-    _ticket++;
+    _checks.cancel();
     preparing = checking = false;
     _attempts.add(
       SolitaireAttempt(
@@ -526,7 +526,7 @@ final class Solitaire extends ChangeNotifier {
   void _turn() {
     final expected = _expected;
     if (expected == null) {
-      _ticket++;
+      _checks.cancel();
       preparing = false;
       _record = null;
       unawaited(_closeEvaluator());
@@ -580,7 +580,7 @@ final class Solitaire extends ChangeNotifier {
     final evaluator = _evaluator;
     final expected = _expected;
     if (evaluator == null || expected == null) return;
-    final ticket = _ticket;
+    final ticket = _checks.now;
     final at = _frontier;
     preparing = true;
     notifyListeners();
@@ -588,7 +588,7 @@ final class Solitaire extends ChangeNotifier {
       _sourceTree!.fenAt(at),
       _sourceTree!.nodeAt(expected)!.uci,
     );
-    if (_disposed || ticket != _ticket || at != _frontier || !active) return;
+    if (ticket.overtaken || at != _frontier || !active) return;
     preparing = false;
     problem = ready
         ? null
@@ -613,7 +613,7 @@ final class Solitaire extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _ticket++;
+    _checks.close();
     _reply?.cancel();
     unawaited(_closeEvaluator());
     _session.removeListener(_documentChanged);

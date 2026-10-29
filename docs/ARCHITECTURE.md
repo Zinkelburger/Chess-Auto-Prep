@@ -175,7 +175,9 @@ waited for but never asked about.
    into entries naming the blamed widget. Never log secrets, tokens or PGN text.
 9. **Async work has an owner and a stale check.** Capture inputs before an
    `await`; a result whose document, position or request changed is discarded.
-   Each action says whether a repeat is rejected, merged or queued. Accepted
+   A newer request overtakes an older one through `Latest`
+   (`workspace/latest.dart`), whose ticket also answers for the owner's
+   disposal. Each action says whether a repeat is rejected, merged or queued. Accepted
    durable operations follow their commit/recovery protocol even if the view
    that started them is gone. Every subscription, timer and process has a named
    owner and an explicit end. A `State` that listens to `widget.<owner>` uses

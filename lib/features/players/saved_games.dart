@@ -14,6 +14,7 @@ import '../../storage/my_accounts.dart';
 import '../../storage/my_games_files.dart';
 import '../../storage/pgn_document_store.dart';
 import '../../storage/player_reports.dart';
+import '../../workspace/latest.dart';
 import 'players.dart';
 
 /// A person's account whose downloaded games stay when their games are
@@ -77,7 +78,7 @@ final class SavedGames extends ChangeNotifier {
   /// or null when they could not be read.
   int? _countedWith;
   final _counts = <String, ({Revision revision, int games})>{};
-  int _ticket = 0;
+  final _refreshes = Latest();
   bool _disposed = false;
 
   /// The ids of people whose downloads are being deleted.
@@ -115,15 +116,15 @@ final class SavedGames extends ChangeNotifier {
   ]);
 
   Future<void> refresh() async {
-    final ticket = ++_ticket;
+    final ticket = _refreshes.begin();
     final people = players.players;
     final revision = mine.revision;
     final shared = await _sharedDownloads(people);
-    if (_disposed || ticket != _ticket) return;
+    if (ticket.overtaken) return;
     final next = <String, GamesSummary>{};
     for (final person in people) {
       final summary = await _summary(person, shared);
-      if (_disposed || ticket != _ticket) return;
+      if (ticket.overtaken) return;
       next[person.id] = summary;
     }
     _summaries = next;
@@ -265,6 +266,7 @@ final class SavedGames extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _refreshes.close();
     players.removeListener(_peopleChanged);
     super.dispose();
   }

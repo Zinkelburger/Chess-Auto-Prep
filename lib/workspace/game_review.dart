@@ -14,6 +14,7 @@ import '../engines/engine_supervisor.dart';
 import '../engines/fixed_depth.dart';
 import 'document_session.dart';
 import 'engine_jobs.dart';
+import 'latest.dart';
 
 /// A bounded whole-game review. Navigation to another game or an edit cancels
 /// it; completed results land as one undoable edit against the exact snapshot.
@@ -40,7 +41,7 @@ final class GameReview extends ChangeNotifier {
   Object? _chapter;
   bool _disposed = false;
   bool _applying = false;
-  int _ticket = 0;
+  final _reviews = Latest();
   bool running = false;
   int completed = 0;
   int total = 0;
@@ -136,7 +137,7 @@ final class GameReview extends ChangeNotifier {
   }
 
   void stop() {
-    _ticket++;
+    _reviews.cancel();
     final search = _search;
     if (search != null) unawaited(search.stop());
   }
@@ -157,7 +158,7 @@ final class GameReview extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    final ticket = ++_ticket;
+    final ticket = _reviews.begin();
     final requestedDepth = depth;
     _chapter = chapter;
     running = true;
@@ -166,8 +167,7 @@ final class GameReview extends ChangeNotifier {
     problem = null;
     _values.clear();
     notifyListeners();
-    bool current() =>
-        !_disposed && ticket == _ticket && identical(session.chapter, chapter);
+    bool current() => ticket.current && identical(session.chapter, chapter);
     try {
       final started = await launch();
       if (started case StartFailed(:final reason)) throw EngineFailure(reason);
@@ -264,14 +264,13 @@ final class GameReview extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    final ticket = ++_ticket;
+    final ticket = _reviews.begin();
     final requestedDepth = depth;
     running = true;
     problem = null;
     // Not one game's review: moving to another game does not end it.
     _chapter = null;
-    bool current() =>
-        !_disposed && ticket == _ticket && session.source == source;
+    bool current() => ticket.current && session.source == source;
     try {
       final started = await launch();
       if (started case StartFailed(:final reason)) throw EngineFailure(reason);
@@ -376,6 +375,7 @@ final class GameReview extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _reviews.close();
     stop();
     session.anyChange.removeListener(_follow);
     super.dispose();

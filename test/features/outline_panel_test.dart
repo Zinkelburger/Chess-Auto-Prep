@@ -1,12 +1,14 @@
 // The outline column itself: what a user sees in it and what their clicks
 // do. The owners are scripted, so no file is read or written.
 import 'package:chess_auto_prep/chess/pgn/chapter_heading.dart';
+import 'package:chess_auto_prep/chess/pgn/game_tree.dart' show NodePath;
 import 'package:chess_auto_prep/features/library/chapter_outline.dart';
 import 'package:chess_auto_prep/features/library/outline_panel.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart'
     show IoFailure, Opened;
 import 'package:chess_auto_prep/ui/theme.dart';
+import 'package:chess_auto_prep/workspace/chapter_commands.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -422,6 +424,39 @@ void main() {
       isFalse,
       reason: 'game 1 is now the Slav, and nobody picked it',
     );
+  });
+
+  testWidgets('lines picked with Ctrl stay picked through a comment, and go '
+      'once a line is deleted', (tester) async {
+    await show(
+      tester,
+      text: '$twoLines\n[Event "Slav"]\n[Result "*"]\n\n1. d4 d5 2. c4 c6 *\n',
+    );
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.tap(find.text('Indian'));
+    await tester.tap(find.text('Slav'));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    Iterable<LineRow> rows() =>
+        tester.widgetList<LineRow>(find.byType(LineRow));
+    Set<String> picked() => {
+      for (final row in rows())
+        if (row.selected) row.line.name,
+    };
+    expect(picked(), {'Indian', 'Slav'});
+
+    fixture.session.setComment(NodePath.of(const [0]), 'Queen pawn.');
+    await tester.pumpAndSettle();
+
+    expect(picked(), {'Indian', 'Slav'});
+    final dragged = rows().firstWhere((row) => row.line.name == 'Slav').drag;
+    expect(dragged.games, {1, 2});
+
+    deleteLine(fixture.session, 0);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Queen\'s'), findsNothing);
+    expect(picked(), isEmpty);
   });
 
   testWidgets('a delete that was refused leaves the line', (tester) async {

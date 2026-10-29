@@ -14,6 +14,7 @@ import '../storage/master_book.dart';
 import '../storage/settings_store.dart';
 import 'document_session.dart';
 import 'gap_walk.dart' show indexOfReply;
+import 'latest.dart';
 import 'local_games.dart';
 
 /// One move of the table: what the database counted, spelled for the
@@ -174,7 +175,7 @@ final class Explorer extends ChangeNotifier {
   String? _notice;
   ExplorerRecovery? _recovery;
   Timer? _rest;
-  int _ticket = 0;
+  final _asks = Latest();
   ({GameTree? tree, NodePath at})? _board;
   bool _disposed = false;
 
@@ -368,7 +369,7 @@ final class Explorer extends ChangeNotifier {
   /// is what stays on the screen if the answer does not come, with a line
   /// saying so.
   Future<void> _ask(Fen fen, ExplorerLine line, {ExplorerState? kept}) async {
-    final ticket = ++_ticket;
+    final ticket = _asks.begin();
     final choice = _choiceNow;
     if (kept == null) _show(ExplorerAsking(choice.source));
     ExplorerAnswer? answer;
@@ -380,7 +381,7 @@ final class Explorer extends ChangeNotifier {
       log.e('ask ${choice.source.title} about ${fen.value}', error);
       problem = 'Could not ask ${choice.source.title}.';
     }
-    if (_disposed || ticket != _ticket) return;
+    if (ticket.overtaken) return;
     if (answer != null) _answers.remember(fen, choice, answer, line);
     // The board has moved on, or another database was chosen: what is on
     // the screen now is about somewhere else, and a failure here is not.
@@ -439,6 +440,7 @@ final class Explorer extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _asks.close();
     _rest?.cancel();
     _session.anyChange.removeListener(_followTheBoard);
     _settings.removeListener(_followTheSettings);
