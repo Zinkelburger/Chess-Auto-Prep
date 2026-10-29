@@ -12,6 +12,7 @@ import '../storage/pgn_document_store.dart';
 import '../storage/settings_store.dart';
 import 'document_session.dart';
 import 'gap_walk.dart';
+import 'latest.dart';
 import 'replies.dart';
 
 /// What a reply row says when the position after it is answered by another
@@ -55,9 +56,8 @@ final class GapHunt extends ChangeNotifier {
   /// The chapter value and the settings the current walk is for.
   ({Object chapter, int elo, int onceIn})? _walkedFor;
 
-  /// Bumped for every walk and on dispose: a walk that finds it moved on
-  /// was overtaken.
-  int _ticket = 0;
+  /// One ticket per walk: a walk of a chapter left behind is dropped.
+  final _walks = Latest();
 
   /// The last finished walk over the open chapter, or null before the
   /// first one over it finishes. While [walking] after an edit it is the
@@ -157,14 +157,14 @@ final class GapHunt extends ChangeNotifier {
     _gapIndex = -1;
     _walkedFor = null;
     _problem = null;
-    _ticket++;
+    _walks.cancel();
     notifyListeners();
   }
 
   /// A repertoire chapter is walked; a single game of a file is not, since
   /// its gaps are not anybody's to fill.
   void _rewalk() {
-    final ticket = ++_ticket;
+    final ticket = _walks.begin();
     final chapter = _session.chapter!;
     if (_session.game != null) {
       _walk = null;
@@ -187,37 +187,36 @@ final class GapHunt extends ChangeNotifier {
   }
 
   Future<void> _walked(
-    int ticket,
+    Ticket ticket,
     GameTree tree,
     Side side, {
     required ChapterRef? source,
     required double floor,
   }) async {
-    bool overtaken() => ticket != _ticket;
     try {
       final elsewhere = await _answers.including(source, tree, side);
-      if (overtaken()) return;
+      if (ticket.overtaken) return;
       final walk = await walkGaps(
         tree: tree,
         side: side,
         floor: floor,
         shares: _model.sharesAt,
-        overtaken: overtaken,
+        overtaken: () => ticket.overtaken,
         elsewhere: elsewhere,
       );
-      if (overtaken() || walk == null) return;
+      if (ticket.overtaken || walk == null) return;
       _walk = walk;
       _walking = false;
       _gapIndex = -1;
       notifyListeners();
     } on Object catch (error) {
-      if (!overtaken()) _failed(error);
+      if (ticket.current) _failed(error);
     }
   }
 
   @override
   void dispose() {
-    _ticket++;
+    _walks.close();
     _session.anyChange.removeListener(_follow);
     _settings.removeListener(_follow);
     super.dispose();

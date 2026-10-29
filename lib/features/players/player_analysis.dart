@@ -17,6 +17,7 @@ import '../../storage/pgn_document_store.dart';
 import '../../ui/relative_time.dart';
 import '../../chess/players/player.dart';
 import '../../chess/players/download_range.dart';
+import '../../workspace/latest.dart';
 import 'player_games.dart';
 
 enum PositionOrder { frequent, lowScore, highScore, badEval }
@@ -61,7 +62,7 @@ final class PlayerAnalysis extends ChangeNotifier {
   }
 
   List<String> warnings = const [];
-  int _ticket = 0;
+  final _selections = Latest();
   bool _disposed = false;
   final Map<DocumentRef, Revision> _revisions = {};
   final Map<String, int> evals = {};
@@ -159,15 +160,14 @@ final class PlayerAnalysis extends ChangeNotifier {
   }
 
   void cancel() {
-    _ticket++;
+    _selections.cancel();
     busy = false;
     status = null;
     changed();
   }
 
-  bool _current(int ticket) => !_disposed && ticket == _ticket;
   Future<void> select(Player next, {bool download = false}) async {
-    final ticket = ++_ticket;
+    final ticket = _selections.begin();
     final same = player?.id == next.id;
     player = next;
     busy = true;
@@ -187,19 +187,19 @@ final class PlayerAnalysis extends ChangeNotifier {
     try {
       if (download) {
         await _download(next, ticket, notes);
-        if (_current(ticket) && notes.isNotEmpty) {
+        if (ticket.current && notes.isNotEmpty) {
           error = 'Some games could not be updated. Showing saved games.';
           errorDetail = notes.join('\n');
         }
       }
-      if (!_current(ticket)) return;
+      if (ticket.overtaken) return;
       final (games, revisions) = await _readGames(next, ticket, notes);
-      if (!_current(ticket)) return;
+      if (ticket.overtaken) return;
       status = 'Building openings from ${games.length} games…';
       changed();
       final result = await analyzePlayerGames(next, games);
       final fetched = await _stalestDownload(next);
-      if (!_current(ticket)) return;
+      if (ticket.overtaken) return;
       if (!await _validate(revisions, ticket)) {
         throw StateError('Games changed while being read. Reload this player.');
       }
@@ -225,7 +225,7 @@ final class PlayerAnalysis extends ChangeNotifier {
                 '${result.unread} unreadable or nonstandard',
             ].join(' · ');
     } on Object catch (e) {
-      if (_current(ticket)) {
+      if (ticket.current) {
         log.w('read player games', e);
         status = null;
         error = download
@@ -234,7 +234,7 @@ final class PlayerAnalysis extends ChangeNotifier {
         errorDetail = '$e';
       }
     } finally {
-      if (_current(ticket)) {
+      if (ticket.current) {
         busy = false;
         changed();
       }
@@ -252,9 +252,9 @@ final class PlayerAnalysis extends ChangeNotifier {
     return stalest;
   }
 
-  Future<void> _download(Player next, int ticket, List<String> notes) async {
+  Future<void> _download(Player next, Ticket ticket, List<String> notes) async {
     for (final account in next.accounts) {
-      if (!_current(ticket)) return;
+      if (ticket.overtaken) return;
       status =
           'Downloading ${account.site.label} games for ${account.username}…';
       changed();
@@ -265,16 +265,16 @@ final class PlayerAnalysis extends ChangeNotifier {
           ? await api.range(
               account.username,
               range,
-              cancelled: () => !_current(ticket),
+              cancelled: () => ticket.overtaken,
               progress: (value) {
-                if (_current(ticket)) {
+                if (ticket.current) {
                   status = value;
                   changed();
                 }
               },
             )
           : await api.recent(account.username, max: range.max);
-      if (!_current(ticket)) return;
+      if (ticket.overtaken) return;
       await _keepDownload(account.site, account.username, fetched, notes);
     }
   }
@@ -308,7 +308,7 @@ final class PlayerAnalysis extends ChangeNotifier {
 
   Future<(List<PlayerGame>, Map<DocumentRef, Revision>)> _readGames(
     Player next,
-    int ticket,
+    Ticket ticket,
     List<String> notes,
   ) async {
     final paths = next.files.toSet();
@@ -318,7 +318,7 @@ final class PlayerAnalysis extends ChangeNotifier {
     final games = <PlayerGame>[];
     final revisions = <DocumentRef, Revision>{};
     for (final path in paths) {
-      if (!_current(ticket)) return (<PlayerGame>[], <DocumentRef, Revision>{});
+      if (ticket.overtaken) return (<PlayerGame>[], <DocumentRef, Revision>{});
       final ref = DocumentRef(path);
       switch (await documents.open(ref)) {
         case Opened(:final text, :final revision):
@@ -342,15 +342,15 @@ final class PlayerAnalysis extends ChangeNotifier {
 
   Future<bool> _validate(
     Map<DocumentRef, Revision> revisions,
-    int ticket,
+    Ticket ticket,
   ) async {
     for (final e in revisions.entries) {
       final read = await documents.open(e.key);
-      if (!_current(ticket) || read is! Opened || read.revision != e.value) {
+      if (ticket.overtaken || read is! Opened || read.revision != e.value) {
         return false;
       }
     }
-    return _current(ticket);
+    return ticket.current;
   }
 
   String get fingerprint => sha256
@@ -369,21 +369,21 @@ final class PlayerAnalysis extends ChangeNotifier {
 
   Future<bool> currentSources() async {
     if (busy || corpus == null) return false;
-    final ticket = _ticket;
+    final ticket = _selections.now;
     final revisions = Map.of(_revisions);
     for (final e in revisions.entries) {
       final read = await documents.open(e.key);
-      if (!_current(ticket) || read is! Opened || read.revision != e.value) {
+      if (ticket.overtaken || read is! Opened || read.revision != e.value) {
         return false;
       }
     }
-    return _current(ticket);
+    return ticket.current;
   }
 
   @override
   void dispose() {
     _disposed = true;
-    _ticket++;
+    _selections.close();
     super.dispose();
   }
 }

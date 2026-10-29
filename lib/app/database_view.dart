@@ -7,6 +7,7 @@ import '../features/databases/databases_screen.dart';
 import '../storage/master_corpus.dart';
 import '../ui/app_action.dart';
 import '../ui/screen_keys.dart';
+import '../workspace/latest.dart';
 import '../workspace/workspace_tabs.dart';
 import '../workspace/workspace.dart';
 import 'mode.dart';
@@ -19,10 +20,10 @@ final class DatabasesView extends ModeView {
 
   final DatabaseLibrary library;
   final WorkspaceRequests requests;
-  int _request = 0;
+  final _opens = Latest();
 
   @override
-  void left() => _request++;
+  void left() => _opens.cancel();
 
   @override
   Listenable get changes => library;
@@ -65,11 +66,11 @@ final class DatabasesView extends ModeView {
   );
 
   Future<void> _open(CorpusGame game) async {
-    final request = ++_request;
+    final ticket = _opens.begin();
     final revision = library.revision;
     final kept = await library.keep(game);
     if (kept == null ||
-        request != _request ||
+        ticket.overtaken ||
         requests.mode != Mode.databases ||
         library.revision != revision) {
       return;
@@ -79,7 +80,7 @@ final class DatabasesView extends ModeView {
 
   @override
   void dispose() {
-    _request++;
+    _opens.close();
     super.dispose();
   }
 }

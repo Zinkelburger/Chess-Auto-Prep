@@ -15,6 +15,7 @@ import '../../storage/edit_scope.dart';
 import '../../storage/pgn_document_store.dart';
 import '../../storage/settings_store.dart';
 import '../../workspace/document_session.dart';
+import '../../workspace/latest.dart';
 
 /// Where the set's puzzles stand.
 sealed class SetState {
@@ -91,7 +92,7 @@ final class TacticsSet extends ChangeNotifier {
     List<Puzzle> queue,
   })?
   _queued;
-  int _loads = 0;
+  final _loads = Latest();
   bool _disposed = false;
 
   SetState get state => _state;
@@ -166,13 +167,13 @@ final class TacticsSet extends ChangeNotifier {
   /// Reads the file, unless the workspace has it open and it is read there.
   Future<void> load() async {
     if (isOpen) return _documentChanged();
-    final ticket = ++_loads;
+    final ticket = _loads.begin();
     final read = await _documents.open(ref);
-    if (_disposed || ticket != _loads || isOpen) return;
+    if (ticket.overtaken || isOpen) return;
     switch (read) {
       case Opened(:final text):
         final chapter = await readChapter(name: ref.name, text: text, game: 0);
-        if (_disposed || ticket != _loads || isOpen) return;
+        if (ticket.overtaken || isOpen) return;
         _show(chapter);
       case Absent():
         _become(const SetMissing());
@@ -225,7 +226,7 @@ final class TacticsSet extends ChangeNotifier {
       case Saved():
         // A load that read the file before this write must not put the
         // puzzle back.
-        _loads++;
+        _loads.cancel();
         if (!_disposed) _show(edited.chapter);
         return null;
       case Conflict():
@@ -244,7 +245,7 @@ final class TacticsSet extends ChangeNotifier {
     if (!isOpen) return;
     final chapter = _session.chapter;
     if (chapter == null) return;
-    _loads++;
+    _loads.cancel();
     _show(chapter);
   }
 
@@ -274,6 +275,7 @@ final class TacticsSet extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _loads.close();
     _session.removeListener(_documentChanged);
     _settings.removeListener(_settingsChanged);
     _mistakes.dispose();

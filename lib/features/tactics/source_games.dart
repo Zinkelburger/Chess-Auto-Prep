@@ -9,6 +9,7 @@ import '../../chess/tactics/source_game.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/my_accounts.dart';
 import '../../storage/my_games_files.dart';
+import '../../workspace/latest.dart';
 import 'puzzle_trainer.dart';
 import 'tactics_set.dart';
 
@@ -75,7 +76,7 @@ final class SourceGames extends ChangeNotifier {
 
   SourceView _view = const NoPuzzleUp();
   Puzzle? _following;
-  int _reads = 0;
+  final _reads = Latest();
   bool _disposed = false;
 
   SourceView get view => _view;
@@ -103,11 +104,11 @@ final class SourceGames extends ChangeNotifier {
   }
 
   Future<void> _follow(Puzzle? puzzle) async {
-    final ticket = ++_reads;
+    final ticket = _reads.begin();
     if (puzzle == null) return _become(const NoPuzzleUp());
     _become(const SourceReading());
     final game = await gameOf(puzzle);
-    if (_disposed || ticket != _reads) return;
+    if (ticket.overtaken) return;
     _become(
       game == null
           ? const NoSourceGame()
@@ -158,6 +159,7 @@ final class SourceGames extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _reads.close();
     _trainer.removeListener(_trainerChanged);
     _set.removeListener(_setChanged);
     super.dispose();

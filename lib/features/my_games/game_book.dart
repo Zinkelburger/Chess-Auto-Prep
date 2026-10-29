@@ -17,6 +17,7 @@ import '../../storage/my_games_files.dart';
 import '../../storage/settings_store.dart';
 import '../../workspace/book_verdict_view.dart' show bookMoment;
 import '../../workspace/books.dart';
+import '../../workspace/latest.dart';
 import '../../workspace/repertoire_shelf.dart';
 import 'book_words.dart' show matchesSearch;
 
@@ -137,7 +138,7 @@ final class GameBook extends ChangeNotifier {
 
   BookState _state = const BookReading();
   String _query = '';
-  int _reads = 0;
+  final _reads = Latest();
   int _watching = 0;
   bool _disposed = false;
   String? _problem;
@@ -222,7 +223,7 @@ final class GameBook extends ChangeNotifier {
   }
 
   void unwatch() {
-    if (_watching > 0 && --_watching == 0) _reads++;
+    if (_watching > 0 && --_watching == 0) _reads.cancel();
   }
 
   /// New games were saved, the usernames changed or a repertoire file was
@@ -242,10 +243,10 @@ final class GameBook extends ChangeNotifier {
   /// invalidate a comparison while the local membership owner is unchanged.
   Future<void> retry() async {
     if (_disposed) return;
-    final reads = _reads;
+    final ticket = _reads.now;
     _books.canRetry ? await _books.retry() : await _books.load();
     // Load notifications already start the current comparison when observed.
-    if (!_disposed && _reads == reads) recheck();
+    if (ticket.current) recheck();
   }
 
   /// Other time controls were chosen: the games are read again.
@@ -265,8 +266,8 @@ final class GameBook extends ChangeNotifier {
   }
 
   Future<void> _read() async {
-    final ticket = ++_reads;
-    bool overtaken() => _disposed || ticket != _reads || _watching == 0;
+    final ticket = _reads.begin();
+    bool overtaken() => ticket.overtaken || _watching == 0;
     final book = _books.active;
     _bookSeen = _bookInput;
     try {
@@ -366,6 +367,7 @@ final class GameBook extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _reads.close();
     _books.removeListener(_bookChanged);
     _settings.removeListener(_settingsChanged);
     _mistakes.removeListener(_countsChanged);

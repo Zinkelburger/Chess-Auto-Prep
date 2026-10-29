@@ -11,6 +11,7 @@ import '../../chess/pgn/tree_edit.dart';
 import '../../storage/chapter_files.dart';
 import '../../ui/selection.dart';
 import '../../workspace/document_session.dart';
+import '../../workspace/latest.dart';
 import 'library.dart';
 
 /// How many opening moves [sans] has in common with the line [above] it,
@@ -122,7 +123,7 @@ final class ChapterOutline extends ChangeNotifier {
   final _currentRows = Selection<int?>();
   bool _disposed = false;
   final _index = <ChapterRef, List<OutlineLine>>{};
-  int _indexGeneration = 0;
+  final _indexing = Latest();
   bool searching = false;
   String? searchProblem;
 
@@ -150,7 +151,7 @@ final class ChapterOutline extends ChangeNotifier {
         ];
 
   Future<void> _indexChapters() async {
-    final generation = ++_indexGeneration;
+    final ticket = _indexing.begin();
     searchProblem = null;
     if (_search.typed.trim().isEmpty) {
       searching = false;
@@ -162,18 +163,18 @@ final class ChapterOutline extends ChangeNotifier {
       if (_index.containsKey(ref) || ref == _session.source) continue;
       try {
         final chapter = await _library.chapterForSearch(ref);
-        if (_disposed || generation != _indexGeneration) return;
+        if (ticket.overtaken) return;
         if (chapter == null) {
           searchProblem = 'Some chapters could not be searched.';
           continue;
         }
         _index[ref] = _linesOf(chapter);
       } on Object {
-        if (_disposed || generation != _indexGeneration) return;
+        if (ticket.overtaken) return;
         searchProblem = 'Some chapters could not be searched.';
       }
     }
-    if (_disposed || generation != _indexGeneration) return;
+    if (ticket.overtaken) return;
     searching = false;
     notifyListeners();
   }
@@ -341,6 +342,7 @@ final class ChapterOutline extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _indexing.close();
     _search.cancel();
     _library.removeListener(_reread);
     _session.removeListener(_reread);

@@ -15,6 +15,7 @@ import '../storage/my_accounts.dart';
 import '../storage/my_games_files.dart';
 import 'file_filter.dart';
 import 'index_build.dart';
+import 'latest.dart';
 
 /// The explorer's two sources on this machine — the open file's games and
 /// the user's own — each an [OpeningIndex] answered from at once when it is
@@ -256,7 +257,7 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
   IndexBuild? _build;
   Map<String, String> _texts = const {};
   List<String> _from = const [];
-  int _reads = 0;
+  final _reads = Latest();
   bool _disposed = false;
 
   @override
@@ -287,27 +288,28 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
   @override
   void forget() {
     if (_disposed) return;
-    _reads++;
+    _reads.cancel();
     _stop();
     _state = const TreeUnbuilt();
     notifyListeners();
   }
 
   Future<void> _read() async {
-    final ticket = ++_reads;
+    final ticket = _reads.begin();
     _state = const TreeReading(0, 0);
     notifyListeners();
-    bool gone() => _disposed || ticket != _reads;
     try {
-      final read = await _gather(gone);
-      if (read == null || gone()) return;
+      final read = await _gather(() => ticket.overtaken);
+      if (read == null || ticket.overtaken) return;
       final corpus = read.corpus;
       final index = corpus.texts.isEmpty
           ? null
           : await _indexCorpus(corpus, ticket);
       // A download or a username change while this read went on calls
       // [forget], which overtakes it: what is kept here is what was read.
-      if (gone() || (index == null && corpus.texts.isNotEmpty)) return;
+      if (ticket.overtaken || (index == null && corpus.texts.isNotEmpty)) {
+        return;
+      }
       _index = index;
       _texts = Map.unmodifiable({
         for (final (i, id) in corpus.ids.indexed) id: corpus.texts[i],
@@ -320,14 +322,17 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
             )
           : const TreeBuilt();
     } on Object catch (error) {
-      if (gone()) return;
+      if (ticket.overtaken) return;
       log.w('read your games', error);
       _state = const TreeFailed('Could not read your games. Try again.');
     }
     notifyListeners();
   }
 
-  Future<OpeningIndex?> _indexCorpus(MyGamesCorpus corpus, int ticket) async {
+  Future<OpeningIndex?> _indexCorpus(
+    MyGamesCorpus corpus,
+    Ticket ticket,
+  ) async {
     final total = corpus.texts.length;
     late final IndexBuild build;
     build = _build = IndexBuild.start(
@@ -343,7 +348,7 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
     notifyListeners();
     try {
       final index = await build.result;
-      return _disposed || ticket != _reads ? null : index;
+      return ticket.overtaken ? null : index;
     } finally {
       if (identical(_build, build)) _build = null;
     }
@@ -380,6 +385,7 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
   @override
   void dispose() {
     _disposed = true;
+    _reads.close();
     _stop();
     super.dispose();
   }

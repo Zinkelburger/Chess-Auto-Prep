@@ -28,6 +28,7 @@ import '../../storage/study_files.dart';
 import '../../ui/file_names.dart';
 import '../../workspace/document_saver.dart';
 import '../../workspace/document_session.dart';
+import '../../workspace/latest.dart';
 
 /// The user's studies: the list of files under `Documents/studies/`, the
 /// search over it, and the operations that make, import, export and remove
@@ -99,7 +100,7 @@ final class Studies extends ChangeNotifier {
 
   StudiesState _state = const StudiesLoading();
   String _query = '';
-  int _refreshes = 0;
+  final _refreshes = Latest();
   bool _busy = false;
   bool _disposed = false;
 
@@ -152,10 +153,10 @@ final class Studies extends ChangeNotifier {
   /// answer, and a list already on screen stays there while the new one is
   /// read.
   Future<void> refresh() async {
-    final ticket = ++_refreshes;
+    final ticket = _refreshes.begin();
     if (_state is! StudiesLoaded) _set(const StudiesLoading());
     final listing = await _files.list();
-    if (_disposed || ticket != _refreshes) return;
+    if (ticket.overtaken) return;
     _set(switch (listing) {
       StudiesListed(:final studies) => StudiesLoaded(studies),
       StudiesUnreadable(:final detail) => _loadFailed(detail),
@@ -584,6 +585,7 @@ final class Studies extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _refreshes.close();
     sender?.dispose();
     super.dispose();
   }

@@ -14,6 +14,7 @@ import '../storage/settings_store.dart';
 import 'document_session.dart';
 import 'gap_hunt.dart';
 import 'gap_walk.dart' show GapWalk, indexOfReply;
+import 'latest.dart';
 
 /// One move the model expects at the position on the board.
 final class ReplyRow {
@@ -145,9 +146,8 @@ final class Replies extends ChangeNotifier {
   /// or an edit marks the rows again from the shares already asked.
   _TableKey? _tableFor;
 
-  /// Bumped for every ask and on dispose: an answer that finds it moved on
-  /// was overtaken.
-  int _ticket = 0;
+  /// One ticket per ask: an answer for a table no longer wanted is dropped.
+  final _asks = Latest();
 
   RepliesState get table => _table;
 
@@ -159,7 +159,7 @@ final class Replies extends ChangeNotifier {
       if (_table is RepliesEmpty) return;
       _table = const RepliesEmpty();
       _tableFor = null;
-      _ticket++;
+      _asks.cancel();
       notifyListeners();
       return;
     }
@@ -179,12 +179,12 @@ final class Replies extends ChangeNotifier {
   /// Tells the pane before it waits, so a table for another position never
   /// stays on screen while the model is asked.
   Future<void> _retable(_TableKey wanted) async {
-    final ticket = ++_ticket;
+    final ticket = _asks.begin();
     _tableFor = wanted;
     _table = const RepliesPending();
     notifyListeners();
     final answer = await _model.answerAt(wanted.fen);
-    if (ticket != _ticket) return;
+    if (ticket.overtaken) return;
     _table = switch (answer) {
       MaiaPolicy(:final shares) => _rowsOf(wanted.fen, shares),
       MaiaFailed(:final reason) => RepliesFailed(reason),
@@ -237,7 +237,7 @@ final class Replies extends ChangeNotifier {
 
   @override
   void dispose() {
-    _ticket++;
+    _asks.close();
     _session.anyChange.removeListener(_follow);
     _settings.removeListener(_follow);
     _gaps.removeListener(_follow);

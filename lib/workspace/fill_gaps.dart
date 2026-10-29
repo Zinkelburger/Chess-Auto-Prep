@@ -23,6 +23,7 @@ import '../storage/pgn_document_store.dart' as store;
 import 'document_session.dart';
 import 'engine_jobs.dart';
 import 'finds.dart';
+import 'latest.dart';
 import 'opening_names.dart';
 import 'generated_draft.dart';
 
@@ -180,10 +181,10 @@ final class FillGaps extends ChangeNotifier {
 
   int? engineDepthAt(Fen fen) => _engineDepths[fen.position];
 
-  // One generation for every delayed start, whether it is loading a saved
-  // tree or waiting for the previous root to be saved. New intent invalidates
+  // One ticket for every delayed start, whether it is loading a saved
+  // tree or waiting for the previous root to be saved. New intent overtakes
   // both paths, even if navigation returns to the same position (ABA).
-  int _startTicket = 0;
+  final _starts = Latest();
 
   /// The engine as the run under way asks it: one for both of its sides.
   EngineAnswers? _answers;
@@ -206,7 +207,7 @@ final class FillGaps extends ChangeNotifier {
   /// Whether the search stopped to follow the board is waiting to start at
   /// the newest position: a later intent supersedes the restart.
   bool get _restarting => switch (_follow) {
-    _Restarting(:final ticket) => ticket == _startTicket,
+    _Restarting(:final ticket) => ticket.current,
     _ => false,
   };
 
@@ -255,7 +256,7 @@ final class FillGaps extends ChangeNotifier {
     if (next == _board) return;
     final follow = _follow;
     final restarting = _restarting;
-    ++_startTicket;
+    _starts.cancel();
     _following = null;
     final sameDocument = next.$1 == _board?.$1 && next.$3 == _board?.$3;
     _board = next;
@@ -277,14 +278,14 @@ final class FillGaps extends ChangeNotifier {
   /// All navigation uses the same stop/save/restart path. Only the latest
   /// board wins while the previous root is still being saved.
   Future<String?> _followBoard(FillRequest request) async {
-    final ticket = ++_startTicket;
+    final ticket = _starts.begin();
     final board = _boardNow;
     final ended = _underway?.ended.future;
     _follow = _Restarting(request, ticket);
     _finishCurrent();
     _releaseSoon();
     await ended;
-    if (_disposed || ticket != _startTicket || board != _boardNow) return null;
+    if (ticket.overtaken || board != _boardNow) return null;
     _follow = _Tracking(request);
     if (!canStart) return 'Save the previous search before continuing.';
     return start(request);
@@ -333,7 +334,7 @@ final class FillGaps extends ChangeNotifier {
     final root = positionOf(_session.cursor.fen);
     if (root == null) return 'The position on the board cannot be searched.';
     final target = _boardTarget(chapter, tree);
-    ++_startTicket;
+    _starts.cancel();
     seed ??= nodeAtBoard(request: request);
     final mirror = request.method == SearchMethod.practical
         ? target.mirror
@@ -422,10 +423,10 @@ final class FillGaps extends ChangeNotifier {
   /// searched from nothing.
   Future<String?> resume(FillRequest request, {bool orAfresh = false}) async {
     if (!canStart) return 'Finish the current search or save first.';
-    final ticket = ++_startTicket;
+    final ticket = _starts.begin();
     final board = _boardNow;
     final side = _session.orientation;
-    bool moved() => ticket != _startTicket || board != _boardNow || !canStart;
+    bool moved() => ticket.overtaken || board != _boardNow || !canStart;
     String changed() => board != _boardNow
         ? 'The board changed while loading the search.'
         : 'The search request changed while loading the saved tree.';
@@ -818,7 +819,7 @@ final class FillGaps extends ChangeNotifier {
 
   void _stopFollowing() {
     _follow = const _Still();
-    ++_startTicket;
+    _starts.cancel();
   }
 
   void _finishCurrent() {
@@ -900,6 +901,7 @@ final class FillGaps extends ChangeNotifier {
     _session.anyChange.removeListener(_boardChanged);
     _jobs.removeListener(_jobsChanged);
     _disposed = true;
+    _starts.close();
     _releaseSoon();
     super.dispose();
   }
@@ -950,5 +952,5 @@ final class _Tracking extends _Follow {
 final class _Restarting extends _Tracking {
   const _Restarting(super.request, this.ticket);
 
-  final int ticket;
+  final Ticket ticket;
 }

@@ -8,6 +8,7 @@ import '../chess/book/played_game.dart';
 import '../chess/pgn/chapter.dart';
 import 'books.dart';
 import 'document_session.dart';
+import 'latest.dart';
 import 'repertoire_shelf.dart';
 
 /// What the book in use says about the game on the board, for the side the
@@ -37,7 +38,7 @@ final class BoardBook extends ChangeNotifier {
   BoardBookState get state => _state;
 
   int _watching = 0;
-  int _checks = 0;
+  final _checks = Latest();
   bool _disposed = false;
 
   /// What the last check was of: another input checks again.
@@ -51,7 +52,7 @@ final class BoardBook extends ChangeNotifier {
 
   void unwatch() {
     if (_watching > 0 && --_watching == 0) {
-      _checks++;
+      _checks.cancel();
       _checked = null;
     }
   }
@@ -77,8 +78,7 @@ final class BoardBook extends ChangeNotifier {
   }
 
   Future<void> _check(Chapter chapter, int game, Side side) async {
-    final ticket = ++_checks;
-    bool overtaken() => _disposed || ticket != _checks;
+    final ticket = _checks.begin();
     final book = _books.active;
     if (book == null) return _become(const BoardBookNotSet());
     final line = chapter.lines[game];
@@ -86,8 +86,8 @@ final class BoardBook extends ChangeNotifier {
     if (tree == null) return _become(const BoardBookIdle());
     if (_shelf.stale) {
       if (_state is! BoardBookChecked) _become(const BoardBookReading());
-      await _shelf.read(gone: overtaken);
-      if (overtaken()) return;
+      await _shelf.read(gone: () => ticket.overtaken);
+      if (ticket.overtaken) return;
       // A read that ended fresh notified, which checked again.
       if (_shelf.stale) return _become(const BoardBookFailed());
     }
@@ -117,6 +117,7 @@ final class BoardBook extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _checks.close();
     _session.removeListener(_changed);
     _shelf.removeListener(_changed);
     _books.removeListener(_changed);
