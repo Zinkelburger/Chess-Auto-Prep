@@ -75,6 +75,9 @@ final class ScriptedBook implements MasterBook {
   bool present;
   BookLookup Function(Fen, bool) answer;
   String? pgn = '[Event "TWIC"]\n\n1. d4 d5 1/2-1/2\n';
+
+  /// Thrown by a game's fetch instead of answering, when set.
+  Object? throwing;
   final asked = <(Fen, bool)>[];
   final gamesAsked = <String>[];
 
@@ -90,6 +93,7 @@ final class ScriptedBook implements MasterBook {
   @override
   Future<String?> gamePgn(String id) async {
     gamesAsked.add(id);
+    if (throwing case final error?) throw error;
     return pgn;
   }
 }

@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../diagnostics/log.dart';
 import '../chess/explorer_answer.dart';
 import '../chess/explorer_choice.dart';
 import '../storage/chapter_files.dart';
@@ -61,7 +62,13 @@ final class GameFetcher extends ChangeNotifier {
   }) async {
     _fetching = game.id;
     notifyListeners();
-    final pgn = await _databases.gamePgn(game, source);
+    String? pgn;
+    try {
+      pgn = await _databases.gamePgn(game, source);
+    } on Object catch (error) {
+      // Fetching ends either way, or every row would wait on this one.
+      log.w('fetch the explorer game ${game.id}', error);
+    }
     if (_disposed) return const GameNotKept('');
     _fetching = null;
     notifyListeners();
