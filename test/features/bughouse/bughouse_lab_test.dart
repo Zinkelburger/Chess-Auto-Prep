@@ -13,6 +13,19 @@ void main() {
   setUp(() => lab = BughouseLab());
   tearDown(() => lab.dispose());
 
+  /// [board] at its [count]th move along its line.
+  void go(BoardNumber board, int count) {
+    final moves = [
+      for (final n in lab.line.lineOf(board))
+        if (lab.line.entry(n) is LineMove) n,
+    ];
+    lab.goTo(board, count == 0 ? null : moves[count - 1]);
+  }
+
+  /// The hand edit [board] is at, as the list writes it.
+  String editHere(BoardNumber board) =>
+      handChangeText((lab.line.entry(lab.line.at(board)!) as HandEdit).changes);
+
   /// Board 1 takes a pawn; board 2's Black may drop it.
   void capture() {
     lab.play(BoardNumber.one, 'e2e4');
@@ -45,10 +58,10 @@ void main() {
     capture();
     lab.play(BoardNumber.two, 'e2e4');
     lab.play(BoardNumber.two, 'P@d5');
-    lab.go(BoardNumber.two, 1);
+    go(BoardNumber.two, 1);
     expect(lab.line.upto(BoardNumber.one), 3);
-    lab.go(BoardNumber.two, 2);
-    lab.go(BoardNumber.one, 2);
+    go(BoardNumber.two, 2);
+    go(BoardNumber.one, 2);
     expect((lab.problem as StepRefused).move.san, 'P@d5');
     expect(lab.line.upto(BoardNumber.one), 3);
     expect(lab.focus, BoardNumber.one);
@@ -93,33 +106,53 @@ void main() {
     expect(lab.line.moves.map((m) => m.san), ['e4', 'd5', 'exd5']);
     expect(lab.line.upto(BoardNumber.one), 3);
     expect(lab.position.two.pockets!.of(Side.black, Role.pawn), 1);
-    expect(handChangeText(lab.line.handChanges(BoardNumber.one, 3)), '+n');
+    expect(editHere(BoardNumber.one), '+n');
     lab.adjustHand(BoardNumber.one, Side.black, Role.knight, -1);
-    expect(lab.line.entries.whereType<HandEdit>(), isEmpty);
+    expect(lab.line.nodes.where((n) => n.entry is HandEdit), isEmpty);
     lab.adjustHand(BoardNumber.one, Side.black, Role.knight, -1);
     expect(lab.position.one.pockets!.of(Side.black, Role.knight), 0);
     for (var i = 0; i < handLimit + 2; i++) {
       lab.adjustHand(BoardNumber.two, Side.white, Role.queen, 1);
     }
     expect(lab.position.two.pockets!.of(Side.white, Role.queen), handLimit);
-    expect(handChangeText(lab.line.handChanges(BoardNumber.two, 0)), '+16Q');
+    expect(editHere(BoardNumber.two), '+16Q');
   });
 
-  test('a hand edit holds from its move on and goes when stepped back', () {
+  test('a hand edit is a step of its own; one made where the board goes on '
+      'is a variation', () {
     lab.play(BoardNumber.one, 'e2e4');
     lab.adjustHand(BoardNumber.one, Side.black, Role.knight, 2);
     lab.adjustHand(BoardNumber.one, Side.white, Role.pawn, 1);
     lab.play(BoardNumber.one, 'N@f6');
     expect(lab.position.one.pockets!.of(Side.black, Role.knight), 1);
-    lab.go(BoardNumber.one, 0);
+    go(BoardNumber.one, 1);
     expect(lab.position.one.pockets!.of(Side.black, Role.knight), 0);
-    lab.go(BoardNumber.one, 1);
+    lab.stepOn(BoardNumber.one, 1);
     expect(lab.position.one.pockets!.of(Side.black, Role.knight), 2);
-    expect(handChangeText(lab.line.handChanges(BoardNumber.one, 1)), '+P +2n');
-    // An edit made there replaces that board's later moves, as a move does.
+    expect(editHere(BoardNumber.one), '+P +2n');
     lab.adjustHand(BoardNumber.one, Side.black, Role.queen, 1);
-    expect(lab.line.moves.map((m) => m.san), ['e4']);
+    expect(lab.line.moves.map((m) => m.san), ['e4', 'N@f6']);
+    expect(lab.line.of(BoardNumber.one).map((m) => m.san), ['e4']);
     expect(lab.position.one.pockets!.of(Side.black, Role.queen), 1);
+  });
+
+  test('a different move is a variation the list can promote', () {
+    lab.play(BoardNumber.one, 'e2e4');
+    lab.play(BoardNumber.one, 'e7e5');
+    lab.step(-1);
+    lab.play(BoardNumber.one, 'c7c5');
+    final c5 = lab.line.at(BoardNumber.one)!;
+    expect(lab.line.moves.map((m) => m.san), ['e4', 'e5', 'c5']);
+    expect(lab.line.isMain(c5), isFalse);
+    // Forward from e4 follows the main line, as in the workspace.
+    lab.step(-1);
+    lab.step(1);
+    expect(lab.line.current(BoardNumber.one)!.san, 'e5');
+    lab.promote(c5);
+    expect(lab.line.isMain(c5), isTrue);
+    lab.toStart();
+    lab.toEnd();
+    expect(lab.line.current(BoardNumber.one)!.san, 'c5');
   });
 
   test('hand edits copy as comments and paste back', () {
@@ -262,7 +295,7 @@ void main() {
   test('delete from here takes the move and its board’s later moves', () {
     capture();
     lab.play(BoardNumber.two, 'e2e4');
-    lab.deleteFrom(lab.line.of(BoardNumber.one)[1]);
+    lab.deleteFrom(lab.line.lineOf(BoardNumber.one)[1]);
     expect(lab.line.of(BoardNumber.one).map((m) => m.san), ['e4']);
     expect(lab.line.of(BoardNumber.two).single.san, 'e4');
     // The capture board 2 dropped cannot go.
@@ -271,7 +304,7 @@ void main() {
     lab.play(BoardNumber.two, 'e2e4');
     lab.play(BoardNumber.two, 'P@d5');
     final before = lab.line;
-    lab.deleteFrom(lab.line.of(BoardNumber.one)[2]);
+    lab.deleteFrom(lab.line.lineOf(BoardNumber.one)[2]);
     expect((lab.problem as DeleteRefused).move.san, 'P@d5');
     expect(lab.line, same(before));
   });
@@ -281,15 +314,15 @@ void main() {
     lab.play(BoardNumber.one, 'e2e4');
     lab.play(BoardNumber.two, 'd2d4');
     lab.play(BoardNumber.one, 'e7e5');
-    final e4 = lab.line.of(BoardNumber.one).first;
+    final e4 = lab.line.lineOf(BoardNumber.one).first;
     expect(lab.linePgnThrough(e4), '1A. e4');
-    final d4 = lab.line.of(BoardNumber.two).single;
+    final d4 = lab.line.lineOf(BoardNumber.two).single;
     expect(lab.linePgnThrough(d4), '1A. e4 1B. d4');
     expect(lab.positionAfter(e4)!.one.fen, startsWith('rnbqkbnr/pppppppp/8'));
     expect(lab.positionAfter(d4)!.two.turn, Side.black);
     lab.showBoards(LabBoards.one);
     expect(
-      lab.linePgnThrough(lab.line.of(BoardNumber.one).last),
+      lab.linePgnThrough(lab.line.lineOf(BoardNumber.one).last),
       '[Variant "Crazyhouse"]\n\n1. e4 e5 *',
     );
   });
@@ -297,7 +330,7 @@ void main() {
   test('an engine line copies after the moves on the boards', () {
     lab.play(BoardNumber.one, 'e2e4');
     lab.play(BoardNumber.one, 'e7e5');
-    lab.go(BoardNumber.one, 1);
+    go(BoardNumber.one, 1);
     expect(
       lab.linePgnWith(const [
         (BoardNumber.one, 'c7c5'),

@@ -9,26 +9,19 @@ import 'table_setup.dart';
 /// is the mover's colour. The order is what makes it replayable, since a
 /// drop on one board needs the capture on the other that came before it. A
 /// hand edit is a comment where it was made, `{ Hands edited on board 1:
-/// +N −2p }`, White's pieces in upper case. Lines are wrapped at 80
-/// columns, as PGN writes them.
+/// +N −2p }`, White's pieces in upper case. Only each board's line is
+/// written, not its variations. Lines are wrapped at 80 columns, as PGN
+/// writes them.
 String bpgnMovetext(TableLine line) {
-  final tokens = <String>[];
-  (BoardNumber, int)? noted;
-  for (final entry in line.entries) {
-    switch (entry) {
-      case LineMove(:final board, :final side, :final number, :final san):
-        noted = null;
-        tokens.add('$number${_letter(board, side)}. $san');
-      case HandEdit(:final board, :final after):
-        // One comment for each place edited, with the net change there.
-        if (noted == (board, after)) continue;
-        noted = (board, after);
-        final text = handChangeText(line.handChanges(board, after));
-        if (text.isNotEmpty) {
-          tokens.add('{ $_editNote ${board.digit}: $text }');
-        }
-    }
-  }
+  final tokens = <String>[
+    for (final node in line.shown.nodes)
+      switch (node.entry) {
+        LineMove(:final board, :final side, :final number, :final san) =>
+          '$number${_letter(board, side)}. $san',
+        HandEdit(:final board, :final changes) =>
+          '{ $_editNote ${board.digit}: ${handChangeText(changes)} }',
+      },
+  ];
   final lines = <String>[];
   var current = '';
   for (final token in tokens) {

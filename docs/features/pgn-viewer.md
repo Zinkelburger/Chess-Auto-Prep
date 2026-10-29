@@ -36,32 +36,37 @@ move list, engine and explorer are described in [workspace](workspace.md).
   file.`, `Nothing matches "<query>".`, `No games match the filter.`,
   `Filtering games…`.
 - **Board** with the game counter under it — `‹ [n] of N ›`, the number
-  typeable to jump. The engine row appears only while the engine is on (E),
-  the move field while typed in (`/`), the move-note card when the move has a
-  note or while editing.
+  typeable to jump. On Read the board is quiet: the engine row appears only
+  while the engine is on (E), the move field while typed in (`/`), the
+  move-note card when the move has a note. On Edit the engine row and the move
+  field are always there.
 - **Reading card** — opens on `Moves` alone: no tab strip, no frame, a `+` in
   its corner. The game's heading (players, result · event · year, opening
   name) is the top of the move text and scrolls with it. Where the game left
   the user's book, one line under the heading says so, e.g. `You left book:
-  3...Nf6 (book 3...cxd4) · Main`, with `Show my line`.
+  3...Nf6 (book 3...cxd4) · Main`, with `Show my line`. Its foot is `Read |
+  Edit` (Ctrl+E), then the four move arrows; the viewer opens on Read.
 - **`+` menu** — the viewer's tabs (`Moves`, `Explorer`, `Filter`, `Analysis`,
-  `Game review`, `Solitaire`, `My books`), then `Edit` and `Engine on` with
-  their keys, then `New pane`.
+  `Game review`, `Solitaire`, `My books`), then `Engine on` with its key, then
+  `New pane`. A tab picked while Moves is alone opens under it.
 - **Tabs** — `Explorer` starts on `This file` here (other modes keep their
   remembered source); for a followed player it offers `All n` / `White n` /
   `Black n`. `Filter`, `Analysis` (a scratch copy of the whole game at the
   cursor, engine on; Ctrl+N), `Game review`, `Solitaire`, `My books` (what the
   book in use says about the game, from the side the board is seen from).
-- **Edit strip** (under the moves while editing or while edits are held) —
-  `Done`, Undo, the save state (`Unsaved changes`, `Unsaved changes · this
-  file is read-only`, `Edits stay unsaved until you save them`), `Discard`,
-  `Save`, plus glyphs and the comment field.
+- **Edit strip** (under the moves on Edit, or while edits are held) — Undo,
+  the save state (`Saved`, `Unsaved changes`, `Unsaved changes · this file is
+  read-only`, `Edits stay unsaved until you save them`), `Discard` and `Save`
+  while edits are held, then on Edit the glyphs and the comment field. `Read`
+  closes it; there is no `Done`.
 - **Actions menu** (Ctrl+K) — Document: `Edit` / `Done editing`, `Undo`,
   `Save changes` and `Discard changes` while edits are held; Board: `Flip
   board`, `Engine on`/`off`, `Play through` / `Stop playing`; Game: `Analyze
-  game` / `Stop analysis`, `Solitaire chess` / `Stop solitaire`, `Add game to
-  study…`; File: `Close file`, `Filter games`, `Export visible games as PGN…`,
-  `Save selection to study…`; Copy: `Copy game PGN`, `Copy FEN`.
+  game` / `Stop analysis`, `Analyze all games` (the review's `Analyze all N
+  games`), `Solitaire chess` / `Stop
+  solitaire`, `Add game to study…`; File: `Open in Study` (a study's file),
+  `Close file`, `Filter games`, `Export visible games as PGN…`, `Save
+  selection to study…`; Copy: `Copy game PGN`, `Copy FEN`.
 
 ## Actions
 
@@ -108,15 +113,23 @@ games first) and follows the one picked or entered, never one half typed;
 Enter on an empty box follows nobody. Each game turns to that player's side;
 a manual flip stands until the next game.
 
-**Edit and save** — moves played, notes and glyphs show at once but are held
-in memory while the viewer is up (`DocumentSession.holdsEdits`); Ctrl+Z undoes
-held edits one at a time (100 steps). `Save` / Ctrl+S (`Save changes`)
-commits an active comment field and writes the file; `Discard` asks `Discard
-unsaved changes?` and restores the original. A read-only file holds edits too;
-Save asks `Save your moves` → `Copy into Documents…` (a name, then a copy in
-`pgn_collections` that opens) or `Add to a study…`. Document tabs keep each
-file's held edits and undo while another is up. Failures go to the top bar's
-status line with one way out (`Retry save`, Reload).
+**Read and edit** — the viewer and Study share this card and its rule.
+`Read | Edit` at the card's foot, Ctrl+E or Actions ▸ `Edit` turns it; each
+mode keeps its own side (the viewer starts on Read, Study on Edit). On Read,
+moves played, review annotations and the like show at once but are held in
+memory (`DocumentSession.holdsEdits`): the strip says `Unsaved changes` with
+`Discard` (asks `Discard unsaved changes?`) and `Save` / Ctrl+S. On Edit every
+change is written as it is made, as in the builder, and turning to Edit writes
+what Read held first; Ctrl+Z undoes either way (100 steps held). Coming to the
+mode, or to a document tab that held edits, never writes them. A read-only
+file holds edits on Read and Edit alike, and Save asks `Save your moves` →
+`Copy into Documents…` (a name, then a copy in `pgn_collections` that opens)
+or `Add to a study…`. Document tabs keep each file's held edits and undo
+while another is up. Failures go to the top bar's status line with one way
+out (`Retry save`, Reload).
+
+**Open in Study** — a file from `Documents/studies` read here goes to Study
+on the same chapter; Study's `Read in PGN Viewer` comes back.
 
 **Unsaved edits after a crash** — held edits are checkpointed about a second
 after they settle (one write per burst, encoded off the UI isolate); leaving or
@@ -130,17 +143,30 @@ past or unreadable is moved to the recovery quarantine.
 **Game review** — `Analyze game` (Actions or the tab's button; `Stop` while
 running) → a depth-14 Stockfish pass over the main line: an evaluation graph
 (White above, Black below; ?!/?/?? dots; hover reads, click or drag goes to a
-move), per-side mark counts and `ACPL`. With `Annotate PGN` on it also writes
-`[%eval]` values, glyphs at 50/100/200 cp loss (inaccuracy/mistake/blunder,
-never over the user's own glyph), a `Mistake. Nf3 was best.` note and up to
-eight plies of the better line as a variation. Every addition is marked
-(`[%cap_review_eval]`, `[%cap_review_nag N]`, `[%cap_review_line N]`) so
-turning `Annotate PGN` off removes exactly that; an existing `[%eval]` is kept;
-a review line the user played on or wrote in becomes theirs. The review is one
-held, undoable edit — never written until Save. Stop, an edit or another game
-cancels it and drops late results. Read-only files get the graph only
-(`This file is read-only`). The graph also reads evaluations already in the
-PGN.
+move), per-side mark counts and `ACPL` (each evaluation held within ±1000
+first, as Lichess counts it). Moves are judged as Lichess judges them: by the
+winning chances the side gave away (`2 / (1 + e^(-0.00368208·cp)) − 1`), 0.1
+an inaccuracy, 0.2 a mistake, 0.3 a blunder; a forced mate appearing against
+the mover is `Checkmate is now unavoidable` and one slipping away `Lost forced
+checkmate sequence`, an inaccuracy, mistake or blunder by what was left
+(beyond ±999, ±700, else). A move the engine itself chose is never marked.
+With `Annotate PGN` on (the default) it also writes `[%eval]` values, the
+glyph (never over the user's own), a `Mistake. Nf3 was best.` note in
+Lichess's words and up to eight plies of the better line as a variation.
+Every addition is marked (`[%cap_review_eval]`, `[%cap_review_nag N]`,
+`[%cap_review_line N]`) so turning `Annotate PGN` off removes exactly that; an
+existing `[%eval]` is kept; a review line the user played on or wrote in
+becomes theirs. The review is one undoable edit, held on Read and written at
+once on Edit. Stop, an edit or another game cancels it and drops late results.
+`Analyze all N games` (a file of several games, `Annotate PGN` on, games
+without a review) reviews each such game in turn, `Game 2 of 5 · 19 / 34
+positions`, writing each into its own game as it ends (one undoable edit per
+game); moving between the games goes on while it runs, Stop or another file
+ends it, and a game whose main line changed meanwhile is left as it is.
+Read-only files get the graph only (`This file is read-only`). The graph also
+reads evaluations already in the PGN. One rule marks a move for the graph,
+the counts and the annotations; a review read back from the file shows the
+marks it wrote.
 
 **Solitaire** — `Solitaire chess` → the Solitaire tab: `Guess for` White /
 Black (default: the side at the bottom), `Start at` `Beginning` / `Current
@@ -214,8 +240,9 @@ Keys: ←/→, Home/End, ↑/↓ (game), Enter/Esc (variation), F, E, Space, Ctr
   column defaults to half the workspace, drawn as a near-black rounded card
   with moves in mono 16 (owner, 2026-09-21).
 - No eval bar anywhere in the app (owner, 2026-09-21).
-- Reading shows no editing chrome; editing is the strip, opened by Ctrl+E or
-  Actions ▸ Edit (owner, 2026-09-21).
+- Reading shows no editing chrome; editing is the strip, opened by `Read |
+  Edit` at the card's foot, Ctrl+E or Actions ▸ Edit (owner, 2026-09-21,
+  2026-10-24).
 - Comments are laid out: paragraphs, inline moves (hover shows a board; click
   shows the position without writing), bare-FEN diagrams, headings and quotes
   (owner, 2026-09-21).
@@ -227,9 +254,14 @@ Keys: ←/→, Home/End, ↑/↓ (game), Enter/Esc (variation), F, E, Space, Ctr
 - A file with chapters lists its games under them; the chapter holding the
   board's game opens and stays open so rows never move under the pointer
   (owner, 2026-09-22).
-- Edits in the viewer are held until the user saves; the builder and Study
-  keep autosaving (owner, 2026-09-23). A read-only file holds edits too and
-  Save asks where they go (owner, 2026-09-27).
+- The viewer and Study are one card, as alike as they can be: on Read edits
+  are held until saved, on Edit they autosave, and the two modes differ only
+  in their list and which side of the switch they open on (owner,
+  2026-10-24: "unify them as much as possible"). A
+  read-only file holds edits on both sides and Save asks where they go
+  (owner, 2026-09-27).
+- Mistakes are marked by lost winning chances, as Lichess marks them, and
+  `Annotate PGN` is on by default (owner, 2026-10-24).
 - No colour for the unsaved state and no snackbars: failures go to the top
   bar's status line with one action (owner, 2026-09-23).
 - A file opens as a book: moves alone, no engine, no extra buttons until used

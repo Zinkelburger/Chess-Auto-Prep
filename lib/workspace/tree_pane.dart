@@ -8,6 +8,7 @@ import '../ui/theme.dart';
 import 'repertoire_tree.dart';
 import 'document_session.dart';
 import 'line_preview.dart';
+import 'preview_target.dart';
 import '../ui/app_keys.dart';
 import '../ui/move_notation.dart';
 
@@ -267,53 +268,43 @@ class _MoveRow extends StatelessWidget {
   /// Opens the file with the most lines at the move; null when nothing can.
   final VoidCallback? onOpen;
 
-  Offset _anchor(BuildContext context) {
-    final box = context.findRenderObject() as RenderBox;
-    return box.localToGlobal(Offset(box.size.width / 2, box.size.height));
-  }
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final muted = monoText.copyWith(color: scheme.onSurfaceVariant);
     return Material(
       color: Colors.transparent,
-      child: MouseRegion(
-        onEnter: (_) => onHover(_anchor(context)),
-        onExit: (_) => onLeave(),
-        child: InkWell(
-          onTap: onTap,
-          child: SizedBox(
-            height: replyRowHeight,
-            child: Row(
-              children: [
-                const SizedBox(width: Space.m),
-                SizedBox(
-                  width: explorerMoveWidth,
-                  child: _move(context, scheme),
+      child: PreviewTarget(
+        onHover: onHover,
+        onLeave: onLeave,
+        onTap: onTap,
+        child: SizedBox(
+          height: replyRowHeight,
+          child: Row(
+            children: [
+              const SizedBox(width: Space.m),
+              SizedBox(width: explorerMoveWidth, child: _move(context, scheme)),
+              SizedBox(
+                width: treeLinesWidth,
+                child: Text(
+                  '${row.lines}',
+                  textAlign: TextAlign.right,
+                  style: muted,
                 ),
-                SizedBox(
-                  width: treeLinesWidth,
-                  child: Text(
-                    '${row.lines}',
-                    textAlign: TextAlign.right,
-                    style: muted,
-                  ),
+              ),
+              const SizedBox(width: Space.m),
+              Expanded(
+                child: Text(
+                  row.goesOn,
+                  style: muted,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(width: Space.m),
-                Expanded(
-                  child: Text(
-                    row.goesOn,
-                    style: muted,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: Space.m),
-                SizedBox(width: treeFilesWidth, child: _files(context)),
-                const SizedBox(width: Space.m),
-              ],
-            ),
+              ),
+              const SizedBox(width: Space.m),
+              SizedBox(width: treeFilesWidth, child: _files(context)),
+              const SizedBox(width: Space.m),
+            ],
           ),
         ),
       ),

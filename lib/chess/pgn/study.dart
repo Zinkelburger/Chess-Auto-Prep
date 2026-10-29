@@ -12,8 +12,11 @@ import 'move_text.dart';
 /// Six tags belong to the study and are written again whenever the chapter
 /// they describe is saved — `Event`, `StudyName`, `ChapterName`,
 /// `Orientation`, and `FEN` with `SetUp` for a chapter that does not start
-/// from the initial position. Every other tag a file carries is the file's,
-/// and is written back exactly as it was read.
+/// from the initial position. `Event` is the study's only while it is the
+/// `Study: Chapter` Lichess writes for a chapter with none of its own: a
+/// game's real event (`Tata Steel`, the club championship) is the
+/// chapter's, as it is on Lichess. Every other tag a file carries is the
+/// file's, and is written back exactly as it was read.
 
 /// The tags this app writes for itself. A chapter's other tags — `Result`,
 /// `ECO`, `Annotator`, whatever else a file brought — are never touched.
@@ -166,7 +169,10 @@ List<PgnHeader> withStudyTags(
   final out = <PgnHeader>[];
   final placed = <String>{};
   for (final line in tags) {
-    if (line is! PgnTag || !studyOwnedTags.contains(line.key)) {
+    if (line is! PgnTag ||
+        !studyOwnedTags.contains(line.key) ||
+        (line.key == 'Event' && ownEvent(line.value, study: study))) {
+      if (line is PgnTag && line.key == 'Event') placed.add('Event');
       out.add(line);
       continue;
     }
@@ -185,6 +191,13 @@ List<PgnHeader> withStudyTags(
     if (!placed.contains(key)) out.add(PgnTag(key, value, trailer: trailer));
   }
   return List.unmodifiable(out);
+}
+
+/// Whether [event] is a game's own event rather than the `Study: Chapter`
+/// the study writes for a chapter without one.
+bool ownEvent(String event, {required String study}) {
+  final value = event.trim();
+  return value.isNotEmpty && value != '?' && !value.startsWith('$study: ');
 }
 
 Map<String, String> _studyTags({

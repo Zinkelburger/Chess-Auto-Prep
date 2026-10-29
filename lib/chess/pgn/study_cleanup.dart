@@ -10,6 +10,20 @@ import 'games_written.dart';
 import 'rewrite_gate.dart';
 import 'study.dart';
 
+/// Tags the tag editor neither shows nor takes: the id training records a
+/// line under, which an edit would cut its progress off from.
+const hiddenStudyTags = {'LineID'};
+
+/// The tags the tag editor offers a chapter: everything but what the study
+/// writes for itself and [hiddenStudyTags]. A game's own `Event` is the
+/// chapter's to edit; the study's `Study: Chapter` is not shown.
+bool editableStudyTag(PgnTag tag, {required String study}) =>
+    !hiddenStudyTags.contains(tag.key) &&
+    (!studyOwnedTags.contains(tag.key) ||
+        (tag.key == 'Event' && ownEvent(tag.value, study: study)));
+
+/// [values] as the chapter's editable tags, in place of the ones it had. An
+/// `Event` taken away gives the chapter back the study's own.
 ChapterEdit editStudyTags(
   Chapter chapter,
   int index,
@@ -19,7 +33,8 @@ ChapterEdit editStudyTags(
     if (!RegExp(r'^[A-Za-z][A-Za-z0-9_]*$').hasMatch(key)) {
       return ChapterEditRefused('Invalid tag name: $key.');
     }
-    if (studyOwnedTags.contains(key)) {
+    if ((studyOwnedTags.contains(key) && key != 'Event') ||
+        hiddenStudyTags.contains(key)) {
       return ChapterEditRefused('$key belongs to the study.');
     }
   }
@@ -29,11 +44,28 @@ ChapterEdit editStudyTags(
       'Use a PGN result: *, 1-0, 0-1 or 1/2-1/2.',
     );
   }
+  final study = studyNameIn(chapter.lines) ?? chapter.name;
   return _edit(chapter, index, (line, tree) {
     final remaining = {...values};
     final tags = <PgnHeader>[];
     for (final tag in line.tags) {
-      if (tag is! PgnTag || studyOwnedTags.contains(tag.key)) {
+      // `Event` keeps its place, whoever's it is: a game in the file starts
+      // at it.
+      if (tag is PgnTag && tag.key == 'Event') {
+        final typed = remaining.remove('Event');
+        final name = studyChapterName(line, index: index, study: study);
+        tags.add(
+          typed == null
+              ? (editableStudyTag(tag, study: study)
+                    ? PgnTag('Event', '$study: $name', trailer: tag.trailer)
+                    : tag)
+              : typed == tag.value
+              ? tag
+              : PgnTag('Event', typed, trailer: tag.trailer),
+        );
+        continue;
+      }
+      if (tag is! PgnTag || !editableStudyTag(tag, study: study)) {
         tags.add(tag);
         continue;
       }
@@ -47,11 +79,56 @@ ChapterEdit editStudyTags(
       }
     }
     final ending = line.tags.firstOrNull?.trailer ?? '\n';
-    tags.addAll(
-      remaining.entries.map((e) => PgnTag(e.key, e.value, trailer: ending)),
-    );
+    for (final MapEntry(:key, :value) in remaining.entries) {
+      final tag = PgnTag(key, value, trailer: ending);
+      // A game in the file starts at its Event.
+      key == 'Event' ? tags.insert(0, tag) : tags.add(tag);
+    }
     return (tags: tags, tree: tree, result: result ?? line.terminator);
   });
+}
+
+/// [chapter] with the tag [key] set to the value [values] gives each game it
+/// names, as one edit: where Lichess keeps the chapters a study was sent as.
+/// The tag is replaced where the game has it and added after its tags where
+/// it does not; a game that cannot be written whole is left as it was.
+ChapterEdit withStudyTag(Chapter chapter, String key, Map<int, String> values) {
+  var current = chapter;
+  final written = <int>{};
+  for (final MapEntry(key: index, :value) in values.entries) {
+    if (index < current.lines.length &&
+        tagValue(current.lines[index].tags, key) == value) {
+      continue;
+    }
+    final edit = _edit(current, index, (line, tree) {
+      final ending = line.tags.firstOrNull?.trailer ?? '\n';
+      final has = line.tags.any((tag) => tag is PgnTag && tag.key == key);
+      return (
+        tags: [
+          for (final tag in line.tags)
+            if (tag is PgnTag && tag.key == key)
+              PgnTag(key, value, trailer: tag.trailer)
+            else
+              tag,
+          if (!has) PgnTag(key, value, trailer: ending),
+        ],
+        tree: tree,
+        result: line.terminator,
+      );
+    });
+    if (edit case ChapterEdited(chapter: final next)) {
+      current = next;
+      written.add(index);
+    }
+  }
+  if (written.isEmpty) return const ChapterUnchanged();
+  return ChapterEdited(
+    current,
+    GamesArranged.of(
+      GamesWritten(rewritten: written),
+      before: current.lines.length,
+    ),
+  );
 }
 
 ChapterEdit resetStudyChapter(Chapter chapter, int index, Fen root) {

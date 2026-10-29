@@ -73,7 +73,8 @@ Top to bottom, left to right:
   to a row; a chevron (`Show full line`) opens it out. Resting on a move floats
   a 200 px board; clicking plays the line up to it. The pane keeps its height
   on, off, paused or showing settings, so the board never changes size; a
-  quiet board (the viewer) keeps it blank until the engine is on, and a hidden
+  quiet board (the viewer and Study on Read) keeps it blank until the engine
+  is on, and a hidden
   puzzle answer keeps it blank too.
 - **Reading card** — the pane tabs (`WorkspaceTab`: `Moves`, `Analysis`, `Game
   review`, `Solitaire`, `Train`, `Replies`, `Explorer`, `Expectimax`, `Audit`,
@@ -84,8 +85,9 @@ Top to bottom, left to right:
   each comment a paragraph under its move (laid out: paragraphs, headings,
   quotes, bare-FEN diagrams, inline moves that float a board on hover and play
   when they follow on), each variation an indented block after the move it
-  replaces. Glyphs follow the SAN. The editing strip opens under it with Ctrl+E
-  (see [pgn-viewer](pgn-viewer.md) for the held-edit strip).
+  replaces. Glyphs follow the SAN. The editing strip opens under it with Ctrl+E,
+  or with `Edit` at the card's foot in the viewer and Study (see
+  [pgn-viewer](pgn-viewer.md) for `Read | Edit` and held edits).
 - **Explorer** — a source row `Book | Masters | Lichess | TWIC | This file |
   My games` (one typeable `Database` box when narrow), `Filters` at its end for
   the chosen source's chips (folded by default; Lichess `Speed` and `Rating`,
@@ -121,7 +123,8 @@ Top to bottom, left to right:
 **Play a move** — board, move field, or an explorer row → an existing move
 only moves the cursor; a new one at a branch point is added as the last
 variation, with no notice even when it transposes. Where the document takes
-edits it is written (builder and Study autosave; the viewer holds it).
+edits it is written (the builder, and the viewer and Study on Edit, autosave;
+on Read it is held).
 
 **Type a move** — SAN or UCI in any case (`nf3`, `g1f3`, `0-0`, `e1h1`,
 `e8=Q`, `e7e8q`, `N1f3`; marks and needless disambiguation optional) → played
@@ -132,18 +135,20 @@ In a drill, a move's first letter typed on the lesson goes to the field.
 
 **Move menu** (right-click a move, Shift+F10) — `Promote variation`, `Make
 main line`, `Delete from here` (no confirmation; Ctrl+Z restores), `Copy line
-PGN`, `Copy FEN`, plus the mode's entries (e.g. `Add line to study…` in the
-viewer).
+PGN`, `Copy FEN`, plus the mode's entries (`Comment this move` and `Add line
+to study…` in the viewer and Study, the quiz markers in Study).
 
-**Edit a note or glyph** — Ctrl+E or Actions ▸ `Edit` opens the strip and the
-pencil on the move note. The comment field edits the prose only; machine
+**Edit a note or glyph** — Ctrl+E, Actions ▸ `Edit`, or `Edit` at the card's
+foot in the viewer and Study opens the strip; in the builder also the pencil on
+the move note. The comment field edits the prose only; machine
 tokens are re-attached after the prose on save, clearing the prose keeps them,
-and a comment left empty is removed rather than written as `{}`. Undo is
-Ctrl+Z.
+and a comment left empty is removed rather than written as `{}`. Clicking
+another move while typing goes there in one click, and the note stays on the
+move it was typed for. Undo is Ctrl+Z.
 
 **Draw shapes** — a drawing is written into the move's comment where the
-document takes edits (builder, Study, the analysis board, the viewer while
-editing); elsewhere it stays until the position changes. Drawn twice a shape
+document takes edits (the builder, the analysis board, the viewer and Study on
+Edit); elsewhere it stays until the position changes. Drawn twice a shape
 goes; another colour recolours it. A left click on the board takes the
 comment's shapes out where edits are taken, else hides them until the
 position changes; the threat stays.
@@ -207,8 +212,8 @@ layout` restores the mode's default.
 
 Every binding is an `AppKey`: handlers bind it, tooltips name it and Settings ▸
 Shortcuts lists it. Board: ←/→, Home/End (also PgUp/PgDn), Enter (into the
-variation at the cursor), Esc (out of the variation, then the edit strip, then
-a sitting), F flip, E engine, Ctrl+E edit, Ctrl+Z undo, Ctrl+S save, `/` move
+variation at the cursor), Esc (out of the variation, then the edit strip
+where there is no `Read | Edit`, then a sitting), F flip, E engine, Ctrl+E edit, Ctrl+Z undo, Ctrl+S save, `/` move
 field, Ctrl+Tab / Ctrl+Shift+Tab / Ctrl+W tabs. Window: Ctrl+K Actions, Ctrl+,
 settings, Ctrl+B list, Ctrl+P Positions, Ctrl+O open, Ctrl+V / Ctrl+Shift+V
 paste, Ctrl+N Analysis tab, Ctrl+Shift+E set up, Ctrl+G search from the board,

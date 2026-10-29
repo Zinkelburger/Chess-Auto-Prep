@@ -11,6 +11,7 @@ Static Astro site deployed to Cloudflare Pages. Browser preparation tools, one s
 | `/bughouse`           | Bughouse — lichess.org/analysis/crazyhouse with + and − on every piece in both hands, lila's board editor and a sit panel; Lichess's crazyhouse Fairy-Stockfish in the browser | `src/analysis/*`, `../../../tools/prepare_crazyhouse_web.py` |
 | `/bughouse-puzzles`   | Bughouse Puzzles — mates and tactics mined from FICS games, reserves frozen | `src/bughouse-puzzles/*`, `public/bughouse-puzzles/` |
 | `/charles-clock`      | Charles Clock — a full-screen phone clock with its own `<html>`      | `src/pages/charles-clock.astro`, `src/lib/charles-clock.ts` |
+| `/meow-chess/`        | Meow Chess — the Meow-Chess tournament director app, a Flutter web build copied in from its own repository | `public/meow-chess/` (built), `functions/meow-chess/fetch.js` |
 
 `/` is the front page linking the tools. `/dashboard` forwards to
 `/twic-notifications` (with the query string, so old login emails keep
@@ -90,7 +91,10 @@ kept on its position and carried through the moves after it; the engine
 always gets a bare FEN. Hands are capped at 16 of a piece and 64 pieces in
 all (the crazyhouse net has 16 slots a piece). The tree is kept in
 `localStorage` and comes back on a plain `/bughouse` and on reload; a `?fen=`
-link opens that position unless it is the saved one.
+link opens that position unless it is the saved one. The FEN box, `?fen=`
+links and PGN write the hand as Lichess does, a ninth rank
+(`…/RNB1K2R/PNpnb w …`); they and the board editor read that or brackets,
+and positions inside the page stay in chessops' bracket form.
 
 `engine.ts` runs Fairy-Stockfish 14 with Lichess's crazyhouse NNUE, the
 engine of lichess.org/analysis/crazyhouse (`@lichess-org/stockfish-web`),
@@ -284,6 +288,30 @@ Styles: the shared trainer vocabulary (`src/styles/trainer.css`, also used by
 the Tactics Trainer), the board and pocket in `src/styles/bughouse-board.css`
 (Lichess's default brown at full brightness, lila's pocket; also used by the
 analysis boards), plus `src/styles/bughouse-puzzles.css`.
+
+## Meow Chess
+
+`public/meow-chess/` is the browser build of
+[Meow-Chess](https://github.com/Zinkelburger/Meow-Chess), a separate Flutter app,
+committed here as built files because Pages cannot build Flutter. **It does not
+update itself.** When Meow-Chess gains a feature or fix worth having on the
+site, rebuild and replace it from the Meow-Chess checkout:
+
+```sh
+python3 scripts/build_web.py --site ../Chess-Auto-Prep   # in Meow-Chess
+```
+
+then commit `public/meow-chess/` here. `public/meow-chess/meow-build.json`
+names the Meow-Chess commit it came from. Meow-Chess's `docs/WEB.md` describes
+what differs from the desktop app.
+
+`functions/meow-chess/fetch.js` is a Cloudflare Pages Function, the site's only
+server-side code apart from `server.py`: Pages runs every file under
+`functions/` at its path. It fetches pages for the app at
+`/meow-chess/fetch?url=…`, because US Chess, FIDE and club websites send no CORS
+headers and a page cannot read them itself. It fetches only HTTPS URLs on its
+host allowlist; add a host there when Meow-Chess learns to read a new site.
+`npx wrangler pages dev dist` runs it locally after a build.
 
 ## Checks
 

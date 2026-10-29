@@ -17,7 +17,11 @@ import '../support/window_fixture.dart';
 /// and the engine's lines, over a scripted engine.
 void main() {
   late WindowFixture w;
-  setUp(() => w = WindowFixture());
+  TestGesture? mouse;
+  setUp(() {
+    w = WindowFixture();
+    mouse = null;
+  });
   tearDown(() => w.dispose());
 
   Future<void> toBughouse(WidgetTester tester) async {
@@ -38,6 +42,23 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// A hand's + or −, with the pointer over its slot so it shows.
+  Future<Finder> handStep(WidgetTester tester, String tooltip) async {
+    final step = find.byTooltip(tooltip);
+    final at = tester.getCenter(step);
+    if (mouse case final pointer?) {
+      await pointer.moveTo(at);
+    } else {
+      final pointer = mouse = await tester.createGesture(
+        kind: PointerDeviceKind.mouse,
+      );
+      await pointer.addPointer(location: at);
+      addTearDown(pointer.removePointer);
+    }
+    await tester.pump();
+    return step;
+  }
+
   testWidgets(
     'Bughouse is in the mode menu only when the build has the engine',
     (tester) async {
@@ -55,24 +76,31 @@ void main() {
     expect(find.byType(Chessboard), findsOneWidget);
     // With one board the clock cases name the colours.
     expect(find.text('White may sit'), findsOneWidget);
-    final more = find.byTooltip('One more knight for Black');
+    // Until the pointer is over the hand its + and − are hidden.
+    await tester.tap(
+      find.byTooltip('One more knight for Black'),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(w.lab.position.one.pockets!.of(Side.black, Role.knight), 0);
+    final more = await handStep(tester, 'One more knight for Black');
     await tester.tap(more);
     await tester.tap(more);
     await tester.pumpAndSettle();
     expect(w.lab.position.one.pockets!.of(Side.black, Role.knight), 2);
-    await tester.tap(find.byTooltip('One knight fewer for Black'));
+    await tester.tap(await handStep(tester, 'One knight fewer for Black'));
     await tester.pumpAndSettle();
     expect(w.lab.position.one.pockets!.of(Side.black, Role.knight), 1);
     expect(w.bughouse.starts, 0);
   });
 
-  testWidgets('two boards show both, the Time chips, and drop across', (
+  testWidgets('two boards show both, the sit chips, and drop across', (
     tester,
   ) async {
     await toBughouse(tester);
     await twoBoards(tester);
     expect(find.byType(Chessboard), findsNWidgets(2));
-    expect(find.text('Time'), findsOneWidget);
+    expect(find.text('A + B may sit'), findsOneWidget);
     w.lab
       ..play(BoardNumber.one, 'e2e4')
       ..play(BoardNumber.one, 'd7d5')
@@ -95,7 +123,7 @@ void main() {
     tester,
   ) async {
     await toBughouse(tester);
-    await tester.tap(find.byTooltip('One more knight for White'));
+    await tester.tap(await handStep(tester, 'One more knight for White'));
     await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const ValueKey(('reserve', Seat.a, Role.knight))),
@@ -148,7 +176,7 @@ void main() {
     expect(w.lab.line.moves.single.san, 'Na3');
   });
 
-  testWidgets('the Time chips decide who may sit', (tester) async {
+  testWidgets('the sit chips decide who may sit', (tester) async {
     await toBughouse(tester);
     await twoBoards(tester);
     await tester.tap(find.text('A + B may sit'));
@@ -205,7 +233,7 @@ void main() {
     tester,
   ) async {
     await toBughouse(tester);
-    await tester.tap(find.byTooltip('One more queen for White'));
+    await tester.tap(await handStep(tester, 'One more queen for White'));
     w.lab.play(BoardNumber.one, 'e2e4');
     await tester.pumpAndSettle();
     await tester.tap(find.text('Edit board'));

@@ -2,28 +2,44 @@ import 'package:flutter/material.dart';
 
 import '../../chess/pgn/game_text.dart';
 import '../../chess/pgn/study.dart';
+import '../../chess/pgn/study_cleanup.dart';
 import '../../ui/theme.dart';
 
+/// The chapter's tags to edit, the game's own first: who played, the
+/// result, when and where, ready to fill in from a scoresheet. A tag left
+/// empty is not written.
 Future<Map<String, String>?> showStudyTags(
   BuildContext context,
-  List<PgnHeader> tags,
-) => showDialog<Map<String, String>>(
+  List<PgnHeader> tags, {
+  required String study,
+}) => showDialog<Map<String, String>>(
   context: context,
-  builder: (_) => _Tags(tags: tags),
+  builder: (_) => _Tags(tags: tags, study: study),
 );
 
+/// The tags a game from a scoresheet has, always offered.
+const _gameTags = ['White', 'Black', 'Result', 'Date', 'Event', 'Round'];
+
 class _Tags extends StatefulWidget {
-  const _Tags({required this.tags});
+  const _Tags({required this.tags, required this.study});
   final List<PgnHeader> tags;
+  final String study;
   @override
   State<_Tags> createState() => _TagsState();
 }
 
 class _TagsState extends State<_Tags> {
-  late final _rows = [
-    for (final tag in widget.tags.whereType<PgnTag>())
-      if (!studyOwnedTags.contains(tag.key)) _TagRow(tag.key, tag.value),
-  ];
+  late final _rows = () {
+    final shown = [
+      for (final tag in widget.tags.whereType<PgnTag>())
+        if (editableStudyTag(tag, study: widget.study)) tag,
+    ];
+    return [
+      for (final key in _gameTags) _TagRow(key, tagValue(shown, key) ?? ''),
+      for (final tag in shown)
+        if (!_gameTags.contains(tag.key)) _TagRow(tag.key, tag.value),
+    ];
+  }();
   final _removed = <_TagRow>[];
   String? _problem;
   @override
@@ -107,6 +123,7 @@ class _TagsState extends State<_Tags> {
     final values = <String, String>{};
     for (final row in _rows) {
       final key = row.key.text.trim();
+      if (row.value.text.trim().isEmpty) continue;
       if (!RegExp(r'^[A-Za-z][A-Za-z0-9_]*$').hasMatch(key)) {
         setState(
           () => _problem =
@@ -114,7 +131,8 @@ class _TagsState extends State<_Tags> {
         );
         return;
       }
-      if (studyOwnedTags.contains(key)) {
+      if ((studyOwnedTags.contains(key) && key != 'Event') ||
+          hiddenStudyTags.contains(key)) {
         setState(() => _problem = '$key belongs to the study.');
         return;
       }

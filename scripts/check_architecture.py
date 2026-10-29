@@ -104,7 +104,10 @@ def check_imports(path: Path, lines: list[str], findings: list[str]) -> None:
                 findings.append(f"{where}: feature {mine} imports feature {theirs}")
 
 
-def check_functions(path: Path, lines: list[str], findings: list[str]) -> None:
+def check_functions(path: Path, lines: list[str], findings: list[str], lengths: bool = True) -> None:
+    """Nesting in each function whose signature is on one line, and its
+    length where [lengths]: in a test, whose cases are closures rather than
+    members. A lib file's lengths are its members', from check_members."""
     where = path.relative_to(REPO)
     i = 0
     while i < len(lines):
@@ -126,7 +129,7 @@ def check_functions(path: Path, lines: list[str], findings: list[str]) -> None:
                 end = j
                 break
         length = end - i + 1
-        if length > MAX_FUNCTION_LINES:
+        if lengths and length > MAX_FUNCTION_LINES:
             findings.append(f"{where}:{i + 1}: function is {length} lines (max {MAX_FUNCTION_LINES})")
         # Braces on the function line itself count as depth 1.
         if deepest - 1 > MAX_NESTING and indent <= 2:
@@ -278,6 +281,63 @@ def _starts_expression(head: str) -> bool:
 
 
 
+DECLARATION = re.compile(r"^(?:(?:abstract|final|base|sealed|interface|mixin)\s+)*(?:class|mixin|enum|extension)\b")
+CALL_HEAD = re.compile(r"\w\s*(?:<[\w\s,<>?]*>)?\s*\(|\bget\s+\w+\s*$")
+
+
+# A composition root lists every part it builds in one call: one job,
+# however long. `// long: <why>` on the line before it says so.
+LONG_WAIVER = re.compile(r"^\s*// long: \S")
+
+
+def check_members(where: str, source: str, findings: list[str]) -> None:
+    """Each function, method, getter and constructor at the top level or in
+    a class, enum, mixin or extension is at most MAX_FUNCTION_LINES long,
+    an `=>` body and a signature over several lines included."""
+    lines = source.split("\n")
+    for line, text in _members(blank_literals(source), 1):
+        waived = line > 1 and LONG_WAIVER.match(lines[line - 2])
+        # An annotation line is the member's label, not its length.
+        while re.match(r"@\w+\s*\n", text):
+            text = text.split("\n", 1)[1].lstrip(" ")
+            line += 1
+        length = text.count("\n") + 1
+        if length > MAX_FUNCTION_LINES and not waived and _is_function(text):
+            findings.append(f"{where}:{line}: function is {length} lines (max {MAX_FUNCTION_LINES})")
+
+
+def _members(body: str, first_line: int) -> list[tuple[int, str]]:
+    """(line, text) of each member of [body], the members of the
+    declarations in it in place of the declarations."""
+    found: list[tuple[int, str]] = []
+    at = 0
+    for text, block in class_members(body):
+        start = body.find(text, at)
+        at = start + len(text)
+        line = first_line + body.count("\n", 0, start)
+        if block and DECLARATION.match(flatten(text)):
+            open_brace = flatten(text).index("{")
+            found += _members(text[open_brace + 1 : -1], line + text.count("\n", 0, open_brace))
+        else:
+            found.append((line, text))
+    return found
+
+
+def _is_function(text: str) -> bool:
+    """Whether a member has a body to read: a block or `=>` after a
+    parameter list or `get`, not a field holding a value."""
+    flat = flatten(text)
+    ends = [i for i in (flat.find("{"), flat.find("=>")) if i >= 0]
+    if not ends:
+        return False
+    head = flat[: min(ends)]
+    assign = ASSIGN.search(head)
+    colon = head.find(":")
+    if assign is not None and (colon < 0 or assign.start() < colon):
+        return False
+    return CALL_HEAD.search(head.rstrip()) is not None
+
+
 LISTENS_TO_WIDGET = re.compile(r"\bwidget\.[\w.?!]+\s*\.\.?\s*addListener\s*\(")
 
 
@@ -368,7 +428,8 @@ def check_file(path: Path, findings: list[str]) -> None:
     if is_lib:
         check_imports(path, lines, findings)
         check_classes(str(where), "\n".join(lines), findings)
-    check_functions(path, lines, findings)
+        check_members(str(where), "\n".join(lines), findings)
+    check_functions(path, lines, findings, lengths=not is_lib)
 
 
 def check_layout(root: Path) -> list[str]:

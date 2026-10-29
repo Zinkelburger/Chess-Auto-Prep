@@ -81,47 +81,7 @@ class ViewerFilterPane extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: Space.s),
-            Wrap(
-              spacing: Space.s,
-              runSpacing: Space.xs,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                TextButton.icon(
-                  onPressed: () => filter.apply(
-                    editing.copyWith(rules: [...rules, const HeaderRule()]),
-                  ),
-                  icon: const Icon(Icons.add, size: IconSize.menu),
-                  label: const Text('Add rule'),
-                ),
-                if (filter.applied.position case final position?)
-                  _PositionChip(
-                    position: position,
-                    onRemove: () => filter.apply(
-                      filter.applied.copyWith(clearPosition: true),
-                    ),
-                  )
-                else
-                  TextButton.icon(
-                    onPressed: onPosition ?? filter.reachingBoardPosition,
-                    icon: const Icon(Icons.grid_on, size: IconSize.menu),
-                    label: const Text('Reaching this position'),
-                  ),
-                if (rules.length > 1)
-                  SegmentedButton<bool>(
-                    segments: const [
-                      ButtonSegment(value: false, label: Text('All')),
-                      ButtonSegment(value: true, label: Text('Any')),
-                    ],
-                    selected: {editing.any},
-                    showSelectedIcon: false,
-                    style: const ButtonStyle(
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    onSelectionChanged: (any) =>
-                        filter.apply(editing.copyWith(any: any.single)),
-                  ),
-              ],
-            ),
+            _ruleActions(editing, rules),
             if (filter.narrowing) ...[
               const Divider(height: Space.xl),
               _matching(context),
@@ -130,6 +90,47 @@ class ViewerFilterPane extends StatelessWidget {
         ),
       );
     },
+  );
+
+  /// Another rule, the position the games must reach, and whether all the
+  /// rules must hold or any one.
+  Widget _ruleActions(GameFilter editing, List<HeaderRule> rules) => Wrap(
+    spacing: Space.s,
+    runSpacing: Space.xs,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    children: [
+      TextButton.icon(
+        onPressed: () => filter.apply(
+          editing.copyWith(rules: [...rules, const HeaderRule()]),
+        ),
+        icon: const Icon(Icons.add, size: IconSize.menu),
+        label: const Text('Add rule'),
+      ),
+      if (filter.applied.position case final position?)
+        _PositionChip(
+          position: position,
+          onRemove: () =>
+              filter.apply(filter.applied.copyWith(clearPosition: true)),
+        )
+      else
+        TextButton.icon(
+          onPressed: onPosition ?? filter.reachingBoardPosition,
+          icon: const Icon(Icons.grid_on, size: IconSize.menu),
+          label: const Text('Reaching this position'),
+        ),
+      if (rules.length > 1)
+        SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(value: false, label: Text('All')),
+            ButtonSegment(value: true, label: Text('Any')),
+          ],
+          selected: {editing.any},
+          showSelectedIcon: false,
+          style: const ButtonStyle(visualDensity: VisualDensity.compact),
+          onSelectionChanged: (any) =>
+              filter.apply(editing.copyWith(any: any.single)),
+        ),
+    ],
   );
 
   /// What can be done with the games the filter found.

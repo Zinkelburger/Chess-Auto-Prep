@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../chess/pgn/comment_text.dart';
 import '../chess/pgn/game_tree.dart';
+import '../chess/pgn/move_label.dart';
 import '../storage/chapter_files.dart' show ChapterRef;
 import '../ui/app_keys.dart';
 import '../ui/listening_state.dart';
+import '../ui/move_notation.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
 
@@ -151,6 +153,18 @@ class _CommentFieldState extends State<CommentField>
     return displayComment(widget.session.startingCommentAt(at) ?? '');
   }
 
+  /// Which move the words are for, so a note is never typed under the
+  /// wrong one: `Note on 9... b5`, or the chapter's own at the start.
+  String? _label(BuildContext context) {
+    final at = _at;
+    if (at == null) return null;
+    if (at.isRoot) return 'Note before the first move';
+    final node = widget.session.tree?.nodeAt(at);
+    if (node == null) return null;
+    final number = moveNumberLabel(node, startsLine: true);
+    return 'Note on ${displaySan(context, '$number ${node.san}')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
@@ -178,9 +192,10 @@ class _CommentFieldState extends State<CommentField>
               minLines: 2,
               maxLines: 4,
               style: text.bodyMedium,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 isDense: true,
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
+                labelText: _label(context),
               ),
             ),
           ),

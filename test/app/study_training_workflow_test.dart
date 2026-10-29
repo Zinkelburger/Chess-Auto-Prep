@@ -62,9 +62,7 @@ void main() {
     },
   );
 
-  testWidgets('Annotate exposes position glyphs and quiz markers', (
-    tester,
-  ) async {
+  testWidgets('Edit exposes position glyphs and quiz markers', (tester) async {
     final w = WindowFixture();
     addTearDown(w.dispose);
     final ref = studyRef('Endgames');
@@ -78,7 +76,13 @@ void main() {
     await tester.pumpAndSettle();
     w.session.cursor.goTo(NodePath.of([0]));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Annotate'));
+    // Study opens on Edit; Read puts the tools away.
+    expect(find.byTooltip('Good move'), findsOneWidget);
+    await tester.tap(find.text('Read'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Good move'), findsNothing);
+    expect(find.text('Quiz starts here'), findsNothing);
+    await tester.tap(find.text('Edit'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Good move'));
     await tester.tap(find.byTooltip('White is better'));

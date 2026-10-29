@@ -10,6 +10,7 @@ import '../chess/pgn/comment_layout.dart';
 import '../chess/pv_text.dart';
 import '../chess/pgn/game_tree.dart';
 import '../ui/theme.dart';
+import 'preview_target.dart';
 import 'comment_line.dart';
 import 'document_session.dart';
 import 'line_preview.dart';
@@ -206,22 +207,16 @@ class _InlineMove extends StatelessWidget {
   final VoidCallback onLeave;
   final VoidCallback? onTap;
 
-  /// The bottom centre of this move on the screen, where its board hangs.
-  Offset _anchor(BuildContext context) {
-    final box = context.findRenderObject() as RenderBox;
-    return box.localToGlobal(Offset(box.size.width / 2, box.size.height));
-  }
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return MouseRegion(
-      onEnter: (_) => onHover(move, _anchor(context)),
+      onEnter: (_) => onHover(move, previewAnchor(context)),
       onExit: (_) => onLeave(),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(3),
-        hoverColor: scheme.primary.withValues(alpha: 0.1),
+        borderRadius: moveTokenRadius,
+        hoverColor: scheme.primary.withValues(alpha: moveHoverAlpha),
         child: ValueListenableBuilder<CommentLine?>(
           valueListenable: shown,
           builder: (context, line, child) => DecoratedBox(
@@ -229,7 +224,7 @@ class _InlineMove extends StatelessWidget {
               color: line != null && line.shows(from, move)
                   ? scheme.primary.withValues(alpha: 0.35)
                   : null,
-              borderRadius: BorderRadius.circular(3),
+              borderRadius: moveTokenRadius,
             ),
             child: child,
           ),

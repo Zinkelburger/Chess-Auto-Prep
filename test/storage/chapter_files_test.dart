@@ -254,7 +254,13 @@ void main() {
     await put('KID/Main.pgn', '[Event "Line"]\n\n1. d4 *');
     // Directory times have millisecond precision; keep the orphan older.
     await Future<void>.delayed(const Duration(milliseconds: 50));
-    final files = ChapterDirectory(root, recovery: recovery);
+    // The listing is read two hours on: the orphan is old enough to be
+    // nobody's import in flight.
+    final files = ChapterDirectory(
+      root,
+      recovery: recovery,
+      now: () => DateTime.now().add(const Duration(hours: 2)),
+    );
     await Future<void>.delayed(const Duration(milliseconds: 50));
     await put('.import-new/Y.pgn', '[Event "Line"]\n\n1. c4 *');
     final listed = await files.list() as Repertoires;
@@ -266,6 +272,15 @@ void main() {
       isTrue,
     );
     expect(File(p.join(root.path, 'KID', 'Main.pgn')).existsSync(), isTrue);
+  });
+
+  test('import staging from the last hour is left for another copy of the '
+      'app to place', () async {
+    await put('.import-abc/X.pgn', '[Event "Line"]\n\n1. e4 *');
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final files = ChapterDirectory(root, recovery: recovery);
+    await files.list();
+    expect(Directory(p.join(root.path, '.import-abc')).existsSync(), isTrue);
   });
 }
 

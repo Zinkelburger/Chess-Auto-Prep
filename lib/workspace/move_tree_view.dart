@@ -644,12 +644,12 @@ class _MoveTokenState extends State<_MoveToken>
           onTap: widget.onTap,
           onSecondaryTap: _openMenu,
           onLongPress: _openMenu,
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: moveTokenRadius,
           child: Container(
             padding: moveTokenPadding,
             decoration: BoxDecoration(
               color: _selected ? scheme.primary.withValues(alpha: 0.35) : null,
-              borderRadius: BorderRadius.circular(3),
+              borderRadius: moveTokenRadius,
             ),
             child: _label(scheme),
           ),

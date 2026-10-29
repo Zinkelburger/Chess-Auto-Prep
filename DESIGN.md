@@ -271,10 +271,11 @@ active pane's a brighter grey. Dividers between panes are 1px lines with a
 
 ### Bughouse reserve (lila's pocket)
 - **Style:** lila's crazyhouse pocket, kept on purpose over the flat rules: five square-sized slots (pawn to queen) in a #888 grey well with lila's inset top shade, 4px radius, beside the seat's letter. A held piece shows in full with its count in white bold on lila's orange (#D64F00) in the slot's lower right; an empty slot keeps its place with the piece at 10% opacity. On the player's turn a slot brightens to #AAA under the pointer, a picked piece takes the board's selection green, and its drop squares are ringed on the board.
-- **Add and take away:** a 26px row of + icon buttons over the slots and a row of − under them, one per slot and as wide as it, in muted ink with no fill. These are the website's large hand steppers, made quiet for the desktop; a − with nothing to take and a + at 16 are disabled.
+- **Add and take away:** while the pointer is over a slot (or one of its controls has focus), that slot shows a − in its upper left corner and a + in its upper right: a dark chip (`labHandStep`, 4px radius) with a white sign, two fifths of the slot within 16–24px. Hidden, they take no room, so the hands are only a square tall and the board gets the height; a − with nothing to take and a + at 16 are left out.
 
 ### Reading card (signature)
 - **Style:** Reading Black card, 8px radius, 24px inset; movetext in 16px mono at 1.7, comments in 16px prose at a 640px measure. Mistakes are marked and clickable; no per-move evaluations in the movetext.
+- **Read | Edit:** in the PGN Viewer and Study the card's foot starts with a compact `Read | Edit` segmented button, then the four move arrows. It is the only control that opens and closes editing there; the edit strip (glyphs, note) opens directly above it, so the strip has no Done of its own. Read keeps the board quiet, as a book; Edit gives it the engine row and the move field.
 
 ## Do's and Don'ts
 

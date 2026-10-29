@@ -109,10 +109,11 @@ const lichessClientId = 'chess-auto-prep';
 /// busy.
 const lichessCallbackPort = 8919;
 
-/// What the token may do: the account's name, and private studies.
+/// What the token may do: the account's name, reading private studies and
+/// writing the user's own.
 /// Game exports and the explorer need no scope; the token only lifts the
 /// rate limit.
-const lichessScopes = 'preference:read study:read';
+const lichessScopes = 'preference:read study:read study:write';
 
 const _authorizeUrl = 'https://lichess.org/oauth';
 const _tokenUrl = 'https://lichess.org/api/token';

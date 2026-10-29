@@ -7,7 +7,15 @@ from unittest.mock import patch
 
 import check_architecture
 
-from check_architecture import LIB, MAX_FUNCTION_LINES, TEST, check_classes, check_functions, check_imports
+from check_architecture import (
+    LIB,
+    MAX_FUNCTION_LINES,
+    TEST,
+    check_classes,
+    check_functions,
+    check_imports,
+    check_members,
+)
 
 
 def class_findings(source: str) -> list[str]:
@@ -92,13 +100,46 @@ class ListeningTest(unittest.TestCase):
         self.assertTrue(class_findings(source))
 
 
+def member_findings(source: str) -> list[str]:
+    findings: list[str] = []
+    check_members("lib/chess/x.dart", source, findings)
+    return findings
+
+
 class FunctionsTest(unittest.TestCase):
+    body = "    work();\n" * MAX_FUNCTION_LINES
+
     def test_a_long_function_fails(self):
-        lines = ["void long() {"] + ["  work();"] * MAX_FUNCTION_LINES + ["}"]
-        findings: list[str] = []
-        check_functions(LIB / "chess/x.dart", lines, findings)
+        findings = member_findings("void long() {\n" + self.body + "}\n")
         self.assertEqual(len(findings), 1)
-        self.assertIn(f"function is {MAX_FUNCTION_LINES + 2} lines", findings[0])
+        self.assertIn(f":1: function is {MAX_FUNCTION_LINES + 2} lines", findings[0])
+
+    def test_a_long_arrow_body_in_a_class_fails(self):
+        source = "class A {\n  @override\n  Widget build(BuildContext c) => Column(\n" + self.body + "  );\n}\n"
+        findings = member_findings(source)
+        self.assertEqual(len(findings), 1)
+        self.assertIn(":3: function is", findings[0])
+
+    def test_a_signature_over_several_lines_is_measured(self):
+        source = "class A {\n  Future<void> run({\n    required int a,\n  }) async {\n" + self.body + "  }\n}\n"
+        self.assertEqual(len(member_findings(source)), 1)
+
+    def test_a_long_getter_fails(self):
+        self.assertEqual(len(member_findings("List<int> get all => [\n" + "  1,\n" * MAX_FUNCTION_LINES + "];\n")), 1)
+
+    def test_a_long_value_is_not_a_function(self):
+        table = "const table = {\n" + "  'a': 1,\n" * MAX_FUNCTION_LINES + "};\n"
+        field = "class A {\n  final rows = [\n" + "    Row(),\n" * MAX_FUNCTION_LINES + "  ];\n}\n"
+        self.assertFalse(member_findings(table))
+        self.assertFalse(member_findings(field))
+
+    def test_a_composition_root_may_say_why_it_is_long(self):
+        source = "class A {\n  // long: lists every part\n  factory A.real() => A(\n" + self.body + "  );\n}\n"
+        self.assertFalse(member_findings(source))
+        self.assertTrue(member_findings(source.replace("// long: lists every part", "// long:")))
+
+    def test_a_short_function_in_an_enum_passes(self):
+        self.assertFalse(member_findings("enum E {\n  a, b;\n  bool get first => this == a;\n}\n"))
 
     def test_a_long_group_is_a_list_of_cases_but_its_tests_are_checked(self):
         body = ["    work();"] * MAX_FUNCTION_LINES

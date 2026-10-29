@@ -21,6 +21,8 @@ final class WorkspaceHooks {
     this.builder = false,
     this.noteEditing = false,
     this.onAnnotate,
+    this.editSwitch = false,
+    this.studyTools = false,
     this.gameCounter = true,
     this.gameOrdering,
     this.moveMenu,
@@ -45,7 +47,16 @@ final class WorkspaceHooks {
     this.underHeading,
   });
 
+  /// Opens the edit strip on the move a right-click was on: `Comment this
+  /// move`.
   final VoidCallback? onAnnotate;
+
+  /// Whether the card has `Read | Edit` at its foot, the one control that
+  /// turns editing on and off in the viewer and Study.
+  final bool editSwitch;
+
+  /// Whether editing offers the quiz markers a study's training reads.
+  final bool studyTools;
   final bool trainingTools;
   final VoidCallback? onStudyLesson;
 
@@ -56,7 +67,7 @@ final class WorkspaceHooks {
   /// Whether the board has only what is in use under it, as a book has a
   /// diagram and nothing else: the engine's row while the engine is on, the
   /// move field while it is typed in, the move's note when there is one or
-  /// while it is edited. The viewer's.
+  /// while it is edited. The viewer's and Study's while reading.
   final bool quietBoard;
 
   /// Under the explorer's databases while `This file` is chosen: the

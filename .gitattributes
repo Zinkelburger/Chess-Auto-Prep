@@ -2,3 +2,7 @@
 # tools/bughouse_windows/build.json. A Windows checkout would otherwise turn
 # their LF into CRLF and every Windows build would call the engine stale.
 tools/bughouse_windows/** -text
+
+# Meow Chess's built web app, copied in from the Meow-Chess repo: served
+# byte for byte, and its minified files make unreadable diffs.
+python/twic-position-finder/frontend/public/meow-chess/** -text -diff

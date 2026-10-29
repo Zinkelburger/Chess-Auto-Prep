@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Replaced by flutter build --base-href (scripts/build_web.py uses /meow-chess/). -->
+  <base href="/meow-chess/">
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Meow-Chess in your browser: Swiss pairings, results, tie-breaks, prizes and the US Chess rating report. Events stay in this browser.">
+  <meta name="theme-color" content="#1F4E8C">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Meow-Chess">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png">
+
+  <title>Meow-Chess</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    html, body { margin: 0; height: 100%; background: #F4F3EF; }
+    @media (prefers-color-scheme: dark) { html, body { background: #1C1C1B; } #loading { color: #C9C6BC; } }
+    #loading {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px;
+      font: 15px system-ui, -apple-system, sans-serif; color: #4A4840;
+    }
+    #loading img { width: 96px; height: 96px; }
+  </style>
+</head>
+<body>
+  <!-- Shown while the app downloads (several MB the first time); removed when it starts. -->
+  <div id="loading"><img src="icons/Icon-192.png" alt=""><span>Loading Meow-Chess…</span></div>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

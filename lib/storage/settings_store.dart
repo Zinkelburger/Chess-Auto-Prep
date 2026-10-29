@@ -62,7 +62,7 @@ final class SettingsStore extends ChangeNotifier {
     final edits = _edits;
     Settings value;
     try {
-      final text = await _target(file).readAsString();
+      final text = await _read(_target(file));
       value = Settings.fromJson(
         text.startsWith('﻿') ? text.substring(1) : text,
       );
@@ -77,6 +77,22 @@ final class SettingsStore extends ChangeNotifier {
     if (_disposed || edits != _edits) return;
     _value = value;
     _notify();
+  }
+
+  /// The file's text. A Windows sharing violation, another program such as
+  /// an antivirus or a sync client holding the file for a moment, is
+  /// retried for a short while; only what still fails is moved aside.
+  Future<String> _read(File file) async {
+    for (var attempt = 0; ; attempt++) {
+      try {
+        return await file.readAsString();
+      } on FileSystemException catch (error) {
+        final code = error.osError?.errorCode;
+        final busy = Platform.isWindows && const [5, 32, 33].contains(code);
+        if (error is PathNotFoundException || !busy || attempt >= 20) rethrow;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
   }
 
   /// Replaces the settings with [next] and writes them. The screen shows

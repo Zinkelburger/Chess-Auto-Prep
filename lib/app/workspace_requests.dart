@@ -356,6 +356,11 @@ final class WorkspaceRequests extends ChangeNotifier {
     return _inViewer(ticket, inside, game: game);
   }
 
+  /// A study's chapter read in the viewer, among the study's games. A study
+  /// is the app's own file in Documents, so it opens where it is.
+  Future<RequestResult> readInViewer(ChapterRef study, {int? game}) =>
+      _inViewer(_nextRequest(), study, game: game);
+
   /// Ctrl+O and `Open PGN file…` are one door whose other side depends on
   /// the mode: in the builder a file becomes a repertoire, everywhere else
   /// it is read in the viewer.

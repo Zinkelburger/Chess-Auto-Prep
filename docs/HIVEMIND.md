@@ -476,9 +476,9 @@ native root mate allowance still follows the engine's existing coupling
 described in the study.
 
 The desktop mode does not pick a budget per question. Each team it shows
-gets one continuous `go nodes 100000` on its own engine process, its lines
+gets one continuous `go nodes 30000` on its own engine process, its lines
 following every report (the first within about a second, then four a
-second), and rests there; the one-board zero search rests at 20,000. The two
+second), and rests there; the one-board zero search rests at 8,000. The two
 processes share the half of the machine's cores the mode takes, so each
 runs at roughly half the single-process rate until the other rests. An
 engine without `ReportIntervalMs` is asked in passes of 800, 4,000 and

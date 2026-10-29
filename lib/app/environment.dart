@@ -25,6 +25,7 @@ import '../net/remote_queue.dart';
 import '../net/lichess_explorer.dart';
 import '../net/lichess_login.dart';
 import '../net/lichess_studies.dart';
+import '../net/lichess_study_writes.dart';
 import '../net/recent_games.dart';
 import '../net/player_ratings.dart';
 import '../storage/book_file.dart';
@@ -106,6 +107,8 @@ final class AppEnvironment {
     required this.readAccount,
     required this.writeAccount,
     required this.lichessStudies,
+    this.lichessStudyWriter,
+    this.openPage = _noPage,
     required this.lichessExplorer,
     required this.masterBook,
     this.masterGames,
@@ -160,6 +163,7 @@ final class AppEnvironment {
   /// The app on this machine: the user's Documents folder and the app's
   /// own [support] folder, the real network, Stockfish and Maia. Updates
   /// are downloaded under [cache]; without one the app does not update.
+  // long: the composition root, one call naming every part the app runs on.
   factory AppEnvironment.native({
     required Directory documents,
     required Directory support,
@@ -209,6 +213,11 @@ final class AppEnvironment {
       readAccount: readLichessAccount,
       writeAccount: writeLichessAccount,
       lichessStudies: LichessStudyApi(client, token: readLichessToken),
+      lichessStudyWriter: LichessStudyWriterApi(
+        client,
+        token: readLichessToken,
+      ),
+      openPage: openInBrowser,
       lichessExplorer: LichessExplorerApi(client, token: readLichessToken),
       masterBook: SqliteMasterBook(masterGames),
       masterGames: masterGames,
@@ -320,6 +329,13 @@ final class AppEnvironment {
   final Future<LichessAccount?> Function() readAccount;
   final Future<bool> Function(LichessAccount?) writeAccount;
   final LichessStudies lichessStudies;
+
+  /// Writes studies to the user's Lichess account; none in the window tests
+  /// unless one is scripted.
+  final LichessStudyWriter? lichessStudyWriter;
+
+  /// Shows a page in the desktop's browser and says whether it went.
+  final Future<bool> Function(Uri page) openPage;
   final LichessExplorer lichessExplorer;
 
   /// The master games database read as an opening book.
@@ -494,6 +510,8 @@ Future<EngineStart> _noRegisteredEngine(
 }) async => const StartFailed('No registered engines here.');
 
 Future<String?> _noFile() async => null;
+
+Future<bool> _noPage(Uri page) async => false;
 
 /// Everything the app keeps, as the Databases mode measures it. Only the
 /// master games, which can be downloaded and imported again, and leftovers

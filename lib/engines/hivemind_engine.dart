@@ -410,7 +410,9 @@ JointMove? parseBestMove(String line) {
 
 /// One search `info` line, or null when it carries nothing to read: an
 /// `info string`, or the root's first line before any node was evaluated,
-/// which prints the unvisited prior as a huge negative score.
+/// which prints the unvisited prior as a huge negative score. A mate the
+/// engine's root scan decides is also printed at one node, as the only
+/// line before `bestmove`, and is kept.
 JointLine? parseHivemindInfo(String line) {
   if (!line.startsWith('info ') || !line.contains(' depth ')) return null;
   final tokens = line.split(RegExp(r'\s+'));
@@ -422,11 +424,11 @@ JointLine? parseHivemindInfo(String line) {
   }
 
   final nodes = number('nodes');
-  if (nodes <= 1) return null;
   final score = tokens.indexOf('score');
   final kind = score < 0 || score + 2 >= tokens.length
       ? null
       : tokens[score + 1];
+  if (nodes <= 1 && kind != 'mate') return null;
   final value = kind == null ? null : int.tryParse(tokens[score + 2]);
   final pv = tokens.indexOf('pv');
   return JointLine(

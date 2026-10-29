@@ -32,6 +32,7 @@ class WorkspaceKeys extends StatefulWidget {
     this.extra = const {},
     this.leave = _nothingToLeave,
     this.save,
+    this.escapeEndsEditing = true,
     required this.child,
   });
 
@@ -54,6 +55,11 @@ class WorkspaceKeys extends StatefulWidget {
   /// What Ctrl+S does with held edits, when not simply writing them to
   /// their file: a file this app may not write asks where they go.
   final VoidCallback? save;
+
+  /// Whether Esc closes the edit strip. Not where `Read | Edit` shows the
+  /// side the card is on: Esc leaving a variation must not also stop the
+  /// edits being saved.
+  final bool escapeEndsEditing;
 
   final Widget child;
 
@@ -113,7 +119,7 @@ class _WorkspaceKeysState extends State<WorkspaceKeys> {
       return true;
     }
     if (_session.cursor.leaveVariation()) return true;
-    if (widget.editing.value) {
+    if (widget.escapeEndsEditing && widget.editing.value) {
       widget.editing.value = false;
       return true;
     }

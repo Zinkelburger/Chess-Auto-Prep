@@ -110,9 +110,10 @@ final class DocumentSession extends ChangeNotifier {
   /// Edits to the open file shown but not written; null when there are none.
   HeldEdits? _held;
 
-  /// Viewer edits stay in memory; builder edits autosave. Once held, all
-  /// further edits join the draft until keepHeld or discardHeld, in any mode;
-  /// a file this app may not write holds them too, to be kept as a copy.
+  /// Edits made while reading stay in memory; edits made while editing, and
+  /// the builder's, autosave. Once held, all further edits join the draft
+  /// until keepHeld or discardHeld, in any mode; a file this app may not
+  /// write holds them too, to be kept as a copy.
   bool get holdsEdits => _holdsEdits;
   bool _holdsEdits = false;
   set holdsEdits(bool on) {
@@ -744,10 +745,20 @@ final class DocumentSession extends ChangeNotifier {
   /// to disk through this one path, not a second writer. They move whole
   /// games, so the cursor follows the moves it was on, not its path, and an
   /// edit that changes which game is the chapter moves the board with it.
+  ///
+  /// [writes] is for a change to the document itself rather than to its
+  /// moves — a chapter renamed, moved or tagged, chapters added, a link to
+  /// where they were sent — which is written even while edits are held,
+  /// taking the held ones with it: leaving it unsaved would lose what was
+  /// asked for.
   String? apply(
     edits.ChapterEdit Function(Chapter chapter) edit, {
     ReferenceChanges? references,
+    bool writes = false,
   }) {
+    if (writes && _held != null && _readOnly == null && _chapter != null) {
+      keepHeld();
+    }
     final chapter = _chapter;
     if (chapter == null) return 'there is nothing open to edit';
     if (_editBlocked() case final reason?) return reason;
@@ -763,6 +774,7 @@ final class DocumentSession extends ChangeNotifier {
               landing(chapter, _view, edited, games),
               references,
             ),
+            writes: writes,
           );
           if (reason != null) return reason;
         }
@@ -831,13 +843,13 @@ final class DocumentSession extends ChangeNotifier {
   /// Writes [landed] and shows what it says to show, following a course
   /// file's chapter to the one shown. Answers why nothing was written, or
   /// null.
-  String? _land(Landing? landed) {
+  String? _land(Landing? landed, {bool writes = false}) {
     if (landed == null) {
       return _editRefused('a new line could not be given its chapter name');
     }
     if (_held case final held?) {
       held.add(_shown!, landed);
-    } else if (_holdsEdits) {
+    } else if (_holdsEdits && !(writes && _readOnly == null)) {
       _held = HeldEdits(_shown!, landed);
     } else {
       _saver.save(landed.text, landed.scope);

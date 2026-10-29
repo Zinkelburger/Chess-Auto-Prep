@@ -96,24 +96,68 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('PGN tags…'));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Value').first,
-      'invalid',
-    );
+    // White, Black, then Result: the game's own tags come first.
+    final result = find.widgetWithText(TextField, 'Value').at(2);
+    await tester.enterText(result, 'invalid');
     await tester.tap(find.text('Save tags'));
     await tester.pumpAndSettle();
     expect(
       find.text('Use a PGN result: *, 1-0, 0-1 or 1/2-1/2.'),
       findsOneWidget,
     );
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Value').first,
-      '1-0',
-    );
+    await tester.enterText(result, '1-0');
     await tester.tap(find.text('Save tags'));
     await tester.pumpAndSettle();
     expect(study.onDisk, contains('[Result "1-0"]'));
     expect(study.onDisk, contains('Nf3 1-0'));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a game from a scoresheet: the tag editor offers its fields, '
+      'keeps the training id out of reach and names the chapter after the '
+      'players', (tester) async {
+    const typed =
+        '[Event "Plane games: Chapter 1"]\n'
+        '[StudyName "Plane games"]\n[ChapterName "Chapter 1"]\n'
+        '[Orientation "white"]\n[LineID "line_ZTR8MA"]\n\n'
+        '1. e4 e5 2. Nf3 *\n';
+    study.dispose();
+    study = await openStudy(typed, name: 'Plane games');
+    await pump(tester);
+    await tester.tap(find.byTooltip('Chapter actions').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('PGN tags…'));
+    await tester.pumpAndSettle();
+    final keys = find.widgetWithText(TextField, 'Tag');
+    for (final (i, key) in [
+      'White',
+      'Black',
+      'Result',
+      'Date',
+      'Event',
+      'Round',
+    ].indexed) {
+      expect((tester.widget<TextField>(keys.at(i))).controller!.text, key);
+    }
+    expect(find.text('line_ZTR8MA'), findsNothing);
+    expect(find.text('Plane games: Chapter 1'), findsNothing);
+    final values = find.widgetWithText(TextField, 'Value');
+    await tester.enterText(values.at(0), 'Me');
+    await tester.enterText(values.at(1), 'Club rival');
+    await tester.enterText(values.at(2), '1-0');
+    await tester.enterText(values.at(4), 'Club championship');
+    await tester.tap(find.text('Save tags'));
+    await tester.pumpAndSettle();
+    expect(study.onDisk, contains('[White "Me"]'));
+    expect(study.onDisk, contains('[Event "Club championship"]'));
+    expect(study.onDisk, contains('[LineID "line_ZTR8MA"]'));
+    expect(
+      study.onDisk,
+      isNot(contains('[Date ""]')),
+      reason: 'empty: left out',
+    );
+    expect(study.onDisk, contains('[ChapterName "Me - Club rival"]'));
+    expect(find.text('Me - Club rival'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

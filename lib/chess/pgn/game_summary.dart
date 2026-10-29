@@ -1,5 +1,6 @@
 import 'chapter_line.dart';
 import 'game_text.dart';
+import 'study.dart' show ownEvent;
 
 /// What a game is, in the words a list or a heading has room for: who
 /// played it, how it ended and where.
@@ -38,6 +39,12 @@ GameSummary summarizeTags(List<PgnHeader> tags, {required int index}) {
   final white = _known(tagValue(tags, 'White'));
   final black = _known(tagValue(tags, 'Black'));
   final event = _known(tagValue(tags, 'Event'));
+  final study = _known(tagValue(tags, 'StudyName'));
+  // A study chapter's `Study: Chapter` names it, but it is not where the
+  // game was played.
+  final played = study == null || event == null || ownEvent(event, study: study)
+      ? event
+      : null;
   final players = white != null && black != null
       ? '$white – $black'
       : white ?? black;
@@ -45,7 +52,7 @@ GameSummary summarizeTags(List<PgnHeader> tags, {required int index}) {
     title: players ?? event ?? 'Game ${index + 1}',
     result: _result(tagValue(tags, 'Result')),
     setting: [
-      if (players != null && event != null) event,
+      if (players != null && played != null) played,
       ?_year(tagValue(tags, 'Date')),
     ].join(' · '),
   );

@@ -9,7 +9,11 @@ import '../../ui/theme.dart';
 /// wide, in a grey well. Pieces held show in full with their count; empty
 /// slots stay in place, faint. While [live] — its player on move — a piece
 /// held can be clicked ([onPick]) or dragged onto the board.
-class PocketWell extends StatelessWidget {
+///
+/// With [onStep], a − and a + appear in a slot's upper corners while the
+/// pointer is over it or one of them has the keyboard's focus; they take
+/// one of that piece away or add one, within 0…[handLimit].
+class PocketWell extends StatefulWidget {
   const PocketWell({
     super.key,
     required this.pockets,
@@ -20,6 +24,7 @@ class PocketWell extends StatelessWidget {
     this.live = false,
     this.picked,
     this.onPick,
+    this.onStep,
   });
 
   final Pockets pockets;
@@ -34,35 +39,150 @@ class PocketWell extends StatelessWidget {
   final bool live;
   final Role? picked;
   final ValueChanged<Role>? onPick;
+  final void Function(Role role, int by)? onStep;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: square * reserveRoles.length,
-    height: square,
-    clipBehavior: Clip.antiAlias,
-    decoration: BoxDecoration(
-      gradient: labPocketWell,
-      borderRadius: BorderRadius.circular(Space.xs),
-    ),
-    child: Row(
-      children: [
-        for (final role in reserveRoles)
-          _ReservePiece(
-            key: switch (seat) {
-              final seat? => ValueKey(('reserve', seat, role)),
-              null => null,
-            },
-            piece: Piece(color: side, role: role),
-            count: pockets.of(side, role),
-            owner: owner,
-            size: square,
-            live: live && pockets.of(side, role) > 0,
-            picked: live && picked == role,
-            onPick: () => onPick?.call(role),
+  State<PocketWell> createState() => _PocketWellState();
+}
+
+class _PocketWellState extends State<PocketWell> {
+  /// The slot under the pointer, and the one whose − or + has the focus.
+  Role? _hovered;
+  Role? _focused;
+
+  void _hover(Role role, bool on) {
+    if (!mounted) return;
+    final hovered = on ? role : (_hovered == role ? null : _hovered);
+    if (hovered != _hovered) setState(() => _hovered = hovered);
+  }
+
+  void _focus(Role role, bool on) {
+    if (!mounted) return;
+    final focused = on ? role : (_focused == role ? null : _focused);
+    if (focused != _focused) setState(() => _focused = focused);
+  }
+
+  Widget _withSteps(Role role, Widget slot) {
+    final onStep = widget.onStep;
+    if (onStep == null) return slot;
+    final count = widget.pockets.of(widget.side, role);
+    final shown = _hovered == role || _focused == role;
+    Widget step(int by) => _HandStep(
+      side: widget.side,
+      role: role,
+      by: by,
+      slot: widget.square,
+      shown: shown,
+      onPressed: () => onStep(role, by),
+    );
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onFocusChange: (on) => _focus(role, on),
+      child: MouseRegion(
+        onEnter: (_) => _hover(role, true),
+        onExit: (_) => _hover(role, false),
+        child: Stack(
+          children: [
+            slot,
+            if (count > 0) Positioned(left: 0, top: 0, child: step(-1)),
+            if (count < handLimit) Positioned(right: 0, top: 0, child: step(1)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pockets = widget.pockets;
+    final side = widget.side;
+    final square = widget.square;
+    return Container(
+      width: square * reserveRoles.length,
+      height: square,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        gradient: labPocketWell,
+        borderRadius: BorderRadius.circular(Space.xs),
+      ),
+      child: Row(
+        children: [
+          for (final role in reserveRoles)
+            _withSteps(
+              role,
+              _ReservePiece(
+                key: switch (widget.seat) {
+                  final seat? => ValueKey(('reserve', seat, role)),
+                  null => null,
+                },
+                piece: Piece(color: side, role: role),
+                count: pockets.of(side, role),
+                owner: widget.owner,
+                size: square,
+                live: widget.live && pockets.of(side, role) > 0,
+                picked: widget.live && widget.picked == role,
+                onPick: () => widget.onPick?.call(role),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One − or + in a pocket slot's corner, shown only while its slot is
+/// pointed at or focused; hidden, it still takes the keyboard's focus,
+/// which shows it.
+class _HandStep extends StatelessWidget {
+  const _HandStep({
+    required this.side,
+    required this.role,
+    required this.by,
+    required this.slot,
+    required this.shown,
+    required this.onPressed,
+  });
+
+  final Side side;
+  final Role role;
+  final int by;
+
+  /// The slot's width, which sizes the chip.
+  final double slot;
+  final bool shown;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colour = side == Side.white ? 'White' : 'Black';
+    final size = (slot * 0.4).clamp(labHandStepMin, labHandStepMax);
+    return IgnorePointer(
+      ignoring: !shown,
+      child: Opacity(
+        opacity: shown ? 1 : 0,
+        child: IconButton(
+          tooltip: by > 0
+              ? 'One more ${role.name} for $colour'
+              : 'One ${role.name} fewer for $colour',
+          onPressed: onPressed,
+          icon: Icon(by > 0 ? Icons.add : Icons.remove),
+          iconSize: size * 0.75,
+          color: labHandStepInk,
+          style: IconButton.styleFrom(
+            backgroundColor: labHandStep,
+            padding: EdgeInsets.zero,
+            minimumSize: Size.zero,
+            fixedSize: Size(size, size),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(Space.xs),
+            ),
           ),
-      ],
-    ),
-  );
+        ),
+      ),
+    );
+  }
 }
 
 /// The dot beside the hand of the player on move; its place is kept when

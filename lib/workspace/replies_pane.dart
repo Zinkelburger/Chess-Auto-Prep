@@ -7,6 +7,7 @@ import 'document_session.dart';
 import 'gap_hunt.dart';
 import 'gap_walk.dart' show MissingReply;
 import 'line_preview.dart';
+import 'preview_target.dart';
 import 'replies.dart';
 import '../ui/move_notation.dart';
 
@@ -256,11 +257,6 @@ class _ReplyRow extends StatelessWidget {
   final VoidCallback onLeave;
   final VoidCallback onTap;
 
-  Offset _anchor(BuildContext context) {
-    final box = context.findRenderObject() as RenderBox;
-    return box.localToGlobal(Offset(box.size.width / 2, box.size.height));
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -268,40 +264,38 @@ class _ReplyRow extends StatelessWidget {
     final muted = TextStyle(color: scheme.onSurfaceVariant);
     return Material(
       color: marked ? scheme.surfaceContainerHighest : Colors.transparent,
-      child: MouseRegion(
-        onEnter: (_) => onHover(_anchor(context)),
-        onExit: (_) => onLeave(),
-        child: InkWell(
-          onTap: onTap,
-          child: SizedBox(
-            height: replyRowHeight,
-            child: Row(
-              children: [
-                SizedBox(
-                  width: replyShareWidth,
-                  child: Text(
-                    _percent(row.share),
-                    textAlign: TextAlign.center,
-                    style: monoText.copyWith(color: scheme.onSurfaceVariant),
-                  ),
+      child: PreviewTarget(
+        onHover: onHover,
+        onLeave: onLeave,
+        onTap: onTap,
+        child: SizedBox(
+          height: replyRowHeight,
+          child: Row(
+            children: [
+              SizedBox(
+                width: replyShareWidth,
+                child: Text(
+                  _percent(row.share),
+                  textAlign: TextAlign.center,
+                  style: monoText.copyWith(color: scheme.onSurfaceVariant),
                 ),
-                Expanded(
-                  child: Text.rich(
-                    TextSpan(
-                      children: [
-                        if (row.label.isNotEmpty)
-                          TextSpan(text: '${row.label} ', style: muted),
-                        TextSpan(text: displaySan(context, row.san)),
-                      ],
-                    ),
-                    style: monoText.copyWith(color: scheme.onSurface),
+              ),
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      if (row.label.isNotEmpty)
+                        TextSpan(text: '${row.label} ', style: muted),
+                      TextSpan(text: displaySan(context, row.san)),
+                    ],
                   ),
+                  style: monoText.copyWith(color: scheme.onSurface),
                 ),
-                if (valued) _expectimax(theme),
-                Flexible(child: _mark(theme)),
-                const SizedBox(width: Space.m),
-              ],
-            ),
+              ),
+              if (valued) _expectimax(theme),
+              Flexible(child: _mark(theme)),
+              const SizedBox(width: Space.m),
+            ],
           ),
         ),
       ),

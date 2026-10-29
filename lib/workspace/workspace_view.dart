@@ -14,6 +14,7 @@ import 'board_and_card.dart';
 import 'board_column.dart';
 import 'document_session.dart';
 import 'edit_strip.dart';
+import 'edit_switch.dart';
 import 'engine_pane.dart';
 import 'explorer_pane.dart';
 import 'game_review_pane.dart';
@@ -27,7 +28,6 @@ import 'workspace.dart';
 import 'workspace_hooks.dart';
 import 'workspace_tabs.dart';
 import 'training_analysis_pane.dart';
-import '../ui/app_keys.dart';
 
 /// The board with the game counter, the engine's lines and the move's note
 /// under it on the left; on the right the reading card: the panes of tabs
@@ -145,7 +145,8 @@ class WorkspaceView extends StatelessWidget {
             editing: editing,
             onSave: hooks.onSaveHeld,
             commentInNote: hooks.noteEditing,
-            studyTools: hooks.onAnnotate != null,
+            studyTools: hooks.studyTools,
+            done: !hooks.editSwitch,
           ),
           // While part of the game is hidden the arrows would walk into it.
           _UnlessHidden(
@@ -154,7 +155,13 @@ class WorkspaceView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Divider(height: 1),
-                NavRow(session: workspace.session, book: layout?.book),
+                NavRow(
+                  session: workspace.session,
+                  book: layout?.book,
+                  leading: hooks.editSwitch
+                      ? EditSwitch(session: workspace.session, editing: editing)
+                      : null,
+                ),
               ],
             ),
           ),
@@ -236,53 +243,35 @@ class _Tabbed extends StatelessWidget {
 
   Widget _moves() {
     final solitaire = workspace.solitaire;
-    Widget reader() => MoveTreeView(
-      session: workspace.session,
-      moveMenu: (path) => [
-        if (hooks.onAnnotate != null)
-          MenuItemButton(
-            onPressed: () {
-              workspace.session.cursor.goTo(path);
-              hooks.onAnnotate!();
-            },
-            child: const Text('Comment this move'),
-          ),
-        ...?hooks.moveMenu?.call(path),
-      ],
-      heading: hooks.header ? _heading() : null,
-      preview: solitaire?.active == true && solitaire?.record != null
-          ? (tree: solitaire!.record!, onRead: solitaire.inspect)
-          : null,
+    // A click on a move while a note is being typed goes there at once: in
+    // the note's tap region the press does not take its focus first, which
+    // would commit the note and redraw the list under the pointer. Leaving
+    // the move commits the note to the move it was typed for.
+    Widget reader() => TextFieldTapRegion(
+      child: MoveTreeView(
+        session: workspace.session,
+        moveMenu: (path) => [
+          if (hooks.onAnnotate != null)
+            MenuItemButton(
+              onPressed: () {
+                workspace.session.cursor.goTo(path);
+                hooks.onAnnotate!();
+              },
+              child: const Text('Comment this move'),
+            ),
+          ...?hooks.moveMenu?.call(path),
+        ],
+        heading: hooks.header ? _heading() : null,
+        preview: solitaire?.active == true && solitaire?.record != null
+            ? (tree: solitaire!.record!, onRead: solitaire.inspect)
+            : null,
+      ),
     );
-    Widget annotatedReader() => hooks.onAnnotate == null
+    return solitaire == null
         ? reader()
         : ListenableBuilder(
-            listenable: workspace.session,
-            builder: (context, _) => Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (workspace.session.chapter != null &&
-                    workspace.session.shownTo == null)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Tooltip(
-                      message: AppKey.edit.tip('Annotate the selected move'),
-                      child: TextButton(
-                        onPressed: hooks.onAnnotate,
-                        child: const Text('Annotate'),
-                      ),
-                    ),
-                  ),
-                Expanded(child: reader()),
-              ],
-            ),
-          );
-    return solitaire == null
-        ? annotatedReader()
-        : ListenableBuilder(
             listenable: solitaire,
-            builder: (context, _) =>
-                solitaire.active ? reader() : annotatedReader(),
+            builder: (context, _) => reader(),
           );
   }
 

@@ -67,6 +67,61 @@ class _RecoveryState extends State<_Recovery> {
     }
   }
 
+  /// The deleted studies as the listing reads, or why there are none.
+  Widget _listingView(
+    BuildContext context,
+    AsyncSnapshot<DeletedListing> snapshot,
+  ) {
+    if (snapshot.hasError || snapshot.data is DeletedUnreadable) {
+      return const Center(
+        child: Text('Could not read deleted studies. Try Refresh.'),
+      );
+    }
+    final listing = snapshot.data;
+    if (listing is! DeletedChapters) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (listing.chapters.isEmpty) {
+      return const Center(child: Text('No deleted studies.'));
+    }
+    return ListView.builder(
+      itemCount: listing.chapters.length,
+      itemBuilder: (context, index) => _row(context, listing.chapters[index]),
+    );
+  }
+
+  /// One deleted study with when it went, and its two ways back.
+  Widget _row(BuildContext context, DeletedChapter chapter) {
+    final date = MaterialLocalizations.of(
+      context,
+    ).formatShortDate(chapter.deletedAt.toLocal());
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Space.xs),
+      child: Row(
+        children: [
+          Expanded(
+            child: Tooltip(
+              message: chapter.name,
+              child: Text(
+                '${chapter.name}\n$date',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: _busy ? null : () => _restore(chapter),
+            child: const Text('Restore'),
+          ),
+          TextButton(
+            onPressed: _busy ? null : () => _restore(chapter, rename: true),
+            child: const Text('Restore as…'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => PopScope(
     canPop: !_busy,
@@ -95,58 +150,7 @@ class _RecoveryState extends State<_Recovery> {
             Expanded(
               child: FutureBuilder<DeletedListing>(
                 future: _listing,
-                builder: (context, snapshot) {
-                  if (snapshot.hasError || snapshot.data is DeletedUnreadable) {
-                    return const Center(
-                      child: Text(
-                        'Could not read deleted studies. Try Refresh.',
-                      ),
-                    );
-                  }
-                  final listing = snapshot.data;
-                  if (listing is! DeletedChapters) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (listing.chapters.isEmpty) {
-                    return const Center(child: Text('No deleted studies.'));
-                  }
-                  return ListView.builder(
-                    itemCount: listing.chapters.length,
-                    itemBuilder: (context, index) {
-                      final chapter = listing.chapters[index];
-                      final date = MaterialLocalizations.of(
-                        context,
-                      ).formatShortDate(chapter.deletedAt.toLocal());
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: Space.xs),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Tooltip(
-                                message: chapter.name,
-                                child: Text(
-                                  '${chapter.name}\n$date',
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: _busy ? null : () => _restore(chapter),
-                              child: const Text('Restore'),
-                            ),
-                            TextButton(
-                              onPressed: _busy
-                                  ? null
-                                  : () => _restore(chapter, rename: true),
-                              child: const Text('Restore as…'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  );
-                },
+                builder: _listingView,
               ),
             ),
           ],

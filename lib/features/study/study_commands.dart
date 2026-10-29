@@ -91,7 +91,7 @@ String studyNameOf(Chapter chapter) =>
 /// asked for it — and saying it twice in two places reads as two failures.
 String? _apply(DocumentSession session, ChapterEdit Function(Chapter) edit) {
   if (session.chapter?.game == null) return 'Open a study chapter first.';
-  session.apply(edit);
+  session.apply(edit, writes: true);
   return null;
 }
 

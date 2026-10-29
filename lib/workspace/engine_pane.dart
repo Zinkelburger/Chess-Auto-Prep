@@ -14,8 +14,8 @@ import 'engine_analysis.dart';
 import 'engine_settings.dart';
 import 'engine_status.dart';
 import 'line_preview.dart';
+import 'preview_target.dart';
 import '../ui/app_keys.dart';
-import '../ui/move_notation.dart';
 
 /// The engine's lines for the position on the board, laid out as the old
 /// app's engine bar: a labelled sliding switch and the engine's status —
@@ -376,8 +376,10 @@ class _LineRowState extends State<_LineRow> {
     final moves = Wrap(
       children: [
         for (final (index, move) in widget.moves.indexed)
-          _MoveToken(
-            move: move,
+          LineMoveToken(
+            label: move.label,
+            san: move.san,
+            height: engineRowHeight,
             onHover: (anchor) => widget.onHover(move, anchor),
             onLeave: widget.onLeave,
             onTap: () => widget.onTap(index),
@@ -440,65 +442,6 @@ class _LineRowState extends State<_LineRow> {
               },
             )
           : null,
-    );
-  }
-}
-
-/// One move in a line: its number muted, the move itself in the text
-/// colour, a tint under the pointer.
-class _MoveToken extends StatelessWidget {
-  const _MoveToken({
-    required this.move,
-    required this.onHover,
-    required this.onLeave,
-    required this.onTap,
-  });
-
-  final PvMove move;
-  final ValueChanged<Offset> onHover;
-  final VoidCallback onLeave;
-  final VoidCallback onTap;
-
-  /// The bottom centre of this token on the screen, where its board hangs.
-  Offset _anchor(BuildContext context) {
-    final box = context.findRenderObject() as RenderBox;
-    return box.localToGlobal(Offset(box.size.width / 2, box.size.height));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return SizedBox(
-      height: engineRowHeight,
-      child: MouseRegion(
-        onEnter: (_) => onHover(_anchor(context)),
-        onExit: (_) => onLeave(),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(3),
-          hoverColor: scheme.primary.withValues(alpha: 0.1),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 3),
-            // As wide as its text, or the row's loose width would be taken.
-            child: Center(
-              widthFactor: 1,
-              child: Text.rich(
-                TextSpan(
-                  children: [
-                    if (move.label.isNotEmpty)
-                      TextSpan(
-                        text: '${move.label} ',
-                        style: TextStyle(color: scheme.onSurfaceVariant),
-                      ),
-                    TextSpan(text: displaySan(context, move.san)),
-                  ],
-                ),
-                style: monoText.copyWith(color: scheme.onSurface),
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
