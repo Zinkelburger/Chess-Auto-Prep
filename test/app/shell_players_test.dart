@@ -112,6 +112,22 @@ void main() {
     expect(w.parts.players.analysis.side, Side.black);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('the player analysed follows their record as it is edited, so '
+      'a reload or download uses the new accounts', (tester) async {
+    await w.pumpShell(tester);
+    await tester.runAsync(() => w.parts.players.analysis.select(player));
+    final now = w.parts.players.directory.players.single;
+    await tester.runAsync(
+      () => w.parts.players.directory.save(
+        now.edited({'name': 'Alexandra'}),
+        expected: now,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(w.parts.players.analysis.player!.name, 'Alexandra');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('filters open in the column, named, and scroll with the list '
       'instead of overflowing it', (tester) async {
     await w.pumpShell(tester);

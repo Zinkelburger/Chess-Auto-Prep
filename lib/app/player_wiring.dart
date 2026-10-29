@@ -64,6 +64,7 @@ final class PlayerModes {
       env.playerReports,
       env.accounts,
     );
+    directory.addListener(_followDirectory);
   }
   final AppEnvironment env;
   final Workspace workspace;
@@ -76,6 +77,21 @@ final class PlayerModes {
   late final PlayerBook book;
   late final SavedGames saved;
   bool _disposed = false;
+
+  /// The player under analysis as the directory has them now: accounts,
+  /// aliases and a download range edited in Players & prep are what the
+  /// next reload, download or retry uses, not the record as it was chosen.
+  void _followDirectory() {
+    final chosen = analysis.player;
+    if (_disposed || chosen == null) return;
+    final current = directory.players
+        .where((p) => p.id == chosen.id)
+        .firstOrNull;
+    if (current == null || identical(current, chosen)) return;
+    analysis
+      ..player = current
+      ..changed();
+  }
 
   void choose(Player player) {
     hunt.stop();
@@ -456,6 +472,7 @@ final class PlayerModes {
 
   void dispose() {
     _disposed = true;
+    directory.removeListener(_followDirectory);
     book.dispose();
     saved.dispose();
     hunt.dispose();
