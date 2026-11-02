@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { parseSquare } from 'chessops/util';
 import {
-  MAX_IN_HAND, START_FEN, Tree, adjustHand, boardDests, dropSquares, fenOf, handEdit, handLetters, lichessFen, playLine, readFen, sanLine, threatFen,
+  MAX_IN_HAND, START_FEN, Tree, adjustHand, boardDests, dropSquares, enPassantOptions, fenOf, handEdit, handLetters, lichessFen, playLine, readFen,
+  sanLine, threatFen,
   outcomeOf, positionOf, readMove,
 } from '../src/analysis/tree';
 import { liveGlyph, povDiff, verdict, winningChances } from '../src/analysis/judge';
@@ -13,6 +15,19 @@ assert.ok(loaded.ok, 'three extra queens a side is a position');
 assert.equal(readFen('8/8/8/8/8/8/8/8[] w - - 0 1').ok, false, 'no kings is refused');
 assert.equal(readFen('nonsense').ok, false);
 assert.match((readFen('4k3/8/8/8/8/8/8/4K3[Kk] w - - 0 1') as { error: string }).error, /king/i);
+const castlingOf = (fen: string) => fenOf((readFen(fen) as { pos: Parameters<typeof fenOf>[0] }).pos).split(' ')[2];
+assert.equal(castlingOf('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQBKNR[] w KQkq - 0 1'), 'kq', 'a moved king loses both rights');
+assert.equal(castlingOf('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/1RBQKBNR[] w KQkq - 0 1'), 'Kkq', 'a rook off a1 is not a Chess960 right');
+assert.equal(castlingOf('rnbqkbn1/pppppppr/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1'), 'KQq', 'a rook off h8 loses only that side');
+assert.equal(castlingOf(START_FEN), 'KQkq');
+assert.equal(fenOf(positionOf('4k3/8/8/8/8/8/8/Q~3K3[] w - - 0 1')).split(' ')[0], '4k3/8/8/8/8/8/8/Q~3K3[]', 'a promoted queen stays marked');
+const pieceAtFen = (fen: string) => { const pos = positionOf(fen); return (sq: string) => pos.board.get(parseSquare(sq)!); };
+// After 1.e4 d5 2.e5 f5 the board allows d6 and f6, as a FEN may name either.
+const EP = 'rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR[] w KQkq f6 0 3';
+assert.deepEqual(enPassantOptions('white', pieceAtFen(EP)), ['d6', 'f6'], 'd5 and f5 both stand beside e5 with nothing behind them');
+assert.equal(fenOf(positionOf(EP)).split(' ')[3], 'f6', 'the en passant square survives reading');
+assert.deepEqual(enPassantOptions('black', pieceAtFen(EP)), [], 'no white pawn stepped two squares');
+assert.deepEqual(enPassantOptions('white', pieceAtFen('rnbqkbnr/pppp1ppp/4p3/4P3/8/8/PPPP1PPP/RNBQKBNR[] w KQkq - 0 3')), [], 'a pawn with a pawn behind it did not step two');
 
 // Hands are shown as Lichess writes them, a ninth rank, and read in either form.
 const LICHESS = 'r2qkb1r/ppp2ppp/2n5/1B1Q4/3pP3/8/PPP2PPP/RNB1K2R/PNpnb w KQkq - 0 10';

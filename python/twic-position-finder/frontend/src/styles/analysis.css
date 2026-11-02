@@ -29,8 +29,10 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-board-wrap { position: relative; width: var(--ch-board); height: var(--ch-board); flex: none; }
 .ch[data-mode="editor"] .ch-board-wrap { width: calc(var(--ch-sq) * 8); height: calc(var(--ch-sq) * 8); }
 .ch-board-wrap .bb-board cg-container { width: 100%; height: 100%; }
+/* A promoted piece: a small dot in the top-left corner, clear of the coordinates (it goes back as a pawn when taken). */
+.ch-board-wrap cg-board square.ch-promoted { background: radial-gradient(circle at 14% 14%, var(--accent) 0 7%, transparent 8%); }
 .ch-board-wrap.ch-editing[data-brush="piece"] cg-board,
-.ch-board-wrap.ch-editing[data-brush="trash"] cg-board { cursor: crosshair; }
+.ch-board-wrap.ch-editing[data-brush="trash"] cg-board { cursor: var(--ch-cursor, crosshair); }
 
 /* lila's spare pieces: pointer, six pieces, bin; one square each. */
 .ch-spare { display: grid; grid-template-columns: repeat(8, var(--ch-sq)); height: var(--ch-sq); flex: none; background: var(--bg-card); border-radius: 4px; }
@@ -70,7 +72,11 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-analysis { position: relative; }
 .ch-tools.menu-open .ch-analysis { display: none; }
 .ch-analysis.practising .ch-ceval, .ch-analysis.practising .ch-settings, .ch-analysis.practising .ch-pvs { display: none; }
-.ch[data-mode="analysis"] .ch-editor, .ch[data-mode="editor"] .ch-analysis { display: none; }
+.ch[data-mode="analysis"] .ch-editor { display: none; }
+/* The editor keeps the engine header and its lines above the editor's own controls, as lila does. */
+.ch[data-mode="editor"] .ch-analysis { flex: none; }
+.ch[data-mode="editor"] .ch-analysis > :not(.ch-ceval, .ch-settings, .ch-pvs, .ch-pv-board) { display: none; }
+.ch[data-mode="editor"] .ch-editor { flex: 1 0 auto; }
 
 /* Engine header: switch, eval, engine name and depth, gear. */
 .ch-ceval { position: relative; display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 10px; border-bottom: 1px solid var(--border); min-height: 52px; }
@@ -145,6 +151,7 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-tick:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 2px; }
 .ch-check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .ch-check input { margin: 0; accent-color: var(--accent); }
+.ch-check:has(input:disabled) { cursor: default; opacity: 0.45; }
 
 /* Engine lines, one row each, as on Lichess. */
 .ch-pvs { flex: none; border-bottom: 1px solid var(--border); }
@@ -285,6 +292,10 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-castling legend { padding: 0; margin-bottom: 6px; font-size: 0.85rem; color: var(--text-dim); }
 .ch-castling > span { color: var(--text-dim); }
 .ch-castling label { white-space: nowrap; }
+.ch-ep { display: flex; align-items: center; gap: 14px; font-size: 0.9rem; }
+.ch-ep[hidden] { display: none; }
+.ch-ep > span { color: var(--text-dim); }
+.ch-ep .ch-choice button { flex: none; padding: 5px 12px; }
 .ch-editor-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .ch-editor-actions { margin-top: auto; justify-content: flex-end; }
 .ch-editor-error { min-height: 1.3em; color: var(--danger); font-size: 0.88rem; }

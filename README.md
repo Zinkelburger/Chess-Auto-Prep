@@ -48,7 +48,7 @@ Use that SDK (or set `FLUTTER=/path/to/flutter/bin/flutter`).
 `scripts/ci.sh full` also checks formatting without applying fixes.
 
 Before tagging, commit the final release candidate and run
-`scripts/ci.sh preflight` in its clean checkout. This checks the SDK,
+`scripts/ci.sh preflight` and `scripts/ci.sh tools` in its clean checkout. This checks the SDK,
 dependencies, formatting, analysis and unit/widget tests. It records
 the commit and rejects uncommitted/untracked files or a changed HEAD at the end.
 Inspect `build/quality-gates/summary.md` and the per-gate logs on failure;

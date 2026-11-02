@@ -57,7 +57,12 @@ checksum-verified chunks. Every file fits Cloudflare Pages' 25 MiB asset limit.
 - `src/analysis/` — the bughouse board and the lila analysis pieces the PGN
   page shares with it:
   - `board.ts` the chessground board in analysis and editor modes, with the
-    editor's spare-piece strips; `moves.ts` the move list (column or inline,
+    editor's spare-piece strips. The editor follows lila's: a castling right
+    counts only while its king and rook are home (and is ticked by the board
+    after Clear board), en passant is chosen among the squares the board
+    allows, right-click swaps the colour of the piece in hand, F flips, the
+    engine follows the edited position, and Shift-click marks a piece promoted
+    (a dot on its square, in analysis too); `moves.ts` the move list (column or inline,
     folds, live ?!/?/?? marks, the right-click menu with Promote, Make main
     line, Force variation, Copy PGN, Delete); `variation-tree.ts` the
     rules-free move tree both pages extend (variations, promote, force
