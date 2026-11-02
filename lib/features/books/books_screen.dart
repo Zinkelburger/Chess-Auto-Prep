@@ -16,6 +16,7 @@ import '../../ui/theme.dart';
 import '../../workspace/book/books.dart';
 import '../../workspace/book/repertoire_catalog.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// The Books mode: the user's books on the left, the one picked on the
 /// right with every repertoire and its chapters to tick in or out. A book
@@ -175,12 +176,12 @@ class _BookList extends StatelessWidget {
                 ),
                 // The empty list has its own button; one is enough.
                 if (!empty)
-                  IconButton(
+                  ToolButton(
+                    icon: AppIcons.add,
+                    tooltip: 'New opening book…',
                     onPressed: books.changingReferences
                         ? null
                         : () => unawaited(newBook(context, books)),
-                    icon: const Icon(AppIcons.add, size: IconSize.action),
-                    tooltip: 'New opening book…',
                   ),
               ],
             ),

@@ -6,6 +6,7 @@ import '../../chess/pgn/study_cleanup.dart';
 import '../../ui/theme.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/form_dialog.dart';
+import '../../ui/tool_button.dart';
 
 /// The chapter's tags to edit, the game's own first: who played, the
 /// result, when and where, ready to fill in from a scoresheet. A tag left
@@ -84,7 +85,8 @@ class _TagsState extends State<_Tags> {
                       decoration: const InputDecoration(labelText: 'Value'),
                     ),
                   ),
-                  IconButton(
+                  ToolButton(
+                    icon: AppIcons.remove,
                     tooltip: 'Remove tag',
                     onPressed: () {
                       if (mounted) {
@@ -94,7 +96,6 @@ class _TagsState extends State<_Tags> {
                         });
                       }
                     },
-                    icon: const Icon(AppIcons.remove, size: IconSize.action),
                   ),
                 ],
               ),

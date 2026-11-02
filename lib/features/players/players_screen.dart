@@ -18,6 +18,8 @@ import '../../ui/list_row.dart';
 import '../../ui/problem_line.dart';
 import '../../ui/progress_line.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/segments.dart';
+import '../../ui/tool_button.dart';
 
 /// The Players & prep page: everyone the user prepares for, or the groups
 /// they are collected in for an event, as one dense list. A row has the two
@@ -148,17 +150,16 @@ class _PlayersScreenState extends State<PlayersScreen> {
   /// Everyone, or the groups people are collected in for an event.
   Widget _viewSwitch() => Align(
     alignment: Alignment.centerLeft,
-    child: SegmentedButton<bool>(
+    child: Segments<bool>(
       segments: const [
         ButtonSegment(value: false, label: Text('All players')),
         ButtonSegment(value: true, label: Text('Groups')),
       ],
-      selected: {owner.showingGroups},
-      showSelectedIcon: false,
-      onSelectionChanged: (v) {
+      selected: owner.showingGroups,
+      onChanged: (v) {
         if (!mounted) return;
         _search.clear();
-        owner.showGroups(v.single);
+        owner.showGroups(v);
       },
     ),
   );
@@ -169,14 +170,13 @@ class _PlayersScreenState extends State<PlayersScreen> {
     final text = Theme.of(context).textTheme;
     return Row(
       children: [
-        IconButton(
+        ToolButton(
+          icon: AppIcons.back,
           tooltip: 'Back to groups',
           onPressed: () {
             _search.clear();
             owner.showGroup(null);
           },
-          icon: const Icon(AppIcons.back, size: IconSize.action),
-          visualDensity: VisualDensity.compact,
         ),
         const SizedBox(width: Space.s),
         Flexible(

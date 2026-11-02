@@ -7,6 +7,7 @@ import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
 import 'study_sender.dart';
 import '../../ui/form_dialog.dart';
+import '../../ui/segments.dart';
 
 /// Asks where on Lichess the open study goes, sends it, and says what
 /// Lichess now holds. One question: a new study, or one already there.
@@ -98,16 +99,13 @@ class _SendState extends State<_Send> with ListeningState<_Send> {
 
   /// Where the chapters go: a new study, or the one the link names.
   List<Widget> _destination(ThemeData theme, {required bool locked}) => [
-    SegmentedButton<bool>(
-      showSelectedIcon: false,
-      selected: {_existing},
+    Segments<bool>(
       segments: const [
         ButtonSegment(value: false, label: Text('New study')),
         ButtonSegment(value: true, label: Text('Existing study')),
       ],
-      onSelectionChanged: locked
-          ? null
-          : (value) => setState(() => _existing = value.single),
+      selected: _existing,
+      onChanged: locked ? null : (value) => setState(() => _existing = value),
     ),
     const SizedBox(height: Space.m),
     if (_existing) ...[

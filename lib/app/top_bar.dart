@@ -7,6 +7,7 @@ import '../ui/theme.dart';
 import 'mode.dart';
 import '../ui/app_keys.dart';
 import '../ui/app_icons.dart';
+import '../ui/tool_button.dart';
 
 /// The row over the window: the mode menu and, beside it, the Actions menu —
 /// one menu of everything that can be done now, the same shape in every mode.
@@ -78,21 +79,19 @@ class TopBar extends StatelessWidget {
       child: Row(
         children: [
           if (!listShown) ListToggle(shown: false, onPressed: onToggleList),
-          IconButton(
-            icon: const Icon(AppIcons.back, size: IconSize.action),
+          ToolButton(
+            icon: AppIcons.back,
             tooltip: AppKey.historyBack.tip(
               backTo == null ? 'Back' : 'Back to $backTo',
             ),
             onPressed: backTo == null ? null : onBack,
-            visualDensity: VisualDensity.compact,
           ),
-          IconButton(
-            icon: const Icon(AppIcons.forward, size: IconSize.action),
+          ToolButton(
+            icon: AppIcons.forward,
             tooltip: AppKey.historyForward.tip(
               forwardTo == null ? 'Forward' : 'Forward to $forwardTo',
             ),
             onPressed: forwardTo == null ? null : onForward,
-            visualDensity: VisualDensity.compact,
           ),
           _ModeMenu(mode: mode, onMode: onMode, offered: offered),
           const SizedBox(width: Space.s),
@@ -111,11 +110,10 @@ class TopBar extends StatelessWidget {
                 ),
               ),
             ),
-          IconButton(
-            icon: const Icon(AppIcons.settings, size: IconSize.action),
+          ToolButton(
+            icon: AppIcons.settings,
             tooltip: AppKey.settings.tip('Settings'),
             onPressed: onSettings,
-            visualDensity: VisualDensity.compact,
           ),
         ],
       ),
@@ -313,13 +311,9 @@ class ListToggle extends StatelessWidget {
   final VoidCallback onPressed;
 
   @override
-  Widget build(BuildContext context) => IconButton(
-    icon: Icon(
-      shown ? AppIcons.hideList : AppIcons.showList,
-      size: IconSize.action,
-    ),
+  Widget build(BuildContext context) => ToolButton(
+    icon: shown ? AppIcons.hideList : AppIcons.showList,
     tooltip: shown ? 'Hide the list' : 'Show the list',
     onPressed: onPressed,
-    visualDensity: VisualDensity.compact,
   );
 }

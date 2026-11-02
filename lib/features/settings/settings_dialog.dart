@@ -8,6 +8,7 @@ import '../../ui/theme.dart';
 import 'setting_controls.dart';
 import 'setting_rows.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// Opens the settings over the workspace. Every change has already
 /// happened by the time it closes; the close button, Esc or outside click dismisses it.
@@ -216,11 +217,10 @@ class _TitleBar extends StatelessWidget {
             style: Theme.of(context).textTheme.titleMedium,
           ),
         ),
-        IconButton(
-          icon: const Icon(AppIcons.close, size: IconSize.action),
+        ToolButton(
+          icon: AppIcons.close,
           tooltip: AppKey.closeDialog.tip('Close'),
           onPressed: onClose,
-          visualDensity: VisualDensity.compact,
         ),
       ],
     ),

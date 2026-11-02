@@ -10,6 +10,7 @@ import 'library_state.dart';
 import 'repertoire_tile.dart';
 import '../../ui/list_message.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// The repertoires, searchable, each opening to its chapters. Tapping a
 /// chapter asks the host to open it in the workspace.
@@ -203,11 +204,10 @@ class _Toolbar extends StatelessWidget {
                     ),
                     const SizedBox(width: Space.xs),
                     if (onCreate case final create?)
-                      IconButton(
-                        icon: const Icon(AppIcons.add, size: IconSize.action),
+                      ToolButton(
+                        icon: AppIcons.add,
                         tooltip: 'New repertoire…',
                         onPressed: busy ? null : create,
-                        visualDensity: VisualDensity.compact,
                       ),
                   ],
                 ),

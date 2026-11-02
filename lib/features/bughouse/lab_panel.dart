@@ -13,6 +13,7 @@ import 'board_moves.dart';
 import 'bughouse_lab.dart';
 import 'lab_engine.dart';
 import 'lab_lines.dart';
+import '../../ui/segments.dart';
 
 /// The column beside the boards: how many boards, who may sit, the engine
 /// switch with its score, then the moves: with one board its best moves and
@@ -67,7 +68,7 @@ class _BoardsSwitch extends StatelessWidget {
     spacing: Space.s,
     runSpacing: Space.s,
     children: [
-      SegmentedButton<LabBoards>(
+      Segments<LabBoards>(
         segments: const [
           ButtonSegment(
             value: LabBoards.one,
@@ -80,10 +81,8 @@ class _BoardsSwitch extends StatelessWidget {
             tooltip: 'Analyse both boards of the game',
           ),
         ],
-        selected: {lab.boards},
-        showSelectedIcon: false,
-        style: const ButtonStyle(visualDensity: VisualDensity.compact),
-        onSelectionChanged: (picked) => lab.showBoards(picked.single),
+        selected: lab.boards,
+        onChanged: (picked) => lab.showBoards(picked),
       ),
       Tooltip(
         message: lab.single
@@ -167,7 +166,7 @@ class _TimeChips extends StatelessWidget {
     padding: const EdgeInsets.only(top: Space.s),
     child: Align(
       alignment: Alignment.centerLeft,
-      child: SegmentedButton<ClockCase>(
+      child: Segments<ClockCase>(
         segments: [
           for (final clock in ClockCase.values)
             ButtonSegment(
@@ -176,10 +175,8 @@ class _TimeChips extends StatelessWidget {
               tooltip: _hint(clock),
             ),
         ],
-        selected: {lab.clock},
-        showSelectedIcon: false,
-        style: const ButtonStyle(visualDensity: VisualDensity.compact),
-        onSelectionChanged: (picked) => lab.setClock(picked.single),
+        selected: lab.clock,
+        onChanged: (picked) => lab.setClock(picked),
       ),
     ),
   );

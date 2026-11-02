@@ -26,6 +26,7 @@ import 'study_recovery_dialog.dart';
 import '../../ui/list_message.dart';
 import '../../ui/list_row.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// Opens one chapter of a study in the workspace.
 typedef OpenChapter = void Function(ChapterRef study, int chapter);
@@ -544,11 +545,10 @@ class _Toolbar extends StatelessWidget {
           Row(
             children: [
               if (currentName != null)
-                IconButton(
+                ToolButton(
+                  icon: AppIcons.back,
                   tooltip: 'Back to studies',
                   onPressed: onChooseStudy,
-                  icon: const Icon(AppIcons.back, size: IconSize.action),
-                  visualDensity: VisualDensity.compact,
                 ),
               // Room for the buttons first: a narrow pane cuts the label,
               // which otherwise has all the row leaves it.

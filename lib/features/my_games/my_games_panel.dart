@@ -11,6 +11,7 @@ import 'book_words.dart';
 import 'game_book.dart';
 import '../../ui/list_message.dart';
 import '../../ui/list_row.dart';
+import '../../ui/segments.dart';
 
 /// The two ways the column lists what the book says: game by game, or
 /// grouped by where the games left it, most often first.
@@ -134,20 +135,14 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
     children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, 0),
-        child: SegmentedButton<_View>(
+        child: Segments<_View>(
           segments: const [
             ButtonSegment(value: _View.games, label: Text('Games')),
             ButtonSegment(value: _View.openings, label: Text('Openings')),
           ],
-          selected: {_view},
-          showSelectedIcon: false,
-          style: const ButtonStyle(
-            visualDensity: VisualDensity.compact,
-            padding: WidgetStatePropertyAll(
-              EdgeInsets.symmetric(horizontal: Space.xs),
-            ),
-          ),
-          onSelectionChanged: (picked) => _show(picked.single),
+          selected: _view,
+          narrow: true,
+          onChanged: (picked) => _show(picked),
         ),
       ),
       Expanded(

@@ -23,6 +23,8 @@ import '../../ui/list_message.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/problem_line.dart';
 import '../../ui/progress_line.dart';
+import '../../ui/segments.dart';
+import '../../ui/tool_button.dart';
 
 /// The Player analysis column: who is being prepared for and where their
 /// games stand, the colour they are looked at from, then the search and the
@@ -139,11 +141,10 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
               if (player != null)
                 _menu(player)
               else if (widget.players.players.isNotEmpty)
-                IconButton(
-                  icon: const Icon(AppIcons.add, size: IconSize.action),
+                ToolButton(
+                  icon: AppIcons.add,
                   tooltip: 'Add player…',
                   onPressed: _add,
-                  visualDensity: VisualDensity.compact,
                 ),
             ],
             trailing: widget.trailing,
@@ -208,15 +209,14 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
         if (corpus != null && corpus.games.isNotEmpty) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(Space.m, 0, Space.m, Space.s),
-            child: SegmentedButton<Side>(
+            child: Segments<Side>(
               segments: const [
                 ButtonSegment(value: Side.white, label: Text('As White')),
                 ButtonSegment(value: Side.black, label: Text('As Black')),
               ],
-              selected: {owner.side},
-              showSelectedIcon: false,
-              style: _segments,
-              onSelectionChanged: (v) => owner.setSide(v.single),
+              selected: owner.side,
+              narrow: true,
+              onChanged: (v) => owner.setSide(v),
             ),
           ),
           Expanded(child: _lists(player)),
@@ -356,12 +356,6 @@ extension on _AnalysisPanelState {
     ];
   }
 }
-
-/// A switch in the column, as small as the rows under it.
-const _segments = ButtonStyle(
-  visualDensity: VisualDensity.compact,
-  padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: Space.xs)),
-);
 
 /// The mode's name, or the chosen player's, with the column's actions and
 /// the host's toggle in the corner.
@@ -594,9 +588,7 @@ class _ListSwitch extends SliverPersistentHeaderDelegate {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SegmentedButton<PlayerList>(
-                  showSelectedIcon: false,
-                  style: _segments,
+                Segments<PlayerList>(
                   segments: const [
                     ButtonSegment(
                       value: PlayerList.openings,
@@ -611,8 +603,9 @@ class _ListSwitch extends SliverPersistentHeaderDelegate {
                       label: Text('Findings'),
                     ),
                   ],
-                  selected: {list},
-                  onSelectionChanged: (v) => onChanged(v.single),
+                  selected: list,
+                  narrow: true,
+                  onChanged: (v) => onChanged(v),
                 ),
               ],
             ),

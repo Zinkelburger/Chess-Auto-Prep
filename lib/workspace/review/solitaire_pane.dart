@@ -8,6 +8,7 @@ import 'solitaire.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/segments.dart';
 
 /// The Solitaire tab: the setup before a start, the guess being made while
 /// one runs, and what was missed once the game is through.
@@ -75,29 +76,27 @@ class _Setup extends StatelessWidget {
         const SizedBox(height: Space.s),
         _Row(
           label: 'Guess for',
-          child: SegmentedButton<Side>(
+          child: Segments<Side>(
             key: const ValueKey('solitaire-side'),
-            showSelectedIcon: false,
             segments: const [
               ButtonSegment(value: Side.white, label: Text('White')),
               ButtonSegment(value: Side.black, label: Text('Black')),
             ],
-            selected: {solitaire.side},
-            onSelectionChanged: (value) => solitaire.setSide(value.first),
+            selected: solitaire.side,
+            onChanged: (value) => solitaire.setSide(value),
           ),
         ),
         const SizedBox(height: Space.s),
         _Row(
           label: 'Start at',
-          child: SegmentedButton<bool>(
+          child: Segments<bool>(
             key: const ValueKey('solitaire-start'),
-            showSelectedIcon: false,
             segments: const [
               ButtonSegment(value: true, label: Text('Beginning')),
               ButtonSegment(value: false, label: Text('Current position')),
             ],
-            selected: {solitaire.fromStart},
-            onSelectionChanged: (value) => solitaire.setFromStart(value.first),
+            selected: solitaire.fromStart,
+            onChanged: (value) => solitaire.setFromStart(value),
           ),
         ),
         const SizedBox(height: Space.s),

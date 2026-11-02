@@ -12,6 +12,7 @@ import 'library_messages.dart';
 import 'library_state.dart';
 import '../../ui/list_message.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// The chapters the user deleted under the repertoire each came from, newest
 /// first, each with `Restore`. It
@@ -167,11 +168,10 @@ class _Header extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(0, Space.s, Space.m, Space.s),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(AppIcons.back, size: IconSize.action),
+          ToolButton(
+            icon: AppIcons.back,
             tooltip: 'Back to repertoires',
             onPressed: onBack,
-            visualDensity: VisualDensity.compact,
           ),
           Expanded(
             child: Text(

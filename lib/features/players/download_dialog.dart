@@ -7,6 +7,7 @@ import '../../ui/form_dialog.dart';
 import '../../ui/number_field.dart';
 import '../../ui/theme.dart';
 import '../../ui/toggle_chip.dart';
+import '../../ui/segments.dart';
 
 Future<PlayerDownloadRange?> downloadRange(
   BuildContext context,
@@ -72,15 +73,14 @@ class _DownloadDialogState extends State<_DownloadDialog> {
               style: text.bodySmall,
             ),
             const SizedBox(height: Space.m),
-            SegmentedButton<bool>(
+            Segments<bool>(
               segments: const [
                 ButtonSegment(value: false, label: Text('Last games')),
                 ButtonSegment(value: true, label: Text('Recent months')),
               ],
-              selected: {months},
-              showSelectedIcon: false,
-              onSelectionChanged: (v) {
-                if (mounted) setState(() => months = v.single);
+              selected: months,
+              onChanged: (v) {
+                if (mounted) setState(() => months = v);
               },
             ),
             const SizedBox(height: Space.s),

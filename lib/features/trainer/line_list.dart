@@ -21,6 +21,7 @@ import 'study_training_controls.dart';
 import 'trainer_words.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/segments.dart';
 
 /// The trainer between sittings: the scope, where its lines stand, Review
 /// and Learn, and the lines themselves — or the wrong answers given in
@@ -177,7 +178,7 @@ class _LineListState extends State<LineList> {
 
   static const _toolbarRowWidth = 420.0;
 
-  Widget _switch(TrainingProgress progress) => SegmentedButton<_Showing>(
+  Widget _switch(TrainingProgress progress) => Segments<_Showing>(
     segments: [
       const ButtonSegment(value: _Showing.lines, label: Text('Lines')),
       ButtonSegment(
@@ -185,11 +186,10 @@ class _LineListState extends State<LineList> {
         label: Text('Mistakes · ${progress.mistakes.length}'),
       ),
     ],
-    selected: {_showing},
-    showSelectedIcon: false,
-    onSelectionChanged: (s) {
+    selected: _showing,
+    onChanged: (s) {
       if (!mounted) return;
-      setState(() => _showing = s.single);
+      setState(() => _showing = s);
     },
   );
 
@@ -202,19 +202,15 @@ class _LineListState extends State<LineList> {
 
   Widget _orderPicker() => Align(
     alignment: Alignment.centerLeft,
-    child: SegmentedButton<LineOrder>(
+    child: Segments<LineOrder>(
       segments: [
         for (final order in _orders)
           ButtonSegment(value: order, label: Text(orderName(order))),
       ],
-      selected: {
-        _orders.contains(widget.trainer.order)
-            ? widget.trainer.order
-            : LineOrder.training,
-      },
-      showSelectedIcon: false,
-      style: const ButtonStyle(visualDensity: VisualDensity.compact),
-      onSelectionChanged: (s) => widget.trainer.order = s.single,
+      selected: _orders.contains(widget.trainer.order)
+          ? widget.trainer.order
+          : LineOrder.training,
+      onChanged: (s) => widget.trainer.order = s,
     ),
   );
 
@@ -624,7 +620,7 @@ class TrainScopeButtons extends StatelessWidget {
   @override
   Widget build(BuildContext context) => trainer.studyDocument != null
       ? StudyTrainingControls(trainer: trainer)
-      : SegmentedButton<TrainScope>(
+      : Segments<TrainScope>(
           segments: const [
             ButtonSegment(value: TrainScope.chapter, label: Text('Chapter')),
             ButtonSegment(
@@ -633,10 +629,8 @@ class TrainScopeButtons extends StatelessWidget {
             ),
             ButtonSegment(value: TrainScope.book, label: Text('Book')),
           ],
-          selected: {trainer.scope},
-          showSelectedIcon: false,
-          style: const ButtonStyle(visualDensity: VisualDensity.compact),
-          onSelectionChanged: (s) => trainer.setScope(s.single),
+          selected: trainer.scope,
+          onChanged: (s) => trainer.setScope(s),
         );
 }
 

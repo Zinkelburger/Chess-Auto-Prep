@@ -15,6 +15,7 @@ import 'trainer.dart';
 import 'trainer_state.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/problem_line.dart';
+import '../../ui/tool_button.dart';
 
 /// The selected scope's training desk, inside the shared Train pane.
 class TrainingHome extends StatefulWidget {
@@ -92,12 +93,11 @@ class _TrainingHomeState extends State<TrainingHome> {
         Row(
           children: [
             if (selection.chapter != null)
-              IconButton(
+              ToolButton(
+                icon: AppIcons.back,
                 tooltip:
                     'Back to ${selection.repertoire?.name ?? 'the whole repertoire'}',
                 onPressed: () => selection.select(),
-                icon: const Icon(AppIcons.back, size: IconSize.action),
-                visualDensity: VisualDensity.compact,
               ),
             Expanded(
               child: Text(

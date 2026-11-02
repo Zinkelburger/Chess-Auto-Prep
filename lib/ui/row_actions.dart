@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'app_icons.dart';
 import 'menu_entry.dart';
-import 'theme.dart';
+import 'tool_button.dart';
 
 /// The `⋯` menu on a row of a list: everything that can be done to that one
 /// thing, out of the way until it is wanted.
@@ -33,11 +33,10 @@ class RowActions extends StatelessWidget {
     return MenuAnchor(
       controller: controller,
       menuChildren: alignMenu(children),
-      builder: (context, controller, _) => IconButton(
-        icon: const Icon(AppIcons.more, size: IconSize.action),
+      builder: (context, controller, _) => ToolButton(
+        icon: AppIcons.more,
         tooltip: tooltip,
         onPressed: controller.isOpen ? controller.close : controller.open,
-        visualDensity: VisualDensity.compact,
       ),
     );
   }

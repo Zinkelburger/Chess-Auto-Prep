@@ -13,6 +13,7 @@ import '../../ui/theme.dart';
 import '../../workspace/board/board_editor.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/form_dialog.dart';
+import '../../ui/tool_button.dart';
 
 Future<TournamentConfig?> tournamentSetup(
   BuildContext context, {
@@ -199,12 +200,12 @@ class _SetupState extends State<_Setup> {
             },
           ),
         ),
-        IconButton(
+        ToolButton(
+          icon: AppIcons.remove,
           tooltip: 'Remove engine ${index + 1}',
           onPressed: _seats.length > 2
               ? () => _change(() => _seats.removeAt(index))
               : null,
-          icon: const Icon(AppIcons.remove, size: IconSize.action),
         ),
       ],
     );

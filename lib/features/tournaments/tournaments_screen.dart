@@ -18,6 +18,7 @@ import 'tournament_run.dart';
 import 'standings_table.dart';
 import 'history_list.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 class TournamentsScreen extends StatefulWidget {
   const TournamentsScreen({
@@ -67,10 +68,10 @@ class _ScreenState extends State<TournamentsScreen> {
                     unawaited(manageTournamentEngines(context, run)),
                 child: const Text('Engines…'),
               ),
-              IconButton(
+              ToolButton(
+                icon: AppIcons.refresh,
                 tooltip: 'Refresh tournaments',
                 onPressed: () => unawaited(run.refresh()),
-                icon: const Icon(AppIcons.refresh, size: IconSize.action),
               ),
               if (run.running)
                 OutlinedButton.icon(
@@ -189,12 +190,12 @@ class _ScreenState extends State<TournamentsScreen> {
                 : () => unawaited(_new(t.config)),
             child: const Text('Run again…'),
           ),
-          IconButton(
+          ToolButton(
+            icon: AppIcons.delete,
             tooltip: 'Delete tournament…',
             onPressed: run.running || run.canRetry
                 ? null
                 : () => unawaited(_remove(t)),
-            icon: const Icon(AppIcons.delete, size: IconSize.action),
           ),
         ],
       ),

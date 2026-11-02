@@ -13,6 +13,7 @@ import 'puzzle_trainer.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// The Puzzle tab of the reading card: whose move it is and what went wrong
 /// in the game, what the last move came to, the three buttons in fixed
@@ -311,8 +312,8 @@ class _Buttons extends StatelessWidget {
             trainer.showSolution,
             tip: AppKey.play.tip('Show solution'),
           ),
-        IconButton(
-          icon: const Icon(AppIcons.again, size: IconSize.action),
+        ToolButton(
+          icon: AppIcons.again,
           tooltip: 'Try it again from the start',
           onPressed: atStart ? null : trainer.reset,
         ),
@@ -374,16 +375,12 @@ class _Stars extends StatelessWidget {
         Text('Rate', style: text),
         const SizedBox(width: Space.xs),
         for (var star = 1; star <= 5; star++)
-          IconButton(
-            icon: Icon(
-              star <= rating ? AppIcons.rated : AppIcons.unrated,
-              size: IconSize.action,
-            ),
+          ToolButton(
+            icon: star <= rating ? AppIcons.rated : AppIcons.unrated,
             tooltip: star == 1
                 ? 'One star hides it from training'
                 : '$star stars',
             onPressed: () => trainer.rate(star == rating ? 0 : star),
-            visualDensity: VisualDensity.compact,
           ),
         if (rating == 1) Text('hidden from training', style: text),
       ],
@@ -422,13 +419,12 @@ class _Progress extends StatelessWidget {
         : run.seen.indexOf(current) + 1;
     return Row(
       children: [
-        IconButton(
-          icon: const Icon(AppIcons.previous, size: IconSize.action),
+        ToolButton(
+          icon: AppIcons.previous,
           tooltip: AppKey.previousGame.tip('Previous puzzle'),
           onPressed: trainer.hasPrevious
               ? () => unawaited(trainer.previous())
               : null,
-          visualDensity: VisualDensity.compact,
         ),
         Expanded(
           child: Text(

@@ -6,6 +6,7 @@ import 'studies_state.dart';
 import 'study_import_source.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/form_dialog.dart';
+import '../../ui/segments.dart';
 
 Future<StudyResult?> showStudyImport(
   BuildContext context,
@@ -116,18 +117,17 @@ class _ImportState extends State<_Import> {
   /// Where the chapters come from: a file, pasted PGN or a Lichess URL,
   /// and the button that reads them.
   List<Widget> _sourceFields() => [
-    SegmentedButton<_Source>(
-      showSelectedIcon: false,
-      selected: {_source},
+    Segments<_Source>(
       segments: const [
         ButtonSegment(value: _Source.file, label: Text('PGN file')),
         ButtonSegment(value: _Source.pgn, label: Text('Paste PGN')),
         ButtonSegment(value: _Source.url, label: Text('Lichess URL')),
       ],
-      onSelectionChanged: _busy
+      selected: _source,
+      onChanged: _busy
           ? null
           : (value) => setState(() {
-              _source = value.single;
+              _source = value;
               _input.clear();
               _data = null;
               _problem = null;
@@ -173,16 +173,13 @@ class _ImportState extends State<_Import> {
       ),
     const SizedBox(height: Space.m),
     if (widget.into != null)
-      SegmentedButton<bool>(
-        showSelectedIcon: false,
-        selected: {_append},
+      Segments<bool>(
         segments: const [
           ButtonSegment(value: false, label: Text('New study')),
           ButtonSegment(value: true, label: Text('Current study')),
         ],
-        onSelectionChanged: _busy
-            ? null
-            : (value) => setState(() => _append = value.single),
+        selected: _append,
+        onChanged: _busy ? null : (value) => setState(() => _append = value),
       ),
     if (_append)
       Text('Add to ${widget.into!.name}')

@@ -9,6 +9,7 @@ import 'chapter_audit.dart';
 import '../document/document_session.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/problem_line.dart';
+import '../../ui/tool_button.dart';
 
 /// The Audit tab: the chapter's own moves checked against the engine.
 ///
@@ -262,10 +263,9 @@ class _FindingRow extends StatelessWidget {
                 ],
               ),
             ),
-            IconButton(
-              icon: const Icon(AppIcons.close, size: IconSize.action),
+            ToolButton(
+              icon: AppIcons.close,
               tooltip: 'Hide this finding',
-              visualDensity: VisualDensity.compact,
               onPressed: onDismiss,
             ),
           ],

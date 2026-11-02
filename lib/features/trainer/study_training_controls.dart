@@ -8,6 +8,7 @@ import '../../ui/status_bar.dart';
 import '../../ui/theme.dart';
 import 'trainer.dart';
 import 'trainer_state.dart';
+import '../../ui/segments.dart';
 
 /// Study scope and practice identity remain available before training is ready.
 class StudyTrainingControls extends StatelessWidget {
@@ -39,8 +40,7 @@ class StudyTrainingControls extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SegmentedButton<TrainScope>(
-              showSelectedIcon: false,
+            Segments<TrainScope>(
               segments: const [
                 ButtonSegment(
                   value: TrainScope.studyChapter,
@@ -51,12 +51,10 @@ class StudyTrainingControls extends StatelessWidget {
                   label: Text('Whole study'),
                 ),
               ],
-              selected: {
-                trainer.scope == TrainScope.studyChapter
-                    ? TrainScope.studyChapter
-                    : TrainScope.chapter,
-              },
-              onSelectionChanged: (value) => trainer.setScope(value.single),
+              selected: trainer.scope == TrainScope.studyChapter
+                  ? TrainScope.studyChapter
+                  : TrainScope.chapter,
+              onChanged: (value) => trainer.setScope(value),
             ),
             const SizedBox(width: Space.s),
             TextButton(
@@ -114,21 +112,14 @@ class _SidesState extends State<_Sides> {
           else
             Semantics(
               label: 'Training side for $name',
-              child: SegmentedButton<Side>(
-                emptySelectionAllowed: !_sides.containsKey(index),
-                showSelectedIcon: false,
+              child: Segments<Side>(
                 segments: const [
                   ButtonSegment(value: Side.white, label: Text('White')),
                   ButtonSegment(value: Side.black, label: Text('Black')),
                 ],
-                selected: {?_sides[index]},
-                onSelectionChanged: (value) => setState(() {
-                  if (value.isEmpty) {
-                    _sides.remove(index);
-                  } else {
-                    _sides[index] = value.single;
-                  }
-                }),
+                selected: _sides[index],
+                emptyAllowed: !_sides.containsKey(index),
+                onChanged: (value) => setState(() => _sides[index] = value),
               ),
             ),
         ],

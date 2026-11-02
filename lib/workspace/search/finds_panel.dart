@@ -19,6 +19,7 @@ import '../document/document_session.dart';
 import 'finds.dart';
 import '../board/line_preview.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/segments.dart';
 
 /// The Positions column: everything the searches have pointed out, one row
 /// a position, in the column a mode keeps its own list in.
@@ -256,7 +257,7 @@ class _Order extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, 0),
-    child: SegmentedButton<FindOrder>(
+    child: Segments<FindOrder>(
       segments: const [
         ButtonSegment(
           value: FindOrder.worth,
@@ -274,15 +275,9 @@ class _Order extends StatelessWidget {
           tooltip: 'The last found first',
         ),
       ],
-      selected: {finds.order},
-      showSelectedIcon: false,
-      style: const ButtonStyle(
-        visualDensity: VisualDensity.compact,
-        padding: WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: Space.xs),
-        ),
-      ),
-      onSelectionChanged: (picked) => finds.sortBy(picked.single),
+      selected: finds.order,
+      narrow: true,
+      onChanged: (picked) => finds.sortBy(picked),
     ),
   );
 }

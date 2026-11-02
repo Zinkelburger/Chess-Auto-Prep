@@ -4,6 +4,7 @@ import '../../ui/app_keys.dart';
 import '../../ui/theme.dart';
 import '../document/document_session.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// The four buttons under the moves that walk the line: start, back,
 /// forward, end. Each says its key, because each has one.
@@ -34,17 +35,13 @@ class NavRow extends StatelessWidget {
               if (book case final book?)
                 ValueListenableBuilder<bool>(
                   valueListenable: book,
-                  builder: (context, open, _) => IconButton(
-                    icon: Icon(
-                      open ? AppIcons.bookOpen : AppIcons.book,
-                      size: IconSize.action,
-                    ),
+                  builder: (context, open, _) => ToolButton(
+                    icon: open ? AppIcons.bookOpen : AppIcons.book,
                     tooltip: open
                         ? 'Hide the opening book'
                         : 'Show the opening book under the moves',
-                    isSelected: open,
+                    selected: open,
                     onPressed: () => book.value = !open,
-                    visualDensity: VisualDensity.compact,
                   ),
                 ),
               _button(
@@ -90,10 +87,5 @@ class NavRow extends StatelessWidget {
   }
 
   Widget _button(IconData icon, String tooltip, bool on, VoidCallback run) =>
-      IconButton(
-        icon: Icon(icon, size: IconSize.action),
-        tooltip: tooltip,
-        onPressed: on ? run : null,
-        visualDensity: VisualDensity.compact,
-      );
+      ToolButton(icon: icon, tooltip: tooltip, onPressed: on ? run : null);
 }

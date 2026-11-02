@@ -10,6 +10,7 @@ import 'player_hunt.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/problem_line.dart';
 import '../../ui/progress_line.dart';
+import '../../ui/tool_button.dart';
 
 /// The top of the Findings list: the button that runs the engine over the
 /// player's most played positions, its settings folded beside it, how far
@@ -106,13 +107,13 @@ class _EngineRunState extends State<EngineRun> {
       ),
       // The gear the engine under the board has, for the same thing: how
       // hard this engine looks.
-      IconButton(
-        onPressed: _toggleSettings,
-        isSelected: _settingsOpen,
-        icon: const Icon(AppIcons.settings, size: IconSize.action),
+      ToolButton(
+        icon: AppIcons.settings,
         tooltip: _settingsOpen
             ? 'Hide the analysis settings'
             : 'Analysis settings',
+        selected: _settingsOpen,
+        onPressed: _toggleSettings,
       ),
     ],
   );

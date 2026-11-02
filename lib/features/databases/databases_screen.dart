@@ -14,6 +14,7 @@ import '../../ui/theme.dart';
 import 'database_library.dart';
 import 'twic_download_dialog.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 class DatabasesScreen extends StatelessWidget {
   const DatabasesScreen({
@@ -95,13 +96,13 @@ class DatabasesScreen extends StatelessWidget {
         ),
       ),
       if (library.places != null) _StorageButton(library: library),
-      IconButton(
+      ToolButton(
+        icon: AppIcons.refresh,
         tooltip: 'Refresh',
         onPressed: () {
           unawaited(library.refresh());
           unawaited(library.measure());
         },
-        icon: const Icon(AppIcons.refresh, size: IconSize.action),
       ),
     ],
   );
@@ -434,16 +435,13 @@ class _StorageDialog extends StatelessWidget {
                           style: TextStyle(color: muted),
                         ),
                         if (store.removable)
-                          IconButton(
+                          ToolButton(
+                            icon: AppIcons.delete,
                             tooltip: 'Delete ${store.name}…',
                             onPressed:
                                 library.removing != null || store.bytes == 0
                                 ? null
                                 : () => unawaited(_remove(context, store)),
-                            icon: const Icon(
-                              AppIcons.delete,
-                              size: IconSize.action,
-                            ),
                           ),
                       ],
                     ),

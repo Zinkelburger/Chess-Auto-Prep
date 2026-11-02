@@ -10,6 +10,7 @@ import '../../workspace/explorer/file_filter.dart';
 import 'export_dialog.dart';
 import 'pgn_viewer.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/segments.dart';
 
 /// The Filter tab: which of the open file's games the list shows. How many
 /// pass, one Field / Rule / Value row per rule starting with a blank one,
@@ -120,16 +121,13 @@ class ViewerFilterPane extends StatelessWidget {
           label: const Text('Reaching this position'),
         ),
       if (rules.length > 1)
-        SegmentedButton<bool>(
+        Segments<bool>(
           segments: const [
             ButtonSegment(value: false, label: Text('All')),
             ButtonSegment(value: true, label: Text('Any')),
           ],
-          selected: {editing.any},
-          showSelectedIcon: false,
-          style: const ButtonStyle(visualDensity: VisualDensity.compact),
-          onSelectionChanged: (any) =>
-              filter.apply(editing.copyWith(any: any.single)),
+          selected: editing.any,
+          onChanged: (any) => filter.apply(editing.copyWith(any: any)),
         ),
     ],
   );

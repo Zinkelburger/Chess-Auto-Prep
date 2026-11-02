@@ -6,6 +6,7 @@ import '../../ui/fold_button.dart';
 import '../../ui/theme.dart';
 import 'explorer.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/segments.dart';
 
 /// The top of the Explorer tab: the databases side by side, the chosen one
 /// pressed, and at the end `Filters` for the one that can be narrowed.
@@ -180,24 +181,13 @@ class _Sources extends StatelessWidget {
 
   Widget _buttons() {
     final choice = explorer.choice;
-    return SegmentedButton<ExplorerSource>(
+    return Segments<ExplorerSource>(
       segments: [
         for (final source in explorer.sources)
           ButtonSegment(value: source, label: Text(source.title)),
       ],
-      selected: {choice.source},
-      showSelectedIcon: false,
-      style: const ButtonStyle(
-        animationDuration: Duration.zero,
-        overlayColor: WidgetStatePropertyAll(Colors.transparent),
-        visualDensity: VisualDensity.compact,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        padding: WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: Space.s),
-        ),
-      ),
-      onSelectionChanged: (picked) =>
-          explorer.choose(choice.copyWith(source: picked.single)),
+      selected: choice.source,
+      onChanged: (picked) => explorer.choose(choice.copyWith(source: picked)),
     );
   }
 }

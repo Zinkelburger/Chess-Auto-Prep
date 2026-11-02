@@ -6,6 +6,7 @@ import '../../ui/file_names.dart';
 import '../../ui/form_dialog.dart';
 import '../../ui/theme.dart';
 import '../../workspace/board/board_editor.dart';
+import '../../ui/segments.dart';
 
 /// What the user asked for: a name, where the chapter starts, and which way
 /// its board faces.
@@ -117,29 +118,25 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
           const SizedBox(height: Space.l),
           Text('Start from', style: label),
           const SizedBox(height: Space.xs),
-          SegmentedButton<_Start>(
-            showSelectedIcon: false,
+          Segments<_Start>(
             segments: const [
               ButtonSegment(value: _Start.initial, label: Text('Initial')),
               ButtonSegment(value: _Start.position, label: Text('Position')),
             ],
-            selected: {_start},
-            onSelectionChanged: (chosen) =>
-                _change(() => _start = chosen.first),
+            selected: _start,
+            onChanged: (chosen) => _change(() => _start = chosen),
           ),
           const SizedBox(height: Space.l),
           Text('Orientation', style: label),
           const SizedBox(height: Space.xs),
-          SegmentedButton<_Facing>(
-            showSelectedIcon: false,
+          Segments<_Facing>(
             segments: const [
               ButtonSegment(value: _Facing.automatic, label: Text('Automatic')),
               ButtonSegment(value: _Facing.white, label: Text('White')),
               ButtonSegment(value: _Facing.black, label: Text('Black')),
             ],
-            selected: {_facing},
-            onSelectionChanged: (chosen) =>
-                _change(() => _facing = chosen.first),
+            selected: _facing,
+            onChanged: (chosen) => _change(() => _facing = chosen),
           ),
         ],
       ),

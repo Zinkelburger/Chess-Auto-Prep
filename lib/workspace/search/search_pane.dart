@@ -23,6 +23,7 @@ import 'search_table.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/choice_field.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// The Expectimax panel: the expectimax search from the
 /// board and its values.
@@ -295,13 +296,9 @@ class _SearchPaneState extends State<SearchPane>
                   ],
                   const Spacer(),
                   if (widget.onShowPositions case final show?)
-                    IconButton(
-                      icon: const Icon(
-                        AppIcons.positions,
-                        size: IconSize.action,
-                      ),
+                    ToolButton(
+                      icon: AppIcons.positions,
                       tooltip: 'Show the positions the searches found',
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                       onPressed: show,
                     ),
                   _gear(context),
@@ -381,16 +378,10 @@ class _SearchPaneState extends State<SearchPane>
     ),
   );
 
-  Widget _gear(BuildContext context) => IconButton(
-    icon: const Icon(AppIcons.settings, size: IconSize.action),
+  Widget _gear(BuildContext context) => ToolButton(
+    icon: AppIcons.settings,
     tooltip: _settingsOpen ? 'Show results' : 'Expectimax settings',
-    isSelected: _settingsOpen,
-    color: Theme.of(context).colorScheme.onSurfaceVariant,
-    selectedIcon: Icon(
-      AppIcons.settings,
-      size: IconSize.action,
-      color: Theme.of(context).colorScheme.primary,
-    ),
+    selected: _settingsOpen,
     onPressed: _toggleSettings,
   );
 

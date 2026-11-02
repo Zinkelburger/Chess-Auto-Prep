@@ -15,6 +15,7 @@ import '../document/document_session.dart';
 import '../document/session_results.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// Everything about changing the document, under the moves: Done, Undo, the
 /// save state, the six glyphs and the note on the move the board is on.
@@ -223,11 +224,10 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
           ),
           const SizedBox(width: Space.s),
         ],
-        IconButton(
-          onPressed: widget.session.canUndo ? _undo : null,
-          icon: const Icon(AppIcons.undo, size: IconSize.action),
+        ToolButton(
+          icon: AppIcons.undo,
           tooltip: AppKey.undo.tip('Undo'),
-          visualDensity: VisualDensity.compact,
+          onPressed: widget.session.canUndo ? _undo : null,
         ),
         const SizedBox(width: Space.s),
       ],

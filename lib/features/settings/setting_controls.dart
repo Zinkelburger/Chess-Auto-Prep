@@ -8,6 +8,7 @@ import '../../ui/theme.dart';
 import '../../ui/number_field.dart';
 import 'lichess_account.dart';
 import 'setting_rows.dart';
+import '../../ui/segments.dart';
 
 /// One row: the label, its hint under it when there is one, and the
 /// control on the right. The same height whatever the control, so a
@@ -144,18 +145,13 @@ class _Choice extends StatelessWidget {
   final ChoiceSetting<Object> setting;
 
   @override
-  Widget build(BuildContext context) => SegmentedButton<Object>(
+  Widget build(BuildContext context) => Segments<Object>(
     segments: [
       for (final (value, label) in setting.options)
         ButtonSegment(value: value, label: Text(label)),
     ],
-    selected: {setting.value},
-    showSelectedIcon: false,
-    style: const ButtonStyle(
-      visualDensity: VisualDensity.compact,
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-    ),
-    onSelectionChanged: (chosen) => setting.pick(chosen.first),
+    selected: setting.value,
+    onChanged: (chosen) => setting.pick(chosen),
   );
 }
 

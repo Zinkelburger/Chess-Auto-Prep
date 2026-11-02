@@ -11,6 +11,7 @@ import '../../ui/theme.dart';
 import 'engine_check.dart';
 import 'tournament_run.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 Future<void> manageTournamentEngines(
   BuildContext context,
@@ -39,22 +40,19 @@ Future<void> manageTournamentEngines(
                   ),
                   trailing: Wrap(
                     children: [
-                      IconButton(
+                      ToolButton(
+                        icon: AppIcons.edit,
                         tooltip: 'Edit ${engine.name}…',
                         onPressed: run.registryBusy || run.running
                             ? null
                             : () => unawaited(_edit(context, run, engine)),
-                        icon: const Icon(AppIcons.edit, size: IconSize.action),
                       ),
-                      IconButton(
+                      ToolButton(
+                        icon: AppIcons.remove,
                         tooltip: 'Remove ${engine.name}…',
                         onPressed: run.registryBusy || run.running
                             ? null
                             : () => unawaited(_remove(context, run, engine)),
-                        icon: const Icon(
-                          AppIcons.remove,
-                          size: IconSize.action,
-                        ),
                       ),
                     ],
                   ),

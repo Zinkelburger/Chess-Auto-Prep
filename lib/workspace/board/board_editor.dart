@@ -11,6 +11,7 @@ import 'board_view.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/form_dialog.dart';
 import '../../ui/problem_line.dart';
+import '../../ui/segments.dart';
 
 /// What a press on the editor's board does.
 sealed class EditorTool {
@@ -230,14 +231,13 @@ class _BoardEditorState extends State<BoardEditor> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SegmentedButton<Side>(
-          showSelectedIcon: false,
+        Segments<Side>(
           segments: const [
             ButtonSegment(value: Side.white, label: Text('White to play')),
             ButtonSegment(value: Side.black, label: Text('Black to play')),
           ],
-          selected: {_setup.turn},
-          onSelectionChanged: (side) => _set(_setup.withTurn(side.first)),
+          selected: _setup.turn,
+          onChanged: (side) => _set(_setup.withTurn(side)),
         ),
         const SizedBox(height: Space.m),
         TextButton(

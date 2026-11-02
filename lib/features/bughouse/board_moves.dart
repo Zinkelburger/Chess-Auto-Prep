@@ -13,6 +13,7 @@ import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
 import 'bughouse_lab.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// A board's moves read like the workspace's move list: its main line as
 /// running text, each variation an indented block right after the move it
@@ -80,10 +81,9 @@ class BoardMoves extends StatelessWidget {
   }
 
   Widget _step(IconData icon, String tip, bool enabled, VoidCallback go) =>
-      IconButton(
-        icon: Icon(icon, size: IconSize.action),
+      ToolButton(
+        icon: icon,
         tooltip: lab.single ? tip : '$tip, ${board.label.toLowerCase()}',
-        visualDensity: VisualDensity.compact,
         onPressed: enabled ? go : null,
       );
 }

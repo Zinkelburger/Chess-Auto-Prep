@@ -23,6 +23,7 @@ import '../../ui/move_notation.dart';
 import '../../ui/list_message.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/progress_line.dart';
+import '../../ui/tool_button.dart';
 
 /// The chapters of the open repertoire and, under the open one, its lines.
 ///
@@ -460,22 +461,20 @@ class _Toolbar extends StatelessWidget {
                   style: Theme.of(context).textTheme.labelSmall,
                 ),
               ),
-              IconButton(
+              ToolButton(
                 key: const ValueKey('outline-at-position'),
-                onPressed: () => onAtPosition(!atPosition),
-                isSelected: atPosition,
-                icon: const Icon(AppIcons.filter, size: IconSize.action),
+                icon: AppIcons.filter,
                 tooltip: atPosition
                     ? 'Show every line'
                     : 'Show only lines through the board position',
-                visualDensity: VisualDensity.compact,
+                selected: atPosition,
+                onPressed: () => onAtPosition(!atPosition),
               ),
               if (onCreate case final create?)
-                IconButton(
-                  onPressed: create,
-                  icon: const Icon(AppIcons.add, size: IconSize.action),
+                ToolButton(
+                  icon: AppIcons.add,
                   tooltip: 'New chapter…',
-                  visualDensity: VisualDensity.compact,
+                  onPressed: create,
                 ),
             ],
           ),

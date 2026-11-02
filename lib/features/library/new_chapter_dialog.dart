@@ -6,6 +6,7 @@ import '../../chess/pgn/chapter_heading.dart';
 import '../../chess/pgn/game_tree.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/theme.dart';
+import '../../ui/segments.dart';
 
 /// What the user asked for: a name, and the moves the chapter starts after,
 /// empty for a chapter that starts at the start.
@@ -85,13 +86,13 @@ class _StartPicker extends StatelessWidget {
       children: [
         Text('Starts', style: theme.textTheme.labelSmall),
         const SizedBox(height: Space.xs),
-        SegmentedButton<bool>(
+        Segments<bool>(
           segments: const [
             ButtonSegment(value: true, label: Text('From here')),
             ButtonSegment(value: false, label: Text('From the start')),
           ],
-          selected: {fromHere},
-          onSelectionChanged: (chosen) => onChanged(chosen.first),
+          selected: fromHere,
+          onChanged: (chosen) => onChanged(chosen),
         ),
         if (fromHere) ...[
           const SizedBox(height: Space.s),
