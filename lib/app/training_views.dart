@@ -23,6 +23,7 @@ import '../workspace/workspace_tabs.dart';
 import 'mode.dart';
 import 'mode_view.dart';
 import 'workspace_requests.dart';
+import '../ui/app_icons.dart';
 
 /// Tactics: the puzzle set on the left, the puzzle and the game it came
 /// from on the card. It is for solving, so it starts with the engine off
@@ -152,10 +153,15 @@ final class TacticsView extends ModeView {
       tabs: tabs,
       onAccounts: menu.dialogs.accounts,
     ),
-    AppAction('Add game to study…', switch (_training.puzzles.up) {
-      final up? => () => unawaited(_addGameToStudy(up.puzzle)),
-      null => null,
-    }, group: 'Tactics'),
+    AppAction(
+      'Add game to study…',
+      switch (_training.puzzles.up) {
+        final up? => () => unawaited(_addGameToStudy(up.puzzle)),
+        null => null,
+      },
+      icon: AppIcons.add,
+      group: 'Tactics',
+    ),
   ];
 
   /// [puzzle]'s game, or the puzzle alone, as a chapter of a study the

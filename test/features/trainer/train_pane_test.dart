@@ -178,7 +178,7 @@ void main() {
     await pump(tester);
     trainer.learn();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Open in Builder'));
+    await tester.tap(find.text('Open in builder'));
     await tester.pumpAndSettle();
     expect(reads.single.ref, fixture.ref);
     expect(reads.single.sans, ['e4']);
@@ -203,7 +203,7 @@ void main() {
     expect(
       tester
           .widget<TextButton>(
-            find.widgetWithText(TextButton, 'Open in Builder'),
+            find.widgetWithText(TextButton, 'Open in builder'),
           )
           .onPressed,
       isNull,
@@ -329,7 +329,7 @@ void main() {
     expect(reads.single.sans, ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4']);
     await tester.tap(find.byTooltip('Actions').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Open in Builder'));
+    await tester.tap(find.text('Open in builder'));
     await tester.pumpAndSettle();
     expect(reads.last.place, ReadIn.builder);
   });

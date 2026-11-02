@@ -13,6 +13,7 @@ import '../workspace/workspace.dart';
 import 'mode.dart';
 import 'mode_view.dart';
 import 'workspace_requests.dart';
+import '../ui/app_icons.dart';
 
 final class DatabasesView extends ModeView {
   DatabasesView(Workspace workspace, this.library, this.requests)
@@ -40,8 +41,9 @@ final class DatabasesView extends ModeView {
   @override
   List<AppAction> actions(ModeMenu menu) => [
     AppAction(
-      'Refresh databases',
+      'Refresh',
       () => unawaited(library.refresh()),
+      icon: AppIcons.refresh,
       group: 'Databases',
     ),
     AppAction(
@@ -49,6 +51,7 @@ final class DatabasesView extends ModeView {
       library.activity == DatabaseActivity.idle && !library.busy
           ? () => unawaited(library.importFile())
           : null,
+      icon: AppIcons.open,
       group: 'Databases',
     ),
   ];

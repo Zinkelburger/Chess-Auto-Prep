@@ -128,9 +128,10 @@ class _PgnViewerPanelState extends State<PgnViewerPanel>
     if (recent.isEmpty) {
       return ListMessage(
         'No PGN open.\nOpen a file to read its games.',
-        action: FilledButton(
+        action: FilledButton.icon(
           onPressed: widget.onBrowse,
-          child: const Text('Open PGN file…'),
+          icon: const Icon(AppIcons.open, size: IconSize.action),
+          label: Text(AppKey.openFile.action),
         ),
       );
     }
@@ -244,7 +245,7 @@ class _PgnViewerPanelState extends State<PgnViewerPanel>
           TextButton(
             onPressed: () => filter.apply(GameFilter.none),
             style: const ButtonStyle(visualDensity: VisualDensity.compact),
-            child: const Text('Clear'),
+            child: const Text('Clear filters'),
           ),
         ],
       ),
@@ -480,7 +481,7 @@ class _Toolbar extends StatelessWidget {
           ),
           IconButton(
             icon: const Icon(AppIcons.open, size: IconSize.action),
-            tooltip: AppKey.openFile.tip('Open PGN file…'),
+            tooltip: AppKey.openFile.tip(AppKey.openFile.action),
             onPressed: onBrowse,
             visualDensity: VisualDensity.compact,
           ),

@@ -101,16 +101,16 @@ void main() {
         ),
       );
       expect(find.text('Storage · 7.9 KB'), findsOneWidget);
-      expect(find.byTooltip('Delete Master games'), findsNothing);
+      expect(find.byTooltip('Delete Master games…'), findsNothing);
       await tester.tap(find.text('Storage · 7.9 KB'));
       await tester.pumpAndSettle();
-      expect(find.byTooltip('Delete Repertoires'), findsNothing);
-      await tester.tap(find.byTooltip('Delete Master games'));
+      expect(find.byTooltip('Delete Repertoires…'), findsNothing);
+      await tester.tap(find.byTooltip('Delete Master games…'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(File(master).existsSync(), isTrue);
-      await tester.tap(find.byTooltip('Delete Master games'));
+      await tester.tap(find.byTooltip('Delete Master games…'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
       // The delete, the measure and the recount are real disk work: let them

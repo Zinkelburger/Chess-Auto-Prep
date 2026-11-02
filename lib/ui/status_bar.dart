@@ -77,7 +77,7 @@ class StatusBar extends StatelessWidget {
             size: IconSize.menu,
             color: scheme.onSurfaceVariant,
           ),
-          tooltip: 'Close',
+          tooltip: 'Hide this message',
           visualDensity: VisualDensity.compact,
         ),
       ],

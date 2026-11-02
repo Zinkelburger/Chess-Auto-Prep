@@ -104,7 +104,7 @@ class ViewerFilterPane extends StatelessWidget {
         onPressed: () => filter.apply(
           editing.copyWith(rules: [...rules, const HeaderRule()]),
         ),
-        icon: const Icon(AppIcons.add, size: IconSize.menu),
+        icon: const Icon(AppIcons.add, size: IconSize.action),
         label: const Text('Add rule'),
       ),
       if (filter.applied.position case final position?)
@@ -141,16 +141,18 @@ class ViewerFilterPane extends StatelessWidget {
     return Wrap(
       spacing: Space.xs,
       children: [
-        TextButton(
+        TextButton.icon(
           onPressed: ready
               ? () => exportViewerPgn(context, viewer, say ?? (_) {})
               : null,
-          child: const Text('Export matching games…'),
+          icon: const Icon(AppIcons.saveCopy, size: IconSize.action),
+          label: const Text('Export games…'),
         ),
         if (onSaveToStudy case final save?)
-          TextButton(
+          TextButton.icon(
             onPressed: ready ? save : null,
-            child: const Text('Save to study…'),
+            icon: const Icon(AppIcons.add, size: IconSize.action),
+            label: const Text('Add games to study…'),
           ),
       ],
     );
@@ -194,7 +196,7 @@ class _Count extends StatelessWidget {
           if (!filter.filter.isEmpty)
             TextButton(
               onPressed: () => filter.apply(GameFilter.none),
-              child: const Text('Clear'),
+              child: const Text('Clear filters'),
             ),
         ],
       ),

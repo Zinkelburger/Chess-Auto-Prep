@@ -194,7 +194,7 @@ void main() {
     tester,
   ) async {
     await show(tester, []);
-    await tester.tap(find.byTooltip('New repertoire'));
+    await tester.tap(find.byTooltip('New repertoire…'));
     await tester.pumpAndSettle();
     expect(find.text('Playing side'), findsNothing);
     await tester.enterText(find.byType(TextField).last, 'Benoni');
@@ -210,7 +210,7 @@ void main() {
     tester,
   ) async {
     await show(tester, []);
-    await tester.tap(find.byTooltip('New repertoire'));
+    await tester.tap(find.byTooltip('New repertoire…'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'a/b');
     await tester.tap(find.text('Create'));

@@ -58,28 +58,29 @@ class _ScreenState extends State<TournamentsScreen> {
                 onPressed: run.running || run.canRetry
                     ? null
                     : () => unawaited(_new()),
-                icon: const Icon(AppIcons.add),
-                label: const Text('New tournament'),
+                icon: const Icon(AppIcons.add, size: IconSize.action),
+                label: const Text('New tournament…'),
               ),
               TextButton(
                 onPressed: () =>
                     unawaited(manageTournamentEngines(context, run)),
-                child: const Text('Engines'),
+                child: const Text('Engines…'),
               ),
               IconButton(
                 tooltip: 'Refresh tournaments',
                 onPressed: () => unawaited(run.refresh()),
-                icon: const Icon(AppIcons.refresh),
+                icon: const Icon(AppIcons.refresh, size: IconSize.action),
               ),
               if (run.running)
-                OutlinedButton(
+                OutlinedButton.icon(
                   onPressed: run.stopping ? null : run.stop,
-                  child: Text(
+                  icon: const Icon(AppIcons.stop, size: IconSize.action),
+                  label: Text(
                     run.stopping ? 'Stopping after this move…' : 'Stop',
                   ),
                 ),
               if (run.canRetry && !run.running)
-                FilledButton(
+                OutlinedButton(
                   onPressed: () => unawaited(run.retrySave()),
                   child: const Text('Retry save'),
                 ),
@@ -188,14 +189,14 @@ class _ScreenState extends State<TournamentsScreen> {
             onPressed: run.running || run.canRetry
                 ? null
                 : () => unawaited(_new(t.config)),
-            child: const Text('Run again'),
+            child: const Text('Run again…'),
           ),
           IconButton(
-            tooltip: 'Move tournament to trash',
+            tooltip: 'Delete tournament…',
             onPressed: run.running || run.canRetry
                 ? null
                 : () => unawaited(_remove(t)),
-            icon: const Icon(AppIcons.delete),
+            icon: const Icon(AppIcons.delete, size: IconSize.action),
           ),
         ],
       ),
@@ -230,7 +231,7 @@ class _ScreenState extends State<TournamentsScreen> {
       ),
       TextButton.icon(
         onPressed: t.games.isEmpty ? null : () => widget.open(t, 0),
-        icon: const Icon(AppIcons.openElsewhere),
+        icon: const Icon(AppIcons.openElsewhere, size: IconSize.action),
         label: const Text('Browse games'),
       ),
       SelectableText(
@@ -280,9 +281,9 @@ class _ScreenState extends State<TournamentsScreen> {
   Future<void> _remove(Tournament t) async {
     if (await confirmAction(
       context,
-      title: 'Move tournament to trash',
-      message: 'Move ${t.config.name} and its games to the tournament trash?',
-      confirm: 'Move to trash',
+      title: 'Delete tournament “${t.config.name}”?',
+      message: 'Its games go to the tournament trash.',
+      confirm: 'Delete',
     )) {
       await run.remove(t);
     }

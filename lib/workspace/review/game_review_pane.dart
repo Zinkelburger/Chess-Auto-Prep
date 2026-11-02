@@ -516,6 +516,22 @@ class _ReviewControls extends StatelessWidget {
   /// Whether the game has a review to analyze again.
   final bool reviewed;
 
+  /// Analyze, again, or Stop while it runs: one button in one place.
+  Widget _runButton() => FilledButton.icon(
+    onPressed: review.running ? review.stop : () => unawaited(review.start()),
+    icon: Icon(
+      review.running ? AppIcons.stop : AppIcons.run,
+      size: IconSize.action,
+    ),
+    label: Text(
+      review.running
+          ? 'Stop'
+          : reviewed
+          ? 'Analyze again'
+          : 'Analyze game',
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -524,19 +540,7 @@ class _ReviewControls extends StatelessWidget {
       children: [
         Row(
           children: [
-            FilledButton.icon(
-              onPressed: review.running
-                  ? review.stop
-                  : () => unawaited(review.start()),
-              icon: Icon(review.running ? AppIcons.stop : AppIcons.run),
-              label: Text(
-                review.running
-                    ? 'Stop'
-                    : reviewed
-                    ? 'Analyze again'
-                    : 'Analyze game',
-              ),
-            ),
+            _runButton(),
             const SizedBox(width: Space.m),
             Expanded(
               child: Text(

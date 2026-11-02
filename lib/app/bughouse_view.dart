@@ -14,6 +14,7 @@ import '../workspace/workspace_tabs.dart';
 import 'mode.dart';
 import 'mode_view.dart';
 import 'window_input.dart';
+import '../ui/app_icons.dart';
 
 /// The Bughouse mode: its own screen, one board or two and what Hivemind
 /// makes of them, with nothing of the workspace but the window around it.
@@ -83,11 +84,13 @@ final class BughouseView extends ModeView {
         () => unawaited(
           Clipboard.setData(ClipboardData(text: lab.position.lichessDualFen)),
         ),
+        icon: AppIcons.copy,
         group: 'Position',
       ),
       AppAction(
         'Paste FEN or dual FEN',
         () => unawaited(_paste(lab.loadDualFen)),
+        icon: AppIcons.paste,
         group: 'Position',
       ),
       AppAction(
@@ -97,14 +100,21 @@ final class BughouseView extends ModeView {
             : () => unawaited(
                 Clipboard.setData(ClipboardData(text: lab.movesText)),
               ),
+        icon: AppIcons.copy,
         group: 'Position',
       ),
       AppAction(
         'Paste moves',
         () => unawaited(_paste(lab.pasteMoves)),
+        icon: AppIcons.paste,
         group: 'Position',
       ),
-      AppAction('Open BPGN…', () => unawaited(_open()), group: 'Position'),
+      AppAction(
+        'Open BPGN…',
+        () => unawaited(_open()),
+        icon: AppIcons.open,
+        group: 'Position',
+      ),
     ];
   }
 

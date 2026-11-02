@@ -297,7 +297,7 @@ class _OutlinePanelState extends State<OutlinePanel> {
                               failed: 'The line move still needs retrying.',
                             );
                           },
-                    child: const Text('Retry line move'),
+                    child: const Text('Retry save'),
                   ),
                 ),
                 TextButton(
@@ -316,7 +316,7 @@ class _OutlinePanelState extends State<OutlinePanel> {
               child: TextButton.icon(
                 onPressed: widget.library.busy ? null : _history,
                 icon: const Icon(AppIcons.history, size: IconSize.action),
-                label: const Text('Version history'),
+                label: const Text('Version history…'),
               ),
             ),
         ],
@@ -481,17 +481,15 @@ class _Toolbar extends StatelessWidget {
                 onPressed: () => onAtPosition(!atPosition),
                 isSelected: atPosition,
                 icon: const Icon(AppIcons.filter, size: IconSize.action),
-                selectedIcon: const Icon(
-                  AppIcons.filter,
-                  size: IconSize.action,
-                ),
-                tooltip: 'At this position',
+                tooltip: atPosition
+                    ? 'Show every line'
+                    : 'Show only lines through the board position',
                 visualDensity: VisualDensity.compact,
               ),
               IconButton(
                 onPressed: onCreate,
                 icon: const Icon(AppIcons.add, size: IconSize.action),
-                tooltip: 'New chapter',
+                tooltip: 'New chapter…',
                 visualDensity: VisualDensity.compact,
               ),
             ],

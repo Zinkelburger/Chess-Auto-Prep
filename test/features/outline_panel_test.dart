@@ -238,11 +238,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sidelines').last);
     await tester.pumpAndSettle();
-    expect(find.text('Retry line move'), findsOneWidget);
+    expect(find.text('Retry save'), findsOneWidget);
 
     await tester.tap(find.text('Discard'));
     await tester.pumpAndSettle();
-    expect(find.text('Retry line move'), findsNothing);
+    expect(find.text('Retry save'), findsNothing);
     expect(fixture.library.hasPendingLineMove, isFalse);
   });
 
@@ -275,7 +275,9 @@ void main() {
   ) async {
     await show(tester);
     fixture.session.cursor.goTo(outline.lines.first.at);
-    await tester.tap(find.byTooltip('At this position'));
+    await tester.tap(
+      find.byTooltip('Show only lines through the board position'),
+    );
     await tester.pumpAndSettle();
     expect(find.textContaining('Nf6'), findsNothing);
     expect(find.textContaining('d5'), findsOneWidget);
@@ -283,7 +285,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Nf6'), findsOneWidget);
     expect(find.textContaining('d5'), findsOneWidget);
-    await tester.tap(find.byTooltip('At this position'));
+    await tester.tap(find.byTooltip('Show every line'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Nf6'), findsOneWidget);
   });
@@ -566,7 +568,7 @@ void main() {
   testWidgets('a new chapter can be made from the column', (tester) async {
     await show(tester);
 
-    await tester.tap(find.byTooltip('New chapter'));
+    await tester.tap(find.byTooltip('New chapter…'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Advance');
     await tester.tap(find.widgetWithText(FilledButton, 'Create'));

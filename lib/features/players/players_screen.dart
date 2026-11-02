@@ -186,13 +186,14 @@ class _PlayersScreenState extends State<PlayersScreen> {
     final text = Theme.of(context).textTheme;
     return Row(
       children: [
-        TextButton.icon(
+        IconButton(
+          tooltip: 'Back to groups',
           onPressed: () {
             _search.clear();
             owner.showGroup(null);
           },
           icon: const Icon(AppIcons.back, size: IconSize.action),
-          label: const Text('Groups'),
+          visualDensity: VisualDensity.compact,
         ),
         const SizedBox(width: Space.s),
         Flexible(
@@ -233,7 +234,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
             onChanged: owner.search,
           ),
         ),
-        FilledButton(
+        FilledButton.icon(
           onPressed: blocked
               ? null
               : groups
@@ -241,18 +242,20 @@ class _PlayersScreenState extends State<PlayersScreen> {
               : group != null
               ? () => _addMember(group)
               : () => editPlayer(context, owner),
-          child: Text(
+          icon: const Icon(AppIcons.add, size: IconSize.action),
+          label: Text(
             groups
-                ? 'New group'
+                ? 'New group…'
                 : group != null
-                ? 'Add players'
-                : 'Add player',
+                ? 'Add players…'
+                : 'Add player…',
           ),
         ),
         if (!groups)
-          OutlinedButton(
+          OutlinedButton.icon(
             onPressed: blocked ? null : () => importPlayers(context, owner),
-            child: const Text('Paste players'),
+            icon: const Icon(AppIcons.paste, size: IconSize.action),
+            label: const Text('Paste players…'),
           ),
         if (group != null) ...[
           TextButton(
@@ -277,14 +280,17 @@ class _PlayersScreenState extends State<PlayersScreen> {
       if (group != null) ...[
         MenuItemButton(
           onPressed: owner.busy ? null : () => _group(old: group),
+          leadingIcon: const Icon(AppIcons.edit, size: IconSize.menu),
           child: const Text('Edit group…'),
         ),
         MenuItemButton(
           onPressed: () => widget.onCopy(group),
+          leadingIcon: const Icon(AppIcons.copy, size: IconSize.menu),
           child: const Text('Copy prep sheet'),
         ),
         MenuItemButton(
           onPressed: () => widget.onExport(group),
+          leadingIcon: const Icon(AppIcons.saveCopy, size: IconSize.menu),
           child: const Text('Export prep sheet…'),
         ),
         if (group.fields['study'] case final String study when study.isNotEmpty)
@@ -301,7 +307,8 @@ class _PlayersScreenState extends State<PlayersScreen> {
         ),
       MenuItemButton(
         onPressed: owner.busy ? null : owner.load,
-        child: const Text('Reload players and groups'),
+        leadingIcon: const Icon(AppIcons.refresh, size: IconSize.menu),
+        child: const Text('Refresh'),
       ),
     ],
   );
@@ -441,10 +448,12 @@ class _GroupRow extends StatelessWidget {
               children: [
                 MenuItemButton(
                   onPressed: busy ? null : onEdit,
+                  leadingIcon: const Icon(AppIcons.edit, size: IconSize.menu),
                   child: const Text('Edit group…'),
                 ),
                 MenuItemButton(
                   onPressed: busy ? null : onRemove,
+                  leadingIcon: const Icon(AppIcons.remove, size: IconSize.menu),
                   child: const Text('Remove group…'),
                 ),
               ],
@@ -501,7 +510,7 @@ class _Notices extends StatelessWidget {
             children: [
               Text(error, style: wrong),
               if (players.needsRetry) ...[
-                TextButton(
+                OutlinedButton(
                   onPressed: players.busy ? null : players.retry,
                   child: const Text('Retry save'),
                 ),
@@ -510,7 +519,7 @@ class _Notices extends StatelessWidget {
                   child: const Text('Discard failed edit and reload'),
                 ),
               ] else
-                TextButton(
+                OutlinedButton(
                   onPressed: players.load,
                   child: const Text('Try again'),
                 ),

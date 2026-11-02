@@ -4,6 +4,7 @@ import '../../ui/theme.dart';
 import 'studies.dart';
 import 'studies_state.dart';
 import 'study_import_source.dart';
+import '../../ui/app_icons.dart';
 
 Future<StudyResult?> showStudyImport(
   BuildContext context,
@@ -148,12 +149,16 @@ class _ImportState extends State<_Import> {
       ),
     Align(
       alignment: Alignment.centerLeft,
-      child: OutlinedButton(
-        onPressed: _busy ? null : _read,
-        child: Text(
-          _source == _Source.file ? 'Choose PGN file…' : 'Preview chapters',
-        ),
-      ),
+      child: _source == _Source.file
+          ? OutlinedButton.icon(
+              onPressed: _busy ? null : _read,
+              icon: const Icon(AppIcons.open, size: IconSize.action),
+              label: const Text('Choose PGN file…'),
+            )
+          : OutlinedButton(
+              onPressed: _busy ? null : _read,
+              child: const Text('Preview chapters'),
+            ),
     ),
   ];
 

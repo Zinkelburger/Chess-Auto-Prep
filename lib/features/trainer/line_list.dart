@@ -46,7 +46,7 @@ class LineList extends StatefulWidget {
   final Widget? bookChip;
   final ValueChanged<LineToRead> onRead;
 
-  /// Whether a row offers `Open in Builder`: not while the builder is the
+  /// Whether a row offers `Open in builder`: not while the builder is the
   /// mode, where reading the line is the same thing.
   final bool offerBuilder;
 
@@ -513,7 +513,12 @@ extension on _LineRow {
     final reads = [
       rowAction('Read', () => onRead(ReadIn.moves), busy: false),
       if (offerBuilder)
-        rowAction('Open in Builder', () => onRead(ReadIn.builder), busy: false),
+        rowAction(
+          'Open in builder',
+          () => onRead(ReadIn.builder),
+          busy: false,
+          icon: AppIcons.openElsewhere,
+        ),
     ];
     if (status == LineStatus.game) return RowActions(children: reads);
     return RowActions(

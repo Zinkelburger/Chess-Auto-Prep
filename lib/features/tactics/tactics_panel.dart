@@ -112,7 +112,7 @@ class _TacticsPanelState extends State<TacticsPanel> {
               ),
               SetUnreadable(:final detail) => ListMessage(
                 'The puzzle set could not be read: $detail',
-                action: TextButton(
+                action: OutlinedButton(
                   onPressed: () => unawaited(widget.set.load()),
                   child: const Text('Try again'),
                 ),
@@ -145,7 +145,7 @@ class _TacticsPanelState extends State<TacticsPanel> {
               widget.trainer.up != null
                   ? 'Show puzzle'
                   : widget.trainer.run != null
-                  ? 'Continue session'
+                  ? 'Resume'
                   : 'Play (${shown.length})',
             ),
           ),
@@ -249,18 +249,22 @@ extension on _TacticsPanelState {
       MenuItemButton(
         onPressed: () =>
             unawaited(Clipboard.setData(ClipboardData(text: puzzle.fen.value))),
+        leadingIcon: const Icon(AppIcons.copy, size: IconSize.menu),
         child: const Text('Copy FEN'),
       ),
       MenuItemButton(
         onPressed: () => unawaited(_copyGame(puzzle)),
+        leadingIcon: const Icon(AppIcons.copy, size: IconSize.menu),
         child: const Text('Copy game PGN'),
       ),
       MenuItemButton(
         onPressed: () => widget.onAddToStudy(puzzle),
+        leadingIcon: const Icon(AppIcons.add, size: IconSize.menu),
         child: const Text('Add game to study…'),
       ),
       MenuItemButton(
         onPressed: () => unawaited(_delete(puzzle)),
+        leadingIcon: const Icon(AppIcons.delete, size: IconSize.menu),
         child: const Text('Delete puzzle…'),
       ),
     ],

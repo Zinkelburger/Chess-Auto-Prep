@@ -84,7 +84,7 @@ class _Idle extends StatelessWidget {
         const SizedBox(height: Space.s),
         Text(
           parked
-              ? 'Your results are kept. Continue session from the list or select a puzzle.'
+              ? 'Your results are kept. Resume from the list or select a puzzle.'
               : available > 0
               ? '$available puzzles ready. Choose Play in the list, then find the best move on the board.'
               : 'Get your games in the left panel to create puzzles, or adjust the filters if you already have some.',

@@ -172,7 +172,7 @@ final class StudyFileChanges {
           uncertain: true,
         );
         return StudyProblem(
-          'Rename was not confirmed: $detail. Retry rename to finish.',
+          'Rename was not confirmed: $detail. Retry save to finish.',
         );
     }
   }
@@ -192,7 +192,7 @@ final class StudyFileChanges {
     final to = ChapterRef.at(p.join(_root, '$wanted.pgn'));
     if (_restore case final existing?) {
       if (existing.from != from || existing.to != to) {
-        return const StudyProblem('Retry the pending study restore first.');
+        return const StudyProblem('Retry the pending study save first.');
       }
       return retryRestore();
     }
@@ -254,7 +254,7 @@ final class StudyFileChanges {
         'The deleted study changed. Refresh and try again.',
       ),
       store.IoFailure(:final detail) => StudyProblem(
-        'Restore was not confirmed: $detail. Retry restore to finish.',
+        'Restore was not confirmed: $detail. Retry save to finish.',
       ),
     };
   }

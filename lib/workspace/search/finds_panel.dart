@@ -168,9 +168,9 @@ class _FindsPanelState extends State<FindsPanel> {
             _Kinds(finds: finds),
             _CountLine(finds: finds),
             if (finds.canRetry)
-              TextButton(
+              OutlinedButton(
                 onPressed: () => unawaited(finds.retry()),
-                child: const Text('Retry saving positions'),
+                child: const Text('Retry save'),
               ),
             Expanded(child: _list(context, finds)),
           ],

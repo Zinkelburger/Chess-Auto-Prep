@@ -314,7 +314,7 @@ class _Sentence extends StatelessWidget {
               children: [
                 TextButton(
                   onPressed: () => unawaited(login()),
-                  child: const Text('Log in to Lichess'),
+                  child: const Text('Log in to Lichess…'),
                 ),
                 if (offline case final twic?)
                   Tooltip(
@@ -327,12 +327,13 @@ class _Sentence extends StatelessWidget {
               ],
             )
           else if (download case final start?)
-            TextButton(
+            TextButton.icon(
               onPressed: () => unawaited(start()),
-              child: const Text('Download TWIC database'),
+              icon: const Icon(AppIcons.download, size: IconSize.action),
+              label: const Text('Download TWIC…'),
             )
           else if (retry case final again?)
-            TextButton(
+            OutlinedButton(
               onPressed: () => unawaited(again()),
               child: const Text('Try again'),
             ),

@@ -59,7 +59,7 @@ class _RecoveryState extends State<_Recovery> {
       if (mounted) {
         setState(
           () => _message =
-              'Could not confirm the restore. Retry restore or refresh the list.',
+              'Could not confirm the restore. Retry save or refresh the list.',
         );
       }
     } finally {
@@ -140,11 +140,11 @@ class _RecoveryState extends State<_Recovery> {
             if (_message != null)
               Semantics(liveRegion: true, child: Text(_message!)),
             if (widget.studies.canRetryRestore)
-              TextButton(
+              OutlinedButton(
                 onPressed: _busy
                     ? null
                     : () => _run(widget.studies.retryRestore),
-                child: const Text('Retry restore'),
+                child: const Text('Retry save'),
               ),
             const SizedBox(height: Space.s),
             Expanded(

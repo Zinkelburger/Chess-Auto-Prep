@@ -105,7 +105,7 @@ void main() {
     await tester.pump();
     expect(fixture.session.cursor.fen, after('e2e4 c7c5'));
 
-    await tester.tap(find.byTooltip('Dismiss').last);
+    await tester.tap(find.byTooltip('Hide this finding').last);
     await tester.pump();
     expect(find.textContaining('Strong reply'), findsNothing);
     expect(find.text('1 dismissed'), findsOneWidget);
@@ -130,7 +130,7 @@ void main() {
         'Dismissals could not be saved; they last only until you audit '
         'again.';
     expect(find.text(warning), findsNothing);
-    await tester.tap(find.byTooltip('Dismiss').last);
+    await tester.tap(find.byTooltip('Hide this finding').last);
     await tester.pump();
     expect(find.textContaining('Strong reply'), findsNothing);
     expect(find.text(warning), findsOneWidget);

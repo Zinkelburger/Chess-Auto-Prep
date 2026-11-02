@@ -41,7 +41,7 @@ class _TwicDialogState extends State<_TwicDialog> {
       return PopScope(
         canPop: !download.running,
         child: AlertDialog(
-          title: const Text('Download TWIC database'),
+          title: const Text('Download TWIC'),
           content: SizedBox(
             width: 440,
             child: Column(

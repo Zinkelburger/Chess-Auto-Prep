@@ -122,7 +122,7 @@ class _Setup extends StatelessWidget {
         FilledButton.icon(
           key: const ValueKey('solitaire-begin'),
           onPressed: count == 0 ? null : solitaire.start,
-          icon: const Icon(AppIcons.run),
+          icon: const Icon(AppIcons.run, size: IconSize.action),
           label: const Text('Start solitaire'),
         ),
       ],
@@ -221,14 +221,14 @@ class _Guessing extends StatelessWidget {
         child: OutlinedButton.icon(
           key: const ValueKey('solitaire-hint'),
           onPressed: solitaire.canHint ? solitaire.showHint : null,
-          icon: const Icon(AppIcons.hint),
+          icon: const Icon(AppIcons.hint, size: IconSize.action),
           label: const Text('Hint'),
         ),
       ),
       OutlinedButton.icon(
         key: const ValueKey('solitaire-reveal'),
         onPressed: solitaire.canReveal ? solitaire.reveal : null,
-        icon: const Icon(AppIcons.reveal),
+        icon: const Icon(AppIcons.reveal, size: IconSize.action),
         label: const Text('Give up this move'),
       ),
       Tooltip(
@@ -319,7 +319,7 @@ class _Done extends StatelessWidget {
           await Clipboard.setData(ClipboardData(text: pgn));
           say('Session PGN copied.', problem: false);
         },
-        icon: const Icon(AppIcons.copy),
+        icon: const Icon(AppIcons.copy, size: IconSize.action),
         label: const Text('Copy session PGN'),
       ),
       OutlinedButton(
@@ -329,9 +329,10 @@ class _Done extends StatelessWidget {
       if (onNextGame != null)
         OutlinedButton(onPressed: onNextGame, child: const Text('Next game')),
       if (onAddToStudy != null)
-        OutlinedButton(
+        OutlinedButton.icon(
           onPressed: onAddToStudy,
-          child: const Text('Add to study…'),
+          icon: const Icon(AppIcons.add, size: IconSize.action),
+          label: const Text('Add game to study…'),
         ),
       TextButton(onPressed: solitaire.stop, child: const Text('Done')),
     ],

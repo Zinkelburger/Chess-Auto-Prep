@@ -245,7 +245,7 @@ class _UpdateDialogState extends State<_UpdateDialog>
         onPressed: () => _answer(_Answer.later),
         child: const Text('Close'),
       ),
-      FilledButton(
+      OutlinedButton(
         onPressed: () => unawaited(widget.updates.install()),
         child: const Text('Try again'),
       ),

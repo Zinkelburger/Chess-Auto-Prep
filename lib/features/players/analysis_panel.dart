@@ -139,7 +139,7 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
               else if (widget.players.players.isNotEmpty)
                 IconButton(
                   icon: const Icon(AppIcons.add, size: IconSize.action),
-                  tooltip: 'Add player',
+                  tooltip: 'Add player…',
                   onPressed: _add,
                   visualDensity: VisualDensity.compact,
                 ),
@@ -171,15 +171,18 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
       if (player.accounts.isNotEmpty)
         MenuItemButton(
           onPressed: owner.busy ? null : () => unawaited(_getGames(player)),
+          leadingIcon: const Icon(AppIcons.download, size: IconSize.menu),
           child: const Text('Get games…'),
         ),
       MenuItemButton(
         onPressed: owner.busy ? null : widget.onImport,
+        leadingIcon: const Icon(AppIcons.open, size: IconSize.menu),
         child: const Text('Add PGN…'),
       ),
       MenuItemButton(
         onPressed: owner.busy ? null : () => unawaited(owner.select(player)),
-        child: const Text('Reload saved games'),
+        leadingIcon: const Icon(AppIcons.refresh, size: IconSize.menu),
+        child: const Text('Refresh'),
       ),
       MenuItemButton(
         onPressed: widget.onDirectory,
@@ -438,7 +441,7 @@ class _Status extends StatelessWidget {
             Wrap(
               spacing: Space.s,
               children: [
-                TextButton(
+                OutlinedButton(
                   onPressed: analysis.busy ? null : analysis.retry,
                   child: const Text('Try again'),
                 ),
@@ -492,11 +495,23 @@ class _NoGames extends StatelessWidget {
       runSpacing: Space.s,
       children: [
         if (canDownload)
-          FilledButton(onPressed: onDownload, child: const Text('Get games')),
+          FilledButton.icon(
+            onPressed: onDownload,
+            icon: const Icon(AppIcons.download, size: IconSize.action),
+            label: const Text('Get games…'),
+          ),
         if (canDownload)
-          OutlinedButton(onPressed: onImport, child: const Text('Add PGN…'))
+          OutlinedButton.icon(
+            onPressed: onImport,
+            icon: const Icon(AppIcons.open, size: IconSize.action),
+            label: const Text('Add PGN…'),
+          )
         else
-          FilledButton(onPressed: onImport, child: const Text('Add PGN…')),
+          FilledButton.icon(
+            onPressed: onImport,
+            icon: const Icon(AppIcons.open, size: IconSize.action),
+            label: const Text('Add PGN…'),
+          ),
       ],
     ),
   );

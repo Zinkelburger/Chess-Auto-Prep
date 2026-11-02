@@ -149,9 +149,10 @@ class _LibraryPanelState extends State<LibraryPanel> {
           children: [
             const Text('No repertoires yet.'),
             const SizedBox(height: Space.m),
-            FilledButton(
+            FilledButton.icon(
               onPressed: library.busy ? null : _newRepertoire,
-              child: const Text('New repertoire'),
+              icon: const Icon(AppIcons.add, size: IconSize.action),
+              label: const Text('New repertoire…'),
             ),
           ],
         ),
@@ -218,7 +219,7 @@ class _Toolbar extends StatelessWidget {
                     const SizedBox(width: Space.xs),
                     IconButton(
                       icon: const Icon(AppIcons.add, size: IconSize.action),
-                      tooltip: 'New repertoire',
+                      tooltip: 'New repertoire…',
                       onPressed: busy ? null : onCreate,
                       visualDensity: VisualDensity.compact,
                     ),

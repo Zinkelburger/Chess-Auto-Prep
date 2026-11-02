@@ -109,7 +109,7 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
               BookReading() when widget.book.problem != null => Column(
                 children: [
                   const ListMessage('Could not compare your games.'),
-                  TextButton(
+                  OutlinedButton(
                     onPressed: () => unawaited(widget.book.retry()),
                     child: const Text('Try again'),
                   ),

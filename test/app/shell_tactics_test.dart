@@ -242,7 +242,7 @@ void main() {
       expect(find.text('Me – Rival'), findsOneWidget);
       expect(find.text('4.Qe2??'), findsOneWidget);
       final puzzle = w.trainer.up!.puzzle;
-      await tester.tap(find.text('Analyze game'));
+      await tester.tap(find.text('Open on analysis board'));
       await tester.pumpAndSettle();
       expect(w.session.isScratch, isTrue);
       expect(w.session.cursor.fen.position, puzzle.fen.position);

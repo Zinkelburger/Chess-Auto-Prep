@@ -39,18 +39,21 @@ Future<void> manageTournamentEngines(
                   trailing: Wrap(
                     children: [
                       IconButton(
-                        tooltip: 'Edit ${engine.name}',
+                        tooltip: 'Edit ${engine.name}…',
                         onPressed: run.registryBusy || run.running
                             ? null
                             : () => unawaited(_edit(context, run, engine)),
-                        icon: const Icon(AppIcons.edit),
+                        icon: const Icon(AppIcons.edit, size: IconSize.action),
                       ),
                       IconButton(
-                        tooltip: 'Remove ${engine.name}',
+                        tooltip: 'Remove ${engine.name}…',
                         onPressed: run.registryBusy || run.running
                             ? null
                             : () => unawaited(_remove(context, run, engine)),
-                        icon: const Icon(AppIcons.remove),
+                        icon: const Icon(
+                          AppIcons.remove,
+                          size: IconSize.action,
+                        ),
                       ),
                     ],
                   ),
@@ -61,11 +64,12 @@ Future<void> manageTournamentEngines(
         ),
       ),
       actions: [
-        TextButton(
+        TextButton.icon(
           onPressed: run.registryBusy || run.running
               ? null
               : () => unawaited(_edit(context, run, null)),
-          child: const Text('Add UCI engine…'),
+          icon: const Icon(AppIcons.add, size: IconSize.action),
+          label: const Text('Add UCI engine…'),
         ),
         TextButton(
           onPressed: () => Navigator.pop(context),
@@ -83,7 +87,7 @@ Future<void> _remove(
 ) async {
   if (await confirmAction(
     context,
-    title: 'Remove engine',
+    title: 'Remove ${engine.name}?',
     message:
         'Remove ${engine.name} from the registry? Saved runs retain their engine settings.',
     confirm: 'Remove',
@@ -175,7 +179,7 @@ class _EditorState extends State<_Editor> {
                 ),
                 TextButton.icon(
                   onPressed: _busy ? null : () => unawaited(_pick()),
-                  icon: const Icon(AppIcons.open),
+                  icon: const Icon(AppIcons.open, size: IconSize.action),
                   label: const Text('Choose file…'),
                 ),
               ],

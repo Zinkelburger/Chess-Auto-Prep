@@ -9,6 +9,7 @@ import '../../workspace/document/document_session.dart';
 import '../../workspace/explorer/explorer_pane.dart' show ResultBar;
 import 'player_analysis.dart';
 import '../../ui/list_message.dart';
+import '../../ui/app_icons.dart';
 
 /// The Player openings tab: what the chosen player's games did from the
 /// position on the board, as the Explorer tab draws a database — a row per
@@ -68,9 +69,10 @@ class PlayerTreePane extends StatelessWidget {
           if (onSave != null && session.cursor.value.indexes.isNotEmpty)
             Align(
               alignment: Alignment.centerLeft,
-              child: TextButton(
+              child: TextButton.icon(
                 onPressed: onSave,
-                child: const Text('Save line to prep study'),
+                icon: const Icon(AppIcons.add, size: IconSize.action),
+                label: const Text('Add line to prep study'),
               ),
             ),
           const _TableHeader(),
@@ -115,9 +117,10 @@ class PlayerTreePane extends StatelessWidget {
                 child: const Text('Go to the first move'),
               ),
               if (onSave != null && session.cursor.value.indexes.isNotEmpty)
-                TextButton(
+                TextButton.icon(
                   onPressed: onSave,
-                  child: const Text('Save line to prep study'),
+                  icon: const Icon(AppIcons.add, size: IconSize.action),
+                  label: const Text('Add line to prep study'),
                 ),
             ],
           ),

@@ -13,6 +13,7 @@ import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
 import 'trainer.dart';
 import 'trainer_state.dart';
+import '../../ui/app_icons.dart';
 
 /// The selected scope's training desk, inside the shared Train pane.
 class TrainingHome extends StatefulWidget {
@@ -87,15 +88,16 @@ class _TrainingHomeState extends State<TrainingHome> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (selection.chapter != null)
-          TextButton(
-            onPressed: () => selection.select(),
-            child: Text(
-              '← ${selection.repertoire?.name ?? 'Whole repertoire'}',
-            ),
-          ),
         Row(
           children: [
+            if (selection.chapter != null)
+              IconButton(
+                tooltip:
+                    'Back to ${selection.repertoire?.name ?? 'the whole repertoire'}',
+                onPressed: () => selection.select(),
+                icon: const Icon(AppIcons.back, size: IconSize.action),
+                visualDensity: VisualDensity.compact,
+              ),
             Expanded(
               child: Text(
                 line?.name ?? selection.title,
@@ -110,6 +112,7 @@ class _TrainingHomeState extends State<TrainingHome> {
                     'Training settings…',
                     widget.onSettings!,
                     busy: false,
+                    icon: AppIcons.settings,
                   ),
                 rowAction(
                   'Mark scope as learned',
@@ -193,13 +196,10 @@ class _TrainingHomeState extends State<TrainingHome> {
           runSpacing: Space.s,
           children: [
             if (paused)
-              FilledButton(
+              FilledButton.icon(
                 onPressed: busy ? null : _resumeScope,
-                child: Text(
-                  selection.repertoirePaused
-                      ? 'Resume repertoire'
-                      : 'Resume training',
-                ),
+                icon: const Icon(AppIcons.run, size: IconSize.action),
+                label: const Text('Resume'),
               )
             else
               FilledButton(

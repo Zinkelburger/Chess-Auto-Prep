@@ -253,7 +253,7 @@ class _Outcome extends StatelessWidget {
             if (login && onLogIn != null)
               TextButton(
                 onPressed: onLogIn,
-                child: const Text('Log in to Lichess'),
+                child: const Text('Log in to Lichess…'),
               ),
           ],
         ),

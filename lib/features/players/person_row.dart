@@ -11,6 +11,7 @@ import 'player_dialogs.dart';
 import 'player_lookup.dart';
 import 'players.dart';
 import 'saved_games.dart';
+import '../../ui/app_icons.dart';
 
 /// One person in the directory or in a group: who they are and where their
 /// games come from, how many games are saved, and the two things done with
@@ -190,6 +191,7 @@ class PersonRow extends StatelessWidget {
               onPressed: owner.busy
                   ? null
                   : () => editPlayer(context, owner, player: player),
+              leadingIcon: const Icon(AppIcons.edit, size: IconSize.menu),
               child: const Text('Edit player…'),
             ),
             MenuItemButton(
@@ -206,10 +208,12 @@ class PersonRow extends StatelessWidget {
                 onPressed: owner.busy || saved.deleting.contains(player.id)
                     ? null
                     : () => onDeleteGames(player),
+                leadingIcon: const Icon(AppIcons.delete, size: IconSize.menu),
                 child: const Text('Delete saved games…'),
               ),
             MenuItemButton(
               onPressed: owner.busy ? null : () => onRemove(player),
+              leadingIcon: const Icon(AppIcons.remove, size: IconSize.menu),
               child: Text(
                 group == null ? 'Remove player…' : 'Remove from group…',
               ),

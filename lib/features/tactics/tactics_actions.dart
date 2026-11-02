@@ -10,6 +10,7 @@ import '../../workspace/workspace_tabs.dart';
 import 'my_games.dart';
 import 'puzzle_trainer.dart';
 import '../../ui/app_keys.dart';
+import '../../ui/app_icons.dart';
 
 /// The Actions menu in Tactics, which is for solving: the puzzle's own
 /// actions, the user's games, the board and the card's tabs — none of the
@@ -50,6 +51,7 @@ List<AppAction> tacticsActions({
               Clipboard.setData(ClipboardData(text: session.cursor.fen.value)),
             )
           : null,
+      icon: AppIcons.copy,
       group: 'Board',
     ),
     ...tabActions(tabs),
@@ -63,7 +65,7 @@ List<AppAction> myGamesActions(
   required VoidCallback onAccounts,
 }) => [
   AppAction(
-    games.running ? 'Pause the review' : 'Get my games',
+    games.running ? 'Pause' : 'Get games',
     games.running
         ? games.pause
         : games.accounts.isEmpty
@@ -86,7 +88,7 @@ List<AppAction> puzzleActions(PuzzleTrainer trainer) {
         ? const []
         : [
             AppAction(
-              'Continue session',
+              'Resume',
               () => unawaited(trainer.continueSession()),
               group: 'Tactics',
             ),

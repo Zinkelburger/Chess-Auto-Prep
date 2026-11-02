@@ -72,8 +72,8 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
                   widget.onDownload != null)
                 TextButton.icon(
                   onPressed: widget.onDownload,
-                  icon: const Icon(AppIcons.download, size: IconSize.menu),
-                  label: const Text('Download more'),
+                  icon: const Icon(AppIcons.download, size: IconSize.action),
+                  label: const Text('Download TWIC…'),
                 ),
               if (summary != null)
                 ConstrainedBox(

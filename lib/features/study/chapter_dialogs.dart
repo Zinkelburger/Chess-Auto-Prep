@@ -90,7 +90,7 @@ class _TagsState extends State<_Tags> {
                           });
                         }
                       },
-                      icon: const Icon(AppIcons.remove),
+                      icon: const Icon(AppIcons.remove, size: IconSize.action),
                     ),
                   ],
                 ),
@@ -99,7 +99,7 @@ class _TagsState extends State<_Tags> {
               onPressed: () {
                 if (mounted) setState(() => _rows.add(_TagRow('', '')));
               },
-              icon: const Icon(AppIcons.add),
+              icon: const Icon(AppIcons.add, size: IconSize.action),
               label: const Text('Add tag'),
             ),
             if (_problem case final message?)

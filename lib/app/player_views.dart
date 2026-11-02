@@ -20,6 +20,7 @@ import '../workspace/workspace_tabs.dart';
 import 'mode_view.dart';
 import 'player_wiring.dart';
 import 'workspace_requests.dart';
+import '../ui/app_icons.dart';
 
 final class PlayerAnalysisView extends ModeView {
   PlayerAnalysisView(Workspace workspace, this.requests, this.players)
@@ -145,7 +146,7 @@ final class PlayerAnalysisView extends ModeView {
   List<AppAction> actions(ModeMenu menu) => [
     AppAction('Players & prep', players.showDirectory, group: 'Player'),
     AppAction(
-      'Get latest games',
+      'Get games',
       players.analysis.player?.accounts.isNotEmpty == true &&
               !players.analysis.busy
           ? () => unawaited(
@@ -182,7 +183,7 @@ final class PlayerAnalysisView extends ModeView {
       group: 'Analysis',
     ),
     AppAction(
-      'Save line to prep study',
+      'Add line to prep study',
       players.analysis.player == null
           ? null
           : () => unawaited(players.saveLine()),
@@ -216,8 +217,9 @@ final class PlayersView extends ModeView {
   @override
   List<AppAction> actions(ModeMenu menu) => [
     AppAction(
-      'Reload players',
+      'Refresh',
       () => unawaited(players.directory.load()),
+      icon: AppIcons.refresh,
       group: 'Players',
     ),
   ];

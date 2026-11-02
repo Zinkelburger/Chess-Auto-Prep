@@ -399,7 +399,7 @@ final class Studies extends ChangeNotifier {
       return _changes.renames(study, to)
           ? retryRename()
           : Future.value(
-              const StudyProblem('Retry the pending study rename first.'),
+              const StudyProblem('Retry the pending study save first.'),
             );
     }
     if (to == study) return Future.value(const StudyDone());
@@ -533,7 +533,7 @@ final class Studies extends ChangeNotifier {
         'A study named "${creation.ref.name}" already exists.',
       ),
       store.IoFailure(:final detail) => StudyProblem(
-        'Could not save the study: $detail. Retry study save to finish.',
+        'Could not save the study: $detail. Retry save to finish.',
       ),
     };
   }

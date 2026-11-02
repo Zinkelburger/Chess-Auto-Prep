@@ -5,6 +5,7 @@ import '../../chess/tactics/puzzle.dart';
 import '../../chess/tactics/source_game.dart';
 import '../../ui/theme.dart';
 import 'source_games.dart';
+import '../../ui/app_icons.dart';
 
 /// The Game tab in Tactics: the whole game the puzzle on the board came
 /// from, who played it and how it went, the review's counts for it, and its
@@ -86,9 +87,10 @@ class _Shown extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: Tooltip(
             message: 'Open the game on an analysis board at the puzzle',
-            child: OutlinedButton(
+            child: OutlinedButton.icon(
               onPressed: () => onAnalyze(game.mistake ?? 0),
-              child: const Text('Analyze game'),
+              icon: const Icon(AppIcons.openElsewhere, size: IconSize.action),
+              label: const Text('Open on analysis board'),
             ),
           ),
         ),

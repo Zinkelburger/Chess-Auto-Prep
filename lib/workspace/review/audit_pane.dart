@@ -78,7 +78,7 @@ class _AuditPaneState extends State<AuditPane> {
           if (running)
             FilledButton.icon(
               onPressed: stopping ? null : audit.stop,
-              icon: const Icon(AppIcons.pause),
+              icon: const Icon(AppIcons.stop, size: IconSize.action),
               label: const Text('Stop'),
             )
           else
@@ -86,7 +86,7 @@ class _AuditPaneState extends State<AuditPane> {
               message: 'Check the chapter\'s moves and the replies it misses',
               child: FilledButton.icon(
                 onPressed: audit.canStart ? () => unawaited(_start()) : null,
-                icon: const Icon(AppIcons.run),
+                icon: const Icon(AppIcons.run, size: IconSize.action),
                 label: const Text('Audit'),
               ),
             ),
@@ -268,7 +268,7 @@ class _FindingRow extends StatelessWidget {
             ),
             IconButton(
               icon: const Icon(AppIcons.close, size: IconSize.action),
-              tooltip: 'Dismiss',
+              tooltip: 'Hide this finding',
               visualDensity: VisualDensity.compact,
               onPressed: onDismiss,
             ),

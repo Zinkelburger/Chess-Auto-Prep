@@ -18,6 +18,7 @@ import 'trainer.dart';
 import 'trainer_state.dart';
 import 'trainer_words.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/app_icons.dart';
 
 /// The Train tab while a sitting runs: the line and how far the sitting has
 /// to go, what the lesson wants now, the moves played so far with the note
@@ -203,7 +204,7 @@ class _OnLine extends StatelessWidget {
               ? 'Study position'
               : trainer.lessonToRead?.place == ReadIn.moves
               ? 'Read line'
-              : 'Open in Builder',
+              : 'Open in builder',
         ),
       ),
     );
@@ -483,7 +484,10 @@ class _Control extends StatelessWidget {
               ),
             ),
           ),
-          TextButton(onPressed: lesson.retry, child: const Text('Try again')),
+          OutlinedButton(
+            onPressed: lesson.retry,
+            child: const Text('Try again'),
+          ),
         ],
       ),
       _ => const SizedBox(height: Space.xl),
@@ -587,7 +591,11 @@ class _Footer extends StatelessWidget {
                 if (onBuilder != null)
                   MenuItemButton(
                     onPressed: onBuilder,
-                    child: const Text('Open in Builder'),
+                    leadingIcon: const Icon(
+                      AppIcons.openElsewhere,
+                      size: IconSize.menu,
+                    ),
+                    child: const Text('Open in builder'),
                   ),
                 MenuItemButton(
                   onPressed: onPeek,
@@ -595,11 +603,7 @@ class _Footer extends StatelessWidget {
                 ),
                 MenuItemButton(
                   onPressed: () => unawaited(lesson.exclude()),
-                  child: Text(
-                    trainer.selection.active
-                        ? 'Pause line training'
-                        : 'Exclude from training',
-                  ),
+                  child: const Text('Exclude from training'),
                 ),
               ],
             ),

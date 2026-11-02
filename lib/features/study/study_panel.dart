@@ -139,7 +139,7 @@ class _StudyPanelState extends State<StudyPanel> {
     if (study == null) return;
     final name = await showNameDialog(
       context,
-      title: 'Save study PGN as',
+      title: 'Export study PGN',
       label: 'File name',
       confirm: 'Choose folder',
       initial: study.name,
@@ -520,7 +520,6 @@ class _Toolbar extends StatelessWidget {
   /// two that need a study open are off until one is.
   List<Widget> get _actions => [
     rowAction('New study…', onNewStudy, busy: busy, icon: AppIcons.add),
-    rowAction('Import chapters…', onImport, busy: busy, icon: AppIcons.open),
     rowAction(
       'Rename study…',
       onRenameStudy,
@@ -528,22 +527,14 @@ class _Toolbar extends StatelessWidget {
       icon: AppIcons.edit,
     ),
     rowAction(
-      'Save study PGN as…',
+      'Export study PGN…',
       onExportStudy,
       busy: busy || !hasOpenStudy,
-      icon: AppIcons.save,
+      icon: AppIcons.saveCopy,
     ),
-    if (onSendToLichess case final send?)
-      rowAction(
-        'Send to Lichess…',
-        send,
-        busy: busy || !hasOpenStudy,
-        icon: AppIcons.send,
-      ),
-    if (onRetrySave != null)
-      rowAction('Retry study save', onRetrySave!, busy: busy),
-    if (onRetryRename != null)
-      rowAction('Retry rename', onRetryRename!, busy: busy),
+    // A study has one write pending at a time: its save or its rename.
+    if (onRetrySave ?? onRetryRename case final retry?)
+      rowAction('Retry save', retry, busy: busy),
     rowAction(
       'Copy study PGN',
       onCopyStudy,
@@ -563,14 +554,16 @@ class _Toolbar extends StatelessWidget {
   Widget _transfers() => Wrap(
     alignment: WrapAlignment.spaceEvenly,
     children: [
-      TextButton(
+      TextButton.icon(
         onPressed: busy ? null : onImport,
-        child: const Text('Import…'),
+        icon: const Icon(AppIcons.open, size: IconSize.action),
+        label: const Text('Import chapters…'),
       ),
       if (hasOpenStudy && onSendToLichess != null)
-        TextButton(
+        TextButton.icon(
           onPressed: busy ? null : onSendToLichess,
-          child: const Text('Send to Lichess…'),
+          icon: const Icon(AppIcons.send, size: IconSize.action),
+          label: const Text('Send to Lichess…'),
         ),
     ],
   );
@@ -586,9 +579,9 @@ class _Toolbar extends StatelessWidget {
             children: [
               if (currentName != null)
                 IconButton(
-                  tooltip: 'All studies',
+                  tooltip: 'Back to studies',
                   onPressed: onChooseStudy,
-                  icon: const Icon(AppIcons.back, size: IconSize.menu),
+                  icon: const Icon(AppIcons.back, size: IconSize.action),
                   visualDensity: VisualDensity.compact,
                 ),
               // Room for the buttons first: a narrow pane cuts the label,
@@ -620,9 +613,10 @@ class _Toolbar extends StatelessWidget {
             ),
           const SizedBox(height: Space.s),
           if (!hasOpenStudy)
-            FilledButton(
+            FilledButton.icon(
               onPressed: busy ? null : onNewStudy,
-              child: const Text('New study'),
+              icon: const Icon(AppIcons.add, size: IconSize.action),
+              label: const Text('New study…'),
             ),
           _transfers(),
           if (hasOpenStudy && onTrain != null)
@@ -635,8 +629,8 @@ class _Toolbar extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
                 onPressed: busy ? null : onNewChapter,
-                icon: const Icon(AppIcons.add, size: IconSize.menu),
-                label: const Text('New chapter'),
+                icon: const Icon(AppIcons.add, size: IconSize.action),
+                label: const Text('New chapter…'),
               ),
             ),
         ],

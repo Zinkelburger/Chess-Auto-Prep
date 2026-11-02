@@ -321,7 +321,9 @@ class _PaneTabStripState<K extends Object> extends State<PaneTabStrip<K>>
                     ),
               ],
               builder: (context, menu, _) => IconButton(
-                tooltip: widget.onAdd == null ? 'Open tab' : 'New analysis tab',
+                tooltip: widget.onAdd == null
+                    ? 'Open tab'
+                    : 'New analysis board',
                 onPressed:
                     widget.onAdd ?? (menu.isOpen ? menu.close : menu.open),
                 icon: const Icon(AppIcons.add, size: IconSize.menu),

@@ -127,7 +127,7 @@ void main() {
     await tester.pump();
     expect(fill.state, isA<FillDone>());
     expect(fill.canMakeLines, isTrue);
-    expect(find.text('Retry saving tree'), findsOneWidget);
+    expect(find.text('Retry save'), findsOneWidget);
     expect(fill.canStart, isFalse);
     await tester.tap(find.text('Discard tree save'));
     await tester.pump();

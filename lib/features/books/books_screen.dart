@@ -169,8 +169,8 @@ class _BookList extends StatelessWidget {
                 onPressed: books.changingReferences
                     ? null
                     : () => unawaited(newBook(context, books)),
-                icon: const Icon(AppIcons.add, size: IconSize.menu),
-                tooltip: 'New opening book',
+                icon: const Icon(AppIcons.add, size: IconSize.action),
+                tooltip: 'New opening book…',
               ),
             ],
           ),
@@ -194,7 +194,7 @@ class _BookList extends StatelessWidget {
             ),
           ),
         if (books.canRetry && books.problem != null)
-          TextButton(
+          OutlinedButton(
             onPressed: books.changingReferences
                 ? null
                 : () => unawaited(books.retry()),
@@ -236,11 +236,12 @@ class _NoBooks extends StatelessWidget {
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: Space.m),
-        FilledButton(
+        FilledButton.icon(
           onPressed: books.loaded && !books.changingReferences
               ? () => unawaited(newBook(context, books))
               : null,
-          child: const Text('New opening book'),
+          icon: const Icon(AppIcons.add, size: IconSize.action),
+          label: const Text('New opening book…'),
         ),
       ],
     ),
@@ -563,7 +564,7 @@ class _ChapterRow extends StatelessWidget {
           const SizedBox(width: Space.xs),
           Expanded(child: Text(chapter.name, overflow: TextOverflow.ellipsis)),
           IconButton(
-            tooltip: 'Open in the builder',
+            tooltip: 'Open in builder',
             iconSize: IconSize.menu,
             visualDensity: VisualDensity.compact,
             onPressed: onOpen,

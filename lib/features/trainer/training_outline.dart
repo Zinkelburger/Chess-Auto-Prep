@@ -92,7 +92,7 @@ class _TrainingOutlineState extends State<TrainingOutline> {
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
               onPressed: widget.onImport,
-              icon: const Icon(AppIcons.open),
+              icon: const Icon(AppIcons.open, size: IconSize.action),
               label: const Text('Import course PGN…'),
             ),
           ),
@@ -311,7 +311,7 @@ class _TrainingOutlineState extends State<TrainingOutline> {
         ),
         if (trainable)
           rowAction(
-            review.excluded ? 'Resume line training' : 'Pause line training',
+            review.excluded ? 'Include in training' : 'Exclude from training',
             () => unawaited(
               trainer.changeProgress(
                 state.progress.setExcluded(line, excluded: !review.excluded),

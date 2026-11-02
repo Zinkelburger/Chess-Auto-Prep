@@ -5,6 +5,7 @@ import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'players.dart';
 import '../../ui/list_message.dart';
+import '../../ui/app_icons.dart';
 
 /// The Player analysis column before anyone is chosen: the saved players to
 /// pick from, narrowed by a search, or the way to add the first one.
@@ -55,7 +56,7 @@ class _PlayerPickerState extends State<PlayerPicker> {
         if (widget.players.error case final error?)
           ListMessage(
             error,
-            action: TextButton(
+            action: OutlinedButton(
               onPressed: widget.players.load,
               child: const Text('Try again'),
             ),
@@ -64,9 +65,10 @@ class _PlayerPickerState extends State<PlayerPicker> {
           ListMessage(
             'Add the player you are preparing for, with their Lichess or '
             'Chess.com username or a PGN of their games.',
-            action: FilledButton(
+            action: FilledButton.icon(
               onPressed: widget.onAdd,
-              child: const Text('Add player'),
+              icon: const Icon(AppIcons.add, size: IconSize.action),
+              label: const Text('Add player…'),
             ),
           )
         else ...[

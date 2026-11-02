@@ -64,8 +64,9 @@ abstract base class _DocumentModeView extends ModeView {
   @override
   List<AppAction> actions(ModeMenu menu) => [
     AppAction(
-      'Open PGN file…',
+      AppKey.openFile.action,
       () => unawaited(requests.openPgnFile()),
+      icon: AppIcons.open,
       shortcut: AppKey.openFile.label,
       group: 'File',
     ),
@@ -383,7 +384,12 @@ abstract base class _ReadingView extends _DocumentModeView {
         shortcut: AppKey.play.label,
         group: 'Board',
       ),
-      AppAction('Add game to study…', open ? _addGame : null, group: 'Game'),
+      AppAction(
+        'Add game to study…',
+        open ? _addGame : null,
+        icon: AppIcons.add,
+        group: 'Game',
+      ),
       _otherMode,
     ];
   }
@@ -486,15 +492,17 @@ final class ViewerView extends _ReadingView {
       group: 'File',
     ),
     AppAction(
-      'Export visible games as PGN…',
+      'Export games…',
       _modes.viewer.file == null || _modes.filter.busy
           ? null
           : menu.dialogs.exportPgn,
+      icon: AppIcons.saveCopy,
       group: 'File',
     ),
     AppAction(
-      'Save selection to study…',
+      'Add games to study…',
       _modes.viewer.file == null || _modes.filter.busy ? null : _addSelection,
+      icon: AppIcons.add,
       group: 'File',
     ),
   ];

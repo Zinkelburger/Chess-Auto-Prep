@@ -87,7 +87,7 @@ class _SetupState extends State<_Setup> {
             TextButton.icon(
               onPressed: () =>
                   _change(() => _seats.add(TournamentEngine.bundled())),
-              icon: const Icon(AppIcons.add),
+              icon: const Icon(AppIcons.add, size: IconSize.action),
               label: const Text('Add engine'),
             ),
             const SizedBox(height: Space.m),
@@ -133,7 +133,11 @@ class _SetupState extends State<_Setup> {
         onPressed: () => Navigator.pop(context),
         child: const Text('Cancel'),
       ),
-      FilledButton(onPressed: _start, child: const Text('Start new run')),
+      FilledButton.icon(
+        onPressed: _start,
+        icon: const Icon(AppIcons.run, size: IconSize.action),
+        label: const Text('Start new run'),
+      ),
     ],
   );
 
@@ -221,7 +225,7 @@ class _SetupState extends State<_Setup> {
           onPressed: _seats.length > 2
               ? () => _change(() => _seats.removeAt(index))
               : null,
-          icon: const Icon(AppIcons.remove),
+          icon: const Icon(AppIcons.remove, size: IconSize.action),
         ),
       ],
     );

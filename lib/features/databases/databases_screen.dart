@@ -71,9 +71,10 @@ class DatabasesScreen extends StatelessWidget {
           if (library.offersDownload)
             Tooltip(
               message:
-                  'Weekly issues of The Week in Chess from theweekinchess.com',
+                  'Download weekly issues of The Week in Chess into the '
+                  'master games',
               child: FilledButton.icon(
-                icon: const Icon(AppIcons.download),
+                icon: const Icon(AppIcons.download, size: IconSize.action),
                 onPressed: library.activity == DatabaseActivity.importing
                     ? null
                     : () => unawaited(showTwicDownload(context, library)),
@@ -81,9 +82,9 @@ class DatabasesScreen extends StatelessWidget {
               ),
             ),
           Tooltip(
-            message: 'Adds a PGN file’s games to the master games',
+            message: 'Add a PGN file’s games to the master games',
             child: OutlinedButton.icon(
-              icon: const Icon(AppIcons.open),
+              icon: const Icon(AppIcons.open, size: IconSize.action),
               onPressed:
                   library.activity == DatabaseActivity.idle &&
                       !library.busy &&
@@ -95,12 +96,12 @@ class DatabasesScreen extends StatelessWidget {
           ),
           if (library.places != null) _StorageButton(library: library),
           IconButton(
-            tooltip: 'Refresh database counts and storage',
+            tooltip: 'Refresh',
             onPressed: () {
               unawaited(library.refresh());
               unawaited(library.measure());
             },
-            icon: const Icon(AppIcons.refresh),
+            icon: const Icon(AppIcons.refresh, size: IconSize.action),
           ),
         ],
       ),
@@ -382,7 +383,7 @@ class _StorageButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TextButton.icon(
     key: const ValueKey('storage'),
-    icon: const Icon(AppIcons.storage),
+    icon: const Icon(AppIcons.storage, size: IconSize.action),
     onPressed: () => unawaited(
       showDialog<void>(
         context: context,
@@ -435,12 +436,15 @@ class _StorageDialog extends StatelessWidget {
                         ),
                         if (store.removable)
                           IconButton(
-                            tooltip: 'Delete ${store.name}',
+                            tooltip: 'Delete ${store.name}…',
                             onPressed:
                                 library.removing != null || store.bytes == 0
                                 ? null
                                 : () => unawaited(_remove(context, store)),
-                            icon: const Icon(AppIcons.delete),
+                            icon: const Icon(
+                              AppIcons.delete,
+                              size: IconSize.action,
+                            ),
                           ),
                       ],
                     ),

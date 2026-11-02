@@ -249,7 +249,7 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
         },
       ),
       if (state is SaveFailed)
-        TextButton(
+        OutlinedButton(
           onPressed: widget.session.retrySave,
           child: const Text('Retry save'),
         ),

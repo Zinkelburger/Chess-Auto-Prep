@@ -133,7 +133,7 @@ void main() {
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
     expect(find.text('Save to repertoire…'), findsOneWidget);
-    expect(find.text('Save to study…'), findsNothing);
+    expect(find.text('Add game to study…'), findsNothing);
     expect(find.text('Paste PGN or FEN'), findsOneWidget);
   });
 

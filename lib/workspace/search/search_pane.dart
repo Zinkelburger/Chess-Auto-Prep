@@ -219,7 +219,7 @@ class _SearchPaneState extends State<SearchPane>
                               OutlinedButton(
                                 onPressed: () =>
                                     unawaited(widget.fill.retryTree()),
-                                child: const Text('Retry saving tree'),
+                                child: const Text('Retry save'),
                               ),
                               TextButton(
                                 onPressed: widget.fill.discardTreeSave,
@@ -405,7 +405,7 @@ class _SearchPaneState extends State<SearchPane>
       return Tooltip(
         message: 'Finish the current position, then pause and keep the results',
         child: FilledButton.icon(
-          icon: const Icon(AppIcons.pause),
+          icon: const Icon(AppIcons.pause, size: IconSize.action),
           onPressed: running.stopping ? null : fill.finish,
           label: const Text('Pause'),
         ),
@@ -425,7 +425,7 @@ class _SearchPaneState extends State<SearchPane>
         message: 'Searched $depth half-moves deep here; search ${depth + 1}',
         child: FilledButton.icon(
           onPressed: fill.canStart ? () => unawaited(_deeper(depth)) : null,
-          icon: const Icon(AppIcons.run),
+          icon: const Icon(AppIcons.run, size: IconSize.action),
           label: const Text('Deeper'),
         ),
       );
@@ -436,7 +436,7 @@ class _SearchPaneState extends State<SearchPane>
           : 'Search from the board',
       child: FilledButton.icon(
         onPressed: fill.canStart ? () => unawaited(_search()) : null,
-        icon: const Icon(AppIcons.run),
+        icon: const Icon(AppIcons.run, size: IconSize.action),
         label: Text(
           resumable
               ? 'Resume'

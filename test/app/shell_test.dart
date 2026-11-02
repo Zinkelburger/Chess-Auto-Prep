@@ -132,7 +132,7 @@ void main() {
     expect(w.analysis.pausedFor, isNull);
     w.requests.switchTo(Mode.trainer);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Resume lesson'));
+    await tester.tap(find.text('Resume'));
     await tester.pump();
     expect(w.lineTrainer.lesson, same(lesson));
     expect(lesson.suspended, isFalse);
@@ -202,7 +202,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('The clipboard holds no FEN.'), findsOneWidget);
     expect(tester.getRect(board), quiet);
-    await tester.tap(find.byTooltip('Close'));
+    await tester.tap(find.byTooltip('Hide this message'));
     await tester.pumpAndSettle();
     expect(find.text('The clipboard holds no FEN.'), findsNothing);
     expect(tester.getRect(board), quiet);

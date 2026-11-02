@@ -201,7 +201,7 @@ void main() {
       );
       final other =
           await study.studies.rename(study.ref, 'Other') as StudyProblem;
-      expect(other.sentence, contains('pending study rename'));
+      expect(other.sentence, contains('pending study save'));
       expect(study.session.source, study.ref);
       expect(study.onDisk, twoChapterStudy);
       expect(study.store.documents.containsKey(studyRef('Renamed')), isFalse);

@@ -182,7 +182,7 @@ List<AppAction> boardActions(
       ),
     if (scratch && requests.mode == Mode.study)
       AppAction(
-        'Save to study…',
+        'Add game to study…',
         () => unawaited(requests.addToStudy([?gameDraft(session)])),
         group: 'Document',
       ),

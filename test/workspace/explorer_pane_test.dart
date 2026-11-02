@@ -301,9 +301,9 @@ void main() {
           return true;
         },
       );
-      expect(find.text('Log in to Lichess'), findsOneWidget);
+      expect(find.text('Log in to Lichess…'), findsOneWidget);
       expect(find.text('Try again'), findsNothing);
-      await tester.tap(find.text('Log in to Lichess'));
+      await tester.tap(find.text('Log in to Lichess…'));
       await tester.pumpAndSettle();
       expect(logins, 1);
       expect(explorer.state, isA<ExplorerShown>());
@@ -325,7 +325,7 @@ void main() {
     );
     await tester.tap(find.text('TWIC'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Download TWIC database'));
+    await tester.tap(find.text('Download TWIC…'));
     await tester.pumpAndSettle();
     expect(downloads, 1);
     expect(explorer.state, isA<ExplorerShown>());

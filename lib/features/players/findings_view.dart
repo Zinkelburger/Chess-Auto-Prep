@@ -86,13 +86,17 @@ class _EngineRunState extends State<EngineRun> {
               'Check the most played positions for bad evaluations and '
               'strong replies these games never met. Scores are from the '
               'player’s side.',
-          child: FilledButton(
+          child: FilledButton.icon(
             onPressed: widget.analysis.busy
                 ? null
                 : hunt.running
                 ? hunt.stop
                 : hunt.start,
-            child: Text(
+            icon: Icon(
+              hunt.running ? AppIcons.stop : AppIcons.run,
+              size: IconSize.action,
+            ),
+            label: Text(
               hunt.running
                   ? 'Stop · ${hunt.done} / ${hunt.total}'
                   : 'Analyze with engine',

@@ -141,7 +141,7 @@ void main() {
       expect(find.byType(LessonView), findsOneWidget);
       expect(w.lineTrainer.lesson, isNotNull);
       expect(tester.takeException(), isNull);
-      expect(find.text('Open in Builder'), findsNothing);
+      expect(find.text('Open in builder'), findsNothing);
       expect(w.lineTrainer.lessonToRead!.place, ReadIn.moves);
       await tester.tap(find.text('Read line'));
       await tester.pumpAndSettle();

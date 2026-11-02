@@ -227,7 +227,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(FilledButton), findsOneWidget);
-    expect(find.text('Add players'), findsOneWidget);
+    expect(find.text('Add players…'), findsOneWidget);
     expect(find.text('Copy prep sheet'), findsNothing);
     await tester.tap(find.byTooltip('More actions'));
     await tester.pumpAndSettle();
