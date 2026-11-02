@@ -122,7 +122,10 @@ class _LibraryPanelState extends State<LibraryPanel> {
   Widget _body(BuildContext context) {
     final library = widget.library;
     return switch (library.state) {
-      LibraryLoading() => const ListMessage.loading('Reading repertoires…'),
+      LibraryLoading() => const ListMessage.loading(
+        'Reading repertoires…',
+        inset: Space.m,
+      ),
       LibraryLoadFailed() => ListMessage(
         'Could not read your repertoires.',
         action: OutlinedButton(
@@ -149,6 +152,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
     if (library.repertoires.isEmpty) {
       return ListMessage(
         'No repertoires yet.',
+        inset: Space.m,
         action: FilledButton.icon(
           onPressed: library.busy ? null : _newRepertoire,
           icon: const Icon(AppIcons.add, size: IconSize.action),

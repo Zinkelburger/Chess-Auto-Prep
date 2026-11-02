@@ -270,10 +270,10 @@ class _CorpusFiltersState extends State<_CorpusFilters> {
     runSpacing: Space.s,
     crossAxisAlignment: WrapCrossAlignment.center,
     children: [
-      _field(_player, 'Player', 220),
-      _field(_event, 'Event', 200),
+      _field(_player, 'Player', 186),
+      _field(_event, 'Event', 180),
       _field(_eco, 'ECO', 90),
-      _field(_since, 'From date', 170),
+      _field(_since, 'From date', 214),
       const Text('Minimum Elo'),
       SizedBox(
         width: 160,

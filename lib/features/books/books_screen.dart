@@ -217,11 +217,15 @@ class _BookList extends StatelessWidget {
   /// The books, or the one sentence and button in their place.
   Widget _list(BuildContext context) {
     if (!books.loaded) {
-      return const ListMessage.loading('Reading opening books…');
+      return const ListMessage.loading(
+        'Reading opening books…',
+        inset: Space.m,
+      );
     }
     if (books.books.isEmpty) {
       return ListMessage(
         'No opening books yet.',
+        inset: Space.m,
         action: FilledButton.icon(
           onPressed: books.changingReferences
               ? null
