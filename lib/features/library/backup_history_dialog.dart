@@ -122,7 +122,9 @@ class _HistoryState extends State<_History> {
           ),
           const SizedBox(height: Space.s),
           Expanded(
+            // Both sides start at the top, as every list does.
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 SizedBox(
                   width: dialogSideListWidth,

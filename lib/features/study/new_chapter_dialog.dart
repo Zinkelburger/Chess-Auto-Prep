@@ -99,6 +99,7 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
     onChanged: (_) {
       if (_nameProblem != null) _change(() => _nameProblem = null);
     },
+    onSubmitted: (_) => _create(),
   );
 
   /// The name, the start and the orientation, in the width of a name

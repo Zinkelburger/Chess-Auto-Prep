@@ -289,6 +289,7 @@ class _AccountsDialogState extends State<_AccountsDialog> {
         controller: controller,
         autofocus: first,
         decoration: InputDecoration(labelText: label),
+        onSubmitted: (_) => _save(),
       );
 
   @override

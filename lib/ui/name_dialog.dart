@@ -103,6 +103,8 @@ class _NameDialogState extends State<_NameDialog> {
                 setState(() => _problem = null);
               }
             },
+            // Also for an input method that submits without a key press.
+            onSubmitted: (_) => _submit(),
           ),
           if (extra != null) ...[
             const SizedBox(height: Space.l),
