@@ -43,8 +43,8 @@ class ListRow extends StatefulWidget {
   /// What the `⋯` button says it opens.
   final String menuTooltip;
 
-  /// The row's fixed height; null only for a row inside a list that sets
-  /// the extent itself.
+  /// The row's fixed height at the normal text size; null only for a row
+  /// inside a list that sets the extent itself.
   final double? height;
 
   /// The room around the words; by default a small inset on the left and,
@@ -96,8 +96,12 @@ class _ListRowState extends State<ListRow> {
               ],
             ),
     );
+    // Taller with larger text, so a two-line row never cuts its words.
     if (widget.height case final height?) {
-      content = SizedBox(height: height, child: content);
+      content = SizedBox(
+        height: MediaQuery.textScalerOf(context).scale(height),
+        child: content,
+      );
     }
     Widget row = Material(
       color: widget.selected

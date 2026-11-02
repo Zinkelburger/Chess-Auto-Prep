@@ -173,9 +173,18 @@ class _RepertoireRow extends StatelessWidget {
               children: [
                 Tooltip(
                   message: folder.name,
-                  child: Text(folder.name, overflow: TextOverflow.ellipsis),
+                  child: Text(
+                    folder.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                Text(_subtitle, style: text.labelSmall),
+                Text(
+                  _subtitle,
+                  style: text.labelSmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
           ),
