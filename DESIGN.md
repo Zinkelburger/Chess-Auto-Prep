@@ -97,6 +97,10 @@ components:
   list-row:
     textColor: "{colors.ink}"
     height: "34px"
+  list-row-selected:
+    backgroundColor: "{colors.selection-grey}"
+    textColor: "{colors.ink}"
+    height: "34px"
 ---
 
 # Design System: Chess Auto Prep
@@ -138,7 +142,7 @@ Neutral charcoal with a single desaturated blue; all other colour is semantic.
 ### Neutral
 - **Charcoal Surface** (charcoal-surface): the window, scaffold and most panes.
 - **Graphite Panel** (graphite-panel): menus, popovers and raised containers.
-- **Selection Grey** (selection-grey): the chosen tab, the selected row.
+- **Selection Grey** (selection-grey): the chosen tab, the selected row in every list (list tiles too, with their words staying ink). Rows picked among several, the move at the cursor and what the pointer is over take the slate accent seen through instead (`selectedTint`, `cursorTint`, `hoverTint`).
 - **Reading Black** (reading-black): the reading card behind the moves.
 - **Outline Grey** (outline-grey): pane borders, dividers, menu edges.
 - **Button Outline** (button-outline): outlined buttons' stroke, a step brighter so it reads as on.
@@ -205,7 +209,7 @@ tool picked while the card is one pane opens under it, so a tool pane is laid
 out to work at half the card's height. A pane shorter
 than its content's minimum scrolls as a whole rather than squeezing a list to
 nothing. Rows are fixed: 34px list rows, 28px engine and reply rows, 32px
-search rows, 44px two-line trainer rows.
+search rows, 44px two-line rows (a name over what is known of it).
 
 ### Named Rules
 **The Still Page Rule.** Reading views never shift: fixed-height feedback lines, panes and rows keep their size whether they hold anything or not, and hover never resizes a row.
@@ -287,7 +291,10 @@ One name and one symbol per action, everywhere it appears. `lib/ui/app_icons.dar
 - **Filters:** compact Field / Rule / Value rows; selected sets as removable chips.
 
 ### Lists and tables
-- **Rows:** fixed height, ink on charcoal, the selected row in Selection Grey. Numbers right-aligned in mono gutters (engine score 54px, explorer games 96px).
+- **Rows:** `list_row`: fixed height, the whole row a click target, ink on charcoal, the selected row filled in Selection Grey. A row with actions ends in its `⋯` button, and a right click or Shift+F10 opens the same menu. Numbers right-aligned in mono gutters (engine score 54px, explorer games 96px).
+- **Empty, reading, failed:** `list_message`, one sentence at the list's top left where the first row would be, never centred. An empty list adds the one labelled button that fills it (`No repertoires yet.` + `New repertoire…`), and the header's `+` appears only once the list has something in it, so the two never show together. A list being read says `Reading repertoires…`, no spinner. A list that could not be read says `Could not read …` with `Try again`, without asking the player to try again. A search with no result: `Nothing matches "q".`
+- **Problem line:** `problem_line`, what could not be done in the error colour on a fixed-height line (all of it on hover), its one fix (`Try again`, `Retry save`) at its end; screen readers say it as it appears.
+- **Progress line:** `progress_line`, a 2px line while something runs, held empty when nothing does, so nothing under it moves.
 - **Result bar:** three grey parts with their own quiet ink, at most 220px wide.
 
 ### Tool panes (Expectimax is the pattern)
@@ -314,7 +321,7 @@ One name and one symbol per action, everywhere it appears. `lib/ui/app_icons.dar
 
 ### Do:
 - **Do** keep every gap on the 4 / 8 / 12 / 16 / 24 scale and every size in `lib/ui/theme.dart`.
-- **Do** reuse the controls in `lib/ui/` (search_field, choice_field, number_field, field_row, check_row, toggle_chip, name_dialog, confirm_dialog, row_actions, pane_tabs, selection, app_action). A stepper or choice sits in a `field_row` that names it; a set of on/off choices is `toggle_chip`s, which never grow a tick.
+- **Do** reuse the controls in `lib/ui/` (search_field, choice_field, number_field, field_row, check_row, toggle_chip, list_row, list_message, problem_line, progress_line, name_dialog, confirm_dialog, row_actions, pane_tabs, selection, app_action). A stepper or choice sits in a `field_row` that names it; a set of on/off choices is `toggle_chip`s, which never grow a tick.
 - **Do** write labels and tooltips behaviour-first: the first sentence says what the control does; the binding comes from `ui/app_keys.dart`.
 - **Do** follow Lichess conventions for the board, arrows, explorer and engine lines.
 - **Do** give feedback lines, rows and panes fixed heights so nothing jumps.

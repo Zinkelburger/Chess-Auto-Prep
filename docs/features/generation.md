@@ -73,8 +73,7 @@ search.
   `Only move`, `Their only move`, `Practical`), `This chapter` (on when a
   chapter is open). A row reads `4.d4 Bc5?  Trap` over `played 29%, loses 1.7
   · 1 in 3 · as White`; `⋯` offers `Train this line` (traps) and `Remove`.
-  Empty: `Nothing found yet. Run a search from the Expectimax tab; what it
-  points out is listed here.`
+  Empty: `What a search from the Expectimax tab finds is listed here.`
 
 ## Actions
 

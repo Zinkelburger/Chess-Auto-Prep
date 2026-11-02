@@ -41,15 +41,18 @@ starts with the engine off, no card heading and no game counter.
   (`2/3`, tooltip `Solved 2 of 3 tries`; blank for a new puzzle, or
   `solved`/`failed` in the current sitting) over `date · vs opponent`; a `⋯`
   menu (`Puzzle actions`). The puzzle on the board is highlighted.
-- **Column messages** — `Reading puzzles…`; `No puzzles yet. Get your games
-  above: …`; `The puzzle set could not be read: {detail}` with `Try again`;
+- **Column messages** — `Reading puzzles…`; with no account, nothing under
+  the account prompt (it already says what to do); with one, `Get games to
+  turn your mistakes into puzzles.`; `Could not read the puzzles: {detail}`
+  with `Try again`;
   `No puzzles from the last {n} days.` with `Include older puzzles`; `Your
   filters rule out every puzzle you have. Open Filters to loosen them.`;
   `Nothing matches "{q}".`
 - **Card tabs** — `Puzzle` (pinned), `Game` (open by default), and `Moves`,
   `Explorer` when opened. No repertoire tabs.
-- **Puzzle tab, idle** — `Practice your mistakes` with `{n} puzzles ready…`,
-  or `Session paused` with `End session`.
+- **Puzzle tab, idle** — one quiet line, no heading: `{n} puzzles ready to
+  play.` (blank with none), or `Session paused; your results are kept.` with
+  `End session`.
 - **Puzzle tab, solving** — `White to play` (`· 2 moves` for a longer line),
   `vs opponent · date`, `You played h5 (inaccuracy)` (after the answer:
   `, allowing Be2   +0.6 → -0.1`), a fixed-height feedback line, the buttons

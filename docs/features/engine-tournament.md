@@ -27,17 +27,17 @@ unavailable.`
   refresh icon (`Refresh tournaments`), and while a run plays `Stop` (`Stopping
   after this move…` once pressed). After a failed save, `Retry save`.
   `New tournament…` is disabled while a run plays or a save waits for retry.
-- **Problem line**: selectable error text for the last failure, then one line
-  per unreadable tournament (`Cannot read tournament <id>: …`).
+- **Problem line**: the last failure in the error colour (all of it on
+  hover), then one line per unreadable tournament (`Cannot read tournament
+  <id>: …`).
 - **History** (left, 280 px): a search box (`Name, engine or opening`) that
-  matches name, opening label and engine names; no match reads `No tournament
-  matches "<query>".` Rows are newest first under `Today`, `Yesterday`, a
+  matches name, opening label and engine names; no match reads `Nothing
+  matches "<query>".`, and with none at all `No tournaments yet.` Rows are newest first under `Today`, `Yesterday`, a
   month (`September 2026`) or `Unknown date`. Each row: name, `<status> ·
   4/10 games`, then each engine's points (`Stockfish A 5.5 · Stockfish B
   4.5`). A `running` row has a progress bar. Status is the stored word:
   `pending`, `running`, `completed`, `stopped`.
-- **Detail** (right): `No tournaments yet` when nothing is selected. Otherwise
-  the name with `Run again…` and a bin icon (`Delete tournament…`),
+- **Detail** (right): blank when nothing is selected. Otherwise the name with `Run again…` and a bin icon (`Delete tournament…`),
   `<status> · 4/10 games`, the time label and format label (`Blitz · 60 s +
   0.6 s`, `Round robin · 10 games per pairing`), and any stored error.
 - **Live game** (selected tournament running): `Game 3 · 41 plies · Nf6` above
@@ -45,8 +45,8 @@ unavailable.`
 - **Crosstable**: `Show rating statistics` checkbox; columns `#`, `Engine`,
   `Score`, `W`, `D`, `L`, optionally `Draw %`, `Elo ±`, `LOS`, `SB` (each with
   an explaining tooltip), then one `vs <name>` column per entrant showing the
-  score over `4 W · 4 D · 2 L`. Before any result: `No games yet — the
-  crosstable fills in as they finish.` Only finished games count.
+  score over `4 W · 4 D · 2 L`. Before any result: `No games finished
+  yet.` Only finished games count.
 - **Below the crosstable**: `Show final positions` (a saved setting), `Browse
   games`, and the full `games.pgn` path in small type.
 - **Games list**: one row per saved game, `3. Stockfish A — Stockfish B`,
