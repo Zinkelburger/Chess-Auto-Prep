@@ -22,7 +22,7 @@ read.
   shown once there is a book); each book by name, `In use` beside the active
   one. While chapter moves rewrite the books: `Updating book chapters…`. A save
   problem is a problem line with `Retry save`.
-- **Book editor** (right) — the book's name, `Use this book` (filled) or
+- **Book editor** (right) — the book's name, `Use this book` (outlined) or
   `In use`, and a `Book actions` menu: `Rename…`, `Stop using`, `Delete…`.
   Under it `Search repertoires and chapters`, then every repertoire: a
   tristate box, its name and `2 of 5` chapters; expanded, each chapter with a

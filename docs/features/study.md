@@ -37,7 +37,9 @@ position or clearing material asks for confirmation. The last chapter cannot
 be deleted. The study menu (**Study actions**) provides **New study…**,
 **Rename study…**, **Export study PGN…**, **Copy study PGN** and **Delete
 study…**, plus **Retry save** when a write failed. **Import chapters…** and, with a study open,
-**Send to Lichess…** sit side by side under the toolbar.
+**Send to Lichess…** sit side by side under the toolbar. Actions ▸ File has
+**New study…**, **New chapter…**, **Import chapters…** and **Send to
+Lichess…** too, off where the panel's are.
 
 ## Import and export
 

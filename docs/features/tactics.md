@@ -98,7 +98,7 @@ a few minutes.`, `{site} has no player by that username.`, `{site} could not
 answer (HTTP {n}).` A site that cannot be reached is answered from its saved
 games: `· Lichess not reached, using saved games`.
 
-**Pause / Resume** — `Pause` (Actions `Pause the review`) → `Pausing…`, stops
+**Pause / Resume** — `Pause` (Actions `Pause`) → `Pausing…`, stops
 after the game being judged → `Paused — {n} games left`; `Resume` carries on
 without downloading again. A game's puzzles, its done mark and its counts are
 one write, so a game cut off midway is judged again and none is mined twice.

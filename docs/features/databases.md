@@ -42,8 +42,8 @@ Reached from the mode menu (`Databases`, in the `Data & engines` group of
   PGN to browse games.` (`Import a PGN to add your own games here.` without
   TWIC) or `No games match these filters.`
 - **Pager** — `Page N`, `Previous`, `Next`; 100 games a page.
-- **Actions menu** — `Refresh` and `Import PGN…` in a `Databases`
-  group.
+- **Actions menu** — the page's buttons in a `Databases` group:
+  `Download TWIC…` (where offered), `Import PGN…`, `Refresh`.
 
 ## Actions
 

@@ -85,6 +85,10 @@ for both, the list and the outline share one column as two pages.
 
 ## Actions
 
+Actions ▸ File also has the list's `New repertoire…`, `New chapter…` (off until
+a repertoire is open) and `Import course PGN…`. On the analysis board
+`Train this chapter`, `Next gap` and `Play as Black` are shown off.
+
 **New repertoire** — list `+` or `New repertoire…` → `Create repertoire` name
 dialog → `<name>/Main.pgn` with no side, opened at once (the side question
 follows) → `A repertoire named "X" already exists.` /

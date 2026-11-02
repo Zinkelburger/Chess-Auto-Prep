@@ -87,6 +87,10 @@ Tabs:
 
 ## Actions
 
+The page's add button (`Add player…`, `Add players…` in a group, `New group…`
+on Groups), `Paste players…` and `Refresh` are also in the Actions menu's
+`Players` group.
+
 **Add or edit a player** — `Add player…` / `Edit player…` → dialog with `Name`,
 `Chess.com usernames`, `Lichess usernames` (comma-separated), `Names used in PGN
 files` (semicolon-separated), `US Chess ID`, `FIDE ID`, `Rating`, `Prep notes`,

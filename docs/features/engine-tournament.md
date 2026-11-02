@@ -56,6 +56,9 @@ unavailable.`
 
 ## Actions
 
+The page's `New tournament…`, `Engines…` and `Refresh` are also in the Actions
+menu's `Tournaments` group.
+
 **Register an engine** — `Engines…` → `Tournament engines` dialog: a fixed
 `Bundled Stockfish` entry (`Always available; add named settings below.`), one
 row per registered engine (`<cores> cores · <MB> MB · <path or Bundled

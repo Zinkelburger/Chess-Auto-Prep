@@ -189,7 +189,8 @@ Neutral charcoal with a single desaturated blue; all other colour is semantic.
 
 The window is a top bar (mode name, Actions, Settings), a document tab strip,
 an optional left list column, then the workspace: the board column (board,
-compact engine lines, typed-move field, note card) beside the reading card's
+the typed-move field named `Move` with its feedback line, compact engine
+lines, note card) beside the reading card's
 panes, first shared two parts board to three parts card. Panes split right or
 below from a tab's context menu; each pane has a browser-style tab strip
 (34px tabs, the chosen one filled). The sentence about the last action sits
@@ -244,7 +245,9 @@ active pane's a brighter grey. Dividers between panes are 1px lines with a
 - **Primary (filled):** ink on Slate Fill; one per surface, for applying or completing.
 - **Outlined:** ink in a Button Outline stroke; the default secondary action.
 - **Text:** slate accent, for light actions inside rows and bars.
-- **Disabled:** Disabled Fill / Disabled Ink. Options that cannot apply are hidden with a one-line reason rather than shown greyed.
+- **Disabled:** Disabled Fill / Disabled Ink. Options that cannot apply are hidden with a one-line reason rather than shown greyed; a menu entry with nothing to act on now is shown off.
+- **Tool buttons:** `tool_button`, an icon-only button in a bar or list header: the symbol at 18px, a compact square, always a tooltip. As a toggle it is drawn in the slate accent while on. Row-sized steppers, chips and tab closers keep their 16px symbols.
+- **Segments:** `segments`, a few answers side by side (`Read | Edit`, `White | Black`): compact, no tick on the chosen one, so a segment never grows when picked.
 - **Hover / Focus:** no splash and no highlight wash; Material's state layer only.
 
 ### Verbs and symbols
@@ -277,7 +280,7 @@ One name and one symbol per action, everywhere it appears. `lib/ui/app_icons.dar
 3. Icon-only buttons live in bars and list headers and always have a tooltip. Where a key does the same, the tooltip comes from `AppKey.tip`, and the label is the AppKey's own wording, so one key has one name.
 4. `…` exactly when the command asks something (a name, a file, a confirmation) before acting; the same label in button and menu form.
 5. Every button that creates, imports or runs in a mode is also an entry in that mode's Actions menu.
-6. A menu keeps a 16px symbol slot on every row once any row has a symbol.
+6. Every menu keeps a 16px symbol slot on every row once any row has a symbol (`menu_entry` does it).
 7. The filled button completes the pane's task: never a retry, never a copy, never one per list row; one per pane.
 
 ### Dialogs
@@ -291,19 +294,23 @@ One name and one symbol per action, everywhere it appears. `lib/ui/app_icons.dar
 - **Style:** 34px tall, up to 220px wide and never wider than the strip (a long title ends in an ellipsis), 6px radius; the chosen tab filled in Selection Grey; a 2px line shows where a dragged tab will land. Tabs close from the right-click menu. The list column's Repertoires / Chapters / Positions tabs use the same height and inset.
 
 ### Menus
-- **Style:** Graphite Panel, 1px outline, 8px radius, 32px rows with the body-small label. The top bar's menus and every right-click menu look the same.
-- **Opening:** at once, with no fade, grow or slide; a right-click menu appears under the pointer on the release.
-- **Symbols:** a move's right-click menu gives each action its symbol in muted ink in a 16px slot before the label, as on the website's analysis board: copy for Copy line PGN / Copy FEN / Copy dual FEN, a bin for Delete from here, an up arrow for Promote variation, a tick for Make main line, the move list's own play and stop marks for the quiz markers. When one row of a menu has a symbol, rows without one keep the slot empty so the labels line up.
+- **Style:** Graphite Panel, 1px outline, 8px radius, 32px rows with the body-small label. Every menu row is a `menu_entry` (the top bar's Actions and mode menus, a row's `⋯`, a pane's `+`) or a `showActionContextMenu` row (right-click menus), and they look the same.
+- **Opening:** at once, with no fade, grow or slide; a right-click menu, a move's included, appears under the pointer on the release.
+- **Symbols:** an entry's symbol sits in muted ink in a 16px slot before the label, the verb table's symbol where it has one: copy for Copy line PGN / Copy FEN, a bin for Delete from here, an up arrow for Promote variation, a tick for Make main line, a speech mark for Comment this move, the move list's play and stop marks for the quiz markers. In every menu, once one row has a symbol, rows without one keep the slot empty so the labels line up.
+- **Actions menu:** each mode's own create, import and run buttons are there too, with the button's label, symbol and enabled state; an entry with nothing to act on (Train this chapter on the analysis board) is shown off.
 
 ### Inputs / Fields
 - Empty fields contain no example text or typing prompts. Keep names on labels, search purposes in accessible names and hover help, and required formats in labels. New names start blank; saved values and functional settings remain visible.
-- **Style:** shared `search_field`, `choice_field`, `number_field` controls with a label above and an underline; search always shows its magnifier and clear action.
+- **Style:** every field is a dense outlined box with its name on the border (the theme's default), the shared `search_field`, `choice_field`, `number_field` controls and a dialog's text fields alike; search always shows its magnifier and clear action. The move field under the board is named `Move` on its border.
 - **Choices:** typeable ChoiceField, NumberStepper or a segmented button. Never a dropdown the player cannot type into.
 - **Filters:** compact Field / Rule / Value rows; selected sets as removable chips.
+- **On and off:** a `check_row` (a tick and its words, the row clickable) for a setting in a pane or dialog, `toggle_chip`s for a set of choices; the Settings dialog's rows keep their switch. A tick that enables a number beside it (`Last 14 days`, Maia fallback under N games) stays one composite row.
+- **Named values:** a stepper or choice sits in a `field_row`: its name on the left, the control at the end of the line.
 
 ### Lists and tables
+- **Column top:** `pane_header`: the column's name in the label style, its `+` or `⋯` right after the name, the `«` in the corner; a way back (`Back to studies`) before the name. Headings inside a list are `SectionLabel`s; the count over a list (`12 of 340`), with its `Filters` or `Clear filters` at the end, is a `CountLine`.
 - **Rows:** `list_row`: fixed height, the whole row a click target, ink on charcoal, the selected row filled in Selection Grey. A row with actions ends in its `⋯` button, and a right click or Shift+F10 opens the same menu. Numbers right-aligned in mono gutters (engine score 54px, explorer games 96px).
-- **Empty, reading, failed:** `list_message`, one sentence at the list's top left where the first row would be, never centred. An empty list adds the one labelled button that fills it (`No repertoires yet.` + `New repertoire…`), and the header's `+` appears only once the list has something in it, so the two never show together. A list being read says `Reading repertoires…`, no spinner. A list that could not be read says `Could not read …` with `Try again`, without asking the player to try again. A search with no result: `Nothing matches "q".`
+- **Empty, reading, failed:** `list_message`, one sentence at the list's top left where the first row would be, never centred. An empty list adds the one labelled button that fills it (`No repertoires yet.` + `New repertoire…`), and the header's `+` appears only once the list has something in it, so the two never show together. A list being read says `Reading repertoires…`, no spinner. A list that could not be read says `Could not read …` with `Try again`, without asking the player to try again. A search with no result: `Nothing matches "q".` The button is as wide as its words; the Moves pane with no moves says `No moves` at its top left the same way.
 - **Problem line:** `problem_line`, what could not be done in the error colour on a fixed-height line (all of it on hover), its one fix (`Try again`, `Retry save`) at its end; screen readers say it as it appears.
 - **Progress line:** `progress_line`, a 2px line while something runs, held empty when nothing does, so nothing under it moves.
 - **Result bar:** three grey parts with their own quiet ink, at most 220px wide.
@@ -332,7 +339,7 @@ One name and one symbol per action, everywhere it appears. `lib/ui/app_icons.dar
 
 ### Do:
 - **Do** keep every gap on the 4 / 8 / 12 / 16 / 24 scale and every size in `lib/ui/theme.dart`.
-- **Do** reuse the controls in `lib/ui/` (search_field, choice_field, number_field, field_row, check_row, toggle_chip, list_row, list_message, problem_line, progress_line, form_dialog, name_dialog, confirm_dialog, options_dialog, choice_dialog, row_actions, pane_tabs, selection, app_action). A stepper or choice sits in a `field_row` that names it; a set of on/off choices is `toggle_chip`s, which never grow a tick.
+- **Do** reuse the controls in `lib/ui/` (search_field, choice_field, number_field, field_row, check_row, toggle_chip, segments, tool_button, pane_header, list_row, list_message, problem_line, progress_line, form_dialog, name_dialog, confirm_dialog, options_dialog, choice_dialog, menu_entry, row_actions, action_context_menu, pane_tabs, selection, app_action). A stepper or choice sits in a `field_row` that names it; a set of on/off choices is `toggle_chip`s, which never grow a tick.
 - **Do** write labels and tooltips behaviour-first: the first sentence says what the control does; the binding comes from `ui/app_keys.dart`.
 - **Do** follow Lichess conventions for the board, arrows, explorer and engine lines.
 - **Do** give feedback lines, rows and panes fixed heights so nothing jumps.

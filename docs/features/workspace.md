@@ -62,8 +62,10 @@ Top to bottom, left to right:
   `[%cal]`/`[%csl]` shapes of the comment on the move under the cursor (the
   introduction's at the start), except over a comment's line or while part of
   the game is hidden. The engine's threat is a red arrow.
-- **Under the board** — the move field (`Type a move`), the
-  game counter where a mode has one, the engine pane, and the move note: the
+- **Under the board** — the move field (named `Move` on its border, tooltip
+  `Type a move`) and the game counter where a mode has one, the move field's
+  feedback line, the engine pane (its room the same height on or off), and
+  the move note: the
   current move with its glyph and note (`14. Nf5!  Good move`), the game's
   introduction and first move (muted, clickable) at the start; fixed height, a
   long note scrolls; no card when there is nothing to say.

@@ -181,7 +181,7 @@ move or gives up; an unjudged move is never called a mistake. Future moves,
 notes and variations stay hidden (`DocumentSession.showOnlyTo`) and visible
 engine analysis is off. At the end the full game returns with attempts, hints
 and evaluations annotated: `Copy session PGN`, `Play again`, `Next game`,
-`Add to study…`, `Done`. Esc, another game or leaving the mode ends it.
+`Add to study…`, `Done` (the filled one). Esc, another game or leaving the mode ends it.
 Solitaire never writes the source file.
 
 **Play through** — Space or `Play through` → one main-line move a second
