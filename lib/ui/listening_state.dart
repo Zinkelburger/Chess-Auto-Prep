@@ -12,9 +12,10 @@ import 'package:flutter/widgets.dart';
 /// state that is going.
 mixin ListeningState<T extends StatefulWidget> on State<T> {
   Listenable? _followed;
+  bool _stopped = false;
 
-  /// What to follow for [widget].
-  Listenable listenableOf(T widget);
+  /// What to follow for [widget]; null while it names nothing to follow.
+  Listenable? listenableOf(T widget);
 
   /// Runs on each notification while the state is listening.
   void changed();
@@ -22,16 +23,16 @@ mixin ListeningState<T extends StatefulWidget> on State<T> {
   @override
   void initState() {
     super.initState();
-    _followed = listenableOf(widget)..addListener(_changed);
+    _followed = listenableOf(widget)?..addListener(_changed);
   }
 
   @override
   void didUpdateWidget(T oldWidget) {
     super.didUpdateWidget(oldWidget);
     final now = listenableOf(widget);
-    if (_followed == null || _followed == now) return;
-    _followed!.removeListener(_changed);
-    _followed = now..addListener(_changed);
+    if (_stopped || _followed == now) return;
+    _followed?.removeListener(_changed);
+    _followed = now?..addListener(_changed);
     changed();
   }
 
@@ -42,6 +43,7 @@ mixin ListeningState<T extends StatefulWidget> on State<T> {
   void stopListening() {
     _followed?.removeListener(_changed);
     _followed = null;
+    _stopped = true;
   }
 
   @override

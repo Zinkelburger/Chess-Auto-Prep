@@ -8,6 +8,7 @@ import '../../chess/players/player.dart';
 import '../../ui/choice_dialog.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
+import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
 import 'analysis_filters.dart';
 import 'analysis_rows.dart';
@@ -61,7 +62,8 @@ class AnalysisPanel extends StatefulWidget {
   State<AnalysisPanel> createState() => _AnalysisPanelState();
 }
 
-class _AnalysisPanelState extends State<AnalysisPanel> {
+class _AnalysisPanelState extends State<AnalysisPanel>
+    with ListeningState<AnalysisPanel> {
   late final _search = TextEditingController(text: widget.analysis.query);
   bool _filtersOpen = false;
 
@@ -71,30 +73,17 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
   PlayerAnalysis get owner => widget.analysis;
 
   @override
-  void initState() {
-    super.initState();
-    owner.addListener(_followQuery);
-  }
-
-  @override
-  void didUpdateWidget(AnalysisPanel old) {
-    super.didUpdateWidget(old);
-    if (old.analysis != widget.analysis) {
-      old.analysis.removeListener(_followQuery);
-      owner.addListener(_followQuery);
-      _followQuery();
-    }
-  }
+  Listenable listenableOf(AnalysisPanel widget) => widget.analysis;
 
   @override
   void dispose() {
-    owner.removeListener(_followQuery);
     _search.dispose();
     super.dispose();
   }
 
   /// Another player chosen clears the search; the box says so.
-  void _followQuery() {
+  @override
+  void changed() {
     if (owner.query.isEmpty && _search.text.isNotEmpty) _search.clear();
   }
 

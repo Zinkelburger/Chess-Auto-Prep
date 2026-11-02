@@ -5,6 +5,7 @@ import '../../ui/theme.dart';
 import '../../chess/players/player.dart';
 import 'players.dart';
 import 'saved_games.dart';
+import '../../ui/attempting.dart';
 import '../../ui/form_dialog.dart';
 
 /// What removing a person from the directory takes with it.
@@ -94,7 +95,8 @@ class _PlayerDialog extends StatefulWidget {
   State<_PlayerDialog> createState() => _PlayerDialogState();
 }
 
-class _PlayerDialogState extends State<_PlayerDialog> {
+class _PlayerDialogState extends State<_PlayerDialog>
+    with Attempting<_PlayerDialog> {
   final _form = GlobalKey<FormState>();
   static const fields = {
     'name': 'Name',
@@ -115,8 +117,6 @@ class _PlayerDialogState extends State<_PlayerDialog> {
       ),
   };
   late final _files = {...?widget.player?.files};
-  bool _saving = false;
-  String? _error;
   @override
   void dispose() {
     for (final c in _boxes.values) {
@@ -127,10 +127,6 @@ class _PlayerDialogState extends State<_PlayerDialog> {
 
   Future<void> _save() async {
     if (!_form.currentState!.validate()) return;
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
     final player = (widget.player ?? Player.create(_boxes['name']!.text))
         .edited({
           'pgn_files': _files.toList(),
@@ -146,17 +142,17 @@ class _PlayerDialogState extends State<_PlayerDialog> {
               _ => e.value.text.trim(),
             },
         });
-    final saved = await widget.players.save(player, expected: widget.player);
-    if (!mounted) return;
+    const failed = 'Save could not complete. Retry from the player list.';
+    final saved = await attempt(
+      'save player',
+      () => widget.players.save(player, expected: widget.player),
+      failure: failed,
+    );
+    if (saved == null || !mounted) return;
     if (saved) {
       Navigator.of(context).pop(player);
     } else {
-      setState(() {
-        _saving = false;
-        _error =
-            widget.players.error ??
-            'Save could not complete. Retry from the player list.';
-      });
+      setState(() => problem = widget.players.error ?? failed);
     }
   }
 
@@ -208,11 +204,11 @@ class _PlayerDialogState extends State<_PlayerDialog> {
   Widget build(BuildContext context) => FormDialog(
     title: widget.player == null ? 'Add player' : 'Edit ${widget.player!.name}',
     width: dialogMedium,
-    confirm: _saving ? 'Saving…' : 'Save player',
+    confirm: busy ? 'Saving…' : 'Save player',
     onConfirm: _save,
-    busy: _saving,
+    busy: busy,
     canFail: true,
-    problem: _error,
+    problem: problem,
     body: SingleChildScrollView(
       child: Form(
         key: _form,
@@ -234,13 +230,9 @@ class _PlayerDialogState extends State<_PlayerDialog> {
                   for (final file in _files)
                     InputChip(
                       label: Text(p.basename(file)),
-                      onDeleted: _saving
+                      onDeleted: busy
                           ? null
-                          : () {
-                              if (mounted) {
-                                setState(() => _files.remove(file));
-                              }
-                            },
+                          : () => setState(() => _files.remove(file)),
                     ),
                 ],
               ),
@@ -262,11 +254,10 @@ class _ImportDialog extends StatefulWidget {
   State<_ImportDialog> createState() => _ImportDialogState();
 }
 
-class _ImportDialogState extends State<_ImportDialog> {
+class _ImportDialogState extends State<_ImportDialog>
+    with Attempting<_ImportDialog> {
   final _text = TextEditingController();
   List<Player>? _preview;
-  String? _error;
-  bool _saving = false;
   @override
   void dispose() {
     _text.dispose();
@@ -279,27 +270,29 @@ class _ImportDialogState extends State<_ImportDialog> {
       if (read.isEmpty) throw const FormatException('No players found.');
       setState(() {
         _preview = read;
-        _error = null;
+        problem = null;
       });
     } on Object catch (e) {
       setState(() {
         _preview = null;
-        _error = '$e';
+        problem = '$e';
       });
     }
   }
 
   Future<void> _save() async {
-    setState(() => _saving = true);
-    final saved = await widget.players.import(_preview!);
-    if (!mounted) return;
+    final players = _preview!;
+    const failed = 'Could not add the players.';
+    final saved = await attempt(
+      'import players',
+      () => widget.players.import(players),
+      failure: failed,
+    );
+    if (saved == null || !mounted) return;
     if (saved) {
       Navigator.pop(context);
     } else {
-      setState(() {
-        _saving = false;
-        _error = widget.players.error;
-      });
+      setState(() => problem = widget.players.error ?? failed);
     }
   }
 
@@ -335,15 +328,15 @@ class _ImportDialogState extends State<_ImportDialog> {
     width: dialogWide,
     confirm: _preview == null
         ? 'Preview players'
-        : _saving
+        : busy
         ? 'Saving…'
         : widget.players.group == null
         ? 'Add players'
         : 'Add to group',
     onConfirm: _preview == null ? _read : _save,
-    busy: _saving,
+    busy: busy,
     canFail: true,
-    problem: _error,
+    problem: problem,
     body: SizedBox(
       height: dialogListHeight,
       child: Column(
@@ -355,9 +348,7 @@ class _ImportDialogState extends State<_ImportDialog> {
             decoration: const InputDecoration(
               labelText: 'Table or opponents JSON',
             ),
-            onChanged: (_) {
-              if (mounted) setState(() => _preview = null);
-            },
+            onChanged: (_) => setState(() => _preview = null),
           ),
           const SizedBox(height: Space.m),
           if (_preview case final preview?) ...[

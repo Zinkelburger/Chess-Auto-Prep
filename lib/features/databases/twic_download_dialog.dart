@@ -68,9 +68,7 @@ class _TwicDialogState extends State<_TwicDialog> {
                   value: _weeks,
                   min: 1,
                   max: 520,
-                  onChanged: (value) {
-                    if (mounted) setState(() => _weeks = value);
-                  },
+                  onChanged: (value) => setState(() => _weeks = value),
                 ),
               ),
             if (waiting)

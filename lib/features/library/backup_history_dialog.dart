@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../storage/backup_history.dart';
 import '../../storage/backups.dart';
 import '../../storage/chapter_files.dart';
+import '../../ui/attempting.dart';
 import '../../ui/form_dialog.dart';
 import '../../ui/list_message.dart';
 import '../../ui/theme.dart';
@@ -27,12 +28,10 @@ class _History extends StatefulWidget {
   State<_History> createState() => _HistoryState();
 }
 
-class _HistoryState extends State<_History> {
+class _HistoryState extends State<_History> with Attempting<_History> {
   List<BackupVersion> _versions = const [];
   BackupVersion? _selected;
   String? _text;
-  String? _problem;
-  bool _busy = true;
 
   @override
   void initState() {
@@ -41,75 +40,48 @@ class _HistoryState extends State<_History> {
   }
 
   Future<void> _load() async {
-    try {
-      final versions = await widget.history.versions(widget.ref);
-      if (!mounted) return;
-      setState(() {
-        _versions = versions;
-        _busy = false;
-      });
-    } on Object catch (error) {
-      if (mounted) {
-        setState(() {
-          _problem = '$error';
-          _busy = false;
-        });
-      }
-    }
+    final versions = await attempt(
+      'read version history',
+      () => widget.history.versions(widget.ref),
+      failure: 'Could not read the version history.',
+    );
+    if (versions != null) setState(() => _versions = versions);
   }
 
   Future<void> _select(BackupVersion version) async {
     setState(() {
       _selected = version;
       _text = null;
-      _problem = null;
-      _busy = true;
     });
-    try {
-      final text = await widget.history.text(widget.ref, version);
-      if (!mounted) return;
-      setState(() {
-        _text = text;
-        _busy = false;
-      });
-    } on Object catch (error) {
-      if (mounted) {
-        setState(() {
-          _problem = '$error';
-          _busy = false;
-        });
-      }
-    }
+    final text = await attempt(
+      'read archived version',
+      () => widget.history.text(widget.ref, version),
+      failure: 'Could not read this version.',
+    );
+    if (text != null) setState(() => _text = text);
   }
 
   Future<void> _prune() async {
     setState(() {
-      _busy = true;
       _text = null;
       _selected = null;
     });
-    try {
+    final versions = await attempt('delete older versions', () async {
       await widget.history.prune(widget.ref);
-      await _load();
-    } on Object catch (error) {
-      if (mounted) {
-        setState(() {
-          _problem = '$error';
-          _busy = false;
-        });
-      }
-    }
+      return widget.history.versions(widget.ref);
+    }, failure: 'Could not delete the older versions.');
+    if (versions != null) setState(() => _versions = versions);
   }
 
   @override
   Widget build(BuildContext context) => FormDialog(
     title: 'Version history · ${widget.ref.fileName}',
     width: dialogWide,
-    working: _busy,
+    working: busy,
     canFail: true,
-    problem: _problem,
+    problem: problem,
     confirm: 'Restore as new repertoire',
-    onConfirm: _busy || _text == null
+    onConfirm: busy || _text == null
         ? null
         : () => Navigator.pop(context, _text),
     body: SizedBox(
@@ -141,7 +113,7 @@ class _HistoryState extends State<_History> {
                                 v.time.toLocal().toString().split('.').first,
                               ),
                               subtitle: Text('${v.size} bytes'),
-                              onTap: _busy ? null : () => _select(v),
+                              onTap: busy ? null : () => _select(v),
                             );
                           },
                         ),
@@ -163,7 +135,7 @@ class _HistoryState extends State<_History> {
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
-              onPressed: _busy || _versions.length <= 100 ? null : _prune,
+              onPressed: busy || _versions.length <= 100 ? null : _prune,
               child: const Text('Delete older versions beyond those limits'),
             ),
           ),

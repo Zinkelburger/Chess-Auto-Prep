@@ -4,6 +4,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 
 import '../../chess/pgn/move_label.dart' show numberedMoves;
+import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
 import 'repertoire_tree.dart';
 import '../document/document_session.dart';
@@ -44,32 +45,34 @@ class TreePane extends StatefulWidget {
   State<TreePane> createState() => _TreePaneState();
 }
 
-class _TreePaneState extends State<TreePane> {
+class _TreePaneState extends State<TreePane> with ListeningState<TreePane> {
   final _preview = HoverPreview<LinePreview>();
+
+  @override
+  Listenable listenableOf(TreePane widget) => widget.tree;
 
   /// A row rebuilt or gone from under the pointer never hears it leave, so
   /// the floated board goes whenever the rows do.
   @override
+  void changed() => _leave();
+
+  @override
   void initState() {
     super.initState();
     widget.tree.watch();
-    widget.tree.addListener(_leave);
   }
 
   @override
   void didUpdateWidget(TreePane old) {
     super.didUpdateWidget(old);
     if (old.tree != widget.tree) {
-      old.tree.removeListener(_leave);
       old.tree.unwatch();
       widget.tree.watch();
-      widget.tree.addListener(_leave);
     }
   }
 
   @override
   void dispose() {
-    widget.tree.removeListener(_leave);
     // Ending the free board tells the board's builders, which may not be
     // marked dirty while the framework is unmounting this pane: the tab is
     // let go once the frame is done instead.

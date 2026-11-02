@@ -92,9 +92,7 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
                   child: FoldButton(
                     label: 'Filters',
                     unfolded: unfolded,
-                    onPressed: () {
-                      if (mounted) setState(() => _unfolded = !_unfolded);
-                    },
+                    onPressed: () => setState(() => _unfolded = !_unfolded),
                   ),
                 ),
             ],

@@ -17,6 +17,7 @@ import 'lesson.dart';
 import 'trainer.dart';
 import 'trainer_state.dart';
 import 'trainer_words.dart';
+import '../../ui/listening_state.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/problem_line.dart';
@@ -50,7 +51,8 @@ class LessonView extends StatefulWidget {
   State<LessonView> createState() => _LessonViewState();
 }
 
-class _LessonViewState extends State<LessonView> {
+class _LessonViewState extends State<LessonView>
+    with ListeningState<LessonView> {
   final _focus = FocusNode(debugLabel: 'lesson');
 
   /// The line whose moves and notes are being read instead of the moves so
@@ -63,9 +65,11 @@ class _LessonViewState extends State<LessonView> {
   }
 
   @override
+  Listenable listenableOf(LessonView widget) => widget.lesson;
+
+  @override
   void initState() {
     super.initState();
-    widget.lesson.addListener(_lessonChanged);
     // The keys are the lesson's from the start. Autofocus would leave them
     // with the workspace, which holds the focus already.
     _focus.requestFocus();
@@ -75,8 +79,6 @@ class _LessonViewState extends State<LessonView> {
   void didUpdateWidget(LessonView old) {
     super.didUpdateWidget(old);
     if (old.lesson == widget.lesson) return;
-    old.lesson.removeListener(_lessonChanged);
-    widget.lesson.addListener(_lessonChanged);
     // A new sitting over this one, from the recap's buttons, takes the keys
     // too, wherever the focus went meanwhile.
     _focus.requestFocus();
@@ -84,15 +86,15 @@ class _LessonViewState extends State<LessonView> {
 
   @override
   void dispose() {
-    widget.lesson.removeListener(_lessonChanged);
     _focus.dispose();
     super.dispose();
   }
 
   /// Once the lesson stops asking, the keys go back to it: Space, the
   /// ratings and ↓ are the lesson's, not letters of a move.
-  void _lessonChanged() {
-    if (!mounted || askingFor(widget.lesson)) return;
+  @override
+  void changed() {
+    if (askingFor(widget.lesson)) return;
     if (widget.moves.focus.hasFocus) _focus.requestFocus();
   }
 

@@ -4,7 +4,6 @@ import 'chapter_dialogs.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../chess/pgn/study.dart';
 import '../../ui/status_bar.dart';
@@ -81,6 +80,14 @@ class _StudyPanelState extends State<StudyPanel> {
 
   Studies get _studies => widget.studies;
 
+  StudyCommands get _commands => StudyCommands(
+    studies: _studies,
+    session: widget.session,
+    became: _became,
+    say: _say,
+    onLichessLogin: widget.onLichessLogin,
+  );
+
   /// A change that did not happen says why in the window's status bar.
   void _say(String sentence) {
     if (!mounted) return;
@@ -104,49 +111,6 @@ class _StudyPanelState extends State<StudyPanel> {
         }
     }
   }
-
-  Future<void> _newStudy() => newStudy(context, _studies, _became);
-
-  Future<void> _import() => importChapters(context, _studies, _became);
-
-  Future<void> _renameStudy() async {
-    final study = _studies.open;
-    if (study == null) return;
-    final name = await showNameDialog(
-      context,
-      title: 'Rename study',
-      label: 'Study name',
-      confirm: 'Rename',
-      initial: study.name,
-    );
-    if (name == null || !mounted) return;
-    _became(await _studies.rename(study, name));
-  }
-
-  Future<void> _exportStudy() async {
-    final study = _studies.open;
-    if (study == null) return;
-    final name = await showNameDialog(
-      context,
-      title: 'Export study PGN',
-      label: 'File name',
-      confirm: 'Choose folder',
-      initial: study.name,
-    );
-    if (name == null || !mounted) return;
-    if (_studies.open != study) {
-      _say('The open study changed. Export it again.');
-      return;
-    }
-    _became(await _studies.exportPgn(name));
-  }
-
-  Future<void> _sendToLichess() => sendStudyToLichess(
-    context,
-    _studies,
-    widget.session,
-    onLogIn: widget.onLichessLogin,
-  );
 
   ChapterLine? _line(StudyChapter chapter) =>
       widget.session.chapter?.lines.elementAtOrNull(chapter.index);
@@ -229,31 +193,6 @@ class _StudyPanelState extends State<StudyPanel> {
     );
   }
 
-  Future<void> _deleteStudy(ChapterRef study) async {
-    final yes = await confirmAction(
-      context,
-      title: 'Delete study “${study.name}”?',
-      message:
-          'The PGN file, with every chapter in it, will be moved to Chess '
-          'Auto Prep recovery storage.',
-      confirm: 'Delete',
-    );
-    if (!yes || !mounted) return;
-    _became(await _studies.delete(study));
-  }
-
-  Future<void> _copy(Future<String?> pgn) async {
-    final text = await pgn;
-    if (!mounted) return;
-    if (text == null) {
-      _say('There is nothing to copy.');
-      return;
-    }
-    await Clipboard.setData(ClipboardData(text: text));
-  }
-
-  Future<void> _newChapter() => newStudyChapter(context, widget.session, _say);
-
   Future<void> _renameChapter(StudyChapter chapter) async {
     final name = await showNameDialog(
       context,
@@ -324,7 +263,7 @@ class _StudyPanelState extends State<StudyPanel> {
     ),
     move: (by) =>
         _edited(moveStudyChapter(widget.session, index: chapter.index, by: by)),
-    copyPgn: () => _copy(_studies.pgnOfChapter(chapter.index)),
+    copyPgn: () => _commands.copy(_studies.pgnOfChapter(chapter.index)),
     remove: () => _deleteChapter(chapter),
     moveTo: () => _moveTo(chapter),
   );
@@ -337,32 +276,11 @@ class _StudyPanelState extends State<StudyPanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _Toolbar(
+            commands: _commands,
             currentName: !_choosingStudy ? _studies.open?.name : null,
             onChooseStudy: () =>
                 setState(() => _choosingFrom = _studies.open?.path),
-            busy: _studies.busy,
-            hasOpenStudy: _studies.open != null,
             search: _search,
-            onSearch: _studies.search,
-            onNewStudy: _newStudy,
-            onImport: _import,
-            onRenameStudy: () => unawaited(_renameStudy()),
-            onExportStudy: () => unawaited(_exportStudy()),
-            onSendToLichess: _studies.sender == null
-                ? null
-                : () => unawaited(_sendToLichess()),
-            onRetrySave: _studies.canRetrySave
-                ? () => unawaited(_studies.retrySave().then(_became))
-                : null,
-            onRetryRename: _studies.canRetryRename
-                ? () => unawaited(_studies.retryRename().then(_became))
-                : null,
-            onCopyStudy: () => _copy(_studies.pgnOfOpenStudy()),
-            onDeleteStudy: () {
-              final open = _studies.open;
-              if (open != null) unawaited(_deleteStudy(open));
-            },
-            onNewChapter: _newChapter,
             onTrain: widget.onTrain,
             trailing: widget.trailing,
           ),
@@ -420,6 +338,7 @@ class _StudyPanelState extends State<StudyPanel> {
     }
     // Build each study row when it scrolls into view.
     final rows = <WidgetBuilder>[];
+    final commands = _commands;
     for (final study in _studies.visible) {
       final open = study == _studies.open;
       rows.add(
@@ -431,8 +350,8 @@ class _StudyPanelState extends State<StudyPanel> {
             setState(() => _choosingFrom = null);
             widget.onOpen(study, 0);
           },
-          onCopyPgn: () => _copy(_studies.pgnOfOpenStudy()),
-          onDelete: () => _deleteStudy(study),
+          onCopyPgn: () => unawaited(commands.copyOpen()),
+          onDelete: () => unawaited(commands.delete(context, study)),
         ),
       );
     }
@@ -445,91 +364,75 @@ class _StudyPanelState extends State<StudyPanel> {
 
 class _Toolbar extends StatelessWidget {
   const _Toolbar({
-    required this.busy,
+    required this.commands,
     this.currentName,
     required this.onChooseStudy,
-    required this.hasOpenStudy,
     required this.search,
-    required this.onSearch,
-    required this.onNewStudy,
-    required this.onImport,
-    required this.onRenameStudy,
-    required this.onExportStudy,
-    this.onSendToLichess,
-    this.onRetryRename,
-    this.onRetrySave,
-    required this.onCopyStudy,
-    required this.onDeleteStudy,
-    required this.onNewChapter,
     required this.onTrain,
     required this.trailing,
   });
 
-  final bool busy;
-  final bool hasOpenStudy;
+  final StudyCommands commands;
   final String? currentName;
   final VoidCallback onChooseStudy;
   final TextEditingController search;
-  final ValueChanged<String> onSearch;
-  final VoidCallback onNewStudy;
-  final VoidCallback onImport;
-  final VoidCallback onRenameStudy, onExportStudy;
-
-  /// Null where the app cannot write to Lichess.
-  final VoidCallback? onSendToLichess;
-  final VoidCallback? onRetryRename, onRetrySave;
-  final VoidCallback onCopyStudy;
-  final VoidCallback onDeleteStudy;
-  final VoidCallback onNewChapter;
   final VoidCallback? onTrain;
   final Widget? trailing;
 
+  bool get _busy => commands.busy;
+  bool get _hasOpenStudy => commands.hasOpenStudy;
+
   /// Making and removing whole studies, and taking one away as text. The
-  /// two that need a study open are off until one is.
-  List<Widget> get _actions => [
-    rowAction('New study…', onNewStudy, busy: busy, icon: AppIcons.add),
+  /// ones that need a study open are off until one is.
+  List<Widget> _actions(BuildContext context) => [
+    rowAction(
+      'New study…',
+      () => unawaited(commands.create(context)),
+      busy: _busy,
+      icon: AppIcons.add,
+    ),
     rowAction(
       'Rename study…',
-      onRenameStudy,
-      busy: busy || !hasOpenStudy,
+      () => unawaited(commands.rename(context)),
+      busy: _busy || !_hasOpenStudy,
       icon: AppIcons.edit,
     ),
     rowAction(
       'Export study PGN…',
-      onExportStudy,
-      busy: busy || !hasOpenStudy,
+      () => unawaited(commands.exportPgn(context)),
+      busy: _busy || !_hasOpenStudy,
       icon: AppIcons.saveCopy,
     ),
     // A study has one write pending at a time: its save or its rename.
-    if (onRetrySave ?? onRetryRename case final retry?)
-      rowAction('Retry save', retry, busy: busy),
+    if (commands.retry case final retry?)
+      rowAction('Retry save', retry, busy: _busy),
     rowAction(
       'Copy study PGN',
-      onCopyStudy,
-      busy: busy || !hasOpenStudy,
+      () => unawaited(commands.copyOpen()),
+      busy: _busy || !_hasOpenStudy,
       icon: AppIcons.copy,
     ),
     rowAction(
       'Delete study…',
-      onDeleteStudy,
-      busy: busy || !hasOpenStudy,
+      () => unawaited(commands.deleteOpen(context)),
+      busy: _busy || !_hasOpenStudy,
       icon: AppIcons.delete,
     ),
   ];
 
   /// Lichess in and out, side by side: what came in goes back the same
   /// way.
-  Widget _transfers() => Wrap(
+  Widget _transfers(BuildContext context) => Wrap(
     alignment: WrapAlignment.spaceEvenly,
     children: [
       TextButton.icon(
-        onPressed: busy ? null : onImport,
+        onPressed: _busy ? null : () => unawaited(commands.importInto(context)),
         icon: const Icon(AppIcons.open, size: IconSize.action),
         label: const Text('Import chapters…'),
       ),
-      if (hasOpenStudy && onSendToLichess != null)
+      if (_hasOpenStudy && commands.canSend)
         TextButton.icon(
-          onPressed: busy ? null : onSendToLichess,
+          onPressed: _busy ? null : () => unawaited(commands.send(context)),
           icon: const Icon(AppIcons.send, size: IconSize.action),
           label: const Text('Send to Lichess…'),
         ),
@@ -549,7 +452,9 @@ class _Toolbar extends StatelessWidget {
                 tooltip: 'Back to studies',
                 onPressed: onChooseStudy,
               ),
-        actions: [RowActions(tooltip: 'Study actions', children: _actions)],
+        actions: [
+          RowActions(tooltip: 'Study actions', children: _actions(context)),
+        ],
         trailing: trailing,
       ),
       Padding(
@@ -561,34 +466,38 @@ class _Toolbar extends StatelessWidget {
               SearchField(
                 controller: search,
                 hint: 'Search studies',
-                onChanged: onSearch,
+                onChanged: commands.studies.search,
               ),
               const SizedBox(height: Space.s),
             ],
             // As wide as their words, as every list's buttons are.
-            if (!hasOpenStudy)
+            if (!_hasOpenStudy)
               Align(
                 alignment: Alignment.centerLeft,
                 child: FilledButton.icon(
-                  onPressed: busy ? null : onNewStudy,
+                  onPressed: _busy
+                      ? null
+                      : () => unawaited(commands.create(context)),
                   icon: const Icon(AppIcons.add, size: IconSize.action),
                   label: const Text('New study…'),
                 ),
               ),
-            _transfers(),
-            if (hasOpenStudy && onTrain != null)
+            _transfers(context),
+            if (_hasOpenStudy && onTrain != null)
               Align(
                 alignment: Alignment.centerLeft,
                 child: OutlinedButton(
-                  onPressed: busy ? null : onTrain,
+                  onPressed: _busy ? null : onTrain,
                   child: const Text('Train study'),
                 ),
               ),
-            if (hasOpenStudy)
+            if (_hasOpenStudy)
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton.icon(
-                  onPressed: busy ? null : onNewChapter,
+                  onPressed: _busy
+                      ? null
+                      : () => unawaited(commands.addChapter(context)),
                   icon: const Icon(AppIcons.add, size: IconSize.action),
                   label: const Text('New chapter…'),
                 ),

@@ -39,7 +39,6 @@ class _DownloadDialogState extends State<_DownloadDialog> {
   }
 
   void _speed(String speed, bool on) {
-    if (!mounted) return;
     setState(() => on ? speeds.add(speed) : speeds.remove(speed));
   }
 
@@ -79,9 +78,7 @@ class _DownloadDialogState extends State<_DownloadDialog> {
                 ButtonSegment(value: true, label: Text('Recent months')),
               ],
               selected: months,
-              onChanged: (v) {
-                if (mounted) setState(() => months = v);
-              },
+              onChanged: (v) => setState(() => months = v),
             ),
             const SizedBox(height: Space.s),
             _amount(),
@@ -127,9 +124,7 @@ class _DownloadDialogState extends State<_DownloadDialog> {
             value: monthCount,
             min: 1,
             max: 120,
-            onChanged: (v) {
-              if (mounted) setState(() => monthCount = v);
-            },
+            onChanged: (v) => setState(() => monthCount = v),
           ),
         )
       : FieldRow(
@@ -140,9 +135,7 @@ class _DownloadDialogState extends State<_DownloadDialog> {
             min: 1,
             max: 10000,
             step: 100,
-            onChanged: (v) {
-              if (mounted) setState(() => count = v);
-            },
+            onChanged: (v) => setState(() => count = v),
           ),
         );
 }

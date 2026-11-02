@@ -93,9 +93,7 @@ class _GroupDialogState extends State<_GroupDialog> {
                 value: rounds,
                 min: 1,
                 max: 30,
-                onChanged: (v) {
-                  if (mounted) setState(() => rounds = v);
-                },
+                onChanged: (v) => setState(() => rounds = v),
               ),
             ),
           ],

@@ -102,7 +102,6 @@ class _BoardEditorState extends State<BoardEditor> {
 
   /// Shows [next] on the board and in the FEN field.
   void _set(Setup next) {
-    if (!mounted) return;
     setState(() {
       _setup = next;
       _unread = false;
@@ -114,7 +113,6 @@ class _BoardEditorState extends State<BoardEditor> {
   /// Typed text sets the board once it can be read; until then the board
   /// stays as it was and the text is the problem.
   void _typed(String text) {
-    if (!mounted) return;
     final read = SetupEdits.read(text);
     setState(() {
       _unread = read == null;
@@ -126,9 +124,7 @@ class _BoardEditorState extends State<BoardEditor> {
   void _report() =>
       widget.onChanged(_unread || _setup.illegal != null ? null : _setup.asFen);
 
-  void _pick(EditorTool tool) {
-    if (mounted) setState(() => _tool = tool);
-  }
+  void _pick(EditorTool tool) => setState(() => _tool = tool);
 
   /// A press or a stroke across [square] with the tool in hand.
   void _paint(Square square) {
@@ -250,9 +246,7 @@ class _BoardEditorState extends State<BoardEditor> {
           child: const Text('Clear board'),
         ),
         TextButton(
-          onPressed: () {
-            if (mounted) setState(() => _bottom = _bottom.opposite);
-          },
+          onPressed: () => setState(() => _bottom = _bottom.opposite),
           child: const Text('Flip board'),
         ),
         const SizedBox(height: Space.m),
@@ -469,9 +463,7 @@ class _BoardEditorDialogState extends State<_BoardEditorDialog> {
       child: BoardEditor(
         initial: widget.initial,
         orientation: widget.orientation,
-        onChanged: (fen) {
-          if (mounted) setState(() => _position = fen);
-        },
+        onChanged: (fen) => setState(() => _position = fen),
       ),
     ),
   );

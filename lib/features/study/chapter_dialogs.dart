@@ -88,22 +88,16 @@ class _TagsState extends State<_Tags> {
                   ToolButton(
                     icon: AppIcons.remove,
                     tooltip: 'Remove tag',
-                    onPressed: () {
-                      if (mounted) {
-                        setState(() {
-                          _rows.remove(row);
-                          _removed.add(row);
-                        });
-                      }
-                    },
+                    onPressed: () => setState(() {
+                      _rows.remove(row);
+                      _removed.add(row);
+                    }),
                   ),
                 ],
               ),
             ),
           TextButton.icon(
-            onPressed: () {
-              if (mounted) setState(() => _rows.add(_TagRow('', '')));
-            },
+            onPressed: () => setState(() => _rows.add(_TagRow('', ''))),
             icon: const Icon(AppIcons.add, size: IconSize.action),
             label: const Text('Add tag'),
           ),
@@ -112,7 +106,6 @@ class _TagsState extends State<_Tags> {
     ),
   );
   void _save() {
-    if (!mounted) return;
     final values = <String, String>{};
     for (final row in _rows) {
       final key = row.key.text.trim();

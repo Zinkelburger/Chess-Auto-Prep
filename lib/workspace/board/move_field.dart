@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../chess/fen.dart';
 import '../../chess/typed_move.dart';
 import '../../ui/app_keys.dart';
+import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
 
 /// The typed-move field's words and focus.
@@ -74,7 +75,7 @@ class MoveField extends StatefulWidget {
   State<MoveField> createState() => _MoveFieldState();
 }
 
-class _MoveFieldState extends State<MoveField> {
+class _MoveFieldState extends State<MoveField> with ListeningState<MoveField> {
   /// Enter found no move in the words; the next change forgets it.
   bool _refused = false;
 
@@ -92,17 +93,16 @@ class _MoveFieldState extends State<MoveField> {
       if (mounted) widget.entry.follow(widget.fen);
     });
     _heard = _words.text;
-    _words.addListener(_changed);
   }
 
   @override
+  Listenable listenableOf(MoveField widget) => widget.entry.words;
+
+  @override
   void didUpdateWidget(MoveField old) {
+    // Another field's words are where this one starts, not a change.
+    if (old.entry != widget.entry) _heard = widget.entry.words.text;
     super.didUpdateWidget(old);
-    if (old.entry != widget.entry) {
-      old.entry.words.removeListener(_changed);
-      _heard = _words.text;
-      _words.addListener(_changed);
-    }
     // Words typed for another position mean nothing in this one.
     widget.entry.follow(widget.fen);
     // A board that stops taking moves gives the keys back.
@@ -113,15 +113,10 @@ class _MoveFieldState extends State<MoveField> {
     }
   }
 
-  @override
-  void dispose() {
-    _words.removeListener(_changed);
-    super.dispose();
-  }
-
   /// Heard on the controller rather than from the field, so words a lesson
   /// types in from outside are read the same as keys pressed here.
-  void _changed() {
+  @override
+  void changed() {
     final text = _words.text;
     if (text == _heard) return;
     _heard = text;

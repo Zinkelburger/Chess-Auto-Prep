@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../../chess/tournament/config.dart';
 import '../../ui/confirm_dialog.dart';
+import '../../ui/attempting.dart';
 import '../../ui/form_dialog.dart';
 import '../../ui/number_field.dart';
 import '../../ui/theme.dart';
@@ -113,7 +114,7 @@ class _Editor extends StatefulWidget {
   State<_Editor> createState() => _EditorState();
 }
 
-class _EditorState extends State<_Editor> {
+class _EditorState extends State<_Editor> with Attempting<_Editor> {
   late final _name = TextEditingController(text: widget.engine?.name ?? '');
   late final _path = TextEditingController(
     text: widget.engine?.executable ?? '',
@@ -129,9 +130,7 @@ class _EditorState extends State<_Editor> {
   late final _id =
       widget.engine?.id ?? 'engine-${DateTime.now().microsecondsSinceEpoch}';
   int _cores = 1, _memory = 128;
-  String? _problem;
   List<String> _output = const [];
-  bool _busy = false;
 
   /// A new engine's name follows the file until the user types one: the
   /// file's name when picked, the engine's `id name` once tested.
@@ -156,11 +155,11 @@ class _EditorState extends State<_Editor> {
   Widget build(BuildContext context) => FormDialog(
     title: widget.engine == null ? 'Add UCI engine' : 'Edit engine',
     width: dialogWide,
-    confirm: _busy ? 'Testing…' : 'Test and save',
+    confirm: busy ? 'Testing…' : 'Test and save',
     onConfirm: () => unawaited(_save()),
-    busy: _busy,
+    busy: busy,
     canFail: true,
-    problem: _problem,
+    problem: problem,
     body: SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -182,7 +181,7 @@ class _EditorState extends State<_Editor> {
                 ),
               ),
               TextButton.icon(
-                onPressed: _busy ? null : () => unawaited(_pick()),
+                onPressed: busy ? null : () => unawaited(_pick()),
                 icon: const Icon(AppIcons.open, size: IconSize.action),
                 label: const Text('Choose file…'),
               ),
@@ -219,9 +218,7 @@ class _EditorState extends State<_Editor> {
           value: value,
           min: 1,
           max: max,
-          onChanged: (n) {
-            if (mounted) setState(() => change(n));
-          },
+          onChanged: (n) => setState(() => change(n)),
         ),
       );
 
@@ -257,29 +254,36 @@ class _EditorState extends State<_Editor> {
 
   Future<void> _save() async {
     FocusScope.of(context).unfocus();
-    var engine = _engine(_name.text.trim());
+    final engine = _engine(_name.text.trim());
     if (engine == null) {
-      setState(() => _problem = 'Write each UCI option as name=value.');
+      setState(() => problem = 'Write each UCI option as name=value.');
       return;
     }
     if (engine.name.isEmpty) {
-      setState(() => _problem = 'Name the engine.');
+      setState(() => problem = 'Name the engine.');
       return;
     }
-    setState(() {
-      _busy = true;
-      _problem = null;
-      _output = const [];
-    });
+    setState(() => _output = const []);
+    final kept = await attempt(
+      'test and save engine',
+      () => _verifyAndKeep(engine),
+      failure: 'Could not test the engine.',
+    );
+    if (mounted && (kept ?? false)) Navigator.pop(context);
+  }
+
+  /// Tests [engine] and keeps it in the list; false with [problem] (and
+  /// for a failed test [_output]) saying why it is not kept.
+  Future<bool> _verifyAndKeep(TournamentEngine tested) async {
+    var engine = tested;
     final check = await widget.run.verify(engine);
-    if (!mounted) return;
+    if (!mounted) return false;
     if (check case EngineRejected(:final reason, :final output)) {
       setState(() {
-        _busy = false;
-        _problem = reason;
+        problem = reason;
         _output = output;
       });
-      return;
+      return false;
     }
     if (check case EngineVerified(
       :final name,
@@ -292,15 +296,9 @@ class _EditorState extends State<_Editor> {
         if (e.id != engine.id) e,
       engine,
     ]);
-    if (!mounted) return;
-    if (widget.run.engines.any((e) => identical(e, engine))) {
-      Navigator.pop(context);
-      return;
-    }
-    setState(() {
-      _busy = false;
-      _problem = widget.run.engineReport;
-    });
+    final kept = widget.run.engines.any((e) => identical(e, engine));
+    if (!kept && mounted) setState(() => problem = widget.run.engineReport);
+    return kept;
   }
 }
 

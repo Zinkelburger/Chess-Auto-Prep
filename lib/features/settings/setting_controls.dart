@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../ui/attempting.dart';
 import '../../ui/choice_field.dart';
 import '../../ui/theme.dart';
 import '../../ui/number_field.dart';
@@ -166,7 +167,7 @@ class _Secret extends StatefulWidget {
   State<_Secret> createState() => _SecretState();
 }
 
-class _SecretState extends State<_Secret> {
+class _SecretState extends State<_Secret> with Attempting<_Secret> {
   final _box = TextEditingController();
   final _focus = FocusNode();
   String _given = '';
@@ -200,25 +201,23 @@ class _SecretState extends State<_Secret> {
     if (!_focus.hasFocus) unawaited(_save(_box.text));
   }
 
-  bool _saving = false;
-
   /// Enter and leaving the field both land here, often for the same
   /// value one after the other; one write goes out.
   Future<void> _save(String value) async {
-    if (_saving || value.trim() == _given.trim()) return;
-    _saving = true;
-    try {
-      final kept = await widget.setting.save(value);
-      if (!mounted) return;
-      setState(() {
-        if (kept) _given = value;
-        _said = kept
-            ? (value.trim().isEmpty ? 'Signed out' : 'Saved')
-            : 'Not saved';
-      });
-    } finally {
-      _saving = false;
-    }
+    if (busy || value.trim() == _given.trim()) return;
+    setState(() => _said = null);
+    final kept = await attempt(
+      'save a secret setting',
+      () => widget.setting.save(value),
+      failure: 'Not saved',
+    );
+    if (kept == null) return;
+    setState(() {
+      if (kept) _given = value;
+      _said = kept
+          ? (value.trim().isEmpty ? 'Signed out' : 'Saved')
+          : 'Not saved';
+    });
   }
 
   @override
@@ -245,7 +244,7 @@ class _SecretState extends State<_Secret> {
             ),
           ),
         ),
-        if (_said case final said?) ...[
+        if (problem ?? _said case final said?) ...[
           const SizedBox(width: Space.s),
           Text(said, style: text.bodySmall),
         ],

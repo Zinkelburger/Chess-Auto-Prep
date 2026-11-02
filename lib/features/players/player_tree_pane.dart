@@ -6,7 +6,7 @@ import '../../chess/pv_text.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
 import '../../workspace/document/document_session.dart';
-import '../../workspace/explorer/explorer_pane.dart' show ResultBar;
+import '../../workspace/explorer/explorer_rows.dart';
 import 'player_analysis.dart';
 import '../../ui/list_message.dart';
 import '../../ui/app_icons.dart';
@@ -89,7 +89,7 @@ class PlayerTreePane extends StatelessWidget {
             ),
           const SectionLabel('Games'),
           for (final game in answer.games)
-            _GameRow(
+            ExplorerGameRow(
               game: game,
               onTap: () {
                 final index = int.tryParse(game.id);
@@ -218,56 +218,6 @@ class _MoveRow extends StatelessWidget {
                     black: move.black,
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(width: Space.m),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// One game that reached the position: the players, how it ended and when.
-class _GameRow extends StatelessWidget {
-  const _GameRow({required this.game, required this.onTap});
-
-  final ExplorerGame game;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final muted = theme.textTheme.bodySmall;
-    return InkWell(
-      onTap: onTap,
-      child: SizedBox(
-        height: listRowHeight,
-        child: Row(
-          children: [
-            const SizedBox(width: Space.m),
-            Expanded(
-              child: Text(
-                '${game.white} – ${game.black}',
-                style: muted?.copyWith(color: theme.colorScheme.onSurface),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: Space.m),
-            Text(
-              game.result,
-              style: monoText.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(width: Space.m),
-            SizedBox(
-              width: explorerGamesWidth / 2,
-              child: Text(
-                '${game.year ?? ''}',
-                style: muted,
-                textAlign: TextAlign.right,
               ),
             ),
             const SizedBox(width: Space.m),

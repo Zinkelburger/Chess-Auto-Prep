@@ -12,6 +12,7 @@ import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/explorer/opening_names.dart';
 import 'package:chess_auto_prep/workspace/explorer/explorer.dart';
 import 'package:chess_auto_prep/workspace/explorer/explorer_pane.dart';
+import 'package:chess_auto_prep/workspace/explorer/explorer_rows.dart';
 import 'package:chess_auto_prep/workspace/explorer/file_filter.dart';
 import 'package:chess_auto_prep/workspace/explorer/local_games.dart';
 import 'package:chessground/chessground.dart' show StaticChessboard;
