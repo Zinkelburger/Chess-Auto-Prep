@@ -179,6 +179,13 @@ Bughouse mode is offered when its engine assets are present.
   `SearchField` keeps its magnifier, clear action, accessible name and hover
   help; `ChoiceField` uses persistent labels. New-name dialogs start empty,
   while rename/edit dialogs retain saved values.
+- Dialogs come from `ui/`: `FormDialog` (title, fields, held problem line,
+  progress line, Cancel and one filled button, Enter and Escape) under
+  `showNameDialog` and the feature forms; `confirmAction` for a yes/no;
+  `showOptionsDialog` for a few answers (a side, a promotion piece);
+  `showChoiceDialog` for a searchable list. `ui/theme.dart` gives them their
+  graphite panel and the `dialogNarrow` / `dialogMedium` / `dialogWide`
+  widths.
 - `AccessibleBoard` adds named squares, side-to-move/check announcements,
   orientation-aware arrow navigation, Enter/Space selection and keyboard promotion
   to the shared pointer board. Modified history shortcuts still pass through.

@@ -116,9 +116,10 @@ app` / `Install`; `Available on GitHub` / `Open releases` (manual copies);
 may ask for your password.` / `Cancel installation`; or a failure (`Could not
 reach GitHub.`, `The download failed verification and was discarded.`, …) /
 `Try again`. An automatic check that finds a new version asks once per run:
-`Chess Auto Prep X.Y.Z is available`, `Release notes`, `Skip this version` /
-`When I close the app` / `Update now` (manual copies: `Download the new
-version from GitHub.` with `Skip this version` / `Later` / `Download`). `Update
+`Chess Auto Prep X.Y.Z is available`, `Release notes`, `Later` (focused, so
+Enter and Escape leave things as they are) / `Skip this version` / `When I
+close the app` / `Update now` (manual copies: `Download the new version from
+GitHub.` with `Later` / `Skip this version` / `Download`). `Update
 now` keeps the dialog up as `Updating to Chess Auto Prep X.Y.Z` with the
 download's progress, then closes the app the normal way (unsaved work is asked
 about) and the helper installs and reopens it. A skipped version is neither

@@ -89,6 +89,10 @@ components:
     backgroundColor: "{colors.graphite-panel}"
     textColor: "{colors.ink}"
     rounded: "{rounded.card}"
+  dialog:
+    backgroundColor: "{colors.graphite-panel}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.card}"
   reading-card:
     backgroundColor: "{colors.reading-black}"
     textColor: "{colors.ink}"
@@ -218,7 +222,7 @@ search rows, 44px two-line rows (a name over what is known of it).
 
 Flat by default. Depth is tonal: reading black under charcoal under graphite,
 separated by 1px outline-grey lines. Menus and popovers are graphite with an
-outline and an 8px radius, not a shadow. Ink splashes and highlight washes
+outline and an 8px radius, not a shadow; so are dialogs. Ink splashes and highlight washes
 are off. The only floating surface is the 200px preview board that appears
 80ms after the pointer rests on a move; it too is set off by a 1px outline, not a
 shadow, as are suggestion lists and drag labels.
@@ -276,6 +280,13 @@ One name and one symbol per action, everywhere it appears. `lib/ui/app_icons.dar
 6. A menu keeps a 16px symbol slot on every row once any row has a symbol.
 7. The filled button completes the pane's task: never a retry, never a copy, never one per list row; one per pane.
 
+### Dialogs
+- **Style:** Graphite Panel, 1px outline, 8px radius, no shadow; the title in the 18px title style. Three widths: narrow 360px (a name or a few values), medium 480px (a form of several fields, a confirm with a long reason), wide 640px (a list beside what it shows, a long form). A list inside a dialog is a fixed height so the dialog does not grow and shrink.
+- **Form:** `form_dialog`: the fields, the held problem line under them, the progress line under the title while it works, then Cancel on the left and the one filled button on the right, on every platform. Enter presses the filled button whenever it is on, from a one-line field after the field has taken its value; a field of several lines keeps Enter for its new line, and a focused button keeps Enter for itself. Escape and a click outside are Cancel. While it saves or sends, Escape and the click outside do nothing and Cancel is off, or says `Stop` when the work can be stopped.
+- **Cancel or Close:** Cancel when the dialog holds something typed or chosen; Close when there is nothing to lose (a list of engines, storage, problem details).
+- **Confirm:** `confirm_dialog`. The title is the question, naming the thing in curly quotes: `Delete chapter “Najdorf”?`, `Remove “Alex” from “Club”?`. The message says what survives or what follows, without repeating the question. The confirming verb is the filled button; a destructive confirm (delete, remove, clear, replace, discard, or one that closes the app) starts with Cancel, or its safe stand-in (`Stay here`, `Later`), focused, so Enter and Escape both keep everything.
+- **Options:** `options_dialog`: a few answers as rows that act on a click (`White` / `Black`, `Queen` / `Rook` / `Bishop` / `Knight`), with Cancel under them. A long or growing list is `choice_dialog`, which can be searched.
+
 ### Pane tabs
 - **Style:** 34px tall, up to 220px wide and never wider than the strip (a long title ends in an ellipsis), 6px radius; the chosen tab filled in Selection Grey; a 2px line shows where a dragged tab will land. Tabs close from the right-click menu. The list column's Repertoires / Chapters / Positions tabs use the same height and inset.
 
@@ -321,7 +332,7 @@ One name and one symbol per action, everywhere it appears. `lib/ui/app_icons.dar
 
 ### Do:
 - **Do** keep every gap on the 4 / 8 / 12 / 16 / 24 scale and every size in `lib/ui/theme.dart`.
-- **Do** reuse the controls in `lib/ui/` (search_field, choice_field, number_field, field_row, check_row, toggle_chip, list_row, list_message, problem_line, progress_line, name_dialog, confirm_dialog, row_actions, pane_tabs, selection, app_action). A stepper or choice sits in a `field_row` that names it; a set of on/off choices is `toggle_chip`s, which never grow a tick.
+- **Do** reuse the controls in `lib/ui/` (search_field, choice_field, number_field, field_row, check_row, toggle_chip, list_row, list_message, problem_line, progress_line, form_dialog, name_dialog, confirm_dialog, options_dialog, choice_dialog, row_actions, pane_tabs, selection, app_action). A stepper or choice sits in a `field_row` that names it; a set of on/off choices is `toggle_chip`s, which never grow a tick.
 - **Do** write labels and tooltips behaviour-first: the first sentence says what the control does; the binding comes from `ui/app_keys.dart`.
 - **Do** follow Lichess conventions for the board, arrows, explorer and engine lines.
 - **Do** give feedback lines, rows and panes fixed heights so nothing jumps.

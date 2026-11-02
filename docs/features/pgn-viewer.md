@@ -123,8 +123,8 @@ change is written as it is made, as in the builder, and turning to Edit writes
 what Read held first; Ctrl+Z undoes either way (100 steps held). Coming to the
 mode, or to a document tab that held edits, never writes them. A read-only
 file holds edits on Read and Edit alike, and Save asks `Save your moves` →
-`Copy into Documents…` (a name, then a copy in `pgn_collections` that opens)
-or `Add to a study…`. Document tabs keep each file's held edits and undo
+`Copy into Documents…` (a file name, checked as every name is, then a copy in
+`pgn_collections` that opens) or `Add to a study…`. Document tabs keep each file's held edits and undo
 while another is up. Failures go to the top bar's status line with one way
 out (`Retry save`, Reload).
 
