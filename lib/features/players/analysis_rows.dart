@@ -227,9 +227,7 @@ class PlayerGameRow extends StatelessWidget {
                 Expanded(
                   child: Text(
                     opponent.isEmpty ? 'Unknown opponent' : opponent,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface,
-                    ),
+                    style: bodySmallInk(theme),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),

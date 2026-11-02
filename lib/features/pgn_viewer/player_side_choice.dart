@@ -41,9 +41,7 @@ class PlayerSideChoice extends StatelessWidget {
               player,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+              style: theme.textTheme.bodySmall,
             ),
           ),
           const SizedBox(width: Space.s),

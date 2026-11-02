@@ -349,9 +349,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final style = theme.textTheme.labelSmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
+    final style = theme.textTheme.labelSmall;
     return SizedBox(
       height: explorerHeaderHeight,
       child: Row(

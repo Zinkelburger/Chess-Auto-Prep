@@ -299,14 +299,11 @@ class FindingRow extends StatelessWidget {
                 ],
               ),
             ),
-            IconButton(
+            ToolButton(
+              icon: dismissed ? AppIcons.undo : AppIcons.close,
               tooltip: dismissed ? 'Restore finding' : 'Dismiss finding',
-              icon: Icon(
-                dismissed ? AppIcons.undo : AppIcons.close,
-                size: IconSize.menu,
-              ),
+              size: IconSize.menu,
               onPressed: onToggle,
-              visualDensity: VisualDensity.compact,
             ),
           ],
         ),

@@ -208,9 +208,7 @@ class _Summary extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         textAlign: TextAlign.right,
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
+        style: theme.textTheme.bodySmall,
       ),
     );
   }
@@ -316,12 +314,7 @@ class _ChipRow extends StatelessWidget {
           height: explorerChipHeight,
           child: Align(
             alignment: Alignment.centerLeft,
-            child: Text(
-              label,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
+            child: Text(label, style: theme.textTheme.labelSmall),
           ),
         ),
         Expanded(

@@ -11,6 +11,7 @@ import 'export_dialog.dart';
 import 'pgn_viewer.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/segments.dart';
+import '../../ui/tool_button.dart';
 
 /// The Filter tab: which of the open file's games the list shows. How many
 /// pass, one Field / Rule / Value row per rule starting with a blank one,
@@ -276,10 +277,10 @@ class _RuleRow extends StatelessWidget {
       hint: 'Value',
       onChanged: (typed) => onChanged(rule.copyWith(value: typed)),
     );
-    final remove = IconButton(
-      icon: const Icon(AppIcons.remove, size: IconSize.menu),
+    final remove = ToolButton(
+      icon: AppIcons.remove,
       tooltip: 'Remove this rule',
-      visualDensity: VisualDensity.compact,
+      size: IconSize.menu,
       onPressed: onRemove,
     );
     return LayoutBuilder(

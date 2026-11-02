@@ -7,6 +7,7 @@ import '../../ui/choice_dialog.dart';
 import '../../ui/theme.dart';
 import 'books.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// The one control wherever the book is read: the active book's name, which
 /// switches to another book, and a pencil into the Books mode to edit them.
@@ -62,12 +63,11 @@ class BookChip extends StatelessWidget {
               ),
             ),
           ),
-          IconButton(
+          ToolButton(
+            icon: AppIcons.edit,
             tooltip: 'Edit opening books',
-            iconSize: IconSize.menu,
-            visualDensity: VisualDensity.compact,
+            size: IconSize.menu,
             onPressed: onEdit,
-            icon: const Icon(AppIcons.edit),
           ),
         ],
       );

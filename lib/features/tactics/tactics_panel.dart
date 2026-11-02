@@ -228,7 +228,7 @@ class _TacticsPanelState extends State<TacticsPanel> {
     final current = widget.trainer.up?.puzzle.index;
     final outcomes = widget.trainer.run?.outcomes ?? const {};
     return SliverFixedExtentList(
-      itemExtent: puzzleRowHeight,
+      itemExtent: twoLineRowHeight,
       delegate: SliverChildBuilderDelegate(childCount: shown.length, (
         context,
         at,
@@ -382,7 +382,7 @@ class _PuzzleRow extends StatelessWidget {
     return ListRow(
       selected: open,
       onTap: onOpen,
-      height: puzzleRowHeight,
+      height: twoLineRowHeight,
       padding: const EdgeInsets.only(left: Space.m),
       menu: menu,
       menuTooltip: 'Puzzle actions',

@@ -9,6 +9,7 @@ import '../document/document_session.dart';
 import '../document/game_ordering.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// `‹ [n] of N ›` under the board: which game of the open file is showing,
 /// with the number typeable to jump. Nothing when the document is not one
@@ -143,11 +144,11 @@ class _GameCounterState extends State<GameCounter>
   /// A step to the game before or after, at the small icon size the
   /// engine's header uses, so the counter fits beside the move field.
   Widget _step(IconData icon, String tooltip, VoidCallback? onPressed) =>
-      IconButton(
-        icon: Icon(icon, size: IconSize.menu),
+      ToolButton(
+        icon: icon,
         tooltip: tooltip,
+        size: IconSize.menu,
         onPressed: onPressed,
-        visualDensity: VisualDensity.compact,
       );
 
   /// The game's number, typed over to jump; the enter key goes there.

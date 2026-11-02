@@ -7,7 +7,8 @@ the best of them written into a draft chapter beside theirs. Every run also
 feeds the Positions list (traps, only moves, practical choices).
 
 Code: `lib/workspace/search/fill_gaps.dart` (`FillGaps`, the one run at a time),
-`search_pane.dart`, `search_settings.dart`, `search_table.dart`,
+`search_pane.dart` (with its `search_run_bar.dart`, `search_status.dart`
+and `search_results.dart`), `search_settings.dart`, `search_table.dart`,
 `fill_states.dart`, `fill_lines.dart` (a run's draft lines),
 `search_opponents.dart`, `generated_draft.dart`,
 `finds.dart`, `finds_panel.dart`, `engine_jobs.dart`; `lib/app/search_door.dart`

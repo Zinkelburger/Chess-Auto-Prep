@@ -49,7 +49,7 @@ class BooksScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SizedBox(
-            width: booksListWidth,
+            width: listColumnWidth,
             child: _BookList(books: books, editing: editing),
           ),
           const VerticalDivider(width: 1),
@@ -433,12 +433,7 @@ class _BookEditorState extends State<_BookEditor> {
           if (inUse)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.m),
-              child: Text(
-                'In use',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
+              child: Text('In use', style: theme.textTheme.bodySmall),
             )
           else
             // One per row, so never the filled one.
@@ -526,12 +521,7 @@ class _FolderRow extends StatelessWidget {
           ),
           const SizedBox(width: Space.xs),
           Expanded(child: Text(folder.name, overflow: TextOverflow.ellipsis)),
-          Text(
-            '$chapters of $of',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
+          Text('$chapters of $of', style: theme.textTheme.bodySmall),
         ],
       ),
     );
@@ -568,12 +558,11 @@ class _ChapterRow extends StatelessWidget {
         ),
         const SizedBox(width: Space.xs),
         Expanded(child: Text(chapter.name, overflow: TextOverflow.ellipsis)),
-        IconButton(
+        ToolButton(
+          icon: AppIcons.openElsewhere,
           tooltip: 'Open in builder',
-          iconSize: IconSize.menu,
-          visualDensity: VisualDensity.compact,
+          size: IconSize.menu,
           onPressed: onOpen,
-          icon: const Icon(AppIcons.openElsewhere),
         ),
       ],
     ),

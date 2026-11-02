@@ -246,7 +246,7 @@ active pane's a brighter grey. Dividers between panes are 1px lines with a
 - **Outlined:** ink in a Button Outline stroke; the default secondary action.
 - **Text:** slate accent, for light actions inside rows and bars.
 - **Disabled:** Disabled Fill / Disabled Ink. Options that cannot apply are hidden with a one-line reason rather than shown greyed; a menu entry with nothing to act on now is shown off.
-- **Tool buttons:** `tool_button`, an icon-only button in a bar or list header: the symbol at 18px, a compact square, always a tooltip. As a toggle it is drawn in the slate accent while on. Row-sized steppers, chips and tab closers keep their 16px symbols.
+- **Tool buttons:** `tool_button`, an icon-only button in a bar or list header: the symbol at 18px, a compact square, always a tooltip. As a toggle it is drawn in the slate accent while on. Inside a row (a stepper, a chip, a remove or open button beside the row's text) it takes the 16px symbol size; tab closers keep theirs.
 - **Segments:** `segments`, a few answers side by side (`Read | Edit`, `White | Black`): compact, no tick on the chosen one, so a segment never grows when picked.
 - **Hover / Focus:** no splash and no highlight wash; Material's state layer only.
 

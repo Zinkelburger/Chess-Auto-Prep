@@ -456,7 +456,7 @@ class _LineRow extends StatelessWidget {
           ? () => onRead(ReadIn.moves)
           : onTrain,
       child: SizedBox(
-        height: MediaQuery.textScalerOf(context).scale(trainRowHeight),
+        height: MediaQuery.textScalerOf(context).scale(twoLineRowHeight),
         child: Row(
           children: [
             Expanded(
@@ -563,7 +563,7 @@ class _MistakeRow extends StatelessWidget {
     return InkWell(
       onTap: onShow,
       child: SizedBox(
-        height: MediaQuery.textScalerOf(context).scale(trainRowHeight),
+        height: MediaQuery.textScalerOf(context).scale(twoLineRowHeight),
         child: Row(
           children: [
             Expanded(

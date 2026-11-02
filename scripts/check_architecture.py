@@ -66,6 +66,35 @@ FILE_CONSTRUCTOR = re.compile(r"\bFile\(")
 # One symbol per verb: every Material icon is named once, in ui/app_icons.dart.
 ICONS_FILE = "ui/app_icons.dart"
 MATERIAL_ICON = re.compile(r"\bIcons\.")
+# One shape per control: outside ui/ these Material widgets come through the
+# shared controls (FormDialog, ProgressLine, ListMessage.loading, Segments,
+# CheckRow, ToggleChip, ToolButton).
+RAW_CONTROL = re.compile(
+    r"\b(?:AlertDialog\(|LinearProgressIndicator\(|CircularProgressIndicator\("
+    r"|SegmentedButton<|CheckboxListTile\(|FilterChip\(|ChoiceChip\(|IconButton\()"
+)
+# Files that still build one, each for its reason.
+RAW_CONTROL_ALLOWED = {
+    # The window before any of the app exists.
+    "app/app.dart": "CircularProgressIndicator(",
+    # Three answers, not a form: Save, Don't save, Cancel.
+    "app/exit_guard.dart": "AlertDialog(",
+    # A list or a report with Close, not a form.
+    "features/databases/databases_screen.dart": "AlertDialog(",
+    "features/players/analysis_panel.dart": "AlertDialog(",
+    "features/study/study_recovery_dialog.dart": "AlertDialog(",
+    "features/tournaments/engine_manager.dart": "AlertDialog(",
+    "workspace/document/study_picker.dart": "AlertDialog(",
+    # A browser login and an update that run while the dialog waits.
+    "features/settings/lichess_login_dialog.dart": "AlertDialog(",
+    "features/settings/update_prompt.dart": "AlertDialog(",
+    # Remove from the group or delete everywhere: two destructive answers.
+    "features/players/player_dialogs.dart": "AlertDialog(",
+    # lila's pocket +/- chips, drawn on the board.
+    "features/bughouse/pocket.dart": "IconButton(",
+    # The engine header's coloured toggles and the line chevron in its gutter.
+    "workspace/analysis/engine_pane.dart": "IconButton(",
+}
 
 
 def relative_folder(path: Path) -> str:
@@ -418,6 +447,17 @@ def check_icons(relative: str, lines: list[str], findings: list[str]) -> None:
             findings.append(f"lib/{relative}:{n}: `Icons.` outside {ICONS_FILE} (use AppIcons)")
 
 
+def check_controls(relative: str, lines: list[str], findings: list[str]) -> None:
+    """[relative] is the path under lib/; ui/ builds the shared controls."""
+    if relative.startswith("ui/"):
+        return
+    allowed = RAW_CONTROL_ALLOWED.get(relative)
+    for n, line in enumerate(lines, 1):
+        for found in RAW_CONTROL.findall(line.split("//")[0]):
+            if found != allowed:
+                findings.append(f"lib/{relative}:{n}: `{found}` outside ui/ (use the shared control)")
+
+
 def check_file(path: Path, findings: list[str]) -> None:
     lines = path.read_text().splitlines()
     where = path.relative_to(REPO)
@@ -439,6 +479,7 @@ def check_file(path: Path, findings: list[str]) -> None:
             findings.append(f"{where}:{n}: file write outside storage/")
     if is_lib:
         check_icons(path.relative_to(LIB).as_posix(), lines, findings)
+        check_controls(path.relative_to(LIB).as_posix(), lines, findings)
         check_imports(path, lines, findings)
         check_classes(str(where), "\n".join(lines), findings)
         check_members(str(where), "\n".join(lines), findings)

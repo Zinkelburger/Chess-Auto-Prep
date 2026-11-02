@@ -118,9 +118,7 @@ class PersonRow extends StatelessWidget {
             padding: const EdgeInsets.only(top: Space.xs),
             child: Text(
               notes,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface,
-              ),
+              style: bodySmallInk(theme),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
@@ -229,9 +227,7 @@ class PersonRow extends StatelessWidget {
             link['chapter'] as String? ??
                 p.basenameWithoutExtension(link['path'] as String),
           ),
-          labelStyle: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurface,
-          ),
+          labelStyle: bodySmallInk(theme),
           visualDensity: VisualDensity.compact,
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           padding: EdgeInsets.zero,

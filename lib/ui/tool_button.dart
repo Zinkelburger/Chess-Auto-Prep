@@ -15,6 +15,7 @@ class ToolButton extends StatelessWidget {
     required this.onPressed,
     this.selected,
     this.selectedIcon,
+    this.size = IconSize.action,
   });
 
   final IconData icon;
@@ -27,12 +28,14 @@ class ToolButton extends StatelessWidget {
   final bool? selected;
   final IconData? selectedIcon;
 
+  /// The symbol's size: [IconSize.menu] for a button inside a row, beside
+  /// the row's own text.
+  final double size;
+
   @override
   Widget build(BuildContext context) => IconButton(
-    icon: Icon(icon, size: IconSize.action),
-    selectedIcon: selectedIcon == null
-        ? null
-        : Icon(selectedIcon, size: IconSize.action),
+    icon: Icon(icon, size: size),
+    selectedIcon: selectedIcon == null ? null : Icon(selectedIcon, size: size),
     isSelected: selected,
     tooltip: tooltip,
     onPressed: onPressed,

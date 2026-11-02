@@ -185,7 +185,10 @@ Bughouse mode is offered when its engine assets are present.
   `showOptionsDialog` for a few answers (a side, a promotion piece);
   `showChoiceDialog` for a searchable list. `ui/theme.dart` gives them their
   graphite panel and the `dialogNarrow` / `dialogMedium` / `dialogWide`
-  widths.
+  widths. A dialog or field that does one slow thing at a time mixes in
+  `Attempting` (`ui/attempting.dart`): `busy`, the `problem` sentence, and
+  `attempt()`, which refuses while busy and logs what threw; its `busy` and
+  `problem` feed `FormDialog` directly.
 - `AccessibleBoard` adds named squares, side-to-move/check announcements,
   orientation-aware arrow navigation, Enter/Space selection and keyboard promotion
   to the shared pointer board. Modified history shortcuts still pass through.
@@ -252,7 +255,10 @@ code reads exactly the formats it writes.
 - [`integration_test/desktop_test.dart`](../integration_test/desktop_test.dart)
   exercises the actual desktop app. Engine/native checks have separate targets.
 - [`scripts/check_architecture.py`](../scripts/check_architecture.py) enforces the architecture
-  rules under `lib/` and `test/` (the name is historical).
+  rules under `lib/` and `test/` (the name is historical), including that
+  only `ui/app_icons.dart` names `Icons.` and that `AlertDialog`, progress
+  indicators, `SegmentedButton`, `CheckboxListTile`, Material chips and
+  `IconButton` are built only in `ui/`, outside a short reasoned allow-list.
 - `scripts/ci.sh analyze lint`, `scripts/ci.sh test` and `scripts/ci.sh tools`
   run through bounded jobs. The headless driver defaults to `lib/main.dart`.
 - Platform runners, `packages/document_file_io`, engine assets/updaters,

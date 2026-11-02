@@ -166,106 +166,104 @@ class _SearchPaneState extends State<SearchPane>
   }
 
   @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: Listenable.merge([
-        widget.fill,
-        widget.session.anyChange,
-        widget.settings,
-        ?widget.fill.finds,
-      ]),
-      builder: (context, _) => LinePreviewOverlay(
-        preview: _preview,
-        orientation: widget.session.orientation,
-        child: LayoutBuilder(
-          builder: (context, size) => SingleChildScrollView(
-            child: SizedBox(
-              height: math.max(
-                size.maxHeight,
-                widget.fill.treeSaveProblem == null
-                    ? searchPaneMinHeight
-                    : searchRecoveryMinHeight,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SearchRunBar(
-                    fill: widget.fill,
-                    settings: widget.settings,
-                    settingsOpen: _settingsOpen,
-                    onToggleSettings: _toggleSettings,
-                    onProblem: _problem,
-                    onSearch: () => unawaited(_search()),
-                    onDeeper: (depth) => unawaited(_deeper(depth)),
-                    onShowPositions: widget.onShowPositions,
-                  ),
-                  SearchStatusLine(
-                    fill: widget.fill,
-                    session: widget.session,
-                    settings: widget.settings,
-                    problem: _invalid ?? _refusal,
-                    onShowPositions: widget.onShowPositions,
-                  ),
-                  const Divider(height: 1),
-                  Expanded(
-                    child: _settingsOpen
-                        ? SearchSettingsView(
-                            settings: widget.settings,
-                            locked: widget.fill.running,
-                            onProblem: _problem,
-                          )
-                        : SearchResults(
-                            fill: widget.fill,
-                            session: widget.session,
-                            book: _book,
-                            onHover: (row, anchor) =>
-                                _hover(row.after, row.move.uci, anchor),
-                            onLeave: _leave,
-                            onPlay: (row) => _play(row.move.uci),
-                          ),
-                  ),
-                  if (widget.fill.treeSaveProblem != null)
-                    Padding(
-                      padding: const EdgeInsets.all(Space.m),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(widget.fill.treeSaveProblem!),
-                          Wrap(
-                            spacing: Space.s,
-                            children: [
-                              OutlinedButton(
-                                onPressed: () =>
-                                    unawaited(widget.fill.retryTree()),
-                                child: const Text('Retry save'),
-                              ),
-                              TextButton(
-                                onPressed: widget.fill.discardTreeSave,
-                                child: const Text('Discard tree save'),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  if (SearchLinesRow.shows(widget.fill))
-                    SearchLinesRow(
-                      fill: widget.fill,
-                      onOpenChapter: widget.onOpenChapter,
-                    ),
-                  if (widget.fill.canDiscardDraft)
-                    TextButton(
-                      onPressed: widget.fill.discardDraftSave,
-                      child: const Text('Discard draft save'),
-                    ),
-                ],
-              ),
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([
+      widget.fill,
+      widget.session.anyChange,
+      widget.settings,
+      ?widget.fill.finds,
+    ]),
+    builder: (context, _) => LinePreviewOverlay(
+      preview: _preview,
+      orientation: widget.session.orientation,
+      child: LayoutBuilder(
+        builder: (context, size) => SingleChildScrollView(
+          child: SizedBox(
+            height: math.max(
+              size.maxHeight,
+              widget.fill.treeSaveProblem == null
+                  ? searchPaneMinHeight
+                  : searchRecoveryMinHeight,
             ),
+            child: _panel(),
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+
+  /// The bar, the status line, the results or the settings in their place,
+  /// and under them whatever a failed save or a finished run offers.
+  Widget _panel() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      SearchRunBar(
+        fill: widget.fill,
+        settings: widget.settings,
+        settingsOpen: _settingsOpen,
+        onToggleSettings: _toggleSettings,
+        onProblem: _problem,
+        onSearch: () => unawaited(_search()),
+        onDeeper: (depth) => unawaited(_deeper(depth)),
+        onShowPositions: widget.onShowPositions,
+      ),
+      SearchStatusLine(
+        fill: widget.fill,
+        session: widget.session,
+        settings: widget.settings,
+        problem: _invalid ?? _refusal,
+        onShowPositions: widget.onShowPositions,
+      ),
+      const Divider(height: 1),
+      Expanded(
+        child: _settingsOpen
+            ? SearchSettingsView(
+                settings: widget.settings,
+                locked: widget.fill.running,
+                onProblem: _problem,
+              )
+            : SearchResults(
+                fill: widget.fill,
+                session: widget.session,
+                book: _book,
+                onHover: (row, anchor) =>
+                    _hover(row.after, row.move.uci, anchor),
+                onLeave: _leave,
+                onPlay: (row) => _play(row.move.uci),
+              ),
+      ),
+      if (widget.fill.treeSaveProblem case final problem?)
+        Padding(
+          padding: const EdgeInsets.all(Space.m),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(problem),
+              Wrap(
+                spacing: Space.s,
+                children: [
+                  OutlinedButton(
+                    onPressed: () => unawaited(widget.fill.retryTree()),
+                    child: const Text('Retry save'),
+                  ),
+                  TextButton(
+                    onPressed: widget.fill.discardTreeSave,
+                    child: const Text('Discard tree save'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      if (SearchLinesRow.shows(widget.fill))
+        SearchLinesRow(fill: widget.fill, onOpenChapter: widget.onOpenChapter),
+      if (widget.fill.canDiscardDraft)
+        TextButton(
+          onPressed: widget.fill.discardDraftSave,
+          child: const Text('Discard draft save'),
+        ),
+    ],
+  );
 
   bool get _book =>
       widget.settings.value.expectimax.method == SearchMethod.mainline;

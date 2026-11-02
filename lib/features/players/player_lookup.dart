@@ -104,9 +104,7 @@ class _PlayerLookupState extends State<PlayerLookup> {
                 Text(
                   '${site?.label ?? candidate['site']} '
                   '${candidate['username']}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface,
-                  ),
+                  style: bodySmallInk(theme),
                 ),
                 Text(
                   '${candidate['evidence'] ?? 'No evidence saved.'}',

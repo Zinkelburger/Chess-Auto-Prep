@@ -5,7 +5,8 @@ writes lines, annotates them, and drills them as line practice. It uses the
 shared board, move tree, engine, document session and autosave system.
 
 Code: `lib/features/study/` (`Studies` owner in `studies.dart`, renames,
-restores and deletes in `study_file_changes.dart`, `StudyPanel`, the send to
+restores and deletes in `study_file_changes.dart`, `StudyPanel` with its
+toolbar's `StudyCommands` in `study_actions.dart`, the send to
 Lichess in `study_sender.dart` and `study_send_dialog.dart`),
 study training controls in `lib/features/trainer/study_training_controls.dart`,
 PGN rules in `lib/chess/pgn/study.dart`, `study_edits.dart`,

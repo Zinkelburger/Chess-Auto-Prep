@@ -126,7 +126,7 @@ class _BoardLineRowsState extends State<BoardLineRows> {
             if (rows != null && i < rows.length)
               _row(rows[i])
             else
-              const SizedBox(height: labTableRowHeight),
+              const SizedBox(height: engineRowHeight),
         ],
       ),
     );
@@ -213,7 +213,7 @@ class _LineRow extends StatelessWidget {
           message: 'Sit: wait here rather than move',
           waitDuration: previewDelay,
           child: SizedBox(
-            height: labTableRowHeight,
+            height: engineRowHeight,
             child: Center(
               widthFactor: 1,
               child: Padding(
@@ -234,7 +234,7 @@ class _LineRow extends StatelessWidget {
         LineMoveToken(
           label: step.label,
           san: step.san,
-          height: labTableRowHeight,
+          height: engineRowHeight,
           strong: i == 0 && !sits,
           onHover: (anchor) => onHover(step, anchor),
           onLeave: onLeave,
@@ -251,7 +251,7 @@ class _LineRow extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           child: SizedBox(
-            height: labTableRowHeight,
+            height: engineRowHeight,
             child: Row(
               children: [
                 Tooltip(

@@ -464,12 +464,7 @@ class _SideSummary extends StatelessWidget {
           if (loss != null)
             Tooltip(
               message: 'Average centipawn loss',
-              child: Text(
-                'ACPL $loss',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
+              child: Text('ACPL $loss', style: theme.textTheme.bodySmall),
             ),
         ],
       ),

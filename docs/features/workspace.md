@@ -14,7 +14,9 @@ the board column and the reading card; `WorkspaceHooks` in
 navigation row in `nav_row.dart`), `BoardView` (`board_view.dart`), `MoveTreeView` (`move_tree_view.dart`),
 `MoveNote` (`move_note.dart`), `EngineAnalysis` / engine pane
 (`engine_analysis.dart`, `engine_pane.dart`, `engine_settings.dart`),
-`Explorer` (`explorer.dart`, `explorer_pane.dart`, `explorer_filters.dart`),
+`Explorer` (`explorer.dart`, `explorer_pane.dart`, `explorer_filters.dart`,
+and `explorer_rows.dart` for the game row and result bar Player openings
+shares),
 the explorer's Book source (`repertoire_tree.dart`, `tree_pane.dart`), pane
 tabs and layout (`workspace_tabs.dart`, `action_layout.dart`,
 `action_panes.dart`), `BoardEditor` (`board_editor.dart`), the move field

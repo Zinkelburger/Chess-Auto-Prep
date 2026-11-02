@@ -14,6 +14,7 @@ import '../../ui/app_keys.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/list_message.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// The explorer's Book: the active book's chapters as an opening
 /// explorer. For the position on the board, every move any of the book's
@@ -180,19 +181,17 @@ class _Summary extends StatelessWidget {
             ),
           ),
           if (off.isNotEmpty) ...[
-            IconButton(
+            ToolButton(
+              icon: AppIcons.undo,
               tooltip: AppKey.back.tip('Take back'),
-              iconSize: IconSize.menu,
-              visualDensity: VisualDensity.compact,
+              size: IconSize.menu,
               onPressed: tree.back,
-              icon: const Icon(AppIcons.undo),
             ),
-            IconButton(
+            ToolButton(
+              icon: AppIcons.back,
               tooltip: 'Back to the file',
-              iconSize: IconSize.menu,
-              visualDensity: VisualDensity.compact,
+              size: IconSize.menu,
               onPressed: tree.backToFile,
-              icon: const Icon(AppIcons.back),
             ),
           ],
         ],
@@ -207,9 +206,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final style = theme.textTheme.labelSmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
+    final style = theme.textTheme.labelSmall;
     return SizedBox(
       height: explorerHeaderHeight,
       child: Row(

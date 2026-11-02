@@ -11,6 +11,7 @@ import '../ui/theme.dart';
 import 'action_layout.dart';
 import 'workspace_tabs.dart';
 import '../ui/app_icons.dart';
+import '../ui/tool_button.dart';
 
 /// Docking affordances appear during a drag, leaving the reading area quiet.
 class ActionPanes extends StatefulWidget {
@@ -79,10 +80,10 @@ class _ActionPanesState extends State<ActionPanes> {
                 'pane-divider-${node.first.indices.first}-'
                 '${node.second.indices.first}',
               ),
-              left: across ? first - paneSplitGrab : 0,
-              top: across ? 0 : first - paneSplitGrab,
-              width: across ? 2 * paneSplitGrab : room.maxWidth,
-              height: across ? room.maxHeight : 2 * paneSplitGrab,
+              left: across ? first - paneDividerGrab : 0,
+              top: across ? 0 : first - paneDividerGrab,
+              width: across ? 2 * paneDividerGrab : room.maxWidth,
+              height: across ? room.maxHeight : 2 * paneDividerGrab,
               child: MouseRegion(
                 cursor: across
                     ? SystemMouseCursors.resizeColumn
@@ -372,19 +373,22 @@ class _ActionPanesState extends State<ActionPanes> {
       menu.isOpen ? menu.close() : menu.open();
     }
 
-    return Tooltip(
-      message: 'Open tools and arrange panes',
-      child: labeled
-          ? TextButton.icon(
+    const tip = 'Open tools and arrange panes';
+    return labeled
+        ? Tooltip(
+            message: tip,
+            child: TextButton.icon(
               icon: const Icon(AppIcons.add, size: IconSize.menu),
               label: const Text('Tools'),
               onPressed: toggle,
-            )
-          : IconButton(
-              icon: const Icon(AppIcons.add, size: IconSize.menu),
-              onPressed: toggle,
             ),
-    );
+          )
+        : ToolButton(
+            icon: AppIcons.add,
+            tooltip: tip,
+            size: IconSize.menu,
+            onPressed: toggle,
+          );
   }
 
   Widget _docking(int index, PaneTabDrag<WorkspaceTab> drag) {

@@ -167,7 +167,7 @@ class _AuditPaneState extends State<AuditPane> {
     }
     return ListView.builder(
       itemCount: findings.length,
-      itemExtent: trainRowHeight,
+      itemExtent: twoLineRowHeight,
       itemBuilder: (context, index) {
         final finding = findings[index];
         return _FindingRow(

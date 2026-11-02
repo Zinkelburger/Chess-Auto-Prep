@@ -181,6 +181,8 @@ const navRowHeight = 36.0;
 /// nowhere larger.
 const engineBarHeight = 40.0;
 const engineSwitchHeight = 18.0;
+
+/// One engine line, chess or bughouse.
 const engineRowHeight = 28.0;
 const engineScoreWidth = 54.0;
 
@@ -209,10 +211,6 @@ const searchPaneMinWidth = 240.0;
 /// Expectimax table its three value columns.
 const builderMovesShare = 0.45;
 
-/// The strip either side of the line between two panes that the divider
-/// is dragged by.
-const paneSplitGrab = Space.xs;
-const searchSettingsWidth = 380.0;
 const reviewGraphHeight = 160.0;
 
 /// The review's marks, as the old viewer coloured them: blue ?!, amber ?,
@@ -419,7 +417,7 @@ final class BoardTheme extends ThemeExtension<BoardTheme> {
 }
 
 /// The bar between two panes the user can drag: one pixel of line, with a
-/// grab area either side of it so it can be found with a mouse.
+/// grab strip either side of it so it can be found with a mouse.
 const paneDividerWidth = 1.0;
 const paneDividerGrab = 4.0;
 
@@ -629,6 +627,11 @@ TextTheme _sized(TextTheme base) => base.copyWith(
   labelSmall: base.labelSmall?.copyWith(fontSize: 12, color: _muted),
 );
 
+/// The small body size in ink rather than muted, for a detail that is the
+/// row's content: a name or a value the row exists to show.
+TextStyle? bodySmallInk(ThemeData theme) =>
+    theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface);
+
 /// The settings dialog: full-width search above categories and a scrollable
 /// settings list. Rows stack their controls when text needs more room.
 const settingsDialogWidth = 760.0;
@@ -648,13 +651,6 @@ const listRowHeight = 34.0;
 
 /// A row of two lines: a name over what is known of it.
 const twoLineRowHeight = 44.0;
-
-/// A row of the trainer's lists: a name over a line of moves.
-const trainRowHeight = twoLineRowHeight;
-
-/// A row of the puzzle list: the move and its result on one line, the
-/// opponent and the date under it.
-const puzzleRowHeight = twoLineRowHeight;
 
 /// The box the Tactics filters take a number of days in.
 const dayCountWidth = 44.0;
@@ -718,7 +714,7 @@ const labOneBoardMax = 720.0;
 
 /// What the board column needs with both boards besides the boards and
 /// their hands: the board's name above and the engine's rows under it.
-const labBoardChrome = labBoardLabelHeight + 3 * labTableRowHeight + 9;
+const labBoardChrome = labBoardLabelHeight + 3 * engineRowHeight + 9;
 const labBoardLabelHeight = 22.0;
 
 /// The narrowest the right-hand panel may become before the boards shrink,
@@ -746,8 +742,7 @@ const labHandStepMax = 24.0;
 const labHandStep = Color(0xE01B1B1D);
 const labHandStepInk = Color(0xFFFFFFFF);
 
-/// An engine line, and its score gutter.
-const labTableRowHeight = 28.0;
+/// A bughouse engine line's score gutter.
 const labScoreWidth = 60.0;
 
 /// The engine's score beside its switch, in mono at the title size.
@@ -797,9 +792,8 @@ const labPocketCountText = TextStyle(
 TextStyle labPocketCountStyle(double slot) =>
     labPocketCountText.copyWith(fontSize: (slot * 0.28).clamp(12, 17));
 
-/// The Books mode: the list of books, a repertoire's or a chapter's row,
-/// and how far a chapter sits in from its repertoire.
-const booksListWidth = 260.0;
+/// The Books mode: a repertoire's or a chapter's row, and how far a
+/// chapter sits in from its repertoire.
 const bookRowHeight = 36.0;
 const bookChapterIndent = 28.0;
 

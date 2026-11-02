@@ -293,9 +293,7 @@ class _ReplyRow extends StatelessWidget {
       child: Text(
         value ?? 'not in tree',
         style: value == null
-            ? theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              )
+            ? theme.textTheme.labelSmall
             : monoText.copyWith(color: scheme.onSurface),
       ),
     );
@@ -316,9 +314,7 @@ class _ReplyRow extends StatelessWidget {
     if (row.elsewhere case final chapter?) {
       return Text(
         chapter,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: scheme.onSurfaceVariant,
-        ),
+        style: theme.textTheme.labelSmall,
         overflow: TextOverflow.ellipsis,
       );
     }

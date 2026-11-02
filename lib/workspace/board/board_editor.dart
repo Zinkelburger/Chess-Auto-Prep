@@ -13,6 +13,7 @@ import '../../ui/form_dialog.dart';
 import '../../ui/problem_line.dart';
 import '../../ui/segments.dart';
 import '../../ui/toggle_chip.dart';
+import '../../ui/tool_button.dart';
 
 /// What a press on the editor's board does.
 sealed class EditorTool {
@@ -181,9 +182,10 @@ class _BoardEditorState extends State<BoardEditor> {
               labelText: 'FEN',
               isDense: true,
               border: const OutlineInputBorder(),
-              suffixIcon: IconButton(
+              suffixIcon: ToolButton(
+                icon: AppIcons.copy,
                 tooltip: 'Copy FEN',
-                icon: const Icon(AppIcons.copy, size: IconSize.menu),
+                size: IconSize.menu,
                 onPressed: () =>
                     Clipboard.setData(ClipboardData(text: _fen.text)),
               ),

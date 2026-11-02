@@ -99,9 +99,7 @@ class ExplorerGameRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final muted = theme.textTheme.bodySmall?.copyWith(
-      color: scheme.onSurfaceVariant,
-    );
+    final muted = theme.textTheme.bodySmall;
     return ListRow(
       onTap: onTap,
       child: Row(
