@@ -8,18 +8,23 @@ import '../../ui/choice_dialog.dart';
 import '../../ui/status_bar.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/search_field.dart';
+import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
-import '../../workspace/chapter_commands.dart';
-import '../../workspace/document_session.dart';
+import '../../workspace/document/chapter_commands.dart';
+import '../../workspace/document/document_session.dart';
 import 'chapter_outline.dart';
 import 'backup_history_dialog.dart';
 import 'library.dart';
+import 'library_actions.dart';
 import 'library_messages.dart';
 import 'library_state.dart';
-import 'new_chapter_dialog.dart';
 import 'outline_rows.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/list_message.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/progress_line.dart';
+import '../../ui/tool_button.dart';
+import '../../ui/pane_header.dart';
 
 /// The chapters of the open repertoire and, under the open one, its lines.
 ///
@@ -85,29 +90,8 @@ class _OutlinePanelState extends State<OutlinePanel> {
   /// A chapter made with the board on a position can start there: that is
   /// how a chapter for one opening is set up, and its root is what the
   /// outline then prints under its name.
-  Future<void> _newChapter() async {
-    final into = widget.outline.repertoire;
-    final chapter = widget.session.chapter;
-    if (into == null) return;
-    final wanted = await showNewChapterDialog(
-      context,
-      fromBoard: chapter == null
-          ? null
-          : rootMovesFromBoard(chapter, widget.session.cursor.value),
-    );
-    if (wanted == null || !mounted) return;
-    await announce(
-      context,
-      widget.library.createChapter(
-        into,
-        wanted.name,
-        rootMoves: wanted.rootMoves,
-      ),
-      thing: 'chapter',
-      name: wanted.name,
-      failed: 'Could not create the chapter.',
-    );
-  }
+  Future<void> _newChapter() =>
+      newChapter(context, widget.library, widget.outline, widget.session);
 
   Future<void> _rename(OutlineLine line) async {
     final name = await showNameDialog(
@@ -274,7 +258,13 @@ class _OutlinePanelState extends State<OutlinePanel> {
           _Toolbar(
             search: _search,
             onSearch: widget.outline.search,
-            onCreate: widget.outline.repertoire == null ? null : _newChapter,
+            // The empty outline has its own button; one is enough.
+            onCreate:
+                widget.outline.repertoire == null ||
+                    widget.outline.chapters.isEmpty &&
+                        widget.outline.query.trim().isEmpty
+                ? null
+                : _newChapter,
             atPosition: widget.outline.atPosition,
             onAtPosition: widget.outline.showAtPosition,
           ),
@@ -296,7 +286,7 @@ class _OutlinePanelState extends State<OutlinePanel> {
                               failed: 'The line move still needs retrying.',
                             );
                           },
-                    child: const Text('Retry line move'),
+                    child: const Text('Retry save'),
                   ),
                 ),
                 TextButton(
@@ -314,8 +304,8 @@ class _OutlinePanelState extends State<OutlinePanel> {
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
                 onPressed: widget.library.busy ? null : _history,
-                icon: const Icon(Icons.history, size: IconSize.action),
-                label: const Text('Version history'),
+                icon: const Icon(AppIcons.history, size: IconSize.action),
+                label: const Text('Version history…'),
               ),
             ),
         ],
@@ -327,17 +317,28 @@ class _OutlinePanelState extends State<OutlinePanel> {
     final outline = widget.outline;
     final chapters = outline.chapters;
     if (chapters.isEmpty) {
+      if (outline.query.trim().isNotEmpty) {
+        return ListMessage(
+          'Nothing matches "${outline.query}".',
+          inset: Space.m,
+        );
+      }
       return ListMessage(
-        outline.query.trim().isEmpty
-            ? 'No chapters yet\nCreate a chapter, then add your moves.'
-            : 'No chapter or line matches "${outline.query}".',
+        'No chapters yet.',
         inset: Space.m,
+        action: outline.repertoire == null
+            ? null
+            : OutlinedButton.icon(
+                onPressed: _newChapter,
+                icon: const Icon(AppIcons.add, size: IconSize.action),
+                label: const Text('New chapter…'),
+              ),
       );
     }
     // A book-sized chapter has thousands of lines, so each row is built when
     // it scrolls into view rather than all of them up front.
     final rows = [
-      if (outline.searching) (_) => const LinearProgressIndicator(),
+      if (outline.searching) (_) => const ProgressLine(),
       if (outline.searchProblem case final problem?)
         (_) => ListMessage(problem, inset: Space.m),
       for (final chapter in chapters) ..._chapterRows(outline, chapter),
@@ -388,10 +389,10 @@ class _OutlinePanelState extends State<OutlinePanel> {
       if (lines.isEmpty)
         (_) => ListMessage(
           outline.query.trim().isNotEmpty
-              ? 'No lines match this search.'
+              ? 'Nothing matches "${outline.query}".'
               : outline.atPosition
               ? 'No line reaches this position.'
-              : 'Empty — add lines to fill this chapter.',
+              : 'No lines yet.',
           inset: Space.m,
         ),
       for (final line in lines) (_) => _lineRow(line, chapter.ref),
@@ -420,24 +421,10 @@ class _OutlinePanelState extends State<OutlinePanel> {
       onTap: () => _pick(line),
       onDrop: (drag) => _move(drag, open, asSidelineOf: line.game),
       actions: [
-        MenuItemButton(
-          onPressed: () => _moveTo(line),
-          child: const Text('Move to chapter…'),
-        ),
-        MenuItemButton(
-          onPressed: () => _rename(line),
-          leadingIcon: const Icon(Icons.edit_outlined, size: IconSize.menu),
-          child: const Text('Rename line…'),
-        ),
-        MenuItemButton(
-          onPressed: () => _delete(line),
-          leadingIcon: const Icon(Icons.delete_outline, size: IconSize.menu),
-          child: const Text('Delete line'),
-        ),
-        MenuItemButton(
-          onPressed: _newChapter,
-          child: const Text('New chapter…'),
-        ),
+        rowAction('Move to chapter…', () => _moveTo(line)),
+        rowAction('Rename line…', () => _rename(line), icon: AppIcons.edit),
+        rowAction('Delete line', () => _delete(line), icon: AppIcons.delete),
+        rowAction('New chapter…', _newChapter),
       ],
     );
   }
@@ -461,53 +448,39 @@ class _Toolbar extends StatelessWidget {
   final ValueChanged<bool> onAtPosition;
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.s, Space.s),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Chapters',
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
-              ),
-              IconButton(
-                key: const ValueKey('outline-at-position'),
-                onPressed: () => onAtPosition(!atPosition),
-                isSelected: atPosition,
-                icon: const Icon(
-                  Icons.filter_alt_outlined,
-                  size: IconSize.action,
-                ),
-                selectedIcon: const Icon(
-                  Icons.filter_alt,
-                  size: IconSize.action,
-                ),
-                tooltip: 'At this position',
-                visualDensity: VisualDensity.compact,
-              ),
-              IconButton(
-                onPressed: onCreate,
-                icon: const Icon(Icons.add, size: IconSize.action),
-                tooltip: 'New chapter',
-                visualDensity: VisualDensity.compact,
-              ),
-            ],
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      PaneHeader(
+        'Chapters',
+        actions: [
+          ToolButton(
+            key: const ValueKey('outline-at-position'),
+            icon: AppIcons.filter,
+            tooltip: atPosition
+                ? 'Show every line'
+                : 'Show only lines through the board position',
+            selected: atPosition,
+            onPressed: () => onAtPosition(!atPosition),
           ),
-          const SizedBox(height: Space.xs),
-          SearchField(
-            controller: search,
-            hint: 'Find a chapter or line',
-            onChanged: onSearch,
-          ),
+          if (onCreate case final create?)
+            ToolButton(
+              icon: AppIcons.add,
+              tooltip: 'New chapter…',
+              onPressed: create,
+            ),
         ],
       ),
-    );
-  }
+      Padding(
+        padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.s, Space.s),
+        child: SearchField(
+          controller: search,
+          hint: 'Find a chapter or line',
+          onChanged: onSearch,
+        ),
+      ),
+    ],
+  );
 }
 
 /// Where Move to chapter sends lines: a chapter already there, or a new one.

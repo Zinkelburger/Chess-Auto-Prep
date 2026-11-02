@@ -5,10 +5,13 @@ import 'package:flutter/material.dart';
 
 import '../ui/action_context_menu.dart';
 import '../ui/app_action.dart';
+import '../ui/menu_entry.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
 import 'action_layout.dart';
 import 'workspace_tabs.dart';
+import '../ui/app_icons.dart';
+import '../ui/tool_button.dart';
 
 /// Docking affordances appear during a drag, leaving the reading area quiet.
 class ActionPanes extends StatefulWidget {
@@ -77,10 +80,10 @@ class _ActionPanesState extends State<ActionPanes> {
                 'pane-divider-${node.first.indices.first}-'
                 '${node.second.indices.first}',
               ),
-              left: across ? first - paneSplitGrab : 0,
-              top: across ? 0 : first - paneSplitGrab,
-              width: across ? 2 * paneSplitGrab : room.maxWidth,
-              height: across ? room.maxHeight : 2 * paneSplitGrab,
+              left: across ? first - paneDividerGrab : 0,
+              top: across ? 0 : first - paneDividerGrab,
+              width: across ? 2 * paneDividerGrab : room.maxWidth,
+              height: across ? room.maxHeight : 2 * paneDividerGrab,
               child: MouseRegion(
                 cursor: across
                     ? SystemMouseCursors.resizeColumn
@@ -199,7 +202,7 @@ class _ActionPanesState extends State<ActionPanes> {
             shape: RoundedRectangleBorder(
               side: BorderSide(
                 color: layout.active == index && layout.count > 1
-                    ? scheme.onSurfaceVariant.withValues(alpha: 0.55)
+                    ? activePaneBorder
                     : scheme.outlineVariant,
               ),
               borderRadius: BorderRadius.circular(paneTabRadius),
@@ -335,67 +338,31 @@ class _ActionPanesState extends State<ActionPanes> {
   Widget _paneMenu(int index, {bool labeled = false}) {
     final tabs = layout.pane(index);
     return MenuAnchor(
-      menuChildren: [
+      menuChildren: alignMenu([
         for (final tab in tabs.tabs)
-          GestureDetector(
-            onSecondaryTapUp: (details) => showActionContextMenu(
-              context,
-              details.globalPosition,
-              layout.destinations(tab.id),
-            ),
-            child: MenuItemButton(
-              onPressed: () => layout.open(index, tab.id),
-              child: Text(tab.title),
-            ),
+          MenuEntry(
+            tab.title,
+            () => layout.open(index, tab.id),
+            alternatives: layout.destinations(tab.id),
           ),
         if (widget.actions?.call() case final actions?
             when actions.isNotEmpty) ...[
           const Divider(height: 1),
-          for (final action in actions)
-            MenuItemButton(
-              onPressed: action.run,
-              leadingIcon: action.icon == null
-                  ? null
-                  : Icon(action.icon, size: IconSize.menu),
-              trailingIcon: action.shortcut == null
-                  ? null
-                  : Text(
-                      action.shortcut!,
-                      style: Theme.of(context).textTheme.labelSmall,
-                    ),
-              child: Text(action.label),
-            ),
+          for (final action in actions) MenuEntry.action(action),
         ],
         const Divider(height: 1),
         if (layout.count > 1) ...[
-          MenuItemButton(
-            onPressed: () => layout.resizeActive(0.05),
-            child: const Text('More room'),
-          ),
-          MenuItemButton(
-            onPressed: () => layout.resizeActive(-0.05),
-            child: const Text('Less room'),
-          ),
+          MenuEntry('More room', () => layout.resizeActive(0.05)),
+          MenuEntry('Less room', () => layout.resizeActive(-0.05)),
         ],
-        MenuItemButton(
-          onPressed: layout.canAddPane ? () => layout.addPane(index) : null,
-          leadingIcon: const Icon(
-            Icons.horizontal_split_outlined,
-            size: IconSize.menu,
-          ),
-          child: const Text('New pane'),
+        MenuEntry(
+          'New pane',
+          layout.canAddPane ? () => layout.addPane(index) : null,
+          icon: AppIcons.newPane,
         ),
-        if (index != 0)
-          MenuItemButton(
-            onPressed: () => layout.closePane(index),
-            child: const Text('Close pane'),
-          ),
-        if (layout.count > 1)
-          MenuItemButton(
-            onPressed: layout.joinAll,
-            child: const Text('Join all panes'),
-          ),
-      ],
+        if (index != 0) MenuEntry('Close pane', () => layout.closePane(index)),
+        if (layout.count > 1) MenuEntry('Join all panes', layout.joinAll),
+      ]),
       builder: (context, menu, _) => _menuButton(menu, index, labeled),
     );
   }
@@ -406,19 +373,22 @@ class _ActionPanesState extends State<ActionPanes> {
       menu.isOpen ? menu.close() : menu.open();
     }
 
-    return Tooltip(
-      message: 'Open tools and arrange panes',
-      child: labeled
-          ? TextButton.icon(
-              icon: const Icon(Icons.add, size: IconSize.menu),
+    const tip = 'Open tools and arrange panes';
+    return labeled
+        ? Tooltip(
+            message: tip,
+            child: TextButton.icon(
+              icon: const Icon(AppIcons.add, size: IconSize.menu),
               label: const Text('Tools'),
               onPressed: toggle,
-            )
-          : IconButton(
-              icon: const Icon(Icons.add, size: IconSize.menu),
-              onPressed: toggle,
             ),
-    );
+          )
+        : ToolButton(
+            icon: AppIcons.add,
+            tooltip: tip,
+            size: IconSize.menu,
+            onPressed: toggle,
+          );
   }
 
   Widget _docking(int index, PaneTabDrag<WorkspaceTab> drag) {

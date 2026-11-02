@@ -6,6 +6,7 @@ import '../../ui/theme.dart';
 import 'player_analysis.dart';
 import 'player_games.dart';
 import 'player_hunt.dart';
+import '../../ui/app_icons.dart';
 
 /// The names over the positions table, which are also how it is sorted:
 /// Games puts the most played first, Score the worst score and then, pressed
@@ -100,7 +101,7 @@ class _Sorter extends StatelessWidget {
           children: [
             if (active)
               Icon(
-                ascending ? Icons.arrow_upward : Icons.arrow_downward,
+                ascending ? AppIcons.sortAscending : AppIcons.sortDescending,
                 size: IconSize.sort,
                 color: ink,
               ),
@@ -147,7 +148,7 @@ class PositionRow extends StatelessWidget {
       onTap: onOpen,
       child: Container(
         // As tall as a row of the other lists; taller when the moves wrap.
-        constraints: const BoxConstraints(minHeight: puzzleRowHeight),
+        constraints: const BoxConstraints(minHeight: twoLineRowHeight),
         padding: const EdgeInsets.symmetric(
           horizontal: Space.m,
           vertical: Space.xs,
@@ -226,9 +227,7 @@ class PlayerGameRow extends StatelessWidget {
                 Expanded(
                   child: Text(
                     opponent.isEmpty ? 'Unknown opponent' : opponent,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface,
-                    ),
+                    style: bodySmallInk(theme),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),

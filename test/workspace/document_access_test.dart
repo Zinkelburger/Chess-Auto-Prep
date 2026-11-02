@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:chess_auto_prep/workspace/document_access.dart';
+import 'package:chess_auto_prep/workspace/document/document_access.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

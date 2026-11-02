@@ -1,4 +1,4 @@
-// The Books owner (lib/workspace/books.dart) edited twice, the second
+// The Books owner (lib/workspace/book/books.dart) edited twice, the second
 // edit made once the first one's write was answered, with an I/O error or
 // a lost answer at each effect of those writes. Its PendingWrites must
 // report a problem exactly while an edit is not in books.json; an edit made
@@ -13,7 +13,7 @@ import 'dart:io';
 import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
-import 'package:chess_auto_prep/workspace/books.dart';
+import 'package:chess_auto_prep/workspace/book/books.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/faulty_disk/owner_faults.dart';

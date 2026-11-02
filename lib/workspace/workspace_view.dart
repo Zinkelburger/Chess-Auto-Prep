@@ -5,29 +5,31 @@ import 'package:flutter/material.dart';
 
 import 'action_layout.dart';
 import 'action_panes.dart';
-import 'audit_pane.dart';
-import 'explorer.dart';
+import 'review/audit_pane.dart';
+import 'explorer/explorer.dart';
+import '../ui/app_action.dart';
+import '../ui/app_icons.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
-import 'board_claim.dart';
-import 'board_and_card.dart';
-import 'board_column.dart';
-import 'document_session.dart';
-import 'edit_strip.dart';
-import 'edit_switch.dart';
-import 'engine_pane.dart';
-import 'explorer_pane.dart';
-import 'game_review_pane.dart';
-import 'move_field.dart';
-import 'move_tree_view.dart';
-import 'nav_row.dart';
-import 'reading_header.dart';
-import 'replies_pane.dart';
-import 'search_pane.dart';
+import 'board/board_claim.dart';
+import 'board/board_and_card.dart';
+import 'board/board_column.dart';
+import 'document/document_session.dart';
+import 'reading/edit_strip.dart';
+import 'reading/edit_switch.dart';
+import 'analysis/engine_pane.dart';
+import 'explorer/explorer_pane.dart';
+import 'review/game_review_pane.dart';
+import 'board/move_field.dart';
+import 'reading/move_tree_view.dart';
+import 'board/nav_row.dart';
+import 'reading/reading_header.dart';
+import 'book/replies_pane.dart';
+import 'search/search_pane.dart';
 import 'workspace.dart';
 import 'workspace_hooks.dart';
 import 'workspace_tabs.dart';
-import 'training_analysis_pane.dart';
+import 'analysis/training_analysis_pane.dart';
 
 /// The board with the game counter, the engine's lines and the move's note
 /// under it on the left; on the right the reading card: the panes of tabs
@@ -58,11 +60,11 @@ class WorkspaceView extends StatelessWidget {
   final ActionLayout? layout;
 
   /// Whether the edit strip is open. The shell owns it: the Actions menu
-  /// and Ctrl+E turn it, and the strip's Done turns it off.
+  /// turns it, and the strip's Done turns it off.
   final ValueNotifier<bool> editing;
 
   /// The words and focus of the move field under the board. The shell owns
-  /// them: its `/` focuses the field and a lesson types into it.
+  /// them: a lesson types into it.
   final MoveEntry moves;
 
   /// What the mode on screen and the shell add.
@@ -252,13 +254,10 @@ class _Tabbed extends StatelessWidget {
         session: workspace.session,
         moveMenu: (path) => [
           if (hooks.onAnnotate != null)
-            MenuItemButton(
-              onPressed: () {
-                workspace.session.cursor.goTo(path);
-                hooks.onAnnotate!();
-              },
-              child: const Text('Comment this move'),
-            ),
+            AppAction('Comment this move', () {
+              workspace.session.cursor.goTo(path);
+              hooks.onAnnotate!();
+            }, icon: AppIcons.comment),
           ...?hooks.moveMenu?.call(path),
         ],
         heading: hooks.header ? _heading() : null,

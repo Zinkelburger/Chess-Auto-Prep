@@ -4,14 +4,16 @@ import 'package:flutter/material.dart';
 import '../../chess/bughouse/hivemind.dart';
 import '../../chess/fen.dart';
 import '../../chess/bughouse/table.dart';
-import '../../ui/app_keys.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/progress_line.dart';
 import '../../ui/engine_switch.dart';
 import '../../ui/theme.dart';
-import '../../workspace/board_editor.dart';
+import '../../workspace/board/board_editor.dart';
 import 'board_moves.dart';
 import 'bughouse_lab.dart';
 import 'lab_engine.dart';
 import 'lab_lines.dart';
+import '../../ui/segments.dart';
 
 /// The column beside the boards: how many boards, who may sit, the engine
 /// switch with its score, then the moves: with one board its best moves and
@@ -66,7 +68,7 @@ class _BoardsSwitch extends StatelessWidget {
     spacing: Space.s,
     runSpacing: Space.s,
     children: [
-      SegmentedButton<LabBoards>(
+      Segments<LabBoards>(
         segments: const [
           ButtonSegment(
             value: LabBoards.one,
@@ -79,10 +81,8 @@ class _BoardsSwitch extends StatelessWidget {
             tooltip: 'Analyse both boards of the game',
           ),
         ],
-        selected: {lab.boards},
-        showSelectedIcon: false,
-        style: const ButtonStyle(visualDensity: VisualDensity.compact),
-        onSelectionChanged: (picked) => lab.showBoards(picked.single),
+        selected: lab.boards,
+        onChanged: (picked) => lab.showBoards(picked),
       ),
       Tooltip(
         message: lab.single
@@ -90,7 +90,7 @@ class _BoardsSwitch extends StatelessWidget {
             : 'Place, move or remove pieces on ${lab.focus.label.toLowerCase()}',
         child: OutlinedButton(
           onPressed: () => _edit(context),
-          child: const Text('Edit board'),
+          child: const Text('Edit position…'),
         ),
       ),
     ],
@@ -166,7 +166,7 @@ class _TimeChips extends StatelessWidget {
     padding: const EdgeInsets.only(top: Space.s),
     child: Align(
       alignment: Alignment.centerLeft,
-      child: SegmentedButton<ClockCase>(
+      child: Segments<ClockCase>(
         segments: [
           for (final clock in ClockCase.values)
             ButtonSegment(
@@ -175,10 +175,8 @@ class _TimeChips extends StatelessWidget {
               tooltip: _hint(clock),
             ),
         ],
-        selected: {lab.clock},
-        showSelectedIcon: false,
-        style: const ButtonStyle(visualDensity: VisualDensity.compact),
-        onSelectionChanged: (picked) => lab.setClock(picked.single),
+        selected: lab.clock,
+        onChanged: (picked) => lab.setClock(picked),
       ),
     ),
   );
@@ -233,7 +231,7 @@ class _EngineBar extends StatelessWidget {
           child: Row(
             children: [
               Tooltip(
-                message: AppKey.bughouseEngine.tip('Toggle engine'),
+                message: engine.on ? 'Turn engine off' : 'Turn engine on',
                 child: EngineSwitch(
                   value: engine.on,
                   onChanged: (_) => engine.toggle(),
@@ -258,14 +256,9 @@ class _EngineBar extends StatelessWidget {
             ],
           ),
         ),
-        SizedBox(
-          height: labThinkingHeight,
-          child: lines is LinesOn && lines.thinking
-              ? LinearProgressIndicator(
-                  minHeight: labThinkingHeight,
-                  value: lines.progress,
-                )
-              : null,
+        ProgressLine(
+          active: lines is LinesOn && lines.thinking,
+          value: lines is LinesOn ? lines.progress : null,
         ),
       ],
     );
@@ -283,21 +276,10 @@ class _ProblemLine extends StatelessWidget {
   final BughouseLab lab;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: labStatusHeight,
-    child: Align(
-      alignment: Alignment.centerLeft,
-      child: Text(
-        switch (lab.problem) {
-          final problem? => _refused(problem),
-          null => '',
-        },
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: Theme.of(context).colorScheme.error),
-      ),
-    ),
-  );
+  Widget build(BuildContext context) => ProblemLine(switch (lab.problem) {
+    final problem? => _refused(problem),
+    null => null,
+  });
 
   static String _refused(TableRefusal refusal) => switch (refusal) {
     DropRefused() => 'That drop is not legal.',

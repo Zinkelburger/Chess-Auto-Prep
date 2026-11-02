@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../chess/bughouse/table.dart';
 import '../../ui/theme.dart';
+import '../../ui/app_icons.dart';
 
 /// A player's hand as lila's crazyhouse pocket: five slots, each [square]
 /// wide, in a grey well. Pieces held show in full with their count; empty
@@ -166,7 +167,7 @@ class _HandStep extends StatelessWidget {
               ? 'One more ${role.name} for $colour'
               : 'One ${role.name} fewer for $colour',
           onPressed: onPressed,
-          icon: Icon(by > 0 ? Icons.add : Icons.remove),
+          icon: Icon(by > 0 ? AppIcons.increase : AppIcons.decrease),
           iconSize: size * 0.75,
           color: labHandStepInk,
           style: IconButton.styleFrom(

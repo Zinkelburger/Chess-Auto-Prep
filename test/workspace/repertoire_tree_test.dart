@@ -3,10 +3,10 @@ import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/workspace/chapter_commands.dart';
-import 'package:chess_auto_prep/workspace/engine_analysis.dart';
-import 'package:chess_auto_prep/workspace/repertoire_shelf.dart';
-import 'package:chess_auto_prep/workspace/repertoire_tree.dart';
+import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
+import 'package:chess_auto_prep/workspace/book/repertoire_shelf.dart';
+import 'package:chess_auto_prep/workspace/book/repertoire_tree.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 

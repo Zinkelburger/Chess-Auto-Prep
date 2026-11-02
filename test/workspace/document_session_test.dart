@@ -2,8 +2,8 @@ import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pv_text.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/workspace/document_session.dart';
-import 'package:chess_auto_prep/workspace/session_results.dart';
+import 'package:chess_auto_prep/workspace/document/document_session.dart';
+import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 

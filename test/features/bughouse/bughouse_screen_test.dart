@@ -9,7 +9,7 @@ import 'package:chess_auto_prep/features/bughouse/lab_lines.dart';
 import 'package:chess_auto_prep/features/bughouse/pocket.dart';
 import 'package:chess_auto_prep/ui/app_keys.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/board_view.dart';
+import 'package:chess_auto_prep/workspace/board/board_view.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart' show Role, Side, Square;
 import 'package:flutter/gestures.dart';
@@ -256,8 +256,8 @@ void main() {
       expect(lab.line.upto(BoardNumber.one), 1);
     });
 
-    testWidgets('the engine\'s choice is an arrow on its board, and Space '
-        'plays it there', (tester) async {
+    testWidgets('the engine\'s choice is an arrow on its board, and Play '
+        'best move plays it there', (tester) async {
       build();
       lab.showBoards(LabBoards.two);
       await pump(tester);
@@ -266,7 +266,7 @@ void main() {
       expect(arrows.last.engine.first.to, Square.f3);
       expect(arrows.last.engine.first.colour, engineBestArrow);
       lab.focusOn(BoardNumber.two);
-      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      engine.playBest(lab.focus);
       await tester.pumpAndSettle();
       expect(lab.line.of(BoardNumber.two).single.san, 'Nf3');
     });

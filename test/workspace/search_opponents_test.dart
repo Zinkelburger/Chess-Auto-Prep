@@ -5,11 +5,11 @@ import 'package:chess_auto_prep/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/chess/generation/sources.dart';
 import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
-import 'package:chess_auto_prep/workspace/engine_analysis.dart';
-import 'package:chess_auto_prep/workspace/engine_jobs.dart';
-import 'package:chess_auto_prep/workspace/fill_gaps.dart';
-import 'package:chess_auto_prep/workspace/fill_states.dart';
-import 'package:chess_auto_prep/workspace/search_opponents.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
+import 'package:chess_auto_prep/workspace/search/fill_gaps.dart';
+import 'package:chess_auto_prep/workspace/search/fill_states.dart';
+import 'package:chess_auto_prep/workspace/search/search_opponents.dart';
 import 'package:dartchess/dartchess.dart' show Position, Side;
 import 'package:flutter_test/flutter_test.dart';
 

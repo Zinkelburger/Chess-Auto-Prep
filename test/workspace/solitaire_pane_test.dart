@@ -1,10 +1,10 @@
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/ui/status_bar.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/engine_analysis.dart';
-import 'package:chess_auto_prep/workspace/move_tree_view.dart';
-import 'package:chess_auto_prep/workspace/solitaire.dart';
-import 'package:chess_auto_prep/workspace/solitaire_pane.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
+import 'package:chess_auto_prep/workspace/reading/move_tree_view.dart';
+import 'package:chess_auto_prep/workspace/review/solitaire.dart';
+import 'package:chess_auto_prep/workspace/review/solitaire_pane.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

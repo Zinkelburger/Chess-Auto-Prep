@@ -1,7 +1,7 @@
 import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/features/trainer/lesson_view.dart';
 import 'package:chess_auto_prep/features/trainer/training_outline.dart';
-import 'package:chess_auto_prep/workspace/training_analysis_pane.dart';
+import 'package:chess_auto_prep/workspace/analysis/training_analysis_pane.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -50,8 +50,8 @@ void main() {
       expect(w.session.isScratch, isTrue);
       expect(w.session.cursor.fen, fen);
       expect(find.byType(TrainingAnalysisPane), findsOneWidget);
-      expect(find.text('Return to training'), findsOneWidget);
-      await tester.tap(find.text('Return to training'));
+      expect(find.text('Resume'), findsOneWidget);
+      await tester.tap(find.text('Resume'));
       await tester.pumpAndSettle();
       expect(w.lineTrainer.lesson, same(lesson));
       expect(lesson.suspended, isFalse);

@@ -29,7 +29,7 @@ import 'package:chess_auto_prep/chess/pgn/repertoire_import.dart';
 import 'package:chess_auto_prep/chess/pgn/study_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
-import 'package:chess_auto_prep/workspace/document_projection.dart';
+import 'package:chess_auto_prep/workspace/document/document_projection.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 
 import '../props.dart';

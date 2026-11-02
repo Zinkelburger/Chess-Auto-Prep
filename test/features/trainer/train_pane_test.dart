@@ -8,7 +8,7 @@ import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/features/trainer/training_scope.dart';
 import 'package:chess_auto_prep/features/trainer/lesson_view.dart';
 import 'package:chess_auto_prep/features/trainer/train_pane.dart';
-import 'package:chess_auto_prep/workspace/chapter_commands.dart';
+import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
 import 'package:chess_auto_prep/chess/training/training_options.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
@@ -16,8 +16,8 @@ import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/engine_analysis.dart';
-import 'package:chess_auto_prep/workspace/move_field.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
+import 'package:chess_auto_prep/workspace/board/move_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -178,7 +178,7 @@ void main() {
     await pump(tester);
     trainer.learn();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Open in Builder'));
+    await tester.tap(find.text('Open in builder'));
     await tester.pumpAndSettle();
     expect(reads.single.ref, fixture.ref);
     expect(reads.single.sans, ['e4']);
@@ -203,7 +203,7 @@ void main() {
     expect(
       tester
           .widget<TextButton>(
-            find.widgetWithText(TextButton, 'Open in Builder'),
+            find.widgetWithText(TextButton, 'Open in builder'),
           )
           .onPressed,
       isNull,
@@ -329,7 +329,7 @@ void main() {
     expect(reads.single.sans, ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4']);
     await tester.tap(find.byTooltip('Actions').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Open in Builder'));
+    await tester.tap(find.text('Open in builder'));
     await tester.pumpAndSettle();
     expect(reads.last.place, ReadIn.builder);
   });

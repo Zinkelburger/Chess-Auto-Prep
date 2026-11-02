@@ -14,14 +14,16 @@ the board column and the reading card; `WorkspaceHooks` in
 navigation row in `nav_row.dart`), `BoardView` (`board_view.dart`), `MoveTreeView` (`move_tree_view.dart`),
 `MoveNote` (`move_note.dart`), `EngineAnalysis` / engine pane
 (`engine_analysis.dart`, `engine_pane.dart`, `engine_settings.dart`),
-`Explorer` (`explorer.dart`, `explorer_pane.dart`, `explorer_filters.dart`),
+`Explorer` (`explorer.dart`, `explorer_pane.dart`, `explorer_filters.dart`,
+and `explorer_rows.dart` for the game row and result bar Player openings
+shares),
 the explorer's Book source (`repertoire_tree.dart`, `tree_pane.dart`), pane
 tabs and layout (`workspace_tabs.dart`, `action_layout.dart`,
 `action_panes.dart`), `BoardEditor` (`board_editor.dart`), the move field
 (`move_field.dart`, resolver `lib/chess/typed_move.dart`). Window wiring:
 `lib/app/shell.dart`, `lib/app/window_columns.dart` (which columns are
 out and how wide), `lib/app/window_keys.dart` (the window's keys and mouse
-back/forward), `lib/app/window_actions.dart` (the Actions menu, palette and
+back/forward), `lib/app/window_actions.dart` (the Actions menu and
 settings), `lib/app/top_bar.dart`, `lib/app/mode_view.dart`
 (`ModeView`; each mode's view in its own file), `lib/app/save_held.dart`,
 `lib/app/board_doors.dart`, `lib/app/train_doors.dart`, `lib/app/job_door.dart`,
@@ -35,13 +37,13 @@ Top to bottom, left to right:
 
 - **Top bar** — `»` (only while the list column is hidden), Back / Forward
   (Alt+← / Alt+→; disabled when empty, the tooltip names the destination), the
-  mode menu, `Actions` (Ctrl+K opens it as a typeable palette); the window's
+  mode menu, `Actions`; the window's
   status sentence in the middle; the settings gear alone at the right end.
 - **Document tabs** — one per open file or analysis board, with close buttons
   and a `+` that opens an empty analysis board. Closing the last one leaves an
   empty analysis board. Each tab keeps its place, held edits and undo.
   Each tab belongs to a mode, named first (`Viewer · Classic games`): the mode
-  its document came up in, or the one a handoff (`Open in Builder`, a pasted
+  its document came up in, or the one a handoff (`Open in builder`, a pasted
   board, `Open study`) sent it to. Going to a mode never renames a tab and never
   brings another mode's document along: the mode's own latest tab comes back at
   its game, move and held edits, and a mode with none gets the empty analysis
@@ -49,8 +51,8 @@ Top to bottom, left to right:
   mode's tab goes to that mode; closing a tab brings up the next one of the same
   mode. The builder and the trainer share their documents (one repertoire
   list); modes with a screen of their own leave the board as it is.
-- **List column** (Ctrl+B hides it; `«` in its corner) — the mode's own list,
-  or `Positions`, the searches' finds (Ctrl+P, Actions ▸ Panels ▸ `Positions`,
+- **List column** (`«` in its corner hides it) — the mode's own list,
+  or `Positions`, the searches' finds (Actions ▸ Panels ▸ `Positions`,
   or the list button on the Expectimax bar).
 - **Board** — Lichess's chessground board: click-click or drag; only legal
   moves land; a pawn on the last rank waits for its piece. Coordinates are a
@@ -62,8 +64,10 @@ Top to bottom, left to right:
   `[%cal]`/`[%csl]` shapes of the comment on the move under the cursor (the
   introduction's at the start), except over a comment's line or while part of
   the game is hidden. The engine's threat is a red arrow.
-- **Under the board** — the move field (`Type a move`, `/` focuses it), the
-  game counter where a mode has one, the engine pane, and the move note: the
+- **Under the board** — the move field (named `Move` on its border, tooltip
+  `Type a move`) and the game counter where a mode has one, the move field's
+  feedback line, the engine pane (its room the same height on or off), and
+  the move note: the
   current move with its glyph and note (`14. Nf5!  Good move`), the game's
   introduction and first move (muted, clickable) at the start; fixed height, a
   long note scrolls; no card when there is nothing to say.
@@ -88,14 +92,14 @@ Top to bottom, left to right:
   each comment a paragraph under its move (laid out: paragraphs, headings,
   quotes, bare-FEN diagrams, inline moves that float a board on hover and play
   when they follow on), each variation an indented block after the move it
-  replaces. Glyphs follow the SAN. The editing strip opens under it with Ctrl+E,
-  or with `Edit` at the card's foot in the viewer and Study (see
+  replaces. Glyphs follow the SAN. The editing strip opens under it from Actions ▸
+  `Edit`, or with `Edit` at the card's foot in the viewer and Study (see
   [pgn-viewer](pgn-viewer.md) for `Read | Edit` and held edits).
 - **Explorer** — a source row `Book | Masters | Lichess | TWIC | This file |
   My games` (one typeable `Database` box when narrow), `Filters` at its end for
   the chosen source's chips (folded by default; Lichess `Speed` and `Rating`,
   defaults Blitz/Rapid/Classical and 2000/2200/2500; TWIC `Classical OTB only`
-  and `Download more`; none for Masters). One line names the board's opening
+  and `Download TWIC…`; none for Masters). One line names the board's opening
   (`C60 Ruy Lopez`, from the bundled lichess book by position; it keeps the
   last named one and is blank, same height, before the first). The table:
   `Move` (ticked when the chapter plays it), `Games` (count and share, `<1%`),
@@ -141,7 +145,7 @@ main line`, `Delete from here` (no confirmation; Ctrl+Z restores), `Copy line
 PGN`, `Copy FEN`, plus the mode's entries (`Comment this move` and `Add line
 to study…` in the viewer and Study, the quiz markers in Study).
 
-**Edit a note or glyph** — Ctrl+E, Actions ▸ `Edit`, or `Edit` at the card's
+**Edit a note or glyph** — Actions ▸ `Edit`, or `Edit` at the card's
 foot in the viewer and Study opens the strip; in the builder also the pencil on
 the move note. The comment field edits the prose only; machine
 tokens are re-attached after the prose on save, clearing the prose keeps them,
@@ -156,7 +160,7 @@ goes; another colour recolours it. A left click on the board takes the
 comment's shapes out where edits are taken, else hides them until the
 position changes; the threat stays.
 
-**Engine** — the switch, E or Actions ▸ `Engine on` → starts or retries a
+**Engine** — the switch or Actions ▸ `Engine on` → starts or retries a
 failed start; the engine is off at every launch. Changing cores or memory
 restarts it; lines apply to the next search. Show threat (setting
 `engineThreat`, off by default) runs a depth-12 search of the turn-passed
@@ -172,9 +176,9 @@ opened in the PGN Viewer at the ply on the board; a `This file` game is put on
 the board in place. Problems, each with one way out: `Could not reach the
 Lichess database — it needs a connection.` (`… TWIC works offline.` when it is
 there) with `Try again`; `Lichess is rate-limiting requests.`; `Log in to
-Lichess to use the opening explorer. …` with `Log in to Lichess` and `Use
+Lichess to use the opening explorer. …` with `Log in to Lichess…` and `Use
 TWIC`; `Download the TWIC database to explore master games offline.` with
-`Download TWIC database` (see [databases](databases.md)); `The classical
+`Download TWIC…` (see [databases](databases.md)); `The classical
 index for this database is not built. Turn off Classical OTB only to see all
 games.`
 
@@ -184,17 +188,17 @@ undo work as on a chapter; the strip says `Not saved`. The document tab `+`
 opens an empty one. Ctrl+V (`Paste PGN or FEN`) puts a pasted PGN (first
 game, variations and comments kept), bare moves or a FEN on a new analysis
 board from any mode, except that in the builder and trainer a PGN becomes a
-repertoire (Actions ▸ `Paste PGN as repertoire`); Ctrl+Shift+V takes a FEN
-only. A FEN may be quoted, a `[FEN "…"]` tag or cut short; one that cannot be
+repertoire (Actions ▸ `Paste PGN as repertoire`; there Actions ▸ `Paste FEN`
+takes a FEN only). A FEN may be quoted, a `[FEN "…"]` tag or cut short; one that cannot be
 played says why (`Not a playable FEN. …`); `Nothing to paste: copy a PGN or
-FEN first.` Ctrl+N / `Open Analysis tab` opens the `Analysis` tab: a scratch
+FEN first.` Ctrl+N / `New analysis tab` opens the `Analysis` tab: a scratch
 copy of the whole current game at the cursor, facing the same way, that never
 writes the source. While that tab is up, paste and set-up fill it instead. In
-the builder `Save to repertoire…` and in Study `Save to study…` ask where,
+the builder `Save to repertoire…` and in Study `Add game to study…` ask where,
 then a chapter name. Closing the window forgets analysis boards.
 
-**Set up position** — Ctrl+Shift+E or Actions ▸ `Set up position…` → the
-board editor (`Set up a position`) on the board's position, same way up:
+**Edit position** — Actions ▸ `Edit position…` → the
+board editor (`Edit position`) on the board's position, same way up:
 spare strips `[pointer] K Q R B N P [bin]` above and below (swap with the
 flip); a spare dragged lands, clicked becomes a brush that paints every square
 pressed or stroked; right-click empties a square. Beside it: side to move,
@@ -216,10 +220,10 @@ layout` restores the mode's default.
 Every binding is an `AppKey`: handlers bind it, tooltips name it and Settings ▸
 Shortcuts lists it. Board: ←/→, Home/End (also PgUp/PgDn), Enter (into the
 variation at the cursor), Esc (out of the variation, then the edit strip
-where there is no `Read | Edit`, then a sitting), F flip, E engine, Ctrl+E edit, Ctrl+Z undo, Ctrl+S save, `/` move
-field, Ctrl+Tab / Ctrl+Shift+Tab / Ctrl+W tabs. Window: Ctrl+K Actions, Ctrl+,
-settings, Ctrl+B list, Ctrl+P Positions, Ctrl+O open, Ctrl+V / Ctrl+Shift+V
-paste, Ctrl+N Analysis tab, Ctrl+Shift+E set up, Ctrl+G search from the board,
+where there is no `Read | Edit`, then a sitting), F flip, Ctrl+Z undo, Ctrl+S
+save, Ctrl+Tab / Ctrl+Shift+Tab / Ctrl+W tabs, Ctrl+Enter finish a comment,
+Shift+F10 or the Menu key for a move's or tab's menu. Window: Ctrl+,
+settings, Ctrl+O open, Ctrl+V paste (PGN or FEN), Ctrl+N Analysis tab,
 F11 full screen, Alt+← / Alt+→ history, Space play / show solution, ↑/↓ next or
 previous game or puzzle. Trainer: Space, ↓, Esc, 1–4. Board-square keyboard
 focus: arrows, Enter/Space, Esc. A text field with focus keeps its keys.

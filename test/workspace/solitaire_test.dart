@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
-import 'package:chess_auto_prep/workspace/engine_analysis.dart';
-import 'package:chess_auto_prep/workspace/solitaire.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
+import 'package:chess_auto_prep/workspace/review/solitaire.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';

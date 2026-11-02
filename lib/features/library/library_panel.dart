@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../../storage/chapter_files.dart';
-import '../../ui/name_dialog.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'deleted_chapters_view.dart';
 import 'library.dart';
-import 'library_messages.dart';
+import 'library_actions.dart';
 import 'library_state.dart';
 import 'repertoire_tile.dart';
 import '../../ui/list_message.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
+import '../../ui/pane_header.dart';
 
 /// The repertoires, searchable, each opening to its chapters. Tapping a
 /// chapter asks the host to open it in the workspace.
@@ -64,26 +66,8 @@ class _LibraryPanelState extends State<LibraryPanel> {
     });
   }
 
-  /// One question, the name. Which side it is for is asked when its
-  /// chapter opens, which is now: the new repertoire opens at once.
-  Future<void> _newRepertoire() async {
-    final name = await showNameDialog(
-      context,
-      title: 'Create repertoire',
-      label: 'Repertoire name',
-      confirm: 'Create',
-    );
-    if (name == null || !mounted) return;
-    final result = await announce(
-      context,
-      widget.library.createRepertoire(name),
-      thing: 'repertoire',
-      name: name,
-      failed: 'Could not create the repertoire.',
-    );
-    if (!mounted || result is! LibraryAdded) return;
-    widget.onOpen(result.first);
-  }
+  Future<void> _newRepertoire() =>
+      newRepertoire(context, widget.library, widget.onOpen);
 
   @override
   Widget build(BuildContext context) {
@@ -101,7 +85,12 @@ class _LibraryPanelState extends State<LibraryPanel> {
         children: [
           _Toolbar(
             busy: widget.library.busy,
-            onCreate: _newRepertoire,
+            // The empty list has its own button; one is enough.
+            onCreate: switch (widget.library.state) {
+              LibraryLoaded() when widget.library.repertoires.isNotEmpty =>
+                _newRepertoire,
+              _ => null,
+            },
             search: _search,
             onSearch: widget.library.search,
             trailing: widget.trailing,
@@ -116,9 +105,12 @@ class _LibraryPanelState extends State<LibraryPanel> {
   Widget _body(BuildContext context) {
     final library = widget.library;
     return switch (library.state) {
-      LibraryLoading() => const Center(child: CircularProgressIndicator()),
+      LibraryLoading() => const ListMessage.loading(
+        'Reading repertoires…',
+        inset: Space.m,
+      ),
       LibraryLoadFailed() => ListMessage(
-        'Could not load repertoires. Please try again.',
+        'Could not read your repertoires.',
         action: OutlinedButton(
           onPressed: library.refresh,
           child: const Text('Try again'),
@@ -141,18 +133,13 @@ class _LibraryPanelState extends State<LibraryPanel> {
 
   Widget _listed(Library library) {
     if (library.repertoires.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(Space.l),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('No repertoires yet.'),
-            const SizedBox(height: Space.m),
-            FilledButton(
-              onPressed: library.busy ? null : _newRepertoire,
-              child: const Text('New repertoire'),
-            ),
-          ],
+      return ListMessage(
+        'No repertoires yet.',
+        inset: Space.m,
+        action: FilledButton.icon(
+          onPressed: library.busy ? null : _newRepertoire,
+          icon: const Icon(AppIcons.add, size: IconSize.action),
+          label: const Text('New repertoire…'),
         ),
       );
     }
@@ -188,55 +175,39 @@ class _Toolbar extends StatelessWidget {
   });
 
   final bool busy;
-  final VoidCallback onCreate;
+
+  /// Null while the list is empty or not read: the header's + then waits.
+  final VoidCallback? onCreate;
   final TextEditingController search;
   final ValueChanged<String> onSearch;
   final Widget? trailing;
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, Space.s),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              // Room for the buttons first: a narrow pane cuts the label,
-              // which otherwise has all the row leaves it.
-              Expanded(
-                child: Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        'Your repertoires',
-                        style: Theme.of(context).textTheme.labelSmall,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: Space.xs),
-                    IconButton(
-                      icon: const Icon(Icons.add, size: IconSize.action),
-                      tooltip: 'New repertoire',
-                      onPressed: busy ? null : onCreate,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ],
-                ),
-              ),
-              ?trailing,
-            ],
-          ),
-          const SizedBox(height: Space.xs),
-          SearchField(
-            controller: search,
-            hint: 'Search repertoires',
-            onChanged: onSearch,
-          ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      PaneHeader(
+        'Your repertoires',
+        actions: [
+          if (onCreate case final create?)
+            ToolButton(
+              icon: AppIcons.add,
+              tooltip: 'New repertoire…',
+              onPressed: busy ? null : create,
+            ),
         ],
+        trailing: trailing,
       ),
-    );
-  }
+      Padding(
+        padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.m, Space.s),
+        child: SearchField(
+          controller: search,
+          hint: 'Search repertoires',
+          onChanged: onSearch,
+        ),
+      ),
+    ],
+  );
 }
 
 /// The way to the deleted chapters, under the list where it is out of the
@@ -254,7 +225,7 @@ class _DeletedLink extends StatelessWidget {
         alignment: Alignment.centerLeft,
         child: TextButton.icon(
           onPressed: onPressed,
-          icon: const Icon(Icons.restore_from_trash, size: IconSize.action),
+          icon: const Icon(AppIcons.restore, size: IconSize.action),
           label: const Text('Deleted chapters'),
         ),
       ),

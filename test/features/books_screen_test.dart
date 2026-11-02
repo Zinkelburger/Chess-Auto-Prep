@@ -8,9 +8,9 @@ import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/book_chip.dart';
-import 'package:chess_auto_prep/workspace/books.dart';
-import 'package:chess_auto_prep/workspace/repertoire_catalog.dart';
+import 'package:chess_auto_prep/workspace/book/book_chip.dart';
+import 'package:chess_auto_prep/workspace/book/books.dart';
+import 'package:chess_auto_prep/workspace/book/repertoire_catalog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -90,7 +90,7 @@ void main() {
               find.byWidgetPredicate(
                 (widget) =>
                     widget is IconButton &&
-                    widget.tooltip == 'New opening book',
+                    widget.tooltip == 'New opening book…',
               ),
             )
             .onPressed,
@@ -98,8 +98,8 @@ void main() {
       );
       expect(
         tester
-            .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Use this book'),
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, 'Use this book'),
             )
             .onPressed,
         isNull,
@@ -122,7 +122,7 @@ void main() {
     'creation already confirmed in a dialog waits for reference save',
     (tester) async {
       await show(tester);
-      await tester.tap(find.byTooltip('New opening book'));
+      await tester.tap(find.byTooltip('New opening book…'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).last, 'Next event');
       final held = Completer<SaveResult>();

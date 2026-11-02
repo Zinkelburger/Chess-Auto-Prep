@@ -6,9 +6,9 @@ import '../../storage/document_ref.dart';
 import '../../storage/operation_id.dart';
 import '../../storage/pgn_document_store.dart' as store;
 import '../../storage/reference_change.dart';
-import '../../workspace/books.dart';
-import '../../workspace/document_saver.dart';
-import '../../workspace/document_session.dart';
+import '../../workspace/book/books.dart';
+import '../../workspace/document/document_saver.dart';
+import '../../workspace/document/document_session.dart';
 import 'library_state.dart';
 
 /// How a chapter file or a repertoire folder is moved or deleted on disk,

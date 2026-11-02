@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:chess_auto_prep/features/library/library_state.dart';
-import 'package:chess_auto_prep/workspace/document_saver.dart';
-import 'package:chess_auto_prep/workspace/document_session.dart';
+import 'package:chess_auto_prep/workspace/document/document_saver.dart';
+import 'package:chess_auto_prep/workspace/document/document_session.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/training_records.dart' as training;

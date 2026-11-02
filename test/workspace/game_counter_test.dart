@@ -1,5 +1,5 @@
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/game_counter.dart';
+import 'package:chess_auto_prep/workspace/board/game_counter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

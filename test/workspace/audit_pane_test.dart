@@ -8,12 +8,13 @@ import 'package:chess_auto_prep/storage/audit_store.dart';
 import 'package:chess_auto_prep/storage/eval_cache.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/audit_pane.dart';
-import 'package:chess_auto_prep/workspace/chapter_audit.dart';
-import 'package:chess_auto_prep/workspace/engine_analysis.dart';
-import 'package:chess_auto_prep/workspace/engine_jobs.dart';
-import 'package:chess_auto_prep/workspace/gap_hunt.dart';
-import 'package:chess_auto_prep/workspace/replies.dart';
+import 'package:chess_auto_prep/workspace/review/audit_pane.dart';
+import 'package:chess_auto_prep/workspace/review/chapter_audit.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
+import 'package:chess_auto_prep/workspace/book/gap_hunt.dart';
+import 'package:chess_auto_prep/workspace/book/replies.dart';
+import 'package:chess_auto_prep/ui/toggle_chip.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -105,7 +106,7 @@ void main() {
     await tester.pump();
     expect(fixture.session.cursor.fen, after('e2e4 c7c5'));
 
-    await tester.tap(find.byTooltip('Dismiss').last);
+    await tester.tap(find.byTooltip('Hide this finding').last);
     await tester.pump();
     expect(find.textContaining('Strong reply'), findsNothing);
     expect(find.text('1 dismissed'), findsOneWidget);
@@ -127,10 +128,9 @@ void main() {
     await pump(tester);
     await runAudit(tester);
     const warning =
-        'Dismissals could not be saved; they last only until you audit '
-        'again.';
+        'Could not save the dismissals; they last until you audit again.';
     expect(find.text(warning), findsNothing);
-    await tester.tap(find.byTooltip('Dismiss').last);
+    await tester.tap(find.byTooltip('Hide this finding').last);
     await tester.pump();
     expect(find.textContaining('Strong reply'), findsNothing);
     expect(find.text(warning), findsOneWidget);
@@ -143,7 +143,7 @@ void main() {
       RemoteQueue(MockClient((_) async => http.Response('', 503))),
     );
     await pump(tester);
-    await tester.tap(find.widgetWithText(FilterChip, 'ChessDB'));
+    await tester.tap(find.widgetWithText(ToggleChip, 'ChessDB'));
     await tester.pump();
     await runAudit(tester);
     expect((audit.state as AuditDone).complete, isFalse);

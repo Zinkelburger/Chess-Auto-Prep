@@ -9,8 +9,8 @@ import '../../chess/pgn/reading_place.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/viewer_places.dart';
-import '../../workspace/document_session.dart';
-import '../../workspace/file_filter.dart';
+import '../../workspace/document/document_session.dart';
+import '../../workspace/explorer/file_filter.dart';
 
 /// Reading metadata follows the immutable document. Latest snapshots coalesce
 /// per path; disposal stops capture, never the saves already accepted.

@@ -1,7 +1,7 @@
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/opening_index.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
-import 'package:chess_auto_prep/workspace/index_build.dart';
+import 'package:chess_auto_prep/workspace/explorer/index_build.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/big_chapter.dart';

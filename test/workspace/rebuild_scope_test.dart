@@ -8,7 +8,7 @@ import 'package:chess_auto_prep/features/library/chapter_outline.dart';
 import 'package:chess_auto_prep/features/library/outline_panel.dart';
 import 'package:chess_auto_prep/features/library/outline_rows.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/move_tree_view.dart';
+import 'package:chess_auto_prep/workspace/reading/move_tree_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

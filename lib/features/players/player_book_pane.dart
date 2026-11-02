@@ -4,6 +4,7 @@ import '../../chess/book/book_check.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
 import 'player_book.dart';
+import '../../ui/progress_line.dart';
 
 /// The My book tab: the player's games walked through the book in use for
 /// the other colour, and the places they left it — a reply the book does
@@ -53,7 +54,7 @@ class PlayerBookPane extends StatelessWidget {
           if (book.busy)
             const Padding(
               padding: EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, 0),
-              child: LinearProgressIndicator(minHeight: progressLineHeight),
+              child: ProgressLine(),
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -75,7 +76,7 @@ class PlayerBookPane extends StatelessWidget {
           Expanded(
             child: ListView.builder(
               itemCount: book.gaps.length,
-              itemExtent: puzzleRowHeight,
+              itemExtent: twoLineRowHeight,
               itemBuilder: (context, i) =>
                   _GapRow(book: book, gap: book.gaps[i], onOpen: onOpen),
             ),

@@ -9,11 +9,12 @@ import 'package:chess_auto_prep/storage/my_games_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/opening_names.dart';
-import 'package:chess_auto_prep/workspace/explorer.dart';
-import 'package:chess_auto_prep/workspace/explorer_pane.dart';
-import 'package:chess_auto_prep/workspace/file_filter.dart';
-import 'package:chess_auto_prep/workspace/local_games.dart';
+import 'package:chess_auto_prep/workspace/explorer/opening_names.dart';
+import 'package:chess_auto_prep/workspace/explorer/explorer.dart';
+import 'package:chess_auto_prep/workspace/explorer/explorer_pane.dart';
+import 'package:chess_auto_prep/workspace/explorer/explorer_rows.dart';
+import 'package:chess_auto_prep/workspace/explorer/file_filter.dart';
+import 'package:chess_auto_prep/workspace/explorer/local_games.dart';
 import 'package:chessground/chessground.dart' show StaticChessboard;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -26,8 +27,8 @@ import '../support/scripted_store.dart';
 import '../support/session_fixture.dart';
 import '../support/books_fixture.dart';
 import '../support/scripted_files.dart';
-import 'package:chess_auto_prep/workspace/repertoire_shelf.dart';
-import 'package:chess_auto_prep/workspace/repertoire_tree.dart';
+import 'package:chess_auto_prep/workspace/book/repertoire_shelf.dart';
+import 'package:chess_auto_prep/workspace/book/repertoire_tree.dart';
 
 const chapter = '''
 // Color: White
@@ -301,9 +302,9 @@ void main() {
           return true;
         },
       );
-      expect(find.text('Log in to Lichess'), findsOneWidget);
+      expect(find.text('Log in to Lichess…'), findsOneWidget);
       expect(find.text('Try again'), findsNothing);
-      await tester.tap(find.text('Log in to Lichess'));
+      await tester.tap(find.text('Log in to Lichess…'));
       await tester.pumpAndSettle();
       expect(logins, 1);
       expect(explorer.state, isA<ExplorerShown>());
@@ -325,7 +326,7 @@ void main() {
     );
     await tester.tap(find.text('TWIC'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Download TWIC database'));
+    await tester.tap(find.text('Download TWIC…'));
     await tester.pumpAndSettle();
     expect(downloads, 1);
     expect(explorer.state, isA<ExplorerShown>());

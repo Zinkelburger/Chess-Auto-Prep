@@ -1,8 +1,8 @@
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/repertoire_shelf.dart';
-import 'package:chess_auto_prep/workspace/repertoire_tree.dart';
-import 'package:chess_auto_prep/workspace/tree_pane.dart';
+import 'package:chess_auto_prep/workspace/book/repertoire_shelf.dart';
+import 'package:chess_auto_prep/workspace/book/repertoire_tree.dart';
+import 'package:chess_auto_prep/workspace/book/tree_pane.dart';
 import 'package:chessground/chessground.dart' show StaticChessboard;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';

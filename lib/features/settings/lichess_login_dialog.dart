@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../ui/listening_state.dart';
+import '../../ui/theme.dart';
 import 'lichess_account.dart';
 import 'setting_controls.dart';
 import 'setting_rows.dart';
@@ -59,7 +60,7 @@ class _LoginDialogState extends State<_LoginDialog>
     return AlertDialog(
       title: const Text('Log in to Lichess'),
       content: SizedBox(
-        width: 440,
+        width: dialogMedium,
         child: SettingRowView(
           row: SettingRow(
             'Lichess',

@@ -6,9 +6,9 @@ import 'package:chess_auto_prep/engines/engine.dart';
 import 'package:chess_auto_prep/engines/engine_line.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/workspace/document_saver.dart';
-import 'package:chess_auto_prep/workspace/document_session.dart';
-import 'package:chess_auto_prep/workspace/engine_analysis.dart';
+import 'package:chess_auto_prep/workspace/document/document_saver.dart';
+import 'package:chess_auto_prep/workspace/document/document_session.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 

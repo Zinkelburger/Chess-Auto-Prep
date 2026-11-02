@@ -35,14 +35,14 @@ void main() {
     expect(find.text('3 games'), findsOneWidget);
     expect(find.text('Player'), findsOneWidget, reason: 'one blank row');
     expect(find.text('contains'), findsOneWidget);
-    expect(find.text('Clear'), findsNothing);
-    expect(find.text('Export matching games…'), findsNothing);
+    expect(find.text('Clear filters'), findsNothing);
+    expect(find.text('Export games…'), findsNothing);
 
     await tester.enterText(find.widgetWithText(TextField, 'Value'), 'Carlsen');
     await tester.pumpAndSettle();
     expect(find.text('1 of 3 games'), findsOneWidget);
     expect(fixture.viewer.visible, hasLength(1));
-    expect(find.text('Export matching games…'), findsOneWidget);
+    expect(find.text('Export games…'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Remove this rule'));
     await tester.pumpAndSettle();

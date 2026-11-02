@@ -34,7 +34,7 @@ under `test/`. What each mode does, and the owner's decisions about it, is in
   A pushed task branch alone is not completion: report when it is visible on main.
   Integration then deletes the task worktree and branch (local and origin);
   pass `--keep` only when more work in that worktree is planned.
-- `origin/backup/local-main` is the automatic development backup.
+- `origin/dev` is the automatic development backup of local `main`.
   `origin/main` is the published version: update it only when the user asks to
   publish/release. Never use a plain `git push` from local main.
 
@@ -73,8 +73,9 @@ under `test/`. What each mode does, and the owner's decisions about it, is in
 - Before stopping, waiting for later or reporting completion, commit all
   intended files and push. Push checkpoint commits during long tasks.
 - Keep useful local commits/checkpoints; do not rewrite shared local main to
-  tidy history. Squash the development batch in a separate publication worktree
-  when requested. Release/version changes stay a separate commit.
+  tidy history. Every publish is squashed: build it in a separate publication
+  worktree, never by pushing local main's commits to `origin/main`.
+  Release/version changes stay a separate commit.
 - Before handing off, run `python3 scripts/agent_worktree.py --verify .`.
   It must confirm a clean tree and the exact HEAD on the remote. Report the
   branch, commit SHA, checks (including failures/skips) and branch dependencies.

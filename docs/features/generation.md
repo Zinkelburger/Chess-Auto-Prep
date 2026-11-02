@@ -6,12 +6,13 @@ runs it, reads the values as the board moves, and, when they want lines, has
 the best of them written into a draft chapter beside theirs. Every run also
 feeds the Positions list (traps, only moves, practical choices).
 
-Code: `lib/workspace/fill_gaps.dart` (`FillGaps`, the one run at a time),
-`search_pane.dart`, `search_settings.dart`, `search_table.dart`,
+Code: `lib/workspace/search/fill_gaps.dart` (`FillGaps`, the one run at a time),
+`search_pane.dart` (with its `search_run_bar.dart`, `search_status.dart`
+and `search_results.dart`), `search_settings.dart`, `search_table.dart`,
 `fill_states.dart`, `fill_lines.dart` (a run's draft lines),
 `search_opponents.dart`, `generated_draft.dart`,
 `finds.dart`, `finds_panel.dart`, `engine_jobs.dart`; `lib/app/search_door.dart`
-(Ctrl+G) and `lib/app/trap_training.dart`; the pure core in
+and `lib/app/trap_training.dart`; the pure core in
 `lib/chess/generation/` (`search.dart`, `mainline_book.dart`, `finds.dart`,
 `traps.dart`, `draft_lines.dart`, `draft_chapter.dart`, `tree_wire_v4*.dart`);
 storage in `lib/storage/generation_trees.dart`, `finds_store.dart`,
@@ -55,7 +56,7 @@ search.
   is still in the document.
 - **Foot** — `Make lines` (`Write the best moves as lines in a draft chapter
   beside this one, traps marked ?`), then `8 lines in Main (draft)` with
-  `Open`. Save failures show `Retry saving tree` / `Discard tree save` and
+  `Open`. Save failures show `Retry save` / `Discard tree save` and
   `Discard draft save`.
 - **Gear** — `Method`: `Maia practical` | `ChessDB mainline`. For Maia
   practical: `Maia rating` (hidden when Maia is never asked), `Fall back to
@@ -66,18 +67,18 @@ search.
   depth` (default 14, 1–40), `Evaluation` (`Engine`, `ChessDB`, `Lichess`).
   While running: `Pause the search to change these.` The same settings are in
   Settings ▸ Expectimax (`Settings.expectimax` in `settings.json`).
-- **Positions list** — replaces the left list column (Ctrl+P, the bar's
-  Positions button, or `N found`; Ctrl+P again restores the list). `Top` |
+- **Positions list** — replaces the left list column (Actions ▸ Panels ▸
+  `Positions`, the bar's Positions button, or `N found`; `Back to the list`
+  restores the list). `Top` |
   `Often` | `New` ordering, a typeable `Kind` field (`Every kind`, `Trap`,
   `Only move`, `Their only move`, `Practical`), `This chapter` (on when a
   chapter is open). A row reads `4.d4 Bc5?  Trap` over `played 29%, loses 1.7
   · 1 in 3 · as White`; `⋯` offers `Train this line` (traps) and `Remove`.
-  Empty: `Nothing found yet. Run a search from the Expectimax tab; what it
-  points out is listed here.`
+  Empty: `What a search from the Expectimax tab finds is listed here.`
 
 ## Actions
 
-**Search** — `Expectimax`, Actions ▸ `Expectimax from here` or Ctrl+G
+**Search** — `Expectimax`, or Actions ▸ `Expectimax from here`
 (where the tab exists and a position is on the board and not hidden; nothing
 is written to the document) → searches the board for both sides on the one engine: for the
 side at the bottom and, with roles swapped, for the other; the second tree's

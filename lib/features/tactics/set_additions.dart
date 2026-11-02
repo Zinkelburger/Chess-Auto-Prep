@@ -13,8 +13,8 @@ import '../../diagnostics/log.dart';
 import '../../storage/edit_scope.dart';
 import '../../storage/pgn_document_store.dart';
 import '../../storage/pending_writes.dart';
-import '../../workspace/document_saver.dart' show DocumentSaver;
-import '../../workspace/document_session.dart';
+import '../../workspace/document/document_saver.dart' show DocumentSaver;
+import '../../workspace/document/document_session.dart';
 import 'tactics_set.dart';
 
 /// What adding a reviewed game's puzzles came to.

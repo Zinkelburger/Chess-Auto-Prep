@@ -7,6 +7,8 @@ import '../../ui/theme.dart';
 import 'app_updates.dart';
 import 'update_offer.dart';
 import 'update_rows.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/progress_line.dart';
 
 /// Puts the "is available" question over the app when a check the app made
 /// by itself finds a new version: Update now, When I close the app (or
@@ -157,7 +159,7 @@ class _UpdateDialogState extends State<_UpdateDialog>
               : 'Chess Auto Prep ${offer.version} is available',
         ),
         content: SizedBox(
-          width: 440,
+          width: dialogMedium,
           child: _updating ? _progress(context) : _question(),
         ),
         actions: _updating ? _progressActions() : _questionActions(),
@@ -181,7 +183,15 @@ class _UpdateDialogState extends State<_UpdateDialog>
     ],
   );
 
+  /// Later on the left, where Cancel sits, and focused: Enter and Escape
+  /// both leave the app as it is. Update now closes the app, so it is
+  /// pressed, never entered by accident.
   List<Widget> _questionActions() => [
+    TextButton(
+      autofocus: true,
+      onPressed: () => _answer(_Answer.later),
+      child: const Text('Later'),
+    ),
     TextButton(
       onPressed: () => _answer(_Answer.skip),
       child: const Text('Skip this version'),
@@ -191,32 +201,21 @@ class _UpdateDialogState extends State<_UpdateDialog>
         onPressed: () => _answer(_Answer.accept),
         child: const Text('When I close the app'),
       ),
+      FilledButton(onPressed: _updateNow, child: const Text('Update now')),
+    ] else
       FilledButton(
-        autofocus: true,
-        onPressed: _updateNow,
-        child: const Text('Update now'),
-      ),
-    ] else ...[
-      TextButton(
-        onPressed: () => _answer(_Answer.later),
-        child: const Text('Later'),
-      ),
-      FilledButton(
-        autofocus: true,
         onPressed: () => _answer(_Answer.accept),
         child: const Text('Download'),
       ),
-    ],
   ];
 
   Widget _progress(BuildContext context) {
     final status = widget.updates.status;
-    final failed = status is UpdateFailed;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        LinearProgressIndicator(
+        ProgressLine(
           value: switch (status) {
             UpdateDownloading(:final fraction) => fraction,
             UpdateFailed() => 0,
@@ -224,17 +223,14 @@ class _UpdateDialogState extends State<_UpdateDialog>
           },
         ),
         const SizedBox(height: Space.m),
-        Text(
-          switch (status) {
+        if (status case UpdateFailed(:final problem))
+          ProblemLine(problemText(problem))
+        else
+          Text(switch (status) {
             UpdateDownloading(:final fraction) =>
               'Downloading… ${(fraction * 100).floor()}%',
-            UpdateFailed(:final problem) => problemText(problem),
             _ => 'Starting the installer…',
-          },
-          style: failed
-              ? TextStyle(color: Theme.of(context).colorScheme.error)
-              : null,
-        ),
+          }),
       ],
     );
   }
@@ -245,7 +241,7 @@ class _UpdateDialogState extends State<_UpdateDialog>
         onPressed: () => _answer(_Answer.later),
         child: const Text('Close'),
       ),
-      FilledButton(
+      OutlinedButton(
         onPressed: () => unawaited(widget.updates.install()),
         child: const Text('Try again'),
       ),

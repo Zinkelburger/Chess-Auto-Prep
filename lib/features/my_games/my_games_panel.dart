@@ -6,10 +6,13 @@ import '../../chess/book/book_check.dart';
 import '../../chess/tactics/mistake_counts.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
-import '../../workspace/document_session.dart';
+import '../../workspace/document/document_session.dart';
 import 'book_words.dart';
 import 'game_book.dart';
 import '../../ui/list_message.dart';
+import '../../ui/list_row.dart';
+import '../../ui/segments.dart';
+import '../../ui/pane_header.dart';
 
 /// The two ways the column lists what the book says: game by game, or
 /// grouped by where the games left it, most often first.
@@ -95,7 +98,7 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _Toolbar(trailing: widget.trailing),
+          PaneHeader('My games', trailing: widget.trailing),
           widget.accounts,
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: Space.s),
@@ -106,16 +109,14 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
           ),
           Expanded(
             child: switch (widget.book.state) {
-              BookReading() when widget.book.problem != null => Column(
-                children: [
-                  const ListMessage('Could not compare your games.'),
-                  TextButton(
-                    onPressed: () => unawaited(widget.book.retry()),
-                    child: const Text('Try again'),
-                  ),
-                ],
+              BookReading() when widget.book.problem != null => ListMessage(
+                'Could not compare your games.',
+                action: OutlinedButton(
+                  onPressed: () => unawaited(widget.book.retry()),
+                  child: const Text('Try again'),
+                ),
               ),
-              BookReading() => const ListMessage(
+              BookReading() => const ListMessage.loading(
                 'Reading your games and repertoires…',
               ),
               BookNoAccounts() => const SizedBox.shrink(),
@@ -135,20 +136,14 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
     children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, 0),
-        child: SegmentedButton<_View>(
+        child: Segments<_View>(
           segments: const [
             ButtonSegment(value: _View.games, label: Text('Games')),
             ButtonSegment(value: _View.openings, label: Text('Openings')),
           ],
-          selected: {_view},
-          showSelectedIcon: false,
-          style: const ButtonStyle(
-            visualDensity: VisualDensity.compact,
-            padding: WidgetStatePropertyAll(
-              EdgeInsets.symmetric(horizontal: Space.xs),
-            ),
-          ),
-          onSelectionChanged: (picked) => _show(picked.single),
+          selected: _view,
+          narrow: true,
+          onChanged: (picked) => _show(picked),
         ),
       ),
       Expanded(
@@ -179,8 +174,8 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
             onChanged: widget.book.search,
           ),
         ),
-        _CountLine(
-          words: query.isEmpty
+        CountLine(
+          query.isEmpty
               ? '$all games, newest first'
               : '${shown.length} of $all games',
         ),
@@ -189,7 +184,7 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
               ? ListMessage('Nothing matches "$query".')
               : ListView.builder(
                   itemCount: shown.length,
-                  itemExtent: puzzleRowHeight,
+                  itemExtent: twoLineRowHeight,
                   itemBuilder: (context, at) => _GameRow(
                     checked: shown[at],
                     mistakes: widget.book.mistakesOf(shown[at]),
@@ -201,48 +196,6 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
       ],
     );
   }
-}
-
-/// The panel's name and the host's toggle in the corner.
-class _Toolbar extends StatelessWidget {
-  const _Toolbar({required this.trailing});
-
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.s, 0),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'My games',
-              style: Theme.of(context).textTheme.labelSmall,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          ?trailing,
-        ],
-      ),
-    );
-  }
-}
-
-class _CountLine extends StatelessWidget {
-  const _CountLine({required this.words});
-
-  final String words;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.m, Space.xs),
-    child: Text(
-      words,
-      style: Theme.of(context).textTheme.labelSmall,
-      overflow: TextOverflow.ellipsis,
-    ),
-  );
 }
 
 /// One game: who it was against, how it went and when on the first line,
@@ -268,39 +221,35 @@ class _GameRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final game = checked.game;
-    return Material(
-      color: open ? theme.colorScheme.surfaceContainerHighest : null,
-      child: InkWell(
-        onTap: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Space.m),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    return ListRow(
+      selected: open,
+      onTap: onOpen,
+      height: twoLineRowHeight,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      gameLine(game),
-                      style: theme.textTheme.bodySmall,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (mistakes case final counts?) ...[
-                    const SizedBox(width: Space.s),
-                    Tooltip(
-                      message: counts.words,
-                      child: Text(counts.glyphs, style: monoText),
-                    ),
-                  ],
-                ],
+              Expanded(
+                child: Text(
+                  gameLine(game),
+                  style: theme.textTheme.bodySmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              _Tag(checked: checked),
+              if (mistakes case final counts?) ...[
+                const SizedBox(width: Space.s),
+                Tooltip(
+                  message: counts.words,
+                  child: Text(counts.glyphs, style: monoText),
+                ),
+              ],
             ],
           ),
-        ),
+          _Tag(checked: checked),
+        ],
       ),
     );
   }
@@ -354,7 +303,7 @@ class _Openings extends StatelessWidget {
     for (final kind in Deviation.values) {
       final ways = checked.waysOf(kind);
       if (ways.isEmpty) continue;
-      items.add(_Heading('${deviationHeading(kind)} (${ways.length})'));
+      items.add(SectionLabel('${deviationHeading(kind)} (${ways.length})'));
       for (final way in ways) {
         items.add(_WayRow(way: way, onOpen: () => onOpen(way.games.first)));
       }
@@ -364,18 +313,6 @@ class _Openings extends StatelessWidget {
     }
     return ListView(children: items);
   }
-}
-
-class _Heading extends StatelessWidget {
-  const _Heading(this.words);
-
-  final String words;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(Space.m, Space.m, Space.m, Space.xs),
-    child: Text(words, style: Theme.of(context).textTheme.labelSmall),
-  );
 }
 
 /// One way games left the book: the move and how many games, then what the
@@ -391,43 +328,36 @@ class _WayRow extends StatelessWidget {
     final theme = Theme.of(context);
     final count = way.games.length;
     final (move, book) = wayLines(way.verdict, way.games.first.game);
-    return SizedBox(
-      height: puzzleRowHeight,
-      child: InkWell(
-        onTap: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Space.m),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    return ListRow(
+      onTap: onOpen,
+      height: twoLineRowHeight,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      move,
-                      style: monoText.copyWith(
-                        color: theme.colorScheme.onSurface,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: Space.s),
-                  Text(
-                    count == 1 ? '1 game' : '$count games',
-                    style: theme.textTheme.labelSmall,
-                  ),
-                ],
+              Expanded(
+                child: Text(
+                  move,
+                  style: monoText.copyWith(color: theme.colorScheme.onSurface),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
+              const SizedBox(width: Space.s),
               Text(
-                book,
+                count == 1 ? '1 game' : '$count games',
                 style: theme.textTheme.labelSmall,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
-        ),
+          Text(
+            book,
+            style: theme.textTheme.labelSmall,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }

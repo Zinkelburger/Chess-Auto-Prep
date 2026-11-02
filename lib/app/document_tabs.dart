@@ -6,9 +6,9 @@ import '../chess/fen.dart';
 import '../chess/pgn/game_tree.dart';
 import '../storage/chapter_files.dart';
 import '../ui/pane_tabs.dart';
-import '../workspace/document_history.dart';
-import '../workspace/document_session.dart';
-import '../workspace/draft_keeper.dart';
+import '../workspace/document/document_history.dart';
+import '../workspace/document/document_session.dart';
+import '../workspace/document/draft_keeper.dart';
 import 'workspace_requests.dart';
 import 'mode.dart';
 

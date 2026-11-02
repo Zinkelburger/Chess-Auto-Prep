@@ -8,7 +8,7 @@ import 'package:chess_auto_prep/storage/my_games_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:flutter/foundation.dart';
-import 'package:chess_auto_prep/workspace/repertoire_shelf.dart';
+import 'package:chess_auto_prep/workspace/book/repertoire_shelf.dart';
 
 import 'my_games_fixture.dart';
 import 'scripted_files.dart';

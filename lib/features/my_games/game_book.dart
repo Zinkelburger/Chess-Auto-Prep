@@ -15,10 +15,10 @@ import '../../storage/book_list.dart' show Book;
 import '../../storage/my_accounts.dart';
 import '../../storage/my_games_files.dart';
 import '../../storage/settings_store.dart';
-import '../../workspace/book_verdict_view.dart' show bookMoment;
-import '../../workspace/books.dart';
+import '../../workspace/book/book_verdict_view.dart' show bookMoment;
+import '../../workspace/book/books.dart';
 import '../../workspace/latest.dart';
-import '../../workspace/repertoire_shelf.dart';
+import '../../workspace/book/repertoire_shelf.dart';
 import 'book_words.dart' show matchesSearch;
 
 /// One of the user's games and what their books say about it.

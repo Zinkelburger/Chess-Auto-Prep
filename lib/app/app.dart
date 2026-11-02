@@ -13,9 +13,9 @@ import '../features/settings/setting_rows.dart';
 import '../features/settings/update_prompt.dart';
 import '../ui/move_notation.dart';
 import '../ui/theme.dart';
-import '../workspace/copy_name_dialog.dart';
-import '../workspace/document_session.dart';
-import '../workspace/session_results.dart';
+import '../workspace/document/save_copy.dart';
+import '../workspace/document/document_session.dart';
+import '../workspace/document/session_results.dart';
 import 'app_parts.dart';
 import 'environment.dart';
 import 'native_desktop.dart';
@@ -106,7 +106,7 @@ class _ChessAutoPrepState extends State<ChessAutoPrep> {
   Future<CopyResult?> _copyOnLeave(DocumentSession session) async {
     final context = _navigator.currentContext;
     if (context == null) return null;
-    final name = await showCopyNameDialog(context);
+    final name = await askCopyName(context);
     if (name == null) return null;
     return session.copyAside(name);
   }

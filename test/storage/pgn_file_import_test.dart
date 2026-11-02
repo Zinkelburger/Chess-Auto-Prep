@@ -7,8 +7,8 @@ import 'package:chess_auto_prep/storage/pgn_file_import.dart';
 import 'package:chess_auto_prep/storage/pgn_file_store.dart';
 import 'package:chess_auto_prep/storage/recovery_gate.dart';
 import 'package:chess_auto_prep/storage/study_files.dart';
-import 'package:chess_auto_prep/workspace/document_saver.dart';
-import 'package:chess_auto_prep/workspace/document_session.dart';
+import 'package:chess_auto_prep/workspace/document/document_saver.dart';
+import 'package:chess_auto_prep/workspace/document/document_session.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter_test/flutter_test.dart';
 

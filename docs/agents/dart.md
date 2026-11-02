@@ -10,7 +10,8 @@ with matching tests under `test/`.
 - `engines/`: supervised engine processes; pure Dart, without Flutter.
 - `net/`: remote services and login sockets.
 - `ui/`: shared controls, theme, shortcuts and presentation helpers.
-- `workspace/`: shared board, document session, engine/explorer and document tools.
+- `workspace/`: the shared workspace, grouped into `document/`, `board/`, `reading/`,
+  `analysis/`, `review/`, `explorer/`, `book/` and `search/`.
 - `features/`: mode owners and panels. One feature never imports another.
 - `app/`: composition, cross-mode wiring, navigation, lifecycle and shutdown.
 - `diagnostics/`: logging; `debug/`: opt-in driver and packaged-app checks.

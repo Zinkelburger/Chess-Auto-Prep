@@ -5,10 +5,12 @@ import '../../chess/explorer_answer.dart';
 import '../../chess/pv_text.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
-import '../../workspace/document_session.dart';
-import '../../workspace/explorer_pane.dart' show ResultBar;
+import '../../workspace/document/document_session.dart';
+import '../../workspace/explorer/explorer_rows.dart';
 import 'player_analysis.dart';
 import '../../ui/list_message.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/pane_header.dart';
 
 /// The Player openings tab: what the chosen player's games did from the
 /// position on the board, as the Explorer tab draws a database — a row per
@@ -68,9 +70,10 @@ class PlayerTreePane extends StatelessWidget {
           if (onSave != null && session.cursor.value.indexes.isNotEmpty)
             Align(
               alignment: Alignment.centerLeft,
-              child: TextButton(
+              child: TextButton.icon(
                 onPressed: onSave,
-                child: const Text('Save line to prep study'),
+                icon: const Icon(AppIcons.add, size: IconSize.action),
+                label: const Text('Add line to prep study'),
               ),
             ),
           const _TableHeader(),
@@ -84,9 +87,9 @@ class PlayerTreePane extends StatelessWidget {
               total: total,
               onTap: () => session.playMove(move.uci),
             ),
-          const _Heading('Games'),
+          const SectionLabel('Games'),
           for (final game in answer.games)
-            _GameRow(
+            ExplorerGameRow(
               game: game,
               onTap: () {
                 final index = int.tryParse(game.id);
@@ -115,9 +118,10 @@ class PlayerTreePane extends StatelessWidget {
                 child: const Text('Go to the first move'),
               ),
               if (onSave != null && session.cursor.value.indexes.isNotEmpty)
-                TextButton(
+                TextButton.icon(
                   onPressed: onSave,
-                  child: const Text('Save line to prep study'),
+                  icon: const Icon(AppIcons.add, size: IconSize.action),
+                  label: const Text('Add line to prep study'),
                 ),
             ],
           ),
@@ -214,68 +218,6 @@ class _MoveRow extends StatelessWidget {
                     black: move.black,
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(width: Space.m),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Heading extends StatelessWidget {
-  const _Heading(this.words);
-
-  final String words;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(Space.m, Space.l, Space.m, Space.xs),
-    child: Text(words, style: Theme.of(context).textTheme.labelSmall),
-  );
-}
-
-/// One game that reached the position: the players, how it ended and when.
-class _GameRow extends StatelessWidget {
-  const _GameRow({required this.game, required this.onTap});
-
-  final ExplorerGame game;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final muted = theme.textTheme.bodySmall;
-    return InkWell(
-      onTap: onTap,
-      child: SizedBox(
-        height: listRowHeight,
-        child: Row(
-          children: [
-            const SizedBox(width: Space.m),
-            Expanded(
-              child: Text(
-                '${game.white} – ${game.black}',
-                style: muted?.copyWith(color: theme.colorScheme.onSurface),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: Space.m),
-            Text(
-              game.result,
-              style: monoText.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(width: Space.m),
-            SizedBox(
-              width: explorerGamesWidth / 2,
-              child: Text(
-                '${game.year ?? ''}',
-                style: muted,
-                textAlign: TextAlign.right,
               ),
             ),
             const SizedBox(width: Space.m),

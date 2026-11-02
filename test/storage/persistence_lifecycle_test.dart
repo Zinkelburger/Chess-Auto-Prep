@@ -18,7 +18,7 @@ import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
-import 'package:chess_auto_prep/workspace/books.dart';
+import 'package:chess_auto_prep/workspace/book/books.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

@@ -1,6 +1,6 @@
 import '../../chess/book/book_check.dart';
 import '../../chess/book/played_game.dart';
-import '../../workspace/book_verdict_view.dart';
+import '../../workspace/book/book_verdict_view.dart';
 import 'game_book.dart';
 
 /// What the screen says about a checked game, in one place, so the list and

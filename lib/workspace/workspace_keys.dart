@@ -5,17 +5,14 @@ import 'package:flutter/services.dart';
 
 import '../ui/app_keys.dart';
 import '../ui/pane_tabs.dart';
-import 'document_session.dart';
-import 'engine_analysis.dart';
-import 'move_field.dart';
+import 'document/document_session.dart';
 import '../ui/screen_keys.dart';
 
 /// The keys of the workspace, wherever the focus is under [child]: the line
-/// (← → Home End PgUp PgDn), the games of the file (↑ ↓), the board (F), the
-/// engine (E), the edit strip (Ctrl+E), the last edit (Ctrl+Z), the card's
-/// tabs (Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+W), the move field under the
-/// board (/), and the variations (Enter into the one at the cursor, Esc
-/// back out), plus whatever the shell adds in [extra] and [leave] for the
+/// (← → Home End PgUp PgDn), the games of the file (↑ ↓), the board (F),
+/// the last edit (Ctrl+Z), the card's tabs (Ctrl+Tab, Ctrl+Shift+Tab,
+/// Ctrl+W) and the variations (Enter into the one at the cursor, Esc back
+/// out), plus whatever the shell adds in [extra] and [leave] for the
 /// window itself.
 ///
 /// It encloses every column that works on the document, not the board
@@ -26,10 +23,8 @@ class WorkspaceKeys extends StatefulWidget {
   const WorkspaceKeys({
     super.key,
     required this.session,
-    required this.analysis,
     required this.editing,
     required this.tabs,
-    required this.moves,
     this.extra = const {},
     this.leave = _nothingToLeave,
     this.save,
@@ -38,15 +33,11 @@ class WorkspaceKeys extends StatefulWidget {
   });
 
   final DocumentSession session;
-  final EngineAnalysis analysis;
   final ValueNotifier<bool> editing;
   final PaneTabs<Object> tabs;
 
-  /// The move field's focus, which `/` puts the keys in.
-  final MoveEntry moves;
-
-  /// The window's own keys, which the shell binds: the list pane, the
-  /// actions, opening a file.
+  /// The window's own keys, which the shell binds: the settings, opening a
+  /// file, the clipboard.
   final Map<ShortcutActivator, VoidCallback> extra;
 
   /// What Esc leaves once the workspace has nothing left to leave: the
@@ -91,26 +82,6 @@ class _WorkspaceKeysState extends State<WorkspaceKeys> {
 
   void _undo() => unawaited(_session.undo());
 
-  /// E turns the engine off at any time, and on only while the whole game
-  /// is on view: it would read a hidden puzzle answer out.
-  void _engine() {
-    final analysis = widget.analysis;
-    if (analysis.enabled) return unawaited(analysis.disable());
-    if (_session.shownTo == null) unawaited(analysis.enable());
-  }
-
-  /// Ctrl+E closes the edit strip at any time, and opens it only while the
-  /// whole game is on view: its note field would show what a hidden puzzle
-  /// answer's note says.
-  void _edit() {
-    final editing = widget.editing;
-    if (editing.value) {
-      editing.value = false;
-    } else if (_session.shownTo == null) {
-      editing.value = true;
-    }
-  }
-
   /// Esc leaves the innermost thing the user is in: a comment's line on
   /// the board, the variation, then the edit strip, then whatever the
   /// window adds.
@@ -137,13 +108,10 @@ class _WorkspaceKeysState extends State<WorkspaceKeys> {
       ...AppKey.previousGame.bind(_session.previousGame),
       ...AppKey.nextGame.bind(_session.nextGame),
       ...AppKey.flip.bind(_session.flip),
-      ...AppKey.engine.bind(_engine),
-      ...AppKey.edit.bind(_edit),
       ...AppKey.undo.bind(_undo),
       ...AppKey.nextTab.bind(tabs.next),
       ...AppKey.previousTab.bind(tabs.previous),
       ...AppKey.closeTab.bind(tabs.closeCurrent),
-      ...AppKey.typeMove.bind(widget.moves.focus.requestFocus),
       ...widget.extra,
     };
   }

@@ -8,9 +8,9 @@ import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart'
     show Conflict, Opened, RestoreRefused;
-import 'package:chess_auto_prep/workspace/document_saver.dart';
-import 'package:chess_auto_prep/workspace/document_session.dart';
-import 'package:chess_auto_prep/workspace/session_results.dart';
+import 'package:chess_auto_prep/workspace/document/document_saver.dart';
+import 'package:chess_auto_prep/workspace/document/document_session.dart';
+import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 

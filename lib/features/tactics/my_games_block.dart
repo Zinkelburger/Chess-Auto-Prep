@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 
 import '../../chess/tactics/game_ids.dart';
 import '../../storage/my_accounts.dart';
+import '../../ui/form_dialog.dart';
 import '../../ui/theme.dart';
 import '../../ui/toggle_chip.dart';
 import 'my_games.dart';
 import 'my_games_words.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/problem_line.dart';
 
 /// The top of the Tactics column: whose games these are, the one button
 /// that fetches and reviews them, and one line saying where that stands.
@@ -37,13 +40,7 @@ class MyGamesBlock extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (games.accountProblem case final problem?)
-              Text(
-                problem,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.error,
-                ),
-              ),
+            if (games.accountProblem case final problem?) ProblemLine(problem),
             games.accounts.isEmpty ? _setUp(context) : _ready(context),
           ],
         ),
@@ -61,12 +58,16 @@ class MyGamesBlock extends StatelessWidget {
         style: Theme.of(context).textTheme.bodySmall,
       ),
       const SizedBox(height: Space.s),
-      _action(
-        primary: primary,
-        onPressed: games.savingAccounts
-            ? null
-            : () => unawaited(editAccounts(context, games)),
-        label: 'Add accounts',
+      // As wide as its words, as every list's one button is.
+      Align(
+        alignment: Alignment.centerLeft,
+        child: _action(
+          primary: primary,
+          onPressed: games.savingAccounts
+              ? null
+              : () => unawaited(editAccounts(context, games)),
+          label: 'Add accounts…',
+        ),
       ),
       const SizedBox(height: Space.s),
       const Divider(height: 1),
@@ -190,18 +191,18 @@ class _Transport extends StatelessWidget {
     final (label, icon, tip) = games.running
         ? (
             'Pause',
-            Icons.pause,
+            AppIcons.pause,
             'Stop after the game being looked at; press again to carry on',
           )
         : games.queued > 0
         ? (
             'Resume',
-            Icons.play_arrow,
+            AppIcons.run,
             'Carry on with the ${games.queued} games still to look at',
           )
         : (
             'Get games',
-            Icons.download,
+            AppIcons.download,
             'Download your new games on each account and turn your '
                 'mistakes in the newest $reviewWindow into puzzles',
           );
@@ -297,33 +298,25 @@ class _AccountsDialogState extends State<_AccountsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('My accounts'),
-      content: SizedBox(
-        width: nameDialogWidth,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _field(_lichess, 'Lichess username', true),
-            const SizedBox(height: Space.m),
-            _field(_chesscom, 'Chess.com username', false),
-            const SizedBox(height: Space.m),
-            Text(
-              'Only your username: your games are public. Leave one blank if '
-              'you do not play there.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
+    return FormDialog(
+      title: 'My accounts',
+      confirm: 'Save',
+      onConfirm: _save,
+      body: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _field(_lichess, 'Lichess username', true),
+          const SizedBox(height: Space.m),
+          _field(_chesscom, 'Chess.com username', false),
+          const SizedBox(height: Space.m),
+          Text(
+            'Only your username: your games are public. Leave one blank if '
+            'you do not play there.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(onPressed: _save, child: const Text('Save')),
-      ],
     );
   }
 }

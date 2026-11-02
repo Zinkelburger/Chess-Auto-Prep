@@ -42,9 +42,20 @@ const outlineRootText = TextStyle(
   fontSize: 12,
 );
 
-/// How wide a dialog that asks for one line of text is. Wide enough for a
-/// long chapter name, narrow enough not to fill the window.
-const nameDialogWidth = 360.0;
+/// The three widths a dialog comes in. Narrow asks for a name or a few
+/// values: wide enough for a long chapter name, narrow enough not to fill
+/// the window. Medium holds a form of several fields or a short list.
+/// Wide puts a list beside what it shows, or a long form of rows.
+const dialogNarrow = 360.0;
+const dialogMedium = 480.0;
+const dialogWide = 640.0;
+
+/// How tall a dialog is that shows a list with room to scroll, such as a
+/// file's earlier versions or the players read from pasted text.
+const dialogListHeight = 420.0;
+
+/// The list down the side of a wide dialog, beside what its row shows.
+const dialogSideListWidth = 220.0;
 
 /// Room for action labels with shortcuts in a separate right-hand gutter.
 const actionMenuWidth = 260.0;
@@ -129,10 +140,21 @@ const proseMaxWidth = 640.0;
 /// tokens, little enough that a line still reads as a line.
 const moveTokenPadding = EdgeInsets.symmetric(horizontal: 4, vertical: 1);
 
-/// The corners of a move's tint, under the pointer or for the move shown,
-/// and how strong the pointer's tint is.
+/// The corners of a move's tint, under the pointer or for the move shown.
 const moveTokenRadius = BorderRadius.all(Radius.circular(3));
-const moveHoverAlpha = 0.1;
+
+/// The accent seen through, in three strengths: under the pointer (a move
+/// hovered, a row dragged lines would land on, a focused tab), one of
+/// several picked (lines picked with Ctrl or Shift, a switch that is on)
+/// and the move at the cursor. A selected row is not tinted: it is filled in
+/// Selection Grey ([ColorScheme.secondaryContainer]).
+final hoverTint = _accent.withValues(alpha: 0.1);
+final selectedTint = _accent.withValues(alpha: 0.25);
+final cursorTint = _accent.withValues(alpha: 0.35);
+
+/// The border of the pane the keys go to when there are several: a
+/// brighter grey than the others', not a colour.
+final activePaneBorder = _muted.withValues(alpha: 0.55);
 
 /// The reading column is a card: its corners, and the room between its
 /// edge and the words.
@@ -159,6 +181,8 @@ const navRowHeight = 36.0;
 /// nowhere larger.
 const engineBarHeight = 40.0;
 const engineSwitchHeight = 18.0;
+
+/// One engine line, chess or bughouse.
 const engineRowHeight = 28.0;
 const engineScoreWidth = 54.0;
 
@@ -187,10 +211,6 @@ const searchPaneMinWidth = 240.0;
 /// Expectimax table its three value columns.
 const builderMovesShare = 0.45;
 
-/// The strip either side of the line between two panes that the divider
-/// is dragged by.
-const paneSplitGrab = Space.xs;
-const searchSettingsWidth = 380.0;
 const reviewGraphHeight = 160.0;
 
 /// The review's marks, as the old viewer coloured them: blue ?!, amber ?,
@@ -270,12 +290,10 @@ const engineArrowWidth = 15.0;
 const engineArrowCutoff = 0.2;
 
 /// The board editor: its board, the column of controls beside it, the
-/// width of a side's name before its castling boxes, and the line held
-/// under the FEN for why the position cannot be played.
+/// and the width of a side's name before its castling boxes.
 const editorBoardSize = 320.0;
 const editorControlsWidth = 280.0;
 const editorSideLabelWidth = 48.0;
-const editorProblemHeight = 24.0;
 
 /// The small board beside a FEN field that shows the position it holds.
 const setupPreviewSize = 120.0;
@@ -399,7 +417,7 @@ final class BoardTheme extends ThemeExtension<BoardTheme> {
 }
 
 /// The bar between two panes the user can drag: one pixel of line, with a
-/// grab area either side of it so it can be found with a mouse.
+/// grab strip either side of it so it can be found with a mouse.
 const paneDividerWidth = 1.0;
 const paneDividerGrab = 4.0;
 
@@ -509,7 +527,20 @@ ThemeData darkTheme() {
         ),
       ),
     ),
+    // Every field is an outlined box with its name on the border: the
+    // search, choice and number controls and a dialog's text fields alike.
+    inputDecorationTheme: const InputDecorationTheme(
+      isDense: true,
+      border: OutlineInputBorder(),
+    ),
     popupMenuTheme: _popupMenu(_sized(base.textTheme)),
+    dialogTheme: _dialog(_sized(base.textTheme)),
+    // A selected tile is filled in Selection Grey, its words in ink: the
+    // same as every other selected row, not words in the accent.
+    listTileTheme: const ListTileThemeData(
+      selectedTileColor: _selection,
+      selectedColor: _text,
+    ),
     menuButtonTheme: MenuButtonThemeData(
       style: ButtonStyle(
         minimumSize: const WidgetStatePropertyAll(
@@ -596,6 +627,11 @@ TextTheme _sized(TextTheme base) => base.copyWith(
   labelSmall: base.labelSmall?.copyWith(fontSize: 12, color: _muted),
 );
 
+/// The small body size in ink rather than muted, for a detail that is the
+/// row's content: a name or a value the row exists to show.
+TextStyle? bodySmallInk(ThemeData theme) =>
+    theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface);
+
 /// The settings dialog: full-width search above categories and a scrollable
 /// settings list. Rows stack their controls when text needs more room.
 const settingsDialogWidth = 760.0;
@@ -613,12 +649,8 @@ const settingChoiceWidth = 240.0;
 /// file. Small enough that a long list is one screen, tall enough to hit.
 const listRowHeight = 34.0;
 
-/// A row of the trainer's lists: a name over a line of moves.
-const trainRowHeight = 44.0;
-
-/// A row of the puzzle list: the move and its result on one line, the
-/// opponent and the date under it.
-const puzzleRowHeight = 44.0;
+/// A row of two lines: a name over what is known of it.
+const twoLineRowHeight = 44.0;
 
 /// The box the Tactics filters take a number of days in.
 const dayCountWidth = 44.0;
@@ -682,7 +714,7 @@ const labOneBoardMax = 720.0;
 
 /// What the board column needs with both boards besides the boards and
 /// their hands: the board's name above and the engine's rows under it.
-const labBoardChrome = labBoardLabelHeight + 3 * labTableRowHeight + 9;
+const labBoardChrome = labBoardLabelHeight + 3 * engineRowHeight + 9;
 const labBoardLabelHeight = 22.0;
 
 /// The narrowest the right-hand panel may become before the boards shrink,
@@ -710,22 +742,16 @@ const labHandStepMax = 24.0;
 const labHandStep = Color(0xE01B1B1D);
 const labHandStepInk = Color(0xFFFFFFFF);
 
-/// An engine line, and its score gutter.
-const labTableRowHeight = 28.0;
+/// A bughouse engine line's score gutter.
 const labScoreWidth = 60.0;
 
-/// The engine's score beside its switch, in mono at the title size, and
-/// the thin bar under the switch while a deeper search runs.
+/// The engine's score beside its switch, in mono at the title size.
 const labPearlWidth = 72.0;
 const labPearlText = TextStyle(
   fontFamily: 'SourceCodePro',
   fontSize: 18,
   fontWeight: FontWeight.w600,
 );
-const labThinkingHeight = 2.0;
-
-/// The line that says why a move, a step or a paste was refused.
-const labStatusHeight = 30.0;
 
 /// The turn dot of the seat to move: White's plain white, Black's black in
 /// a grey ring so it shows on the dark panel. A fact, not decoration.
@@ -766,9 +792,8 @@ const labPocketCountText = TextStyle(
 TextStyle labPocketCountStyle(double slot) =>
     labPocketCountText.copyWith(fontSize: (slot * 0.28).clamp(12, 17));
 
-/// The Books mode: the list of books, a repertoire's or a chapter's row,
-/// and how far a chapter sits in from its repertoire.
-const booksListWidth = 260.0;
+/// The Books mode: a repertoire's or a chapter's row, and how far a
+/// chapter sits in from its repertoire.
 const bookRowHeight = 36.0;
 const bookChapterIndent = 28.0;
 
@@ -793,11 +818,18 @@ const personRowBreak = 720.0;
 /// A named control on one line of a column or a dialog: the row, and the
 /// width a typeable choice takes at its end, which is a number stepper's.
 const fieldRowHeight = 36.0;
+
+/// The master games' Minimum Elo: its name and its stepper on one line.
+const eloFilterWidth = 260.0;
 const fieldControlWidth = 144.0;
 
 /// The bar that says a download or an engine pass is running: a line, not
 /// a stripe.
 const progressLineHeight = 2.0;
+
+/// The line that says what could not be done: two lines of small text, so
+/// a long reason is cut rather than pushing what is under it down.
+const problemLineHeight = 36.0;
 
 /// The mark on the move a puzzle is about, in the review's colours: the
 /// same blue, amber and red the game review draws them in.
@@ -816,6 +848,21 @@ const readingNumberColor = _muted;
 const boardFocusWidth = 3.0;
 
 const double moveFeedbackHeight = 36;
+
+/// A dialog is a raised panel like a menu: graphite, a 1px outline and the
+/// reading card's radius, with no shadow and no tint, titled in the 18px
+/// title style.
+DialogThemeData _dialog(TextTheme text) => DialogThemeData(
+  backgroundColor: _panel,
+  surfaceTintColor: Colors.transparent,
+  shadowColor: Colors.transparent,
+  elevation: 0,
+  shape: RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(readingCardRadius),
+    side: const BorderSide(color: _outline),
+  ),
+  titleTextStyle: text.titleMedium,
+);
 
 /// The right-click menus, drawn like the top bar's menus.
 PopupMenuThemeData _popupMenu(TextTheme text) => PopupMenuThemeData(

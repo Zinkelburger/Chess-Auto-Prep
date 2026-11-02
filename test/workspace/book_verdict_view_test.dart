@@ -2,7 +2,7 @@ import 'package:chess_auto_prep/chess/book/book_check.dart';
 import 'package:chess_auto_prep/chess/book/played_game.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/repertoire_index.dart';
-import 'package:chess_auto_prep/workspace/book_verdict_view.dart';
+import 'package:chess_auto_prep/workspace/book/book_verdict_view.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _sicilian = '''

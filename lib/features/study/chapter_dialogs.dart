@@ -4,6 +4,9 @@ import '../../chess/pgn/game_text.dart';
 import '../../chess/pgn/study.dart';
 import '../../chess/pgn/study_cleanup.dart';
 import '../../ui/theme.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/form_dialog.dart';
+import '../../ui/tool_button.dart';
 
 /// The chapter's tags to edit, the game's own first: who played, the
 /// result, when and where, ready to fill in from a scoresheet. A tag left
@@ -51,75 +54,58 @@ class _TagsState extends State<_Tags> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Chapter PGN tags'),
-    content: SizedBox(
-      width: 620,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final row in _rows)
-              Padding(
-                key: ObjectKey(row),
-                padding: const EdgeInsets.only(bottom: Space.s),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: row.key,
-                        decoration: const InputDecoration(labelText: 'Tag'),
-                      ),
+  Widget build(BuildContext context) => FormDialog(
+    title: 'Chapter PGN tags',
+    width: dialogWide,
+    confirm: 'Save tags',
+    onConfirm: _save,
+    canFail: true,
+    problem: _problem,
+    body: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final row in _rows)
+            Padding(
+              key: ObjectKey(row),
+              padding: const EdgeInsets.only(bottom: Space.s),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: row.key,
+                      decoration: const InputDecoration(labelText: 'Tag'),
                     ),
-                    const SizedBox(width: Space.s),
-                    Expanded(
-                      flex: 2,
-                      child: TextField(
-                        controller: row.value,
-                        decoration: const InputDecoration(labelText: 'Value'),
-                      ),
+                  ),
+                  const SizedBox(width: Space.s),
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: row.value,
+                      decoration: const InputDecoration(labelText: 'Value'),
                     ),
-                    IconButton(
-                      tooltip: 'Remove tag',
-                      onPressed: () {
-                        if (mounted) {
-                          setState(() {
-                            _rows.remove(row);
-                            _removed.add(row);
-                          });
-                        }
-                      },
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
+                  ),
+                  ToolButton(
+                    icon: AppIcons.remove,
+                    tooltip: 'Remove tag',
+                    onPressed: () => setState(() {
+                      _rows.remove(row);
+                      _removed.add(row);
+                    }),
+                  ),
+                ],
               ),
-            TextButton.icon(
-              onPressed: () {
-                if (mounted) setState(() => _rows.add(_TagRow('', '')));
-              },
-              icon: const Icon(Icons.add),
-              label: const Text('Add tag'),
             ),
-            if (_problem case final message?)
-              Text(
-                message,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-          ],
-        ),
+          TextButton.icon(
+            onPressed: () => setState(() => _rows.add(_TagRow('', ''))),
+            icon: const Icon(AppIcons.add, size: IconSize.action),
+            label: const Text('Add tag'),
+          ),
+        ],
       ),
     ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      FilledButton(onPressed: _save, child: const Text('Save tags')),
-    ],
   );
   void _save() {
-    if (!mounted) return;
     final values = <String, String>{};
     for (final row in _rows) {
       final key = row.key.text.trim();

@@ -1,9 +1,10 @@
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/board_editor.dart';
+import 'package:chess_auto_prep/workspace/board/board_editor.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/gestures.dart';
+import 'package:chess_auto_prep/ui/toggle_chip.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -137,7 +138,7 @@ void main() {
       'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
     );
     await tester.pump();
-    expect(find.widgetWithText(ChoiceChip, 'e3'), findsNothing);
+    expect(find.widgetWithText(ToggleChip, 'e3'), findsNothing);
     await tester.tap(find.text('Use this position'));
     await tester.pumpAndSettle();
     expect(

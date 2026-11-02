@@ -1,6 +1,6 @@
 /// Which games of a collection a list shows: rules on their header values,
 /// as the old PGN Viewer's `Filter` tab wrote them. Pure values; the owner
-/// that applies one to the open file is `workspace/file_filter.dart`.
+/// that applies one to the open file is `workspace/explorer/file_filter.dart`.
 library;
 
 import 'package:collection/collection.dart';

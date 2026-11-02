@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/app/mode.dart';
-import 'package:chess_auto_prep/workspace/audit_pane.dart';
-import 'package:chess_auto_prep/workspace/engine_jobs.dart';
+import 'package:chess_auto_prep/workspace/review/audit_pane.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

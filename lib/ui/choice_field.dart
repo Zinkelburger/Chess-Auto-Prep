@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'theme.dart';
+import 'app_icons.dart';
 
 /// A box to type a choice into, suggesting what fits as it is typed: the
 /// typeable choice field the app uses instead of a drop-down menu, which
@@ -144,7 +145,7 @@ class _ChoiceFieldState extends State<ChoiceField> {
                 labelText: widget.label ?? widget.hint,
                 floatingLabelBehavior: FloatingLabelBehavior.always,
                 prefixIcon: value.text.isEmpty
-                    ? const Icon(Icons.search, size: IconSize.menu)
+                    ? const Icon(AppIcons.search, size: IconSize.menu)
                     : null,
                 prefixIconConstraints: const BoxConstraints(
                   minWidth: IconSize.action + Space.s,

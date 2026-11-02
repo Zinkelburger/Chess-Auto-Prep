@@ -2,7 +2,7 @@ import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/features/library/library_panel.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/workspace/move_field.dart';
+import 'package:chess_auto_prep/workspace/board/move_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -52,13 +52,18 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> clickField(WidgetTester tester) async {
+    await tester.tap(field);
+    await tester.pumpAndSettle();
+  }
+
   group('on a chapter', () {
-    testWidgets('/ goes to the field, and a new move is played into the '
-        'chapter the moment it is named', (tester) async {
+    testWidgets('a click puts the keys in the field, and a new move is '
+        'played into the chapter the moment it is named', (tester) async {
       await openKid(tester);
-      expect(find.byTooltip('Type a move (/)'), findsOneWidget);
+      expect(find.byTooltip('Type a move'), findsOneWidget);
       expect(fieldHasFocus(tester), isFalse);
-      await key(tester, LogicalKeyboardKey.slash);
+      await clickField(tester);
       expect(fieldHasFocus(tester), isTrue);
       await tester.enterText(field, 'N');
       await tester.pump();
@@ -80,7 +85,7 @@ void main() {
     ) async {
       await openKid(tester);
       final before = kidOnDisk();
-      await key(tester, LogicalKeyboardKey.slash);
+      await clickField(tester);
       await tester.enterText(field, 'c5');
       await tester.pumpAndSettle();
       expect(w.session.cursor.value, NodePath.of([0]));
@@ -89,7 +94,7 @@ void main() {
 
     testWidgets('Enter plays the one move the words leave', (tester) async {
       await openKid(tester);
-      await key(tester, LogicalKeyboardKey.slash);
+      await clickField(tester);
       await tester.enterText(field, 'Nh');
       await tester.pump();
       expect(w.session.cursor.value, const NodePath.root());
@@ -102,7 +107,7 @@ void main() {
     testWidgets('words no move is written as are marked, never played or '
         'asked about', (tester) async {
       await openKid(tester);
-      await key(tester, LogicalKeyboardKey.slash);
+      await clickField(tester);
       await tester.enterText(field, 'Ke7');
       await tester.pump();
       final error = Theme.of(tester.element(field)).colorScheme.error;
@@ -125,7 +130,7 @@ void main() {
       tester,
     ) async {
       await openKid(tester);
-      await key(tester, LogicalKeyboardKey.slash);
+      await clickField(tester);
       await tester.enterText(field, 'N');
       await tester.pump();
       await key(tester, LogicalKeyboardKey.keyF);
@@ -142,7 +147,7 @@ void main() {
     tester,
   ) async {
     await openKid(tester);
-    await key(tester, LogicalKeyboardKey.slash);
+    await clickField(tester);
     await tester.enterText(field, 'Ke7');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
@@ -163,7 +168,7 @@ void main() {
     await w.requests.newAnalysisBoard();
     await tester.pumpAndSettle();
     expect(w.session.isScratch, isTrue);
-    await key(tester, LogicalKeyboardKey.slash);
+    await clickField(tester);
     await tester.enterText(field, 'e2e4');
     await tester.pumpAndSettle();
     expect(w.session.cursor.currentMove?.san, 'e4');
@@ -183,7 +188,7 @@ void main() {
     await tester.tap(find.text('Play (4)'));
     await tester.pumpAndSettle();
     expect(find.text('Black to play · 2 moves'), findsOneWidget);
-    await key(tester, LogicalKeyboardKey.slash);
+    await clickField(tester);
     await tester.enterText(field, 'd5');
     await tester.pumpAndSettle();
     expect(find.text('Incorrect — d5 is not it.'), findsOneWidget);

@@ -30,16 +30,16 @@ import 'package:chess_auto_prep/storage/player_files.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/ui/navigation_pages.dart';
-import 'package:chess_auto_prep/workspace/document_saver.dart';
-import 'package:chess_auto_prep/workspace/document_session.dart';
-import 'package:chess_auto_prep/workspace/engine_analysis.dart';
+import 'package:chess_auto_prep/workspace/document/document_saver.dart';
+import 'package:chess_auto_prep/workspace/document/document_session.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/features/trainer/trainer.dart';
-import 'package:chess_auto_prep/workspace/repertoire_shelf.dart';
-import 'package:chess_auto_prep/workspace/repertoire_tree.dart';
-import 'package:chess_auto_prep/workspace/explorer.dart';
-import 'package:chess_auto_prep/workspace/fill_gaps.dart';
-import 'package:chess_auto_prep/workspace/game_fetcher.dart';
-import 'package:chess_auto_prep/workspace/session_results.dart';
+import 'package:chess_auto_prep/workspace/book/repertoire_shelf.dart';
+import 'package:chess_auto_prep/workspace/book/repertoire_tree.dart';
+import 'package:chess_auto_prep/workspace/explorer/explorer.dart';
+import 'package:chess_auto_prep/workspace/search/fill_gaps.dart';
+import 'package:chess_auto_prep/workspace/explorer/game_fetcher.dart';
+import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -336,4 +336,26 @@ final class ScriptedDraftQuestion implements DraftQuestion {
 
   @override
   void withdraw() {}
+}
+
+/// Opens the top bar's Actions menu and takes [label] from it.
+Future<void> chooseAction(WidgetTester tester, String label) async {
+  await tester.tap(find.text('Actions'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(label).last);
+  await tester.pumpAndSettle();
+}
+
+/// Actions ▸ Panels ▸ [entry]: `Positions`, or `Back to the list`.
+Future<void> choosePanel(WidgetTester tester, String entry) async {
+  await tester.tap(find.text('Actions'));
+  await tester.pumpAndSettle();
+  final panels = find.widgetWithText(SubmenuButton, 'Panels');
+  await tester.ensureVisible(panels);
+  await tester.tap(panels);
+  await tester.pumpAndSettle();
+  final item = find.widgetWithText(MenuItemButton, entry);
+  await tester.ensureVisible(item);
+  await tester.tap(item);
+  await tester.pumpAndSettle();
 }

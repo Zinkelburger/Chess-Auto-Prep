@@ -1,9 +1,12 @@
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 import '../../chess/pgn/study.dart';
+import '../../ui/list_message.dart';
+import '../../ui/list_row.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
+import '../../ui/app_icons.dart';
 
 typedef ChapterActions = ({
   VoidCallback rename,
@@ -44,47 +47,35 @@ class ChapterRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Semantics(
+    return ListRow(
       selected: open,
-      child: Material(
-        color: open ? theme.colorScheme.surfaceContainerHighest : null,
-        child: InkWell(
-          onTap: onOpen,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(Space.l, 0, Space.xs, 0),
-            child: SizedBox(
-              height: listRowHeight,
-              child: Row(
-                children: [
-                  dragHandle ??
-                      SizedBox(
-                        width: Space.l + Space.xs,
-                        child: Text(
-                          '${chapter.ordinal}',
-                          style: theme.textTheme.labelSmall,
-                        ),
-                      ),
-                  Expanded(
-                    child: Tooltip(
-                      message: chapter.name,
-                      child: Text(
-                        chapter.name,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                  RowActions(tooltip: 'Chapter actions', children: _menuItems),
-                ],
+      onTap: onOpen,
+      padding: const EdgeInsets.fromLTRB(Space.l, 0, Space.xs, 0),
+      menu: _menuItems,
+      menuTooltip: 'Chapter actions',
+      child: Row(
+        children: [
+          dragHandle ??
+              SizedBox(
+                width: Space.l + Space.xs,
+                child: Text(
+                  '${chapter.ordinal}',
+                  style: theme.textTheme.labelSmall,
+                ),
               ),
+          Expanded(
+            child: Tooltip(
+              message: chapter.name,
+              child: Text(chapter.name, overflow: TextOverflow.ellipsis),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 
   List<Widget> get _menuItems => [
-    rowAction('Rename…', actions.rename, busy: busy, icon: Icons.edit_outlined),
+    rowAction('Rename…', actions.rename, busy: busy, icon: AppIcons.edit),
     rowAction('PGN tags…', actions.tags, busy: busy),
     rowAction('Set starting position…', actions.root, busy: busy),
     const Divider(),
@@ -104,20 +95,20 @@ class ChapterRow extends StatelessWidget {
       'Move up',
       () => actions.move(-1),
       busy: busy,
-      icon: Icons.arrow_upward,
+      icon: AppIcons.moveUp,
     ),
     rowAction(
       'Move down',
       () => actions.move(1),
       busy: busy,
-      icon: Icons.arrow_downward,
+      icon: AppIcons.moveDown,
     ),
     const Divider(),
     rowAction(
       'Copy chapter PGN',
       actions.copyPgn,
       busy: busy,
-      icon: Icons.content_copy,
+      icon: AppIcons.copy,
     ),
     const Divider(),
     rowAction(
@@ -130,7 +121,7 @@ class ChapterRow extends StatelessWidget {
       'Delete chapter…',
       actions.remove,
       busy: busy,
-      icon: Icons.delete_outline,
+      icon: AppIcons.delete,
     ),
   ];
 }
@@ -237,9 +228,10 @@ class _StudyChapterListState extends State<StudyChapterList> {
         ),
         Expanded(
           child: chapters.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.all(Space.l),
-                  child: Text('Nothing matches in this study.'),
+              ? ListMessage(
+                  _query.isEmpty
+                      ? 'No chapters yet.'
+                      : 'Nothing matches "${_search.text.trim()}".',
                 )
               : canDrag
               ? ReorderableListView.builder(

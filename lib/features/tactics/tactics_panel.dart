@@ -6,8 +6,8 @@ import 'package:flutter/services.dart';
 import '../../chess/tactics/puzzle.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/status_bar.dart';
-import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
+import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
 import 'my_games.dart';
 import 'my_games_block.dart';
@@ -16,6 +16,9 @@ import 'puzzle_trainer.dart';
 import 'source_games.dart';
 import 'tactics_set.dart';
 import '../../ui/list_message.dart';
+import '../../ui/list_row.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/pane_header.dart';
 
 /// The Tactics column: the one button that starts a sitting, the filters
 /// beside the count they change, and the puzzles they let through, which
@@ -92,11 +95,15 @@ class _TacticsPanelState extends State<TacticsPanel> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([widget.set, widget.trainer]),
+      listenable: Listenable.merge([
+        widget.set,
+        widget.trainer,
+        widget.myGames,
+      ]),
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _Toolbar(trailing: widget.trailing),
+          PaneHeader('Tactics', trailing: widget.trailing),
           // With puzzles to play, Play is the column's one filled button.
           MyGamesBlock(
             games: widget.myGames,
@@ -104,14 +111,17 @@ class _TacticsPanelState extends State<TacticsPanel> {
           ),
           Expanded(
             child: switch (widget.set.state) {
-              SetLoading() => const ListMessage('Reading puzzles…'),
+              SetLoading() => const ListMessage.loading('Reading puzzles…'),
+              // With no account yet, the block above already says what to
+              // do; saying it again here would be the same words twice.
+              SetMissing() when widget.myGames.accounts.isEmpty =>
+                const SizedBox.shrink(),
               SetMissing() => const ListMessage(
-                'No puzzles yet. Get your games above: the mistakes you made '
-                'in them become puzzles here.',
+                'Get games to turn your mistakes into puzzles.',
               ),
               SetUnreadable(:final detail) => ListMessage(
-                'The puzzle set could not be read: $detail',
-                action: TextButton(
+                'Could not read the puzzles: $detail',
+                action: OutlinedButton(
                   onPressed: () => unawaited(widget.set.load()),
                   child: const Text('Try again'),
                 ),
@@ -139,12 +149,12 @@ class _TacticsPanelState extends State<TacticsPanel> {
             onPressed: shown.isEmpty && widget.trainer.run == null
                 ? null
                 : () => widget.onPlay(),
-            icon: const Icon(Icons.play_arrow, size: IconSize.action),
+            icon: const Icon(AppIcons.run, size: IconSize.action),
             label: Text(
               widget.trainer.up != null
                   ? 'Show puzzle'
                   : widget.trainer.run != null
-                  ? 'Continue session'
+                  ? 'Resume'
                   : 'Play (${shown.length})',
             ),
           ),
@@ -157,7 +167,7 @@ class _TacticsPanelState extends State<TacticsPanel> {
   Widget _list(List<Puzzle> queue, List<Puzzle> shown) => CustomScrollView(
     slivers: [
       SliverToBoxAdapter(
-        child: _CountLine(
+        child: _PuzzleCount(
           queue: queue,
           total: widget.set.puzzles.length,
           filtersOpen: _filtersOpen,
@@ -218,7 +228,7 @@ class _TacticsPanelState extends State<TacticsPanel> {
     final current = widget.trainer.up?.puzzle.index;
     final outcomes = widget.trainer.run?.outcomes ?? const {};
     return SliverFixedExtentList(
-      itemExtent: puzzleRowHeight,
+      itemExtent: twoLineRowHeight,
       delegate: SliverChildBuilderDelegate(childCount: shown.length, (
         context,
         at,
@@ -238,32 +248,29 @@ class _TacticsPanelState extends State<TacticsPanel> {
 
 extension on _TacticsPanelState {
   /// What can be done to one puzzle besides playing it.
-  Widget _menu(Puzzle puzzle) => RowActions(
-    tooltip: 'Puzzle actions',
-    children: [
-      MenuItemButton(
-        onPressed: () => widget.onAnalyze(puzzle),
-        child: const Text('Analyze in the game'),
-      ),
-      MenuItemButton(
-        onPressed: () =>
-            unawaited(Clipboard.setData(ClipboardData(text: puzzle.fen.value))),
-        child: const Text('Copy FEN'),
-      ),
-      MenuItemButton(
-        onPressed: () => unawaited(_copyGame(puzzle)),
-        child: const Text('Copy game PGN'),
-      ),
-      MenuItemButton(
-        onPressed: () => widget.onAddToStudy(puzzle),
-        child: const Text('Add game to study…'),
-      ),
-      MenuItemButton(
-        onPressed: () => unawaited(_delete(puzzle)),
-        child: const Text('Delete puzzle…'),
-      ),
-    ],
-  );
+  List<Widget> _menu(Puzzle puzzle) => [
+    rowAction('Analyze in the game', () => widget.onAnalyze(puzzle)),
+    rowAction(
+      'Copy FEN',
+      () => unawaited(Clipboard.setData(ClipboardData(text: puzzle.fen.value))),
+      icon: AppIcons.copy,
+    ),
+    rowAction(
+      'Copy game PGN',
+      () => unawaited(_copyGame(puzzle)),
+      icon: AppIcons.copy,
+    ),
+    rowAction(
+      'Add game to study…',
+      () => widget.onAddToStudy(puzzle),
+      icon: AppIcons.add,
+    ),
+    rowAction(
+      'Delete puzzle…',
+      () => unawaited(_delete(puzzle)),
+      icon: AppIcons.delete,
+    ),
+  ];
 
   /// The game the puzzle came from; the puzzle's own game when it came from
   /// none the app knows.
@@ -287,36 +294,10 @@ extension on _TacticsPanelState {
   }
 }
 
-/// The panel's name and the host's toggle in the corner.
-class _Toolbar extends StatelessWidget {
-  const _Toolbar({required this.trailing});
-
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.s, 0),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'Tactics',
-              style: Theme.of(context).textTheme.labelSmall,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          ?trailing,
-        ],
-      ),
-    );
-  }
-}
-
 /// How many puzzles the filters let through and what they are, with the
 /// way to the filters beside it.
-class _CountLine extends StatelessWidget {
-  const _CountLine({
+class _PuzzleCount extends StatelessWidget {
+  const _PuzzleCount({
     required this.queue,
     required this.total,
     required this.filtersOpen,
@@ -330,38 +311,29 @@ class _CountLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.xs, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '${queue.length} of $total',
-                  style: text.labelSmall,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              TextButton.icon(
-                onPressed: onFilters,
-                icon: Icon(
-                  filtersOpen ? Icons.expand_less : Icons.expand_more,
-                  size: IconSize.action,
-                ),
-                iconAlignment: IconAlignment.end,
-                label: const Text('Filters'),
-              ),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        CountLine(
+          '${queue.length} of $total',
+          action: TextButton.icon(
+            onPressed: onFilters,
+            icon: Icon(
+              filtersOpen ? AppIcons.showLess : AppIcons.showMore,
+              size: IconSize.action,
+            ),
+            iconAlignment: IconAlignment.end,
+            label: const Text('Filters'),
           ),
-          Padding(
-            padding: const EdgeInsets.only(right: Space.s),
-            child: Text(_kinds(queue), style: text.labelSmall),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(Space.m, 0, Space.m, 0),
+          child: Text(
+            _kinds(queue),
+            style: Theme.of(context).textTheme.labelSmall,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -390,7 +362,7 @@ class _PuzzleRow extends StatelessWidget {
   final Puzzle puzzle;
 
   /// The row's ⋯ menu.
-  final Widget menu;
+  final List<Widget> menu;
 
   /// This is the puzzle on the board.
   final bool open;
@@ -407,26 +379,14 @@ class _PuzzleRow extends StatelessWidget {
     // A new puzzle says nothing: most are, and a column of `new` is noise.
     final record = stats.isNew ? '' : '${stats.successes}/${stats.reviews}';
     final tried = stats.reviews == 1 ? '1 try' : '${stats.reviews} tries';
-    return Material(
-      color: open ? theme.colorScheme.surfaceContainerHighest : null,
-      child: InkWell(
-        onTap: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.only(left: Space.m),
-          child: Row(
-            children: [
-              Expanded(
-                child: _lines(
-                  theme,
-                  record,
-                  'Solved ${stats.successes} of $tried',
-                ),
-              ),
-              menu,
-            ],
-          ),
-        ),
-      ),
+    return ListRow(
+      selected: open,
+      onTap: onOpen,
+      height: twoLineRowHeight,
+      padding: const EdgeInsets.only(left: Space.m),
+      menu: menu,
+      menuTooltip: 'Puzzle actions',
+      child: _lines(theme, record, 'Solved ${stats.successes} of $tried'),
     );
   }
 }

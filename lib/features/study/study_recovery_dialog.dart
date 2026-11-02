@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../storage/deleted_chapters.dart';
+import '../../ui/attempting.dart';
+import '../../ui/list_message.dart';
 import '../../ui/name_dialog.dart';
+import '../../ui/progress_line.dart';
 import '../../ui/theme.dart';
 import 'studies.dart';
 import 'studies_state.dart';
@@ -19,7 +22,7 @@ class _Recovery extends StatefulWidget {
   State<_Recovery> createState() => _RecoveryState();
 }
 
-class _RecoveryState extends State<_Recovery> {
+class _RecoveryState extends State<_Recovery> with Attempting<_Recovery> {
   Future<DeletedListing>? _listing;
   @override
   void initState() {
@@ -27,8 +30,8 @@ class _RecoveryState extends State<_Recovery> {
     _listing = widget.studies.deleted();
   }
 
-  bool _busy = false;
-  String? _message;
+  /// The last restore went through.
+  bool _restored = false;
 
   Future<void> _restore(DeletedChapter chapter, {bool rename = false}) async {
     final name = rename
@@ -44,27 +47,21 @@ class _RecoveryState extends State<_Recovery> {
   }
 
   Future<void> _run(Future<StudyResult> Function() action) async {
+    setState(() => _restored = false);
+    final result = await attempt(
+      'restore deleted study',
+      action,
+      failure: 'Could not confirm the restore. Retry save or refresh the list.',
+    );
+    if (result == null) return;
     setState(() {
-      _busy = true;
-      _message = null;
-    });
-    try {
-      final result = await action();
-      if (!mounted) return;
-      setState(() {
-        _message = result is StudyProblem ? result.sentence : 'Study restored.';
-        _listing = widget.studies.deleted();
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => _message =
-              'Could not confirm the restore. Retry restore or refresh the list.',
-        );
+      if (result is StudyProblem) {
+        problem = result.sentence;
+      } else {
+        _restored = true;
       }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+      _listing = widget.studies.deleted();
+    });
   }
 
   /// The deleted studies as the listing reads, or why there are none.
@@ -73,16 +70,23 @@ class _RecoveryState extends State<_Recovery> {
     AsyncSnapshot<DeletedListing> snapshot,
   ) {
     if (snapshot.hasError || snapshot.data is DeletedUnreadable) {
-      return const Center(
-        child: Text('Could not read deleted studies. Try Refresh.'),
+      return ListMessage(
+        'Could not read the deleted studies.',
+        inset: 0,
+        action: OutlinedButton(
+          onPressed: busy
+              ? null
+              : () => setState(() => _listing = widget.studies.deleted()),
+          child: const Text('Try again'),
+        ),
       );
     }
     final listing = snapshot.data;
     if (listing is! DeletedChapters) {
-      return const Center(child: CircularProgressIndicator());
+      return const ListMessage.loading('Reading deleted studies…', inset: 0);
     }
     if (listing.chapters.isEmpty) {
-      return const Center(child: Text('No deleted studies.'));
+      return const ListMessage('No deleted studies.', inset: 0);
     }
     return ListView.builder(
       itemCount: listing.chapters.length,
@@ -110,11 +114,11 @@ class _RecoveryState extends State<_Recovery> {
             ),
           ),
           TextButton(
-            onPressed: _busy ? null : () => _restore(chapter),
+            onPressed: busy ? null : () => _restore(chapter),
             child: const Text('Restore'),
           ),
           TextButton(
-            onPressed: _busy ? null : () => _restore(chapter, rename: true),
+            onPressed: busy ? null : () => _restore(chapter, rename: true),
             child: const Text('Restore as…'),
           ),
         ],
@@ -124,11 +128,11 @@ class _RecoveryState extends State<_Recovery> {
 
   @override
   Widget build(BuildContext context) => PopScope(
-    canPop: !_busy,
+    canPop: !busy,
     child: AlertDialog(
       title: const Text('Deleted studies'),
       content: SizedBox(
-        width: nameDialogWidth * 2,
+        width: dialogWide,
         height: MediaQuery.sizeOf(context).height * 0.5,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -136,15 +140,16 @@ class _RecoveryState extends State<_Recovery> {
             const Text(
               'Restore a study with all its chapters and annotations.',
             ),
-            if (_busy) const LinearProgressIndicator(),
-            if (_message != null)
-              Semantics(liveRegion: true, child: Text(_message!)),
+            ProgressLine(active: busy),
+            if (problem ?? (_restored ? 'Study restored.' : null)
+                case final message?)
+              Semantics(liveRegion: true, child: Text(message)),
             if (widget.studies.canRetryRestore)
-              TextButton(
-                onPressed: _busy
+              OutlinedButton(
+                onPressed: busy
                     ? null
                     : () => _run(widget.studies.retryRestore),
-                child: const Text('Retry restore'),
+                child: const Text('Retry save'),
               ),
             const SizedBox(height: Space.s),
             Expanded(
@@ -158,14 +163,14 @@ class _RecoveryState extends State<_Recovery> {
       ),
       actions: [
         TextButton(
-          onPressed: _busy
+          onPressed: busy ? null : () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+        TextButton(
+          onPressed: busy
               ? null
               : () => setState(() => _listing = widget.studies.deleted()),
           child: const Text('Refresh'),
-        ),
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.pop(context),
-          child: const Text('Close'),
         ),
       ],
     ),

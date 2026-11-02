@@ -7,7 +7,7 @@ import '../../chess/training/schedule.dart';
 import '../../chess/training/training_options.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/settings_store.dart';
-import '../../workspace/repertoire_catalog.dart';
+import '../../workspace/book/repertoire_catalog.dart';
 
 /// The trainer's chosen repertoire and browsing scope, independent of the
 /// document on the board. Browsing never starts or replaces a lesson.

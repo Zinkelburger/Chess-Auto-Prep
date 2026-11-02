@@ -4,12 +4,13 @@ import 'package:flutter/services.dart';
 
 import '../../ui/app_action.dart';
 import '../../ui/pane_tabs.dart';
-import '../../workspace/document_session.dart';
-import '../../workspace/engine_analysis.dart';
+import '../../workspace/document/document_session.dart';
+import '../../workspace/analysis/engine_analysis.dart';
 import '../../workspace/workspace_tabs.dart';
 import 'my_games.dart';
 import 'puzzle_trainer.dart';
 import '../../ui/app_keys.dart';
+import '../../ui/app_icons.dart';
 
 /// The Actions menu in Tactics, which is for solving: the puzzle's own
 /// actions, the user's games, the board and the card's tabs — none of the
@@ -41,7 +42,6 @@ List<AppAction> tacticsActions({
               analysis.enabled ? analysis.disable() : analysis.enable(),
             )
           : null,
-      shortcut: AppKey.engine.label,
       group: 'Board',
     ),
     AppAction(
@@ -51,6 +51,7 @@ List<AppAction> tacticsActions({
               Clipboard.setData(ClipboardData(text: session.cursor.fen.value)),
             )
           : null,
+      icon: AppIcons.copy,
       group: 'Board',
     ),
     ...tabActions(tabs),
@@ -63,17 +64,21 @@ List<AppAction> myGamesActions(
   MyGames games, {
   required VoidCallback onAccounts,
 }) => [
+  // The same three states as the button: Pause while it runs, Resume
+  // after a pause, else Get games.
+  if (games.running)
+    AppAction('Pause', games.pause, icon: AppIcons.pause, group: 'My games')
+  else
+    AppAction(
+      games.queued > 0 ? 'Resume' : 'Get games',
+      games.accounts.isEmpty || games.savingAccounts
+          ? null
+          : () => unawaited(games.start()),
+      icon: games.queued > 0 ? AppIcons.run : AppIcons.download,
+      group: 'My games',
+    ),
   AppAction(
-    games.running ? 'Pause the review' : 'Get my games',
-    games.running
-        ? games.pause
-        : games.accounts.isEmpty
-        ? null
-        : () => unawaited(games.start()),
-    group: 'My games',
-  ),
-  AppAction(
-    'My accounts…',
+    games.accounts.isEmpty ? 'Add accounts…' : 'My accounts…',
     games.running ? null : onAccounts,
     group: 'My games',
   ),
@@ -87,7 +92,7 @@ List<AppAction> puzzleActions(PuzzleTrainer trainer) {
         ? const []
         : [
             AppAction(
-              'Continue session',
+              'Resume',
               () => unawaited(trainer.continueSession()),
               group: 'Tactics',
             ),

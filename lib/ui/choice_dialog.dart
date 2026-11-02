@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'search_field.dart';
+import 'list_message.dart';
 import 'theme.dart';
 
 /// Asks the user to pick one of [options], answering null when they back out.
@@ -88,7 +89,7 @@ class _ChoiceDialogState<T extends Object> extends State<_ChoiceDialog<T>> {
     return AlertDialog(
       title: Text(widget.title),
       content: SizedBox(
-        width: nameDialogWidth,
+        width: dialogNarrow,
         height: choiceDialogHeight,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -117,9 +118,9 @@ class _ChoiceDialogState<T extends Object> extends State<_ChoiceDialog<T>> {
   Widget _list(BuildContext context) {
     final matches = _matches;
     if (matches.isEmpty) {
-      return Text(
+      return ListMessage(
         widget.options.isEmpty ? widget.empty : 'Nothing matches "$_query".',
-        style: Theme.of(context).textTheme.bodySmall,
+        inset: 0,
       );
     }
     return ListView.builder(

@@ -5,10 +5,10 @@ import 'package:flutter/material.dart';
 
 import '../ui/app_action.dart';
 import '../ui/pane_tabs.dart';
-import '../workspace/document_actions.dart';
-import '../workspace/explorer.dart';
-import '../workspace/game_ordering.dart';
-import '../workspace/move_tree_view.dart' show MoveMenu;
+import '../workspace/document/document_actions.dart';
+import '../workspace/explorer/explorer.dart';
+import '../workspace/document/game_ordering.dart';
+import '../workspace/reading/move_tree_view.dart' show MoveMenu;
 import '../workspace/workspace.dart';
 import '../workspace/action_layout.dart';
 import '../workspace/workspace_tabs.dart';
@@ -32,15 +32,19 @@ typedef ShellDialogs = ({
   VoidCallback search,
   VoidCallback accounts,
   VoidCallback newBook,
+  VoidCallback importCourse,
 });
 
 /// What the Actions menu is built from besides the mode: whether the edit
 /// strip is open, the analysis board's entries (built only when a mode
-/// offers them, since they read the shell's context) and the dialogs.
+/// offers them, since they read the shell's context), the dialogs, and the
+/// window's context for the mode's own dialogs: the ones its screen opens
+/// from its buttons, which the menu offers too.
 typedef ModeMenu = ({
   ValueNotifier<bool> editing,
   List<AppAction> Function() board,
   ShellDialogs dialogs,
+  BuildContext context,
 });
 
 /// One mode as the window shows it: its list on the left, the tabs of its
@@ -203,7 +207,12 @@ Map<Mode, ModeView> modeViews({
     for (final mode in Mode.values)
       mode: switch (mode) {
         Mode.repertoires => RepertoiresView(workspace, requests, documents),
-        Mode.trainer => TrainerView(workspace, requests, documents),
+        Mode.trainer => TrainerView(
+          workspace,
+          requests,
+          documents,
+          training.lines,
+        ),
         Mode.books => BooksView(workspace, requests, documents),
         Mode.pgnViewer => ViewerView(workspace, requests, documents, editing),
         Mode.study => study,

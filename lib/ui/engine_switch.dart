@@ -29,7 +29,7 @@ class EngineSwitch extends StatelessWidget {
           ),
           trackColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.selected)
-                ? scheme.primary.withValues(alpha: 0.25)
+                ? selectedTint
                 : Colors.transparent,
           ),
           trackOutlineColor: WidgetStatePropertyAll(scheme.outline),

@@ -4,8 +4,8 @@ import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/pgn_file_picker.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
-import 'package:chess_auto_prep/workspace/document_saver.dart';
-import 'package:chess_auto_prep/workspace/document_session.dart';
+import 'package:chess_auto_prep/workspace/document/document_saver.dart';
+import 'package:chess_auto_prep/workspace/document/document_session.dart';
 import 'package:path/path.dart' as p;
 
 import 'scripted_files.dart';

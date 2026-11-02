@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 
 import '../../chess/game_filter.dart';
 import '../../ui/theme.dart';
-import '../../workspace/file_filter.dart';
+import '../../workspace/explorer/file_filter.dart';
 import 'pgn_viewer.dart';
+import '../../ui/segments.dart';
 
 /// Under the explorer's `This file`: the followed player's games with
 /// either colour, with White or with Black, each with how many there are.
@@ -40,13 +41,11 @@ class PlayerSideChoice extends StatelessWidget {
               player,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+              style: theme.textTheme.bodySmall,
             ),
           ),
           const SizedBox(width: Space.s),
-          SegmentedButton<Side?>(
+          Segments<Side?>(
             key: const ValueKey('player-side'),
             segments: [
               ButtonSegment(
@@ -62,18 +61,9 @@ class PlayerSideChoice extends StatelessWidget {
                 label: Text('Black ${sides.black}'),
               ),
             ],
-            selected: {sideKept(filter.filter, player)},
-            showSelectedIcon: false,
-            style: const ButtonStyle(
-              animationDuration: Duration.zero,
-              visualDensity: VisualDensity.compact,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              padding: WidgetStatePropertyAll(
-                EdgeInsets.symmetric(horizontal: Space.s),
-              ),
-            ),
-            onSelectionChanged: (picked) =>
-                filter.apply(keepingSide(filter.filter, player, picked.single)),
+            selected: sideKept(filter.filter, player),
+            onChanged: (picked) =>
+                filter.apply(keepingSide(filter.filter, player, picked)),
           ),
         ],
       );

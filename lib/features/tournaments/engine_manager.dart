@@ -5,10 +5,15 @@ import 'package:path/path.dart' as p;
 
 import '../../chess/tournament/config.dart';
 import '../../ui/confirm_dialog.dart';
+import '../../ui/attempting.dart';
+import '../../ui/form_dialog.dart';
 import '../../ui/number_field.dart';
 import '../../ui/theme.dart';
 import 'engine_check.dart';
 import 'tournament_run.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
+import '../../ui/field_row.dart';
 
 Future<void> manageTournamentEngines(
   BuildContext context,
@@ -20,7 +25,7 @@ Future<void> manageTournamentEngines(
     builder: (context, _) => AlertDialog(
       title: const Text('Tournament engines'),
       content: SizedBox(
-        width: 600,
+        width: dialogWide,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -37,19 +42,19 @@ Future<void> manageTournamentEngines(
                   ),
                   trailing: Wrap(
                     children: [
-                      IconButton(
-                        tooltip: 'Edit ${engine.name}',
+                      ToolButton(
+                        icon: AppIcons.edit,
+                        tooltip: 'Edit ${engine.name}…',
                         onPressed: run.registryBusy || run.running
                             ? null
                             : () => unawaited(_edit(context, run, engine)),
-                        icon: const Icon(Icons.edit_outlined),
                       ),
-                      IconButton(
-                        tooltip: 'Remove ${engine.name}',
+                      ToolButton(
+                        icon: AppIcons.remove,
+                        tooltip: 'Remove ${engine.name}…',
                         onPressed: run.registryBusy || run.running
                             ? null
                             : () => unawaited(_remove(context, run, engine)),
-                        icon: const Icon(Icons.delete_outline),
                       ),
                     ],
                   ),
@@ -59,16 +64,18 @@ Future<void> manageTournamentEngines(
           ),
         ),
       ),
+      // Nothing here waits for an answer, so Close; the action at the right.
       actions: [
-        TextButton(
-          onPressed: run.registryBusy || run.running
-              ? null
-              : () => unawaited(_edit(context, run, null)),
-          child: const Text('Add UCI engine…'),
-        ),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Close'),
+        ),
+        TextButton.icon(
+          onPressed: run.registryBusy || run.running
+              ? null
+              : () => unawaited(_edit(context, run, null)),
+          icon: const Icon(AppIcons.add, size: IconSize.action),
+          label: const Text('Add UCI engine…'),
         ),
       ],
     ),
@@ -82,9 +89,8 @@ Future<void> _remove(
 ) async {
   if (await confirmAction(
     context,
-    title: 'Remove engine',
-    message:
-        'Remove ${engine.name} from the registry? Saved runs retain their engine settings.',
+    title: 'Remove “${engine.name}”?',
+    message: 'Saved runs keep their engine settings.',
     confirm: 'Remove',
   )) {
     await run.keepEngines(run.engines.where((e) => e.id != engine.id).toList());
@@ -108,7 +114,7 @@ class _Editor extends StatefulWidget {
   State<_Editor> createState() => _EditorState();
 }
 
-class _EditorState extends State<_Editor> {
+class _EditorState extends State<_Editor> with Attempting<_Editor> {
   late final _name = TextEditingController(text: widget.engine?.name ?? '');
   late final _path = TextEditingController(
     text: widget.engine?.executable ?? '',
@@ -124,9 +130,7 @@ class _EditorState extends State<_Editor> {
   late final _id =
       widget.engine?.id ?? 'engine-${DateTime.now().microsecondsSinceEpoch}';
   int _cores = 1, _memory = 128;
-  String? _problem;
   List<String> _output = const [];
-  bool _busy = false;
 
   /// A new engine's name follows the file until the user types one: the
   /// file's name when picked, the engine's `id name` once tested.
@@ -148,90 +152,74 @@ class _EditorState extends State<_Editor> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text(widget.engine == null ? 'Add UCI engine' : 'Edit engine'),
-    content: SizedBox(
-      width: 600,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _name,
-              onChanged: (_) => _autoName = false,
-              decoration: const InputDecoration(labelText: 'Name'),
-            ),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _path,
-                    decoration: const InputDecoration(
-                      labelText: 'Executable path (empty = bundled Stockfish)',
-                    ),
+  Widget build(BuildContext context) => FormDialog(
+    title: widget.engine == null ? 'Add UCI engine' : 'Edit engine',
+    width: dialogWide,
+    confirm: busy ? 'Testing…' : 'Test and save',
+    onConfirm: () => unawaited(_save()),
+    busy: busy,
+    canFail: true,
+    problem: problem,
+    body: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _name,
+            onChanged: (_) => _autoName = false,
+            decoration: const InputDecoration(labelText: 'Name'),
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _path,
+                  decoration: const InputDecoration(
+                    labelText: 'Executable path (empty = bundled Stockfish)',
                   ),
                 ),
-                TextButton.icon(
-                  onPressed: _busy ? null : () => unawaited(_pick()),
-                  icon: const Icon(Icons.folder_open_outlined),
-                  label: const Text('Choose file…'),
-                ),
-              ],
-            ),
-            _number('Cores', _cores, 1024, (n) => _cores = n),
-            _number('Hash (MB)', _memory, 65536, (n) => _memory = n),
-            TextField(
-              controller: _args,
-              minLines: 1,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Arguments (one per line)',
               ),
-            ),
-            TextField(
-              controller: _options,
-              minLines: 2,
-              maxLines: 6,
-              decoration: const InputDecoration(
-                labelText: 'UCI options (name=value, one per line)',
+              TextButton.icon(
+                onPressed: busy ? null : () => unawaited(_pick()),
+                icon: const Icon(AppIcons.open, size: IconSize.action),
+                label: const Text('Choose file…'),
               ),
+            ],
+          ),
+          _number('Cores', _cores, 1024, (n) => _cores = n),
+          _number('Hash (MB)', _memory, 65536, (n) => _memory = n),
+          TextField(
+            controller: _args,
+            minLines: 1,
+            maxLines: 4,
+            decoration: const InputDecoration(
+              labelText: 'Arguments (one per line)',
             ),
-            if (_problem case final message?)
-              Padding(
-                padding: const EdgeInsets.only(top: Space.m),
-                child: SelectableText(message),
-              ),
-            if (_output.isNotEmpty) EngineOutput(lines: _output),
-          ],
-        ),
+          ),
+          TextField(
+            controller: _options,
+            minLines: 2,
+            maxLines: 6,
+            decoration: const InputDecoration(
+              labelText: 'UCI options (name=value, one per line)',
+            ),
+          ),
+          if (_output.isNotEmpty) EngineOutput(lines: _output),
+        ],
       ),
     ),
-    actions: [
-      TextButton(
-        onPressed: _busy ? null : () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      FilledButton(
-        onPressed: _busy ? null : () => unawaited(_save()),
-        child: Text(_busy ? 'Testing…' : 'Test and save'),
-      ),
-    ],
   );
   Widget _number(String name, int value, int max, void Function(int) change) =>
-      Row(
-        children: [
-          Expanded(child: Text(name)),
-          NumberField(
-            label: name,
-            value: value,
-            min: 1,
-            max: max,
-            onChanged: (n) {
-              if (mounted) setState(() => change(n));
-            },
-          ),
-        ],
+      FieldRow(
+        label: name,
+        child: NumberField(
+          label: name,
+          value: value,
+          min: 1,
+          max: max,
+          onChanged: (n) => setState(() => change(n)),
+        ),
       );
 
   Future<void> _pick() async {
@@ -266,29 +254,36 @@ class _EditorState extends State<_Editor> {
 
   Future<void> _save() async {
     FocusScope.of(context).unfocus();
-    var engine = _engine(_name.text.trim());
+    final engine = _engine(_name.text.trim());
     if (engine == null) {
-      setState(() => _problem = 'Write each UCI option as name=value.');
+      setState(() => problem = 'Write each UCI option as name=value.');
       return;
     }
     if (engine.name.isEmpty) {
-      setState(() => _problem = 'Name the engine.');
+      setState(() => problem = 'Name the engine.');
       return;
     }
-    setState(() {
-      _busy = true;
-      _problem = null;
-      _output = const [];
-    });
+    setState(() => _output = const []);
+    final kept = await attempt(
+      'test and save engine',
+      () => _verifyAndKeep(engine),
+      failure: 'Could not test the engine.',
+    );
+    if (mounted && (kept ?? false)) Navigator.pop(context);
+  }
+
+  /// Tests [engine] and keeps it in the list; false with [problem] (and
+  /// for a failed test [_output]) saying why it is not kept.
+  Future<bool> _verifyAndKeep(TournamentEngine tested) async {
+    var engine = tested;
     final check = await widget.run.verify(engine);
-    if (!mounted) return;
+    if (!mounted) return false;
     if (check case EngineRejected(:final reason, :final output)) {
       setState(() {
-        _busy = false;
-        _problem = reason;
+        problem = reason;
         _output = output;
       });
-      return;
+      return false;
     }
     if (check case EngineVerified(
       :final name,
@@ -301,15 +296,9 @@ class _EditorState extends State<_Editor> {
         if (e.id != engine.id) e,
       engine,
     ]);
-    if (!mounted) return;
-    if (widget.run.engines.any((e) => identical(e, engine))) {
-      Navigator.pop(context);
-      return;
-    }
-    setState(() {
-      _busy = false;
-      _problem = widget.run.engineReport;
-    });
+    final kept = widget.run.engines.any((e) => identical(e, engine));
+    if (!kept && mounted) setState(() => problem = widget.run.engineReport);
+    return kept;
   }
 }
 

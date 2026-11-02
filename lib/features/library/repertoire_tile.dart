@@ -5,10 +5,12 @@ import '../../ui/choice_dialog.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/relative_time.dart';
+import '../../ui/list_row.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
 import 'library.dart';
 import 'library_messages.dart';
+import '../../ui/app_icons.dart';
 
 /// One repertoire in the list, and its chapters when it is open.
 class RepertoireTile extends StatelessWidget {
@@ -110,7 +112,7 @@ class _RepertoireRow extends StatelessWidget {
   Future<void> _delete(BuildContext context) async {
     final yes = await confirmAction(
       context,
-      title: 'Delete repertoire "${folder.name}"?',
+      title: 'Delete repertoire “${folder.name}”?',
       message:
           'Its chapters can be restored from Deleted chapters under this '
           'list.',
@@ -133,56 +135,60 @@ class _RepertoireRow extends StatelessWidget {
       'Rename…',
       () => _rename(context),
       busy: library.busy,
-      icon: Icons.edit_outlined,
+      icon: AppIcons.edit,
     ),
     rowAction(
       'New chapter…',
       () => _newChapter(context),
       busy: library.busy,
-      icon: Icons.add,
+      icon: AppIcons.add,
     ),
     rowAction(
       'Delete…',
       () => _delete(context),
       busy: library.busy,
-      icon: Icons.delete_outline,
+      icon: AppIcons.delete,
     ),
   ];
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    return InkWell(
+    return ListRow(
       onTap: onToggle,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          Space.s,
-          Space.xs,
-          Space.xs,
-          Space.xs,
-        ),
-        child: Row(
-          children: [
-            Icon(
-              expanded ? Icons.expand_more : Icons.chevron_right,
-              size: IconSize.action,
-            ),
-            const SizedBox(width: Space.xs),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Tooltip(
-                    message: folder.name,
-                    child: Text(folder.name, overflow: TextOverflow.ellipsis),
+      height: twoLineRowHeight,
+      padding: const EdgeInsets.fromLTRB(Space.s, 0, Space.xs, 0),
+      menu: _actions(context),
+      child: Row(
+        children: [
+          Icon(
+            expanded ? AppIcons.expanded : AppIcons.collapsed,
+            size: IconSize.action,
+          ),
+          const SizedBox(width: Space.xs),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Tooltip(
+                  message: folder.name,
+                  child: Text(
+                    folder.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  Text(_subtitle, style: text.labelSmall),
-                ],
-              ),
+                ),
+                Text(
+                  _subtitle,
+                  style: text.labelSmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
-            RowActions(children: _actions(context)),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -251,7 +257,7 @@ class _ChapterRow extends StatelessWidget {
   Future<void> _delete(BuildContext context) async {
     final yes = await confirmAction(
       context,
-      title: 'Delete chapter "${chapter.name}"?',
+      title: 'Delete chapter “${chapter.name}”?',
       message: library.sharesFile(chapter)
           ? 'Its games, including edits you have just made, will be taken '
                 'out of the course file they share.'
@@ -272,50 +278,28 @@ class _ChapterRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: open ? scheme.surfaceContainerHighest : Colors.transparent,
-      child: InkWell(
-        onTap: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            Space.l + Space.m,
-            Space.xs,
-            Space.xs,
-            Space.xs,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Tooltip(
-                  message: chapter.name,
-                  child: Text(chapter.name, overflow: TextOverflow.ellipsis),
-                ),
-              ),
-              RowActions(
-                children: [
-                  rowAction(
-                    'Rename…',
-                    () => _rename(context),
-                    busy: library.busy,
-                    icon: Icons.edit_outlined,
-                  ),
-                  rowAction(
-                    'Move to…',
-                    () => _move(context),
-                    busy: library.busy,
-                  ),
-                  rowAction(
-                    'Delete…',
-                    () => _delete(context),
-                    busy: library.busy,
-                    icon: Icons.delete_outline,
-                  ),
-                ],
-              ),
-            ],
-          ),
+    return ListRow(
+      selected: open,
+      onTap: onOpen,
+      padding: const EdgeInsets.fromLTRB(Space.l + Space.m, 0, Space.xs, 0),
+      menu: [
+        rowAction(
+          'Rename…',
+          () => _rename(context),
+          busy: library.busy,
+          icon: AppIcons.edit,
         ),
+        rowAction('Move to…', () => _move(context), busy: library.busy),
+        rowAction(
+          'Delete…',
+          () => _delete(context),
+          busy: library.busy,
+          icon: AppIcons.delete,
+        ),
+      ],
+      child: Tooltip(
+        message: chapter.name,
+        child: Text(chapter.name, overflow: TextOverflow.ellipsis),
       ),
     );
   }

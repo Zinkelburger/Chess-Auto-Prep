@@ -5,8 +5,8 @@ import 'package:chess_auto_prep/features/tactics/set_additions.dart';
 import 'package:chess_auto_prep/features/tactics/tactics_set.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
-import 'package:chess_auto_prep/workspace/document_saver.dart';
-import 'package:chess_auto_prep/workspace/document_session.dart';
+import 'package:chess_auto_prep/workspace/document/document_saver.dart';
+import 'package:chess_auto_prep/workspace/document/document_session.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/my_games_fixture.dart';

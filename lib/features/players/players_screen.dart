@@ -14,6 +14,12 @@ import 'player_dialogs.dart';
 import 'players.dart';
 import 'saved_games.dart';
 import '../../ui/list_message.dart';
+import '../../ui/list_row.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/progress_line.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/segments.dart';
+import '../../ui/tool_button.dart';
 
 /// The Players & prep page: everyone the user prepares for, or the groups
 /// they are collected in for an event, as one dense list. A row has the two
@@ -59,35 +65,15 @@ class _PlayersScreenState extends State<PlayersScreen> {
   }
 
   Players get owner => widget.players;
-  Future<void> _group({PlayerGroup? old}) async {
-    final group = await editGroup(context, group: old);
-    if (!mounted || group == null) return;
-    if (await owner.saveGroup(group, expected: old) && mounted) {
-      owner.showGroup(group.id);
-    }
-  }
-
-  Future<void> _addMember(PlayerGroup group) async {
-    final player = await showChoiceDialog<Player>(
-      context,
-      title: 'Add to ${group.name}',
-      options: owner.players.where((p) => !group.contains(p.id)).toList(),
-      label: (p) => p.name,
-      hint: 'Search players',
-      empty:
-          'Everyone is already in this group. Add a new player from All players.',
-    );
-    if (player != null && mounted) {
-      await owner.saveGroup(group.member(player.id), expected: group);
-    }
-  }
+  Future<void> _group({PlayerGroup? old}) =>
+      saveGroupFrom(context, owner, old: old);
 
   Future<void> _remove(Player player) async {
     final group = owner.group;
     if (group != null) {
       if (!await confirmAction(
             context,
-            title: 'Remove from ${group.name}?',
+            title: 'Remove “${player.name}” from “${group.name}”?',
             message: 'Saved games and studies stay on disk.',
             confirm: 'Remove',
           ) ||
@@ -120,7 +106,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
     final deleted = saved.deletable;
     if (await confirmAction(
           context,
-          title: 'Delete ${player.name}’s saved games?',
+          title: 'Delete the saved games of “${player.name}”?',
           message: [
             'Moves $deleted downloaded ${deleted == 1 ? 'game' : 'games'} to '
                 'the recovery folder and deletes their analysis. Linked PGN '
@@ -164,17 +150,16 @@ class _PlayersScreenState extends State<PlayersScreen> {
   /// Everyone, or the groups people are collected in for an event.
   Widget _viewSwitch() => Align(
     alignment: Alignment.centerLeft,
-    child: SegmentedButton<bool>(
+    child: Segments<bool>(
       segments: const [
         ButtonSegment(value: false, label: Text('All players')),
         ButtonSegment(value: true, label: Text('Groups')),
       ],
-      selected: {owner.showingGroups},
-      showSelectedIcon: false,
-      onSelectionChanged: (v) {
+      selected: owner.showingGroups,
+      onChanged: (v) {
         if (!mounted) return;
         _search.clear();
-        owner.showGroups(v.single);
+        owner.showGroups(v);
       },
     ),
   );
@@ -185,13 +170,13 @@ class _PlayersScreenState extends State<PlayersScreen> {
     final text = Theme.of(context).textTheme;
     return Row(
       children: [
-        TextButton.icon(
+        ToolButton(
+          icon: AppIcons.back,
+          tooltip: 'Back to groups',
           onPressed: () {
             _search.clear();
             owner.showGroup(null);
           },
-          icon: const Icon(Icons.arrow_back, size: IconSize.action),
-          label: const Text('Groups'),
         ),
         const SizedBox(width: Space.s),
         Flexible(
@@ -232,26 +217,28 @@ class _PlayersScreenState extends State<PlayersScreen> {
             onChanged: owner.search,
           ),
         ),
-        FilledButton(
+        FilledButton.icon(
           onPressed: blocked
               ? null
               : groups
               ? () => _group()
               : group != null
-              ? () => _addMember(group)
+              ? () => addToGroup(context, owner, group)
               : () => editPlayer(context, owner),
-          child: Text(
+          icon: const Icon(AppIcons.add, size: IconSize.action),
+          label: Text(
             groups
-                ? 'New group'
+                ? 'New group…'
                 : group != null
-                ? 'Add players'
-                : 'Add player',
+                ? 'Add players…'
+                : 'Add player…',
           ),
         ),
         if (!groups)
-          OutlinedButton(
+          OutlinedButton.icon(
             onPressed: blocked ? null : () => importPlayers(context, owner),
-            child: const Text('Paste players'),
+            icon: const Icon(AppIcons.paste, size: IconSize.action),
+            label: const Text('Paste players…'),
           ),
         if (group != null) ...[
           TextButton(
@@ -274,33 +261,41 @@ class _PlayersScreenState extends State<PlayersScreen> {
     tooltip: 'More actions',
     children: [
       if (group != null) ...[
-        MenuItemButton(
-          onPressed: owner.busy ? null : () => _group(old: group),
-          child: const Text('Edit group…'),
+        rowAction(
+          'Edit group…',
+          () => _group(old: group),
+          busy: owner.busy,
+          icon: AppIcons.edit,
         ),
-        MenuItemButton(
-          onPressed: () => widget.onCopy(group),
-          child: const Text('Copy prep sheet'),
+        rowAction(
+          'Copy prep sheet',
+          () => widget.onCopy(group),
+          icon: AppIcons.copy,
         ),
-        MenuItemButton(
-          onPressed: () => widget.onExport(group),
-          child: const Text('Export prep sheet…'),
+        rowAction(
+          'Export prep sheet…',
+          () => widget.onExport(group),
+          icon: AppIcons.saveCopy,
         ),
         if (group.fields['study'] case final String study when study.isNotEmpty)
-          MenuItemButton(
-            onPressed: owner.busy ? null : () => owner.unlinkGroupStudy(group),
-            child: const Text('Unlink group study'),
+          rowAction(
+            'Unlink group study',
+            () => owner.unlinkGroupStudy(group),
+            busy: owner.busy,
           ),
       ],
       // Only where there is a rating service to ask.
       if (owner.lookupRating != null)
-        MenuItemButton(
-          onPressed: owner.lookingUp ? null : owner.updateRatings,
-          child: const Text('Update US Chess ratings'),
+        rowAction(
+          'Update US Chess ratings',
+          owner.updateRatings,
+          busy: owner.lookingUp,
         ),
-      MenuItemButton(
-        onPressed: owner.busy ? null : owner.load,
-        child: const Text('Reload players and groups'),
+      rowAction(
+        'Refresh',
+        owner.load,
+        busy: owner.busy,
+        icon: AppIcons.refresh,
       ),
     ],
   );
@@ -312,9 +307,9 @@ class _PlayersScreenState extends State<PlayersScreen> {
     if (groups.isEmpty) {
       return ListMessage(
         owner.query.isNotEmpty
-            ? 'No groups match this search.'
-            : 'No groups yet. A group collects the players of an event, with '
-                  'a prep sheet and a study for the whole field.',
+            ? 'Nothing matches "${owner.query}".'
+            : 'No groups yet; a group holds an event’s players, its prep '
+                  'sheet and a study.',
       );
     }
     return ListView.separated(
@@ -336,7 +331,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
   Future<void> _removeGroup(PlayerGroup group) async {
     if (await confirmAction(
           context,
-          title: 'Remove ${group.name}?',
+          title: 'Remove group “${group.name}”?',
           message: 'Players, saved games and studies stay in your library.',
           confirm: 'Remove',
         ) &&
@@ -350,12 +345,10 @@ class _PlayersScreenState extends State<PlayersScreen> {
     if (players.isEmpty) {
       return ListMessage(
         owner.query.isNotEmpty
-            ? 'No players match this search.'
+            ? 'Nothing matches "${owner.query}".'
             : owner.group == null
-            ? 'No players yet. Add a player with an online account, or paste '
-                  'a player list.'
-            : 'Nobody in this group yet. Add players from your directory, or '
-                  'paste the event’s player list.',
+            ? 'No players yet.'
+            : 'Nobody in this group yet.',
       );
     }
     return ListView.separated(
@@ -408,49 +401,32 @@ class _GroupRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    return InkWell(
+    return ListRow(
       onTap: onOpen,
-      child: SizedBox(
-        height: puzzleRowHeight,
-        child: Row(
-          children: [
-            const SizedBox(width: Space.m),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    group.name,
-                    style: text.bodyMedium,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    groupLine(group),
-                    style: text.labelSmall,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            RowActions(
-              tooltip: 'Group actions',
-              children: [
-                MenuItemButton(
-                  onPressed: busy ? null : onEdit,
-                  child: const Text('Edit group…'),
-                ),
-                MenuItemButton(
-                  onPressed: busy ? null : onRemove,
-                  child: const Text('Remove group…'),
-                ),
-              ],
-            ),
-            const SizedBox(width: Space.s),
-          ],
-        ),
+      height: twoLineRowHeight,
+      padding: const EdgeInsets.only(left: Space.m, right: Space.s),
+      menuTooltip: 'Group actions',
+      menu: [
+        rowAction('Edit group…', onEdit, busy: busy, icon: AppIcons.edit),
+        rowAction('Remove group…', onRemove, busy: busy, icon: AppIcons.remove),
+      ],
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            group.name,
+            style: text.bodyMedium,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            groupLine(group),
+            style: text.labelSmall,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
@@ -468,18 +444,12 @@ class _Notices extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final wrong = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.error,
-    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(vertical: Space.s),
-          child: SizedBox(
-            height: progressLineHeight,
-            child: players.busy ? const LinearProgressIndicator() : null,
-          ),
+          child: ProgressLine(active: players.busy),
         ),
         if (players.lookupStatus case final status?)
           Row(
@@ -492,30 +462,64 @@ class _Notices extends StatelessWidget {
                 ),
             ],
           ),
-        for (final warning in players.warnings) Text(warning, style: wrong),
+        for (final warning in players.warnings) ProblemLine(warning),
         if (players.error case final error?)
-          Wrap(
-            spacing: Space.s,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(error, style: wrong),
-              if (players.needsRetry) ...[
-                TextButton(
-                  onPressed: players.busy ? null : players.retry,
-                  child: const Text('Retry save'),
-                ),
-                TextButton(
-                  onPressed: players.busy ? null : players.discardFailed,
-                  child: const Text('Discard failed edit and reload'),
-                ),
-              ] else
-                TextButton(
-                  onPressed: players.load,
-                  child: const Text('Try again'),
-                ),
-            ],
+          ProblemLine(
+            error,
+            action: players.needsRetry
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      OutlinedButton(
+                        onPressed: players.busy ? null : players.retry,
+                        child: const Text('Retry save'),
+                      ),
+                      const SizedBox(width: Space.s),
+                      TextButton(
+                        onPressed: players.busy ? null : players.discardFailed,
+                        child: const Text('Discard failed edit and reload'),
+                      ),
+                    ],
+                  )
+                : OutlinedButton(
+                    onPressed: players.load,
+                    child: const Text('Try again'),
+                  ),
           ),
       ],
     );
+  }
+}
+
+/// A group made, or [old] changed, from its dialog; the group then shown.
+Future<void> saveGroupFrom(
+  BuildContext context,
+  Players players, {
+  PlayerGroup? old,
+}) async {
+  final group = await editGroup(context, group: old);
+  if (!context.mounted || group == null) return;
+  if (await players.saveGroup(group, expected: old) && context.mounted) {
+    players.showGroup(group.id);
+  }
+}
+
+/// One of everyone into [group], picked by name.
+Future<void> addToGroup(
+  BuildContext context,
+  Players players,
+  PlayerGroup group,
+) async {
+  final player = await showChoiceDialog<Player>(
+    context,
+    title: 'Add to ${group.name}',
+    options: players.players.where((p) => !group.contains(p.id)).toList(),
+    label: (p) => p.name,
+    hint: 'Search players',
+    empty:
+        'Everyone is already in this group. Add a new player from All players.',
+  );
+  if (player != null && context.mounted) {
+    await players.saveGroup(group.member(player.id), expected: group);
   }
 }

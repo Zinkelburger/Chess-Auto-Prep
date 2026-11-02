@@ -11,7 +11,7 @@ import subprocess
 
 from agent_worktree import branch_name, git_text, verify_handoff
 
-BACKUP_REF = 'refs/heads/backup/local-main'
+BACKUP_REF = 'refs/heads/dev'
 
 
 def run(checkout: Path, *args: str) -> None:
@@ -55,7 +55,7 @@ def verify_main(checkout: Path) -> None:
     remote = git_text(checkout, 'ls-remote', '--exit-code', 'origin', BACKUP_REF).split()[0]
     if remote != head:
         raise RuntimeError('Local main is not backed up; rerun agent_integrate.py from the task')
-    print(f'Local main at {head[:8]} is backed up on origin/backup/local-main: {checkout}')
+    print(f'Local main at {head[:8]} is backed up on origin/dev: {checkout}')
     dirty = git_text(checkout, 'status', '--porcelain')
     if dirty:
         print('Existing uncommitted main edits remain local; they are not part of this backup:')

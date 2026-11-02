@@ -4,7 +4,7 @@ import 'package:chess_auto_prep/chess/game_filter.dart';
 import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/workspace/file_filter.dart';
+import 'package:chess_auto_prep/workspace/explorer/file_filter.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';

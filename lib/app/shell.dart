@@ -18,10 +18,10 @@ import '../ui/pane_tabs.dart';
 import '../ui/navigation_pages.dart';
 import '../ui/theme.dart';
 import '../storage/finds_store.dart';
-import '../workspace/board_claim.dart';
-import '../workspace/book_chip.dart';
-import '../workspace/finds_panel.dart';
-import '../workspace/move_field.dart';
+import '../workspace/board/board_claim.dart';
+import '../workspace/book/book_chip.dart';
+import '../workspace/search/finds_panel.dart';
+import '../workspace/board/move_field.dart';
 import '../workspace/workspace.dart';
 import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_tabs.dart';
@@ -92,13 +92,13 @@ class Shell extends StatefulWidget {
 
 class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// Whether the edit strip is open: `Read | Edit` in the viewer and
-  /// Study, Ctrl+E and the strip's own Done elsewhere. Each mode keeps its
+  /// Study, Actions ▸ Edit and the strip's own Done elsewhere. Each mode keeps its
   /// own, in [_editingIn] while another is on screen.
   final _editing = ValueNotifier(false);
   final _editingIn = <Mode, bool>{};
 
-  /// The words and the focus of the move field under the board, which `/`
-  /// and a lesson reach as well as the field.
+  /// The words and the focus of the move field under the board, which a
+  /// lesson reaches as well as the field.
   final _moves = MoveEntry();
 
   /// Who holds the board: a lesson first, then the explorer Book's free
@@ -246,13 +246,12 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   final _listContentKey = GlobalKey();
   final _outlineContentKey = GlobalKey();
 
-  /// What the Actions menu and the palette offer, and the dialogs they open.
+  /// What the Actions menu offers, and the dialogs it opens.
   late final _actions = WindowActions(
     requests: _requests,
     workspace: _ws,
     documents: _docs,
     training: _train,
-    labs: widget.labs,
     columns: _columns,
     layoutMemory: _layoutMemory,
     doors: _doors,
@@ -263,6 +262,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     inspecting: () => _inspecting,
     settingRows: widget.settingRows,
     settingsAlso: widget.settingsAlso,
+    importCourse: () => unawaited(_trainDoors.importCourse()),
   );
 
   /// The window's keys over the workspace's, and the mouse's buttons.
@@ -272,7 +272,6 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     puzzles: _train.puzzles,
     columns: _columns,
     doors: _doors,
-    search: _search,
     actions: _actions,
     fullScreen: widget.fullScreen,
     view: () => _view,
@@ -411,9 +410,10 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
           mounted &&
           await confirmAction(
             context,
-            title: 'Train this line',
-            message: 'No chapter plays this line yet. Add it to $draft first?',
+            title: 'Add this line to “$draft”?',
+            message: 'No chapter plays this line yet; training needs one.',
             confirm: 'Add and train',
+            destructive: false,
           ),
       showTrain: () {
         if (mounted) _views[Mode.repertoires]!.show(WorkspaceTab.train);
@@ -429,6 +429,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
 
   void _saveHeld() => _actions.saveHeld(context);
 
+  /// A context under the window's status scope.
+  final _statusContext = GlobalKey();
+
   /// The mode and the status are the requests'; a change to either redraws
   /// the window, as a change of mode must.
   @override
@@ -439,6 +442,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         child: StatusScope(
           say: _requests.say,
           child: ListenableBuilder(
+            key: _statusContext,
             listenable: Listenable.merge([_requests, widget.labs.offered]),
             builder: (context, _) => _requests.mode == Mode.repertoires
                 ? PgnDropRegion(
@@ -476,7 +480,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         // A mode with a screen of its own has no list to show or hide.
         listShown: _columns.listShown || screen != null,
         onToggleList: _columns.toggleList,
-        actions: () => _actions.entries(context),
+        // Under the status scope: a mode's own dialog run from the menu
+        // says what became of it in the bar, as from its button.
+        actions: () => _actions.entries(_statusContext.currentContext!),
         // What the entries' enabled states read, heard only while the
         // menu is open: the bar itself shows none of it.
         actionsChange: Listenable.merge([
@@ -500,10 +506,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
             screen ??
             WorkspaceKeys(
               session: _boardWorkspace.session,
-              analysis: _boardWorkspace.analysis,
               editing: _editing,
               tabs: _tabs,
-              moves: _moves,
               extra: _keys.all(context),
               leave: _keys.leave,
               save: _inspecting ? null : _saveHeld,

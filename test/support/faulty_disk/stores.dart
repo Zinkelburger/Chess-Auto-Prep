@@ -97,7 +97,7 @@ final class Stores {
 
   /// Every book's chapters and sections, as books.json reads now, or
   /// `unreadable`: `BookStore` throws when the file cannot be read, and the
-  /// Books owner (lib/workspace/books.dart) shows that, not the throw.
+  /// Books owner (lib/workspace/book/books.dart) shows that, not the throw.
   Future<String> bookSelectors() async {
     final BookSnapshot books;
     try {

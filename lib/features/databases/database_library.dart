@@ -8,7 +8,7 @@ import 'package:path/path.dart' as p;
 import '../../storage/chapter_files.dart';
 import '../../chess/explorer_answer.dart';
 import '../../chess/explorer_choice.dart';
-import '../../workspace/game_fetcher.dart';
+import '../../workspace/explorer/game_fetcher.dart';
 import '../../storage/disk_usage.dart';
 import '../../storage/master_corpus.dart';
 import '../../storage/pending_writes.dart';

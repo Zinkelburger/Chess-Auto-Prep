@@ -20,7 +20,7 @@ and release builds. Use [the architecture contracts](ARCHITECTURE.md),
 - [`app/workspace_requests.dart`](../lib/app/workspace_requests.dart) coordinates
   opens, mode changes and dirty-draft decisions. [`app/mode.dart`](../lib/app/mode.dart)
   defines every top-level mode.
-- [`workspace/document_session.dart`](../lib/workspace/document_session.dart)
+- [`workspace/document/document_session.dart`](../lib/workspace/document/document_session.dart)
   owns the active parsed document, edits and save state; its
   `DocumentCursor` (`session.cursor`, `document_cursor.dart`) owns where the
   reader is and a comment's line on the board. The shared
@@ -38,7 +38,7 @@ and release builds. Use [the architecture contracts](ARCHITECTURE.md),
 | [`engines/`](../lib/engines/) | Engine installation, supervised processes, UCI and finite engine jobs |
 | [`net/`](../lib/net/) | Service clients, downloads and login callbacks |
 | [`ui/`](../lib/ui/) | Shared controls, theme, shortcuts, notation and selection |
-| [`workspace/`](../lib/workspace/) | Shared document, board, analysis, explorer, tabs and tools |
+| [`workspace/`](../lib/workspace/) | Shared workspace view and panes, over `document/`, `board/`, `reading/`, `analysis/`, `review/`, `explorer/`, `book/` and `search/` |
 | [`features/`](../lib/features/) | Mode-specific owners and panels; no cross-feature imports |
 | [`app/`](../lib/app/) | Composition, cross-mode commands, lifecycle, desktop close and updates |
 | [`debug/`](../lib/debug/) | Opt-in headless control and packaged-app checks |
@@ -58,7 +58,7 @@ Bughouse mode is offered when its engine assets are present.
   `TrainingOutline` and `TrainingHome` live inside the existing three panels.
   `TrainingOptions` persists the repertoire, review choice and parent pauses.
   Analysis/Explorer help opens a scratch study detour at the lesson position;
-  Return to training restores the retained lesson. A mode, tab or file detour suspends the current lesson and its
+  Resume restores the retained lesson. A mode, tab or file detour suspends the current lesson and its
   timers; Resume reclaims the board in the visible Train pane. Back to lines
   ends it explicitly. Accepted ratings finish saving while paused; a changed
   source invalidates the retained lesson. Training records remain under Documents.
@@ -67,15 +67,15 @@ Bughouse mode is offered when its engine assets are present.
   Ctrl+V reads by content: a FEN (quoted, a `[FEN "…"]` tag, or cut short and
   filled in as `w - - 0 1`), a PGN or bare moves becomes an analysis board,
   except a PGN in the builder or trainer with a chapter up, which becomes a
-  repertoire; Ctrl+Shift+V takes a FEN only. A FEN faces the side to move. A
+  repertoire; Actions ▸ `Paste FEN` takes a FEN only. A FEN faces the side to move. A
   blank board (nothing played or edited) is reused rather than opening another
   tab. Tactics, the trainer and the modes without a board send the board to the
-  Repertoire builder; Bughouse names its own paste. `Set up position…`
-  (Ctrl+Shift+E) opens the shared `workspace/board_editor.dart` on the board's
+  Repertoire builder; Bughouse names its own paste. `Edit position…`
+  opens the shared `workspace/board/board_editor.dart` on the board's
   position and returns an analysis board the same way up. While the Analysis
   tab is up, both fill that tab's scratch game instead.
 - The viewer and Study share `_ReadingView` (`app/document_views.dart`): one
-  card with `Read | Edit` (`workspace/edit_switch.dart`, at the start of
+  card with `Read | Edit` (`workspace/reading/edit_switch.dart`, at the start of
   `NavRow`) bound to the shell's editing notifier, which keeps a side per mode
   (`ModeView.startsEditing`: Study). Read sets `DocumentSession.holdsEdits`;
   turning to Edit keeps the held edits first. `DocumentSession.apply(writes:
@@ -89,7 +89,7 @@ Bughouse mode is offered when its engine assets are present.
   file` (`Explorer.independent(starting:)`), and supplies the Filter tab
   (`ViewerFilterPane`) and the followed player's colour choice
   (`PlayerSideChoice`) through `ModeView`.
-- `GameReview` (`workspace/game_review.dart`) reviews the game on the board
+- `GameReview` (`workspace/review/game_review.dart`) reviews the game on the board
   (`start`) or every game of the file without a review in turn (`startAll`);
   marks come from `moveReviewMark` in `chess/pgn/game_review.dart`, Lichess's
   winning-chance drop and mate rules.
@@ -132,17 +132,17 @@ Bughouse mode is offered when its engine assets are present.
   Cleanup is limited to explicitly selected derived data.
 - Generation owns search trees and draft publication; Replies/gaps and Audit
   use the current workspace and chapter revision. A practical search from the
-  board (`workspace/fill_gaps.dart`) builds two trees in one run, the board's
+  board (`workspace/search/fill_gaps.dart`) builds two trees in one run, the board's
   side and the other; `FillGaps.nodeAtBoard(side:)` reads either, and
-  `workspace/search_table.dart` merges them into the Expectimax table's
+  `workspace/search/search_table.dart` merges them into the Expectimax table's
   White, Black and Engine columns. Saved-tree loading and automatic board-follow
   restarts share one start generation: navigation, a newer accepted start/resume,
   or any stop command invalidates earlier pending starts, including an away-and-back
   navigation. Exact-root results take precedence while preserving newest-first
   order. Engine depths and continuation lines share the same source/depth scope.
   Turning a finished run into a draft chapter, and retrying that draft's save,
-  is `workspace/fill_lines.dart`'s.
-- `workspace/index_build.dart` owns each opening-index build. Incremental work
+  is `workspace/search/fill_lines.dart`'s.
+- `workspace/explorer/index_build.dart` owns each opening-index build. Incremental work
   and isolate messages use the same guarded completion: success, failure and
   cancellation close the timer, receive port and worker. Progress-consumer failures
   reach the result future, and late worker handles are stopped after completion.
@@ -179,6 +179,16 @@ Bughouse mode is offered when its engine assets are present.
   `SearchField` keeps its magnifier, clear action, accessible name and hover
   help; `ChoiceField` uses persistent labels. New-name dialogs start empty,
   while rename/edit dialogs retain saved values.
+- Dialogs come from `ui/`: `FormDialog` (title, fields, held problem line,
+  progress line, Cancel and one filled button, Enter and Escape) under
+  `showNameDialog` and the feature forms; `confirmAction` for a yes/no;
+  `showOptionsDialog` for a few answers (a side, a promotion piece);
+  `showChoiceDialog` for a searchable list. `ui/theme.dart` gives them their
+  graphite panel and the `dialogNarrow` / `dialogMedium` / `dialogWide`
+  widths. A dialog or field that does one slow thing at a time mixes in
+  `Attempting` (`ui/attempting.dart`): `busy`, the `problem` sentence, and
+  `attempt()`, which refuses while busy and logs what threw; its `busy` and
+  `problem` feed `FormDialog` directly.
 - `AccessibleBoard` adds named squares, side-to-move/check announcements,
   orientation-aware arrow navigation, Enter/Space selection and keyboard promotion
   to the shared pointer board. Modified history shortcuts still pass through.
@@ -188,19 +198,19 @@ Bughouse mode is offered when its engine assets are present.
   while browsing source games. Writes participate in exit settling. Actions offers
   Reset workspace layout, board width and active pane sizing; tab context menus
   also open with Shift+F10. Mode navigation is grouped and searchable through
-  Find a mode and the Actions palette. The reading surface names its Tools menu.
+  Find a mode and the Actions menu. The reading surface names its Tools menu.
 - Engine jobs publish a named kind through `EngineJobs`; the top bar's running
   task button returns to the owning tool without starting a second job. Discard
   of held edits confirms the named document and refuses stale dialog callbacks.
 - Settings includes accounts, engine/training controls, diagnostics, shortcuts,
   licenses and verified update downloads/install-on-close.
-  The engine pane (`workspace/engine_pane.dart`) is the switch, one status
+  The engine pane (`workspace/analysis/engine_pane.dart`) is the switch, one status
   line and 28px rows of score gutter plus moves; the status
-  (`workspace/engine_status.dart`) says depth, speed and nodes from UCI
+  (`workspace/analysis/engine_status.dart`) says depth, speed and nodes from UCI
   `info` (`EngineLine.nodes`/`nps`), then the engine's `id name`, and leaves
   out the depth a found mate runs out to. Its gear swaps the lines in place
   for typeable Lines shown, CPU cores and Memory steppers
-  (`workspace/engine_settings.dart`, wording shared with Settings ▸ Engine
+  (`workspace/analysis/engine_settings.dart`, wording shared with Settings ▸ Engine
   through `EngineSettingCopy`); both write the same settings, which the
   workspace wiring applies to the running engine. CPU cores is automatic
   until chosen (`Settings.autoCores`, resolved by `Settings.coresOn` to half
@@ -214,11 +224,11 @@ Bughouse mode is offered when its engine assets are present.
   Stockfish. Stockfish install failures give the player one plain sentence;
   the file, checksum or `tools/fetch_assets.py` hint goes to the log. The
   Expectimax tab's gear does the
-  same for the search (`workspace/search_settings.dart`): its rows and
+  same for the search (`workspace/search/search_settings.dart`): its rows and
   Settings ▸ Expectimax write `Settings.expectimax`
   (`chess/generation/expectimax_options.dart`), and every way of starting a
   search reads `FillRequest.of(settings)`. `opponentFor` in
-  `workspace/search_opponents.dart` turns the request's reply source into the
+  `workspace/search/search_opponents.dart` turns the request's reply source into the
   search's opponent: Maia, or a games database (Lichess explorer, local master
   book) with Maia behind it. Each opponent node keeps who answered it
   (`OpponentNode.repliesFrom`, saved as `v2_replies_from`), and the table's
@@ -245,7 +255,10 @@ code reads exactly the formats it writes.
 - [`integration_test/desktop_test.dart`](../integration_test/desktop_test.dart)
   exercises the actual desktop app. Engine/native checks have separate targets.
 - [`scripts/check_architecture.py`](../scripts/check_architecture.py) enforces the architecture
-  rules under `lib/` and `test/` (the name is historical).
+  rules under `lib/` and `test/` (the name is historical), including that
+  only `ui/app_icons.dart` names `Icons.` and that `AlertDialog`, progress
+  indicators, `SegmentedButton`, `CheckboxListTile`, Material chips and
+  `IconButton` are built only in `ui/`, outside a short reasoned allow-list.
 - `scripts/ci.sh analyze lint`, `scripts/ci.sh test` and `scripts/ci.sh tools`
   run through bounded jobs. The headless driver defaults to `lib/main.dart`.
 - Platform runners, `packages/document_file_io`, engine assets/updaters,

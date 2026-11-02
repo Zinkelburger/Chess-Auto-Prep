@@ -6,11 +6,14 @@ import 'package:flutter/material.dart';
 import '../../chess/tactics/puzzle.dart';
 import '../../chess/tactics/puzzle_run.dart';
 import '../../ui/check_row.dart';
+import '../../ui/list_message.dart';
 import '../../ui/theme.dart';
 import 'puzzle_state.dart';
 import 'puzzle_trainer.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// The Puzzle tab of the reading card: whose move it is and what went wrong
 /// in the game, what the last move came to, the three buttons in fixed
@@ -70,27 +73,26 @@ class _Idle extends StatelessWidget {
   final PuzzleTrainer trainer;
   final int available;
 
+  /// One quiet line, no heading: the list column already says how to get
+  /// puzzles, so with none to play there is nothing to add here.
   @override
   Widget build(BuildContext context) {
-    final parked = trainer.run != null;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          parked ? 'Session paused' : 'Practice your mistakes',
-          style: Theme.of(context).textTheme.titleMedium,
+    if (trainer.run != null) {
+      return ListMessage(
+        'Session paused; your results are kept.',
+        inset: 0,
+        action: TextButton(
+          onPressed: trainer.end,
+          child: const Text('End session'),
         ),
-        const SizedBox(height: Space.s),
-        Text(
-          parked
-              ? 'Your results are kept. Continue session from the list or select a puzzle.'
-              : available > 0
-              ? '$available puzzles ready. Choose Play in the list, then find the best move on the board.'
-              : 'Get your games in the left panel to create puzzles, or adjust the filters if you already have some.',
-        ),
-        if (parked)
-          TextButton(onPressed: trainer.end, child: const Text('End session')),
-      ],
+      );
+    }
+    if (available == 0) return const SizedBox.shrink();
+    return ListMessage(
+      available == 1
+          ? '1 puzzle ready to play.'
+          : '$available puzzles ready to play.',
+      inset: 0,
     );
   }
 }
@@ -299,19 +301,19 @@ class _Buttons extends StatelessWidget {
         if (up.finished)
           _button(
             'Analyze',
-            Icons.insights,
+            AppIcons.analyze,
             onAnalyze,
             tip: 'Open the game with the engine on',
           )
         else
           _button(
             'Show solution',
-            Icons.lightbulb_outline,
+            AppIcons.hint,
             trainer.showSolution,
             tip: AppKey.play.tip('Show solution'),
           ),
-        IconButton(
-          icon: const Icon(Icons.replay, size: IconSize.action),
+        ToolButton(
+          icon: AppIcons.again,
           tooltip: 'Try it again from the start',
           onPressed: atStart ? null : trainer.reset,
         ),
@@ -320,7 +322,7 @@ class _Buttons extends StatelessWidget {
             message: AppKey.nextGame.tip('Next puzzle'),
             child: FilledButton.icon(
               onPressed: next,
-              icon: const Icon(Icons.arrow_forward, size: IconSize.action),
+              icon: const Icon(AppIcons.forward, size: IconSize.action),
               iconAlignment: IconAlignment.end,
               label: const Text('Next'),
             ),
@@ -328,7 +330,7 @@ class _Buttons extends StatelessWidget {
         else
           _button(
             'Skip',
-            Icons.skip_next,
+            AppIcons.skip,
             next,
             tip: AppKey.nextGame.tip('Skip this puzzle'),
             iconAfter: true,
@@ -373,16 +375,12 @@ class _Stars extends StatelessWidget {
         Text('Rate', style: text),
         const SizedBox(width: Space.xs),
         for (var star = 1; star <= 5; star++)
-          IconButton(
-            icon: Icon(
-              star <= rating ? Icons.star : Icons.star_border,
-              size: IconSize.action,
-            ),
+          ToolButton(
+            icon: star <= rating ? AppIcons.rated : AppIcons.unrated,
             tooltip: star == 1
                 ? 'One star hides it from training'
                 : '$star stars',
             onPressed: () => trainer.rate(star == rating ? 0 : star),
-            visualDensity: VisualDensity.compact,
           ),
         if (rating == 1) Text('hidden from training', style: text),
       ],
@@ -421,13 +419,12 @@ class _Progress extends StatelessWidget {
         : run.seen.indexOf(current) + 1;
     return Row(
       children: [
-        IconButton(
-          icon: const Icon(Icons.chevron_left, size: IconSize.action),
+        ToolButton(
+          icon: AppIcons.previous,
           tooltip: AppKey.previousGame.tip('Previous puzzle'),
           onPressed: trainer.hasPrevious
               ? () => unawaited(trainer.previous())
               : null,
-          visualDensity: VisualDensity.compact,
         ),
         Expanded(
           child: Text(

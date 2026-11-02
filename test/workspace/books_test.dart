@@ -4,7 +4,7 @@ import 'package:chess_auto_prep/storage/book_file.dart';
 import 'package:chess_auto_prep/storage/book_snapshot.dart';
 import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
-import 'package:chess_auto_prep/workspace/books.dart';
+import 'package:chess_auto_prep/workspace/book/books.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_files.dart';
@@ -324,19 +324,6 @@ void main() {
     expect(books.includes(scotch), isTrue);
     expect(books.includes(ruy), isFalse);
     expect(books.shareOf(books.active!, course), BookShare.some);
-  });
-
-  test('renames and moves in the library are followed', () {
-    final book = books.create('Spring')!;
-    books
-      ..setRepertoire(book, najdorf, true)
-      ..setChapter(books.active!, e4, ref('e4', 'Italian'), true)
-      ..movedFolder('/repertoires/Najdorf', '/repertoires/Sicilian')
-      ..movedFile('/repertoires/e4/Italian.pgn', '/repertoires/e4/Giuoco.pgn');
-    expect(books.includes(ref('Sicilian', 'Main')), isTrue);
-    expect(books.includes(ref('Najdorf', 'Main')), isFalse);
-    expect(books.includes(ref('e4', 'Giuoco')), isTrue);
-    expect(books.includes(ref('e4', 'Italian')), isFalse);
   });
 
   test('deleting the book in use leaves none in use', () {

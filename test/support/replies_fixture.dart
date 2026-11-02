@@ -1,8 +1,8 @@
 import 'package:chess_auto_prep/engines/maia/move_policy.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
-import 'package:chess_auto_prep/workspace/document_session.dart';
-import 'package:chess_auto_prep/workspace/gap_hunt.dart';
-import 'package:chess_auto_prep/workspace/replies.dart';
+import 'package:chess_auto_prep/workspace/document/document_session.dart';
+import 'package:chess_auto_prep/workspace/book/gap_hunt.dart';
+import 'package:chess_auto_prep/workspace/book/replies.dart';
 
 import 'scripted_files.dart';
 import 'scripted_store.dart';

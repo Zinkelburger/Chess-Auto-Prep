@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../storage/chapter_files.dart';
+import '../../ui/list_row.dart';
 import '../../ui/move_notation.dart';
-import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
 import 'chapter_outline.dart';
 
@@ -164,46 +164,36 @@ class LineRow extends StatelessWidget {
 
   Widget _row(BuildContext context) {
     final theme = Theme.of(context);
-    return Material(
-      color: selected
-          ? theme.colorScheme.primary.withValues(alpha: 0.2)
-          : current
-          ? theme.colorScheme.surfaceContainerHighest
-          : Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: outlineRowHeight),
-          child: Padding(
-            padding: const EdgeInsets.only(left: Space.m + outlineIndent),
-            child: Row(
-              children: [
-                if (!line.shared) ...[
-                  Flexible(
-                    child: Tooltip(
-                      message: line.name,
-                      child: Text(line.name, overflow: TextOverflow.ellipsis),
-                    ),
-                  ),
-                  const SizedBox(width: Space.s),
-                ],
-                Expanded(
-                  child: Tooltip(
-                    message: displaySan(context, line.moves),
-                    child: Text(
-                      displaySan(context, line.moves),
-                      overflow: TextOverflow.ellipsis,
-                      style: monoText.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
+    return ListRow(
+      selected: current,
+      picked: selected,
+      onTap: onTap,
+      padding: const EdgeInsets.only(left: Space.m + outlineIndent),
+      menu: actions,
+      child: Row(
+        children: [
+          if (!line.shared) ...[
+            Flexible(
+              child: Tooltip(
+                message: line.name,
+                child: Text(line.name, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+            const SizedBox(width: Space.s),
+          ],
+          Expanded(
+            child: Tooltip(
+              message: displaySan(context, line.moves),
+              child: Text(
+                displaySan(context, line.moves),
+                overflow: TextOverflow.ellipsis,
+                style: monoText.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-                RowActions(children: actions),
-              ],
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -269,15 +259,12 @@ class LineDropTarget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return DragTarget<LineDrag>(
       onWillAcceptWithDetails: (details) => accepts(details.data),
       onAcceptWithDetails: (details) => onDrop(details.data),
       builder: (context, candidates, _) => DecoratedBox(
         decoration: BoxDecoration(
-          color: candidates.isEmpty
-              ? Colors.transparent
-              : scheme.primary.withValues(alpha: 0.15),
+          color: candidates.isEmpty ? Colors.transparent : hoverTint,
         ),
         child: child,
       ),

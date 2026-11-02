@@ -5,10 +5,10 @@ import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/document_session.dart';
-import 'package:chess_auto_prep/workspace/engine_analysis.dart';
-import 'package:chess_auto_prep/workspace/engine_pane.dart';
-import 'package:chess_auto_prep/workspace/engine_settings.dart';
+import 'package:chess_auto_prep/workspace/document/document_session.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_pane.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_settings.dart';
 import 'package:chessground/chessground.dart' show StaticChessboard;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -110,7 +110,7 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 200));
     expect(tester.getSize(find.byType(EnginePane)), before);
-    await tester.tap(find.byTooltip('Turn engine off (E)'));
+    await tester.tap(find.byTooltip('Turn engine off'));
     await tester.pump();
     expect(tester.getSize(find.byType(EnginePane)).height, engineBarHeight);
     expect(analysis.enabled, isFalse);
@@ -305,7 +305,7 @@ void main() {
     await analysis.enable();
     await tester.pump();
     expect(find.text('No Stockfish in this build'), findsOneWidget);
-    expect(find.byTooltip('Turn engine on (E)'), findsOneWidget);
+    expect(find.byTooltip('Turn engine on'), findsOneWidget);
   });
 
   testWidgets('the crosshair keeps the threat choice, which the analysis '

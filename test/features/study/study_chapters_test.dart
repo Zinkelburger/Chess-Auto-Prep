@@ -5,8 +5,8 @@ import 'package:chess_auto_prep/chess/pgn/study.dart';
 import 'package:chess_auto_prep/chess/pgn/line_id_pins.dart';
 import 'package:chess_auto_prep/features/study/study_commands.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
-import 'package:chess_auto_prep/workspace/chapter_commands.dart';
-import 'package:chess_auto_prep/workspace/session_results.dart';
+import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
+import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 

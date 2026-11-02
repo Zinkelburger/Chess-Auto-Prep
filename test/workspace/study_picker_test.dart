@@ -1,7 +1,7 @@
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/study_choice.dart';
-import 'package:chess_auto_prep/workspace/study_picker.dart';
+import 'package:chess_auto_prep/workspace/document/study_choice.dart';
+import 'package:chess_auto_prep/workspace/document/study_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

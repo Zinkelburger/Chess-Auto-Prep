@@ -221,7 +221,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Clear'), findsNothing);
+    expect(find.text('Clear filters'), findsNothing);
     await tester.tap(find.byTooltip('Filter games'));
     expect(asked, 1);
 
@@ -231,7 +231,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('1 of 3'), findsOneWidget);
     expect(find.text('Ding, Liren – Giri, Anish'), findsNothing);
-    await tester.tap(find.text('Clear'));
+    await tester.tap(find.text('Clear filters'));
     await tester.pumpAndSettle();
     expect(find.text('Ding, Liren – Giri, Anish'), findsOneWidget);
     expect(fixture.filter.narrowing, isFalse);
@@ -248,7 +248,7 @@ void main() {
     await pump(tester);
     expect(find.text('No games match the filter.'), findsOneWidget);
     expect(find.text('0 of 3'), findsOneWidget);
-    await tester.tap(find.text('Clear'));
+    await tester.tap(find.text('Clear filters'));
     await tester.pumpAndSettle();
     expect(find.text('Club night'), findsOneWidget);
   });

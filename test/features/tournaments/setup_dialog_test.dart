@@ -2,6 +2,7 @@ import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/tournament/config.dart';
 import 'package:chess_auto_prep/features/tournaments/setup_dialog.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
+import 'package:chess_auto_prep/ui/toggle_chip.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -82,7 +83,7 @@ void main() {
         );
       }
       if (preset != null) {
-        await tester.tap(find.widgetWithText(ChoiceChip, preset));
+        await tester.tap(find.widgetWithText(ToggleChip, preset));
         await tester.pumpAndSettle();
       }
       await tester.tap(find.text('Start new run'));

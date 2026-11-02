@@ -7,7 +7,7 @@ switching events is switching the book.
 
 Code: `lib/features/books/books_screen.dart` (the mode's screen), wired by
 `BooksView` in `lib/app/books_view.dart`; the owner `Books` in
-`lib/workspace/books.dart`, the chip in `lib/workspace/book_chip.dart`;
+`lib/workspace/book/books.dart`, the chip in `lib/workspace/book/book_chip.dart`;
 storage in `lib/storage/book_list.dart` (format), `book_file.dart` (the file)
 and `book_references.dart` (selectors rewritten by chapter moves). Back and
 Forward live in `lib/app/workspace_requests.dart`.
@@ -18,16 +18,17 @@ Mode menu: `Opening books` (group `Repertoires`). A screen of its own, no
 board. Also reached from the pencil beside the book chip wherever the book is
 read.
 
-- **Book list** (left) — `Opening books` with a `+` (`New opening book`); each
-  book by name, `In use` under the active one. While chapter moves rewrite the
-  books: `Updating book chapters…`. A save problem shows in the error colour
-  with `Retry save`.
-- **Book editor** (right) — the book's name, `Use this book` (filled) or
+- **Book list** (left) — `Opening books` with a `+` (`New opening book…`,
+  shown once there is a book); each book by name, `In use` beside the active
+  one. While chapter moves rewrite the books: `Updating book chapters…`. A save
+  problem is a problem line with `Retry save`.
+- **Book editor** (right) — the book's name, `Use this book` (outlined) or
   `In use`, and a `Book actions` menu: `Rename…`, `Stop using`, `Delete…`.
   Under it `Search repertoires and chapters`, then every repertoire: a
   tristate box, its name and `2 of 5` chapters; expanded, each chapter with a
   box and `Open in the builder`. Draft chapters are not listed.
-- **Empty states** — `No opening books yet.` with `New opening book`;
+- **Empty states** — `Reading opening books…`; `No opening books yet.` with
+  `New opening book…`, top left in the list, the editor side blank;
   `Create or import a repertoire, then choose its chapters for this book.`
   with `Open repertoire builder`; `Nothing matches "q".`
 - **Book chip** (elsewhere) — the active book's name (`No opening book set`)

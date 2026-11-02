@@ -130,7 +130,7 @@ void main() {
       );
       f.dispose();
       places.fail = false;
-      await f.viewer.retryReading();
+      await f.viewer.loadRecent();
       expect(await f.viewer.pendingWrites.settle(), isNull);
       expect(places.saved[f.ref.path]!.game, 1);
       expect(places.saved[f.ref.path]!.path, NodePath.of([0]));

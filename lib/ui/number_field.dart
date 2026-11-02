@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'theme.dart';
+import 'app_icons.dart';
 
 /// A number typed into a box, or stepped with − and +. Enter or leaving
 /// the box takes what was typed, kept inside the row's range.
@@ -81,7 +82,7 @@ class _NumberFieldState extends State<NumberField> {
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
-          icon: const Icon(Icons.remove, size: IconSize.menu),
+          icon: const Icon(AppIcons.decrease, size: IconSize.menu),
           tooltip: 'Decrease ${widget.label}',
           onPressed: widget.value > widget.min
               ? () => _step(-widget.step)
@@ -113,7 +114,7 @@ class _NumberFieldState extends State<NumberField> {
           Text(unit, style: text.bodySmall),
         ],
         IconButton(
-          icon: const Icon(Icons.add, size: IconSize.menu),
+          icon: const Icon(AppIcons.increase, size: IconSize.menu),
           tooltip: 'Increase ${widget.label}',
           onPressed: widget.value < widget.max
               ? () => _step(widget.step)

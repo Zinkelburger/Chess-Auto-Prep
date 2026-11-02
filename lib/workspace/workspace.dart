@@ -1,24 +1,24 @@
-import 'board_book.dart';
-import 'engine_jobs.dart';
+import 'book/board_book.dart';
+import 'analysis/engine_jobs.dart';
 import '../storage/settings_store.dart';
-import 'books.dart';
-import 'chapter_audit.dart';
-import 'game_review.dart';
-import 'solitaire.dart';
-import 'collection_analysis.dart';
-import 'document_saver.dart';
-import 'document_session.dart';
-import 'engine_analysis.dart';
-import 'explorer.dart';
-import 'fill_gaps.dart';
-import 'finds.dart';
-import 'game_fetcher.dart';
-import 'gap_hunt.dart';
-import 'local_games.dart';
-import 'opening_names.dart';
-import 'replies.dart';
-import 'repertoire_shelf.dart';
-import 'repertoire_tree.dart';
+import 'book/books.dart';
+import 'review/chapter_audit.dart';
+import 'review/game_review.dart';
+import 'review/solitaire.dart';
+import 'document/collection_analysis.dart';
+import 'document/document_saver.dart';
+import 'document/document_session.dart';
+import 'analysis/engine_analysis.dart';
+import 'explorer/explorer.dart';
+import 'search/fill_gaps.dart';
+import 'search/finds.dart';
+import 'explorer/game_fetcher.dart';
+import 'book/gap_hunt.dart';
+import 'explorer/local_games.dart';
+import 'explorer/opening_names.dart';
+import 'book/replies.dart';
+import 'book/repertoire_shelf.dart';
+import 'book/repertoire_tree.dart';
 
 /// The owners of the one workspace every mode shares: the document and its
 /// saver, and what is worked out from where the cursor is.

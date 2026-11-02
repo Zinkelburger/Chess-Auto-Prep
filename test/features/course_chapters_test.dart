@@ -9,7 +9,8 @@ import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/chapter_directory.dart';
 import 'package:chess_auto_prep/storage/recovery_gate.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/workspace/document_saver.dart' as saver;
+import 'package:chess_auto_prep/workspace/document/document_saver.dart'
+    as saver;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

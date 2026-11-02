@@ -1,10 +1,9 @@
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/features/library/library_panel.dart';
-import 'package:chess_auto_prep/workspace/comment_field.dart';
-import 'package:chess_auto_prep/workspace/move_tree_view.dart';
+import 'package:chess_auto_prep/workspace/reading/comment_field.dart';
+import 'package:chess_auto_prep/workspace/reading/move_tree_view.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
@@ -35,10 +34,7 @@ void main() {
     await tester.pumpAndSettle();
     final nf3 = NodePath.of([0, 0]);
     w.session.cursor.goTo(nf3);
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.pumpAndSettle();
+    await chooseAction(tester, 'Edit');
     final field = find.descendant(
       of: find.byType(CommentField),
       matching: find.byType(TextField),

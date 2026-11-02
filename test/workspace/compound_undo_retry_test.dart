@@ -3,9 +3,9 @@ import 'package:chess_auto_prep/storage/compound_commit.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart' as store;
 import 'package:chess_auto_prep/storage/reference_change.dart';
-import 'package:chess_auto_prep/workspace/document_saver.dart';
-import 'package:chess_auto_prep/workspace/edit_strip.dart';
-import 'package:chess_auto_prep/workspace/session_results.dart';
+import 'package:chess_auto_prep/workspace/document/document_saver.dart';
+import 'package:chess_auto_prep/workspace/reading/edit_strip.dart';
+import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

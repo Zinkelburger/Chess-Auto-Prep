@@ -12,7 +12,9 @@ from check_architecture import (
     MAX_FUNCTION_LINES,
     TEST,
     check_classes,
+    check_controls,
     check_functions,
+    check_icons,
     check_imports,
     check_members,
 )
@@ -35,6 +37,34 @@ class LayoutTest(unittest.TestCase):
             (root / "test/v2").mkdir()
             (root / "lib/services").mkdir()
             self.assertEqual(len(check_architecture.check_layout(root)), 3)
+
+
+class IconsTest(unittest.TestCase):
+    def test_only_the_icon_file_names_material_icons(self):
+        findings: list[str] = []
+        check_icons("ui/app_icons.dart", ["  static const add = Icons.add;"], findings)
+        self.assertEqual(findings, [])
+        check_icons("features/a.dart", ["Icon(AppIcons.add)", "// Icons.add in a comment"], findings)
+        self.assertEqual(findings, [])
+        check_icons("features/a.dart", ["const Icon(Icons.add)"], findings)
+        self.assertEqual(len(findings), 1)
+
+
+class ControlsTest(unittest.TestCase):
+    def test_raw_material_controls_stay_in_ui(self):
+        findings: list[str] = []
+        check_controls("ui/form_dialog.dart", ["return AlertDialog("], findings)
+        check_controls("features/a.dart", ["ToolButton(", "// IconButton( in a comment"], findings)
+        self.assertEqual(findings, [])
+        check_controls("features/a.dart", ["IconButton(", "SegmentedButton<int>("], findings)
+        self.assertEqual(len(findings), 2)
+
+    def test_an_allowed_file_may_build_only_its_own_exception(self):
+        findings: list[str] = []
+        check_controls("features/bughouse/pocket.dart", ["child: IconButton("], findings)
+        self.assertEqual(findings, [])
+        check_controls("features/bughouse/pocket.dart", ["AlertDialog("], findings)
+        self.assertEqual(len(findings), 1)
 
 
 class ImportsTest(unittest.TestCase):

@@ -3,9 +3,9 @@ import 'package:chess_auto_prep/chess/pgn/line_moves.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart'
     show Collision, Conflict, IoFailure, Opened, SaveRefused, Unfinished;
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/document_saver.dart';
-import 'package:chess_auto_prep/workspace/document_session.dart';
-import 'package:chess_auto_prep/workspace/edit_strip.dart';
+import 'package:chess_auto_prep/workspace/document/document_saver.dart';
+import 'package:chess_auto_prep/workspace/document/document_session.dart';
+import 'package:chess_auto_prep/workspace/reading/edit_strip.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -82,7 +82,7 @@ void main() {
 
   testWidgets('Done says the key that does the same', (tester) async {
     await pump(tester);
-    expect(find.byTooltip('Done editing (Ctrl+E)'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Done'), findsOneWidget);
   });
 
   testWidgets('while part of the game is hidden there is no note and no '

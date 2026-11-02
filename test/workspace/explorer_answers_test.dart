@@ -1,7 +1,7 @@
 import 'package:chess_auto_prep/chess/explorer_answer.dart';
 import 'package:chess_auto_prep/chess/explorer_choice.dart';
 import 'package:chess_auto_prep/chess/fen.dart';
-import 'package:chess_auto_prep/workspace/explorer.dart';
+import 'package:chess_auto_prep/workspace/explorer/explorer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_explorer.dart';

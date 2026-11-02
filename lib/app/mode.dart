@@ -16,7 +16,7 @@ import '../features/tactics/tactics_set.dart';
 import '../features/trainer/trainer.dart';
 import '../storage/pgn_file_import.dart';
 import '../storage/pgn_file_picker.dart';
-import '../workspace/file_filter.dart';
+import '../workspace/explorer/file_filter.dart';
 import 'trap_training.dart';
 
 /// The app's modes. Each one fills the left column beside the one
