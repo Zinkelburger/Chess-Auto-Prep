@@ -135,28 +135,23 @@ void main() {
     );
   });
 
-  testWidgets('the menu opens under the move that asked for it, and is the '
-      'one menu of the list', (tester) async {
+  testWidgets('the menu opens where the move was right-clicked, and no move '
+      'carries a menu of its own', (tester) async {
     final fixture = await openSession(twoLines);
     addTearDown(fixture.dispose);
     await pumpTree(tester, fixture);
-    expect(find.byType(MenuAnchor), findsOneWidget);
+    expect(find.byType(MenuAnchor), findsNothing);
 
     for (final move in ['Nf6', 'c4']) {
-      final token = tester.getRect(
-        find.ancestor(
-          of: find.textContaining(move),
-          matching: find.byType(InkWell),
-        ),
-      );
-      await tester.tap(find.textContaining(move), buttons: kSecondaryButton);
+      final at = tester.getCenter(find.textContaining(move));
+      await tester.tapAt(at, buttons: kSecondaryButton);
       await tester.pumpAndSettle();
       // Its first entry, inside the menu's own padding.
       final entry = tester.getTopLeft(
-        find.widgetWithText(MenuItemButton, 'Promote variation'),
+        find.widgetWithText(PopupMenuItem<VoidCallback>, 'Promote variation'),
       );
-      expect(entry.dy - token.bottom, inInclusiveRange(0, 32), reason: move);
-      expect(entry.dx - token.left, inInclusiveRange(0, 32), reason: move);
+      expect(entry.dy - at.dy, inInclusiveRange(0, 32), reason: move);
+      expect(entry.dx - at.dx, inInclusiveRange(0, 32), reason: move);
       // A click anywhere else puts it away.
       await tester.tapAt(const Offset(390, 590));
       await tester.pumpAndSettle();

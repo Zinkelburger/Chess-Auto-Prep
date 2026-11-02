@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/action_context_menu.dart';
 import '../ui/app_action.dart';
+import '../ui/menu_entry.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
 import 'action_layout.dart';
@@ -336,64 +337,31 @@ class _ActionPanesState extends State<ActionPanes> {
   Widget _paneMenu(int index, {bool labeled = false}) {
     final tabs = layout.pane(index);
     return MenuAnchor(
-      menuChildren: [
+      menuChildren: alignMenu([
         for (final tab in tabs.tabs)
-          GestureDetector(
-            onSecondaryTapUp: (details) => showActionContextMenu(
-              context,
-              details.globalPosition,
-              layout.destinations(tab.id),
-            ),
-            child: MenuItemButton(
-              onPressed: () => layout.open(index, tab.id),
-              child: Text(tab.title),
-            ),
+          MenuEntry(
+            tab.title,
+            () => layout.open(index, tab.id),
+            alternatives: layout.destinations(tab.id),
           ),
         if (widget.actions?.call() case final actions?
             when actions.isNotEmpty) ...[
           const Divider(height: 1),
-          for (final action in actions)
-            MenuItemButton(
-              onPressed: action.run,
-              leadingIcon: action.icon == null
-                  ? null
-                  : Icon(action.icon, size: IconSize.menu),
-              trailingIcon: action.shortcut == null
-                  ? null
-                  : Text(
-                      action.shortcut!,
-                      style: Theme.of(context).textTheme.labelSmall,
-                    ),
-              child: Text(action.label),
-            ),
+          for (final action in actions) MenuEntry.action(action),
         ],
         const Divider(height: 1),
         if (layout.count > 1) ...[
-          MenuItemButton(
-            onPressed: () => layout.resizeActive(0.05),
-            child: const Text('More room'),
-          ),
-          MenuItemButton(
-            onPressed: () => layout.resizeActive(-0.05),
-            child: const Text('Less room'),
-          ),
+          MenuEntry('More room', () => layout.resizeActive(0.05)),
+          MenuEntry('Less room', () => layout.resizeActive(-0.05)),
         ],
-        MenuItemButton(
-          onPressed: layout.canAddPane ? () => layout.addPane(index) : null,
-          leadingIcon: const Icon(AppIcons.newPane, size: IconSize.menu),
-          child: const Text('New pane'),
+        MenuEntry(
+          'New pane',
+          layout.canAddPane ? () => layout.addPane(index) : null,
+          icon: AppIcons.newPane,
         ),
-        if (index != 0)
-          MenuItemButton(
-            onPressed: () => layout.closePane(index),
-            child: const Text('Close pane'),
-          ),
-        if (layout.count > 1)
-          MenuItemButton(
-            onPressed: layout.joinAll,
-            child: const Text('Join all panes'),
-          ),
-      ],
+        if (index != 0) MenuEntry('Close pane', () => layout.closePane(index)),
+        if (layout.count > 1) MenuEntry('Join all panes', layout.joinAll),
+      ]),
       builder: (context, menu, _) => _menuButton(menu, index, labeled),
     );
   }

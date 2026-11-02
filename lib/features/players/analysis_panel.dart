@@ -168,28 +168,28 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
   Widget _menu(Player player) => RowActions(
     tooltip: 'Player actions',
     children: [
-      MenuItemButton(onPressed: _choose, child: const Text('Change player…')),
+      rowAction('Change player…', _choose),
       // Only a player with an account has games to download.
       if (player.accounts.isNotEmpty)
-        MenuItemButton(
-          onPressed: owner.busy ? null : () => unawaited(_getGames(player)),
-          leadingIcon: const Icon(AppIcons.download, size: IconSize.menu),
-          child: const Text('Get games…'),
+        rowAction(
+          'Get games…',
+          () => unawaited(_getGames(player)),
+          busy: owner.busy,
+          icon: AppIcons.download,
         ),
-      MenuItemButton(
-        onPressed: owner.busy ? null : widget.onImport,
-        leadingIcon: const Icon(AppIcons.open, size: IconSize.menu),
-        child: const Text('Add PGN…'),
+      rowAction(
+        'Add PGN…',
+        widget.onImport,
+        busy: owner.busy,
+        icon: AppIcons.open,
       ),
-      MenuItemButton(
-        onPressed: owner.busy ? null : () => unawaited(owner.select(player)),
-        leadingIcon: const Icon(AppIcons.refresh, size: IconSize.menu),
-        child: const Text('Refresh'),
+      rowAction(
+        'Refresh',
+        () => unawaited(owner.select(player)),
+        busy: owner.busy,
+        icon: AppIcons.refresh,
       ),
-      MenuItemButton(
-        onPressed: widget.onDirectory,
-        child: const Text('Players & prep'),
-      ),
+      rowAction('Players & prep', widget.onDirectory),
     ],
   );
 

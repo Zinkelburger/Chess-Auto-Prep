@@ -309,7 +309,6 @@ class _TrainingOutlineState extends State<TrainingOutline> {
         rowAction(
           'Read moves and notes',
           () => widget.onRead(state.toRead(line, ReadIn.moves)),
-          busy: false,
         ),
         if (trainable)
           rowAction(

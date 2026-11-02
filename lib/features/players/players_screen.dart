@@ -281,37 +281,41 @@ class _PlayersScreenState extends State<PlayersScreen> {
     tooltip: 'More actions',
     children: [
       if (group != null) ...[
-        MenuItemButton(
-          onPressed: owner.busy ? null : () => _group(old: group),
-          leadingIcon: const Icon(AppIcons.edit, size: IconSize.menu),
-          child: const Text('Edit group…'),
+        rowAction(
+          'Edit group…',
+          () => _group(old: group),
+          busy: owner.busy,
+          icon: AppIcons.edit,
         ),
-        MenuItemButton(
-          onPressed: () => widget.onCopy(group),
-          leadingIcon: const Icon(AppIcons.copy, size: IconSize.menu),
-          child: const Text('Copy prep sheet'),
+        rowAction(
+          'Copy prep sheet',
+          () => widget.onCopy(group),
+          icon: AppIcons.copy,
         ),
-        MenuItemButton(
-          onPressed: () => widget.onExport(group),
-          leadingIcon: const Icon(AppIcons.saveCopy, size: IconSize.menu),
-          child: const Text('Export prep sheet…'),
+        rowAction(
+          'Export prep sheet…',
+          () => widget.onExport(group),
+          icon: AppIcons.saveCopy,
         ),
         if (group.fields['study'] case final String study when study.isNotEmpty)
-          MenuItemButton(
-            onPressed: owner.busy ? null : () => owner.unlinkGroupStudy(group),
-            child: const Text('Unlink group study'),
+          rowAction(
+            'Unlink group study',
+            () => owner.unlinkGroupStudy(group),
+            busy: owner.busy,
           ),
       ],
       // Only where there is a rating service to ask.
       if (owner.lookupRating != null)
-        MenuItemButton(
-          onPressed: owner.lookingUp ? null : owner.updateRatings,
-          child: const Text('Update US Chess ratings'),
+        rowAction(
+          'Update US Chess ratings',
+          owner.updateRatings,
+          busy: owner.lookingUp,
         ),
-      MenuItemButton(
-        onPressed: owner.busy ? null : owner.load,
-        leadingIcon: const Icon(AppIcons.refresh, size: IconSize.menu),
-        child: const Text('Refresh'),
+      rowAction(
+        'Refresh',
+        owner.load,
+        busy: owner.busy,
+        icon: AppIcons.refresh,
       ),
     ],
   );
@@ -423,16 +427,8 @@ class _GroupRow extends StatelessWidget {
       padding: const EdgeInsets.only(left: Space.m, right: Space.s),
       menuTooltip: 'Group actions',
       menu: [
-        MenuItemButton(
-          onPressed: busy ? null : onEdit,
-          leadingIcon: const Icon(AppIcons.edit, size: IconSize.menu),
-          child: const Text('Edit group…'),
-        ),
-        MenuItemButton(
-          onPressed: busy ? null : onRemove,
-          leadingIcon: const Icon(AppIcons.remove, size: IconSize.menu),
-          child: const Text('Remove group…'),
-        ),
+        rowAction('Edit group…', onEdit, busy: busy, icon: AppIcons.edit),
+        rowAction('Remove group…', onRemove, busy: busy, icon: AppIcons.remove),
       ],
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,

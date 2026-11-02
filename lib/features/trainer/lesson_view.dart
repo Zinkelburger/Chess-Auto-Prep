@@ -581,21 +581,15 @@ class _Footer extends StatelessWidget {
               tooltip: 'Line actions',
               children: [
                 if (onBuilder != null)
-                  MenuItemButton(
-                    onPressed: onBuilder,
-                    leadingIcon: const Icon(
-                      AppIcons.openElsewhere,
-                      size: IconSize.menu,
-                    ),
-                    child: const Text('Open in builder'),
+                  rowAction(
+                    'Open in builder',
+                    onBuilder,
+                    icon: AppIcons.openElsewhere,
                   ),
-                MenuItemButton(
-                  onPressed: onPeek,
-                  child: const Text('View moves and notes'),
-                ),
-                MenuItemButton(
-                  onPressed: () => unawaited(lesson.exclude()),
-                  child: const Text('Exclude from training'),
+                rowAction('View moves and notes', onPeek),
+                rowAction(
+                  'Exclude from training',
+                  () => unawaited(lesson.exclude()),
                 ),
               ],
             ),

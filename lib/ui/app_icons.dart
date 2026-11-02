@@ -111,6 +111,9 @@ abstract final class AppIcons {
   static const last = Icons.last_page;
   static const flip = Icons.swap_vert;
 
+  /// A note on a move: `Comment this move`.
+  static const comment = Icons.mode_comment_outlined;
+
   /// Promote variation, and make it the main line.
   static const promote = Icons.arrow_upward;
   static const mainLine = Icons.check;

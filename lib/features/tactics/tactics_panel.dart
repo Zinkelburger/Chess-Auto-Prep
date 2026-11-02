@@ -7,6 +7,7 @@ import '../../chess/tactics/puzzle.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/status_bar.dart';
 import '../../ui/search_field.dart';
+import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
 import 'my_games.dart';
 import 'my_games_block.dart';
@@ -247,30 +248,26 @@ class _TacticsPanelState extends State<TacticsPanel> {
 extension on _TacticsPanelState {
   /// What can be done to one puzzle besides playing it.
   List<Widget> _menu(Puzzle puzzle) => [
-    MenuItemButton(
-      onPressed: () => widget.onAnalyze(puzzle),
-      child: const Text('Analyze in the game'),
+    rowAction('Analyze in the game', () => widget.onAnalyze(puzzle)),
+    rowAction(
+      'Copy FEN',
+      () => unawaited(Clipboard.setData(ClipboardData(text: puzzle.fen.value))),
+      icon: AppIcons.copy,
     ),
-    MenuItemButton(
-      onPressed: () =>
-          unawaited(Clipboard.setData(ClipboardData(text: puzzle.fen.value))),
-      leadingIcon: const Icon(AppIcons.copy, size: IconSize.menu),
-      child: const Text('Copy FEN'),
+    rowAction(
+      'Copy game PGN',
+      () => unawaited(_copyGame(puzzle)),
+      icon: AppIcons.copy,
     ),
-    MenuItemButton(
-      onPressed: () => unawaited(_copyGame(puzzle)),
-      leadingIcon: const Icon(AppIcons.copy, size: IconSize.menu),
-      child: const Text('Copy game PGN'),
+    rowAction(
+      'Add game to study…',
+      () => widget.onAddToStudy(puzzle),
+      icon: AppIcons.add,
     ),
-    MenuItemButton(
-      onPressed: () => widget.onAddToStudy(puzzle),
-      leadingIcon: const Icon(AppIcons.add, size: IconSize.menu),
-      child: const Text('Add game to study…'),
-    ),
-    MenuItemButton(
-      onPressed: () => unawaited(_delete(puzzle)),
-      leadingIcon: const Icon(AppIcons.delete, size: IconSize.menu),
-      child: const Text('Delete puzzle…'),
+    rowAction(
+      'Delete puzzle…',
+      () => unawaited(_delete(puzzle)),
+      icon: AppIcons.delete,
     ),
   ];
 

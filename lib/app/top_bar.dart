@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/app_action.dart';
 import '../ui/choice_dialog.dart';
-import '../ui/action_context_menu.dart';
+import '../ui/menu_entry.dart';
 import '../ui/theme.dart';
 import 'mode.dart';
 import '../ui/app_keys.dart';
@@ -152,10 +152,7 @@ class _ModeMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     return MenuAnchor(
       menuChildren: [
-        MenuItemButton(
-          onPressed: () => _find(context),
-          child: const Text('Find a mode…'),
-        ),
+        MenuEntry('Find a mode…', () => _find(context), icon: AppIcons.search),
         for (final group in modeGroups.entries) ...[
           const Divider(height: 1),
           Padding(
@@ -167,12 +164,11 @@ class _ModeMenu extends StatelessWidget {
           ),
           for (final named in group.value)
             if (offered(named))
-              MenuItemButton(
-                onPressed: () => onMode(named),
-                leadingIcon: named == mode
-                    ? const Icon(AppIcons.tick, size: IconSize.menu)
-                    : const SizedBox(width: IconSize.menu),
-                child: Text(named.label),
+              MenuEntry(
+                named.label,
+                () => onMode(named),
+                icon: named == mode ? AppIcons.tick : null,
+                slot: true,
               ),
         ],
       ],
@@ -239,26 +235,6 @@ class _ActionsMenuState extends State<_ActionsMenu> {
     for (final action in widget.actions()) {
       (groups[action.group ?? 'Actions'] ??= []).add(action);
     }
-    Widget entry(AppAction action) => GestureDetector(
-      onSecondaryTapUp: action.alternatives.isEmpty
-          ? null
-          : (details) => showActionContextMenu(
-              context,
-              details.globalPosition,
-              action.alternatives,
-            ),
-      child: MenuItemButton(
-        onPressed: action.run,
-        leadingIcon: action.icon == null
-            ? null
-            : Icon(action.icon, size: IconSize.menu),
-        trailingIcon: action.shortcut == null
-            ? null
-            : Text(action.shortcut!, style: text.labelSmall),
-        child: Text(action.label),
-      ),
-    );
-
     final children = <Widget>[];
     for (final group in groups.entries.where(
       (group) => !_secondary.containsKey(group.key),
@@ -279,7 +255,7 @@ class _ActionsMenuState extends State<_ActionsMenu> {
           child: Text(group.key, style: text.labelSmall),
         ),
       );
-      children.addAll(group.value.map(entry));
+      children.addAll(group.value.map(MenuEntry.action));
     }
     final secondary = groups.entries.where(
       (group) => _secondary.containsKey(group.key),
@@ -293,12 +269,12 @@ class _ActionsMenuState extends State<_ActionsMenu> {
       children.add(
         SubmenuButton(
           leadingIcon: Icon(_secondary[group.key], size: IconSize.menu),
-          menuChildren: group.value.map(entry).toList(),
+          menuChildren: menuEntries(group.value),
           child: Text(group.key),
         ),
       );
     }
-    return children;
+    return alignMenu(children);
   }
 
   /// Keep the document's work in view; secondary controls expand beside it.

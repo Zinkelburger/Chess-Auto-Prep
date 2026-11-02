@@ -449,26 +449,23 @@ class _BookEditorState extends State<_BookEditor> {
           RowActions(
             tooltip: 'Book actions',
             children: [
-              MenuItemButton(
-                onPressed: books.changingReferences
-                    ? null
-                    : () => unawaited(_rename(context, books, book)),
-                leadingIcon: const Icon(AppIcons.edit, size: IconSize.menu),
-                child: const Text('Rename…'),
+              rowAction(
+                'Rename…',
+                () => unawaited(_rename(context, books, book)),
+                busy: books.changingReferences,
+                icon: AppIcons.edit,
               ),
               if (inUse)
-                MenuItemButton(
-                  onPressed: books.changingReferences
-                      ? null
-                      : () => books.activate(null),
-                  child: const Text('Stop using'),
+                rowAction(
+                  'Stop using',
+                  () => books.activate(null),
+                  busy: books.changingReferences,
                 ),
-              MenuItemButton(
-                onPressed: books.changingReferences
-                    ? null
-                    : () => unawaited(_delete(context, books, book)),
-                leadingIcon: const Icon(AppIcons.delete, size: IconSize.menu),
-                child: const Text('Delete…'),
+              rowAction(
+                'Delete…',
+                () => unawaited(_delete(context, books, book)),
+                busy: books.changingReferences,
+                icon: AppIcons.delete,
               ),
             ],
           ),

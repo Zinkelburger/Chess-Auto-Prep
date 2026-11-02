@@ -15,7 +15,6 @@ import '../features/trainer/trainer.dart';
 import '../features/trainer/trainer_state.dart';
 import '../ui/app_action.dart';
 import '../ui/app_keys.dart';
-import '../ui/theme.dart';
 import '../workspace/book/board_book.dart';
 import '../workspace/book/board_book_pane.dart';
 import '../workspace/book/book_chip.dart';
@@ -402,12 +401,12 @@ abstract base class _ReadingView extends _DocumentModeView {
       unawaited(requests.addToStudy([?gameDraft(workspace.session)]));
 
   /// A move's menu adds the line through it to a study.
-  List<Widget> _addLine(NodePath path) => [
-    MenuItemButton(
-      onPressed: () =>
+  List<AppAction> _addLine(NodePath path) => [
+    AppAction(
+      'Add line to study…',
+      () =>
           unawaited(requests.addToStudy([?lineDraft(workspace.session, path)])),
-      leadingIcon: const Icon(AppIcons.add, size: IconSize.menu),
-      child: const Text('Add line to study…'),
+      icon: AppIcons.add,
     ),
   ];
 }

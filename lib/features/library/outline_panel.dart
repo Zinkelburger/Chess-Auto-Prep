@@ -8,6 +8,7 @@ import '../../ui/choice_dialog.dart';
 import '../../ui/status_bar.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/search_field.dart';
+import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
 import '../../workspace/document/chapter_commands.dart';
 import '../../workspace/document/document_session.dart';
@@ -439,24 +440,10 @@ class _OutlinePanelState extends State<OutlinePanel> {
       onTap: () => _pick(line),
       onDrop: (drag) => _move(drag, open, asSidelineOf: line.game),
       actions: [
-        MenuItemButton(
-          onPressed: () => _moveTo(line),
-          child: const Text('Move to chapter…'),
-        ),
-        MenuItemButton(
-          onPressed: () => _rename(line),
-          leadingIcon: const Icon(AppIcons.edit, size: IconSize.menu),
-          child: const Text('Rename line…'),
-        ),
-        MenuItemButton(
-          onPressed: () => _delete(line),
-          leadingIcon: const Icon(AppIcons.delete, size: IconSize.menu),
-          child: const Text('Delete line'),
-        ),
-        MenuItemButton(
-          onPressed: _newChapter,
-          child: const Text('New chapter…'),
-        ),
+        rowAction('Move to chapter…', () => _moveTo(line)),
+        rowAction('Rename line…', () => _rename(line), icon: AppIcons.edit),
+        rowAction('Delete line', () => _delete(line), icon: AppIcons.delete),
+        rowAction('New chapter…', _newChapter),
       ],
     );
   }

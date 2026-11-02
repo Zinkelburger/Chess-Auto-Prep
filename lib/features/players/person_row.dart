@@ -187,36 +187,31 @@ class PersonRow extends StatelessWidget {
         RowActions(
           tooltip: 'Player actions',
           children: [
-            MenuItemButton(
-              onPressed: owner.busy
-                  ? null
-                  : () => editPlayer(context, owner, player: player),
-              leadingIcon: const Icon(AppIcons.edit, size: IconSize.menu),
-              child: const Text('Edit player…'),
+            rowAction(
+              'Edit player…',
+              () => editPlayer(context, owner, player: player),
+              busy: owner.busy,
+              icon: AppIcons.edit,
             ),
-            MenuItemButton(
-              onPressed: () => onLink(player),
-              child: const Text('Link study…'),
-            ),
+            rowAction('Link study…', () => onLink(player)),
             if (prep)
-              MenuItemButton(
-                onPressed: owner.busy ? null : () => owner.unlinkPrep(player),
-                child: const Text('Unlink prep study'),
+              rowAction(
+                'Unlink prep study',
+                () => owner.unlinkPrep(player),
+                busy: owner.busy,
               ),
             if (deletable)
-              MenuItemButton(
-                onPressed: owner.busy || saved.deleting.contains(player.id)
-                    ? null
-                    : () => onDeleteGames(player),
-                leadingIcon: const Icon(AppIcons.delete, size: IconSize.menu),
-                child: const Text('Delete saved games…'),
+              rowAction(
+                'Delete saved games…',
+                () => onDeleteGames(player),
+                busy: owner.busy || saved.deleting.contains(player.id),
+                icon: AppIcons.delete,
               ),
-            MenuItemButton(
-              onPressed: owner.busy ? null : () => onRemove(player),
-              leadingIcon: const Icon(AppIcons.remove, size: IconSize.menu),
-              child: Text(
-                group == null ? 'Remove player…' : 'Remove from group…',
-              ),
+            rowAction(
+              group == null ? 'Remove player…' : 'Remove from group…',
+              () => onRemove(player),
+              busy: owner.busy,
+              icon: AppIcons.remove,
             ),
           ],
         ),

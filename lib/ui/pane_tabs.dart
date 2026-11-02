@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import 'listening_state.dart';
+import 'menu_entry.dart';
 import 'app_keys.dart';
 import 'theme.dart';
 import 'app_icons.dart';
@@ -315,10 +316,7 @@ class _PaneTabStripState<K extends Object> extends State<PaneTabStrip<K>>
               menuChildren: [
                 for (final tab in tabs.tabs)
                   if (!tabs.isOpen(tab.id))
-                    MenuItemButton(
-                      onPressed: () => tabs.show(tab.id),
-                      child: Text(tab.title),
-                    ),
+                    MenuEntry(tab.title, () => tabs.show(tab.id)),
               ],
               builder: (context, menu, _) => IconButton(
                 tooltip: widget.onAdd == null

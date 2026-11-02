@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'theme.dart';
 import 'app_icons.dart';
+import 'menu_entry.dart';
+import 'theme.dart';
 
 /// The `⋯` menu on a row of a list: everything that can be done to that one
 /// thing, out of the way until it is wanted.
@@ -17,7 +18,7 @@ class RowActions extends StatelessWidget {
     this.controller,
   });
 
-  /// The menu's items, usually `MenuItemButton`s.
+  /// The menu's items, usually [rowAction]s; their symbols line up.
   final List<Widget> children;
 
   /// What the button says it opens, for a list whose rows are not the only
@@ -31,7 +32,7 @@ class RowActions extends StatelessWidget {
   Widget build(BuildContext context) {
     return MenuAnchor(
       controller: controller,
-      menuChildren: children,
+      menuChildren: alignMenu(children),
       builder: (context, controller, _) => IconButton(
         icon: const Icon(AppIcons.more, size: IconSize.action),
         tooltip: tooltip,
@@ -44,13 +45,9 @@ class RowActions extends StatelessWidget {
 
 /// A menu entry, off while a change to the catalog is in flight: two catalog
 /// writes at once is how a half-applied change happens.
-MenuItemButton rowAction(
+MenuEntry rowAction(
   String label,
-  VoidCallback run, {
-  required bool busy,
+  VoidCallback? run, {
+  bool busy = false,
   IconData? icon,
-}) => MenuItemButton(
-  onPressed: busy ? null : run,
-  leadingIcon: icon == null ? null : Icon(icon, size: IconSize.menu),
-  child: Text(label),
-);
+}) => MenuEntry(label, busy ? null : run, icon: icon);

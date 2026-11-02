@@ -399,19 +399,9 @@ class _Header extends StatelessWidget {
     tooltip: 'Training actions',
     children: [
       if (onImport != null)
-        rowAction(
-          'Import course PGN…',
-          onImport!,
-          busy: false,
-          icon: AppIcons.open,
-        ),
+        rowAction('Import course PGN…', onImport!, icon: AppIcons.open),
       if (onSettings != null)
-        rowAction(
-          'Training settings…',
-          onSettings!,
-          busy: false,
-          icon: AppIcons.settings,
-        ),
+        rowAction('Training settings…', onSettings!, icon: AppIcons.settings),
       rowAction(
         'Mark every line known',
         () => onChange(
@@ -428,11 +418,7 @@ class _Header extends StatelessWidget {
         ),
         busy: progress.stale,
       ),
-      rowAction(
-        'Reload progress',
-        () => unawaited(trainer.reload()),
-        busy: false,
-      ),
+      rowAction('Reload progress', () => unawaited(trainer.reload())),
     ],
   );
 }
@@ -519,12 +505,11 @@ extension on _LineRow {
     const doing = 'save training progress';
     final trained = status == LineStatus.due || status == LineStatus.learned;
     final reads = [
-      rowAction('Read', () => onRead(ReadIn.moves), busy: false),
+      rowAction('Read', () => onRead(ReadIn.moves)),
       if (offerBuilder)
         rowAction(
           'Open in builder',
           () => onRead(ReadIn.builder),
-          busy: false,
           icon: AppIcons.openElsewhere,
         ),
     ];

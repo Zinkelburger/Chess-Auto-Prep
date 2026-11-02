@@ -112,7 +112,6 @@ class _TrainingHomeState extends State<TrainingHome> {
                   rowAction(
                     'Training settings…',
                     widget.onSettings!,
-                    busy: false,
                     icon: AppIcons.settings,
                   ),
                 rowAction(
@@ -139,11 +138,7 @@ class _TrainingHomeState extends State<TrainingHome> {
                   ),
                   busy: widget.ready.progress.stale,
                 ),
-                rowAction(
-                  'Reload progress',
-                  () => unawaited(trainer.reload()),
-                  busy: false,
-                ),
+                rowAction('Reload progress', () => unawaited(trainer.reload())),
               ],
             ),
           ],

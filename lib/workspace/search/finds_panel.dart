@@ -12,6 +12,7 @@ import '../../ui/choice_field.dart';
 import '../../ui/list_message.dart';
 import '../../ui/list_row.dart';
 import '../../ui/problem_line.dart';
+import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
 import '../../ui/toggle_chip.dart';
 import '../document/document_session.dart';
@@ -388,12 +389,8 @@ class _FindRow extends StatelessWidget {
         onTap: onOpen,
         height: null,
         menu: [
-          if (onTrain case final train?)
-            MenuItemButton(
-              onPressed: train,
-              child: const Text('Train this line'),
-            ),
-          MenuItemButton(onPressed: onRemove, child: const Text('Remove')),
+          if (onTrain case final train?) rowAction('Train this line', train),
+          rowAction('Remove', onRemove),
         ],
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

@@ -1,9 +1,7 @@
-import 'package:flutter/material.dart';
-
 import '../../chess/pgn/comment_text.dart';
 import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/study.dart';
-import '../../ui/theme.dart';
+import '../../ui/app_action.dart';
 import '../../workspace/document/document_session.dart';
 import '../../ui/app_icons.dart';
 
@@ -13,29 +11,22 @@ import '../../ui/app_icons.dart';
 /// A marker is a token in the move's comment, so it travels with the chapter
 /// through an export, an import and anyone else's reader. The words on the
 /// move are not touched, and each entry reads as what pressing it does.
-List<Widget> quizMenuItems(DocumentSession session, NodePath path) {
+List<AppAction> quizMenuItems(DocumentSession session, NodePath path) {
   if (path.isRoot) return const [];
   final comment = session.tree?.nodeAt(path)?.comment;
   final starts = hasToken(comment, quizStartMarker);
   final ends = hasToken(comment, quizEndMarker);
   return [
-    _item(
+    // The symbols are the marks the move list shows for each marker.
+    AppAction(
       starts ? 'Do not start a quiz here' : 'Start quiz from this move',
-      AppIcons.run,
       () => session.setMarker(path, quizStartMarker, on: !starts),
+      icon: AppIcons.run,
     ),
-    _item(
+    AppAction(
       ends ? 'Do not end a quiz here' : 'End quiz after this move',
-      AppIcons.stop,
       () => session.setMarker(path, quizEndMarker, on: !ends),
+      icon: AppIcons.stop,
     ),
   ];
 }
-
-/// The icons are the marks the move list shows for each marker.
-MenuItemButton _item(String label, IconData icon, VoidCallback run) =>
-    MenuItemButton(
-      onPressed: run,
-      leadingIcon: Icon(icon, size: IconSize.menu),
-      child: Text(label),
-    );

@@ -7,6 +7,8 @@ import 'action_layout.dart';
 import 'action_panes.dart';
 import 'review/audit_pane.dart';
 import 'explorer/explorer.dart';
+import '../ui/app_action.dart';
+import '../ui/app_icons.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
 import 'board/board_claim.dart';
@@ -252,13 +254,10 @@ class _Tabbed extends StatelessWidget {
         session: workspace.session,
         moveMenu: (path) => [
           if (hooks.onAnnotate != null)
-            MenuItemButton(
-              onPressed: () {
-                workspace.session.cursor.goTo(path);
-                hooks.onAnnotate!();
-              },
-              child: const Text('Comment this move'),
-            ),
+            AppAction('Comment this move', () {
+              workspace.session.cursor.goTo(path);
+              hooks.onAnnotate!();
+            }, icon: AppIcons.comment),
           ...?hooks.moveMenu?.call(path),
         ],
         heading: hooks.header ? _heading() : null,

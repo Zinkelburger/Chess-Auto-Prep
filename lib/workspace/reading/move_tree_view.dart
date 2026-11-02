@@ -12,6 +12,8 @@ import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/move_label.dart';
 import '../../chess/pgn/move_text.dart';
 import '../../chess/pgn/study.dart';
+import '../../ui/action_context_menu.dart';
+import '../../ui/app_action.dart';
 import '../../ui/listening_state.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/selection.dart';
@@ -70,7 +72,6 @@ class _MoveTreeViewState extends State<MoveTreeView>
   DocumentSession get session => widget.session;
 
   final _selection = Selection<NodePath>();
-  final _menu = GlobalKey<_MoveMenuState>();
 
   /// The lines last built, and the tree and orientation they show.
   ({GameTree tree, Side side, Widget lines})? _built;
@@ -98,9 +99,6 @@ class _MoveTreeViewState extends State<MoveTreeView>
   /// Takes the moves out. Nothing is said about it: the moves are gone from
   /// the tree on screen, and Ctrl+Z puts them back.
   void _deleteFrom(NodePath path) => deleteFrom(widget.session, path);
-
-  void _showMenu(BuildContext move, List<Widget> entries) =>
-      _menu.currentState?.show(move, entries);
 
   Widget _comment(String comment, Fen at, NodePath from) => CommentBlocks(
     comment: comment,
@@ -184,7 +182,6 @@ class _MoveTreeViewState extends State<MoveTreeView>
       (path) => const [],
       _deleteFrom,
       _readComment,
-      _showMenu,
     );
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
@@ -208,38 +205,34 @@ class _MoveTreeViewState extends State<MoveTreeView>
       (path) => widget.moveMenu?.call(path) ?? const [],
       _deleteFrom,
       _readComment,
-      _showMenu,
       preview: widget.preview,
     );
     return LinePreviewOverlay(
       preview: preview,
       orientation: side,
-      child: _MoveMenu(
-        key: _menu,
-        child: SingleChildScrollView(
-          // Another game starts at the top: the scroll offset belongs to the
-          // game it was scrolled in, and an edit keeps it.
-          key: ValueKey((widget.session.source, widget.session.game)),
-          padding: const EdgeInsets.fromLTRB(
-            readingCardInset,
-            Space.s,
-            readingCardInset,
-            Space.l,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (widget.heading case final heading?)
-                SizedBox(width: double.infinity, child: heading),
-              if (displayComment(tree.rootComment ?? '').isNotEmpty)
-                _readComment(
-                  tree.rootComment!,
-                  tree.rootFen,
-                  const NodePath.root(),
-                ),
-              ...builder.line(const NodePath.root(), tree.children),
-            ],
-          ),
+      child: SingleChildScrollView(
+        // Another game starts at the top: the scroll offset belongs to the
+        // game it was scrolled in, and an edit keeps it.
+        key: ValueKey((widget.session.source, widget.session.game)),
+        padding: const EdgeInsets.fromLTRB(
+          readingCardInset,
+          Space.s,
+          readingCardInset,
+          Space.l,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.heading case final heading?)
+              SizedBox(width: double.infinity, child: heading),
+            if (displayComment(tree.rootComment ?? '').isNotEmpty)
+              _readComment(
+                tree.rootComment!,
+                tree.rootFen,
+                const NodePath.root(),
+              ),
+            ...builder.line(const NodePath.root(), tree.children),
+          ],
         ),
       ),
     );
@@ -250,14 +243,11 @@ class _MoveTreeViewState extends State<MoveTreeView>
 typedef _Branch = ({NodePath parent, List<MoveNode> siblings, int branch});
 
 /// What a mode adds to the menu on the move at `path`.
-typedef MoveMenu = List<Widget> Function(NodePath path);
+typedef MoveMenu = List<AppAction> Function(NodePath path);
 
 /// A comment laid out from the position [at], belonging to the move at
 /// [from] — the one a line of analysis in it is played from.
 typedef _CommentWidget = Widget Function(String comment, Fen at, NodePath from);
-
-/// Opens `entries` as the menu of the move drawn at `move`.
-typedef _ShowMenu = void Function(BuildContext move, List<Widget> entries);
 
 final class _LineBuilder {
   _LineBuilder(
@@ -265,8 +255,7 @@ final class _LineBuilder {
     this.selection,
     this.moveMenu,
     this.onDeleteFrom,
-    this.comment,
-    this.showMenu, {
+    this.comment, {
     this.preview,
   });
 
@@ -283,8 +272,6 @@ final class _LineBuilder {
   final ValueChanged<NodePath> onDeleteFrom;
 
   final _CommentWidget comment;
-
-  final _ShowMenu showMenu;
 
   /// The line that starts at `siblings[branch]` and follows main
   /// continuations to the end. A comment is a paragraph of its own, so the
@@ -352,7 +339,6 @@ final class _LineBuilder {
         onTap: () =>
             session.cursor.goTo(NodePath.of(limit.indexes.take(depth + 1))),
         actions: () => const [],
-        showMenu: showMenu,
       ),
   ];
 
@@ -377,35 +363,33 @@ final class _LineBuilder {
       actions: () => preview != null
           ? const []
           : [
-              MenuItemButton(
-                onPressed: () => promoteVariation(session, path),
-                leadingIcon: const Icon(AppIcons.promote, size: IconSize.menu),
-                child: const Text('Promote variation'),
+              AppAction(
+                'Promote variation',
+                () => promoteVariation(session, path),
+                icon: AppIcons.promote,
               ),
-              MenuItemButton(
-                onPressed: () => makeMainLine(session, path),
-                leadingIcon: const Icon(AppIcons.mainLine, size: IconSize.menu),
-                child: const Text('Make main line'),
+              AppAction(
+                'Make main line',
+                () => makeMainLine(session, path),
+                icon: AppIcons.mainLine,
               ),
-              MenuItemButton(
-                onPressed: () => onDeleteFrom(path),
-                leadingIcon: const Icon(AppIcons.delete, size: IconSize.menu),
-                child: const Text('Delete from here'),
+              AppAction(
+                'Delete from here',
+                () => onDeleteFrom(path),
+                icon: AppIcons.delete,
               ),
-              const Divider(),
-              MenuItemButton(
-                onPressed: () => _copy(writeLineTo(session.tree!, path)),
-                leadingIcon: const Icon(AppIcons.copy, size: IconSize.menu),
-                child: const Text('Copy line PGN'),
+              AppAction(
+                'Copy line PGN',
+                () => _copy(writeLineTo(session.tree!, path)),
+                icon: AppIcons.copy,
               ),
-              MenuItemButton(
-                onPressed: () => _copy(node.fen.value),
-                leadingIcon: const Icon(AppIcons.copy, size: IconSize.menu),
-                child: const Text('Copy FEN'),
+              AppAction(
+                'Copy FEN',
+                () => _copy(node.fen.value),
+                icon: AppIcons.copy,
               ),
               ...moveMenu(path),
             ],
-      showMenu: showMenu,
     );
   }
 }
@@ -453,47 +437,6 @@ class _VariationBlock extends StatelessWidget {
   }
 }
 
-/// The one menu of a move list, opened under whichever move asks for it.
-///
-/// Every move can open a menu and almost none ever does, so the moves share
-/// this one rather than each carry an anchor, an overlay and a controller
-/// of its own: a game of a hundred moves is put on screen without building
-/// a hundred of them.
-class _MoveMenu extends StatefulWidget {
-  const _MoveMenu({super.key, required this.child});
-
-  final Widget child;
-
-  @override
-  State<_MoveMenu> createState() => _MoveMenuState();
-}
-
-class _MoveMenuState extends State<_MoveMenu> {
-  final _menu = MenuController();
-  List<Widget> _entries = const [];
-
-  /// Opens [entries] just under the move drawn at [move], where a menu
-  /// anchored to that move would open.
-  void show(BuildContext move, List<Widget> entries) {
-    final token = move.findRenderObject();
-    final list = context.findRenderObject();
-    if (entries.isEmpty || token is! RenderBox || list is! RenderBox) return;
-    setState(() => _entries = entries);
-    _menu.open(
-      position: list.globalToLocal(
-        token.localToGlobal(Offset(0, token.size.height)),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) => MenuAnchor(
-    controller: _menu,
-    menuChildren: _entries,
-    child: widget.child,
-  );
-}
-
 /// One clickable move, with what can be done to it on the right button.
 /// When it becomes the selected one it scrolls itself into view. The menu's
 /// entries are made when it opens: a list of a thousand moves has no use for
@@ -508,7 +451,6 @@ class _MoveToken extends StatefulWidget {
     required this.quizEnds,
     required this.onTap,
     required this.actions,
-    required this.showMenu,
   });
 
   final String label;
@@ -527,10 +469,7 @@ class _MoveToken extends StatefulWidget {
   final VoidCallback onTap;
 
   /// What the right button offers for this move, asked when it opens.
-  final List<Widget> Function() actions;
-
-  /// Opens the list's menu under this move.
-  final _ShowMenu showMenu;
+  final List<AppAction> Function() actions;
 
   @override
   State<_MoveToken> createState() => _MoveTokenState();
@@ -559,7 +498,20 @@ class _MoveTokenState extends State<_MoveToken>
     setState(() => _selected = now);
   }
 
-  void _openMenu() => widget.showMenu(context, widget.actions());
+  /// Opens the move's menu at [position], or just under the move when it
+  /// was asked for from the keyboard or by a long press.
+  void _openMenu([Offset? position]) {
+    final actions = widget.actions();
+    final token = context.findRenderObject();
+    if (actions.isEmpty || token is! RenderBox) return;
+    unawaited(
+      showActionContextMenu(
+        context,
+        position ?? token.localToGlobal(Offset(0, token.size.height)),
+        actions,
+      ),
+    );
+  }
 
   /// After the frame, because the token has no position until it is laid out.
   void _reveal() {
@@ -631,7 +583,7 @@ class _MoveTokenState extends State<_MoveToken>
         selected: _selected,
         child: InkWell(
           onTap: widget.onTap,
-          onSecondaryTap: _openMenu,
+          onSecondaryTapUp: (details) => _openMenu(details.globalPosition),
           onLongPress: _openMenu,
           borderRadius: moveTokenRadius,
           child: Container(
