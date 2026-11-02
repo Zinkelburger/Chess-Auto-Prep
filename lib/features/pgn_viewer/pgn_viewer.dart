@@ -73,7 +73,6 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
     changed: notifyListeners,
   );
   Future<ReadingPlace?> savedPlace(ChapterRef ref) => _reading.load(ref.path);
-  Future<void> retryReading() => _reading.retry();
   final PgnExport? exporter;
   final PendingWrites pendingWrites;
   final RecentFiles _recentFiles;

@@ -16,6 +16,7 @@ import '../../support/viewer_fixture.dart';
 import '../../support/scripted_store.dart';
 import 'package:chess_auto_prep/features/study/studies.dart';
 import 'package:chess_auto_prep/features/study/studies_state.dart';
+import 'package:chess_auto_prep/features/study/study_import_source.dart';
 import 'package:chess_auto_prep/net/lichess_studies.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
@@ -510,6 +511,14 @@ void main() {
     },
   );
 
+  /// A Lichess link imported as the Import chapters dialog does: read, then
+  /// filed as a new study.
+  Future<StudyResult> importUrl(String url) async =>
+      switch (await study.studies.imports.url(url)) {
+        final StudyImportData data => study.studies.importPreview(data),
+        StudyImportProblem(:final message) => StudyProblem(message),
+      };
+
   const downloaded =
       '[Event "Sicilian: Najdorf"]\n[StudyName "Sicilian"]\n'
       '[ChapterName "Najdorf"]\n\n1. e4 c5 *\n';
@@ -519,9 +528,7 @@ void main() {
     () async {
       study.lichess.answer = const StudyFetched(downloaded);
       relist();
-      final result = await study.studies.importFromUrl(
-        'lichess.org/study/abcd1234',
-      );
+      final result = await importUrl('lichess.org/study/abcd1234');
       expect(result, isA<StudyDone>());
       expect((result as StudyDone).opened?.name, 'Sicilian');
       expect(study.lichess.asked.single.studyId, 'abcd1234');
@@ -535,9 +542,7 @@ void main() {
         '[Event "Endgames: More"]\n[StudyName "Endgames"]\n\n1. e4 *\n',
       );
       relist();
-      final result = await study.studies.importFromUrl(
-        'lichess.org/study/abcd1234',
-      );
+      final result = await importUrl('lichess.org/study/abcd1234');
       expect((result as StudyDone).opened?.name, 'Endgames 2');
       expect(study.onDisk, twoChapterStudy);
     },
@@ -546,8 +551,11 @@ void main() {
   test(
     'importing: a link it does not know is refused without a request',
     () async {
-      final result = await study.studies.importFromUrl('example.com/study/x');
-      expect((result as StudyProblem).sentence, 'Not a Lichess study link.');
+      final result = await importUrl('example.com/study/x');
+      expect(
+        (result as StudyProblem).sentence,
+        'Use a Lichess study or chapter link.',
+      );
       expect(study.lichess.asked, isEmpty);
     },
   );
@@ -555,9 +563,7 @@ void main() {
   test('importing: a failed download takes nothing away', () async {
     study.lichess.answer = const StudyNotFetched(StudyFetchProblem.unreachable);
     relist();
-    final result = await study.studies.importFromUrl(
-      'lichess.org/study/abcd1234',
-    );
+    final result = await importUrl('lichess.org/study/abcd1234');
     expect((result as StudyProblem).sentence, contains('did not respond'));
     expect(study.studies.studies, hasLength(1));
     expect(study.onDisk, twoChapterStudy);
@@ -566,10 +572,11 @@ void main() {
   test('importing: a download with no games in it is not filed', () async {
     study.lichess.answer = const StudyFetched('not a game\n');
     relist();
-    final result = await study.studies.importFromUrl(
-      'lichess.org/study/abcd1234',
+    final result = await importUrl('lichess.org/study/abcd1234');
+    expect(
+      (result as StudyProblem).sentence,
+      startsWith('No complete games found'),
     );
-    expect((result as StudyProblem).sentence, contains('empty'));
     expect(study.store.documents, hasLength(1));
   });
 
@@ -594,7 +601,7 @@ void main() {
         StudyFetchProblem.unreachable,
       );
       relist();
-      await study.studies.importFromUrl('lichess.org/study/abcd1234');
+      await importUrl('lichess.org/study/abcd1234');
       // The owner is free again, so the next thing the user asks for runs.
       expect(study.studies.busy, isFalse);
       expect(await study.studies.create('Openings'), isA<StudyDone>());
@@ -619,9 +626,7 @@ void main() {
       '[Event "../../evil: One"]\n[StudyName "../../evil"]\n\n1. e4 *\n',
     );
     relist();
-    final result = await study.studies.importFromUrl(
-      'lichess.org/study/abcd1234',
-    );
+    final result = await importUrl('lichess.org/study/abcd1234');
     expect(result, isA<StudyDone>());
     for (final ref in study.store.documents.keys) {
       expect(p.dirname(ref.path), studiesRoot);
@@ -635,10 +640,7 @@ void main() {
     );
     for (final id in ['abcd1234', 'efgh5678']) {
       relist();
-      expect(
-        await study.studies.importFromUrl('lichess.org/study/$id'),
-        isA<StudyDone>(),
-      );
+      expect(await importUrl('lichess.org/study/$id'), isA<StudyDone>());
     }
     final names = study.store.documents.keys
         .map(_nameOf)

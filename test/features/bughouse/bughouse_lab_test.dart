@@ -1,4 +1,3 @@
-import 'package:chess_auto_prep/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/chess/bughouse/table_line.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_lab.dart';
@@ -76,14 +75,6 @@ void main() {
     expect(lab.line.upto(BoardNumber.one), 0);
     lab.toEnd();
     expect(lab.line.upto(BoardNumber.one), 3);
-  });
-
-  test('a joint action plays both halves, a sitting board keeps still', () {
-    lab.playJoint(const JointMove('e2e4', 'd2d4'));
-    expect(lab.line.moves.map((m) => m.san), ['e4', 'd4']);
-    lab.playJoint(const JointMove(null, 'e2e4'));
-    expect(lab.problem, isA<LineMisfits>());
-    expect(lab.line.moves.length, 2);
   });
 
   test('a new game or a pasted position starts a new line', () {
@@ -273,10 +264,10 @@ void main() {
     expect(lab.line.moves.single.san, 'e8=N');
     // An engine's move names its piece too; a bare one is a queen.
     lab.loadDualFen(promoting);
-    lab.playJoint(const JointMove('e7e8r', null));
+    lab.playMoves(const [(BoardNumber.one, 'e7e8r')]);
     expect(lab.line.moves.single.san, 'e8=R+');
     lab.loadDualFen(promoting);
-    lab.playJoint(const JointMove('e7e8', null));
+    lab.playMoves(const [(BoardNumber.one, 'e7e8')]);
     expect(lab.line.moves.single.san, 'e8=Q+');
   });
 

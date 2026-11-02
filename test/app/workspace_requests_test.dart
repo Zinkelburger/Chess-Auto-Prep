@@ -455,14 +455,14 @@ void main() {
     test('is where the window starts, and Ctrl+V pastes onto it', () async {
       expect(w.session.isScratch, isTrue);
       input.clipboardText = '1.e4 c5 2.Nf3';
-      expect(await w.requests.pasteOntoBoard(), isA<RequestDone>());
+      expect(await w.requests.paste(), isA<RequestDone>());
       expect(w.session.cursor.currentMove?.san, 'Nf3');
       expect(w.store.creates, isEmpty);
     });
 
     test('a paste with no game says why and changes nothing', () async {
       input.clipboardText = 'no moves here';
-      final result = await w.requests.pasteOntoBoard();
+      final result = await w.requests.paste();
       expect(result, isA<RequestRefused>());
       expect(w.requests.status, startsWith('The clipboard holds no game'));
       expect(w.session.tree!.children, isEmpty);

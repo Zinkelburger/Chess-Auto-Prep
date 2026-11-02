@@ -587,9 +587,6 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// the trainer, with a chapter up, a PGN becomes a new repertoire.
   Future<RequestResult> paste() => _paste(repertoire: true);
 
-  /// The clipboard — a PGN, bare moves or a FEN — as a new analysis board.
-  Future<RequestResult> pasteOntoBoard() => _paste();
-
   /// Actions ▸ Paste FEN: a FEN on the clipboard, and nothing else, as a
   /// new analysis board.
   Future<RequestResult> pasteFen() => _paste(positionOnly: true);
