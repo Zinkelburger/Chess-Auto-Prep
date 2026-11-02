@@ -10,6 +10,7 @@ import '../document/document_session.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/problem_line.dart';
 import '../../ui/tool_button.dart';
+import '../../ui/toggle_chip.dart';
 
 /// The Audit tab: the chapter's own moves checked against the engine.
 ///
@@ -92,18 +93,16 @@ class _AuditPaneState extends State<AuditPane> {
                 label: const Text('Audit'),
               ),
             ),
-          Tooltip(
-            message: 'Also ask ChessDB for good replies (sends positions)',
-            child: FilterChip(
-              label: const Text('ChessDB'),
-              selected: audit.askChessDb,
-              onSelected: running
-                  ? null
-                  : (on) {
-                      if (!mounted) return;
-                      setState(() => audit.askChessDb = on);
-                    },
-            ),
+          ToggleChip(
+            label: 'ChessDB',
+            tooltip: 'Also ask ChessDB for good replies (sends positions)',
+            selected: audit.askChessDb,
+            onSelected: running
+                ? null
+                : (on) {
+                    if (!mounted) return;
+                    setState(() => audit.askChessDb = on);
+                  },
           ),
         ],
       ),

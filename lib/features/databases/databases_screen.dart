@@ -15,6 +15,8 @@ import 'database_library.dart';
 import 'twic_download_dialog.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/tool_button.dart';
+import '../../ui/toggle_chip.dart';
+import '../../ui/field_row.dart';
 
 class DatabasesScreen extends StatelessWidget {
   const DatabasesScreen({
@@ -275,23 +277,25 @@ class _CorpusFiltersState extends State<_CorpusFilters> {
       _field(_event, 'Event', 180),
       _field(_eco, 'ECO', 90),
       _field(_since, 'From date', 214),
-      const Text('Minimum Elo'),
       SizedBox(
-        width: 160,
-        child: NumberField(
+        width: eloFilterWidth,
+        child: FieldRow(
           label: 'Minimum Elo',
-          value: _elo,
-          min: 0,
-          max: 3500,
-          onChanged: (value) {
-            if (!mounted) return;
-            setState(() => _elo = value);
-            _changed();
-          },
+          child: NumberField(
+            label: 'Minimum Elo',
+            value: _elo,
+            min: 0,
+            max: 3500,
+            onChanged: (value) {
+              if (!mounted) return;
+              setState(() => _elo = value);
+              _changed();
+            },
+          ),
         ),
       ),
-      FilterChip(
-        label: const Text('Strongest first'),
+      ToggleChip(
+        label: 'Strongest first',
         selected: _strongest,
         onSelected: (value) {
           if (!mounted) return;

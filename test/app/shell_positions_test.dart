@@ -73,6 +73,8 @@ void main() {
     expect(find.text('Positions'), findsNothing);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.widgetWithText(SubmenuButton, 'Panels'));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(SubmenuButton, 'Panels'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(MenuItemButton, 'Positions'));
@@ -83,6 +85,8 @@ void main() {
       findsOneWidget,
     );
     await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.widgetWithText(SubmenuButton, 'Panels'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(SubmenuButton, 'Panels'));
     await tester.pumpAndSettle();

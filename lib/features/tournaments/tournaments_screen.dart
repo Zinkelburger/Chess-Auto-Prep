@@ -19,6 +19,7 @@ import 'standings_table.dart';
 import 'history_list.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/tool_button.dart';
+import '../../ui/check_row.dart';
 
 class TournamentsScreen extends StatefulWidget {
   const TournamentsScreen({
@@ -217,10 +218,8 @@ class _ScreenState extends State<TournamentsScreen> {
         const SizedBox(height: Space.m),
       ],
       TournamentStandingsTable(tournament: t),
-      CheckboxListTile(
-        contentPadding: EdgeInsets.zero,
-        controlAffinity: ListTileControlAffinity.leading,
-        title: const Text('Show final positions'),
+      CheckRow(
+        label: 'Show final positions',
         value: widget.settings.value.tournamentFinalPositions,
         onChanged: (value) => unawaited(
           widget.settings.update(

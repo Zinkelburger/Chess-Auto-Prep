@@ -51,6 +51,10 @@ void main() {
       await pump(tester);
       await tester.tap(find.text('Actions'));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.widgetWithText(SubmenuButton, 'Action Tabs'),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(SubmenuButton, 'Action Tabs'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Show Replies'));
@@ -387,6 +391,10 @@ void main() {
     expect(find.text('Replies'), findsOneWidget);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.widgetWithText(SubmenuButton, 'Action Tabs'),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(SubmenuButton, 'Action Tabs'));
     await tester.pumpAndSettle();
     expect(find.text('Next tab'), findsOneWidget);
@@ -396,6 +404,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Replies'), findsNothing);
     await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.widgetWithText(SubmenuButton, 'Action Tabs'),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(SubmenuButton, 'Action Tabs'));
     await tester.pumpAndSettle();

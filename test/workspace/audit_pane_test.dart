@@ -14,6 +14,7 @@ import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
 import 'package:chess_auto_prep/workspace/book/gap_hunt.dart';
 import 'package:chess_auto_prep/workspace/book/replies.dart';
+import 'package:chess_auto_prep/ui/toggle_chip.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -142,7 +143,7 @@ void main() {
       RemoteQueue(MockClient((_) async => http.Response('', 503))),
     );
     await pump(tester);
-    await tester.tap(find.widgetWithText(FilterChip, 'ChessDB'));
+    await tester.tap(find.widgetWithText(ToggleChip, 'ChessDB'));
     await tester.pump();
     await runAudit(tester);
     expect((audit.state as AuditDone).complete, isFalse);

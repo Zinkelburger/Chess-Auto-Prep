@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../chess/tournament/result.dart';
 import '../../chess/tournament/standings.dart';
 import '../../ui/list_message.dart';
+import '../../ui/check_row.dart';
 
 class TournamentStandingsTable extends StatefulWidget {
   const TournamentStandingsTable({super.key, required this.tournament});
@@ -19,12 +20,10 @@ class _TableState extends State<TournamentStandingsTable> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          controlAffinity: ListTileControlAffinity.leading,
-          title: const Text('Show rating statistics'),
+        CheckRow(
+          label: 'Show rating statistics',
           value: _statistics,
-          onChanged: (v) => setState(() => _statistics = v ?? false),
+          onChanged: (v) => setState(() => _statistics = v),
         ),
         if (rows.every((r) => r.score.played == 0))
           const ListMessage('No games finished yet.', inset: 0)

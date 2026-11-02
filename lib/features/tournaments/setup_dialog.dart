@@ -14,6 +14,9 @@ import '../../workspace/board/board_editor.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/form_dialog.dart';
 import '../../ui/tool_button.dart';
+import '../../ui/toggle_chip.dart';
+import '../../ui/check_row.dart';
+import '../../ui/field_row.dart';
 
 Future<TournamentConfig?> tournamentSetup(
   BuildContext context, {
@@ -235,9 +238,8 @@ class _SetupState extends State<_Setup> {
     Map<String, Object?> data,
     String key,
     bool value,
-  ) => CheckboxListTile(
-    contentPadding: EdgeInsets.zero,
-    title: Text(name),
+  ) => CheckRow(
+    label: name,
     value: data[key] as bool? ?? value,
     onChanged: (n) => _change(() => data[key] = n),
   );
@@ -247,26 +249,21 @@ class _SetupState extends State<_Setup> {
     String key,
     Map<String, String> options,
     String fallback,
-  ) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: Space.s),
-    child: Row(
-      children: [
-        Expanded(child: Text(name)),
-        SizedBox(
-          width: settingChoiceWidth,
-          child: ChoiceField(
-            text: options[data[key] ?? fallback] ?? options[fallback]!,
-            options: options.values.toList(),
-            hint: name,
-            onChanged: (text) {
-              final found = options.entries
-                  .where((e) => e.value == text)
-                  .firstOrNull;
-              if (found != null) _change(() => data[key] = found.key);
-            },
-          ),
-        ),
-      ],
+  ) => FieldRow(
+    label: name,
+    child: SizedBox(
+      width: settingChoiceWidth,
+      child: ChoiceField(
+        text: options[data[key] ?? fallback] ?? options[fallback]!,
+        options: options.values.toList(),
+        hint: name,
+        onChanged: (text) {
+          final found = options.entries
+              .where((e) => e.value == text)
+              .firstOrNull;
+          if (found != null) _change(() => data[key] = found.key);
+        },
+      ),
     ),
   );
 
@@ -281,9 +278,8 @@ class _SetupState extends State<_Setup> {
         runSpacing: Space.xs,
         children: [
           for (final preset in tournamentTimePresets)
-            ChoiceChip(
-              showCheckmark: false,
-              label: Text(preset.label),
+            ToggleChip(
+              label: preset.label,
               tooltip: describeTime(preset.time),
               selected: describeTime(preset.time) == current,
               onSelected: (_) => _change(

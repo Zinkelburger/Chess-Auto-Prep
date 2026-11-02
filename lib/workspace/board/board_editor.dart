@@ -12,6 +12,7 @@ import '../../ui/app_icons.dart';
 import '../../ui/form_dialog.dart';
 import '../../ui/problem_line.dart';
 import '../../ui/segments.dart';
+import '../../ui/toggle_chip.dart';
 
 /// What a press on the editor's board does.
 sealed class EditorTool {
@@ -265,10 +266,9 @@ class _BoardEditorState extends State<BoardEditor> {
           spacing: Space.xs,
           children: [
             for (final square in [null, ...passable])
-              ChoiceChip(
-                label: Text(square?.name ?? 'None'),
+              ToggleChip(
+                label: square?.name ?? 'None',
                 selected: _setup.epSquare == square,
-                showCheckmark: false,
                 onSelected: (_) => _set(_setup.withEnPassant(square)),
               ),
           ],

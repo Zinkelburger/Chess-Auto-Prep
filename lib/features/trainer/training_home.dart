@@ -16,6 +16,7 @@ import 'trainer_state.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/problem_line.dart';
 import '../../ui/tool_button.dart';
+import '../../ui/toggle_chip.dart';
 
 /// The selected scope's training desk, inside the shared Train pane.
 class TrainingHome extends StatefulWidget {
@@ -254,28 +255,26 @@ class _TrainingHomeState extends State<TrainingHome> {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         const Text('Review'),
-        ChoiceChip(
-          label: const Text('Due'),
+        ToggleChip(
+          label: 'Due',
           selected: !trainer.options.reviewAll && !selection.choosing,
           onSelected: (_) {
             selection.chooseLines(false);
             selection.update(trainer.options.copyWith(reviewAll: false));
           },
         ),
-        ChoiceChip(
-          label: const Text('All learned'),
+        ToggleChip(
+          label: 'All learned',
           selected: trainer.options.reviewAll && !selection.choosing,
           onSelected: (_) {
             selection.chooseLines(false);
             selection.update(trainer.options.copyWith(reviewAll: true));
           },
         ),
-        FilterChip(
-          label: Text(
-            selection.choosing
-                ? '${selection.picked.length} selected'
-                : 'Choose lines',
-          ),
+        ToggleChip(
+          label: selection.choosing
+              ? '${selection.picked.length} selected'
+              : 'Choose lines',
           selected: selection.choosing,
           onSelected: selection.chooseLines,
         ),

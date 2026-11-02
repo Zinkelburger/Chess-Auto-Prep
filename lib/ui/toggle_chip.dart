@@ -12,10 +12,14 @@ class ToggleChip extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onSelected,
+    this.tooltip,
   });
 
   final String label;
   final bool selected;
+
+  /// What the chip does or stands for, when its label does not say.
+  final String? tooltip;
 
   /// Null while the choice cannot change.
   final ValueChanged<bool>? onSelected;
@@ -23,6 +27,8 @@ class ToggleChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) => FilterChip(
     label: Text(label),
+    tooltip: tooltip,
+    chipAnimationStyle: _still,
     selected: selected,
     onSelected: onSelected,
     showCheckmark: false,
@@ -37,3 +43,10 @@ class ToggleChip extends StatelessWidget {
     ),
   );
 }
+
+/// A chip changes at once when pressed: nothing slides or fades.
+final _still = ChipAnimationStyle(
+  enableAnimation: AnimationStyle.noAnimation,
+  selectAnimation: AnimationStyle.noAnimation,
+  avatarDrawerAnimation: AnimationStyle.noAnimation,
+);

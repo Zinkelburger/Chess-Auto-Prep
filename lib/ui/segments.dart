@@ -19,7 +19,8 @@ class Segments<T> extends StatelessWidget {
 
   final List<ButtonSegment<T>> segments;
 
-  /// The chosen answer; null for none, when [emptyAllowed].
+  /// The chosen answer. A value no segment has, such as null where null
+  /// is not one of the answers, is none chosen, for [emptyAllowed].
   final T? selected;
 
   /// Null shows the choice but does not let it change.
@@ -49,7 +50,10 @@ class Segments<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SegmentedButton<T>(
     segments: segments,
-    selected: {?selected},
+    selected: {
+      for (final segment in segments)
+        if (segment.value == selected) segment.value,
+    },
     emptySelectionAllowed: emptyAllowed,
     showSelectedIcon: false,
     style: narrow ? _narrow : _style,

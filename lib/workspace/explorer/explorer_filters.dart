@@ -7,6 +7,7 @@ import '../../ui/theme.dart';
 import 'explorer.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/segments.dart';
+import '../../ui/toggle_chip.dart';
 
 /// The top of the Explorer tab: the databases side by side, the chosen one
 /// pressed, and at the end `Filters` for the one that can be narrowed.
@@ -228,11 +229,9 @@ class _TwicFilters extends StatelessWidget {
     final choice = explorer.choice;
     return Align(
       alignment: Alignment.centerLeft,
-      child: FilterChip(
-        chipAnimationStyle: _quietChips,
-        label: const Text('Classical OTB only'),
+      child: ToggleChip(
+        label: 'Classical OTB only',
         selected: choice.classicalOnly,
-        visualDensity: VisualDensity.compact,
         onSelected: (on) => explorer.choose(choice.copyWith(classicalOnly: on)),
       ),
     );
@@ -257,11 +256,9 @@ class _LichessFilters extends StatelessWidget {
           label: 'Speed',
           chips: [
             for (final speed in LichessSpeed.values)
-              FilterChip(
-                chipAnimationStyle: _quietChips,
-                label: Text(speed.title),
+              ToggleChip(
+                label: speed.title,
                 selected: choice.speeds.contains(speed),
-                visualDensity: VisualDensity.compact,
                 onSelected: (on) => _speed(choice, speed, on),
               ),
           ],
@@ -271,11 +268,9 @@ class _LichessFilters extends StatelessWidget {
           label: 'Rating',
           chips: [
             for (final rating in lichessRatings)
-              FilterChip(
-                chipAnimationStyle: _quietChips,
-                label: Text('$rating'),
+              ToggleChip(
+                label: '$rating',
                 selected: choice.ratings.contains(rating),
-                visualDensity: VisualDensity.compact,
                 onSelected: (on) => _rating(choice, rating, on),
               ),
           ],
@@ -338,9 +333,3 @@ class _ChipRow extends StatelessWidget {
     );
   }
 }
-
-final _quietChips = ChipAnimationStyle(
-  enableAnimation: AnimationStyle.noAnimation,
-  selectAnimation: AnimationStyle.noAnimation,
-  avatarDrawerAnimation: AnimationStyle.noAnimation,
-);

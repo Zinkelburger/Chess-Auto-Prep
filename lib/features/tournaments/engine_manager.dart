@@ -12,6 +12,7 @@ import 'engine_check.dart';
 import 'tournament_run.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/tool_button.dart';
+import '../../ui/field_row.dart';
 
 Future<void> manageTournamentEngines(
   BuildContext context,
@@ -211,19 +212,17 @@ class _EditorState extends State<_Editor> {
     ),
   );
   Widget _number(String name, int value, int max, void Function(int) change) =>
-      Row(
-        children: [
-          Expanded(child: Text(name)),
-          NumberField(
-            label: name,
-            value: value,
-            min: 1,
-            max: max,
-            onChanged: (n) {
-              if (mounted) setState(() => change(n));
-            },
-          ),
-        ],
+      FieldRow(
+        label: name,
+        child: NumberField(
+          label: name,
+          value: value,
+          min: 1,
+          max: max,
+          onChanged: (n) {
+            if (mounted) setState(() => change(n));
+          },
+        ),
       );
 
   Future<void> _pick() async {

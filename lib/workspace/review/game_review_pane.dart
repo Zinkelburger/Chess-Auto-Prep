@@ -11,6 +11,7 @@ import 'game_review.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/problem_line.dart';
+import '../../ui/check_row.dart';
 
 /// The game's evaluation as a graph, the old viewer's way: White's
 /// advantage light above the middle, Black's dark below, each marked move a
@@ -557,21 +558,14 @@ class _ReviewControls extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            Tooltip(
-              message: review.session.readOnly != null
+            CheckRow(
+              key: const ValueKey('review-annotate'),
+              label: 'Annotate PGN',
+              tooltip: review.session.readOnly != null
                   ? 'This file is read-only'
                   : 'Write evaluations, ?/?? marks and better lines into the game',
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('Annotate PGN', style: theme.textTheme.bodySmall),
-                  Switch(
-                    key: const ValueKey('review-annotate'),
-                    value: review.annotate && review.session.readOnly == null,
-                    onChanged: review.canAnnotate ? review.setAnnotate : null,
-                  ),
-                ],
-              ),
+              value: review.annotate && review.session.readOnly == null,
+              onChanged: review.canAnnotate ? review.setAnnotate : null,
             ),
           ],
         ),

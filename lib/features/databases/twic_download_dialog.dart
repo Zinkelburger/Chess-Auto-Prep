@@ -6,6 +6,7 @@ import 'database_library.dart';
 import '../../ui/theme.dart';
 import '../../ui/number_field.dart';
 import '../../ui/form_dialog.dart';
+import '../../ui/field_row.dart';
 
 /// Downloads through [library], which keeps it from running beside an
 /// import. Shown only where the library offers a download.
@@ -60,19 +61,17 @@ class _TwicDialogState extends State<_TwicDialog> {
             ),
             const SizedBox(height: Space.m),
             if (!download.running)
-              Row(
-                children: [
-                  const Expanded(child: Text('Weeks')),
-                  NumberField(
-                    label: 'Weeks',
-                    value: _weeks,
-                    min: 1,
-                    max: 520,
-                    onChanged: (value) {
-                      if (mounted) setState(() => _weeks = value);
-                    },
-                  ),
-                ],
+              FieldRow(
+                label: 'Weeks',
+                child: NumberField(
+                  label: 'Weeks',
+                  value: _weeks,
+                  min: 1,
+                  max: 520,
+                  onChanged: (value) {
+                    if (mounted) setState(() => _weeks = value);
+                  },
+                ),
               ),
             if (waiting)
               Text(

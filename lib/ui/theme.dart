@@ -529,6 +529,11 @@ ThemeData darkTheme() {
         ),
       ),
     ),
+    // Every field is an outlined box with its name on the border: the
+    // search, choice and number controls and a dialog's text fields alike.
+    inputDecorationTheme: const InputDecorationTheme(
+      border: OutlineInputBorder(),
+    ),
     popupMenuTheme: _popupMenu(_sized(base.textTheme)),
     dialogTheme: _dialog(_sized(base.textTheme)),
     // A selected tile is filled in Selection Grey, its words in ink: the
@@ -818,6 +823,9 @@ const personRowBreak = 720.0;
 /// A named control on one line of a column or a dialog: the row, and the
 /// width a typeable choice takes at its end, which is a number stepper's.
 const fieldRowHeight = 36.0;
+
+/// The master games' Minimum Elo: its name and its stepper on one line.
+const eloFilterWidth = 260.0;
 const fieldControlWidth = 144.0;
 
 /// The bar that says a download or an engine pass is running: a line, not
