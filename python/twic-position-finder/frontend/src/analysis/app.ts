@@ -11,9 +11,9 @@
  */
 import type { DrawShape } from '@lichess-org/chessground/draw';
 import type { Key } from '@lichess-org/chessground/types';
-import { makePockets } from 'chessops/fen';
+import { makePockets, parseFen } from 'chessops/fen';
 import { Material } from 'chessops/setup';
-import type { Color, Role } from 'chessops/types';
+import type { Color, Role, SquareName } from 'chessops/types';
 import { CrazyBoard, ROLE_LETTER, type Brush } from './board';
 import { CevalView } from './ceval';
 import { Engine, type EngineResult, type EngineStatus, type SearchSettings } from './engine';
@@ -27,10 +27,14 @@ import { loadSettings, maxThreads, recommendedThreads, saveSettings, sitNodesFor
 import { SitPanel } from './sit';
 import { engineShapes, glyphShape, moveShapes, threatShapes, variationShapes } from './shapes';
 import {
-  HAND_ROLES, START_FEN, Tree, boardDests, dropSquares, fenOf, handEdit, lichessFen, outcomeOf, playLine, positionOf, readFen, readMove, threatFen,
-  type SavedTree, type TreeNode,
+  HAND_ROLES, START_FEN, Tree, boardDests, castlingPossible, dropSquares, enPassantOptions, fenOf, handEdit, lichessFen, outcomeOf, playLine,
+  positionOf, readFen, readMove, threatFen, type CastlingRight, type SavedTree, type TreeNode,
 } from './tree';
-import { makeUci } from 'chessops/util';
+import { makeSquare, makeUci } from 'chessops/util';
+
+const HELP_NOTES = [
+  'In the board editor, F flips the board, right-click with a piece in hand takes the other colour, and Shift-click marks a piece promoted (a dot in its top-left corner): taken, it goes back as a pawn.',
+];
 
 /** The analysis tree, kept in this browser so a reload comes back to it (Lichess keeps it too). */
 const TREE_KEY = 'bughouse-analysis-tree-v1';
@@ -66,6 +70,10 @@ export interface Extra {
 interface Draft {
   turn: Color;
   castling: { K: boolean; Q: boolean; k: boolean; q: boolean };
+  /** The en passant square asked for; it counts only while the board allows it. */
+  ep: string | null;
+  /** After Clear board, castling follows the board (a king and rook put home tick it) until a box is touched. */
+  guessCastling: boolean;
   hands: Material;
   fullmoves: number;
   brush: Brush;
@@ -112,6 +120,7 @@ export class BughouseApp {
   private autoplay: { delay: number; timer: number } | null = null;
   private stepping = false;
   private saveTimer = 0;
+  private editorSearchTimer = 0;
   private toastTimer = 0;
   private lastDepth = new Map<string, number>();
   private readonly extra: Extra;
@@ -145,7 +154,11 @@ export class BughouseApp {
       clickSquare: (key) => this.clickSquare(key),
       wheel: (forward) => forward ? this.next() : this.prev(),
       edited: () => this.draftChanged(),
-    });
+      swapBrushColor: () => {
+        const brush = this.draft?.brush;
+        if (brush && typeof brush !== 'string') this.setBrush({ role: brush.role, color: brush.color === 'white' ? 'black' : 'white' });
+      },
+    }, { promotedPieces: true });
 
     const app = this;
     this.moves = new MoveList($('ch-moves'), $('ch-fork'), {
@@ -179,7 +192,7 @@ export class BughouseApp {
       action: $<HTMLButtonElement>('ch-engine-action'), live: $('ch-eval-live'),
     }, {
       hover: (uci) => this.hover(uci, 'paleBlue'),
-      play: (pv, upTo) => this.playLine(pv, upTo),
+      play: (pv, upTo) => { if (this.mode === 'analysis') this.playLine(pv, upTo); },
       start: () => this.startEngine(),
     }, { engineName: 'Fairy-Stockfish', playLine, hands: (fen) => positionOf(fen).pockets });
     this.extra = new SitPanel({
@@ -424,13 +437,22 @@ export class BughouseApp {
     this.extra?.update();
   }
 
+  /** The position the engine looks at: the current move, or the editor's position while it is legal. */
+  private enginePosition(): { fen: string; ply: number } | null {
+    if (this.mode === 'analysis') return { fen: this.current.fen, ply: this.current.ply };
+    const read = readFen(this.draftFen());
+    if (!read.ok) return null;
+    return { fen: fenOf(read.pos), ply: (read.pos.fullmoves - 1) * 2 + (read.pos.turn === 'black' ? 1 : 0) };
+  }
+
   private search() {
-    if (this.mode === 'editor') { this.engine.stop(); return; }
-    if (outcomeOf(this.current.fen)) { this.engine.stop(); this.renderCeval(); return; }
+    clearTimeout(this.editorSearchTimer);
+    const at = this.enginePosition();
+    if (!at || outcomeOf(at.fen)) { this.engine.stop(); this.renderCeval(); return; }
     if (this.practice) this.engine.analyse(this.current.fen, { ...this.searchSettings(), multiPv: 1, infinite: false, nodes: PRACTICE_NODES });
     else if (!this.settings.engineOn) { this.engine.stop(); return; }
     else {
-      const fen = this.threat ? threatFen(this.current.fen) : this.current.fen;
+      const fen = this.threat ? threatFen(at.fen) : at.fen;
       // A position already searched to its limit is shown as it was, as Lichess keeps its evaluations;
       // the engine's time then goes to the sit panel.
       const kept = this.evals.get(fen);
@@ -452,8 +474,10 @@ export class BughouseApp {
     // A position searched again starts from depth 1: keep the deeper search until the new one reaches it.
     if (!kept || result.depth >= kept.depth || result.lines.length > kept.lines.length || kept.lines.length > this.settings.multiPv)
       this.evals.set(result.fen, result);
-    const searched = this.threat ? threatFen(this.current.fen) : this.current.fen;
-    if (result.fen !== this.current.fen && result.fen !== searched) return;
+    const at = this.enginePosition();
+    if (!at) return;
+    const searched = this.threat ? threatFen(at.fen) : at.fen;
+    if (result.fen !== at.fen && result.fen !== searched) return;
     if (this.practice) { this.practice.check(); return; }
     this.renderCeval();
     this.renderShapes();
@@ -487,20 +511,21 @@ export class BughouseApp {
   }
 
   private renderCeval() {
-    const pos = positionOf(this.current.fen);
-    const fen = this.threat ? threatFen(this.current.fen) : this.current.fen;
+    const at = this.enginePosition();
+    const fen = at ? (this.threat ? threatFen(at.fen) : at.fen) : '';
     this.ceval.render({
       enabled: this.settings.engineOn,
       fen,
-      ply: this.current.ply,
+      ply: at?.ply ?? 0,
       multiPv: this.settings.multiPv,
       infinite: this.settings.searchSeconds === 0,
       searchMs: this.searchSettings().searchMs,
-      result: this.evals.get(fen),
+      result: at ? this.evals.get(fen) : undefined,
       status: this.engineStatus,
       threat: this.threat,
-      inCheck: pos.isCheck(),
-      over: outcomeOf(this.current.fen),
+      inCheck: !!at && positionOf(at.fen).isCheck(),
+      over: at && outcomeOf(at.fen),
+      unplayable: at ? null : 'Waiting for a legal position',
       orientation: this.orientation,
     });
   }
@@ -523,8 +548,8 @@ export class BughouseApp {
 
   /** Lichess's "Show threat" (X): what the other side would play if it were its move. */
   private toggleThreat(on = !this.threat) {
-    const pos = positionOf(this.current.fen);
-    if (on === this.threat || this.practice || !this.settings.engineOn || pos.isCheck() || outcomeOf(this.current.fen)) return;
+    const at = this.enginePosition();
+    if (on === this.threat || this.practice || !this.settings.engineOn || !at || positionOf(at.fen).isCheck() || outcomeOf(at.fen)) return;
     this.threat = on;
     this.hoverUci = null;
     this.renderCeval();
@@ -602,7 +627,7 @@ export class BughouseApp {
       flip: () => { this.flip(); this.closeActionMenu(); },
       editor: () => { this.closeActionMenu(); this.openEditor(); },
       practice: () => this.togglePractice(),
-      help: () => openHelp(),
+      help: () => openHelp([], HELP_NOTES),
       clearMoves: () => this.clearMoves(),
       replay: (delay) => this.replay(delay),
       toggle: (key) => this.toggleSetting(key),
@@ -628,6 +653,8 @@ export class BughouseApp {
     this.draft = {
       turn: pos.turn,
       castling: { K: castling.includes('K'), Q: castling.includes('Q'), k: castling.includes('k'), q: castling.includes('q') },
+      ep: pos.epSquare === undefined ? null : makeSquare(pos.epSquare),
+      guessCastling: false,
       hands: pos.pockets ? pos.pockets.clone() : Material.empty(),
       fullmoves: pos.fullmoves,
       brush: 'pointer',
@@ -635,11 +662,12 @@ export class BughouseApp {
     this.mode = 'editor';
     this.dropping = null;
     this.threat = false;
-    this.engine.stop();
     this.moves.closeMenu();
     $('ch').dataset.mode = 'editor';
     this.board.showEditor(this.current.fen, this.orientation, 'pointer');
     this.renderAll();
+    // As on lila, the engine follows the position being set up; the sit panel stands down.
+    this.analyse();
   }
 
   private closeEditor(apply: boolean) {
@@ -649,7 +677,6 @@ export class BughouseApp {
       if (!read.ok) return;
       this.tree = new Tree(fenOf(read.pos));
       this.current = this.tree.root;
-      this.evals.clear();
       this.pgnDirty = false;
       this.scheduleSave();
     }
@@ -663,9 +690,18 @@ export class BughouseApp {
 
   private draftFen(): string {
     const d = this.draft!;
-    const c = d.castling;
-    const castling = `${c.K ? 'K' : ''}${c.Q ? 'Q' : ''}${c.k ? 'k' : ''}${c.q ? 'q' : ''}` || '-';
-    return `${this.board.boardFen()}[${makePockets(d.hands)}] ${d.turn === 'white' ? 'w' : 'b'} ${castling} - 0 ${d.fullmoves}`;
+    const castling = (['K', 'Q', 'k', 'q'] as const).filter((right) => d.castling[right] && this.draftCanCastle(right)).join('') || '-';
+    const ep = d.ep && this.draftEpOptions().includes(d.ep as SquareName) ? d.ep : '-';
+    return `${this.board.boardFen()}[${makePockets(d.hands)}] ${d.turn === 'white' ? 'w' : 'b'} ${castling} ${ep} 0 ${d.fullmoves}`;
+  }
+
+  /** A ticked right counts only while its king and rook stand on their starting squares. */
+  private draftCanCastle(right: CastlingRight): boolean {
+    return castlingPossible(right, (square) => this.board.cg.state.pieces.get(square));
+  }
+
+  private draftEpOptions(): SquareName[] {
+    return enPassantOptions(this.draft!.turn, (square) => this.board.cg.state.pieces.get(square));
   }
 
   private draftPieceCount(): number {
@@ -673,17 +709,24 @@ export class BughouseApp {
   }
 
   private draftChanged() {
+    const d = this.draft!;
+    if (d.guessCastling)
+      for (const right of ['K', 'Q', 'k', 'q'] as const) d.castling[right] = this.draftCanCastle(right);
     this.renderHands();
     this.renderEditorPanel();
     this.renderUnder();
+    // A position painted square by square is searched once the brush rests.
+    this.threat = false;
+    this.renderCeval();
+    clearTimeout(this.editorSearchTimer);
+    this.editorSearchTimer = window.setTimeout(() => this.search(), 150);
   }
 
   private setDraftFen(fen: string): string | null {
     const setupFen = fen.trim();
-    const read = readFen(setupFen);
     // The editor takes positions the analysis board would refuse too; only the FEN itself must parse.
+    if (parseFen(setupFen).isErr) return 'That is not a FEN.';
     const parts = setupFen.split(/\s+/);
-    if (!read.ok && !/^[1-8pnbrqkPNBRQK~/]+(\[[pnbrqPNBRQ]*\])?$/.test(parts[0] ?? '')) return 'That is not a FEN.';
     const d = this.draft!;
     // The hand is in brackets or, as Lichess writes it, a ninth rank.
     const ranks = parts[0].replace(/\[.*$/, '').split('/');
@@ -697,6 +740,8 @@ export class BughouseApp {
     d.turn = parts[1] === 'b' ? 'black' : 'white';
     const castling = parts[2] ?? '-';
     d.castling = { K: castling.includes('K'), Q: castling.includes('Q'), k: castling.includes('k'), q: castling.includes('q') };
+    d.ep = /^[a-h][36]$/.test(parts[3] ?? '') ? parts[3] : null;
+    d.guessCastling = false;
     d.fullmoves = Math.max(1, Number(parts[5]) || 1);
     this.board.cg.set({ fen: board });
     this.draftChanged();
@@ -725,8 +770,24 @@ export class BughouseApp {
     const d = this.draft!;
     for (const b of document.querySelectorAll<HTMLButtonElement>('#ch-turn button'))
       b.setAttribute('aria-checked', String(b.dataset.turn === d.turn));
-    for (const box of document.querySelectorAll<HTMLInputElement>('#ch-castling input'))
-      box.checked = d.castling[box.dataset.right as keyof Draft['castling']];
+    for (const box of document.querySelectorAll<HTMLInputElement>('#ch-castling input')) {
+      const right = box.dataset.right as CastlingRight;
+      box.disabled = !this.draftCanCastle(right);
+      box.checked = d.castling[right] && !box.disabled;
+    }
+    const options = this.draftEpOptions();
+    const ep = $('ch-ep');
+    ep.hidden = !options.length;
+    const choice = d.ep && options.includes(d.ep as SquareName) ? d.ep : null;
+    ep.querySelector('.ch-choice')!.replaceChildren(...[null, ...options].map((square) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(square === choice));
+      b.textContent = square ?? 'None';
+      b.onclick = () => { this.draft!.ep = square; this.draftChanged(); };
+      return b;
+    }));
     const read = readFen(this.draftFen());
     const error = $('ch-editor-error');
     error.textContent = read.ok ? '' : read.error;
@@ -816,7 +877,10 @@ export class BughouseApp {
       this.renderCeval();
       this.renderMoves();
       this.renderPractice();
-    } else this.renderEditorPanel();
+    } else {
+      this.renderCeval();
+      this.renderEditorPanel();
+    }
     this.renderActionMenu();
     this.renderControls();
     this.renderUnder();
@@ -878,14 +942,20 @@ export class BughouseApp {
 
     // Editor panel
     for (const b of document.querySelectorAll<HTMLButtonElement>('#ch-turn button'))
-      b.onclick = () => { this.draft!.turn = b.dataset.turn as Color; this.draftChanged(); };
+      b.onclick = () => { this.draft!.turn = b.dataset.turn as Color; this.draft!.ep = null; this.draftChanged(); };
     for (const box of document.querySelectorAll<HTMLInputElement>('#ch-castling input'))
-      box.onchange = () => { this.draft!.castling[box.dataset.right as keyof Draft['castling']] = box.checked; this.draftChanged(); };
+      box.onchange = () => {
+        this.draft!.castling[box.dataset.right as keyof Draft['castling']] = box.checked;
+        this.draft!.guessCastling = false;
+        this.draftChanged();
+      };
     $('ch-editor-start').onclick = () => this.setDraftFen(START_FEN);
     $('ch-editor-clear').onclick = () => {
       this.board.cg.set({ fen: '8/8/8/8/8/8/8/8' });
       this.draft!.hands = Material.empty();
       this.draft!.castling = { K: false, Q: false, k: false, q: false };
+      this.draft!.ep = null;
+      this.draft!.guessCastling = true;
       this.draftChanged();
     };
     $('ch-editor-apply').onclick = () => this.closeEditor(true);
@@ -894,7 +964,13 @@ export class BughouseApp {
     // FEN and PGN
     const fen = $<HTMLInputElement>('ch-fen');
     fen.onchange = () => this.loadFen(fen.value);
-    fen.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); this.loadFen(fen.value); } };
+    // Enter loads and leaves the box, as on lila; a later click would otherwise reload it under the pointer.
+    fen.onkeydown = (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      this.loadFen(fen.value);
+      if (!fen.getAttribute('aria-invalid')) fen.blur();
+    };
     fen.onblur = () => { if (!fen.getAttribute('aria-invalid')) this.renderUnder(); };
     $('ch-fen-copy').onclick = () => void navigator.clipboard?.writeText(fen.value).then(() => this.flashCopied());
     const pgn = $<HTMLTextAreaElement>('ch-pgn');
@@ -938,9 +1014,11 @@ export class BughouseApp {
       if (this.mode === 'editor') { this.closeEditor(false); return; }
       if (this.autoplay) { this.stopAutoplay(); return; }
     }
-    if (this.mode === 'editor') return;
     const shift = e.shiftKey;
-    const actions: Record<string, () => void> = shift ? {
+    // The editor keeps only F (flip) and ? (this help).
+    const actions: Record<string, () => void> = this.mode === 'editor' ? {
+      f: () => this.flip(), '?': () => openHelp([], HELP_NOTES),
+    } : shift ? {
       ArrowLeft: () => this.goTo(this.tree.previousBranch(this.current.id)),
       K: () => this.goTo(this.tree.previousBranch(this.current.id)),
       ArrowRight: () => this.goTo(this.tree.nextBranch(this.current.id, this.forkIndex)),
@@ -948,7 +1026,7 @@ export class BughouseApp {
       ArrowUp: () => this.goTo(this.tree.stepLine(this.current.id, 'prev')),
       ArrowDown: () => this.goTo(this.tree.stepLine(this.current.id, 'next')),
       I: () => this.toggleSetting('inline'),
-      '?': () => openHelp(),
+      '?': () => openHelp([], HELP_NOTES),
       $: () => this.last(),
     } : {
       ArrowLeft: () => this.prev(), ArrowRight: () => this.next(),
